@@ -42,7 +42,15 @@ interface StudentInsight {
 }
 
 interface Insights {
-  class: { id: string; title: string; attendance_synced_at: string | null; has_meeting: boolean };
+  class: {
+    id: string;
+    title: string;
+    attendance_synced_at: string | null;
+    attendance_sync_status?: string | null;
+    /** Human explanation of the last sync failure, resolved server-side. */
+    attendance_sync_message?: string | null;
+    has_meeting: boolean;
+  };
   summary: {
     rosterSize: number;
     present: number;
@@ -194,6 +202,11 @@ export default function ClassAttendanceInsights({ open, onClose, classId, classr
           )}
         </Box>
         {message && <Alert severity="info" sx={{ mb: 2 }}>{message}</Alert>}
+        {/* Why the last sync produced nothing, resolved server-side from the
+            persisted status code. Without this an empty sheet is unexplained. */}
+        {!message && data?.class.attendance_sync_message && (
+          <Alert severity="warning" sx={{ mb: 2 }}>{data.class.attendance_sync_message}</Alert>
+        )}
 
         {loading ? (
           <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 1 }} />

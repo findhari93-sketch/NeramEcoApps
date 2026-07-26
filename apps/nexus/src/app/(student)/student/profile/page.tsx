@@ -66,6 +66,7 @@ export default function StudentProfile() {
         userName={user?.name || 'Student'}
         userEmail={user?.email || null}
         userType={user?.user_type || 'student'}
+        avatarUrl={user?.avatar_url ?? null}
         getToken={getToken}
       />
 

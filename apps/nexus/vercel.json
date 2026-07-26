@@ -8,8 +8,16 @@
       "schedule": "45 15 * * *"
     },
     {
+      "path": "/api/cron/sync-attendance",
+      "schedule": "20 15 * * *"
+    },
+    {
       "path": "/api/cron/class-followups",
       "schedule": "30 15 * * *"
+    },
+    {
+      "path": "/api/cron/sync-attendance",
+      "schedule": "0 18 * * *"
     },
     {
       "path": "/api/cron/scorecard-reminders",

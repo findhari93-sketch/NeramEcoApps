@@ -36,11 +36,13 @@ import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import UndoIcon from '@mui/icons-material/Undo';
 import SearchIcon from '@mui/icons-material/Search';
+import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useNavBadges } from '@/components/NavBadgeProvider';
 import RejectPhotoDialog from '@/components/photo-review/RejectPhotoDialog';
 import type { PhotoStatus } from '@/lib/photo-gate';
+import { photoOriginLabel, type PhotoOrigin } from '@/lib/photo-origin';
 
 interface ReviewRow {
   student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
@@ -49,6 +51,7 @@ interface ReviewRow {
   photo_reviewed_at: string | null;
   photo_rejection_reason: string | null;
   nexus_last_login_at: string | null;
+  photo_origin: PhotoOrigin | null;
 }
 
 interface ReviewData {
@@ -94,7 +97,11 @@ export default function PhotoReviewPage() {
   const [viewing, setViewing] = useState<ReviewRow | null>(null);
   const [rejecting, setRejecting] = useState<ReviewRow[] | null>(null);
   const [nudging, setNudging] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Photos whose URL 404s. Some stored avatar_urls point at objects that are
+  // gone, and a broken <img> in a face-judging grid is worse than useless.
+  const [broken, setBroken] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (activeClassroom?.id && !classroomId) setClassroomId(activeClassroom.id);
@@ -104,6 +111,7 @@ export default function PhotoReviewPage() {
     if (!classroomId) return;
     setData(null);
     setSelected(new Set());
+    setBroken(new Set());
     setError(null);
     try {
       const res = (await authFetch(
@@ -160,11 +168,31 @@ export default function PhotoReviewPage() {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ decisions }),
         });
+        const body = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
           throw new Error(body.error || 'Could not save the decision.');
         }
         setRejecting(null);
+
+        // Say plainly whether the approved photo reached Microsoft. It fails for
+        // real reasons (an account with no mailbox, consent not granted yet) and
+        // a teacher who is told "approved" while Teams still shows initials has
+        // been misled.
+        const ms: { status: string }[] = Array.isArray(body.microsoft) ? body.microsoft : [];
+        if (ms.length > 0) {
+          const synced = ms.filter((m) => m.status === 'synced').length;
+          const off = ms.filter((m) => m.status === 'disabled').length;
+          if (off === ms.length) {
+            setNotice(`Approved ${ms.length}. Copying photos to Microsoft is switched off.`);
+          } else if (synced === ms.length) {
+            setNotice(`Approved ${ms.length}, and copied to Microsoft.`);
+          } else {
+            setNotice(
+              `Approved ${ms.length}. ${synced} copied to Microsoft, ${ms.length - synced} could not be copied.`,
+            );
+          }
+        }
+
         await load();
         refreshBadges();
       } catch (e) {
@@ -211,6 +239,49 @@ export default function PhotoReviewPage() {
     }
   }, [getTeacherToken, selected, visibleRows]);
 
+  /**
+   * Pull Microsoft photos for this roster now. Students often set their picture
+   * on myaccount.microsoft.com instead of here, and the weekly background job is
+   * too slow a loop for a teacher sitting in front of the queue. Anything new
+   * comes back as "Needs review", so the decision stays with the teacher.
+   */
+  const checkMicrosoft = useCallback(async () => {
+    if (!classroomId) return;
+    setSyncing(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const token = await getTeacherToken();
+      const res = await fetch('/api/photo-review/sync-microsoft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ classroomId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Could not check Microsoft.');
+
+      const pulled = body.counts?.pulled ?? 0;
+      const parts = [
+        pulled > 0
+          ? `${pulled} new or changed ${pulled === 1 ? 'photo' : 'photos'} added to Needs review.`
+          : 'No new photos on Microsoft.',
+      ];
+      if (body.withoutMicrosoftAccount > 0) {
+        parts.push(`${body.withoutMicrosoftAccount} without a Microsoft account were not checked.`);
+      }
+      if (body.skipped > 0) {
+        parts.push(`${body.skipped} were not checked this time, run it again to finish.`);
+      }
+      setNotice(parts.join(' '));
+      await load();
+      refreshBadges();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not check Microsoft.');
+    } finally {
+      setSyncing(false);
+    }
+  }, [classroomId, getTeacherToken, load, refreshBadges]);
+
   const counts = data?.counts || EMPTY_COUNTS;
   const selectedRows = visibleRows.filter((r) => selected.has(r.student.id));
 
@@ -220,8 +291,20 @@ export default function PhotoReviewPage() {
         Photo Review
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Every student needs a clear photo of their own face. You decide, nothing is automatic.
+        Every student needs a clear photo of their own face. You decide, nothing is automatic. An
+        approved photo becomes their Microsoft and Teams picture too.
       </Typography>
+
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<CloudSyncOutlinedIcon />}
+        onClick={checkMicrosoft}
+        disabled={syncing || !classroomId}
+        sx={{ mb: 2, minHeight: 44, textTransform: 'none' }}
+      >
+        {syncing ? 'Checking Microsoft...' : 'Check Microsoft for new photos'}
+      </Button>
 
       {classrooms.length > 1 && (
         <TextField
@@ -293,7 +376,9 @@ export default function PhotoReviewPage() {
       )}
       {tab === 'pending' && counts.pending > 0 && (
         <Alert severity="info" sx={{ mb: 1.5 }}>
-          Tap a photo to see it full size. Select the good ones and approve them together.
+          Tap a photo to see it full size. Select the good ones and approve them together. The
+          label under each name says where the photo came from. Most were picked up automatically
+          from Microsoft or Google sign-in, so the student never chose them.
         </Alert>
       )}
 
@@ -354,7 +439,9 @@ export default function PhotoReviewPage() {
           >
             {visibleRows.map((r) => {
               const isSelected = selected.has(r.student.id);
-              const hasPhoto = !!r.student.avatar_url;
+              const isBroken = broken.has(r.student.id);
+              const hasPhoto = !!r.student.avatar_url && !isBroken;
+              const originLabel = photoOriginLabel(r.photo_origin);
               return (
                 <Box
                   key={r.student.id}
@@ -373,6 +460,9 @@ export default function PhotoReviewPage() {
                         src={r.student.avatar_url as string}
                         alt={r.student.name || 'Student photo'}
                         onClick={() => setViewing(r)}
+                        onError={() =>
+                          setBroken((s) => new Set(s).add(r.student.id))
+                        }
                         style={{
                           width: '100%',
                           height: '100%',
@@ -382,21 +472,28 @@ export default function PhotoReviewPage() {
                         }}
                       />
                     ) : (
-                      <Box
-                        sx={{
-                          height: '100%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
+                      <Stack
+                        alignItems="center"
+                        justifyContent="center"
+                        spacing={0.5}
+                        sx={{ height: '100%', px: 1 }}
                       >
                         <UserAvatar
                           name={r.student.name}
-                          size={64}
+                          size={56}
                           clickable={false}
                           tapToView={false}
                         />
-                      </Box>
+                        {isBroken && (
+                          <Typography
+                            variant="caption"
+                            color="warning.dark"
+                            sx={{ textAlign: 'center', lineHeight: 1.3 }}
+                          >
+                            Photo did not load
+                          </Typography>
+                        )}
+                      </Stack>
                     )}
 
                     <Checkbox
@@ -437,6 +534,15 @@ export default function PhotoReviewPage() {
                     <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 14 }} noWrap>
                       {r.student.name || r.student.email}
                     </Typography>
+                    {originLabel && (
+                      <Chip
+                        label={originLabel}
+                        size="small"
+                        variant="outlined"
+                        color={r.photo_origin === 'upload' ? 'primary' : 'default'}
+                        sx={{ height: 20, fontSize: '0.65rem', mt: 0.25, maxWidth: '100%' }}
+                      />
+                    )}
                     {tab === 'missing' && (
                       <Typography variant="caption" color="text.secondary">
                         Last opened Nexus: {formatDay(r.nexus_last_login_at)}

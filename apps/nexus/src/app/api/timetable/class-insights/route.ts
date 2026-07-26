@@ -3,6 +3,7 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { LATE_THRESHOLD_MINUTES } from '@/lib/class-absences';
 import { tallyReasons } from '@/lib/rsvp-reasons';
+import { ATTENDANCE_FAILURE_MESSAGES, type AttendanceSyncFailure } from '@/lib/attendance-sync';
 
 /**
  * GET /api/timetable/class-insights?class_id={id}&classroom_id={id}  (teacher)
@@ -24,23 +25,23 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient() as any;
 
-    // Teacher-gate.
-    const { data: user } = await supabase.from('users').select('id').eq('ms_oid', msUser.oid).single();
+    // Staff gate on user_type, not classroom enrollment: any teacher or admin can
+    // review any class, matching /api/timetable/attendance-report.
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, user_type')
+      .eq('ms_oid', msUser.oid)
+      .single();
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    const { data: enrollment } = await supabase
-      .from('nexus_enrollments')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('classroom_id', classroomId)
-      .eq('is_active', true)
-      .maybeSingle();
-    if (!enrollment || enrollment.role !== 'teacher') {
+    if (user.user_type !== 'teacher' && user.user_type !== 'admin') {
       return NextResponse.json({ error: 'Only teachers can view class insights' }, { status: 403 });
     }
 
     const { data: cls } = await supabase
       .from('nexus_scheduled_classes')
-      .select('id, title, scheduled_date, start_time, end_time, classroom_id, status, attendance_synced_at, teams_meeting_id')
+      .select(
+        'id, title, scheduled_date, start_time, end_time, classroom_id, status, attendance_synced_at, attendance_sync_status, teams_meeting_id',
+      )
       .eq('id', classId)
       .eq('classroom_id', classroomId)
       .single();
@@ -118,6 +119,11 @@ export async function GET(request: NextRequest) {
         end_time: cls.end_time,
         status: cls.status,
         attendance_synced_at: cls.attendance_synced_at,
+        attendance_sync_status: cls.attendance_sync_status ?? null,
+        attendance_sync_message:
+          cls.attendance_sync_status && cls.attendance_sync_status !== 'ok'
+            ? ATTENDANCE_FAILURE_MESSAGES[cls.attendance_sync_status as AttendanceSyncFailure] ?? null
+            : null,
         has_meeting: !!cls.teams_meeting_id,
       },
       summary: {

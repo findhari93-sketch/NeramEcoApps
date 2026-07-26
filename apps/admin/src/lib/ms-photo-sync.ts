@@ -19,7 +19,14 @@
  * throttle (429) failures instead of miscounting them all as "no photo".
  */
 import { createHash } from 'crypto';
-import { getSupabaseAdminClient, createUserAvatar, getLatestMsAvatarHash } from '@neram/database';
+import {
+  getSupabaseAdminClient,
+  createUserAvatar,
+  getLatestMsAvatarHash,
+  shouldFetchMicrosoftPhoto,
+  decideMicrosoftPull,
+  type PhotoSyncStatus,
+} from '@neram/database';
 import { getUserPhotoResult, checkGraphConnection } from '@neram/auth';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -52,6 +59,7 @@ export type MsPhotoSyncStatus =
   | 'unchanged'
   | 'no_photo'
   | 'no_oid'
+  | 'suppressed'
   | 'permission_denied'
   | 'throttled'
   | 'graph_error'
@@ -63,9 +71,20 @@ export type MsPhotoSyncStatus =
  */
 export async function syncUserMsPhoto(
   supabase: any,
-  user: { id: string; ms_oid?: string | null; name?: string | null },
+  user: { id: string; ms_oid?: string | null; name?: string | null; photo_status?: string | null },
 ): Promise<{ status: MsPhotoSyncStatus; message?: string }> {
   if (!user?.ms_oid) return { status: 'no_oid' };
+
+  // A student's Nexus photo and their Microsoft photo are meant to be ONE
+  // picture, so a change made in Microsoft has to come back here. The rule for
+  // when to take it lives in decideMicrosoftPull, shared with the Nexus
+  // on-demand sync so the cron and the teacher button cannot disagree.
+  //
+  // Only 'pending' is skipped outright, and it is skipped before the Graph call:
+  // a photo is already sitting in the teacher's queue and swapping it underneath
+  // them mid-review churns the queue for nothing.
+  const photoStatus = (user.photo_status || 'missing') as PhotoSyncStatus;
+  if (!shouldFetchMicrosoftPhoto(photoStatus)) return { status: 'suppressed' };
 
   try {
     // Bounded retry on throttle (429), honoring Retry-After.
@@ -90,7 +109,15 @@ export async function syncUserMsPhoto(
     const photo = result;
     const hash = createHash('sha256').update(photo.buffer).digest('hex');
     const prevHash = await getLatestMsAvatarHash(user.id, supabase);
-    if (prevHash && prevHash === hash) return { status: 'unchanged' };
+    // hashChanged compares against the bytes Graph RETURNS, which is also what a
+    // Nexus-side push fingerprints after uploading. That is what stops a photo
+    // we ourselves put on Microsoft from looking like a student change and
+    // bouncing back into the review queue on every run.
+    const decision = decideMicrosoftPull({
+      photoStatus,
+      hashChanged: !prevHash || prevHash !== hash,
+    });
+    if (!decision.pull) return { status: 'unchanged' };
 
     const ext = (photo.contentType.split('/')[1] || 'jpg').replace(/[^a-z0-9]/gi, '') || 'jpg';
     // Public `documents` bucket, same one the alumni offboarding capture uses.
@@ -116,6 +143,25 @@ export async function syncUserMsPhoto(
       supabase,
     );
 
+    // createUserAvatar already set users.avatar_url. Put the new photo into the
+    // teacher review queue rather than letting Graph bypass the human check.
+    // 'pending' does not block the student.
+    //
+    // The previous decision is cleared because this is a DIFFERENT photo: an old
+    // rejection reason would be shown against a picture it was never about, and
+    // a stale approval would let a student pass review and then quietly swap
+    // their face in Microsoft.
+    await supabase
+      .from('users')
+      .update({
+        photo_status: 'pending',
+        photo_submitted_at: new Date().toISOString(),
+        photo_reviewed_by: null,
+        photo_reviewed_at: null,
+        photo_rejection_reason: null,
+      })
+      .eq('id', user.id);
+
     return { status: 'synced' };
   } catch (err: any) {
     return { status: 'error', message: err?.message || String(err) };
@@ -128,6 +174,8 @@ export interface MsPhotoSyncSummary {
   unchanged: number;
   noPhoto: number;
   noOid: number;
+  /** Skipped because a photo is already waiting for a teacher decision. */
+  suppressed: number;
   /** 401/403 from Graph: app registration lacks photo-read consent for this user. */
   permissionDenied: number;
   /** 429 after retries: Graph throttled us. */
@@ -149,7 +197,7 @@ async function fetchMsUsers(supabase: any): Promise<any[]> {
   for (;;) {
     const { data, error } = await supabase
       .from('users')
-      .select('id, name, email, ms_oid')
+      .select('id, name, email, ms_oid, photo_status')
       .not('ms_oid', 'is', null)
       .order('updated_at', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
@@ -174,6 +222,7 @@ export async function syncMsPhotosBulk(userIds?: string[]): Promise<MsPhotoSyncS
     unchanged: 0,
     noPhoto: 0,
     noOid: 0,
+    suppressed: 0,
     permissionDenied: 0,
     throttled: 0,
     graphError: 0,
@@ -190,7 +239,10 @@ export async function syncMsPhotosBulk(userIds?: string[]): Promise<MsPhotoSyncS
   const supabase = getSupabaseAdminClient();
   let list: any[];
   if (userIds && userIds.length > 0) {
-    const { data } = await supabase.from('users').select('id, name, email, ms_oid').in('id', userIds);
+    const { data } = await supabase
+      .from('users')
+      .select('id, name, email, ms_oid, photo_status')
+      .in('id', userIds);
     list = data || [];
   } else {
     list = await fetchMsUsers(supabase);
@@ -216,6 +268,9 @@ export async function syncMsPhotosBulk(userIds?: string[]): Promise<MsPhotoSyncS
           break;
         case 'no_oid':
           summary.noOid++;
+          break;
+        case 'suppressed':
+          summary.suppressed++;
           break;
         case 'permission_denied':
           summary.permissionDenied++;

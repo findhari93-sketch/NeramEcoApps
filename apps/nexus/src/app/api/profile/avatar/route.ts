@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
+import { verifyMsToken } from '@/lib/ms-verify';
 import { createUserAvatar, getSupabaseAdminClient } from '@neram/database';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -123,34 +123,20 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', user.id);
 
-    // Attempt Microsoft Graph photo sync (non-blocking)
-    let teamsSynced = false;
-    const token = extractBearerToken(authHeader);
-    if (token) {
-      try {
-        const graphRes = await fetch(
-          'https://graph.microsoft.com/v1.0/me/photo/$value',
-          {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'image/jpeg',
-            },
-            body: fileBuffer,
-          }
-        );
-        teamsSynced = graphRes.ok;
-        if (!graphRes.ok) {
-          console.warn('Graph photo sync failed:', graphRes.status, await graphRes.text().catch(() => ''));
-        }
-      } catch (err) {
-        console.warn('Graph photo sync error:', err);
-      }
-    }
-
+    // NOTE: the photo is deliberately NOT pushed to Microsoft here.
+    //
+    // This route used to PUT /me/photo/$value with the student's own token. That
+    // could never work: loginScopes.nexus requests User.Read and
+    // User.ReadBasic.All, never User.ReadWrite, so Graph returned 403 for every
+    // student and the failure was only console.warn'd. It was also wrong in
+    // principle, because it published an unreviewed photo to the student's
+    // tenant-wide identity before any teacher had looked at it.
+    //
+    // The push now happens app-only when a teacher approves the photo, in
+    // lib/photo-ms-sync.ts.
     return NextResponse.json({
       success: true,
-      avatar: { id: avatar.id, url: publicUrl, teamsSynced },
+      avatar: { id: avatar.id, url: publicUrl },
     });
   } catch (error: any) {
     console.error('Avatar upload error:', error);

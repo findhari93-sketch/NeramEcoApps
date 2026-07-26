@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     // Verify teacher role & get user info
     const { data: user } = await supabase
       .from('users')
-      .select('id, email')
+      .select('id, email, name')
       .eq('ms_oid', msUser.oid)
       .single();
 
@@ -101,6 +101,31 @@ export async function POST(request: NextRequest) {
     let meetingId = '';
     let joinUrl = '';
 
+    // Resolve the tutor (who takes the class) and the scheduler (the caller) so the
+    // meeting can be put on the tutor's calendar and both are named in the Teams post.
+    const schedulerName = user.name || user.email || 'Neram Classes';
+    let tutorName = schedulerName;
+    let tutorEmail = user.email || '';
+    const tutorClassId = (scheduledClass as Record<string, unknown>).teacher_id as string | null;
+    if (tutorClassId && tutorClassId !== user.id) {
+      const { data: tutor } = await supabase
+        .from('users')
+        .select('name, email')
+        .eq('id', tutorClassId)
+        .single();
+      if (tutor) {
+        tutorName = tutor.name || tutor.email || schedulerName;
+        tutorEmail = tutor.email || '';
+      }
+    }
+    const postMeta = { tutorName, schedulerName };
+
+    // Every teacher (plus the chosen tutor) should see the class on their Teams
+    // calendar, so invite all teaching staff as attendees. The tutor is required;
+    // other teachers are optional. Admins are only invited when they are the tutor,
+    // to avoid sending every admin a calendar invite for every class.
+    const staffAttendees = await getStaffAttendees(supabase, tutorEmail);
+
     if (scope === 'channel_meeting' && classroom?.ms_team_id) {
       // ── CHANNEL MEETING: proper group calendar event (shows in Teams channel + sends invites) ──
       // Writing to the team's group calendar requires the organizer to be a
@@ -117,7 +142,8 @@ export async function POST(request: NextRequest) {
       const createGroupEvent = () =>
         createGroupCalendarEvent(
           supabase, token, teamId, classroom_id,
-          scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec
+          scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec,
+          staffAttendees, postMeta,
         );
 
       try {
@@ -170,7 +196,7 @@ export async function POST(request: NextRequest) {
       // Keep the channel + message IDs so cancelling the class can later remove
       // this announcement, instead of leaving a dead card in the channel.
       try {
-        const posted = await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl }, MEETING_CHANNEL_NAME, classroom.ms_channel_id ?? null, buildRsvpUrl(request, scheduledClass.id));
+        const posted = await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl }, MEETING_CHANNEL_NAME, classroom.ms_channel_id ?? null, buildRsvpUrl(request, scheduledClass.id), postMeta);
         extras.channelPosted = true;
         if (posted) {
           extras.teams_channel_id = posted.channelId;
@@ -188,7 +214,8 @@ export async function POST(request: NextRequest) {
       // Send personal calendar invites to all enrolled users
       const invited = await createPersonalCalendarEvent(
         supabase, token, classroom_id,
-        scheduledClass.batch_id, scheduledClass, meeting, user.email || '', ensureSec
+        scheduledClass.batch_id, scheduledClass, meeting, user.email || '', ensureSec,
+        staffAttendees,
       );
       extras.invitedCount = invited;
     } else {
@@ -203,7 +230,7 @@ export async function POST(request: NextRequest) {
     // linked group chat. The teacher's delegated token must carry ChatMessage.Send.
     if (joinUrl && classroom?.ms_group_chat_id) {
       try {
-        const chatMessageId = await postToTeamsGroupChat(token, classroom.ms_group_chat_id, buildMeetingHtml(scheduledClass, joinUrl, buildRsvpUrl(request, scheduledClass.id)));
+        const chatMessageId = await postToTeamsGroupChat(token, classroom.ms_group_chat_id, buildMeetingHtml(scheduledClass, joinUrl, buildRsvpUrl(request, scheduledClass.id), postMeta));
         extras.groupChatPosted = true;
         if (chatMessageId) extras.teams_group_chat_message_id = chatMessageId;
       } catch (err) {
@@ -345,17 +372,25 @@ async function createGroupCalendarEvent(
   scheduledClass: Record<string, unknown>,
   creatorEmail: string,
   ensureSec: (t: string) => string,
+  extraAttendees: GraphAttendee[] = [],
+  meta?: PostMeta,
 ): Promise<{ meetingId: string; joinUrl: string; attendeeCount: number }> {
-  // Fetch all enrolled users (students + teachers) for attendee list
-  const attendees = await getEnrolledAttendees(supabase, classroomId, batchId, creatorEmail);
+  // Enrolled users (students + teachers) plus all teaching staff, so the tutor and
+  // every teacher get the class on their calendar.
+  const attendees = await getEnrolledAttendees(supabase, classroomId, batchId, creatorEmail, extraAttendees);
 
+  const tutorLine = meta?.tutorName?.trim()
+    ? `<p><strong>Tutor:</strong> ${meta.tutorName.trim()}</p>`
+    : '';
   const eventPayload = {
     subject: scheduledClass.title as string,
     body: {
       contentType: 'HTML',
-      content: scheduledClass.description
-        ? `<p>${scheduledClass.description}</p>`
-        : `<p>Scheduled class: <strong>${scheduledClass.title}</strong></p>`,
+      content: `${tutorLine}${
+        scheduledClass.description
+          ? `<p>${scheduledClass.description}</p>`
+          : `<p>Scheduled class: <strong>${scheduledClass.title}</strong></p>`
+      }`,
     },
     start: {
       dateTime: `${scheduledClass.scheduled_date}T${ensureSec(scheduledClass.start_time as string)}`,
@@ -408,8 +443,9 @@ async function createPersonalCalendarEvent(
   meeting: Record<string, unknown>,
   creatorEmail: string,
   ensureSec: (t: string) => string,
+  extraAttendees: GraphAttendee[] = [],
 ): Promise<number> {
-  const attendees = await getEnrolledAttendees(supabase, classroomId, batchId, creatorEmail);
+  const attendees = await getEnrolledAttendees(supabase, classroomId, batchId, creatorEmail, extraAttendees);
 
   if (attendees.length === 0) return 0;
 
@@ -460,7 +496,8 @@ async function getEnrolledAttendees(
   classroomId: string,
   batchId: string | null,
   creatorEmail: string,
-): Promise<Array<{ emailAddress: { address: string; name: string }; type: 'required' }>> {
+  extraAttendees: GraphAttendee[] = [],
+): Promise<GraphAttendee[]> {
   // Fetch all enrolled users (both students and teachers)
   let query = supabase
     .from('nexus_enrollments')
@@ -476,30 +513,87 @@ async function getEnrolledAttendees(
 
   const { data: enrollments } = await query;
 
-  return (enrollments || [])
+  const enrolled: GraphAttendee[] = (enrollments || [])
     .map((e: Record<string, unknown>) => {
       const u = e.users as Record<string, unknown> | null;
       return { email: u?.email as string | undefined, name: u?.name as string | undefined };
     })
-    .filter((u): u is { email: string; name: string | undefined } =>
-      !!u.email && u.email.toLowerCase() !== creatorEmail?.toLowerCase()
-    )
+    .filter((u): u is { email: string; name: string | undefined } => !!u.email)
     .map((u) => ({
       emailAddress: { address: u.email, name: u.name || u.email },
       type: 'required' as const,
     }));
+
+  // Merge enrolled + extra (staff) attendees, drop the organizer, and de-dupe by
+  // email. A 'required' entry wins over an 'optional' one for the same person.
+  const byEmail = new Map<string, GraphAttendee>();
+  for (const a of [...enrolled, ...extraAttendees]) {
+    const key = a.emailAddress.address.toLowerCase();
+    if (!key || key === creatorEmail?.toLowerCase()) continue;
+    const existing = byEmail.get(key);
+    if (!existing || (existing.type === 'optional' && a.type === 'required')) {
+      byEmail.set(key, a);
+    }
+  }
+  return Array.from(byEmail.values());
+}
+
+/**
+ * All teaching staff to invite so every teacher sees the class on their Teams
+ * calendar. Teachers become 'optional' attendees; the tutor (matched by email) is
+ * 'required'. Admins are only included when they are the tutor, so admins are not
+ * sent a calendar invite for every class. Excludes test-login seeds.
+ */
+async function getStaffAttendees(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  tutorEmail: string,
+): Promise<GraphAttendee[]> {
+  const { data: staff } = await supabase
+    .from('users')
+    .select('name, email, ms_oid, user_type')
+    .in('user_type', ['teacher', 'admin']);
+
+  const tutorKey = tutorEmail?.toLowerCase();
+  const out: GraphAttendee[] = [];
+  for (const s of (staff || []) as Array<Record<string, unknown>>) {
+    const email = s.email as string | null;
+    const msOid = s.ms_oid as string | null;
+    if (!email || !msOid || String(msOid).startsWith('test-oid-')) continue;
+    const isTutor = !!tutorKey && email.toLowerCase() === tutorKey;
+    if (s.user_type === 'admin' && !isTutor) continue;
+    out.push({
+      emailAddress: { address: email, name: (s.name as string) || email },
+      type: isTutor ? 'required' : 'optional',
+    });
+  }
+  return out;
 }
 
 /** Default channel to announce scheduled meetings in (falls back to General). */
 const MEETING_CHANNEL_NAME = 'Class Meeting Details';
 
+/** A calendar attendee in Microsoft Graph shape. */
+type GraphAttendee = { emailAddress: { address: string; name: string }; type: 'required' | 'optional' };
+
+/** Tutor + scheduler names surfaced in the Teams channel/chat announcement. */
+type PostMeta = { tutorName?: string; schedulerName?: string };
+
 /** Shared HTML body for the channel post and the group-chat post. */
-function buildMeetingHtml(scheduledClass: Record<string, unknown>, joinUrl: string, rsvpUrl?: string): string {
+function buildMeetingHtml(scheduledClass: Record<string, unknown>, joinUrl: string, rsvpUrl?: string, meta?: PostMeta): string {
   const desc = (scheduledClass.description as string | null | undefined)?.trim();
+  const tutorName = meta?.tutorName?.trim();
+  const schedulerName = meta?.schedulerName?.trim();
+  const tutorLine = tutorName
+    ? `<p>👩‍🏫 <strong>Tutor:</strong> ${tutorName}${
+        schedulerName && schedulerName !== tutorName
+          ? ` &nbsp;·&nbsp; <strong>Scheduled by:</strong> ${schedulerName}`
+          : ''
+      }</p>`
+    : '';
   return `<h3>📅 ${scheduledClass.title}</h3>
 <p><strong>Date:</strong> ${scheduledClass.scheduled_date}<br/>
 <strong>Time:</strong> ${scheduledClass.start_time} to ${scheduledClass.end_time} (IST)</p>
-${desc ? `<p>${desc.replace(/\n/g, '<br/>')}</p>` : ''}
+${tutorLine}${desc ? `<p>${desc.replace(/\n/g, '<br/>')}</p>` : ''}
 <p><a href="${joinUrl}">🔗 Join Meeting</a></p>${
     rsvpUrl
       ? `\n<p>✋ Can't make it? <a href="${rsvpUrl}">Tap to RSVP</a> (you're marked attending by default).</p>`
@@ -529,6 +623,7 @@ async function postToTeamsChannel(
   channelName: string = MEETING_CHANNEL_NAME,
   channelId: string | null = null,
   rsvpUrl?: string,
+  meta?: PostMeta,
 ): Promise<{ channelId: string; messageId: string } | null> {
   // Resolve the target channel by display name, falling back to General.
   const findChannel = async (name: string) => {
@@ -550,7 +645,7 @@ async function postToTeamsChannel(
   const messageBody = {
     body: {
       contentType: 'html',
-      content: buildMeetingHtml(scheduledClass, (meeting.joinWebUrl as string) || '', rsvpUrl),
+      content: buildMeetingHtml(scheduledClass, (meeting.joinWebUrl as string) || '', rsvpUrl, meta),
     },
   };
 

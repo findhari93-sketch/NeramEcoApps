@@ -6,7 +6,6 @@ import {
   Typography,
   Chip,
   Paper,
-  Avatar,
   IconButton,
   Tooltip,
 } from '@neram/ui';
@@ -24,6 +23,9 @@ interface ProfileHeroProps {
   userName: string;
   userEmail: string | null;
   userType: string;
+  /** users.avatar_url from /api/auth/me, the one Nexus-stored photo, shown
+   *  regardless of whether it has reached Microsoft yet. */
+  avatarUrl: string | null;
   getToken: () => Promise<string | null>;
 }
 
@@ -52,15 +54,24 @@ const PHOTO_CHIP: Record<
   missing: null,
 };
 
-export default function ProfileHero({ userName, userEmail, userType, getToken }: ProfileHeroProps) {
+export default function ProfileHero({
+  userName,
+  userEmail,
+  userType,
+  avatarUrl,
+  getToken,
+}: ProfileHeroProps) {
   const { photoGate, refreshAuth } = useNexusAuthContext();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [customPhotoUrl, setCustomPhotoUrl] = useState<string | null>(null);
-  const [teamsSynced, setTeamsSynced] = useState(false);
 
-  const handleUploadComplete = (newUrl: string, synced: boolean) => {
+  // Server truth, not a guess from the upload response. A photo only reaches
+  // Teams after a teacher approves it, so this is false for the whole time the
+  // student is waiting, which is exactly what they should see.
+  const teamsSynced = photoGate.microsoftSynced;
+
+  const handleUploadComplete = (newUrl: string) => {
     setCustomPhotoUrl(newUrl);
-    setTeamsSynced(synced);
     // Pull the new 'pending' status so the chip below updates without a reload.
     void refreshAuth();
   };
@@ -98,16 +109,54 @@ export default function ProfileHero({ userName, userEmail, userType, getToken }:
             }}
             onClick={() => setUploadOpen(true)}
           >
-            {customPhotoUrl ? (
-              <Avatar
-                src={customPhotoUrl}
-                alt={userName}
-                sx={{ width: 120, height: 120, fontSize: 48 }}
+            {/* Just uploaded this session, so show that response immediately
+                rather than waiting on refreshAuth() to round-trip. Otherwise
+                fall back to the server-known avatar_url, which GraphAvatar
+                shows the instant it loads, before (or if) the live Microsoft
+                photo becomes available. Either way, an uploaded photo is
+                never invisible while it waits for review. */}
+            <GraphAvatar
+              self
+              name={userName}
+              size={120}
+              fallbackSrc={customPhotoUrl || avatarUrl}
+            />
+
+            {/* Review-status badge, directly on the photo: an uploaded photo
+                should never read as "not uploaded" just because it hasn't
+                been looked at yet. */}
+            {(photoGate.status === 'pending' || photoGate.status === 'rejected') && (
+              <Tooltip
+                title={
+                  photoGate.status === 'rejected'
+                    ? photoGate.reason || 'Your teacher asked for a clearer photo of your face.'
+                    : 'A teacher will look at this soon. You can keep using Nexus in the meantime.'
+                }
               >
-                {userName?.charAt(0)?.toUpperCase()}
-              </Avatar>
-            ) : (
-              <GraphAvatar self name={userName} size={120} />
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    bgcolor: photoGate.status === 'rejected' ? 'warning.main' : 'info.main',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '3px solid',
+                    borderColor: 'background.paper',
+                  }}
+                >
+                  {photoGate.status === 'rejected' ? (
+                    <ErrorOutlineIcon sx={{ fontSize: 16 }} />
+                  ) : (
+                    <HourglassEmptyIcon sx={{ fontSize: 16 }} />
+                  )}
+                </Box>
+              </Tooltip>
             )}
 
             {/* Edit badge */}
@@ -198,7 +247,7 @@ export default function ProfileHero({ userName, userEmail, userType, getToken }:
                 </Tooltip>
               )}
               {teamsSynced && (
-                <Tooltip title="Photo synced to Microsoft Teams">
+                <Tooltip title="This is also your photo in Microsoft Teams and Outlook">
                   <Chip
                     icon={<CloudDoneIcon sx={{ fontSize: 16 }} />}
                     label="Teams synced"

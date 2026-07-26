@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { assertCronRequest } from '@/lib/cron-auth';
 import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { syncClassroomMeetings } from '@/lib/teams-meeting-sync';
 import { announceCancellationToTeams } from '@/lib/teams-class-announcements';
@@ -17,7 +18,10 @@ import { notifyClassCancelled } from '@/lib/timetable-notifications';
  *
  * Uses app-only token (no user interaction needed).
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = assertCronRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const supabase = getSupabaseAdminClient();
 
@@ -35,7 +39,10 @@ export async function GET() {
 
     const token = await getAppOnlyToken();
     const now = new Date();
-    const pastDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString();
+    // 90-day lookback (not just 1 day): the UPDATE step also backfills organizer_name/
+    // organizer_email for classes already in Nexus, so a wider window is what makes
+    // already-scheduled historical classes self-heal their organizer data over time.
+    const pastDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
     const futureDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
     let totalImported = 0;

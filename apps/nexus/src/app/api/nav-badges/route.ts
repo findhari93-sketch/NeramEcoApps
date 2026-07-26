@@ -42,17 +42,17 @@ export async function GET(request: NextRequest) {
 
       badges.drawing_reviews = drawingCount ?? 0;
 
-      // Profile photos waiting for a human decision. Deliberately classroom
-      // agnostic: this is a "there is work waiting" signal, and joining
-      // enrollments would cost more than the badge is worth. Served by the
-      // partial index idx_users_photo_status_open.
-      const { count: photoCount } = await supabase
-        .from('users')
-        .select('id', { count: 'exact', head: true })
-        .eq('photo_status', 'pending')
-        .eq('is_alumni', false);
+      // Profile photos waiting for a human decision.
+      //
+      // This MUST match the population /teacher/photo-review shows, which is a
+      // classroom roster. Counting users.photo_status alone sweeps in ~1,350
+      // marketing leads whose avatar came from Google sign-in and who never open
+      // Nexus, which is how the badge came to read "99+" over an empty queue.
+      // The RPC does the enrollment join once, server side, counting distinct
+      // students so a two-classroom student is one piece of work.
+      const { data: photoCount } = await supabase.rpc('count_pending_photo_reviews');
 
-      badges.photo_review = photoCount ?? 0;
+      badges.photo_review = typeof photoCount === 'number' ? photoCount : 0;
     } else {
       // Student: count their own open + in_progress issues
       const { count } = await supabase

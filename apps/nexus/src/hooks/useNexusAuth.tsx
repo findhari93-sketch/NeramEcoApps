@@ -53,6 +53,8 @@ interface StoredImpersonation {
   expiresAt: string;
   impersonatorName: string | null;
   student: ImpersonationStudent;
+  /** Page the teacher/admin was on when they started this session, so Exit can return there. */
+  returnUrl: string | null;
 }
 
 interface NexusAuthState {
@@ -123,11 +125,13 @@ interface NexusAuthState {
     student: ImpersonationStudent | null;
     impersonatorName: string | null;
     expiresAt: string | null;
+    /** Page the teacher/admin was on when they started this session, so Exit can return there. */
+    returnUrl: string | null;
   };
   /** Start viewing as the given student (teacher/admin only). Throws on failure. */
   startImpersonation: (
     studentId: string,
-    opts?: { reason?: string; ticketId?: string }
+    opts?: { reason?: string; ticketId?: string; returnUrl?: string }
   ) => Promise<void>;
   /** Exit student view and return to the teacher/admin's own session. */
   exitImpersonation: () => Promise<void>;
@@ -408,7 +412,7 @@ export function useNexusAuth(): NexusAuthState {
   }, [impersonationToken, impersonationState, clearImpersonation]);
 
   const startImpersonation = useCallback(
-    async (studentId: string, opts?: { reason?: string; ticketId?: string }) => {
+    async (studentId: string, opts?: { reason?: string; ticketId?: string; returnUrl?: string }) => {
       // Mint with the real teacher/admin token. Under the E2E test-mode bypass
       // there is no MSAL token, so fall back to the injected test token (which
       // verifyMsToken accepts in non-production).
@@ -439,6 +443,7 @@ export function useNexusAuth(): NexusAuthState {
         expiresAt: data.expiresAt,
         impersonatorName: data.impersonatorName ?? null,
         student: data.student,
+        returnUrl: opts?.returnUrl ?? null,
       };
       try {
         sessionStorage.setItem(IMPERSONATION_KEY, JSON.stringify(stored));
@@ -454,15 +459,23 @@ export function useNexusAuth(): NexusAuthState {
 
   const exitImpersonation = useCallback(async () => {
     // Best-effort: close the audit session with the impersonation token still
-    // in hand, before clearing local state.
+    // in hand, before clearing local state. Capped with a short timeout so a
+    // stalled request can never block the exit itself (leaving the teacher
+    // stuck on "Exiting..." with no way out) - the session is closed on a
+    // best-effort basis, not a required one.
     try {
       const raw = sessionStorage.getItem(IMPERSONATION_KEY);
       const parsed = raw ? (JSON.parse(raw) as StoredImpersonation) : null;
       if (parsed?.token) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
         await fetch('/api/auth/impersonate/end', {
           method: 'POST',
           headers: { Authorization: `Bearer ${parsed.token}` },
-        }).catch(() => undefined);
+          signal: controller.signal,
+        })
+          .catch(() => undefined)
+          .finally(() => clearTimeout(timeout));
       }
     } catch {
       /* ignore */
@@ -520,6 +533,7 @@ export function useNexusAuth(): NexusAuthState {
       student: impersonationToken ? impersonationState!.student : null,
       impersonatorName: impersonationToken ? impersonationState!.impersonatorName : null,
       expiresAt: impersonationToken ? impersonationState!.expiresAt : null,
+      returnUrl: impersonationToken ? impersonationState!.returnUrl ?? null : null,
     },
     startImpersonation,
     exitImpersonation,

@@ -31,6 +31,7 @@ import {
 import AddAPhotoOutlinedIcon from '@mui/icons-material/AddAPhotoOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ProfilePhotoUpload from '@/components/profile/ProfilePhotoUpload';
 
@@ -48,6 +49,8 @@ export default function PhotoRequiredGate() {
   const { user, signOut, getToken, photoGate, refreshAuth } = useNexusAuthContext();
   const [open, setOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [msNotice, setMsNotice] = useState<string | null>(null);
 
   const firstName = user?.name ? user.name.split(' ')[0] : null;
   const rejected = photoGate.status === 'rejected';
@@ -58,6 +61,33 @@ export default function PhotoRequiredGate() {
     setSubmitted(true);
     setOpen(false);
     await refreshAuth();
+  };
+
+  const useMicrosoftPhoto = async () => {
+    setPulling(true);
+    setMsNotice(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/profile/avatar/from-microsoft', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (body?.success) {
+        setSubmitted(true);
+        await refreshAuth();
+        return;
+      }
+      setMsNotice(
+        body?.message ||
+          body?.error ||
+          'We could not use your Microsoft photo. Take or choose one here instead.',
+      );
+    } catch {
+      setMsNotice('We could not reach Microsoft. Take or choose a photo here instead.');
+    } finally {
+      setPulling(false);
+    }
   };
 
   return (
@@ -189,9 +219,36 @@ export default function PhotoRequiredGate() {
           {rejected ? 'Add a new photo' : 'Take or upload a photo'}
         </Button>
 
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, mb: 3 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, mb: 2 }}>
           No camera? Choose a photo already saved on your device.
         </Typography>
+
+        {/* Many students already set a picture on their Microsoft account. It is
+            meant to be the same photo, so make that one tap rather than making
+            them find the file and upload it a second time. */}
+        <Button
+          variant="outlined"
+          size="large"
+          fullWidth
+          startIcon={<CloudSyncOutlinedIcon />}
+          onClick={useMicrosoftPhoto}
+          disabled={pulling}
+          sx={{
+            borderRadius: 3,
+            textTransform: 'none',
+            fontWeight: 600,
+            minHeight: 52,
+            mb: msNotice ? 1.5 : 3,
+          }}
+        >
+          {pulling ? 'Checking Microsoft...' : 'Use my Microsoft photo'}
+        </Button>
+
+        {msNotice && (
+          <Alert severity="info" sx={{ width: '100%', mb: 3, textAlign: 'left' }}>
+            {msNotice}
+          </Alert>
+        )}
 
         <Button
           variant="outlined"

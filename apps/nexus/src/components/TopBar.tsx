@@ -259,6 +259,7 @@ export default function TopBar() {
               self
               tapToView={false}
               name={user?.name}
+              fallbackSrc={user?.avatar_url}
               size={36}
               sx={{
                 border: `2px solid ${roleAccent}`,
@@ -382,6 +383,7 @@ export default function TopBar() {
             <GraphAvatar
               self
               name={user?.name}
+              fallbackSrc={user?.avatar_url}
               size={48}
               sx={{
                 border: `2px solid ${roleAccent}`,

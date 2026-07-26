@@ -220,6 +220,11 @@ export async function GET(request: NextRequest) {
         classroomCount: activeEnrollments.length,
         photoStatus,
       }),
+      // Also rides the select('*'). Only true when the approved photo really did
+      // reach the Microsoft account, so the profile screen never claims a Teams
+      // sync that silently failed.
+      microsoftSynced:
+        photoStatus === 'approved' && (user as any).photo_ms_sync_status === 'synced',
     };
 
     return NextResponse.json({

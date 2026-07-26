@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { assertCronRequest } from '@/lib/cron-auth';
 import { getLiveLeaderboard } from '@neram/database/queries/nexus';
 
 /**
@@ -9,7 +10,10 @@ import { getLiveLeaderboard } from '@neram/database/queries/nexus';
  * - Snapshots the weekly leaderboard for all classrooms
  * - Computes ranks, rank changes, Rising Stars, Comeback Kids
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = assertCronRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const supabase = getSupabaseAdminClient() as any;
 

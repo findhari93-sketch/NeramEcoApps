@@ -26,7 +26,7 @@ import type { Area, Point } from 'react-easy-crop';
 interface ProfilePhotoUploadProps {
   open: boolean;
   onClose: () => void;
-  onUploadComplete: (newUrl: string, teamsSynced: boolean) => void;
+  onUploadComplete: (newUrl: string) => void;
   getToken: () => Promise<string | null>;
   /**
    * Mandatory mode: hide the close X and Cancel, and disable backdrop dismiss.
@@ -51,7 +51,7 @@ export default function ProfilePhotoUpload({
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'failed'>('idle');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'submitted'>('idle');
 
   // The shared picker only SELECTS the file (paste / drop / choose); it does not
   // upload here. We read it into a data URL to feed the existing cropper below.
@@ -108,13 +108,13 @@ export default function ProfilePhotoUpload({
       }
 
       const data = await res.json();
-      setSyncStatus(data.avatar.teamsSynced ? 'synced' : 'failed');
+      setSyncStatus('submitted');
 
-      // Brief delay to show sync status
+      // Brief pause so the student reads what happens next before it closes.
       setTimeout(() => {
-        onUploadComplete(data.avatar.url, data.avatar.teamsSynced);
+        onUploadComplete(data.avatar.url);
         handleClose();
-      }, 1200);
+      }, 1400);
     } catch (error) {
       console.error('Avatar upload error:', error);
       setSyncStatus('idle');
@@ -214,17 +214,15 @@ export default function ProfilePhotoUpload({
 
             {syncStatus === 'syncing' && (
               <Alert icon={<CloudSyncIcon />} severity="info" sx={{ mx: 3, mb: 1 }}>
-                Uploading & syncing to Microsoft Teams...
+                Uploading your photo...
               </Alert>
             )}
-            {syncStatus === 'synced' && (
+            {/* Honest about what happens next. The photo only reaches Teams once
+                a teacher has approved it, so promising a Teams sync here would
+                be a lie the student would notice. */}
+            {syncStatus === 'submitted' && (
               <Alert icon={<CheckCircleIcon />} severity="success" sx={{ mx: 3, mb: 1 }}>
-                Photo synced to Microsoft Teams
-              </Alert>
-            )}
-            {syncStatus === 'failed' && (
-              <Alert severity="warning" sx={{ mx: 3, mb: 1 }}>
-                Uploaded, but Teams sync failed (may need admin consent)
+                Sent to your teacher. Once they approve it, this becomes your Teams photo too.
               </Alert>
             )}
           </>

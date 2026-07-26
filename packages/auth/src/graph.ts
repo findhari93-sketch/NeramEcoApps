@@ -133,7 +133,15 @@ export interface GraphErrorInfo {
  * Map a raw Microsoft Graph / Entra error string to a short, actionable message.
  * Keeps the noisy AADSTS JSON out of the UI while still pointing at the real fix.
  */
-export function classifyGraphError(raw: string | null | undefined): GraphErrorInfo {
+export function classifyGraphError(
+  raw: string | null | undefined,
+  /**
+   * Which permission the caller actually needs, so a 403 points at the right
+   * Azure fix. Photo writes need ProfilePhoto.ReadWrite.All, not the
+   * User.ReadWrite.All that offboarding needs.
+   */
+  context?: 'photo',
+): GraphErrorInfo {
   const text = (raw || '').toString();
   const t = text.toLowerCase();
   const trimmed = text.length > 600 ? `${text.slice(0, 600)}…` : text;
@@ -188,7 +196,10 @@ export function classifyGraphError(raw: string | null | undefined): GraphErrorIn
     return {
       code: 'insufficient_permission',
       message: 'The Microsoft app is missing the required permission.',
-      fix: 'In Azure Portal → API permissions, add Microsoft Graph application permission User.ReadWrite.All and click "Grant admin consent", then retry.',
+      fix:
+        context === 'photo'
+          ? 'In Azure Portal → API permissions, add Microsoft Graph application permission ProfilePhoto.ReadWrite.All and click "Grant admin consent", then retry.'
+          : 'In Azure Portal → API permissions, add Microsoft Graph application permission User.ReadWrite.All and click "Grant admin consent", then retry.',
       raw: trimmed,
     };
   }
@@ -415,6 +426,64 @@ export async function getUserPhotoResult(userId: string): Promise<UserPhotoResul
     return { ok: true, buffer: Buffer.from(arrayBuffer), contentType };
   } catch {
     return { ok: false, status: 0 }; // network error / timeout
+  }
+}
+
+export interface SetUserPhotoResult {
+  ok: boolean;
+  /** HTTP status from Graph. 0 means network error or timeout. */
+  status: number;
+  /** Populated on 429 when Graph sent a Retry-After header. */
+  retryAfterMs?: number;
+  /** Response body on failure, truncated. Feed to classifyGraphError. */
+  error?: string;
+}
+
+/**
+ * Replace a Microsoft user's profile photo. This is what makes a student's Nexus
+ * photo and their Teams/Outlook photo the same picture.
+ *
+ * Requires the **ProfilePhoto.ReadWrite.All** application permission with admin
+ * consent. Without it Graph returns 403 for every user.
+ *
+ * IMPORTANT, same limitation as the read side: app-only photo access needs the
+ * target user to have an Exchange Online mailbox, because the photo is stored
+ * there. A licence-less or mailbox-less account returns 404 even when the
+ * permission is granted. Callers must treat failure as expected for some users
+ * and surface it, never abort a bulk run on it.
+ *
+ * Graph re-encodes what it stores, so the bytes sent here will NOT hash equal to
+ * the bytes a later GET returns. Any dedupe must hash the read-back, not this
+ * input. Never throws.
+ */
+export async function setUserPhoto(
+  userId: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<SetUserPhotoResult> {
+  try {
+    const res = await graphFetch(
+      `/users/${encodeURIComponent(userId)}/photo/$value`,
+      {
+        method: 'PUT',
+        // Graph rejects anything but a concrete image type here.
+        headers: { 'Content-Type': contentType || 'image/jpeg' },
+        body: new Uint8Array(buffer),
+      },
+      30_000, // photo upload is heavier than the metadata calls
+    );
+
+    if (res.ok) return { ok: true, status: res.status };
+
+    let retryAfterMs: number | undefined;
+    if (res.status === 429) {
+      const ra = parseInt(res.headers.get('retry-after') || '', 10);
+      if (Number.isFinite(ra)) retryAfterMs = ra * 1000;
+    }
+    const error = await res.text().catch(() => '');
+    return { ok: false, status: res.status, retryAfterMs, error: error.slice(0, 600) };
+  } catch (err: any) {
+    return { ok: false, status: 0, error: err?.message || String(err) };
   }
 }
 

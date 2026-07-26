@@ -4,6 +4,13 @@ import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { sendNudge } from '@/lib/nudge-delivery';
 import { toPhotoStatus, type PhotoStatus } from '@/lib/photo-gate';
+import { resolvePhotoOrigin } from '@/lib/photo-origin';
+import { pushApprovedPhotoToMicrosoft, type MsPushResult } from '@/lib/photo-ms-sync';
+import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
+import { getNexusSetting } from '@neram/database';
+
+/** Mirroring an approved photo onto the student's real Microsoft identity. */
+const MS_PUSH_FEATURE = 'staff.photo-ms-push';
 
 /**
  * Teacher photo review queue.
@@ -34,16 +41,26 @@ interface RosterUser {
 }
 
 /** Active, non-alumni students of one classroom. Same population the assignment
- *  roster and engagement dashboard use, so the counts always agree. */
+ *  roster and engagement dashboard use, so the counts always agree.
+ *
+ *  The FK must be named. nexus_enrollments points at users TWICE (user_id and
+ *  removed_by), so a bare `user:users(...)` embed is ambiguous and PostgREST
+ *  refuses it. Every other call site in the repo names it the same way. And the
+ *  error is raised rather than swallowed: a discarded error here looked exactly
+ *  like "no students need review", which is how this shipped broken. */
 async function loadRoster(supabase: any, classroomId: string): Promise<RosterUser[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('nexus_enrollments')
     .select(
-      'user_id, user:users(id, name, email, avatar_url, is_alumni, photo_status, photo_submitted_at, photo_reviewed_at, photo_rejection_reason, nexus_last_login_at)',
+      'user_id, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni, photo_status, photo_submitted_at, photo_reviewed_at, photo_rejection_reason, nexus_last_login_at)',
     )
     .eq('classroom_id', classroomId)
     .eq('role', 'student')
     .eq('is_active', true);
+
+  if (error) {
+    throw new Error(`Could not load the classroom roster: ${error.message}`);
+  }
 
   return ((data || []) as any[])
     .map((row) => row.user as RosterUser | null)
@@ -72,17 +89,39 @@ export async function GET(request: NextRequest) {
     const counts = { pending: 0, missing: 0, rejected: 0, approved: 0 };
     for (const u of roster) counts[toPhotoStatus(u.photo_status)] += 1;
 
-    const rows = roster
+    const shown = roster
       .filter((u) => toPhotoStatus(u.photo_status) === status)
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-      .map((u) => ({
-        student: { id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url },
-        photo_status: toPhotoStatus(u.photo_status),
-        photo_submitted_at: u.photo_submitted_at,
-        photo_reviewed_at: u.photo_reviewed_at,
-        photo_rejection_reason: u.photo_rejection_reason,
-        nexus_last_login_at: u.nexus_last_login_at,
-      }));
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    // Provenance for just the bucket being shown. Most photos here were never
+    // submitted by the student (a background job pulled them from Microsoft, or
+    // they arrived with a Google sign-in), and the teacher needs to know that
+    // before approving a face. One extra query, only over the visible rows.
+    const sourceBy = new Map<string, string | null>();
+    if (shown.length > 0) {
+      const { data: avatarRows } = await supabase
+        .from('user_avatars')
+        .select('user_id, source')
+        .in(
+          'user_id',
+          shown.map((u) => u.id),
+        )
+        .eq('is_current', true);
+      for (const a of (avatarRows || []) as any[]) sourceBy.set(a.user_id, a.source ?? null);
+    }
+
+    const rows = shown.map((u) => ({
+      student: { id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url },
+      photo_status: toPhotoStatus(u.photo_status),
+      photo_submitted_at: u.photo_submitted_at,
+      photo_reviewed_at: u.photo_reviewed_at,
+      photo_rejection_reason: u.photo_rejection_reason,
+      nexus_last_login_at: u.nexus_last_login_at,
+      photo_origin: resolvePhotoOrigin({
+        avatarSource: sourceBy.get(u.id) ?? null,
+        avatarUrl: u.avatar_url,
+      }),
+    }));
 
     return NextResponse.json({ counts, rows, status });
   } catch (err) {
@@ -229,10 +268,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Approval is the moment the photo becomes the student's ONE picture, so it
+    // is also the moment it goes onto their Microsoft account and therefore into
+    // Teams and Outlook. Deliberately not done at upload time: that would put an
+    // unreviewed image on a tenant-wide identity.
+    //
+    // Best-effort in every direction. A Graph failure is expected for accounts
+    // without a mailbox and must never undo a decision the teacher already made,
+    // so the outcome is reported back rather than thrown.
+    const approvedIds = decisions.filter((d) => d.decision === 'approved').map((d) => d.studentId);
+    let microsoft: MsPushResult[] = [];
+    if (approvedIds.length > 0) {
+      const setting = await getNexusSetting(FEATURE_FLAGS_KEY).catch(() => null);
+      const flags: FlagMap = resolveFlags((setting?.value as FlagMap) || {});
+      if (flags[MS_PUSH_FEATURE] === true) {
+        microsoft = await Promise.all(
+          approvedIds.map((id) =>
+            pushApprovedPhotoToMicrosoft(id).catch((e) => ({
+              userId: id,
+              status: 'failed' as const,
+              message: e instanceof Error ? e.message : 'Could not reach Microsoft.',
+            })),
+          ),
+        );
+      } else {
+        microsoft = approvedIds.map((id) => ({
+          userId: id,
+          status: 'disabled' as const,
+          message: 'Copying photos to Microsoft is switched off.',
+        }));
+      }
+    }
+
     return NextResponse.json({
-      approved: decisions.filter((d) => d.decision === 'approved').length,
+      approved: approvedIds.length,
       rejected: rejected.length,
       reopened: decisions.filter((d) => d.decision === 'pending').length,
+      microsoft,
     });
   } catch (err) {
     return errorResponse(err, 'Failed to save photo decisions');

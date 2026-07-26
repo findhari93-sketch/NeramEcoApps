@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { notifyRecordingAvailable } from '@/lib/timetable-notifications';
-import { resolveOnlineMeeting } from '@/lib/teams-online-meeting';
+import { resolveOnlineMeeting, resolveOrganizerOid } from '@/lib/teams-online-meeting';
 
 /**
  * GET /api/timetable/recording?class_id={id}
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     // Get class details
     const { data: cls } = await supabase
       .from('nexus_scheduled_classes')
-      .select('teams_meeting_id, teams_meeting_join_url, teams_meeting_url, title, teacher_id')
+      .select('teams_meeting_id, teams_meeting_join_url, teams_meeting_url, title, teacher_id, organizer_email')
       .eq('id', class_id)
       .single();
 
@@ -83,10 +83,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No Teams meeting linked to this class' }, { status: 400 });
     }
 
-    // Organizer's ms_oid, for the app-only path used by channel/group meetings.
-    const { data: organizer } = cls.teacher_id
-      ? await supabase.from('users').select('ms_oid').eq('id', cls.teacher_id).maybeSingle()
-      : { data: null };
+    // Resolve the ms_oid to read the meeting on behalf of: the real Teams organizer
+    // when known (channel/group meetings are often organized by someone other than
+    // the assigned teacher), else the teacher.
+    const organizerOid = await resolveOrganizerOid(supabase, {
+      joinUrl: cls.teams_meeting_join_url || cls.teams_meeting_url || null,
+      organizerEmail: cls.organizer_email,
+      teacherId: cls.teacher_id,
+    });
 
     // The stored teams_meeting_id is an Outlook event id for channel/group meetings,
     // not an onlineMeeting id, so resolve the real onlineMeeting (delegated if the
@@ -95,7 +99,7 @@ export async function POST(request: NextRequest) {
       delegatedToken: token!,
       teamsMeetingId: cls.teams_meeting_id,
       joinUrl: cls.teams_meeting_join_url || cls.teams_meeting_url || null,
-      organizerOid: organizer?.ms_oid ?? null,
+      organizerOid,
     });
 
     if (!resolved) {

@@ -34,6 +34,7 @@ export interface ClassCardData {
   classroom?: { id: string; name: string; type: string } | null;
   description?: string | null;
   organizer_name?: string | null;
+  attendance_synced_at?: string | null;
 }
 
 interface ClassCardProps {

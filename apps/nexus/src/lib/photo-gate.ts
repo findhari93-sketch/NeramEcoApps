@@ -71,6 +71,13 @@ export interface PhotoGateState {
   /** Teacher's rejection reason, only ever set when status is 'rejected'. */
   reason: string | null;
   required: boolean;
+  /**
+   * Whether this exact photo is also live on the student's Microsoft account,
+   * which is what Teams and Outlook show. Only ever true after a teacher has
+   * approved it and the push to Graph succeeded, so it must be read from the
+   * server rather than assumed from a successful upload.
+   */
+  microsoftSynced: boolean;
 }
 
 /**
@@ -82,4 +89,5 @@ export const DEFAULT_PHOTO_GATE: PhotoGateState = {
   status: 'approved',
   reason: null,
   required: false,
+  microsoftSynced: false,
 };

@@ -179,3 +179,26 @@ describe('staff.photo-review', () => {
     expect(featureForPath('/teacher/photo-review')?.id).toBe('staff.photo-review');
   });
 });
+
+describe('staff.photo-ms-push', () => {
+  const flag = FEATURES.find((f) => f.id === 'staff.photo-ms-push');
+
+  it('is registered so it appears as a switch on the admin Features page', () => {
+    expect(flag).toBeDefined();
+    expect(flag?.surface).toBe('staff');
+  });
+
+  it('has no paths, so it can never gate a page by accident', () => {
+    // It writes to a Microsoft identity, it does not own a route.
+    expect(flag?.paths).toEqual([]);
+    expect(featureForPath('/teacher/photo-ms-push')).toBeUndefined();
+  });
+
+  it('follows the staff convention (defaults ON) but stays switchable off', () => {
+    // It must be switchable off, because until ProfilePhoto.ReadWrite.All is
+    // consented in Azure every push returns 403.
+    expect(flag?.defaultEnabled).toBe(true);
+    expect(flag?.core).toBeFalsy();
+    expect(resolveFlags({ 'staff.photo-ms-push': false })['staff.photo-ms-push']).toBe(false);
+  });
+});

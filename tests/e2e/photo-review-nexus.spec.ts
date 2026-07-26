@@ -64,6 +64,46 @@ test.describe('Nexus, photo review queue', () => {
     expect(body.status).toBe('pending');
   });
 
+  /**
+   * REGRESSION. This queue once showed 0 in all four tabs over a 30 student
+   * classroom, with HTTP 200 and no error, because the roster embed named no
+   * foreign key. nexus_enrollments points at users twice (user_id, removed_by),
+   * so PostgREST refused the join, and the route discarded the error and
+   * returned an empty list.
+   *
+   * The failure was invisible precisely because "no rows" and "query broken"
+   * looked identical. So the assertion has to come from an independent source of
+   * roster truth, not from the same endpoint.
+   */
+  test('the roster is not silently empty when the classroom has students', async ({ request }) => {
+    test.skip(!ready);
+
+    const enrollmentsRes = await request.get(
+      `${NEXUS}/api/classrooms/${classroomId}/enrollments`,
+      { headers: authHeader(teacherToken) },
+    );
+    test.skip(!enrollmentsRes.ok(), 'Could not read the roster independently');
+
+    const enrollments = await enrollmentsRes.json();
+    const rows: any[] = Array.isArray(enrollments)
+      ? enrollments
+      : enrollments.enrollments || enrollments.rows || [];
+    const activeStudents = rows.filter(
+      (e) => e.role === 'student' && e.is_active !== false && e.user?.is_alumni !== true,
+    ).length;
+    test.skip(activeStudents === 0, 'The e2e classroom genuinely has no students');
+
+    const res = await request.get(`${NEXUS}/api/photo-review?classroom=${classroomId}`, {
+      headers: authHeader(teacherToken),
+    });
+    expect(res.status()).toBe(200);
+    const { counts } = await res.json();
+    const total = counts.pending + counts.missing + counts.rejected + counts.approved;
+
+    // The bug produced exactly total === 0 here. Anything else means the join ran.
+    expect(total).toBeGreaterThan(0);
+  });
+
   test('every status bucket is queryable', async ({ request }) => {
     test.skip(!ready);
     for (const status of ['pending', 'missing', 'rejected', 'approved']) {
@@ -97,6 +137,24 @@ test.describe('Nexus, photo review queue', () => {
       data: { decisions: [] },
     });
     expect(res.status()).toBe(400);
+  });
+
+  test('the Microsoft sync needs a classroom and refuses a student', async ({ request }) => {
+    test.skip(!ready);
+
+    const noClassroom = await request.post(`${NEXUS}/api/photo-review/sync-microsoft`, {
+      headers: { ...authHeader(teacherToken), 'Content-Type': 'application/json' },
+      data: {},
+    });
+    expect(noClassroom.status()).toBe(400);
+
+    if (studentToken) {
+      const asStudent = await request.post(`${NEXUS}/api/photo-review/sync-microsoft`, {
+        headers: { ...authHeader(studentToken), 'Content-Type': 'application/json' },
+        data: { classroomId },
+      });
+      expect(asStudent.status()).toBeGreaterThanOrEqual(400);
+    }
   });
 
   test('a student cannot read or write the review queue', async ({ request }) => {

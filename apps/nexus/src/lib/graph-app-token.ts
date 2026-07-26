@@ -52,3 +52,32 @@ export async function getAppOnlyToken(): Promise<string> {
 
   return data.access_token;
 }
+
+/**
+ * Read the `roles` claim out of an app-only token.
+ *
+ * Payload decode only, no signature check: this is our own freshly minted token
+ * and the purpose is diagnostic. It is what makes "the app registration lacks
+ * the permission" distinguishable from "the permission is granted but a Teams
+ * application access policy is refusing us", since both otherwise surface as a
+ * bare Graph 403 and need completely different fixes.
+ */
+export function decodeAppTokenRoles(token: string): string[] {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return [];
+    const json = Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    const claims = JSON.parse(json);
+    return Array.isArray(claims.roles) ? claims.roles : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Graph application permissions the Teams attendance path needs. */
+export const ATTENDANCE_APP_ROLES = {
+  /** Either satisfies the joinWebUrl lookup on /users/{oid}/onlineMeetings. */
+  meetingLookup: ['OnlineMeetings.Read.All', 'OnlineMeetings.ReadWrite.All'],
+  /** Required for attendanceReports and attendanceRecords. */
+  artifacts: ['OnlineMeetingArtifact.Read.All'],
+} as const;

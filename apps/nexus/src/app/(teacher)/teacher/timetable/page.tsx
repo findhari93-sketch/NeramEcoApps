@@ -101,6 +101,8 @@ export default function TeacherTimetable() {
 
   // RSVP data
   const [rsvpData, setRsvpData] = useState<Record<string, { attending: number; total: number }>>({});
+  // Real Teams/manual attendance, for past classes only (cheap DB-only read, no Graph call).
+  const [attendanceData, setAttendanceData] = useState<Record<string, { present: number; total: number }>>({});
   // Rating data
   const [averageRatings, setAverageRatings] = useState<Record<string, number>>({});
 
@@ -202,13 +204,34 @@ export default function TeacherTimetable() {
         .catch(() => null);
     });
 
-    const [rsvpResults, ratingResults] = await Promise.all([
+    // Real attendance is only meaningful once a class has ended, and the fetch
+    // itself is a plain DB read (no Graph call), so it's cheap to include here.
+    const ensureSec = (t: string) => (t && t.length === 5 ? `${t}:00` : t);
+    const pastClassIds = classIds.filter((id) => {
+      const c = fetchedClasses.find((fc) => fc.id === id);
+      if (!c || c.status === 'cancelled') return false;
+      const endMs = new Date(`${c.scheduled_date}T${ensureSec(c.end_time)}+05:30`).getTime();
+      return !Number.isNaN(endMs) && Date.now() > endMs;
+    });
+
+    const attendancePromises = pastClassIds.map((id) => {
+      const cid = getClassroomId(id);
+      return fetch(`/api/timetable/attendance-report?class_id=${id}&classroom_id=${cid}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .catch(() => null);
+    });
+
+    const [rsvpResults, ratingResults, attendanceResults] = await Promise.all([
       Promise.all(rsvpPromises),
       Promise.all(ratingPromises),
+      Promise.all(attendancePromises),
     ]);
 
     const rsvpMap: Record<string, { attending: number; total: number }> = {};
     const ratingMap: Record<string, number> = {};
+    const attendanceMap: Record<string, { present: number; total: number }> = {};
 
     classIds.forEach((id, i) => {
       if (rsvpResults[i]?.summary) {
@@ -219,14 +242,41 @@ export default function TeacherTimetable() {
       }
     });
 
+    pastClassIds.forEach((id, i) => {
+      if (attendanceResults[i]?.summary) {
+        attendanceMap[id] = attendanceResults[i].summary;
+      }
+    });
+
     setRsvpData(rsvpMap);
     setAverageRatings(ratingMap);
+    setAttendanceData(attendanceMap);
   };
 
   useEffect(() => {
     fetchClasses();
     fetchHolidays();
   }, [fetchClasses, fetchHolidays]);
+
+  /** Re-pull one class's attendance summary, so the detail panel reflects a sync/manual-mark made in the Attendance sheet without re-fetching the whole week. */
+  const refreshAttendanceSummary = async (classId: string, classroomId: string) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(
+        `/api/timetable/attendance-report?class_id=${classId}&classroom_id=${classroomId}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.summary) {
+          setAttendanceData((prev) => ({ ...prev, [classId]: data.summary }));
+        }
+      }
+    } catch {
+      // panel just keeps showing the stale/"not synced" summary
+    }
+  };
 
   // How many drafts are waiting in this week, so the Publish button can say so.
   const fetchDraftCount = useCallback(async () => {
@@ -1035,6 +1085,7 @@ export default function TeacherTimetable() {
         classroomId={activeClassroom?.id || ''}
         getToken={getToken}
         rsvpSummary={selectedClass ? rsvpData[selectedClass.id] : null}
+        attendanceSummary={selectedClass ? attendanceData[selectedClass.id] : null}
         averageRating={selectedClass ? averageRatings[selectedClass.id] : null}
         onEdit={handleEdit}
         onDelete={handleDelete}
@@ -1104,7 +1155,10 @@ export default function TeacherTimetable() {
       {attendanceClass && (
         <AttendanceSheet
           open={!!attendanceClass}
-          onClose={() => setAttendanceClass(null)}
+          onClose={() => {
+            refreshAttendanceSummary(attendanceClass.id, activeClassroom?.id || '');
+            setAttendanceClass(null);
+          }}
           classId={attendanceClass.id}
           classTitle={attendanceClass.title}
           classroomId={activeClassroom?.id || ''}

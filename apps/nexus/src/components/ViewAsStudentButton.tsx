@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   Button,
   IconButton,
@@ -47,6 +47,7 @@ export default function ViewAsStudentButton({
 }: ViewAsStudentButtonProps) {
   const { isTeacher, impersonation, startImpersonation } = useNexusAuthContext();
   const router = useRouter();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,7 +61,7 @@ export default function ViewAsStudentButton({
     setLoading(true);
     setError(null);
     try {
-      await startImpersonation(studentId, { reason, ticketId });
+      await startImpersonation(studentId, { reason, ticketId, returnUrl: pathname });
       router.push('/student/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open student view');

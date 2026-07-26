@@ -77,6 +77,7 @@ export {
   getUserProfile,
   getUserPhoto,
   getUserPhotoResult,
+  setUserPhoto,
   removeAllLicenses,
   addLicenses,
   setAccountEnabled,
@@ -85,7 +86,7 @@ export {
   userExists,
   findUserOidByEmail,
 } from './graph';
-export type { UserLicenseInfo, GraphErrorInfo, ClassroomTeamsSyncResult, UserPhotoResult, TeamsActivityResult } from './graph';
+export type { UserLicenseInfo, GraphErrorInfo, ClassroomTeamsSyncResult, UserPhotoResult, SetUserPhotoResult, TeamsActivityResult } from './graph';
 
 // Hooks
 export {

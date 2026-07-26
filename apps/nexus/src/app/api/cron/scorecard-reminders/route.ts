@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { assertCronRequest } from '@/lib/cron-auth';
 
 /**
  * GET /api/cron/scorecard-reminders
@@ -10,7 +11,10 @@ import { getSupabaseAdminClient } from '@neram/database';
  *   - scorecard_reminder_sent = false
  * Creates a notification for each student and marks scorecard_reminder_sent = true
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = assertCronRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const supabase = getSupabaseAdminClient() as any;
 

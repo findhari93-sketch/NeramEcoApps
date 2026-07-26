@@ -5726,6 +5726,8 @@ export type Database = {
           id: string
           joined_at: string | null
           left_at: string | null
+          marked_at: string | null
+          marked_by: string | null
           scheduled_class_id: string
           source: string | null
           student_id: string
@@ -5738,6 +5740,8 @@ export type Database = {
           id?: string
           joined_at?: string | null
           left_at?: string | null
+          marked_at?: string | null
+          marked_by?: string | null
           scheduled_class_id: string
           source?: string | null
           student_id: string
@@ -5750,6 +5754,8 @@ export type Database = {
           id?: string
           joined_at?: string | null
           left_at?: string | null
+          marked_at?: string | null
+          marked_by?: string | null
           scheduled_class_id?: string
           source?: string | null
           student_id?: string
@@ -10439,6 +10445,10 @@ export type Database = {
       nexus_scheduled_classes: {
         Row: {
           allowed_presenters: string | null
+          attendance_sync_attempts: number
+          attendance_sync_detail: string | null
+          attendance_sync_status: string | null
+          attendance_synced_at: string | null
           batch_id: string | null
           classroom_id: string
           created_at: string | null
@@ -10448,6 +10458,9 @@ export type Database = {
           lobby_bypass: string | null
           meeting_group_id: string | null
           notes: string | null
+          online_meeting_id: string | null
+          organizer_email: string | null
+          organizer_ms_oid: string | null
           organizer_name: string | null
           recording_duration_minutes: number | null
           recording_fetched_at: string | null
@@ -10471,6 +10484,10 @@ export type Database = {
         }
         Insert: {
           allowed_presenters?: string | null
+          attendance_sync_attempts?: number
+          attendance_sync_detail?: string | null
+          attendance_sync_status?: string | null
+          attendance_synced_at?: string | null
           batch_id?: string | null
           classroom_id: string
           created_at?: string | null
@@ -10480,6 +10497,9 @@ export type Database = {
           lobby_bypass?: string | null
           meeting_group_id?: string | null
           notes?: string | null
+          online_meeting_id?: string | null
+          organizer_email?: string | null
+          organizer_ms_oid?: string | null
           organizer_name?: string | null
           recording_duration_minutes?: number | null
           recording_fetched_at?: string | null
@@ -10503,6 +10523,10 @@ export type Database = {
         }
         Update: {
           allowed_presenters?: string | null
+          attendance_sync_attempts?: number
+          attendance_sync_detail?: string | null
+          attendance_sync_status?: string | null
+          attendance_synced_at?: string | null
           batch_id?: string | null
           classroom_id?: string
           created_at?: string | null
@@ -10512,6 +10536,9 @@ export type Database = {
           lobby_bypass?: string | null
           meeting_group_id?: string | null
           notes?: string | null
+          online_meeting_id?: string | null
+          organizer_email?: string | null
+          organizer_ms_oid?: string | null
           organizer_name?: string | null
           recording_duration_minutes?: number | null
           recording_fetched_at?: string | null
@@ -15372,6 +15399,9 @@ export type Database = {
           onboarding_completed_at: string | null
           password_updated_at: string | null
           photo_avatar_id: string | null
+          photo_ms_sync_error: string | null
+          photo_ms_sync_status: string | null
+          photo_ms_synced_at: string | null
           photo_rejection_reason: string | null
           photo_reviewed_at: string | null
           photo_reviewed_by: string | null
@@ -15420,6 +15450,9 @@ export type Database = {
           onboarding_completed_at?: string | null
           password_updated_at?: string | null
           photo_avatar_id?: string | null
+          photo_ms_sync_error?: string | null
+          photo_ms_sync_status?: string | null
+          photo_ms_synced_at?: string | null
           photo_rejection_reason?: string | null
           photo_reviewed_at?: string | null
           photo_reviewed_by?: string | null
@@ -15468,6 +15501,9 @@ export type Database = {
           onboarding_completed_at?: string | null
           password_updated_at?: string | null
           photo_avatar_id?: string | null
+          photo_ms_sync_error?: string | null
+          photo_ms_sync_status?: string | null
+          photo_ms_synced_at?: string | null
           photo_rejection_reason?: string | null
           photo_reviewed_at?: string | null
           photo_reviewed_by?: string | null
@@ -15934,6 +15970,7 @@ export type Database = {
         Args: { source_year: number; target_year: number }
         Returns: number
       }
+      count_pending_photo_reviews: { Args: Record<string, never>; Returns: number }
       create_lead_profile: { Args: { payload: Json }; Returns: Json }
       ensure_qb_stats: { Args: { p_user_id: string }; Returns: undefined }
       get_allotment_college_stats: {

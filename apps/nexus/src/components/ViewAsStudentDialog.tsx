@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   Dialog,
   DialogTitle,
@@ -55,6 +55,7 @@ const getInitials = (name: string) =>
 export default function ViewAsStudentDialog({ open, onClose }: ViewAsStudentDialogProps) {
   const { getToken, startImpersonation } = useNexusAuthContext();
   const router = useRouter();
+  const pathname = usePathname();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CandidateStudent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,6 +118,7 @@ export default function ViewAsStudentDialog({ open, onClose }: ViewAsStudentDial
     try {
       await startImpersonation(student.id, {
         reason: 'Viewing student account from profile menu',
+        returnUrl: pathname,
       });
       onClose();
       router.push('/student/dashboard');

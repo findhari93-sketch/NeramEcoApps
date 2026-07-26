@@ -159,7 +159,7 @@ export async function syncClassroomMeetings(
   const { data: nexusClasses } = await supabase
     .from('nexus_scheduled_classes')
     .select(
-      'id, classroom_id, teams_meeting_id, teams_meeting_url, teams_meeting_join_url, teams_meeting_scope, title, scheduled_date, start_time, end_time, status, created_at, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id',
+      'id, classroom_id, teams_meeting_id, teams_meeting_url, teams_meeting_join_url, teams_meeting_scope, title, scheduled_date, start_time, end_time, status, created_at, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, organizer_name, organizer_email',
     )
     .eq('classroom_id', classroom.id)
     .not('teams_meeting_id', 'is', null)
@@ -182,6 +182,8 @@ export async function syncClassroomMeetings(
           teams_channel_id: string | null;
           teams_channel_message_id: string | null;
           teams_group_chat_message_id: string | null;
+          organizer_name: string | null;
+          organizer_email: string | null;
         }>
       | null;
   };
@@ -219,6 +221,7 @@ export async function syncClassroomMeetings(
         end_time: event.end.substring(11, 16),
         teacher_id: teacherId,
         organizer_name: event.organizerName,
+        organizer_email: event.organizerEmail,
         description: toDescription(event.bodyContent),
         teams_meeting_id: event.id,
         teams_meeting_url: event.joinUrl,
@@ -284,11 +287,19 @@ export async function syncClassroomMeetings(
       const teamsDate = matched.start.substring(0, 10);
       const teamsStart = matched.start.substring(11, 16);
       const teamsEnd = matched.end.substring(11, 16);
+      // Organizer fields are compared separately from title/date/time so a class
+      // whose organizer was never captured (e.g. created via Nexus's own Add Class
+      // flow, not imported from the calendar) gets it backfilled here on every
+      // sync cycle, not just at import time.
+      const organizerChanged =
+        (matched.organizerName && cls.organizer_name !== matched.organizerName) ||
+        (matched.organizerEmail && cls.organizer_email !== matched.organizerEmail);
       const changed =
         cls.title !== matched.subject ||
         cls.scheduled_date !== teamsDate ||
         cls.start_time.substring(0, 5) !== teamsStart ||
-        cls.end_time.substring(0, 5) !== teamsEnd;
+        cls.end_time.substring(0, 5) !== teamsEnd ||
+        organizerChanged;
 
       if (changed) {
         const { error } = await supabase
@@ -298,6 +309,8 @@ export async function syncClassroomMeetings(
             scheduled_date: teamsDate,
             start_time: teamsStart,
             end_time: teamsEnd,
+            ...(matched.organizerName ? { organizer_name: matched.organizerName } : {}),
+            ...(matched.organizerEmail ? { organizer_email: matched.organizerEmail } : {}),
           } as never)
           .eq('id', cls.id);
         if (error) {

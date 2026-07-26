@@ -81,6 +81,8 @@ interface ClassDetailPanelProps {
   getToken: () => Promise<string | null>;
   // RSVP data
   rsvpSummary?: { attending: number; total: number } | null;
+  /** Real (Teams/manual) attendance for a past class, DB-only so cheap to fetch. */
+  attendanceSummary?: { present: number; total: number } | null;
   myRsvp?: 'attending' | 'not_attending' | null;
   averageRating?: number | null;
   myAttended?: boolean | null;
@@ -177,6 +179,7 @@ export default function ClassDetailPanel({
   classroomId,
   getToken,
   rsvpSummary,
+  attendanceSummary,
   myRsvp,
   myAttended,
   averageRating,
@@ -389,8 +392,9 @@ export default function ClassDetailPanel({
           )}
         </Box>
 
-        {/* RSVP summary for teachers */}
-        {role === 'teacher' && rsvpSummary && (
+        {/* RSVP summary for teachers, upcoming classes: RSVP is the only number
+            that means anything before the class has happened. */}
+        {role === 'teacher' && rsvpSummary && isUpcoming && (
           <Box
             sx={{
               display: 'flex',
@@ -412,6 +416,73 @@ export default function ClassDetailPanel({
                 View details →
               </Typography>
             )}
+          </Box>
+        )}
+
+        {/* Past classes: the RSVP-only chip reads as real turnout but isn't, so
+            once a class has happened, show Total / Opted in / Attended side by
+            side. Attended comes from real Teams/manual data (nexus_attendance),
+            "Not synced yet" until the teacher runs Sync from Teams (Attendance
+            button below) or Teams itself hasn't published the report yet. */}
+        {role === 'teacher' && rsvpSummary && isPast && (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              p: 1.5,
+              bgcolor: 'grey.50',
+              borderRadius: 1,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PeopleAltIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Attendance
+              </Typography>
+              {onViewRsvpDashboard && (
+                <Typography
+                  variant="caption"
+                  color="primary"
+                  sx={{ ml: 'auto', cursor: 'pointer' }}
+                  onClick={() => onViewRsvpDashboard(cls.id)}
+                >
+                  View details →
+                </Typography>
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 3 }}>
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  Total
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                  {rsvpSummary.total}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  Opted in
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                  {rsvpSummary.attending}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  Attended
+                </Typography>
+                {cls.attendance_synced_at ? (
+                  <Typography variant="body1" sx={{ fontWeight: 700, color: 'success.main' }}>
+                    {attendanceSummary?.present ?? 0}
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Not synced yet
+                  </Typography>
+                )}
+              </Box>
+            </Box>
           </Box>
         )}
 

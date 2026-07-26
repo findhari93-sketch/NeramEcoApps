@@ -136,3 +136,33 @@ describe('syncClassroomMeetings cancel-detect', () => {
     expect(r.cancelled).toBe(0);
   });
 });
+
+describe('syncClassroomMeetings organizer backfill', () => {
+  it('backfills organizer_name/organizer_email on a class whose organizer was never captured', async () => {
+    // mockCalendarView hardcodes the event organizer to name "T", address "t@x.com".
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, isCancelled: false }]);
+    const sb = makeSupabase([channelClass({ organizer_name: null, organizer_email: null })]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.updated).toBe(1);
+    expect(sb.__updates).toContainEqual({
+      table: 'nexus_scheduled_classes',
+      vals: {
+        title: 'Class',
+        scheduled_date: '2020-01-15',
+        start_time: '19:00',
+        end_time: '20:30',
+        organizer_name: 'T',
+        organizer_email: 't@x.com',
+      },
+      id: 'c1',
+    });
+  });
+
+  it('does not re-update a class whose organizer already matches Teams and nothing else changed', async () => {
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, isCancelled: false }]);
+    const sb = makeSupabase([channelClass({ organizer_name: 'T', organizer_email: 't@x.com' })]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.updated).toBe(0);
+    expect(sb.__updates).toHaveLength(0);
+  });
+});

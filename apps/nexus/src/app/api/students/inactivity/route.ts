@@ -36,14 +36,24 @@ export async function GET(request: NextRequest) {
 
     // Roster: the same population the assignment roster and photo queue use, so
     // the three screens never disagree about who is in the class.
-    const { data: enrollmentRows } = await supabase
+    //
+    // The FK must be named: nexus_enrollments points at users twice (user_id and
+    // removed_by), so a bare `user:users(...)` embed is ambiguous and PostgREST
+    // refuses it. Raise the error instead of discarding it, otherwise a broken
+    // query looks identical to "nobody in this class is disengaged", which is
+    // the most dangerous possible way for this screen to be wrong.
+    const { data: enrollmentRows, error: rosterError } = await supabase
       .from('nexus_enrollments')
       .select(
-        'id, user_id, enrolled_at, user:users(id, name, email, avatar_url, is_alumni, photo_status, nexus_first_login_at, nexus_last_login_at)',
+        'id, user_id, enrolled_at, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni, photo_status, nexus_first_login_at, nexus_last_login_at)',
       )
       .eq('classroom_id', classroomId)
       .eq('role', 'student')
       .eq('is_active', true);
+
+    if (rosterError) {
+      throw new Error(`Could not load the classroom roster: ${rosterError.message}`);
+    }
 
     const roster = ((enrollmentRows || []) as any[]).filter(
       (r) => r.user && r.user.is_alumni !== true,

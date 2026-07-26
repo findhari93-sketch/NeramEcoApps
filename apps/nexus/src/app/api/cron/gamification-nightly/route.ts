@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { assertCronRequest } from '@/lib/cron-auth';
 import {
   updateStudentStreak,
   recordPointEvent,
@@ -15,7 +16,10 @@ import {
  * - Updates streaks for students with gaps (resets if missed a day)
  * - Checks streak milestones (7/30/90 day bonuses)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = assertCronRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const supabase = getSupabaseAdminClient() as any;
     const today = new Date().toISOString().split('T')[0];

@@ -170,6 +170,56 @@ test.describe('Nexus — View as Student (impersonation)', () => {
     await expect(page).toHaveURL(/\/teacher/, { timeout: 15000 });
   });
 
+  // ── Exit returns to the exact page impersonation was started from ──
+
+  test('exit returns to the specific origin page, not just the dashboard', async ({
+    page,
+    request,
+  }) => {
+    const mintRes = await request.post('/api/auth/impersonate', {
+      headers: authHeader(teacherToken),
+      data: { studentId, reason: 'E2E return-url test' },
+    });
+    if (mintRes.status() !== 200) {
+      test.skip(true, 'Impersonation not available in this environment');
+      return;
+    }
+    const mint = await mintRes.json();
+    const originPage = '/teacher/students';
+
+    // Seed the impersonation session with a returnUrl, as startImpersonation()
+    // does when triggered from ViewAsStudentButton/ViewAsStudentDialog on a
+    // specific page (here, the students list) rather than the dashboard.
+    await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(
+      ({ teacherToken, mint, originPage }) => {
+        localStorage.setItem('nexus_test_token', teacherToken);
+        sessionStorage.setItem(
+          'nexus_impersonation',
+          JSON.stringify({
+            token: mint.token,
+            expiresAt: mint.expiresAt,
+            impersonatorName: mint.impersonatorName,
+            student: mint.student,
+            returnUrl: originPage,
+          })
+        );
+      },
+      { teacherToken, mint, originPage }
+    );
+
+    await page.goto(`${BASE_URL}/student/dashboard`, { waitUntil: 'domcontentloaded' });
+
+    const exitBtn = page.getByRole('button', { name: /exit student view/i });
+    await expect(exitBtn).toBeVisible({ timeout: 15000 });
+    await exitBtn.click();
+
+    // Must land back on the exact origin page, not the generic dashboard.
+    await expect(page).toHaveURL(new RegExp(originPage.replace(/\//g, '\\/')), {
+      timeout: 15000,
+    });
+  });
+
   // ── Mobile: banner doesn't overflow ──
 
   test('mobile: banner Exit button is reachable at 375px', async ({ page, request }) => {

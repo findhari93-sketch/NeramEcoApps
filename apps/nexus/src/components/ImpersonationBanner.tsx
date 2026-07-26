@@ -36,12 +36,16 @@ export default function ImpersonationBanner() {
 
   const handleExit = async () => {
     setExiting(true);
+    // Capture before exitImpersonation() clears the stored session.
+    const returnUrl = impersonation.returnUrl;
     try {
       await exitImpersonation();
     } finally {
-      // Back to the teacher/admin's own dashboard; RoleGuard re-grants access.
-      // (/teacher has no index page and would 404 — use the canonical route.)
-      router.push('/teacher/dashboard');
+      // Prefer the page the teacher/admin started from; fall back to the
+      // dashboard for sessions started before returnUrl existed, or without
+      // one. (/teacher has no index page and would 404 — use the canonical
+      // route.) RoleGuard re-grants teacher/admin access either way.
+      router.push(returnUrl || '/teacher/dashboard');
     }
   };
 

@@ -5,6 +5,7 @@ import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { notifyRecordingAvailable, notifyClassCancelled } from '@/lib/timetable-notifications';
 import { syncClassroomMeetings } from '@/lib/teams-meeting-sync';
 import { announceCancellationToTeams } from '@/lib/teams-class-announcements';
+import { extractOidFromJoinUrl } from '@/lib/teams-online-meeting';
 
 /**
  * POST /api/timetable/sync-now
@@ -66,7 +67,10 @@ export async function POST(request: NextRequest) {
 
     const appToken = await getAppOnlyToken();
     const now = new Date();
-    const pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    // 90-day lookback (not just 7 days): the UPDATE step also backfills organizer_name/
+    // organizer_email for classes already in Nexus, so a wider window is what makes
+    // already-scheduled historical classes self-heal their organizer data over time.
+    const pastDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
     const futureDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
 
@@ -389,24 +393,6 @@ function matchRecordingToClass(
 }
 
 // ─── OnlineMeetings recording fetch helpers (fallback) ──────────────────────
-
-/**
- * Extract the organizer OID from a Teams join URL.
- * The join URL contains a context parameter with {"Tid":"...","Oid":"..."}.
- */
-function extractOidFromJoinUrl(joinUrl: string): string | null {
-  try {
-    const url = new URL(joinUrl);
-    const context = url.searchParams.get('context');
-    if (!context) return null;
-    const parsed = JSON.parse(context);
-    return parsed.Oid || null;
-  } catch {
-    // Join URL might be encoded differently, try regex
-    const match = joinUrl.match(/%22Oid%22%3a%22([a-f0-9-]+)%22/i);
-    return match ? match[1] : null;
-  }
-}
 
 /**
  * Look up a Teams online meeting by its join URL, then fetch the first recording.

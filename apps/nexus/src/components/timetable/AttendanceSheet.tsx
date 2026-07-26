@@ -34,6 +34,15 @@ interface AttendanceRecord {
   };
 }
 
+/** Why the last Teams sync did or did not produce anything. */
+interface SyncState {
+  synced_at: string | null;
+  status: string | null;
+  /** Human explanation, already resolved server-side from the status code. */
+  message: string | null;
+  has_meeting: boolean;
+}
+
 interface AttendanceSheetProps {
   open: boolean;
   onClose: () => void;
@@ -59,6 +68,9 @@ export default function AttendanceSheet({
   const [syncing, setSyncing] = useState(false);
   const [savingAll, setSavingAll] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [severity, setSeverity] = useState<'info' | 'warning' | 'success'>('info');
+  const [sync, setSync] = useState<SyncState | null>(null);
+  const [unmatched, setUnmatched] = useState(0);
 
   const fetchAttendance = async () => {
     setLoading(true);
@@ -75,6 +87,7 @@ export default function AttendanceSheet({
         const data = await res.json();
         setRecords(data.attendance || []);
         setSummary(data.summary || { present: 0, absent: 0, total: 0 });
+        setSync(data.sync ?? null);
       }
     } catch (err) {
       console.error('Failed to load attendance:', err);
@@ -87,6 +100,7 @@ export default function AttendanceSheet({
     if (open) {
       fetchAttendance();
       setMessage(null);
+      setUnmatched(0);
     }
   }, [open, classId]);
 
@@ -112,12 +126,24 @@ export default function AttendanceSheet({
 
       const data = await res.json();
       if (res.ok) {
-        setMessage(`Synced ${data.synced} records from Teams`);
+        const count = data.synced ?? 0;
+        setUnmatched(data.unmatched ?? 0);
+        setSeverity(count > 0 ? 'success' : 'warning');
+        setMessage(
+          count > 0
+            ? `Synced ${count} ${count === 1 ? 'student' : 'students'} from Teams.`
+            : data.message || 'Teams returned no attendance for this class.',
+        );
         fetchAttendance();
       } else {
+        // The server maps each failure code to a specific explanation, so a
+        // missing Azure grant no longer looks the same as a class that has not
+        // happened yet.
+        setSeverity('warning');
         setMessage(data.error || 'Sync failed');
       }
     } catch (err) {
+      setSeverity('warning');
       setMessage('Failed to sync from Teams');
     } finally {
       setSyncing(false);
@@ -220,8 +246,22 @@ export default function AttendanceSheet({
       </DialogTitle>
       <DialogContent>
         {message && (
-          <Alert severity="info" sx={{ mb: 1.5 }} onClose={() => setMessage(null)}>
+          <Alert severity={severity} sx={{ mb: 1.5 }} onClose={() => setMessage(null)}>
             {message}
+            {unmatched > 0 && (
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                {unmatched} {unmatched === 1 ? 'person' : 'people'} joined who are not on this
+                roster, so they were skipped.
+              </Typography>
+            )}
+          </Alert>
+        )}
+
+        {/* Standing explanation from the last sync, so a teacher opening the sheet
+            cold still learns why it is empty without pressing anything. */}
+        {!message && sync?.status && sync.status !== 'ok' && sync.message && (
+          <Alert severity="warning" sx={{ mb: 1.5 }}>
+            {sync.message}
           </Alert>
         )}
 
@@ -260,9 +300,20 @@ export default function AttendanceSheet({
             {savingAll ? 'Saving...' : 'Mark all present'}
           </Button>
         </Box>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: sync?.synced_at ? 0.5 : 2 }}>
           Toggle any student to mark them present or absent, changes save instantly.
         </Typography>
+        {sync?.synced_at && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+            Synced from Teams on{' '}
+            {new Date(sync.synced_at).toLocaleString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </Typography>
+        )}
 
         {/* Attendance list */}
         {loading ? (
@@ -301,17 +352,22 @@ export default function AttendanceSheet({
                   <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
                     {record.student?.name || 'Unknown'}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  {/* Teams telemetry sits under the name so it wraps instead of
+                      pushing the toggle off a 375px screen. */}
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                     {record.source === 'teams' ? 'Teams' : record.source === 'manual' ? 'Marked by you' : 'Not marked'}
                     {record.joined_at && ` · Joined ${formatTime(record.joined_at)}`}
+                    {record.left_at && `, left ${formatTime(record.left_at)}`}
                     {record.duration_minutes ? ` · ${formatDuration(record.duration_minutes)}` : ''}
                   </Typography>
                 </Box>
+                {/* Full-size switch, not small: this is the main repeated tap on a
+                    phone and needs to clear the 44px touch-target floor. */}
                 <Switch
                   checked={record.attended}
                   onChange={(e) => handleToggleAttendance(record.student_id, e.target.checked)}
-                  size="small"
                   color="success"
+                  inputProps={{ 'aria-label': `Attendance for ${record.student?.name || 'student'}` }}
                 />
               </Box>
             ))}

@@ -99,6 +99,13 @@ export const FEATURES: FeatureDef[] = [
   // dark-launch it, switch it off from /teacher/admin/features before shipping.
   { id: 'staff.students-watchlist', label: 'Inactivity Watchlist', surface: 'staff', group: 'Management', paths: ['/teacher/students/watchlist'], defaultEnabled: true },
   { id: 'staff.photo-review', label: 'Photo Review', surface: 'staff', group: 'Management', paths: ['/teacher/photo-review'], defaultEnabled: true },
+  // Not a page (`paths: []`). Mirrors an approved photo onto the student's real
+  // Microsoft account, so it writes to a tenant-wide identity that Teams,
+  // Outlook and the directory all read. Needs the ProfilePhoto.ReadWrite.All
+  // application permission with admin consent in Azure first, so switch this
+  // OFF from /teacher/admin/features until that consent is granted. Defaults ON
+  // only because the registry invariant requires it for staff features.
+  { id: 'staff.photo-ms-push', label: 'Copy approved photos to Microsoft', surface: 'staff', group: 'Management', paths: [], defaultEnabled: true },
   { id: 'staff.reviews', label: 'Reviews', surface: 'staff', group: 'Management', paths: ['/teacher/reviews'], defaultEnabled: true },
   { id: 'staff.modules', label: 'Modules', surface: 'staff', group: 'Management', paths: ['/teacher/modules'], defaultEnabled: true },
   { id: 'staff.study-materials', label: 'Study Materials', surface: 'staff', group: 'Management', paths: ['/teacher/study-materials'], defaultEnabled: true },

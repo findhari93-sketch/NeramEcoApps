@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
       classroom_id, classroom_ids, title, scheduled_date, start_time, end_time,
       topic_id, course_topic_id, batch_id, teams_meeting_scope, target_scope, description,
       lobby_bypass, allowed_presenters, recurrence_rule, recurrence_end_date,
-      publish_state,
+      publish_state, teacher_id: tutorIdInput,
     } = body;
 
     // Multi-classroom: one logical class can target several classrooms. Each classroom
@@ -222,6 +222,21 @@ export async function POST(request: NextRequest) {
       teacherId = await verifyTeacherRole(msUser.oid, cid);
     }
 
+    // The tutor who takes the class. Any teaching staff (teacher/admin) may be
+    // assigned; validate the picked id and fall back to the scheduler when absent
+    // or invalid. `teacherId` (the scheduler) remains the authorization check above.
+    let tutorId: string | null = null;
+    if (tutorIdInput) {
+      const { data: tutor } = await supabase
+        .from('users')
+        .select('id, user_type')
+        .eq('id', tutorIdInput)
+        .single();
+      if (tutor && ['teacher', 'admin'].includes(tutor.user_type ?? '')) {
+        tutorId = tutor.id;
+      }
+    }
+
     // Classroom types drive the display-only target_scope ('all' for the common cohort).
     const { data: classroomRows } = await supabase
       .from('nexus_classrooms')
@@ -240,7 +255,7 @@ export async function POST(request: NextRequest) {
       title,
       start_time,
       end_time,
-      teacher_id: teacherId,
+      teacher_id: tutorId || teacherId,
       // Topics now come from the Course Plan Builder (course_topic_id). topic_id is the
       // legacy topic space, kept null unless a caller still sends it.
       course_topic_id: course_topic_id || null,
@@ -343,7 +358,7 @@ export async function PATCH(request: NextRequest) {
 
     // Only allow updating specific fields
     const allowedFields = [
-      'title', 'scheduled_date', 'start_time', 'end_time', 'topic_id', 'course_topic_id', 'status',
+      'title', 'scheduled_date', 'start_time', 'end_time', 'topic_id', 'course_topic_id', 'status', 'teacher_id',
       'teams_meeting_url', 'teams_meeting_id', 'teams_meeting_join_url', 'teams_meeting_scope',
       'batch_id', 'recording_url', 'transcript_url', 'notes', 'description', 'target_scope',
       'lobby_bypass', 'allowed_presenters', 'auto_sync_recording', 'rescheduled_to',

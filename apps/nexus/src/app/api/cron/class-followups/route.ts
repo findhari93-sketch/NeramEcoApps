@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import { computeAbsencesForClass, istToday } from '@/lib/class-absences';
+import { assertCronRequest } from '@/lib/cron-auth';
+import { syncClassAttendance, CLASS_SYNC_COLUMNS, type ClassMeetingRow } from '@/lib/attendance-sync';
 
 /**
  * GET /api/cron/class-followups
@@ -18,14 +20,18 @@ import { computeAbsencesForClass, istToday } from '@/lib/class-absences';
  * in-app notification tells the teacher a list is waiting, and sending is a
  * person's decision on the attendance screen.
  *
- * KNOWN LIMIT: this does not pull fresh attendance from Teams. The Graph
- * attendance-report endpoint used by /api/timetable/attendance-report is
- * delegated (`/me/onlineMeetings/...`), so it needs a signed-in teacher and
- * cannot run here. The list is therefore computed from attendance already
- * recorded. A teacher who opens the attendance screen and syncs gets a
- * recomputed list immediately, which is the same code path.
+ * Attendance is pulled from Teams first, for each of today's finished classes,
+ * so the absence list is computed from fresh data rather than whatever happened
+ * to be recorded. That used to be impossible because the Graph read was
+ * delegated and needed a signed-in teacher; it now resolves app-only on behalf
+ * of the meeting's organizer. The dedicated /api/cron/sync-attendance pass runs
+ * ten minutes earlier and does the bulk of this; the inline sync here is the
+ * belt-and-braces that keeps the two from drifting out of order.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = assertCronRequest(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const supabase = getSupabaseAdminClient() as any;
     const today = istToday();
@@ -38,7 +44,7 @@ export async function GET() {
 
     const { data: classes, error } = await supabase
       .from('nexus_scheduled_classes')
-      .select('id, classroom_id, title, scheduled_date, start_time, end_time, status, publish_state')
+      .select(`${CLASS_SYNC_COLUMNS}, title, end_time, status, publish_state, attendance_synced_at`)
       .eq('scheduled_date', today)
       .lte('end_time', nowIstTime)
       .neq('status', 'cancelled')
@@ -47,6 +53,20 @@ export async function GET() {
     if (error) throw error;
     if (!classes || classes.length === 0) {
       return NextResponse.json({ message: 'No classes finished today', classes: 0 });
+    }
+
+    // Refresh attendance from Teams before deciding who was absent. Best-effort:
+    // a class Graph cannot answer for still gets an absence list from whatever is
+    // recorded, which is the old behaviour rather than a regression.
+    let attendanceSynced = 0;
+    for (const cls of classes) {
+      if (cls.attendance_synced_at || !cls.teams_meeting_id) continue;
+      try {
+        const result = await syncClassAttendance(supabase, cls as ClassMeetingRow);
+        if (result.ok) attendanceSynced++;
+      } catch (err) {
+        console.error(`Teams attendance sync failed for class ${cls.id}:`, err);
+      }
     }
 
     let totalNoShows = 0;
@@ -106,6 +126,7 @@ export async function GET() {
     return NextResponse.json({
       date: today,
       classes: classes.length,
+      attendanceSynced,
       noShows: totalNoShows,
       optedOut: totalOptedOut,
       teachersNotified: notified,

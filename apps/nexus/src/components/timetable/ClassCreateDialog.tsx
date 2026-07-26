@@ -53,6 +53,16 @@ interface BatchOption {
   name: string;
 }
 
+interface TeacherOption {
+  id: string;
+  name: string;
+  email: string;
+  avatar_url?: string | null;
+  user_type?: string;
+  /** True for the currently signed-in scheduler, so the picker can default to them. */
+  isSelf?: boolean;
+}
+
 interface ClassroomOption {
   id: string;
   name: string;
@@ -84,6 +94,8 @@ interface ClassFormData {
   end_time: string;
   /** Course Plan Builder topic id (nexus_course_topics). */
   topic_id: string;
+  /** The teacher (tutor) who takes this class. Defaults to the scheduler. */
+  teacher_id: string;
   /** Classrooms this class targets. One row is created per classroom (shared meeting). */
   classroom_ids: string[];
   create_meeting: boolean;
@@ -136,6 +148,7 @@ const emptyForm: ClassFormData = {
   start_time: '',
   end_time: '',
   topic_id: '',
+  teacher_id: '',
   classroom_ids: [],
   create_meeting: false,
   description: '',
@@ -237,6 +250,10 @@ export default function ClassCreateDialog({
   // Course Plan topics for the currently selected classroom(s), fetched on selection change.
   const [topicOptions, setTopicOptions] = useState<TopicOption[]>(topics || []);
   const [topicsLoading, setTopicsLoading] = useState(false);
+  // Teaching staff for the "Teacher (tutor)" picker, loaded once when the dialog opens.
+  const [teacherOptions, setTeacherOptions] = useState<TeacherOption[]>([]);
+  const [teachersLoading, setTeachersLoading] = useState(false);
+  const [selfTeacherId, setSelfTeacherId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [holidayConflict, setHolidayConflict] = useState<{ date: string; title: string } | null>(null);
@@ -284,6 +301,7 @@ export default function ClassCreateDialog({
         start_time: editingClass.start_time,
         end_time: editingClass.end_time,
         topic_id: editingClass.course_topic?.id || editingClass.topic?.id || '',
+        teacher_id: editingClass.teacher?.id || '',
         classroom_ids: classroomIds,
         create_meeting: false,
         description: editingClass.description || '',
@@ -357,6 +375,45 @@ export default function ClassCreateDialog({
     };
   }, [open, classroomIdsKey, getToken]);
 
+  // Load teaching staff once per open for the tutor picker, and remember who the
+  // signed-in scheduler is so new classes default to them as the tutor.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setTeachersLoading(true);
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch('/api/timetable/teachers', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) {
+            const list: TeacherOption[] = data.teachers || [];
+            setTeacherOptions(list);
+            setSelfTeacherId(list.find((t) => t.isSelf)?.id || '');
+          }
+        }
+      } catch {
+        // Non-fatal: the picker just stays empty and the API defaults the tutor to the scheduler.
+      } finally {
+        if (!cancelled) setTeachersLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, getToken]);
+
+  // Default a new class's tutor to the scheduler once staff have loaded, unless a
+  // tutor is already chosen (e.g. editing an existing class).
+  useEffect(() => {
+    if (!open || editingClass || !selfTeacherId) return;
+    setFormData((f) => (f.teacher_id ? f : { ...f, teacher_id: selfTeacherId }));
+  }, [open, editingClass, selfTeacherId]);
+
   // Resolve the currently selected topic option (fall back to the editing class's topic
   // so its label shows even before the plan-topics list loads).
   const selectedTopic: TopicOption | null =
@@ -366,6 +423,19 @@ export default function ClassCreateDialog({
       : editingClass?.topic && editingClass.topic.id === formData.topic_id
         ? { id: editingClass.topic.id, title: editingClass.topic.title, category: editingClass.topic.category || 'General' }
         : null);
+
+  // Resolve the selected tutor. Fall back to the editing class's teacher so its name
+  // shows even before the staff list finishes loading.
+  const selectedTeacher: TeacherOption | null =
+    teacherOptions.find((t) => t.id === formData.teacher_id) ||
+    (editingClass?.teacher && editingClass.teacher.id === formData.teacher_id
+      ? {
+          id: editingClass.teacher.id,
+          name: editingClass.teacher.name,
+          email: '',
+          avatar_url: editingClass.teacher.avatar_url,
+        }
+      : null);
 
   const handleSubmit = async () => {
     if (!formData.title || !formData.scheduled_date || !formData.start_time || !formData.end_time) {
@@ -438,6 +508,7 @@ export default function ClassCreateDialog({
         classroom_ids: formData.classroom_ids,
         classroom_id: primaryClassroomId,
         course_topic_id: formData.topic_id || null,
+        teacher_id: formData.teacher_id || null,
         description: formData.description || null,
         lobby_bypass: formData.create_meeting ? formData.lobby_bypass : null,
         allowed_presenters: formData.create_meeting ? formData.allowed_presenters : null,
@@ -717,6 +788,47 @@ export default function ClassCreateDialog({
                   endAdornment: (
                     <>
                       {topicsLoading ? <CircularProgress color="inherit" size={18} /> : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
+          />
+
+          {/* Teacher (tutor) — who actually takes this class. Any teaching staff can be
+              chosen; the meeting lands on the tutor's Teams calendar and their name is
+              shown in the Teams channel/chat post. Defaults to the scheduler. */}
+          <Autocomplete
+            options={teacherOptions}
+            getOptionLabel={(o) => o.name}
+            isOptionEqualToValue={(o, v) => o.id === v.id}
+            value={selectedTeacher}
+            onChange={(_e, val) => setFormData((f) => ({ ...f, teacher_id: val?.id || '' }))}
+            loading={teachersLoading}
+            fullWidth
+            renderOption={(props, option) => (
+              <Box component="li" {...props} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start !important', minHeight: 44 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {option.name}{option.isSelf ? ' (you)' : ''}
+                </Typography>
+                {option.email && (
+                  <Typography variant="caption" color="text.secondary">{option.email}</Typography>
+                )}
+              </Box>
+            )}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Teacher (tutor)"
+                placeholder="Who takes this class?"
+                InputLabelProps={{ ...params.InputLabelProps, shrink: true }}
+                helperText="Shows the meeting on this teacher's Teams calendar and names them in the Teams post"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {teachersLoading ? <CircularProgress color="inherit" size={18} /> : null}
                       {params.InputProps.endAdornment}
                     </>
                   ),
