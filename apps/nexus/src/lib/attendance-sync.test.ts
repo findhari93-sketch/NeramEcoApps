@@ -179,6 +179,28 @@ describe('syncClassAttendance', () => {
     expect(result).toMatchObject({ ok: false, code: 'access_policy_missing' });
   });
 
+  it('classifies a 403 on the DELEGATED artifact path as not_organizer, not an access policy', async () => {
+    // No organizer oid and no join URL, so the only path left is the caller's own
+    // me/onlineMeetings. A Teams application access policy does not govern that
+    // base, so blaming one would send an admin to the wrong console.
+    const supabase = mockSupabase({ nexus_scheduled_classes: [{ attendance_sync_attempts: 0 }] });
+    stubGraph([{ match: '/attendanceReports', status: 403, text: '3003: User does not have access to lookup meeting' }]);
+
+    const result = await syncClassAttendance(
+      supabase as any,
+      {
+        ...CLASS,
+        teams_meeting_id: ONLINE_MEETING_ID,
+        teams_meeting_join_url: null,
+        organizer_ms_oid: null,
+        online_meeting_id: null,
+      },
+      { delegatedToken: 'deleg' },
+    );
+
+    expect(result).toMatchObject({ ok: false, code: 'not_organizer' });
+  });
+
   it('classifies Authorization_RequestDenied as a missing app permission', async () => {
     const supabase = mockSupabase({ nexus_scheduled_classes: [{ attendance_sync_attempts: 0 }] });
     stubGraph([

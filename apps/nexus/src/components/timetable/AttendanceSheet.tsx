@@ -17,6 +17,9 @@ import {
 } from '@neram/ui';
 import SyncIcon from '@mui/icons-material/Sync';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
+import TroubleshootIcon from '@mui/icons-material/Troubleshoot';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
 interface AttendanceRecord {
   id: string;
@@ -42,6 +45,31 @@ interface SyncState {
   message: string | null;
   has_meeting: boolean;
 }
+
+/** One probe from /api/timetable/attendance-diagnostics. */
+interface DiagnosticStep {
+  step: string;
+  ok: boolean;
+  detail: string;
+  remedy?: string;
+}
+
+interface DiagnosticsResult {
+  ok: boolean;
+  blocking_step: string | null;
+  steps: DiagnosticStep[];
+}
+
+const STEP_LABELS: Record<string, string> = {
+  class: 'Class and meeting link',
+  env: 'Microsoft credentials',
+  app_token: 'Microsoft sign-in for Nexus',
+  app_roles: 'Graph application permissions',
+  organizer: 'Meeting organizer',
+  access_policy: 'Teams application access policy',
+  meeting_lookup: 'Finding the meeting in Teams',
+  reports: 'Attendance report',
+};
 
 interface AttendanceSheetProps {
   open: boolean;
@@ -71,6 +99,8 @@ export default function AttendanceSheet({
   const [severity, setSeverity] = useState<'info' | 'warning' | 'success'>('info');
   const [sync, setSync] = useState<SyncState | null>(null);
   const [unmatched, setUnmatched] = useState(0);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
 
   const fetchAttendance = async () => {
     setLoading(true);
@@ -101,8 +131,41 @@ export default function AttendanceSheet({
       fetchAttendance();
       setMessage(null);
       setUnmatched(0);
+      setDiagnostics(null);
     }
   }, [open, classId]);
+
+  /**
+   * Ask the server which link in the Teams chain is broken.
+   *
+   * This exists because the endpoint requires a bearer token, so it could not be
+   * opened in a browser, which is exactly why it went unused during the outage it
+   * was built for. The dialog already holds a token, so the one place a teacher
+   * sees the failure is also the place that can explain it.
+   */
+  const handleDiagnose = async () => {
+    setDiagnosing(true);
+    setDiagnostics(null);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/timetable/attendance-diagnostics?class_id=${classId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (data?.steps) {
+        setDiagnostics(data as DiagnosticsResult);
+      } else {
+        setSeverity('warning');
+        setMessage(data?.error || 'Could not run diagnostics');
+      }
+    } catch {
+      setSeverity('warning');
+      setMessage('Could not run diagnostics');
+    } finally {
+      setDiagnosing(false);
+    }
+  };
 
   const handleSyncTeams = async () => {
     setSyncing(true);
@@ -299,7 +362,85 @@ export default function AttendanceSheet({
           >
             {savingAll ? 'Saving...' : 'Mark all present'}
           </Button>
+          {/* Only offered once something has actually gone wrong, so the normal
+              path stays a two-button dialog. */}
+          {teamsMeetingId && sync?.status && sync.status !== 'ok' && (
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<TroubleshootIcon />}
+              onClick={handleDiagnose}
+              disabled={diagnosing || syncing}
+              sx={{ textTransform: 'none', minHeight: 40 }}
+            >
+              {diagnosing ? 'Checking...' : 'Why not?'}
+            </Button>
+          )}
         </Box>
+
+        {diagnostics && (
+          <Box
+            sx={{
+              mb: 2,
+              p: 1.5,
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: diagnostics.ok ? 'success.light' : 'warning.light',
+              bgcolor: 'action.hover',
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+              {diagnostics.ok
+                ? 'Teams attendance is reachable for this class.'
+                : 'Teams attendance is blocked here:'}
+            </Typography>
+            {diagnostics.steps.map((step) => (
+              <Box key={step.step} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'flex-start' }}>
+                {step.ok ? (
+                  <CheckCircleOutlineIcon color="success" sx={{ fontSize: 18, mt: 0.2 }} />
+                ) : (
+                  <ErrorOutlineIcon color="warning" sx={{ fontSize: 18, mt: 0.2 }} />
+                )}
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: step.ok ? 400 : 600 }}>
+                    {STEP_LABELS[step.step] || step.step}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', wordBreak: 'break-word' }}
+                  >
+                    {step.detail}
+                  </Typography>
+                  {/* Remedies include PowerShell, which must never widen the
+                      dialog: it scrolls inside its own box instead. */}
+                  {step.remedy && (
+                    <Box
+                      component="pre"
+                      sx={{
+                        mt: 0.5,
+                        mb: 0,
+                        p: 1,
+                        fontSize: 11,
+                        lineHeight: 1.5,
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre',
+                        overflowX: 'auto',
+                        maxWidth: '100%',
+                        borderRadius: 1,
+                        bgcolor: 'background.paper',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      {step.remedy}
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        )}
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: sync?.synced_at ? 0.5 : 2 }}>
           Toggle any student to mark them present or absent, changes save instantly.
         </Typography>

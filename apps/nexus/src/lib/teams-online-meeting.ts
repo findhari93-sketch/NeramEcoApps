@@ -95,6 +95,12 @@ export type MeetingLookupFailure =
   | 'meeting_not_found'
   | 'app_permission_missing'
   | 'access_policy_missing'
+  /**
+   * The DELEGATED lookup was refused because the signed-in user did not organize
+   * the meeting (Teams error 3003). For our channel meetings that is the normal
+   * case, not a misconfiguration, so it must never be reported as the reason.
+   */
+  | 'not_organizer'
   | 'graph_error';
 
 export interface OnlineMeetingResolution {
@@ -113,20 +119,69 @@ interface LookupResult {
 /**
  * Map a Graph error response onto a remediable cause.
  *
- * `Authorization_RequestDenied` means the app registration itself lacks the
- * permission. A plain 403 on an `/users/{oid}/onlineMeetings` read means the
- * permission is there but no Teams application access policy grants this app
- * rights over that organizer.
+ * `appOnly` is load-bearing, not decoration. A Teams application access policy
+ * governs app-only reads of `users/{oid}/...` and has no bearing whatsoever on
+ * the delegated `me/...` collection, so blaming it for a delegated 403 sends the
+ * operator to the wrong console. Verified live against this tenant: the app-only
+ * refusal reads `No application access policy found for this app <id> on the
+ * user`, while the delegated one reads `3003: User does not have access to
+ * lookup meeting`, which merely means the caller is not the organizer.
  */
-function classifyGraphFailure(status: number, body: string): MeetingLookupFailure {
-  if (/Authorization_RequestDenied/i.test(body)) return 'app_permission_missing';
-  if (/application\s*access\s*policy/i.test(body)) return 'access_policy_missing';
-  if (status === 403) return 'access_policy_missing';
+function classifyGraphFailure(status: number, body: string, appOnly: boolean): MeetingLookupFailure {
+  if (appOnly) {
+    if (/Authorization_RequestDenied/i.test(body)) return 'app_permission_missing';
+    if (/application\s*access\s*policy/i.test(body)) return 'access_policy_missing';
+    if (status === 403) return 'access_policy_missing';
+  } else if (status === 403) {
+    return 'not_organizer';
+  }
   if (status === 404) return 'meeting_not_found';
   return 'graph_error';
 }
 
-async function lookupByJoinUrl(base: string, token: string, joinUrl: string): Promise<LookupResult> {
+/**
+ * Which of two failed attempts to report. Lower wins.
+ *
+ * App-only outcomes always beat delegated ones: app-only is the only path that
+ * can succeed for a channel meeting, and Azure misconfigurations surface there
+ * alone. This exists because the previous "keep the most actionable failure"
+ * heuristic let the delegated attempt's 403 overwrite the app-only diagnosis,
+ * which is how prod ended up storing the useless `me/onlineMeetings responded
+ * 403 ... 3003` instead of Microsoft's explicit access-policy message.
+ */
+export function failureRank(failure: MeetingLookupFailure, appOnly: boolean): number {
+  if (appOnly) {
+    if (failure === 'app_permission_missing' || failure === 'access_policy_missing') return 0;
+    if (failure === 'graph_error') return 1;
+    return 2;
+  }
+  // A delegated "you are not the organizer" is expected noise here.
+  return failure === 'not_organizer' ? 5 : 4;
+}
+
+/**
+ * Is this a Teams *channel* meeting?
+ *
+ * The join URL's thread type is authoritative: `@thread.tacv2` is a channel
+ * thread, `@thread.v2` is a standalone meeting thread. The stored id shape is
+ * only a fallback for rows with no join URL, and it must cover both Outlook
+ * event id prefixes: prod holds `AAMk…` and `AQMk…`, and checking only `AAMk`
+ * misclassified the latter as a standalone meeting.
+ */
+export function isChannelMeeting(teamsMeetingId: string | null, joinUrl: string | null): boolean {
+  if (joinUrl) {
+    if (joinUrl.includes('thread.tacv2')) return true;
+    if (joinUrl.includes('thread.v2')) return false;
+  }
+  return /^(AAMk|AQMk)/i.test(teamsMeetingId ?? '');
+}
+
+async function lookupByJoinUrl(
+  base: string,
+  token: string,
+  joinUrl: string,
+  appOnly: boolean,
+): Promise<LookupResult> {
   const filter = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
   try {
     const res = await fetch(
@@ -137,7 +192,7 @@ async function lookupByJoinUrl(base: string, token: string, joinUrl: string): Pr
       const body = await res.text().catch(() => '');
       return {
         id: null,
-        failure: classifyGraphFailure(res.status, body),
+        failure: classifyGraphFailure(res.status, body, appOnly),
         detail: `${base} responded ${res.status} ${body.slice(0, 400)}`,
       };
     }
@@ -165,12 +220,12 @@ async function lookupByJoinUrl(base: string, token: string, joinUrl: string): Pr
  *
  * Resolution order depends on the meeting kind, because trying the wrong path
  * first costs a Graph round trip that can never succeed:
- *   - Channel/group meeting (`AAMk…` stored id): app-only
- *     `/users/{organizerOid}/onlineMeetings` FIRST, since the delegated `/me`
- *     collection does not contain meetings organized by someone else. Needs the
- *     application permissions `OnlineMeetings.Read.All` and
- *     `OnlineMeetingArtifact.Read.All`, AND a Teams application access policy
- *     granting this app read access on behalf of that organizer.
+ *   - Channel/group meeting (`@thread.tacv2` join URL, or an `AAMk…`/`AQMk…`
+ *     stored id): app-only `/users/{organizerOid}/onlineMeetings` FIRST, since
+ *     the delegated `/me` collection does not contain meetings organized by
+ *     someone else. Needs the application permissions `OnlineMeetings.Read.All`
+ *     and `OnlineMeetingArtifact.Read.All`, AND a Teams application access
+ *     policy granting this app read access on behalf of that organizer.
  *   - Anything else: delegated `/me/onlineMeetings` first (the caller organized
  *     it), then app-only, then the stored id as-is.
  *
@@ -206,19 +261,19 @@ export async function resolveOnlineMeetingDetailed(opts: {
     }
   }
 
-  // A stored `AAMk…` id means a channel/group meeting, which the delegated
-  // /me collection can never resolve. Going app-only first there saves a
-  // guaranteed-useless Graph round trip on every single sync.
-  const isChannelMeeting = !!teamsMeetingId?.startsWith('AAMk');
+  // A channel/group meeting can never be resolved by the delegated /me
+  // collection, so going app-only first saves a guaranteed-useless Graph round
+  // trip on every single sync.
+  const channelMeeting = isChannelMeeting(teamsMeetingId, joinUrl);
 
   /** A lookup attempt that also carries the base path and token it used. */
-  type Attempt = (LookupResult & { base: string; token: string }) | null;
+  type Attempt = (LookupResult & { base: string; token: string; appOnly: boolean }) | null;
 
   const tryDelegated = async (): Promise<Attempt> => {
     if (!joinUrl || !delegatedToken) return null;
     const base = 'me/onlineMeetings';
-    const result = await lookupByJoinUrl(base, delegatedToken, joinUrl);
-    return { ...result, base, token: delegatedToken };
+    const result = await lookupByJoinUrl(base, delegatedToken, joinUrl, false);
+    return { ...result, base, token: delegatedToken, appOnly: false };
   };
 
   const tryAppOnly = async (): Promise<Attempt> => {
@@ -234,16 +289,18 @@ export async function resolveOnlineMeetingDetailed(opts: {
         detail: `app-only token unavailable: ${err instanceof Error ? err.message : String(err)}`,
         base,
         token: '',
+        appOnly: true,
       };
     }
-    const result = await lookupByJoinUrl(base, appToken, joinUrl);
-    return { ...result, base, token: appToken };
+    const result = await lookupByJoinUrl(base, appToken, joinUrl, true);
+    return { ...result, base, token: appToken, appOnly: true };
   };
 
-  const steps = isChannelMeeting ? [tryAppOnly, tryDelegated] : [tryDelegated, tryAppOnly];
+  const steps = channelMeeting ? [tryAppOnly, tryDelegated] : [tryDelegated, tryAppOnly];
 
-  let lastFailure: MeetingLookupFailure | undefined;
-  let lastDetail: string | undefined;
+  let bestFailure: MeetingLookupFailure | undefined;
+  let bestDetail: string | undefined;
+  let bestRank = Number.POSITIVE_INFINITY;
 
   for (const run of steps) {
     const result = await run();
@@ -257,22 +314,17 @@ export async function resolveOnlineMeetingDetailed(opts: {
         },
       };
     }
-    // Keep the most actionable failure: an Azure misconfiguration beats a plain
-    // "no match", because it is the one the operator can actually fix.
-    if (
-      result.failure &&
-      (lastFailure === undefined ||
-        lastFailure === 'meeting_not_found' ||
-        result.failure === 'app_permission_missing' ||
-        result.failure === 'access_policy_missing')
-    ) {
-      lastFailure = result.failure;
-      lastDetail = result.detail;
+    if (!result.failure) continue;
+    const rank = failureRank(result.failure, result.appOnly);
+    if (rank < bestRank) {
+      bestRank = rank;
+      bestFailure = result.failure;
+      bestDetail = result.detail;
     }
   }
 
   // Stored id is already an onlineMeeting id (link_only). Use it via delegated.
-  if (teamsMeetingId && !isChannelMeeting && delegatedToken) {
+  if (teamsMeetingId && !channelMeeting && delegatedToken) {
     return {
       meeting: {
         meetingId: teamsMeetingId,
@@ -286,7 +338,7 @@ export async function resolveOnlineMeetingDetailed(opts: {
     return { meeting: null, failure: 'no_organizer', detail: 'no organizer oid and no delegated token' };
   }
 
-  return { meeting: null, failure: lastFailure ?? 'meeting_not_found', detail: lastDetail };
+  return { meeting: null, failure: bestFailure ?? 'meeting_not_found', detail: bestDetail };
 }
 
 /**

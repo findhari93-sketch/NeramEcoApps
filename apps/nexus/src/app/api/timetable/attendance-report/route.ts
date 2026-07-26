@@ -17,6 +17,10 @@ const FAILURE_STATUS: Record<AttendanceSyncFailure, number> = {
   meeting_not_found: 404,
   app_permission_missing: 503,
   access_policy_missing: 503,
+  // Also a tenant-configuration problem from the caller's point of view: their
+  // own account can never read a meeting they did not organize, so the fix is
+  // the same access policy that lets Nexus read it on the organizer's behalf.
+  not_organizer: 503,
   report_not_ready: 409,
   no_records: 200,
   graph_error: 502,

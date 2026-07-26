@@ -5,6 +5,8 @@ import {
   resolveOrganizerOid,
   extractOidFromJoinUrl,
   escapeIlike,
+  isChannelMeeting,
+  failureRank,
 } from './teams-online-meeting';
 
 // App-only token path is exercised via the mocked fetch below; stub the token so
@@ -148,6 +150,27 @@ describe('resolveOnlineMeetingDetailed failure classification', () => {
     expect(calls[0]).toContain('/users/oid-123/onlineMeetings');
   });
 
+  it('also goes app-only first for an AQMk event id, not just AAMk', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        return { ok: true, json: async () => ({ value: [{ id: ONLINE_MEETING_ID }] }) } as Response;
+      }),
+    );
+
+    await resolveOnlineMeetingDetailed({
+      delegatedToken: 'deleg',
+      teamsMeetingId: 'AQMkAGExNjgzOGVhLTYzMGQtNGVmYQ==',
+      joinUrl: JOIN_URL,
+      organizerOid: 'oid-123',
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('/users/oid-123/onlineMeetings');
+  });
+
   it('short-circuits entirely when the onlineMeeting id is already cached', async () => {
     vi.stubGlobal('fetch', vi.fn());
     const r = await resolveOnlineMeetingDetailed({
@@ -177,6 +200,124 @@ describe('resolveOnlineMeetingDetailed failure classification', () => {
     });
 
     expect(calls.every((u) => !u.includes('me/onlineMeetings'))).toBe(true);
+  });
+});
+
+describe('the delegated 403 must not mask the app-only diagnosis', () => {
+  /** Stub Graph with a different status/body per collection. */
+  function stubByBase(handlers: {
+    user?: { status: number; body: string };
+    me?: { status: number; body: string };
+  }) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const handler = url.includes('/users/') ? handlers.user : handlers.me;
+        if (!handler) {
+          return { ok: true, status: 200, json: async () => ({ value: [] }), text: async () => '' } as Response;
+        }
+        return {
+          ok: false,
+          status: handler.status,
+          text: async () => handler.body,
+          json: async () => ({}),
+        } as Response;
+      }),
+    );
+  }
+
+  // The exact production shape on 2026-07-26: the app-only attempt carried
+  // Microsoft's explicit access-policy message, and the delegated attempt that
+  // ran afterwards overwrote it with a useless 3003, which is what got stored in
+  // attendance_sync_detail and sent debugging to the wrong endpoint.
+  it('keeps the app-only detail, not the delegated 3003 that follows it', async () => {
+    stubByBase({
+      user: {
+        status: 403,
+        body: '{"error":{"code":"forbidden","message":"No application access policy found for this app aa039c70 on the user"}}',
+      },
+      me: {
+        status: 403,
+        body: '{"error":{"code":"Forbidden","message":"3003: User does not have access to lookup meeting"}}',
+      },
+    });
+
+    const r = await resolveOnlineMeetingDetailed({
+      delegatedToken: 'deleg',
+      teamsMeetingId: AAMK_EVENT_ID,
+      joinUrl: JOIN_URL,
+      organizerOid: 'oid-123',
+    });
+
+    expect(r.failure).toBe('access_policy_missing');
+    expect(r.detail).toContain('users/oid-123/onlineMeetings');
+    expect(r.detail).toContain('No application access policy');
+    expect(r.detail).not.toContain('3003');
+  });
+
+  it('reports a delegated-only 403 as not_organizer, never as an access policy problem', async () => {
+    stubByBase({ me: { status: 403, body: '3003: User does not have access to lookup meeting' } });
+
+    const r = await resolveOnlineMeetingDetailed({
+      delegatedToken: 'deleg',
+      teamsMeetingId: null,
+      joinUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc%40thread.v2/0',
+      organizerOid: null,
+    });
+
+    // Application access policies govern app-only reads of users/{oid}; they have
+    // no bearing on /me, so naming one here would send an admin to the wrong place.
+    expect(r.failure).toBe('not_organizer');
+  });
+
+  it('still surfaces an app-only meeting_not_found over a delegated 403', async () => {
+    stubByBase({ me: { status: 403, body: '3003' } }); // user base returns 200 + empty value
+
+    const r = await resolveOnlineMeetingDetailed({
+      delegatedToken: 'deleg',
+      teamsMeetingId: AAMK_EVENT_ID,
+      joinUrl: JOIN_URL,
+      organizerOid: 'oid-123',
+    });
+
+    expect(r.failure).toBe('meeting_not_found');
+  });
+});
+
+describe('failureRank', () => {
+  it('ranks an app-only Azure misconfiguration above every other outcome', () => {
+    expect(failureRank('access_policy_missing', true)).toBeLessThan(failureRank('meeting_not_found', true));
+    expect(failureRank('app_permission_missing', true)).toBeLessThan(failureRank('not_organizer', false));
+    expect(failureRank('access_policy_missing', true)).toBeLessThan(failureRank('graph_error', true));
+  });
+
+  it('ranks a delegated not_organizer last, because it is expected noise here', () => {
+    expect(failureRank('not_organizer', false)).toBeGreaterThan(failureRank('meeting_not_found', true));
+    expect(failureRank('not_organizer', false)).toBeGreaterThan(failureRank('graph_error', false));
+  });
+});
+
+describe('isChannelMeeting', () => {
+  const CHANNEL_URL =
+    'https://teams.microsoft.com/l/meetup-join/19%3aEMRG-7AiVM6ZpFfIf2rBGeFbPMeMC-BZHE8m8EUeaaU1%40thread.tacv2/1784707344096';
+  const STANDALONE_URL = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_MDg3ZTli%40thread.v2/0';
+
+  it('reads the thread type out of the join URL', () => {
+    expect(isChannelMeeting(null, CHANNEL_URL)).toBe(true);
+    expect(isChannelMeeting(null, STANDALONE_URL)).toBe(false);
+  });
+
+  it('prefers the join URL over the stored id shape', () => {
+    expect(isChannelMeeting(AAMK_EVENT_ID, STANDALONE_URL)).toBe(false);
+  });
+
+  it('falls back to the stored id, covering AQMk as well as AAMk', () => {
+    expect(isChannelMeeting(AAMK_EVENT_ID, null)).toBe(true);
+    // Regression: prod stores AQMk event ids too, and a bare startsWith('AAMk')
+    // misread those as standalone meetings.
+    expect(isChannelMeeting('AQMkAGExNjgzOGVhLTYz', null)).toBe(true);
+    expect(isChannelMeeting(ONLINE_MEETING_ID, null)).toBe(false);
+    expect(isChannelMeeting(null, null)).toBe(false);
   });
 });
 

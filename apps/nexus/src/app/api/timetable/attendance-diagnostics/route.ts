@@ -144,53 +144,70 @@ export async function GET(request: NextRequest) {
     });
     if (!organizerOid) return respond(steps, cls);
 
-    // 5. Access policy. With the roles confirmed present above, a 403 here can
-    // only be the Teams application access policy.
-    const policyRes = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${organizerOid}/onlineMeetings?$top=1`,
+    // 5 and 6. Access policy AND meeting lookup, from ONE Graph call.
+    //
+    // They share a call because a filter is the only way to read this collection:
+    // an unfiltered `?$top=1` returns 400 `InvalidArgument: One of the required
+    // parameters to lookup meeting by QueryOptions is null or empty`, and it does
+    // so BEFORE Graph evaluates any policy. This endpoint used to probe with
+    // `?$top=1` and treat that 400 as a pass, so it reported a healthy access
+    // policy while the real 403 was one step further on. Verified against the
+    // live tenant on 2026-07-26.
+    if (!joinUrl) {
+      steps.push({
+        step: 'access_policy',
+        ok: false,
+        detail: 'No join URL stored on this class, so the meeting cannot be looked up at all.',
+        remedy: 'Recreate the meeting from Nexus so the join URL is captured.',
+      });
+      return respond(steps, cls);
+    }
+
+    const filter = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
+    const lookupRes = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${organizerOid}/onlineMeetings?$filter=${encodeURIComponent(filter)}&$select=id`,
       { headers: { Authorization: `Bearer ${appToken}` } },
     );
-    const policyBody = policyRes.ok ? '' : (await policyRes.text().catch(() => '')).slice(0, 400);
-    const policyOk = policyRes.ok || policyRes.status === 400; // 400 = odd filter, but access was allowed
+    const lookupBody = lookupRes.ok ? '' : (await lookupRes.text().catch(() => '')).slice(0, 400);
+
+    // With the roles confirmed present above, a 403 here can only be the policy.
+    const policyRefused = lookupRes.status === 403;
 
     steps.push({
       step: 'access_policy',
-      ok: policyOk,
-      detail: policyOk
-        ? `Graph allowed an app-only read of this organizer's meetings (${policyRes.status})`
-        : `Graph refused: ${policyRes.status} ${policyBody}`,
-      remedy: policyOk
-        ? undefined
-        : [
+      ok: !policyRefused,
+      detail: policyRefused
+        ? `Graph refused: ${lookupRes.status} ${lookupBody}`
+        : `Graph allowed an app-only read of this organizer's meetings (${lookupRes.status})`,
+      remedy: policyRefused
+        ? [
             'Run as a Teams administrator:',
             '  Connect-MicrosoftTeams',
             `  New-CsApplicationAccessPolicy -Identity Nexus-Attendance-Read -AppIds "${process.env.AZ_CLIENT_ID}" -Description "Nexus reads Teams meeting attendance"`,
             '  Grant-CsApplicationAccessPolicy -PolicyName Nexus-Attendance-Read -Global',
             'Propagation can take 30 minutes or more.',
-          ].join('\n'),
+          ].join('\n')
+        : undefined,
     });
-    if (!policyOk) return respond(steps, cls);
+    if (policyRefused) return respond(steps, cls);
 
-    // 6. Meeting lookup
-    const filter = `JoinWebUrl eq '${(joinUrl ?? '').replace(/'/g, "''")}'`;
-    const meetingRes = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${organizerOid}/onlineMeetings?$filter=${encodeURIComponent(filter)}&$select=id`,
-      { headers: { Authorization: `Bearer ${appToken}` } },
-    );
-    const meetingData = meetingRes.ok ? await meetingRes.json() : null;
-    const meetingId: string | null = meetingData?.value?.[0]?.id ?? null;
+    const lookupData = lookupRes.ok ? await lookupRes.json().catch(() => null) : null;
+    const meetingId: string | null = lookupData?.value?.[0]?.id ?? null;
+    const isChannelUrl = joinUrl.includes('thread.tacv2');
 
     steps.push({
       step: 'meeting_lookup',
       ok: !!meetingId,
       detail: meetingId
         ? `Resolved onlineMeeting ${meetingId}`
-        : meetingRes.ok
-          ? 'Graph matched no meeting for this join URL'
-          : `Graph returned ${meetingRes.status} ${(await meetingRes.text().catch(() => '')).slice(0, 300)}`,
+        : lookupRes.ok
+          ? `Graph matched no meeting for this join URL (${isChannelUrl ? 'channel thread' : 'standalone meeting thread'})`
+          : `Graph returned ${lookupRes.status} ${lookupBody}`,
       remedy: meetingId
         ? undefined
-        : 'The meeting may have been deleted in Teams, or the stored join URL is not the canonical one. Recreate the meeting from Nexus.',
+        : isChannelUrl
+          ? 'This is a channel meeting (19:...@thread.tacv2). The onlineMeetings collection is keyed on meeting threads (@thread.v2), so a channel meeting may not be resolvable by join URL at all. Compare against a standalone meeting before assuming the meeting is missing.'
+          : 'The meeting may have been deleted in Teams, or the stored join URL is not the canonical one. Recreate the meeting from Nexus.',
     });
     if (!meetingId) return respond(steps, cls);
 

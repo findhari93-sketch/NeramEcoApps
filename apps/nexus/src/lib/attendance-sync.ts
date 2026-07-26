@@ -27,6 +27,7 @@ export type AttendanceSyncFailure =
   | 'meeting_not_found'
   | 'app_permission_missing'
   | 'access_policy_missing'
+  | 'not_organizer'
   | 'report_not_ready'
   | 'no_records'
   | 'graph_error';
@@ -77,6 +78,8 @@ export const ATTENDANCE_FAILURE_MESSAGES: Record<AttendanceSyncFailure, string> 
     'Nexus is missing the Microsoft Graph application permission for meeting attendance. An administrator needs to grant OnlineMeetings.Read.All and OnlineMeetingArtifact.Read.All in Azure.',
   access_policy_missing:
     'Microsoft is refusing to let Nexus read this organizer’s meetings. An administrator needs to grant the Teams application access policy for the Nexus app.',
+  not_organizer:
+    'You did not organize this meeting in Teams, so Microsoft will not let your own account read its attendance. Nexus reads it on the organizer’s behalf instead, which needs the Teams application access policy to be granted.',
   report_not_ready:
     'Teams has not published an attendance report for this class yet. It usually appears a little while after the meeting ends.',
   no_records: 'Teams published an attendance report for this class, but it lists nobody.',
@@ -94,6 +97,8 @@ function fromLookupFailure(failure: MeetingLookupFailure): AttendanceSyncFailure
       return 'app_permission_missing';
     case 'access_policy_missing':
       return 'access_policy_missing';
+    case 'not_organizer':
+      return 'not_organizer';
     default:
       return 'graph_error';
   }
@@ -270,6 +275,10 @@ export async function syncClassAttendance(
   }
 
   const { artifactBase, token } = resolution.meeting;
+  // Which identity the artifact path reads as. A Teams application access policy
+  // only governs `users/{oid}/...`, so a 403 on the delegated `me/...` base means
+  // the caller is not the organizer, not that the tenant is misconfigured.
+  const artifactIsAppOnly = artifactBase.startsWith('users/');
 
   const reportsResult = await graphGetAllPages<GraphAttendanceReport>(
     `https://graph.microsoft.com/v1.0/${artifactBase}/attendanceReports`,
@@ -284,7 +293,9 @@ export async function syncClassAttendance(
       code: /Authorization_RequestDenied/i.test(body)
         ? 'app_permission_missing'
         : status === 403
-          ? 'access_policy_missing'
+          ? artifactIsAppOnly
+            ? 'access_policy_missing'
+            : 'not_organizer'
           : status === 404
             ? 'report_not_ready'
             : 'graph_error',
