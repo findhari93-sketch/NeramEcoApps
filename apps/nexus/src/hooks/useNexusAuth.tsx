@@ -14,6 +14,13 @@ import {
   type TimetableWindow,
 } from '@/lib/timetable-window';
 import { DEFAULT_PHOTO_GATE, type PhotoGateState } from '@/lib/photo-gate';
+import {
+  capabilityMap,
+  isInternalStaff as isInternalStaffRole,
+  type Capability,
+  type CapabilityMap,
+  type StaffRole,
+} from '@/lib/staff-capabilities';
 
 // Types for Nexus auth context
 interface NexusUser {
@@ -81,6 +88,23 @@ interface NexusAuthState {
   isFeatureEnabled: (id: string) => boolean;
 
   /**
+   * Nexus authority tier, from /api/auth/me. Distinct from `nexusRole`, which is
+   * only the coarse route-group role: a `manager` has nexusRole 'teacher'.
+   * See @/lib/staff-capabilities.
+   */
+  staffRole: StaffRole | null;
+  /** Whether this person may be assigned as the tutor of a class. */
+  canTeach: boolean;
+  /**
+   * Does this user hold a capability? Use this for anything finer than
+   * "staff vs student", in place of reading nexusRole. Fail-closed: an unknown
+   * capability, or a payload from before the tier rollout, returns false.
+   */
+  can: (capability: Capability) => boolean;
+  /** admin or manager: the internal core team, who see and act across ALL classes. */
+  isInternalStaff: boolean;
+
+  /**
    * The evening class window the timetable draws (admin-configured, from
    * /api/auth/me). Classes outside it still show: the grid expands to fit.
    * See @/lib/timetable-window.
@@ -111,8 +135,18 @@ interface NexusAuthState {
   accessEnded: { reason: string; message: string } | null;
 
   // Helpers
+  /**
+   * "Is this a staff member", NOT "does this person teach". True for admin,
+   * manager and teacher alike, which is what the staff-vs-student UI branches
+   * want. For anything finer, use `can(...)`; for tutor eligibility use
+   * `canTeach`; for "sees every class" use `isInternalStaff`.
+   */
   isTeacher: boolean;
   isStudent: boolean;
+  /**
+   * True only for the `admin` tier. A `manager` is deliberately false here, so
+   * the admin-only panel and system settings stay hidden from them.
+   */
   isAdmin: boolean;
   getToken: () => Promise<string | null>;
   /** Get token with extended teacher scopes (meetings, channels, calendar) */
@@ -175,6 +209,11 @@ export function useNexusAuth(): NexusAuthState {
   // Default to registry defaults (student features off, staff on) until /me loads.
   const [featureFlags, setFeatureFlags] = useState<FlagMap>(() => resolveFlags({}));
   const [timetableWindow, setTimetableWindow] = useState<TimetableWindow>(() => cloneDefaultWindow());
+  const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
+  const [canTeach, setCanTeach] = useState<boolean>(true);
+  // Starts as the all-false map, so the UI hides staff actions until /me answers
+  // rather than flashing them and then removing them.
+  const [capabilities, setCapabilities] = useState<CapabilityMap>(() => capabilityMap(null));
   // Default never blocks: a gate that defaults to "blocked" would flash the
   // blocker on every page load for every compliant student.
   const [photoGate, setPhotoGate] = useState<PhotoGateState>(DEFAULT_PHOTO_GATE);
@@ -255,6 +294,25 @@ export function useNexusAuth(): NexusAuthState {
         // real /me path and get the DB-driven flags instead.
         setFeatureFlags(allFeaturesEnabled());
 
+        // Same for capabilities: test mode has no /me, so take the tier the test
+        // harness stored. A spec that injects only a role (the pre-tier shape)
+        // maps 'teacher' onto `manager`, matching the test-login default, so
+        // pre-existing teacher specs keep the broad powers they were written
+        // against. See the note in /api/auth/test-login.
+        const storedStaffRole = localStorage.getItem('nexus_auth_staff_role');
+        const testStaffRole: StaffRole | null =
+          storedStaffRole === 'admin' || storedStaffRole === 'manager' || storedStaffRole === 'teacher'
+            ? storedStaffRole
+            : roleStr === 'admin'
+              ? 'admin'
+              : roleStr === 'teacher'
+                ? 'manager'
+                : null;
+        const testCanTeach = localStorage.getItem('nexus_auth_can_teach') !== 'false';
+        setStaffRole(testStaffRole);
+        setCanTeach(testCanTeach);
+        setCapabilities(capabilityMap(testStaffRole, testCanTeach));
+
         const savedClassroomId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
         const savedClassroom = parsedClassrooms.find(c => c.id === savedClassroomId);
         setActiveClassroomState(savedClassroom || parsedClassrooms[0] || null);
@@ -318,6 +376,9 @@ export function useNexusAuth(): NexusAuthState {
               setClassrooms([]);
               setActiveClassroomState(null);
               setFeatureFlags(resolveFlags({}));
+              setStaffRole(null);
+              setCanTeach(true);
+              setCapabilities(capabilityMap(null));
               setPhotoGate(DEFAULT_PHOTO_GATE);
             }
             return;
@@ -332,6 +393,12 @@ export function useNexusAuth(): NexusAuthState {
         setNexusRole(data.nexusRole);
         setClassrooms(data.classrooms || []);
         setFeatureFlags(data.featureFlags || resolveFlags({}));
+        // Recompute the map from the tier rather than trusting the transmitted
+        // one, so a stale or partial payload cannot grant a capability. Falls
+        // back to the all-false map when staffRole is absent.
+        setStaffRole(data.staffRole ?? null);
+        setCanTeach(data.canTeach !== false);
+        setCapabilities(capabilityMap(data.staffRole ?? null, data.canTeach !== false));
         // parseWindow again on the client: /me already sanitises, but this keeps
         // the grid safe if the response shape ever drifts.
         setTimetableWindow(parseWindow(data.timetableWindow));
@@ -378,6 +445,9 @@ export function useNexusAuth(): NexusAuthState {
       setClassrooms([]);
       setActiveClassroomState(null);
       setFeatureFlags(resolveFlags({}));
+      setStaffRole(null);
+      setCanTeach(true);
+      setCapabilities(capabilityMap(null));
       setPhotoGate(DEFAULT_PHOTO_GATE);
       // Only clear dbLoading if MS auth is definitively done (not loading)
       // so we don't briefly show loading=false with user=null
@@ -499,6 +569,9 @@ export function useNexusAuth(): NexusAuthState {
     setActiveClassroomState(null);
     setAccessEnded(null);
     setFeatureFlags(resolveFlags({}));
+    setStaffRole(null);
+    setCanTeach(true);
+    setCapabilities(capabilityMap(null));
     setPhotoGate(DEFAULT_PHOTO_GATE);
     localStorage.removeItem(ACTIVE_CLASSROOM_KEY);
     clearImpersonation();
@@ -517,6 +590,10 @@ export function useNexusAuth(): NexusAuthState {
     setActiveClassroom,
     featureFlags,
     isFeatureEnabled: (id: string) => checkFeatureEnabled(id, featureFlags),
+    staffRole,
+    canTeach,
+    can: (capability: Capability) => capabilities[capability] === true,
+    isInternalStaff: isInternalStaffRole(staffRole),
     timetableWindow,
     photoGate,
     refreshAuth,

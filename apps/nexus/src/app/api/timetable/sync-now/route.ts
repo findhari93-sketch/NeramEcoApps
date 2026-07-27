@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { notifyRecordingAvailable, notifyClassCancelled } from '@/lib/timetable-notifications';
 import { syncClassroomMeetings } from '@/lib/teams-meeting-sync';
 import { announceCancellationToTeams } from '@/lib/teams-class-announcements';
 import { extractOidFromJoinUrl } from '@/lib/teams-online-meeting';
+import { fetchChannelRecordings, matchRecordingToClass } from '@/lib/channel-recordings';
 
 /**
  * POST /api/timetable/sync-now
@@ -33,12 +35,22 @@ export async function POST(request: NextRequest) {
     // Resolve userId from ms_oid
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // This writes classes and recordings for every classroom the caller is
+    // enrolled in, so it is a scheduling action. Previously ANY active enrollment
+    // was enough, including a student's.
+    if (!canUser(user, 'teach.timetable.schedule')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can run a timetable sync.' },
+        { status: 403 },
+      );
     }
 
     // Get all classroom IDs this user is enrolled in
@@ -250,146 +262,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// ─── SharePoint recording helpers ───────────────────────────────────────────
-
-interface RecordingFile {
-  name: string;
-  webUrl: string;
-  createdDateTime: string;
-  size: number;
-}
-
-/**
- * Fetch recording files from a Teams channel's SharePoint Recordings folder.
- * Channel meeting recordings are stored in: Team Site > General > Recordings/
- */
-async function fetchChannelRecordings(
-  token: string,
-  teamId: string,
-): Promise<RecordingFile[]> {
-  // Get the default (General) channel's files drive
-  const channelsRes = await fetch(
-    `https://graph.microsoft.com/v1.0/teams/${teamId}/channels?$filter=displayName eq 'General'&$select=id`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-
-  if (!channelsRes.ok) {
-    // Try the primary channel endpoint instead
-    const primaryRes = await fetch(
-      `https://graph.microsoft.com/v1.0/teams/${teamId}/primaryChannel?$select=id`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!primaryRes.ok) {
-      throw new Error(`Failed to get team channel: ${primaryRes.status}`);
-    }
-    const primary = await primaryRes.json();
-    return fetchRecordingsFromChannel(token, teamId, primary.id);
-  }
-
-  const channelsData = await channelsRes.json();
-  const channels = channelsData.value || [];
-  if (channels.length === 0) {
-    throw new Error('No General channel found');
-  }
-
-  return fetchRecordingsFromChannel(token, teamId, channels[0].id);
-}
-
-async function fetchRecordingsFromChannel(
-  token: string,
-  teamId: string,
-  channelId: string,
-): Promise<RecordingFile[]> {
-  // List files in the channel's filesFolder/Recordings directory
-  const folderRes = await fetch(
-    `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/filesFolder`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-
-  if (!folderRes.ok) {
-    throw new Error(`Failed to get channel filesFolder: ${folderRes.status}`);
-  }
-
-  const folder = await folderRes.json();
-  const driveId = folder.parentReference?.driveId;
-  const folderId = folder.id;
-
-  if (!driveId || !folderId) {
-    throw new Error('Missing driveId or folderId from filesFolder');
-  }
-
-  // Try to list files in the "Recordings" subfolder
-  const recordingsRes = await fetch(
-    `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderId}:/Recordings:/children` +
-    `?$select=name,webUrl,createdDateTime,size&$orderby=createdDateTime desc&$top=50`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-
-  if (!recordingsRes.ok) {
-    // Recordings folder might not exist, try root of channel files
-    console.log('[sync-now] No Recordings subfolder, checking channel root for video files');
-    const rootRes = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${folderId}/children` +
-      `?$select=name,webUrl,createdDateTime,size&$orderby=createdDateTime desc&$top=50`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    if (!rootRes.ok) return [];
-    const rootData = await rootRes.json();
-    return (rootData.value || []).filter((f: any) =>
-      f.name?.match(/\.(mp4|mkv)$/i)
-    );
-  }
-
-  const data = await recordingsRes.json();
-  return (data.value || []).filter((f: any) =>
-    f.name?.match(/\.(mp4|mkv)$/i)
-  );
-}
-
-/**
- * Match a SharePoint recording file to a scheduled class by date and time.
- * Recording filenames typically contain the meeting date or title.
- */
-function matchRecordingToClass(
-  recordings: RecordingFile[],
-  cls: { scheduled_date: string; start_time: string; title: string },
-): RecordingFile | null {
-  if (recordings.length === 0) return null;
-
-  const classDate = cls.scheduled_date; // "2026-04-12"
-  const classTitle = cls.title.toLowerCase();
-
-  for (const rec of recordings) {
-    const recDate = rec.createdDateTime.substring(0, 10); // "2026-04-12"
-    const recName = rec.name.toLowerCase();
-
-    // Match by creation date
-    if (recDate !== classDate) continue;
-
-    // If multiple recordings on the same date, try to match by time or title
-    // Recordings created within ~30 min of class start time are a likely match
-    const classStartHour = parseInt(cls.start_time.substring(0, 2), 10);
-    const recHourUTC = new Date(rec.createdDateTime).getUTCHours();
-    // IST = UTC+5:30, so class start in UTC is roughly classStartHour - 5.5
-    const classStartUTC = classStartHour - 5.5;
-    const hourDiff = Math.abs(recHourUTC - classStartUTC);
-
-    if (hourDiff <= 1.5) return rec;
-
-    // Also check if the recording name contains part of the class title
-    const titleWords = classTitle.split(/\s+/).filter(w => w.length > 3);
-    const nameMatch = titleWords.some(w => recName.includes(w));
-    if (nameMatch) return rec;
-  }
-
-  // If only one recording on that date, return it even without time match
-  const sameDateRecs = recordings.filter(r => r.createdDateTime.substring(0, 10) === classDate);
-  if (sameDateRecs.length === 1) return sameDateRecs[0];
-
-  return null;
 }
 
 // ─── OnlineMeetings recording fetch helpers (fallback) ──────────────────────

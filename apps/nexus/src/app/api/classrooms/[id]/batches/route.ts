@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 
 /**
  * GET /api/classrooms/[id]/batches
@@ -70,12 +71,15 @@ export async function POST(
 
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!canUser(user, 'structure.batch.manage')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can create batches.' },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();

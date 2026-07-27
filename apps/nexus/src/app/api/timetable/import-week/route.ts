@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser, canTutor } from '@/lib/staff-capabilities';
 
 /**
  * Commit a reviewed week import.
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -135,16 +136,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: enrollment } = await supabase
-      .from('nexus_enrollments')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('classroom_id', classroom_id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (!enrollment || enrollment.role !== 'teacher') {
-      return NextResponse.json({ error: 'Only teachers can import a week' }, { status: 403 });
+    // Importing a week writes a batch of classes, so it is a scheduling action
+    // belonging to the internal team, not to any enrolled teacher.
+    if (!canUser(user, 'teach.timetable.schedule')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can import a week.' },
+        { status: 403 },
+      );
     }
 
     // Re-validate. The client already filtered, but this is the trust boundary.
@@ -197,10 +195,14 @@ export async function POST(request: NextRequest) {
     const teacherIdByName = new Map<string, string>();
     const wantedNames = [...new Set(classes.map((c) => c.teacherName).filter(Boolean))] as string[];
     if (wantedNames.length > 0) {
-      const { data: staff } = await supabase
+      // Only tutor-eligible staff are candidates: a name in the spreadsheet must
+      // never resolve to someone who does not take classes (an office manager
+      // still has a staff user_type, so filtering on that alone is not enough).
+      const { data: allStaff } = await supabase
         .from('users')
-        .select('id, name')
+        .select('id, name, user_type, staff_role, can_teach')
         .in('user_type', ['teacher', 'admin']);
+      const staff = (allStaff || []).filter((s: any) => canTutor(s));
       for (const name of wantedNames) {
         const needle = name.toLowerCase().replace(/^(ar|dr|mr|mrs|ms)\.?\s+/i, '').trim();
         const hit = (staff || []).find((s: any) => {

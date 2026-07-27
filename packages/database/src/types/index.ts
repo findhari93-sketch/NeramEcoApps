@@ -13,6 +13,21 @@
 // ============================================
 
 export type UserType = 'lead' | 'student' | 'teacher' | 'admin' | 'parent';
+/**
+ * Nexus authority tier (users.staff_role, migration 20260727100000).
+ *
+ * Deliberately separate from UserType, which gates Admin app access
+ * (AdminGuard requires user_type='admin'). Splitting the two lets a person hold
+ * full Admin app rights while being restricted inside Nexus, and avoids
+ * widening the user_type enum, which ~192 inline `teacher || admin` checks
+ * compare against.
+ *
+ *   admin    system settings, roles, feature flags. Everything.
+ *   manager  internal core team. Every operational power across ALL classes,
+ *            but no system settings.
+ *   teacher  external. Teaching functions, scoped to the sessions they tutor.
+ */
+export type StaffRole = 'admin' | 'manager' | 'teacher';
 export type UserStatus = 'pending' | 'approved' | 'rejected' | 'active' | 'inactive';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 export type ApplicationSource = 'website_form' | 'app' | 'referral' | 'manual' | 'direct_link';
@@ -119,6 +134,19 @@ export interface User extends Timestamps {
 
   // Status
   user_type: UserType;
+  /**
+   * Nexus authority tier (migration 20260727100000). NULL for students, and for
+   * staff not yet classified, in which case resolveStaffRole() falls back to
+   * user_type. Does NOT affect Admin app access, which still reads user_type.
+   */
+  staff_role: StaffRole | null;
+  /**
+   * Whether this person may be assigned as the tutor of a scheduled class
+   * (migration 20260727100000). Orthogonal to staff_role: a manager with
+   * can_teach=false keeps every other manager capability and only loses the
+   * tutor slot. Meaningless for students.
+   */
+  can_teach: boolean;
   status: UserStatus;
   email_verified: boolean;
   phone_verified: boolean;
@@ -4995,6 +5023,74 @@ export interface NexusCatchupItem {
   position: number;
   status: NexusCatchupItemStatus;
   completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NexusCatchupJourneyStatus = 'active' | 'completed' | 'paused' | 'abandoned';
+
+/**
+ * A student's paced backlog of past classes in one classroom.
+ *
+ * `started_on` and `weekly_quota` are snapshots taken when the journey is
+ * created, not live reads. enrollUser upserts without resetting `enrolled_at`,
+ * so a restored student would otherwise inherit their original join date; and a
+ * teacher raising the classroom quota must not retroactively put everyone
+ * behind pace.
+ */
+export interface NexusCatchupJourney {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  started_on: string;
+  weekly_quota: number;
+  status: NexusCatchupJourneyStatus;
+  generated_at: string | null;
+  completed_at: string | null;
+  last_nudged_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * `late_joiner` rows are a backlog item, not a real absence: the student was not
+ * enrolled when the class ran, so there is nothing to explain and `reason_code`
+ * stays null for them.
+ */
+export type NexusClassAbsenceKind = 'no_show' | 'opted_out' | 'late_joiner';
+
+/**
+ * One class a student owes: a missed class, or a class taught before they
+ * joined. `journey_id` is null for classic absences, and every catch-up column
+ * below is null with it, so the original absence loop is unaffected.
+ *
+ * Only per-student state lives here. Which recap to watch, which test to pass,
+ * whether the class can be caught up at all, and whether the assignment is in
+ * are all facts about the class or derivable joins, so they are read live
+ * rather than snapshotted. Any of them can change after the item is created.
+ */
+export interface NexusClassAbsence {
+  id: string;
+  scheduled_class_id: string;
+  student_id: string;
+  classroom_id: string;
+  kind: NexusClassAbsenceKind;
+  detected_at: string;
+  reason_code: string | null;
+  reason_note: string | null;
+  reason_submitted_at: string | null;
+  followup_sent_at: string | null;
+  followup_sent_by: string | null;
+  recording_watched_at: string | null;
+  caught_up_at: string | null;
+  journey_id: string | null;
+  /** Cleared by a failed attempt: that write is the "rewatch before retry" rule. */
+  test_unlocked_at: string | null;
+  test_passed_at: string | null;
+  rewatch_count: number;
+  excused_at: string | null;
+  excused_by: string | null;
+  excuse_note: string | null;
   created_at: string;
   updated_at: string;
 }

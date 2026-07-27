@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /**
@@ -10,7 +11,12 @@ import { getSupabaseAdminClient } from '@neram/database';
  */
 export async function GET(request: NextRequest) {
   try {
-    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    // Staff-only: the teacher dashboard payload for an arbitrary classroom id.
+    // Previously the token was verified but the role never checked, so a
+    // student's token returned the staff dashboard for any classroom.
+    const user = await getRequestUser(request.headers.get('Authorization'));
+    assertCapability(user, 'report.view');
+
     const classroomId = request.nextUrl.searchParams.get('classroom');
 
     if (!classroomId) {
@@ -18,16 +24,6 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdminClient();
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
 
     const today = new Date().toISOString().split('T')[0];
 

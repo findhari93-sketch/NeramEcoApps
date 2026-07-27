@@ -11,6 +11,7 @@ import {
   insertRecapAttempt,
   upsertRecapProgress,
   markRecapCompletedIfAllPassed,
+  unlockCatchupTestForRecap,
 } from '@neram/database';
 
 async function resolveStudent(request: NextRequest) {
@@ -136,9 +137,25 @@ export async function POST(
     });
 
     let recapCompleted = false;
+    let catchupTestUnlocked = false;
     if (passed) {
       await upsertRecapProgress(user.id, recapId, { last_section_id: sectionId });
       recapCompleted = await markRecapCompletedIfAllPassed(user.id, recapId);
+
+      // Finishing the recap is what opens the class test on a catch-up backlog
+      // item. Best-effort: a student who has just passed their last checkpoint
+      // should not see an error because a table they have never heard of was
+      // unavailable, and the re-arm route can open it later regardless.
+      if (recapCompleted) {
+        try {
+          catchupTestUnlocked = await unlockCatchupTestForRecap(user.id, recapId);
+        } catch (unlockErr) {
+          console.error(
+            '[recap] catch-up test unlock failed (non-fatal):',
+            unlockErr instanceof Error ? unlockErr.message : unlockErr,
+          );
+        }
+      }
     }
 
     return NextResponse.json({
@@ -152,6 +169,7 @@ export async function POST(
         questions_with_explanations: questionsWithExplanations,
       },
       recap_completed: recapCompleted,
+      catchup_test_unlocked: catchupTestUnlocked,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to submit quiz';

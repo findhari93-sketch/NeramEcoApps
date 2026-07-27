@@ -17,7 +17,7 @@ import {
   removePlanScheduleOverride,
 } from '@neram/database';
 import type { NexusPlanAuditAction } from '@neram/database';
-import { getRequestUser, assertStaff } from '@/lib/study-materials';
+import { getRequestUser, assertStaff, assertCapability } from '@/lib/study-materials';
 import { computeFlow, toFlowEntries, istToday } from '@/lib/plan-flow';
 import { errorResponse } from '@/lib/api-errors';
 import {
@@ -117,6 +117,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     ] as const) {
       if (key in body) updates[key] = body[key];
     }
+
+    // Archiving retires a whole season of teaching and is the precondition for a
+    // hard delete, so it needs structure.plan.delete rather than plain staff
+    // access. Every other field on a plan stays editable by any staff tier.
+    if (updates.status === 'archived') {
+      assertCapability(user, 'structure.plan.delete');
+    }
     if (updates.status === 'active') updates.activated_at = new Date().toISOString();
 
     // Class hours and days. The plan owns the shape of the teaching day, which
@@ -176,7 +183,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await getRequestUser(request.headers.get('Authorization'));
-    assertStaff(user);
+    assertCapability(user, 'structure.plan.delete');
     const meta = await getPlanMeta(params.id);
     if (!meta) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
     if (meta.status !== 'archived') {

@@ -127,8 +127,13 @@ export default function ClassReconciliationPage() {
   }, [load]);
 
   /**
-   * Pulling fresh attendance needs the teacher's own token: the Graph endpoint
-   * is delegated, which is exactly why the nightly cron cannot do it.
+   * Pull fresh attendance on demand.
+   *
+   * The token is sent because it is an accelerator, not a requirement: if this
+   * teacher happens to be the meeting's organizer, the server prefers their own
+   * delegated token, which needs no Teams application access policy. Everyone
+   * else is served app-only on the organizer's behalf, which is also how the
+   * nightly cron reads attendance with nobody signed in at all.
    */
   const syncTeams = async () => {
     if (!data) return;

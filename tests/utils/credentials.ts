@@ -129,14 +129,14 @@ export async function injectAuthForPage(
   const authData = await getTestAuthToken(page.request, role);
   if (!authData) return false;
 
-  const { user, nexusRole, classrooms, testToken } = authData;
+  const { user, nexusRole, classrooms, testToken, staffRole, canTeach } = authData;
 
   // Navigate to Nexus first to set localStorage on correct origin
   await page.goto(`${APP_URLS.nexus}/login`, { waitUntil: 'domcontentloaded' });
 
   // Inject auth state
   await page.evaluate(
-    ({ user, nexusRole, classrooms, testToken }: any) => {
+    ({ user, nexusRole, classrooms, testToken, staffRole, canTeach }: any) => {
       localStorage.setItem('nexus_test_token', testToken);
       if (classrooms.length > 0) {
         localStorage.setItem('nexus_active_classroom_id', classrooms[0].id);
@@ -144,8 +144,14 @@ export async function injectAuthForPage(
       localStorage.setItem('nexus_auth_user', JSON.stringify(user));
       localStorage.setItem('nexus_auth_role', nexusRole);
       localStorage.setItem('nexus_auth_classrooms', JSON.stringify(classrooms));
+      // Staff tier + tutor eligibility, so test mode (which never calls
+      // /api/auth/me) resolves the same capability map a real session would.
+      // Omitted values make useNexusAuth fall back to deriving the tier from
+      // nexusRole, which keeps pre-tier specs working unchanged.
+      if (staffRole) localStorage.setItem('nexus_auth_staff_role', staffRole);
+      if (canTeach === false) localStorage.setItem('nexus_auth_can_teach', 'false');
     },
-    { user, nexusRole, classrooms, testToken }
+    { user, nexusRole, classrooms, testToken, staffRole, canTeach }
   );
 
   // Set auth header for API calls

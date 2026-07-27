@@ -1,6 +1,13 @@
 /**
  * Shared helper for verifying Question Bank access in API routes.
- * Ensures students are enrolled in a QB-enabled classroom before serving data.
+ *
+ * Staff get access from their tier. Students must be enrolled in the classroom
+ * AND the classroom must have QB switched on.
+ *
+ * That student check is the point of this module, and it was previously NOT
+ * performed: the function documented it, imported the two helpers needed for it,
+ * then returned `ok: true` for every authenticated caller regardless of
+ * enrolment. Any signed-in user could read the whole Question Bank.
  */
 
 import { NextResponse } from 'next/server';
@@ -10,6 +17,7 @@ import {
   getUserRoleInClassroom,
   isQBEnabledForClassroom,
 } from '@neram/database';
+import { resolveStaffRole } from './staff-capabilities';
 
 export interface QBCaller {
   id: string;
@@ -23,9 +31,12 @@ export type QBAccessResult =
 /**
  * Verify that the caller has access to the Question Bank for the given classroom.
  *
- * - Teachers/admins: always allowed (no enrollment check).
- * - Students: must be enrolled in the classroom AND the classroom must have QB enabled.
- * - If classroomId is null/undefined for a student, returns 400.
+ * - Staff (admin/manager/teacher): always allowed, no enrollment check.
+ * - Students: must be enrolled in the classroom AND the classroom must have QB
+ *   enabled.
+ * - A student request with no classroomId is a 400: without a classroom there is
+ *   nothing to authorise against, and defaulting to "allow" is what caused the
+ *   original hole.
  */
 export async function verifyQBAccess(
   authHeader: string | null,
@@ -45,7 +56,7 @@ export async function verifyQBAccess(
   const supabase = getSupabaseAdminClient();
   const { data: caller } = await supabase
     .from('users')
-    .select('id, user_type')
+    .select('id, user_type, staff_role, can_teach')
     .eq('ms_oid', msUser.oid)
     .single();
 
@@ -53,13 +64,43 @@ export async function verifyQBAccess(
     return { ok: false, response: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
   }
 
-  // Teachers and admins can access QB without enrollment checks
-  if (['teacher', 'admin'].includes(caller.user_type ?? '')) {
-    return { ok: true, caller: { id: caller.id, user_type: caller.user_type ?? 'student' } };
+  const asCaller: QBCaller = { id: caller.id, user_type: caller.user_type ?? 'student' };
+
+  // Any staff tier reaches the Question Bank without an enrollment check: they
+  // author and review its content.
+  if (resolveStaffRole(caller) !== null) {
+    return { ok: true, caller: asCaller };
   }
 
-  // QB is globally available to all enrolled students (no classroom gating).
-  // If a classroomId is provided, we can optionally verify enrollment,
-  // but it's not required for access.
-  return { ok: true, caller: { id: caller.id, user_type: caller.user_type ?? 'student' } };
+  // ── Students ───────────────────────────────────────────────────────────────
+  if (!classroomId) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'classroom_id is required' }, { status: 400 }),
+    };
+  }
+
+  const role = await getUserRoleInClassroom(caller.id, classroomId).catch(() => null);
+  if (!role) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'You are not enrolled in this classroom.' },
+        { status: 403 },
+      ),
+    };
+  }
+
+  const qbEnabled = await isQBEnabledForClassroom(classroomId).catch(() => false);
+  if (!qbEnabled) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'The Question Bank is not open for your classroom yet.' },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return { ok: true, caller: asCaller };
 }

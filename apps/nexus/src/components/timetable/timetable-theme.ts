@@ -34,6 +34,27 @@ export const LAYOUT = {
   gridGutter: 46,
   /** Right-hand editing panel. */
   editPanel: 340,
+
+  // ─── Calendar shell (the Teams-shaped layout) ──────────────────────────────
+
+  /** Mini-calendar rail. Only drawn at lg and up, where the width exists. */
+  rail: 248,
+  /** The single toolbar row that replaced the old title row plus toolbar. */
+  toolbarRow: 52,
+  /**
+   * App chrome above and below a page's content box, which the calendar has to
+   * subtract from the viewport to fill the rest of the screen exactly.
+   *
+   * These are the FULL-BLEED numbers, i.e. what the teacher/student/parent
+   * layouts leave once the timetable route drops its Container padding. Note
+   * the two do not change at the same breakpoint: TopBar grows at sm
+   * (52 to 56), BottomNav disappears at md, so sm needs its own value or the
+   * page picks up a 4px scrollbar on a landscape phone.
+   *   xs: TopBar 52 + BottomNav 64 = 116
+   *   sm: TopBar 56 + BottomNav 64 = 120
+   *   md: TopBar 56                =  56
+   */
+  shellChrome: { xs: 116, sm: 120, md: 56 },
 } as const;
 
 /**

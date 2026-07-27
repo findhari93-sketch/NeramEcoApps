@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 import { syncClassroomToTeam } from '@/lib/teams-sync';
 
 /**
@@ -17,10 +18,9 @@ export async function POST(
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient();
 
-    // Verify teacher role
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
@@ -28,15 +28,13 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const { data: enrollment } = await supabase
-      .from('nexus_enrollments')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('classroom_id', classroomId)
-      .single();
-
-    if (!enrollment || enrollment.role !== 'teacher') {
-      return NextResponse.json({ error: 'Only teachers can sync Teams members' }, { status: 403 });
+    // Same fix as teams-create: gate on the capability, not on holding a teacher
+    // enrollment in this specific classroom, so an admin is not rejected.
+    if (!canUser(user, 'structure.classroom.teams_link')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can sync Teams members.' },
+        { status: 403 },
+      );
     }
 
     const result = await syncClassroomToTeam(classroomId);

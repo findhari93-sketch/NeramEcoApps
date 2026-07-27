@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
-import { parseVTT } from '@/lib/vtt-parser';
-import { fetchTranscriptFromSharePoint } from '@/lib/sharepoint-transcript';
+import { canRunSession } from '@/lib/staff-capabilities';
+import { resolveTranscript } from '@/lib/transcript-resolver';
 import { generateClassSummary, type ClassImageInput } from '@/lib/class-summary-ai';
-import type { TranscriptEntry } from '@neram/database';
 
 /**
  * POST /api/timetable/[classId]/summarize  (staff)
@@ -15,11 +14,8 @@ import type { TranscriptEntry } from '@neram/database';
  * registry. Nothing is saved: the teacher reviews and edits, then Save (the
  * wrap-up PATCH) commits it. This mirrors the class-recap generator.
  *
- * Transcript source, in priority order (same ladder as class-recaps generate):
- *   1. body.transcript_text  — teacher pasted plain text
- *   2. body.vtt_content      — teacher uploaded a .vtt
- *   3. class.transcript_url  — a directly fetchable transcript content URL
- *   4. class.recording_url   — SharePoint recording -> resolve its .vtt via Graph
+ * The transcript ladder itself lives in lib/transcript-resolver, shared with the
+ * recap generator so the two cannot answer "is there a transcript" differently.
  *
  * If none resolve and there are no images, returns { needs_manual: true } so the
  * UI reveals the paste box instead of erroring.
@@ -29,13 +25,13 @@ interface Ctx {
   params: { classId: string };
 }
 
-const CLASS_COLS = 'id, classroom_id, title, transcript_url, recording_url, teams_meeting_id';
+const CLASS_COLS = 'id, classroom_id, teacher_id, title, transcript_url, recording_url, teams_meeting_id';
 const MAX_IMAGES = 4;
 
 async function resolveAccess(supabase: any, msOid: string, classId: string) {
   const { data: user } = await supabase
     .from('users')
-    .select('id, user_type')
+    .select('id, user_type, staff_role, can_teach')
     .eq('ms_oid', msOid)
     .single();
   if (!user) return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
@@ -55,8 +51,9 @@ async function resolveAccess(supabase: any, msOid: string, classId: string) {
     .eq('is_active', true)
     .maybeSingle();
 
-  const isAdmin = user.user_type === 'admin';
-  const canEdit = isAdmin || user.user_type === 'teacher' || enrollment?.role === 'teacher';
+  // Internal staff may act on any class; an external teacher only on the
+  // classes they are the tutor of. See canRunSession.
+  const canEdit = canRunSession(user, cls.teacher_id);
   if (!canEdit) {
     return { error: NextResponse.json({ error: 'Only staff can summarize a class' }, { status: 403 }) };
   }
@@ -99,63 +96,16 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     if ('error' in access) return access.error;
     const cls = access.cls;
 
-    // --- Resolve a transcript through the ladder ---
-    let transcript: TranscriptEntry[] = [];
-
-    if (typeof body.transcript_text === 'string' && body.transcript_text.trim()) {
-      transcript = [{ start: 0, end: 0, text: body.transcript_text.trim() }];
-    } else if (typeof body.vtt_content === 'string' && body.vtt_content.trim()) {
-      transcript = parseVTT(body.vtt_content);
-    }
-
-    if (transcript.length === 0 && cls.transcript_url && msToken) {
-      try {
-        const res = await fetch(cls.transcript_url, { headers: { Authorization: `Bearer ${msToken}` } });
-        if (res.ok) transcript = parseVTT(await res.text());
-      } catch {
-        /* fall through to a live Teams lookup */
-      }
-    }
-
-    // Live from Teams by meeting id (same call the recording sync uses). This is
-    // the path that makes one-click Generate work for a real class whose
-    // transcript is ready but has not been synced into transcript_url yet.
-    if (transcript.length === 0 && cls.teams_meeting_id && msToken) {
-      try {
-        const listRes = await fetch(
-          `https://graph.microsoft.com/v1.0/me/onlineMeetings/${cls.teams_meeting_id}/transcripts`,
-          { headers: { Authorization: `Bearer ${msToken}` } },
-        );
-        if (listRes.ok) {
-          const list = await listRes.json();
-          const contentUrl = list.value?.[0]?.transcriptContentUrl || list.value?.[0]?.content || null;
-          if (contentUrl) {
-            const contentRes = await fetch(contentUrl, { headers: { Authorization: `Bearer ${msToken}` } });
-            if (contentRes.ok) {
-              transcript = parseVTT(await contentRes.text());
-              // Remember it so the next Generate is instant.
-              if (transcript.length > 0) {
-                await supabase
-                  .from('nexus_scheduled_classes')
-                  .update({ transcript_url: contentUrl })
-                  .eq('id', params.classId);
-              }
-            }
-          }
-        }
-      } catch {
-        /* fall through to SharePoint resolution */
-      }
-    }
-
-    if (transcript.length === 0 && cls.recording_url && msToken) {
-      try {
-        const vtt = await fetchTranscriptFromSharePoint(cls.recording_url, msToken);
-        transcript = parseVTT(vtt);
-      } catch {
-        // NO_ACCESS / VIDEO_NOT_FOUND / NO_TRANSCRIPT all fall back to manual below
-      }
-    }
+    // --- Resolve a transcript through the shared ladder ---
+    // Pasted text, then an uploaded .vtt, then a cached URL, then live from
+    // Graph (cached back), then the SharePoint recording. See lib/transcript-resolver.
+    const { entries: transcript } = await resolveTranscript({
+      cls: { ...cls, id: params.classId },
+      msToken,
+      transcriptText: body.transcript_text,
+      vttContent: body.vtt_content,
+      supabase,
+    });
 
     // --- Load class drawings (a drawing class can be summarized from these alone) ---
     const images = await loadClassImages(supabase, params.classId);

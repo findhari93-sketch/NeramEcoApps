@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { assertCronRequest } from '@/lib/cron-auth';
 import {
   getExpiredAwaitingIssues,
   cleanupIssueScreenshots,
@@ -7,12 +8,10 @@ import {
 import { createUserNotification } from '@neram/database/queries';
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  // Same check this route used to spell out inline, now shared with the other
+  // cron routes so the rule lives in one place.
+  const denied = assertCronRequest(request);
+  if (denied) return denied;
 
   try {
     const supabase = getSupabaseAdminClient();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Box, Typography, Fab, Snackbar, Alert, Button, useMediaQuery, useTheme, Menu, MenuItem, ListItemIcon, ListItemText, ListSubheader } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
 import EventIcon from '@mui/icons-material/Event';
@@ -8,7 +8,8 @@ import EventBusyIcon from '@mui/icons-material/EventBusy';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SyncIcon from '@mui/icons-material/Sync';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import HistoryIcon from '@mui/icons-material/History';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DateRangeIcon from '@mui/icons-material/DateRange';
 import LinkIcon from '@mui/icons-material/Link';
@@ -19,21 +20,29 @@ import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useTimetableView } from '@/hooks/useTimetableView';
 import GridView from '@/components/timetable/views/GridView';
+import DayView from '@/components/timetable/views/DayView';
+import MonthView from '@/components/timetable/views/MonthView';
 import PlannerWeekList from '@/components/timetable/views/PlannerWeekList';
-import TimetableToolbar from '@/components/timetable/views/TimetableToolbar';
+import CalendarShell from '@/components/timetable/CalendarShell';
 import ClassEditPanel from '@/components/timetable/ClassEditPanel';
 import LinkAssignmentDialog from '@/components/timetable/LinkAssignmentDialog';
 import NewAssignmentDialog from '@/components/assignments/NewAssignmentDialog';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import ClassCreateDialog from '@/components/timetable/ClassCreateDialog';
 import AttendanceSheet from '@/components/timetable/AttendanceSheet';
+import BackfillFromTeamsDialog from '@/components/timetable/BackfillFromTeamsDialog';
 import ClassAttendanceInsights from '@/components/timetable/ClassAttendanceInsights';
 import ClassDetailPanel from '@/components/timetable/ClassDetailPanel';
 import HolidayManager from '@/components/timetable/HolidayManager';
 import RsvpDashboard from '@/components/timetable/RsvpDashboard';
 import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
 import { type ClassCardData } from '@/components/timetable/ClassCard';
-import { type HolidayInfo } from '@/components/timetable/date-utils';
+import {
+  formatDateISO,
+  formatRangeLabel,
+  monthGridRangeFor,
+  type HolidayInfo,
+} from '@/components/timetable/date-utils';
 import { type PlanShape } from '@/lib/plan-shape';
 
 interface ClassroomOption {
@@ -67,7 +76,14 @@ export default function TeacherTimetable() {
   // right one instead of dropping the teacher on the plans index to hunt.
   const activePlanId = planShapes[0]?.id ?? null;
   const activePlanName = planShapes.length === 1 ? planShapes[0].title : null;
-  const { week, band, view, setWeekOffset } = viewState;
+  const { week, band, view, anchorDate, setAnchorDate, range, configuredWindow } = viewState;
+
+  /** "20-26 Jul", so Publish names the week even from Month view. */
+  const weekRangeLabel = useMemo(
+    () => formatRangeLabel('week', week.allDays).shortLabel,
+    [week],
+  );
+
 
   // Planner state
   const [panelClass, setPanelClass] = useState<ClassCardData | null>(null);
@@ -90,6 +106,7 @@ export default function TeacherTimetable() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassCardData | null>(null);
   const [attendanceClass, setAttendanceClass] = useState<ClassCardData | null>(null);
+  const [backfillOpen, setBackfillOpen] = useState(false);
   const [insightsClass, setInsightsClass] = useState<ClassCardData | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
   const [holidayManagerOpen, setHolidayManagerOpen] = useState(false);
@@ -99,6 +116,10 @@ export default function TeacherTimetable() {
   // Holidays
   const [holidays, setHolidays] = useState<Record<string, HolidayInfo>>({});
 
+  /** Dots on the mini calendar and the day strip. */
+  const markedDates = useMemo(() => new Set(classes.map((c) => c.scheduled_date)), [classes]);
+  const holidayDates = useMemo(() => new Set(Object.keys(holidays)), [holidays]);
+
   // RSVP data
   const [rsvpData, setRsvpData] = useState<Record<string, { attending: number; total: number }>>({});
   // Real Teams/manual attendance, for past classes only (cheap DB-only read, no Graph call).
@@ -106,8 +127,8 @@ export default function TeacherTimetable() {
   // Rating data
   const [averageRatings, setAverageRatings] = useState<Record<string, number>>({});
 
-  // Toolbar overflow menu (mobile)
-  const [toolbarMenuAnchor, setToolbarMenuAnchor] = useState<HTMLElement | null>(null);
+  // The toolbar's "New" split button: class, holiday or a whole imported week.
+  const [newMenuAnchor, setNewMenuAnchor] = useState<HTMLElement | null>(null);
 
   // Slot action menu
   const [slotMenuAnchor, setSlotMenuAnchor] = useState<HTMLElement | null>(null);
@@ -121,44 +142,88 @@ export default function TeacherTimetable() {
     severity: 'success',
   });
 
-  const fetchClasses = useCallback(async () => {
+  /**
+   * Always load a whole month grid, whatever the view is showing.
+   *
+   * The endpoint already takes an arbitrary range, so this costs no API change,
+   * and it turns week paging and week/month switching inside a loaded month
+   * into zero requests. Given the per-class fan-out below, that is a large net
+   * reduction in function invocations, not an increase.
+   */
+  const fetchRange = useMemo(
+    () => monthGridRangeFor(anchorDate, range.start, range.end),
+    [anchorDate, range.start, range.end],
+  );
+
+  /**
+   * What is already in `classes`. Guards the refetch on navigation.
+   *
+   * Every mutation must call fetchClasses(true): without the force flag this
+   * cache silently swallows the refresh after publishing, cancelling or syncing.
+   */
+  const loadedRange = useRef<{ classroomId: string; start: string; end: string } | null>(null);
+
+  const fetchClasses = useCallback(async (force = false) => {
     if (!activeClassroom) return;
+
+    const have = loadedRange.current;
+    const covered =
+      !force &&
+      have !== null &&
+      have.classroomId === activeClassroom.id &&
+      have.start <= fetchRange.start &&
+      have.end >= fetchRange.end;
+    if (covered) return;
+
     setLoading(true);
     try {
       const token = await getToken();
       if (!token) return;
 
       const res = await fetch(
-        `/api/timetable?classroom=${activeClassroom.id}&start=${week.start}&end=${week.end}`,
+        `/api/timetable?classroom=${activeClassroom.id}&start=${fetchRange.start}&end=${fetchRange.end}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (res.ok) {
         const data = await res.json();
-        const fetchedClasses = data.classes || [];
-        setClasses(fetchedClasses);
+        setClasses(data.classes || []);
         setPlanShapes(data.planShapes || []);
-
-        // Fetch RSVP summaries and ratings for each class
-        if (fetchedClasses.length > 0) {
-          fetchRsvpAndRatings(fetchedClasses, token);
-        }
+        loadedRange.current = {
+          classroomId: activeClassroom.id,
+          start: fetchRange.start,
+          end: fetchRange.end,
+        };
       }
     } catch (err) {
       console.error('Failed to load timetable:', err);
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, week.start, week.end, getToken]);
+  }, [activeClassroom, fetchRange.start, fetchRange.end, getToken]);
 
-  const fetchHolidays = useCallback(async () => {
+  const loadedHolidayRange = useRef<{ classroomId: string; start: string; end: string } | null>(null);
+
+  const fetchHolidays = useCallback(async (force = false) => {
     if (!activeClassroom) return;
+
+    const have = loadedHolidayRange.current;
+    if (
+      !force &&
+      have !== null &&
+      have.classroomId === activeClassroom.id &&
+      have.start <= fetchRange.start &&
+      have.end >= fetchRange.end
+    ) {
+      return;
+    }
+
     try {
       const token = await getToken();
       if (!token) return;
 
       const res = await fetch(
-        `/api/timetable/holidays?classroom_id=${activeClassroom.id}&start=${week.start}&end=${week.end}`,
+        `/api/timetable/holidays?classroom_id=${activeClassroom.id}&start=${fetchRange.start}&end=${fetchRange.end}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -169,11 +234,16 @@ export default function TeacherTimetable() {
           map[h.holiday_date] = { title: h.title, description: h.description };
         }
         setHolidays(map);
+        loadedHolidayRange.current = {
+          classroomId: activeClassroom.id,
+          start: fetchRange.start,
+          end: fetchRange.end,
+        };
       }
     } catch {
       // ignore
     }
-  }, [activeClassroom, week.start, week.end, getToken]);
+  }, [activeClassroom, fetchRange.start, fetchRange.end, getToken]);
 
   const fetchRsvpAndRatings = async (fetchedClasses: ClassCardData[], token: string) => {
     if (!activeClassroom || fetchedClasses.length === 0) return;
@@ -253,10 +323,43 @@ export default function TeacherTimetable() {
     setAttendanceData(attendanceMap);
   };
 
+  // Navigation only: the range guards inside decide whether a request is
+  // actually needed, so paging weeks inside a loaded month costs nothing.
   useEffect(() => {
     fetchClasses();
     fetchHolidays();
   }, [fetchClasses, fetchHolidays]);
+
+  /**
+   * What the current view actually draws. `classes` holds the whole loaded
+   * month, so everything downstream, the views and the per-class fan-out alike,
+   * works from this instead.
+   */
+  const visibleClasses = useMemo(
+    () => classes.filter((c) => c.scheduled_date >= range.start && c.scheduled_date <= range.end),
+    [classes, range.start, range.end],
+  );
+
+  /**
+   * The per-class fan-out, deliberately kept off the month.
+   *
+   * This is three to four requests per class. Over a week that is fine; over a
+   * month it would be ninety-odd function invocations for numbers no month chip
+   * has room to show anyway.
+   */
+  useEffect(() => {
+    if (view === 'month' || visibleClasses.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      if (!token || cancelled) return;
+      fetchRsvpAndRatings(visibleClasses, token);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, visibleClasses, getToken]);
 
   /** Re-pull one class's attendance summary, so the detail panel reflects a sync/manual-mark made in the Attendance sheet without re-fetching the whole week. */
   const refreshAttendanceSummary = async (classId: string, classroomId: string) => {
@@ -301,14 +404,14 @@ export default function TeacherTimetable() {
   // Assignment counts for the planner tags. One request per class, but only for
   // the handful in view, and only on the planner.
   useEffect(() => {
-    if (view !== 'agenda' || classes.length === 0) return;
+    if (view !== 'agenda' || visibleClasses.length === 0) return;
     let cancelled = false;
 
     (async () => {
       const token = await getToken();
       if (!token) return;
       const entries = await Promise.all(
-        classes.map(async (c) => {
+        visibleClasses.map(async (c) => {
           try {
             const res = await fetch(`/api/timetable/${c.id}/assignments`, {
               headers: { Authorization: `Bearer ${token}` },
@@ -327,7 +430,7 @@ export default function TeacherTimetable() {
     return () => {
       cancelled = true;
     };
-  }, [view, classes, getToken, assignmentRefreshKey]);
+  }, [view, visibleClasses, getToken, assignmentRefreshKey]);
 
   /** Linking or creating changed the picture: refresh the tags and the panel. */
   const refreshAssignments = useCallback(() => {
@@ -372,7 +475,7 @@ export default function TeacherTimetable() {
                 : `Week published to students. ${data.published} ${data.published === 1 ? 'class is' : 'classes are'} now visible.`,
           severity: missing > 0 ? 'warning' : 'success',
         });
-        fetchClasses();
+        fetchClasses(true);
         fetchDraftCount();
       } else {
         setSnackbar({ open: true, message: data.error || 'Could not publish the week', severity: 'error' });
@@ -462,7 +565,7 @@ export default function TeacherTimetable() {
           const data = await res.json();
           if (data.imported > 0) {
             setSnackbar({ open: true, message: `Auto-imported ${data.imported} meeting(s) from Teams`, severity: 'info' });
-            fetchClasses();
+            fetchClasses(true);
           }
         }
       } catch {
@@ -513,7 +616,7 @@ export default function TeacherTimetable() {
         } else {
           setSnackbar({ open: true, message: 'Class cancelled', severity: 'success' });
         }
-        fetchClasses();
+        fetchClasses(true);
       } else {
         const data = await res.json().catch(() => ({}));
         setSnackbar({ open: true, message: data.error || 'Failed to cancel class', severity: 'error' });
@@ -549,7 +652,7 @@ export default function TeacherTimetable() {
         } else {
           setSnackbar({ open: true, message: 'Class permanently deleted', severity: 'success' });
         }
-        fetchClasses();
+        fetchClasses(true);
       }
     } catch (err) {
       console.error('Failed to delete class:', err);
@@ -582,7 +685,7 @@ export default function TeacherTimetable() {
           message: data.found ? 'Recording synced!' : 'No recording found yet',
           severity: 'success',
         });
-        fetchClasses();
+        fetchClasses(true);
       } else {
         setSnackbar({ open: true, message: data.error || 'Sync failed', severity: 'error' });
       }
@@ -648,7 +751,7 @@ export default function TeacherTimetable() {
           message: `Imported ${data.imported} meeting(s), ${data.skipped} already existed`,
           severity: 'success',
         });
-        if (data.imported > 0) fetchClasses();
+        if (data.imported > 0) fetchClasses(true);
       } else {
         setSnackbar({ open: true, message: data.error || 'Import failed', severity: 'error' });
       }
@@ -690,7 +793,7 @@ export default function TeacherTimetable() {
                 severity: 'success',
               },
         );
-        fetchClasses();
+        fetchClasses(true);
       } else {
         setSnackbar({ open: true, message: data.error || 'Failed to create meeting', severity: 'error' });
       }
@@ -736,7 +839,7 @@ export default function TeacherTimetable() {
             ? { open: true, message: data.note || 'Meeting link created (standalone).', severity: 'info' }
             : { open: true, message: 'Teams meeting created!', severity: 'success' },
         );
-        fetchClasses();
+        fetchClasses(true);
       } else {
         setSnackbar({ open: true, message: data.error || 'Failed to create Teams meeting', severity: 'error' });
       }
@@ -821,256 +924,294 @@ export default function TeacherTimetable() {
         });
 
         if (!delRes.ok) throw new Error('Failed to remove holiday');
-        fetchHolidays();
+        fetchHolidays(true);
       }
     }
   };
 
-  return (
-    <Box sx={{ position: 'relative', minHeight: '60vh' }}>
-      {/* One action bar. Six competing buttons became a primary action plus a
-          menu grouped by the job it does, because "Holidays / RSVP / Sync
-          Members / Sync from Teams" side by side gave no clue which mattered.
-          Everything in the menu is also reachable in context: tap a day to mark
-          a holiday, open a class for its RSVP. */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          mb: 2,
-          gap: 1,
-        }}
-      >
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
-          Timetable
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, md: 1 } }}>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => {
-              setEditingClass(null);
-              setPrefillDate('');
-              setPrefillTime('');
-              setCreateDialogOpen(true);
-            }}
-            sx={{ textTransform: 'none', minHeight: 44, fontWeight: 700, whiteSpace: 'nowrap' }}
-          >
-            {isDesktop ? 'Schedule class' : 'Schedule'}
-          </Button>
+  const openCreateDialog = (date = '', time = '') => {
+    setEditingClass(null);
+    setPrefillDate(date);
+    setPrefillTime(time);
+    setCreateDialogOpen(true);
+  };
 
-          <Button
-            variant="outlined"
-            onClick={(e) => setToolbarMenuAnchor(e.currentTarget)}
-            endIcon={<MoreVertIcon />}
-            aria-label="More timetable actions"
-            sx={{ textTransform: 'none', minHeight: 44, fontWeight: 600, px: isDesktop ? 2 : 1.25 }}
-          >
-            {isDesktop ? 'More' : ''}
-          </Button>
-
-          {activeClassroom && (
-            <TimetableNotificationBell classroomId={activeClassroom.id} getToken={getToken} />
-          )}
-        </Box>
-      </Box>
-
-      <Menu
-        anchorEl={toolbarMenuAnchor}
-        open={Boolean(toolbarMenuAnchor)}
-        onClose={() => setToolbarMenuAnchor(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        PaperProps={{ sx: { minWidth: 250 } }}
-      >
-        <ListSubheader sx={{ lineHeight: '32px', fontSize: '0.6875rem', letterSpacing: '.08em' }}>
-          THIS WEEK
-        </ListSubheader>
-        <MenuItem
-          onClick={() => {
-            setToolbarMenuAnchor(null);
-            router.push('/teacher/timetable/import');
-          }}
-          sx={{ minHeight: 48 }}
-        >
-          <ListItemIcon><CloudUploadIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Upload week</ListItemText>
-        </MenuItem>
-        {draftCount > 0 && (
-          <MenuItem
-            onClick={() => {
-              setToolbarMenuAnchor(null);
-              handlePublishWeek();
-            }}
-            disabled={publishing}
-            sx={{ minHeight: 48 }}
-          >
-            <ListItemIcon><PublishIcon fontSize="small" color="primary" /></ListItemIcon>
-            <ListItemText
-              primary={publishing ? 'Publishing...' : 'Publish week'}
-              secondary={`${draftCount} draft${draftCount === 1 ? '' : 's'} waiting`}
-            />
-          </MenuItem>
-        )}
-        <MenuItem
-          onClick={() => {
-            setToolbarMenuAnchor(null);
-            setHolidayManagerOpen(true);
-          }}
-          sx={{ minHeight: 48 }}
-        >
-          <ListItemIcon><EventBusyIcon fontSize="small" /></ListItemIcon>
-          <ListItemText primary="Mark a holiday" secondary="Or tap an empty day" />
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setToolbarMenuAnchor(null);
-            setRsvpDashboardClassId(undefined);
-            setRsvpDashboardOpen(true);
-          }}
-          sx={{ minHeight: 48 }}
-        >
-          <ListItemIcon><AssessmentIcon fontSize="small" /></ListItemIcon>
-          <ListItemText primary="Who is attending" secondary="Opt-outs across the week" />
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setToolbarMenuAnchor(null);
-            router.push('/teacher/recordings');
-          }}
-          sx={{ minHeight: 48 }}
-        >
-          <ListItemIcon><SmartDisplayOutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText primary="Recordings" secondary="Search past classes by tag" />
-        </MenuItem>
-
-        <ListSubheader sx={{ lineHeight: '32px', fontSize: '0.6875rem', letterSpacing: '.08em' }}>
-          SETUP
-        </ListSubheader>
-        {/* Class hours live on the course plan, which already owns the dates
-            that make a season a season. There is no second place to set them. */}
-        <MenuItem
-          onClick={() => {
-            setToolbarMenuAnchor(null);
-            router.push(
-              activePlanId
-                ? `/teacher/course-plans/${activePlanId}`
-                : '/teacher/course-plans',
-            );
-          }}
-          sx={{ minHeight: 48 }}
-        >
-          <ListItemIcon><DateRangeIcon fontSize="small" /></ListItemIcon>
-          <ListItemText
-            primary="Class hours and days"
-            secondary={
-              activePlanName
-                ? `Set on the course plan, ${activePlanName}`
-                : 'Set on the course plan'
-            }
-          />
-        </MenuItem>
-
-        {activeClassroom?.ms_team_id && (
-          <ListSubheader sx={{ lineHeight: '32px', fontSize: '0.6875rem', letterSpacing: '.08em' }}>
-            TEAMS
-          </ListSubheader>
-        )}
-        {activeClassroom?.ms_team_id && (
-          <MenuItem
-            onClick={() => {
-              setToolbarMenuAnchor(null);
-              handleSyncMembers();
-            }}
-            sx={{ minHeight: 48 }}
-          >
-            <ListItemIcon><SyncIcon fontSize="small" /></ListItemIcon>
-            <ListItemText primary="Sync members" secondary="Add enrolled students to the Team" />
-          </MenuItem>
-        )}
-        {activeClassroom?.ms_team_id && (
-          <MenuItem
-            onClick={() => {
-              setToolbarMenuAnchor(null);
-              handleSyncFromTeams();
-            }}
-            sx={{ minHeight: 48 }}
-          >
-            <ListItemIcon><CloudDownloadIcon fontSize="small" /></ListItemIcon>
-            <ListItemText primary="Import from Teams" secondary="Pull meetings already scheduled there" />
-          </MenuItem>
-        )}
-      </Menu>
-
-      <TimetableToolbar state={viewState} agendaLabel="Plan" />
-
-      {view === 'grid' ? (
-        <GridView
-          classes={classes}
-          week={week}
-          band={band}
-          loading={loading}
-          holidays={holidays}
-          role="teacher"
-          onSlotClick={handleSlotClick}
-          onClassClick={handleClassClick}
-          rsvpData={rsvpData}
+  /**
+   * Everything that used to be the "More" button's menu, unchanged apart from
+   * Publish now naming its week: in Month view the teacher can no longer see
+   * which week they would be publishing.
+   */
+  const overflowMenu = (close: () => void) => [
+    <MenuItem key="upload" onClick={() => { close(); router.push('/teacher/timetable/import'); }} sx={{ minHeight: 48 }}>
+      <ListItemIcon><CloudUploadIcon fontSize="small" /></ListItemIcon>
+      <ListItemText>Upload week</ListItemText>
+    </MenuItem>,
+    draftCount > 0 ? (
+      <MenuItem key="publish" onClick={() => { close(); handlePublishWeek(); }} disabled={publishing} sx={{ minHeight: 48 }}>
+        <ListItemIcon><PublishIcon fontSize="small" color="primary" /></ListItemIcon>
+        <ListItemText
+          primary={publishing ? 'Publishing...' : `Publish ${weekRangeLabel}`}
+          secondary={`${draftCount} draft${draftCount === 1 ? '' : 's'} waiting`}
         />
-      ) : (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', lg: '1fr 340px' },
-            gap: 2,
-            alignItems: 'start',
-          }}
-        >
-          <PlannerWeekList
-            classes={classes}
-            week={week}
-            loading={loading}
-            holidays={holidays}
-            selectedId={panelClass?.id ?? null}
-            assignmentCounts={assignmentCounts}
-            onSelect={setPanelClass}
-            onAssignmentClick={openAssignmentMenu}
-            onAddClass={(date) => {
-              setPrefillDate(date);
-              setPrefillTime('');
-              setEditingClass(null);
-              setCreateDialogOpen(true);
-            }}
-          />
-          <ClassEditPanel
-            cls={panelClass}
-            getToken={getToken}
-            getTeacherToken={getTeacherToken}
-            refreshKey={assignmentRefreshKey}
-            onCreateMeeting={handleCreateMeeting}
-            onCreateAssignment={setNewAssignmentClass}
-            onLinkExisting={setLinkDialogClass}
-            onChanged={fetchClasses}
-            onNotify={(message, severity = 'success') =>
-              setSnackbar({ open: true, message, severity })
-            }
-          />
+      </MenuItem>
+    ) : null,
+    <MenuItem key="holiday" onClick={() => { close(); setHolidayManagerOpen(true); }} sx={{ minHeight: 48 }}>
+      <ListItemIcon><EventBusyIcon fontSize="small" /></ListItemIcon>
+      <ListItemText primary="Mark a holiday" secondary="Or tap an empty day" />
+    </MenuItem>,
+    <MenuItem key="rsvp" onClick={() => { close(); setRsvpDashboardClassId(undefined); setRsvpDashboardOpen(true); }} sx={{ minHeight: 48 }}>
+      <ListItemIcon><AssessmentIcon fontSize="small" /></ListItemIcon>
+      <ListItemText primary="Who is attending" secondary="Opt-outs across the week" />
+    </MenuItem>,
+    <MenuItem key="recordings" onClick={() => { close(); router.push('/teacher/recordings'); }} sx={{ minHeight: 48 }}>
+      <ListItemIcon><SmartDisplayOutlinedIcon fontSize="small" /></ListItemIcon>
+      <ListItemText primary="Recordings" secondary="Search past classes by tag" />
+    </MenuItem>,
+    activeClassroom?.ms_team_id ? (
+      <ListSubheader key="teams-head" sx={{ lineHeight: '32px', fontSize: '0.6875rem', letterSpacing: '.08em' }}>
+        TEAMS
+      </ListSubheader>
+    ) : null,
+    activeClassroom?.ms_team_id ? (
+      <MenuItem key="sync-members" onClick={() => { close(); handleSyncMembers(); }} sx={{ minHeight: 48 }}>
+        <ListItemIcon><SyncIcon fontSize="small" /></ListItemIcon>
+        <ListItemText primary="Sync members" secondary="Add enrolled students to the Team" />
+      </MenuItem>
+    ) : null,
+    activeClassroom?.ms_team_id ? (
+      <MenuItem key="import-teams" onClick={() => { close(); handleSyncFromTeams(); }} sx={{ minHeight: 48 }}>
+        <ListItemIcon><CloudDownloadIcon fontSize="small" /></ListItemIcon>
+        <ListItemText primary="Import from Teams" secondary="Pull meetings already scheduled there" />
+      </MenuItem>
+    ) : null,
+    // "Import from Teams" above stays the one-tap quick path. This is the
+    // deliberate one: pick a range, review what was found, then write.
+    activeClassroom?.ms_team_id ? (
+      <MenuItem key="backfill" onClick={() => { close(); setBackfillOpen(true); }} sx={{ minHeight: 48 }}>
+        <ListItemIcon><HistoryIcon fontSize="small" /></ListItemIcon>
+        <ListItemText primary="Backfill from Teams" secondary="Past classes, recordings and attendance" />
+      </MenuItem>
+    ) : null,
+  ];
+
+  /* Class hours live on the course plan, which already owns the dates that make
+     a season a season. There is no second place to set them, and it sits in the
+     view menu because it is what "time scale" means here. */
+  const viewMenuExtras = (close: () => void) => (
+    <MenuItem
+      onClick={() => {
+        close();
+        router.push(activePlanId ? `/teacher/course-plans/${activePlanId}` : '/teacher/course-plans');
+      }}
+      sx={{ minHeight: 44 }}
+    >
+      <ListItemIcon sx={{ minWidth: 32 }}><DateRangeIcon fontSize="small" /></ListItemIcon>
+      <ListItemText
+        primary="Class hours and days"
+        secondary={activePlanName ? `On the course plan, ${activePlanName}` : 'On the course plan'}
+      />
+    </MenuItem>
+  );
+
+  const toolbarActions = (
+    <>
+      {activeClassroom && (
+        <Box sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
+          <TimetableNotificationBell classroomId={activeClassroom.id} getToken={getToken} />
         </Box>
       )}
+      <Button
+        variant="contained"
+        onClick={(e) => setNewMenuAnchor(e.currentTarget)}
+        startIcon={<AddIcon />}
+        endIcon={<ExpandMoreIcon />}
+        aria-haspopup="menu"
+        data-testid="cal-new"
+        sx={{
+          display: { xs: 'none', sm: 'inline-flex' },
+          minHeight: 44,
+          ml: 0.5,
+          textTransform: 'none',
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        New
+      </Button>
+      <Menu
+        anchorEl={newMenuAnchor}
+        open={Boolean(newMenuAnchor)}
+        onClose={() => setNewMenuAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{ sx: { minWidth: 220 } }}
+      >
+        <MenuItem onClick={() => { setNewMenuAnchor(null); openCreateDialog(); }} sx={{ minHeight: 48 }}>
+          <ListItemIcon><EventIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Class</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { setNewMenuAnchor(null); setHolidayManagerOpen(true); }} sx={{ minHeight: 48 }}>
+          <ListItemIcon><EventBusyIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Holiday</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { setNewMenuAnchor(null); router.push('/teacher/timetable/import'); }} sx={{ minHeight: 48 }}>
+          <ListItemIcon><CloudUploadIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Import a week</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  );
 
-      {/* Mobile only: the header button is the desktop equivalent, and two
-          identical actions on one screen is one too many. */}
+  /* The Teams "My calendars" slot. Not a classroom list, since the TopBar
+     already switches classrooms: the useful week context instead. */
+  const railFooter = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Typography
+        sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '.08em', color: 'text.disabled' }}
+      >
+        THIS WEEK
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {draftCount > 0
+          ? `${draftCount} draft${draftCount === 1 ? '' : 's'} waiting`
+          : 'Everything published'}
+      </Typography>
+      {draftCount > 0 && (
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={handlePublishWeek}
+          disabled={publishing}
+          startIcon={<PublishIcon fontSize="small" />}
+          sx={{ alignSelf: 'flex-start', minHeight: 44, textTransform: 'none', fontWeight: 600 }}
+        >
+          {publishing ? 'Publishing...' : `Publish ${weekRangeLabel}`}
+        </Button>
+      )}
+      {activePlanName && (
+        <Typography variant="caption" color="text.disabled">
+          {activePlanName}
+        </Typography>
+      )}
+    </Box>
+  );
+
+  return (
+    <Box sx={{ position: 'relative' }}>
+      <CalendarShell
+        state={viewState}
+        agendaLabel="Plan"
+        railSubtitle={activeClassroom?.name}
+        railFooter={railFooter}
+        markedDates={markedDates}
+        holidayDates={holidayDates}
+        toolbarActions={toolbarActions}
+        overflowMenu={overflowMenu}
+        viewMenuExtras={viewMenuExtras}
+      >
+        {view === 'month' && range.month ? (
+          <MonthView
+            classes={visibleClasses}
+            month={range.month}
+            loading={loading}
+            holidays={holidays}
+            role="teacher"
+            anchorISO={formatDateISO(anchorDate)}
+            onClassClick={handleClassClick}
+            onOpenDay={(iso) => {
+              setAnchorDate(new Date(`${iso}T00:00:00`));
+              viewState.setView('day');
+            }}
+            onDayMenu={(iso, e) => handleSlotClick(iso, configuredWindow.start, e)}
+          />
+        ) : view === 'week' ? (
+          <GridView
+            classes={visibleClasses}
+            week={week}
+            band={band}
+            loading={loading}
+            holidays={holidays}
+            role="teacher"
+            onSlotClick={handleSlotClick}
+            onClassClick={handleClassClick}
+            rsvpData={rsvpData}
+          />
+        ) : view === 'day' ? (
+          <DayView
+            classes={visibleClasses}
+            week={week}
+            anchorDate={anchorDate}
+            band={band}
+            onSelectDate={setAnchorDate}
+            loading={loading}
+            holidays={holidays}
+            role="teacher"
+            onSlotClick={handleSlotClick}
+            onClassClick={handleClassClick}
+            rsvpData={rsvpData}
+          />
+        ) : (
+          <Box
+            sx={{
+              display: 'flex',
+              // Side by side once there is room for the 340px rail, stacked
+              // below that with the whole column scrolling as one.
+              flexDirection: { xs: 'column', lg: 'row' },
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              overflowY: { xs: 'auto', lg: 'hidden' },
+            }}
+          >
+            <PlannerWeekList
+              classes={visibleClasses}
+              week={week}
+              loading={loading}
+              holidays={holidays}
+              selectedId={panelClass?.id ?? null}
+              assignmentCounts={assignmentCounts}
+              onSelect={setPanelClass}
+              onAssignmentClick={openAssignmentMenu}
+              onAddClass={(date) => openCreateDialog(date)}
+            />
+            <Box
+              sx={{
+                flex: '0 0 auto',
+                width: { xs: 'auto', lg: 340 },
+                minHeight: 0,
+                overflowY: { xs: 'visible', lg: 'auto' },
+                borderLeft: { lg: `1px solid ${theme.palette.divider}` },
+                borderTop: { xs: `1px solid ${theme.palette.divider}`, lg: 'none' },
+                p: 2,
+                pb: { xs: 9, lg: 2 },
+              }}
+            >
+              <ClassEditPanel
+                cls={panelClass}
+                getToken={getToken}
+                getTeacherToken={getTeacherToken}
+                refreshKey={assignmentRefreshKey}
+                onCreateMeeting={handleCreateMeeting}
+                onCreateAssignment={setNewAssignmentClass}
+                onLinkExisting={setLinkDialogClass}
+                onChanged={fetchClasses}
+                onNotify={(message, severity = 'success') =>
+                  setSnackbar({ open: true, message, severity })
+                }
+              />
+            </Box>
+          </Box>
+        )}
+      </CalendarShell>
+
+      {/* Mobile only: the toolbar's New button is the desktop equivalent, and
+          two identical actions on one screen is one too many. */}
       {!isDesktop && (
         <Fab
           color="primary"
           aria-label="Schedule a class"
-          onClick={() => {
-            setEditingClass(null);
-            setPrefillDate('');
-            setPrefillTime('');
-            setCreateDialogOpen(true);
-          }}
-          sx={{ position: 'fixed', bottom: 80, right: 16, width: 56, height: 56 }}
+          onClick={() => openCreateDialog()}
+          sx={{ position: 'fixed', bottom: 80, right: 16, width: 56, height: 56, zIndex: 2 }}
         >
           <AddIcon />
         </Fab>
@@ -1112,7 +1253,7 @@ export default function TeacherTimetable() {
         getToken={getToken}
         onSaved={() => {
           setSnackbar({ open: true, message: editingClass ? 'Class updated' : 'Class created', severity: 'success' });
-          fetchClasses();
+          fetchClasses(true);
           fetchHolidays();
           setPrefillDate('');
           setPrefillTime('');
@@ -1131,13 +1272,15 @@ export default function TeacherTimetable() {
         onClose={() => setHolidayManagerOpen(false)}
         classroomId={activeClassroom?.id || ''}
         getToken={getToken}
-        onHolidaysChanged={() => { fetchHolidays(); fetchClasses(); }}
+        onHolidaysChanged={() => { fetchHolidays(true); fetchClasses(true); }}
         getClassesOnDate={getClassesOnDate}
         onCancelClass={handleCancelClassForHoliday}
         prefillDate={prefillDate}
       />
 
       {/* RSVP Dashboard */}
+      {/* The range follows what is on screen: asked from Month view, "who is
+          attending" should answer for the month, not for one week of it. */}
       <RsvpDashboard
         open={rsvpDashboardOpen}
         onClose={() => {
@@ -1147,8 +1290,8 @@ export default function TeacherTimetable() {
         classroomId={activeClassroom?.id || ''}
         getToken={getToken}
         classId={rsvpDashboardClassId}
-        startDate={week.start}
-        endDate={week.end}
+        startDate={range.start}
+        endDate={range.end}
       />
 
       {/* Attendance Sheet */}
@@ -1164,6 +1307,20 @@ export default function TeacherTimetable() {
           classroomId={activeClassroom?.id || ''}
           teamsMeetingId={attendanceClass.teams_meeting_id}
           getToken={getToken}
+        />
+      )}
+
+      {activeClassroom && (
+        <BackfillFromTeamsDialog
+          open={backfillOpen}
+          onClose={() => setBackfillOpen(false)}
+          classroomId={activeClassroom.id}
+          classroomName={activeClassroom.name}
+          getToken={getToken}
+          onApplied={fetchClasses}
+          onNotify={(message, severity) =>
+            setSnackbar({ open: true, message, severity: severity ?? 'success' })
+          }
         />
       )}
 

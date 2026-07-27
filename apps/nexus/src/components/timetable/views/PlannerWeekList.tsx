@@ -58,7 +58,22 @@ export default function PlannerWeekList({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.125 }}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.125,
+        // At lg the list is its own scrolling column beside the editing rail.
+        // Below that the two stack, and the shared parent does the scrolling,
+        // so the list must take its natural height instead of claiming all of it.
+        flex: { xs: '0 0 auto', lg: 1 },
+        minHeight: 0,
+        minWidth: 0,
+        overflowY: { xs: 'visible', lg: 'auto' },
+        p: { xs: 1.5, md: 2 },
+        pb: { xs: 9, lg: 2 }, // clears the mobile Fab at bottom: 80
+      }}
+    >
       {week.days.map((day) => {
         const dateStr = formatDateISO(day);
         const holiday = holidays?.[dateStr];

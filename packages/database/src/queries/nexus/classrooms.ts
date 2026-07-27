@@ -1,5 +1,6 @@
 import { getSupabaseBrowserClient, getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { getCurrentBatch } from '../academicBatches';
+import { ensureCatchupJourney } from './catchup-journey';
 
 export async function getClassroomsByUser(
   userId: string,
@@ -131,6 +132,24 @@ export async function enrollUser(
     .select()
     .single();
   if (error) throw error;
+
+  // A student joining mid-course has missed everything taught so far, so build
+  // their catch-up backlog now rather than making them wait for the weekly
+  // sweep. Deliberately swallowed: getting into the classroom matters more than
+  // getting a to-do list, and a backlog that failed to generate is repaired on
+  // the next sweep anyway.
+  if (data.role === 'student') {
+    try {
+      await ensureCatchupJourney(data.user_id, data.classroom_id, {}, supabase);
+    } catch (err) {
+      console.error('[enrollUser] catch-up backlog generation failed', {
+        user_id: data.user_id,
+        classroom_id: data.classroom_id,
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
   return enrollment;
 }
 

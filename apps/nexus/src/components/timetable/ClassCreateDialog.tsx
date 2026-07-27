@@ -39,7 +39,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import { type ClassCardData } from './ClassCard';
-import { type HolidayInfo } from './WeeklyCalendarGrid';
+import { type HolidayInfo } from './date-utils';
 import { buildClassDraftPrompt, parseClassDraft } from '@/lib/class-ai-draft';
 
 interface TopicOption {

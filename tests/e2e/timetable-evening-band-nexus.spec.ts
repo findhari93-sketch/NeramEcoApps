@@ -57,6 +57,19 @@ async function openTimetable(page: any) {
   await page.goto(`${APP_URLS.nexus}/student/timetable`, { waitUntil: 'domcontentloaded' });
 }
 
+/**
+ * Pick a view from the toolbar's dropdown.
+ *
+ * The old segmented Agenda/Grid toggle is gone: four views plus the density
+ * option do not fit a segmented control at 375px, so the switch is a menu of
+ * radio items, matching the Teams calendar.
+ */
+async function selectView(page: any, label: 'Day' | 'Week' | 'Month' | 'Agenda' | 'Plan') {
+  await page.getByTestId('cal-view-switch').click();
+  await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+  await expect(page.getByRole('menuitemradio', { name: label })).toHaveCount(0);
+}
+
 test.describe('Timetable evening band', () => {
   test.describe.configure({ timeout: 120_000 });
 
@@ -143,26 +156,26 @@ test.describe('Timetable evening band', () => {
     expect(perClassCalls, 'per-class RSVP/attendance fetches must be gone').toHaveLength(0);
   });
 
-  test('AC5: Agenda and Grid switch, and the choice survives a reload', async ({ page }) => {
+  test('AC5: Agenda and Week switch, and the choice survives a reload', async ({ page }) => {
     const ok = await injectAuthForPage(page, 'student');
     test.skip(!ok, 'Test auth not configured');
 
     await openTimetable(page);
+    await expect(page.getByTestId('cal-view-switch')).toBeVisible({ timeout: 30_000 });
 
-    const grid = page.getByRole('button', { name: 'Grid view' });
-    const agenda = page.getByRole('button', { name: 'Agenda view' });
-    await expect(grid).toBeVisible({ timeout: 30_000 });
-
-    await grid.click();
-    await expect(grid).toHaveAttribute('aria-pressed', 'true');
-    // The band note is the honesty line about the compact window.
-    await expect(page.getByText(/Showing .*(AM|PM)|Showing the full day/)).toBeVisible();
+    await selectView(page, 'Week');
+    await expect(page.getByTestId('cal-view-switch')).toContainText('Week');
+    // The band note is the honesty line about the compact window. It now rides
+    // in the toolbar's slack rather than owning a row of its own.
+    await expect(page.getByTestId('cal-band-note')).toHaveText(
+      /Showing .*(AM|PM)|Showing the full day/,
+    );
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(grid).toHaveAttribute('aria-pressed', 'true', { timeout: 30_000 });
+    await expect(page.getByTestId('cal-view-switch')).toContainText('Week', { timeout: 30_000 });
 
-    await agenda.click();
-    await expect(agenda).toHaveAttribute('aria-pressed', 'true');
+    await selectView(page, 'Agenda');
+    await expect(page.getByTestId('cal-view-switch')).toContainText('Agenda');
   });
 
   test('AC6: the grid draws only the configured hours, not a full day', async ({ page, request }) => {
@@ -177,9 +190,8 @@ test.describe('Timetable evening band', () => {
     const { timetableWindow } = await me.json();
 
     await openTimetable(page);
-    const grid = page.getByRole('button', { name: 'Grid view' });
-    await expect(grid).toBeVisible({ timeout: 30_000 });
-    await grid.click();
+    await expect(page.getByTestId('cal-view-switch')).toBeVisible({ timeout: 30_000 });
+    await selectView(page, 'Week');
 
     // A full 8 AM to 8 PM day would be 13 hour labels. The band should be far
     // fewer, unless a class outside the window legitimately expanded it (in
@@ -188,7 +200,7 @@ test.describe('Timetable evening band', () => {
     const endHour = parseInt(timetableWindow.end.slice(0, 2), 10);
     const expectedLabels = endHour - startHour + 1;
 
-    const note = await page.getByText(/Showing /).innerText();
+    const note = await page.getByTestId('cal-band-note').innerText();
     if (!/expanded to fit/.test(note)) {
       const labels = await page.getByTestId('grid-hour-label').count();
       expect(labels).toBeLessThanOrEqual(expectedLabels + 1);
@@ -211,9 +223,8 @@ test.describe('Timetable evening band', () => {
     test.skip(!ok, 'Test auth not configured');
 
     await openTimetable(page);
-    const grid = page.getByRole('button', { name: 'Grid view' });
-    await expect(grid).toBeVisible({ timeout: 30_000 });
-    await grid.click();
+    await expect(page.getByTestId('cal-view-switch')).toBeVisible({ timeout: 30_000 });
+    await selectView(page, 'Week');
     await page.waitForTimeout(1500);
 
     // The six-column band is wider than a phone on purpose. It must scroll
@@ -227,12 +238,11 @@ test.describe('Timetable evening band', () => {
     test.skip(!ok, 'Test auth not configured');
 
     await openTimetable(page);
-    await expect(page.getByRole('button', { name: 'Grid view' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('cal-view-switch')).toBeVisible({ timeout: 30_000 });
 
-    await assertTouchTargetSize(page, 'button[aria-label="Grid view"]');
-    await assertTouchTargetSize(page, 'button[aria-label="Agenda view"]');
-    await assertTouchTargetSize(page, 'button[aria-label="Previous week"]');
-    await assertTouchTargetSize(page, 'button[aria-label="Next week"]');
+    await assertTouchTargetSize(page, '[data-testid="cal-view-switch"]');
+    await assertTouchTargetSize(page, '[data-testid="cal-prev"]');
+    await assertTouchTargetSize(page, '[data-testid="cal-next"]');
   });
 
   test('empty state: a week with no classes still renders the shell', async ({ page }) => {

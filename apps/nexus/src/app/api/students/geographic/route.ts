@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { errorResponse } from '@/lib/api-errors';
 import { getActiveGeoStudents, buildHierarchy, searchActiveStudents } from '@/lib/geo-students';
 
 /**
@@ -15,7 +16,9 @@ import { getActiveGeoStudents, buildHierarchy, searchActiveStudents } from '@/li
  */
 export async function GET(request: NextRequest) {
   try {
-    await verifyMsToken(request.headers.get('Authorization'));
+    const caller = await getRequestUser(request.headers.get('Authorization'));
+    // Staff-only: country/state/city tree plus a flat student search.
+    assertCapability(caller, 'coord.student.view');
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');

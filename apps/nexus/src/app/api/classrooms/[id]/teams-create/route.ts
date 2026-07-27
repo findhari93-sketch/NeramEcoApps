@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 import { createTeamForClassroom } from '@/lib/teams-sync';
 
 /**
@@ -17,10 +18,9 @@ export async function POST(
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient();
 
-    // Verify teacher role
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
@@ -28,15 +28,17 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const { data: enrollment } = await supabase
-      .from('nexus_enrollments')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('classroom_id', classroomId)
-      .single();
-
-    if (!enrollment || enrollment.role !== 'teacher') {
-      return NextResponse.json({ error: 'Only teachers can create Teams teams' }, { status: 403 });
+    // Creating the classroom's Microsoft Team is internal-team work.
+    //
+    // This previously gated on a teacher ENROLLMENT in the classroom, which
+    // rejected an admin who happened not to be enrolled: the opposite of every
+    // other route, where an admin manages any classroom. The capability check is
+    // the consistent gate.
+    if (!canUser(user, 'structure.classroom.teams_link')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can create the Teams team for a classroom.' },
+        { status: 403 },
+      );
     }
 
     // Get classroom details for team name

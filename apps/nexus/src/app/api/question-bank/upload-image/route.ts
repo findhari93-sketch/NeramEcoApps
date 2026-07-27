@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { httpStatusForError } from '@/lib/api-errors';
 import { getSupabaseAdminClient, rewriteStorageUrl } from '@neram/database';
 
 // Allow up to 10 MB uploads (Next.js App Router body size config)
@@ -13,17 +15,20 @@ export const maxDuration = 30;
  * Returns: { url, path }
  */
 export async function POST(request: NextRequest) {
-  // --- 1. Verify Microsoft token ---
+  // --- 1. Verify the caller and their authority ---
+  //
+  // This writes arbitrary files into Supabase storage. It previously only
+  // verified the token, so any authenticated user (including a student) could
+  // upload. Question Bank images are authored content.
   let msUser;
   try {
     msUser = await verifyMsToken(request.headers.get('Authorization'));
+    const caller = await getRequestUser(request.headers.get('Authorization'));
+    assertCapability(caller, 'teach.content.author');
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'Unknown auth error';
     console.error('QB upload: auth failed:', detail);
-    return NextResponse.json(
-      { error: `Auth failed: ${detail}` },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: detail }, { status: httpStatusForError(err) });
   }
 
   // --- 2. Get Supabase admin client ---

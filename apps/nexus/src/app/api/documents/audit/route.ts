@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /**
@@ -8,16 +9,12 @@ import { getSupabaseAdminClient } from '@neram/database';
  */
 export async function GET(request: NextRequest) {
   try {
-    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    // Staff-only: the document audit log for any student, document or classroom.
+    // Previously authenticated but not authorised.
+    const user = await getRequestUser(request.headers.get('Authorization'));
+    assertCapability(user, 'coord.document.verify');
+
     const supabase = getSupabaseAdminClient();
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     // nexus_document_audit_log is not in generated types
     let query = (supabase as any)

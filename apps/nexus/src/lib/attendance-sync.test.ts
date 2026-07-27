@@ -3,6 +3,7 @@ import {
   pickReportForClass,
   buildRosterIndex,
   syncClassAttendance,
+  applyCsvAttendance,
   ATTENDANCE_FAILURE_MESSAGES,
   type ClassMeetingRow,
 } from './attendance-sync';
@@ -447,5 +448,145 @@ describe('ATTENDANCE_FAILURE_MESSAGES', () => {
   it('names the Azure remedy for the two permission failures', () => {
     expect(ATTENDANCE_FAILURE_MESSAGES.app_permission_missing).toMatch(/OnlineMeetingArtifact\.Read\.All/);
     expect(ATTENDANCE_FAILURE_MESSAGES.access_policy_missing).toMatch(/application access policy/i);
+  });
+});
+
+describe('applyCsvAttendance', () => {
+  const CSV_CLASS = { id: 'class-1', classroom_id: 'room-1' };
+
+  const rosterOf = (...ids: string[]) =>
+    ids.map((id) => ({ user_id: id, role: 'student', user: { id } }));
+
+  beforeEach(() => {
+    vi.stubGlobal('console', { ...console, error: vi.fn() });
+  });
+
+  it('never touches Microsoft Graph, which is the whole point of the fallback', async () => {
+    const supabase = mockSupabase({
+      nexus_enrollments: rosterOf('student-1'),
+      nexus_attendance: [],
+    });
+    stubGraph([]);
+
+    await applyCsvAttendance(
+      supabase as any,
+      CSV_CLASS,
+      [{ student_id: 'student-1', attended: true, duration_minutes: 88, joined_at: null, left_at: null }],
+      { markedBy: 'staff-1', detail: 'Imported from Teams CSV' },
+    );
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('writes source teams_csv and stamps who imported it', async () => {
+    const supabase = mockSupabase({
+      nexus_enrollments: rosterOf('student-1'),
+      nexus_attendance: [],
+    });
+
+    const result = await applyCsvAttendance(
+      supabase as any,
+      CSV_CLASS,
+      [
+        {
+          student_id: 'student-1',
+          attended: true,
+          duration_minutes: 88,
+          joined_at: '2026-07-22T13:32:00.000Z',
+          left_at: '2026-07-22T15:00:00.000Z',
+        },
+      ],
+      { markedBy: 'staff-1', detail: 'Imported from Teams CSV by Shanthi' },
+    );
+
+    expect(result).toMatchObject({ ok: true, synced: 1 });
+
+    const upsert = supabase.__writes.find((w) => w.table === 'nexus_attendance' && w.op === 'upsert');
+    expect(upsert?.payload[0]).toMatchObject({
+      student_id: 'student-1',
+      attended: true,
+      duration_minutes: 88,
+      source: 'teams_csv',
+      marked_by: 'staff-1',
+    });
+  });
+
+  it("keeps a teacher's manual decision and only attaches the report's telemetry", async () => {
+    const supabase = mockSupabase({
+      nexus_enrollments: rosterOf('student-1'),
+      // Marked ABSENT by hand, even though the report says they were there.
+      nexus_attendance: [{ student_id: 'student-1', source: 'manual', attended: false }],
+    });
+
+    await applyCsvAttendance(
+      supabase as any,
+      CSV_CLASS,
+      [{ student_id: 'student-1', attended: true, duration_minutes: 88, joined_at: null, left_at: null }],
+      { markedBy: 'staff-1', detail: 'Imported from Teams CSV' },
+    );
+
+    const upsert = supabase.__writes.find((w) => w.table === 'nexus_attendance' && w.op === 'upsert');
+    expect(upsert?.payload[0]).toMatchObject({
+      attended: false,
+      source: 'manual',
+      duration_minutes: 88,
+    });
+  });
+
+  it('stamps the class as synced with the import as its detail', async () => {
+    const supabase = mockSupabase({
+      nexus_enrollments: rosterOf('student-1'),
+      nexus_attendance: [],
+    });
+
+    await applyCsvAttendance(
+      supabase as any,
+      CSV_CLASS,
+      [{ student_id: 'student-1', attended: true, duration_minutes: 88, joined_at: null, left_at: null }],
+      { markedBy: 'staff-1', detail: 'Imported from Teams CSV by Shanthi: 1 matched' },
+    );
+
+    const update = supabase.__writes.find(
+      (w) => w.table === 'nexus_scheduled_classes' && w.op === 'update',
+    );
+    expect(update?.payload).toMatchObject({
+      attendance_sync_status: 'ok',
+      attendance_sync_detail: 'Imported from Teams CSV by Shanthi: 1 matched',
+    });
+    expect(update?.payload.attendance_synced_at).toBeTruthy();
+  });
+
+  it('refuses an empty import rather than stamping the class as synced', async () => {
+    const supabase = mockSupabase({ nexus_enrollments: [], nexus_attendance: [] });
+
+    const result = await applyCsvAttendance(supabase as any, CSV_CLASS, [], {
+      markedBy: 'staff-1',
+      detail: 'Imported from Teams CSV',
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'no_records' });
+    expect(supabase.__writes).toHaveLength(0);
+  });
+
+  it('derives no_shows for enrolled students the report marked absent', async () => {
+    const supabase = mockSupabase({
+      nexus_enrollments: rosterOf('student-1', 'student-2'),
+      // deriveNoShows re-reads this table; nobody is recorded as attended.
+      nexus_attendance: [],
+    });
+
+    const result = await applyCsvAttendance(
+      supabase as any,
+      CSV_CLASS,
+      [{ student_id: 'student-1', attended: false, duration_minutes: 1, joined_at: null, left_at: null }],
+      { markedBy: 'staff-1', detail: 'Imported from Teams CSV' },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.noShows).toBe(2);
+    expect(
+      supabase.__writes.some((w) => w.table === 'nexus_class_absences' && w.op === 'upsert'),
+    ).toBe(true);
   });
 });

@@ -17,6 +17,7 @@ import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurned
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
+import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
@@ -34,6 +35,7 @@ const STARRED_PATH = '/student/study-materials/starred';
 const SELF_LEARNING_PATH = '/student/self-learning';
 const COURSE_PLAN_PATH = '/student/course-plan';
 const ASSIGNMENTS_PATH = '/student/assignments';
+const CATCHUP_PATH = '/student/catch-up';
 // Covers both the list (/student/class-recaps) and the player (/student/class-recap/[id]).
 const CLASS_RECAP_PATH = '/student/class-recap';
 const CLASS_RECAPS_PATH = '/student/class-recaps';
@@ -72,6 +74,7 @@ const CLASSROOM: ZoneConfig = {
         { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
         { label: 'Course Plan', path: COURSE_PLAN_PATH, icon: <ViewTimelineOutlinedIcon /> },
         { label: 'Assignments', path: ASSIGNMENTS_PATH, icon: <AssignmentTurnedInOutlinedIcon /> },
+        { label: 'Catch-up', path: CATCHUP_PATH, icon: <HistoryToggleOffOutlinedIcon /> },
       ],
     },
     {
@@ -110,6 +113,7 @@ const CLASSROOM: ZoneConfig = {
   overflowItems: [
     { label: 'Course Plan', path: COURSE_PLAN_PATH, icon: <ViewTimelineOutlinedIcon /> },
     { label: 'Assignments', path: ASSIGNMENTS_PATH, icon: <AssignmentTurnedInOutlinedIcon /> },
+    { label: 'Catch-up', path: CATCHUP_PATH, icon: <HistoryToggleOffOutlinedIcon /> },
     { label: 'Leaderboard', path: '/student/leaderboard', icon: <LeaderboardOutlinedIcon /> },
     { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
     { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
@@ -187,6 +191,7 @@ function detectZoneFromPath(pathname: string): StudentZoneId | null {
     '/student/timetable',
     COURSE_PLAN_PATH,
     ASSIGNMENTS_PATH,
+    CATCHUP_PATH,
     '/student/tests',
     '/student/drawings',
     '/student/exam-recall',

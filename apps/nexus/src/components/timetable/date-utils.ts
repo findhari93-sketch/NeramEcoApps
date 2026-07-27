@@ -61,6 +61,59 @@ export function isoWeekday(d: Date): IsoWeekday {
   return (js === 0 ? 7 : js) as IsoWeekday;
 }
 
+/** Local midnight of the given date. The calendar's anchor is always normalised. */
+export function startOfDay(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
+/** `n` days later (or earlier, for a negative n). Handles month and year rollover. */
+export function addDays(d: Date, n: number): Date {
+  const out = startOfDay(d);
+  out.setDate(out.getDate() + n);
+  return out;
+}
+
+/** Local midnight of the 1st of the given date's month. */
+export function startOfMonth(d: Date): Date {
+  const out = startOfDay(d);
+  out.setDate(1);
+  return out;
+}
+
+/**
+ * `n` months later, clamped to the last valid day.
+ *
+ * Naive `setMonth(m + 1)` on 31 January lands on 3 March, which would make
+ * month navigation skip February entirely. Clamp instead: 31 Jan + 1 is 28 Feb.
+ *
+ * Note this is still lossy when chained (31 Jan, 28 Feb, 28 Mar), so the month
+ * navigation in useTimetableView always recomputes from startOfMonth rather
+ * than stepping the previous anchor.
+ */
+export function addMonths(d: Date, n: number): Date {
+  const out = startOfDay(d);
+  const day = out.getDate();
+  out.setDate(1);
+  out.setMonth(out.getMonth() + n);
+  const lastDayOfTarget = new Date(out.getFullYear(), out.getMonth() + 1, 0).getDate();
+  out.setDate(Math.min(day, lastDayOfTarget));
+  return out;
+}
+
+export function isSameMonth(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+}
+
+export function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 export interface WeekDates {
   /** Every day of the week, Monday first. Used for the date range query. */
   allDays: Date[];
@@ -82,19 +135,29 @@ export interface WeekDates {
  * scheduled on an excluded day is still fetched and can be surfaced.
  */
 export function getWeekDates(offset: number, weekdays: IsoWeekday[] = DEFAULT_WINDOW.days): WeekDates {
-  const now = new Date();
-  const monday = new Date(now);
-  const dayOfWeek = now.getDay();
-  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  monday.setDate(now.getDate() + diff + offset * 7);
-  monday.setHours(0, 0, 0, 0);
+  return getWeekDatesFor(addDays(new Date(), offset * 7), weekdays);
+}
+
+/**
+ * The Monday-anchored week CONTAINING `anchor`.
+ *
+ * The same thing getWeekDates computes, but addressed by date rather than by an
+ * offset from today. The calendar navigates by anchor date (a week offset
+ * cannot express "which month"), so this is the primitive and getWeekDates is
+ * now a thin wrapper over it.
+ */
+export function getWeekDatesFor(
+  anchor: Date,
+  weekdays: IsoWeekday[] = DEFAULT_WINDOW.days,
+): WeekDates {
+  const base = startOfDay(anchor);
+  const dayOfWeek = base.getDay();
+  // Sunday (0) belongs to the week that STARTED six days ago, not the one
+  // about to start. Getting this backwards shifts every Sunday by a week.
+  const monday = addDays(base, dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
 
   const allDays: Date[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    allDays.push(d);
-  }
+  for (let i = 0; i < 7; i++) allDays.push(addDays(monday, i));
 
   const sunday = allDays[6];
   const fmt = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
@@ -105,6 +168,161 @@ export function getWeekDates(offset: number, weekdays: IsoWeekday[] = DEFAULT_WI
     start: formatDateISO(monday),
     end: formatDateISO(sunday),
     label: `${fmt(monday)}, ${fmt(sunday)}`,
+  };
+}
+
+// ─── Month grid ──────────────────────────────────────────────────────────────
+
+export interface MonthGrid {
+  /**
+   * 5 or 6 rows of 7 REAL Dates, Monday first, including the spill days from
+   * the previous and next month that fill the corners.
+   *
+   * Deliberately not the `(number | null)[][]` shape used by
+   * components/gamification/AttendanceHeatmap.tsx: a calendar has to render its
+   * spill days as real, clickable dates, whereas the heatmap only pads them out.
+   */
+  weeks: Date[][];
+  /** `weeks` flattened: 35 or 42 dates. */
+  days: Date[];
+  /** The 1st of the month being displayed, for the "other month" dim. */
+  monthStart: Date;
+  /** First cell, as YYYY-MM-DD. This is what to FETCH, spill days included. */
+  start: string;
+  /** Last cell, as YYYY-MM-DD. */
+  end: string;
+  /** "July 2026" */
+  label: string;
+}
+
+/**
+ * The month containing `anchor`, as whole Monday-anchored weeks.
+ *
+ * Row count is 5 or 6 depending on how the month falls, never a fixed 6: a
+ * five-week month gets taller, more legible cells for free.
+ */
+export function getMonthGrid(anchor: Date): MonthGrid {
+  const monthStart = startOfMonth(anchor);
+  const firstCell = getWeekDatesFor(monthStart).allDays[0];
+
+  // Walk whole weeks until the month is covered. A month spans at most 6.
+  const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+  const weeks: Date[][] = [];
+  let cursor = firstCell;
+  do {
+    const row: Date[] = [];
+    for (let i = 0; i < 7; i++) row.push(addDays(cursor, i));
+    weeks.push(row);
+    cursor = addDays(cursor, 7);
+  } while (cursor <= monthEnd);
+
+  const days = weeks.flat();
+
+  return {
+    weeks,
+    days,
+    monthStart,
+    start: formatDateISO(days[0]),
+    end: formatDateISO(days[days.length - 1]),
+    label: monthStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+  };
+}
+
+/**
+ * The fetch range for a view: the anchor's whole month grid, widened only if
+ * the visible range pokes outside it.
+ *
+ * Anchored on the MONTH rather than derived from the visible range, because a
+ * month grid already runs Monday to Sunday and re-widening one would pull in
+ * the neighbouring months every time. That is what makes the range stable:
+ * week, day and month views of the same month all produce an identical range,
+ * so switching between them and paging days or weeks inside the month costs no
+ * requests at all. Only crossing into a new month refetches.
+ *
+ * The widening still matters for a week that straddles two months (27 July to
+ * 2 August): the anchor's grid may not reach the far end.
+ */
+export function monthGridRangeFor(
+  anchor: Date,
+  visibleStart: string,
+  visibleEnd: string,
+): { start: string; end: string } {
+  const grid = getMonthGrid(anchor);
+  return {
+    start: visibleStart < grid.start ? visibleStart : grid.start,
+    end: visibleEnd > grid.end ? visibleEnd : grid.end,
+  };
+}
+
+// ─── Range labels ────────────────────────────────────────────────────────────
+
+/**
+ * The toolbar's period label, in a long form and a 375px-safe short form.
+ *
+ *   day    "Monday, 27 July 2026"    / "Mon 27 Jul"
+ *   week   "20 to 26 July 2026"      / "20-26 Jul"
+ *   month  "July 2026"               / "Jul 2026"
+ *
+ * A week straddling two months or two years spells both out, since "20 to 26"
+ * would otherwise be ambiguous.
+ */
+export function formatRangeLabel(
+  mode: 'day' | 'week' | 'month' | 'agenda',
+  days: Date[],
+): { label: string; shortLabel: string } {
+  if (days.length === 0) return { label: '', shortLabel: '' };
+
+  const first = days[0];
+  const last = days[days.length - 1];
+
+  if (mode === 'day') {
+    return {
+      label: first.toLocaleDateString('en-IN', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }),
+      shortLabel: first.toLocaleDateString('en-IN', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      }),
+    };
+  }
+
+  if (mode === 'month') {
+    // NOT days[0]: a month grid opens on up to six spill days from the previous
+    // month, so July 2026 would announce itself as June. The middle cell is
+    // always inside the target month, whether the grid is 35 or 42 cells.
+    const inMonth = days[Math.floor(days.length / 2)];
+    return {
+      label: inMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+      shortLabel: inMonth.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
+    };
+  }
+
+  // Week and agenda both show a week.
+  const sameYear = first.getFullYear() === last.getFullYear();
+  const sameMonth = sameYear && first.getMonth() === last.getMonth();
+
+  if (sameMonth) {
+    return {
+      label: `${first.getDate()} to ${last.getDate()} ${first.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`,
+      shortLabel: `${first.getDate()}-${last.getDate()} ${first.toLocaleDateString('en-IN', { month: 'short' })}`,
+    };
+  }
+
+  const longOpts: Intl.DateTimeFormatOptions = sameYear
+    ? { day: 'numeric', month: 'long' }
+    : { day: 'numeric', month: 'long', year: 'numeric' };
+  const shortOpts: Intl.DateTimeFormatOptions = sameYear
+    ? { day: 'numeric', month: 'short' }
+    : { day: 'numeric', month: 'short', year: 'numeric' };
+
+  return {
+    label: `${first.toLocaleDateString('en-IN', longOpts)} to ${last.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+    shortLabel: `${first.toLocaleDateString('en-IN', shortOpts)} - ${last.toLocaleDateString('en-IN', shortOpts)}`,
   };
 }
 
@@ -152,6 +370,23 @@ export function formatTime(time: string): string {
   const hour = parseInt(h, 10);
   const ampm = hour >= 12 ? 'PM' : 'AM';
   return `${hour % 12 || 12}:${m} ${ampm}`;
+}
+
+/**
+ * "19:00" to "7 PM", "19:30" to "7:30 PM".
+ *
+ * The month view's chips are 20px tall and one line, so the ":00" that
+ * formatTime always prints is four characters of pure noise there.
+ * Returns the input unchanged if it cannot be parsed.
+ */
+export function formatTimeCompact(time: string): string {
+  const [h, m] = (time ?? '').split(':');
+  const hour = parseInt(h, 10);
+  const mins = parseInt(m, 10);
+  if (Number.isNaN(hour) || Number.isNaN(mins)) return time;
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const h12 = hour % 12 || 12;
+  return mins === 0 ? `${h12} ${ampm}` : `${h12}:${String(mins).padStart(2, '0')} ${ampm}`;
 }
 
 // ─── Band resolution ─────────────────────────────────────────────────────────

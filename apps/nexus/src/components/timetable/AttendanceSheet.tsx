@@ -18,8 +18,10 @@ import {
 import SyncIcon from '@mui/icons-material/Sync';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import TroubleshootIcon from '@mui/icons-material/Troubleshoot';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import DiagnosticsStepList, { type DiagnosticStep } from './DiagnosticsStepList';
+import TeamsCsvImportDialog from './TeamsCsvImportDialog';
+import type { RosterCandidate } from '@/lib/teams-attendance-csv';
 
 interface AttendanceRecord {
   id: string;
@@ -29,6 +31,8 @@ interface AttendanceRecord {
   left_at: string | null;
   duration_minutes: number | null;
   source: string;
+  /** Every address this student might have joined Teams under, lowercased. */
+  match_emails?: string[];
   student: {
     id: string;
     name: string;
@@ -46,30 +50,12 @@ interface SyncState {
   has_meeting: boolean;
 }
 
-/** One probe from /api/timetable/attendance-diagnostics. */
-interface DiagnosticStep {
-  step: string;
-  ok: boolean;
-  detail: string;
-  remedy?: string;
-}
-
+/** The shape /api/timetable/attendance-diagnostics returns. */
 interface DiagnosticsResult {
   ok: boolean;
   blocking_step: string | null;
   steps: DiagnosticStep[];
 }
-
-const STEP_LABELS: Record<string, string> = {
-  class: 'Class and meeting link',
-  env: 'Microsoft credentials',
-  app_token: 'Microsoft sign-in for Nexus',
-  app_roles: 'Graph application permissions',
-  organizer: 'Meeting organizer',
-  access_policy: 'Teams application access policy',
-  meeting_lookup: 'Finding the meeting in Teams',
-  reports: 'Attendance report',
-};
 
 interface AttendanceSheetProps {
   open: boolean;
@@ -101,6 +87,8 @@ export default function AttendanceSheet({
   const [unmatched, setUnmatched] = useState(0);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [classAnchor, setClassAnchor] = useState<string | null>(null);
 
   const fetchAttendance = async () => {
     setLoading(true);
@@ -118,6 +106,13 @@ export default function AttendanceSheet({
         setRecords(data.attendance || []);
         setSummary(data.summary || { present: 0, absent: 0, total: 0 });
         setSync(data.sync ?? null);
+        // The Teams report writes bare wall-clock times with no offset, so the
+        // importer needs this class's start to anchor them against.
+        setClassAnchor(
+          data.class?.scheduled_date
+            ? `${data.class.scheduled_date}T${String(data.class.start_time ?? '00:00').substring(0, 5)}:00+05:30`
+            : null,
+        );
       }
     } catch (err) {
       console.error('Failed to load attendance:', err);
@@ -134,6 +129,17 @@ export default function AttendanceSheet({
       setDiagnostics(null);
     }
   }, [open, classId]);
+
+  /**
+   * The roster in the shape the CSV importer matches against. Built from what
+   * this dialog already fetched, so the import dialog makes no network call at
+   * all until the teacher commits.
+   */
+  const importRoster: RosterCandidate[] = records.map((record) => ({
+    student_id: record.student_id,
+    name: record.student?.name ?? null,
+    match_emails: record.match_emails ?? (record.student?.email ? [record.student.email.toLowerCase()] : []),
+  }));
 
   /**
    * Ask the server which link in the Teams chain is broken.
@@ -201,9 +207,15 @@ export default function AttendanceSheet({
       } else {
         // The server maps each failure code to a specific explanation, so a
         // missing Azure grant no longer looks the same as a class that has not
-        // happened yet.
+        // happened yet. When it also knows who organized the meeting, say so:
+        // that person's own account can read the attendance with no Teams policy
+        // change at all, which is the fastest way out of this state.
         setSeverity('warning');
-        setMessage(data.error || 'Sync failed');
+        const hint =
+          data.organizer?.name && data.organizer.is_caller === false
+            ? ` ${data.organizer.name} organized this meeting. If they sign into Nexus and press Sync from Teams, their own account can read it without any Teams policy change.`
+            : '';
+        setMessage(`${data.error || 'Sync failed'}${hint}`);
       }
     } catch (err) {
       setSeverity('warning');
@@ -362,84 +374,40 @@ export default function AttendanceSheet({
           >
             {savingAll ? 'Saving...' : 'Mark all present'}
           </Button>
-          {/* Only offered once something has actually gone wrong, so the normal
-              path stays a two-button dialog. */}
-          {teamsMeetingId && sync?.status && sync.status !== 'ok' && (
+        </Box>
+
+        {/* The recovery row. Only rendered once a sync has actually failed, so
+            the normal path stays a two-button dialog, and it disappears on its
+            own the day Teams starts answering. Two text buttons on their own
+            row rather than a third and fourth button above, so they wrap to one
+            column at 375px instead of crowding the primary actions. */}
+        {teamsMeetingId && sync?.status && sync.status !== 'ok' && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<UploadFileOutlinedIcon />}
+              onClick={() => setImportOpen(true)}
+              disabled={syncing || savingAll || loading}
+              sx={{ textTransform: 'none', minHeight: 44 }}
+            >
+              Upload Teams report
+            </Button>
             <Button
               variant="text"
               size="small"
               startIcon={<TroubleshootIcon />}
               onClick={handleDiagnose}
               disabled={diagnosing || syncing}
-              sx={{ textTransform: 'none', minHeight: 40 }}
+              sx={{ textTransform: 'none', minHeight: 44 }}
             >
               {diagnosing ? 'Checking...' : 'Why not?'}
             </Button>
-          )}
-        </Box>
+          </Box>
+        )}
 
         {diagnostics && (
-          <Box
-            sx={{
-              mb: 2,
-              p: 1.5,
-              borderRadius: 1,
-              border: '1px solid',
-              borderColor: diagnostics.ok ? 'success.light' : 'warning.light',
-              bgcolor: 'action.hover',
-            }}
-          >
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-              {diagnostics.ok
-                ? 'Teams attendance is reachable for this class.'
-                : 'Teams attendance is blocked here:'}
-            </Typography>
-            {diagnostics.steps.map((step) => (
-              <Box key={step.step} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'flex-start' }}>
-                {step.ok ? (
-                  <CheckCircleOutlineIcon color="success" sx={{ fontSize: 18, mt: 0.2 }} />
-                ) : (
-                  <ErrorOutlineIcon color="warning" sx={{ fontSize: 18, mt: 0.2 }} />
-                )}
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: step.ok ? 400 : 600 }}>
-                    {STEP_LABELS[step.step] || step.step}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ display: 'block', wordBreak: 'break-word' }}
-                  >
-                    {step.detail}
-                  </Typography>
-                  {/* Remedies include PowerShell, which must never widen the
-                      dialog: it scrolls inside its own box instead. */}
-                  {step.remedy && (
-                    <Box
-                      component="pre"
-                      sx={{
-                        mt: 0.5,
-                        mb: 0,
-                        p: 1,
-                        fontSize: 11,
-                        lineHeight: 1.5,
-                        fontFamily: 'monospace',
-                        whiteSpace: 'pre',
-                        overflowX: 'auto',
-                        maxWidth: '100%',
-                        borderRadius: 1,
-                        bgcolor: 'background.paper',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                      }}
-                    >
-                      {step.remedy}
-                    </Box>
-                  )}
-                </Box>
-              </Box>
-            ))}
-          </Box>
+          <DiagnosticsStepList steps={diagnostics.steps} ok={diagnostics.ok} />
         )}
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: sync?.synced_at ? 0.5 : 2 }}>
           Toggle any student to mark them present or absent, changes save instantly.
@@ -520,6 +488,21 @@ export default function AttendanceSheet({
           Close
         </Button>
       </DialogActions>
+
+      <TeamsCsvImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        classId={classId}
+        classroomId={classroomId}
+        classAnchorIso={classAnchor}
+        roster={importRoster}
+        getToken={getToken}
+        onImported={() => {
+          setSeverity('success');
+          setMessage('Imported the Teams attendance report.');
+          fetchAttendance();
+        }}
+      />
     </Dialog>
   );
 }

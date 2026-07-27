@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, createUserNotification, removeEnrollments } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 import { addMemberToTeam } from '@/lib/teams-sync';
 import type { RemovalReasonCategory } from '@neram/database';
 
@@ -70,12 +71,17 @@ export async function POST(
 
     const { data: caller } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!caller || !['teacher', 'admin'].includes(caller.user_type)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Adding someone to a cohort is internal-team work, not something a visiting
+    // teacher does.
+    if (!canUser(caller, 'structure.enrollment.add')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can add students to a classroom.' },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();
@@ -209,12 +215,16 @@ export async function PATCH(
 
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Batch assignment is part of managing who sits where in the cohort.
+    if (!canUser(user, 'structure.enrollment.add')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can change batch assignments.' },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();
@@ -308,12 +318,17 @@ export async function DELETE(
 
     const { data: caller } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!caller || !['teacher', 'admin'].includes(caller.user_type)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Removing a student cuts their Nexus access, so it stays with the internal
+    // team. Before the tier split any teacher could do this.
+    if (!canUser(caller, 'structure.enrollment.remove')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can remove students from a classroom.' },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();

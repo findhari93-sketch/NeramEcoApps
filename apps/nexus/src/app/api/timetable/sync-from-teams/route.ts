@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 import { getAppOnlyToken } from '@/lib/graph-app-token';
+import { fetchGroupCalendarView } from '@/lib/teams-meeting-sync';
 
 /**
  * POST /api/timetable/sync-from-teams
@@ -22,7 +24,7 @@ export async function POST(request: NextRequest) {
     // Verify teacher role
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
@@ -30,15 +32,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const { data: enrollment } = await supabase
-      .from('nexus_enrollments')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('classroom_id', classroom_id)
-      .single();
-
-    if (!enrollment || enrollment.role !== 'teacher') {
-      return NextResponse.json({ error: 'Only teachers can sync from Teams' }, { status: 403 });
+    // Importing meetings from Teams writes classes into the timetable, so it is a
+    // scheduling action. Gating on the capability instead of on a teacher
+    // enrollment also stops an admin who is not enrolled from being rejected.
+    if (!canUser(user, 'teach.timetable.schedule')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can import classes from Teams.' },
+        { status: 403 },
+      );
     }
 
     // Get linked team
@@ -100,8 +101,16 @@ export async function POST(request: NextRequest) {
     const meetings: { title: string; scheduled_date: string; status: string }[] = [];
 
     for (const event of events) {
-      const joinUrl = event.onlineMeeting?.joinUrl;
+      const joinUrl = event.joinUrl;
       if (!joinUrl) {
+        continue;
+      }
+
+      // The shared fetcher deliberately keeps cancelled events so the reconciler
+      // in teams-meeting-sync can act on them. This route only imports, so a
+      // cancelled meeting must never become a live class here.
+      if (event.isCancelled) {
+        skipped++;
         continue;
       }
 
@@ -118,23 +127,20 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        // Parse date/time — Graph returns IST thanks to Prefer: outlook.timezone header
-        const startStr = event.start.dateTime as string;
-        const endStr = event.end.dateTime as string;
-
-        const scheduledDate = startStr.substring(0, 10);
-        const startTime = startStr.substring(11, 16);
-        const endTime = endStr.substring(11, 16);
+        // Graph returns IST thanks to the Prefer: outlook.timezone header
+        const scheduledDate = event.start.substring(0, 10);
+        const startTime = event.start.substring(11, 16);
+        const endTime = event.end.substring(11, 16);
 
         // Resolve organizer -> teacher_id
         let teacherId = user.id;
-        const organizerName = event.organizer?.emailAddress?.name || null;
+        const organizerName = event.organizerName;
 
-        if (event.organizer?.emailAddress?.address) {
+        if (event.organizerEmail) {
           const { data: organizer } = await supabase
             .from('users')
             .select('id')
-            .eq('email', event.organizer.emailAddress.address)
+            .eq('email', event.organizerEmail)
             .single();
 
           if (organizer) {
@@ -143,14 +149,13 @@ export async function POST(request: NextRequest) {
         }
 
         // Extract description
-        let description: string | null = null;
-        if (event.body?.content) {
-          description = event.body.content
-            .replace(/<[^>]*>/g, '')
-            .replace(/&nbsp;/g, ' ')
-            .trim()
-            .substring(0, 500) || null;
-        }
+        const description = event.bodyContent
+          ? event.bodyContent
+              .replace(/<[^>]*>/g, '')
+              .replace(/&nbsp;/g, ' ')
+              .trim()
+              .substring(0, 500) || null
+          : null;
 
         const { error: insertError } = await supabase
           .from('nexus_scheduled_classes')
@@ -189,50 +194,4 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : 'Failed to sync from Teams';
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-/**
- * Fetch online meeting events from a Teams group calendar using calendarView.
- * Handles pagination, returns max 100 events.
- */
-async function fetchGroupCalendarView(
-  token: string,
-  groupId: string,
-  startDateTime: string,
-  endDateTime: string,
-  maxEvents: number = 100,
-): Promise<any[]> {
-  const events: any[] = [];
-  let url: string | null =
-    `https://graph.microsoft.com/v1.0/groups/${groupId}/calendarView` +
-    `?startDateTime=${encodeURIComponent(startDateTime)}` +
-    `&endDateTime=${encodeURIComponent(endDateTime)}` +
-    `&$top=50` +
-    `&$orderby=start/dateTime desc` +
-    `&$select=id,subject,start,end,onlineMeeting,organizer,body,isOnlineMeeting`;
-
-  while (url && events.length < maxEvents) {
-    const res: Response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Prefer: 'outlook.timezone="Asia/Kolkata"',
-      },
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(`Failed to fetch group calendar: ${res.status} ${errText}`);
-    }
-
-    const data = await res.json();
-    for (const event of data.value || []) {
-      if (event.isOnlineMeeting && event.onlineMeeting?.joinUrl) {
-        events.push(event);
-      }
-    }
-
-    url = data['@odata.nextLink'] || null;
-  }
-
-  return events;
 }

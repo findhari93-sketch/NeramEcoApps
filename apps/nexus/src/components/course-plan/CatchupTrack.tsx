@@ -9,17 +9,30 @@ import { ReactNode } from 'react';
 import { Box, Typography, Stack, alpha } from '@neram/ui';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
+/**
+ * Explicit per-step state, for callers whose ordering is not simply "the first
+ * unfinished one is next". A catch-up backlog steps OVER a class whose recap the
+ * teacher has not published yet rather than stalling every later class behind
+ * it, which the done/not-done derivation below cannot express.
+ */
+export type TrackStepStatus = 'done' | 'current' | 'locked' | 'pending' | 'excused';
+
 export interface TrackStep {
   id: string;
   title: string;
   description?: string | null;
   done: boolean;
+  /** Optional. When any step sets it, the derived ordering is not used. */
+  status?: TrackStepStatus;
+  /** Optional badge number. Defaults to the row's index. */
+  label?: string | number;
 }
 
 export default function CatchupTrack({
   steps,
   onStepClick,
   currentAction,
+  trailing,
   lockFuture = true,
 }: {
   steps: TrackStep[];
@@ -27,16 +40,23 @@ export default function CatchupTrack({
   onStepClick?: (step: TrackStep, index: number) => void;
   /** Rendered on the right of the current step (e.g. a Start button). */
   currentAction?: (step: TrackStep, index: number) => ReactNode;
+  /** Rendered on the right of every OTHER step (e.g. a due-date chip). */
+  trailing?: (step: TrackStep, index: number) => ReactNode;
   /** When false, later steps are tappable too (teacher view). */
   lockFuture?: boolean;
 }) {
-  const currentIdx = steps.findIndex((s) => !s.done);
+  const explicit = steps.some((s) => s.status);
+  const currentIdx = explicit
+    ? steps.findIndex((s) => s.status === 'current')
+    : steps.findIndex((s) => !s.done);
   return (
     <Stack spacing={1}>
       {steps.map((s, i) => {
-        const isDone = s.done;
+        const isDone = explicit ? s.status === 'done' || s.status === 'excused' : s.done;
         const isCurrent = i === currentIdx;
-        const locked = lockFuture && currentIdx !== -1 && i > currentIdx;
+        const locked = explicit
+          ? s.status === 'locked' || s.status === 'pending'
+          : lockFuture && currentIdx !== -1 && i > currentIdx;
         const clickable = !!onStepClick && !locked;
         return (
           <Box
@@ -76,7 +96,7 @@ export default function CatchupTrack({
                 color: isDone ? '#1B5E20' : isCurrent ? '#5B21B6' : 'text.secondary',
               }}
             >
-              {isDone ? '✓' : i + 1}
+              {isDone ? '✓' : (s.label ?? i + 1)}
             </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', lineHeight: 1.3 }}>{s.title}</Typography>
@@ -88,6 +108,8 @@ export default function CatchupTrack({
             </Box>
             {isCurrent && currentAction ? (
               <Box sx={{ flexShrink: 0 }}>{currentAction(s, i)}</Box>
+            ) : trailing?.(s, i) ? (
+              <Box sx={{ flexShrink: 0 }}>{trailing(s, i)}</Box>
             ) : locked ? (
               <LockOutlinedIcon sx={{ fontSize: 16, color: 'text.disabled', flexShrink: 0 }} />
             ) : null}

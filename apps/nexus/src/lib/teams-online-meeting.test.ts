@@ -150,6 +150,55 @@ describe('resolveOnlineMeetingDetailed failure classification', () => {
     expect(calls[0]).toContain('/users/oid-123/onlineMeetings');
   });
 
+  it('goes delegated FIRST for a channel meeting when preferDelegated is set', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        return { ok: true, json: async () => ({ value: [{ id: ONLINE_MEETING_ID }] }) } as Response;
+      }),
+    );
+
+    // The organizer's own token needs no Teams application access policy, which
+    // is the only route open while that grant is outstanding.
+    const r = await resolveOnlineMeetingDetailed({
+      delegatedToken: 'deleg',
+      teamsMeetingId: AAMK_EVENT_ID,
+      joinUrl: JOIN_URL,
+      organizerOid: 'oid-123',
+      preferDelegated: true,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('/me/onlineMeetings');
+    expect(r.meeting?.artifactBase).toBe(`me/onlineMeetings/${ONLINE_MEETING_ID}`);
+  });
+
+  it('does not take the cached-id app-only shortcut when preferDelegated is set', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        return { ok: true, json: async () => ({ value: [{ id: ONLINE_MEETING_ID }] }) } as Response;
+      }),
+    );
+
+    // The shortcut hardcodes users/{oid}, which walks straight back into the
+    // access-policy 403 that preferDelegated exists to route around.
+    const r = await resolveOnlineMeetingDetailed({
+      delegatedToken: 'deleg',
+      teamsMeetingId: AAMK_EVENT_ID,
+      joinUrl: JOIN_URL,
+      organizerOid: 'oid-123',
+      knownOnlineMeetingId: ONLINE_MEETING_ID,
+      preferDelegated: true,
+    });
+
+    expect(r.meeting?.artifactBase).toBe(`me/onlineMeetings/${ONLINE_MEETING_ID}`);
+  });
+
   it('also goes app-only first for an AQMk event id, not just AAMk', async () => {
     const calls: string[] = [];
     vi.stubGlobal(

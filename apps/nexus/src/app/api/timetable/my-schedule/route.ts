@@ -194,19 +194,29 @@ export async function GET(request: NextRequest) {
     // set up yet), and the calendar falls back to the global window.
     const planShapes = planResult.status === 'fulfilled' ? planResult.value : [];
 
-    const openAbsences =
+    const absenceRows =
       absenceResult.status === 'fulfilled'
-        ? ((absenceResult.value.data || []) as any[])
-            .filter((a) => a.class)
-            .map((a) => ({
-              class_id: a.scheduled_class_id,
-              title: a.class.title,
-              scheduled_date: a.class.scheduled_date,
-              start_time: a.class.start_time,
-              kind: a.kind,
-              reason_given: !!a.reason_code,
-            }))
+        ? ((absenceResult.value.data || []) as any[]).filter((a) => a.class)
         : [];
+
+    // Classes actually MISSED. Deliberately excludes catch-up backlog items:
+    // a late joiner owes every class taught before they arrived, and listing
+    // seventeen of them here as "you missed this, tell us why" would be both
+    // wrong and overwhelming. Those live on the catch-up screen instead.
+    const openAbsences = absenceRows
+      .filter((a) => a.kind !== 'late_joiner')
+      .map((a) => ({
+        class_id: a.scheduled_class_id,
+        title: a.class.title,
+        scheduled_date: a.class.scheduled_date,
+        start_time: a.class.start_time,
+        kind: a.kind,
+        reason_given: !!a.reason_code,
+      }));
+
+    // Just the count, so the rail can point at the catch-up screen without
+    // duplicating its list.
+    const catchupPending = absenceRows.filter((a) => a.kind === 'late_joiner').length;
 
     return NextResponse.json({
       classes: uniqueClasses,
@@ -216,6 +226,7 @@ export async function GET(request: NextRequest) {
       holidays,
       planShapes,
       openAbsences,
+      catchupPending,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load schedule';

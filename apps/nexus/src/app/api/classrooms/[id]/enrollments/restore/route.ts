@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, restoreEnrollment, createUserNotification } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 
 /**
  * POST /api/classrooms/[id]/enrollments/restore
@@ -18,12 +19,15 @@ export async function POST(
 
     const { data: caller } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!caller || !['teacher', 'admin'].includes(caller.user_type)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!canUser(caller, 'structure.enrollment.add')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can restore an enrolment.' },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();

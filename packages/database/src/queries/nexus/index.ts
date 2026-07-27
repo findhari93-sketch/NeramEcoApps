@@ -29,6 +29,8 @@ export * from './gamification';
 export * from './curriculum';
 export * from './teaching-plans';
 export * from './catchup';
+export * from './catchup-journey';
+export * from './catchup-test';
 export * from './class-recaps';
 export * from './assignments';
 export * from './drawing-checklist';

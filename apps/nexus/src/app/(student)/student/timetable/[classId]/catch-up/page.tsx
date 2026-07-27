@@ -1,15 +1,19 @@
 'use client';
 
 /**
- * Catching up on a class you missed.
+ * Catching up on a class you did not sit through.
  *
- * Three steps in order, because doing them out of order is not catching up:
- * say why you missed it, watch the recording, finish the work. Then say you are
- * done, which is a deliberate act rather than something inferred from a
- * progress bar.
+ * Steps in order, because doing them out of order is not catching up. Which
+ * steps you get depends on why you are here:
  *
- * The reason step comes first not to nag but because it is the only part the
- * teacher cannot find out any other way.
+ *   Missed a class you were enrolled for: say why, watch it, finish the work.
+ *   The reason step comes first not to nag but because it is the only part the
+ *   teacher cannot find out any other way.
+ *
+ *   Joined after the class was taught: there is no why, so that step is not
+ *   shown. Instead there is a class test at the end, because for a newcomer
+ *   the point is not attendance, it is whether they actually know the material
+ *   the rest of the class already covered.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -46,10 +50,20 @@ interface CatchUpData {
     recording_url: string | null;
     youtube_url: string | null;
   };
-  absence: { reason_code: string | null; reason_note: string | null } | null;
+  absence: { reason_code: string | null; reason_note: string | null; kind?: string } | null;
   assignments: Array<{ id: string; title: string; assignment_type: string; submitted: boolean }>;
   recap: { id: string; status: string } | null;
-  steps: { reasonGiven: boolean; watched: boolean; workDone: boolean; caughtUp: boolean };
+  /** Null until a teacher has built the class test for this class. */
+  test: { placement_id: string; test_id: string; passing_pct: number; unlocked: boolean; passed: boolean } | null;
+  steps: {
+    reasonGiven: boolean;
+    watched: boolean;
+    workDone: boolean;
+    testPassed: boolean;
+    caughtUp: boolean;
+  };
+  /** False for someone who joined after the class ran: nothing to explain. */
+  reasonRequired: boolean;
   hasRecording: boolean;
 }
 
@@ -147,8 +161,23 @@ export default function CatchUpPage() {
     );
   }
 
-  const { steps, assignments, recap } = data;
+  const { steps, assignments, recap, test } = data;
   const cls = data.class;
+  // Someone who joined after this class ran. Nothing to explain, and a test to
+  // pass at the end.
+  const lateJoiner = !data.reasonRequired;
+
+  // Numbered in the order they are actually shown, so a newcomer never reads
+  // "2. Watch the recording" as their first instruction.
+  const stepNo = (() => {
+    let n = 0;
+    return {
+      reason: data.reasonRequired ? ++n : 0,
+      watch: ++n,
+      work: ++n,
+      test: test ? ++n : 0,
+    };
+  })();
   // A guided recap is the better way to watch when one exists: it checkpoints
   // and quizzes. Otherwise the raw recording, YouTube first since Teams copies
   // expire.
@@ -210,7 +239,9 @@ export default function CatchUpPage() {
           color: 'primary.main',
         }}
       >
-        Catch up, you missed this on {formatDay(cls.scheduled_date)}
+        {lateJoiner
+          ? `Catch up, this was taught on ${formatDay(cls.scheduled_date)}`
+          : `Catch up, you missed this on ${formatDay(cls.scheduled_date)}`}
       </Typography>
       <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, lineHeight: 1.25 }}>
         {cls.title}
@@ -232,9 +263,10 @@ export default function CatchUpPage() {
       )}
 
       <Stack spacing={1.25}>
-        {/* 1. Why. The only part the teacher cannot find out any other way. */}
-        {stepBox(
-          1,
+        {/* Why. The only part the teacher cannot find out any other way, and
+            only a question worth asking of someone who was actually enrolled. */}
+        {data.reasonRequired && stepBox(
+          stepNo.reason,
           steps.reasonGiven,
           'Tell us why you missed it',
           steps.reasonGiven ? (
@@ -310,9 +342,9 @@ export default function CatchUpPage() {
           ),
         )}
 
-        {/* 2. Watch. */}
+        {/* Watch. */}
         {stepBox(
-          2,
+          stepNo.watch,
           steps.watched,
           'Watch the recording',
           !data.hasRecording ? (
@@ -332,7 +364,10 @@ export default function CatchUpPage() {
                   {recap ? 'Open the guided recap' : steps.watched ? 'Watch again' : 'Watch now'}
                 </Button>
               )}
-              {!steps.watched && (
+              {/* Only offered when there is no guided recap. Where one exists,
+                  finishing its checkpoints IS the proof, and the server refuses
+                  a self-declaration alongside it. */}
+              {!steps.watched && !recap && (
                 <Button
                   variant="outlined"
                   disabled={busy}
@@ -346,10 +381,10 @@ export default function CatchUpPage() {
           ),
         )}
 
-        {/* 3. The work. Locked until the recording is watched: doing the
+        {/* The work. Locked until the recording is watched: doing the
               assignment without the class is not catching up. */}
         {stepBox(
-          3,
+          stepNo.work,
           steps.workDone,
           assignments.length === 0 ? 'Nothing was set in this class' : 'Finish the assignment',
           assignments.length === 0 ? (
@@ -395,6 +430,35 @@ export default function CatchUpPage() {
           ),
           assignments.length > 0 && !steps.watched,
         )}
+
+        {/* The class test. Only a newcomer gets one: for them the question is
+            not "were you here", it is whether they know what everyone else
+            already covered. It stays locked until the guided recap is finished,
+            and a score under the pass mark locks it again, so a retry always
+            means going back through the material rather than guessing twice. */}
+        {test && stepBox(
+          stepNo.test,
+          test.passed,
+          `Pass the class test (${test.passing_pct}% to clear)`,
+          test.passed ? (
+            <Typography variant="body2" color="text.secondary">
+              Passed. This class is done.
+            </Typography>
+          ) : !test.unlocked ? (
+            <Typography variant="body2" color="text.secondary">
+              Finish the guided recap to unlock the test.
+            </Typography>
+          ) : (
+            <Button
+              variant="contained"
+              onClick={() => router.push(`/student/catch-up/${cls.id}/test`)}
+              sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
+            >
+              Take the class test
+            </Button>
+          ),
+          !test.unlocked && !test.passed,
+        )}
       </Stack>
 
       {!steps.caughtUp && (
@@ -402,13 +466,13 @@ export default function CatchUpPage() {
           <Button
             fullWidth
             variant="contained"
-            disabled={busy || !steps.watched || !steps.workDone}
+            disabled={busy || !steps.watched || !steps.workDone || !steps.testPassed}
             onClick={() => act({ action: 'mark_caught_up' }, 'Marked as caught up.')}
             sx={{ textTransform: 'none', minHeight: 48, fontWeight: 700, borderRadius: RADIUS.control }}
           >
             Mark as caught up
           </Button>
-          {(!steps.watched || !steps.workDone) && (
+          {(!steps.watched || !steps.workDone || !steps.testPassed) && (
             <Typography
               variant="caption"
               color="text.secondary"

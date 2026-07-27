@@ -1,17 +1,27 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { syncClassroomMeetings } from './teams-meeting-sync';
 
 /**
  * These tests pin down the ONLY safe cancellation rule: a Nexus channel-meeting
  * class is cancelled solely when its matching Teams event is explicitly
- * isCancelled. Mere absence from the fetched window, and any non-channel scope,
- * must never cancel, that was the bug that silently killed freshly-created classes.
+ * isCancelled AND the class has not happened yet. Mere absence from the fetched
+ * window, any non-channel scope, and any class already over must never cancel.
+ * Those were the two ways classes disappeared: freshly-created ones were killed
+ * by absence, and a month of past ones by a calendar tidy-up weeks later.
  */
 
 const JOIN_URL = 'https://teams.microsoft.com/l/meetup-join/abc';
 const PAST = '2020-01-01T00:00:00.000Z';
 const FUTURE = '2020-02-01T00:00:00.000Z';
 const OLD_CREATED = '2020-01-01T00:00:00.000Z'; // well outside the 30-min grace window
+
+/**
+ * Every fixture class sits at 2020-01-15 19:00-20:30 IST, which is 13:30-15:00
+ * UTC. The clock is pinned before that so the default fixture is an UPCOMING
+ * class; the past-class guard is exercised by moving the clock, not the data.
+ */
+const BEFORE_CLASS = new Date('2020-01-15T10:00:00.000Z');
+const AFTER_CLASS = new Date('2020-01-15T16:00:00.000Z');
 
 /** Minimal chainable Supabase mock that records updates/inserts. */
 function makeSupabase(nexusClasses: any[]) {
@@ -92,7 +102,13 @@ const channelClass = (over: Partial<any> = {}) => ({
   ...over,
 });
 
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(BEFORE_CLASS);
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -134,6 +150,30 @@ describe('syncClassroomMeetings cancel-detect', () => {
     const sb = makeSupabase([channelClass({ created_at: new Date().toISOString() })]);
     const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
     expect(r.cancelled).toBe(0);
+  });
+
+  it('does NOT cancel a class that has already ended, even on an explicit isCancelled', async () => {
+    // Deleting or declining the calendar entry after the fact is a tidy-up, not a
+    // statement that the class never ran. Cancelling here would hide the class,
+    // its recording and its attendance from every student with no way back.
+    vi.setSystemTime(AFTER_CLASS);
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, isCancelled: true }]);
+    const sb = makeSupabase([channelClass()]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.cancelled).toBe(0);
+    expect(r.skippedPastCancels).toBe(1);
+    expect(sb.__updates.filter((u: any) => u.vals.status === 'cancelled')).toHaveLength(0);
+  });
+
+  it('still cancels a class that has not started yet', async () => {
+    // The boundary the guard turns on: one minute before the class ends it is
+    // still cancellable, which is the case the reconciler exists for.
+    vi.setSystemTime(new Date('2020-01-15T14:59:00.000Z'));
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, isCancelled: true }]);
+    const sb = makeSupabase([channelClass()]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.cancelled).toBe(1);
+    expect(r.skippedPastCancels).toBe(0);
   });
 });
 

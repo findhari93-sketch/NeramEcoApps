@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient } from '@neram/database';
 
 const SEED_TAG = 'test-seed-data';
@@ -13,18 +14,14 @@ const SEED_TAG = 'test-seed-data';
  */
 export async function POST(request: NextRequest) {
   try {
-    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    // This route writes seed content into a real classroom. It used to SELECT
+    // user_type and then never check it, so any authenticated user (including a
+    // student) could seed, and DELETE, recall data in production. Authoring
+    // content is teach.content.author.
+    const user = await getRequestUser(request.headers.get('Authorization'));
+    assertCapability(user, 'teach.content.author');
+
     const supabase = getSupabaseAdminClient();
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
 
     const body = await request.json();
     const classroomId = body.classroom_id;
@@ -179,18 +176,11 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    // Same gate as POST: this deletes recall threads in a real classroom.
+    const user = await getRequestUser(request.headers.get('Authorization'));
+    assertCapability(user, 'teach.content.author');
+
     const supabase = getSupabaseAdminClient();
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
 
     // Find all seed versions by the tag
     const { data: seedVersions } = await supabase

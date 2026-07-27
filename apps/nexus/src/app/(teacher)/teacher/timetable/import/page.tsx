@@ -17,7 +17,7 @@ import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { useTimetableView } from '@/hooks/useTimetableView';
+import { getWeekDates } from '@/components/timetable/date-utils';
 import {
   describeParse,
   parseWeekRows,
@@ -43,8 +43,10 @@ export default function ImportWeekPage() {
   const router = useRouter();
   const theme = useTheme();
   const { activeClassroom, getToken, timetableWindow } = useNexusAuthContext();
-  const viewState = useTimetableView([], 'agenda');
-  const { week } = viewState;
+  // This page always imports into the CURRENT week and offers no navigation, so
+  // it only ever wanted this Monday. Pulling in the whole view hook (with its
+  // stored preferences, band resolution and plan shapes) for that was waste.
+  const week = useMemo(() => getWeekDates(0), []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);

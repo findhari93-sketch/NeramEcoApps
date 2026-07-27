@@ -59,10 +59,17 @@ export async function computeAbsencesForClass(
   const [{ data: roster }, { data: attendance }, { data: optOuts }] = await Promise.all([
     supabase
       .from('nexus_enrollments')
-      .select('user_id')
+      .select('user_id, enrolled_at')
       .eq('classroom_id', cls.classroom_id)
       .eq('role', 'student')
-      .eq('is_active', true),
+      .eq('is_active', true)
+      // The roster is who was in the class THAT DAY, not who is in it now.
+      // Without this, a student who joined in July is marked a no-show for every
+      // class held in June: work they could not possibly have attended, chased
+      // by the follow-up cron as if they had skipped it. Those classes are a
+      // catch-up backlog item instead (see ensureCatchupJourney), which is a
+      // different thing with a different conversation attached to it.
+      .lte('enrolled_at', `${cls.scheduled_date}T23:59:59+05:30`),
     supabase
       .from('nexus_attendance')
       .select('student_id, attended, joined_at')

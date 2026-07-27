@@ -7,17 +7,22 @@
  * Three jobs per classroom:
  *   1. IMPORT   - a live Teams group-calendar meeting with no Nexus row -> insert one.
  *   2. CANCEL   - a Nexus channel_meeting class whose Teams event is EXPLICITLY
- *                 isCancelled -> mark it cancelled. (Only channel meetings live in the
- *                 group calendar; and we cancel ONLY on an explicit isCancelled flag,
- *                 matched by join URL, never merely because an event is missing from the
- *                 fetched window. Absence-based inference is what wrongly cancelled every
- *                 freshly-created class.)
+ *                 isCancelled AND has not started yet -> mark it cancelled. (Only channel
+ *                 meetings live in the group calendar; we cancel ONLY on an explicit
+ *                 isCancelled flag, matched by join URL, never merely because an event is
+ *                 missing from the fetched window. Absence-based inference is what wrongly
+ *                 cancelled every freshly-created class. A class that has already ENDED is
+ *                 never auto-cancelled either: it either happened or it did not, and that
+ *                 is a fact no later calendar edit can change. Tidying up an old calendar
+ *                 entry in Outlook must not retroactively erase a class, its recording and
+ *                 its attendance from every student's timeline.)
  *   3. UPDATE   - a matched Teams event whose time/title changed -> update the Nexus row.
  *
  * Uses an app-only (client-credentials) Graph token supplied by the caller.
  */
 
 import { getSupabaseAdminClient } from '@neram/database';
+import { istInstantMs } from './channel-recordings';
 
 type AdminClient = ReturnType<typeof getSupabaseAdminClient>;
 
@@ -52,6 +57,11 @@ export interface SyncClassroomResult {
   updated: number;
   cancelled: number;
   cancelledClasses: CancelledClass[];
+  /**
+   * Past classes Teams reports as cancelled that were left alone. Counted rather
+   * than hidden, so "why is this old class still on the timetable?" has an answer.
+   */
+  skippedPastCancels: number;
   errors: string[];
 }
 
@@ -143,6 +153,7 @@ export async function syncClassroomMeetings(
     updated: 0,
     cancelled: 0,
     cancelledClasses: [],
+    skippedPastCancels: 0,
     errors: [],
   };
 
@@ -259,6 +270,17 @@ export async function syncClassroomMeetings(
 
     // ─── 2. CANCEL only on an EXPLICIT isCancelled flag from Teams ───
     if (matched?.isCancelled) {
+      // ...and only while the class is still ahead of us. Cancelling a class that
+      // has already ended rewrites history: it hides the recording and attendance
+      // that prove it ran, and nothing in this reconciler can ever put it back.
+      // Deleting or declining a stale Outlook entry weeks later is a common tidy-up
+      // and must not have that effect. A past class that genuinely needs cancelling
+      // is a deliberate human action in the timetable.
+      if (istInstantMs(cls.scheduled_date, cls.end_time) <= Date.now()) {
+        result.skippedPastCancels++;
+        continue;
+      }
+
       const { error } = await supabase
         .from('nexus_scheduled_classes')
         .update({ status: 'cancelled' } as never)

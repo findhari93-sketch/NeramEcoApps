@@ -111,7 +111,7 @@ export default function StudentSelfLearningPage() {
               <Box key={track.id}>
                 <Box sx={{ p: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', mb: 1.5 }}>
                   <Typography sx={{ fontWeight: 800, fontSize: '0.95rem' }}>
-                    {track.plan?.title || 'Catch-up plan'}
+                    {track.plan?.title || 'Topic plan'}
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mt: 1.25 }}>
                     <Box sx={{ flex: 1, height: 8, borderRadius: 99, bgcolor: alpha('#1A2027', 0.08) }}>

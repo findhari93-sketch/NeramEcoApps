@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { capabilityMap, resolveStaffRole, type StaffRole } from '@/lib/staff-capabilities';
 
 /**
  * Delete an existing test user so the same stable email can be reused with a
@@ -61,11 +62,30 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { email, role, reset } = body as { email?: string; role?: 'teacher' | 'student' | 'parent'; reset?: boolean };
+    const { email, role, reset, staffRole: requestedStaffRole, canTeach: requestedCanTeach } = body as {
+      email?: string;
+      role?: 'teacher' | 'student' | 'parent';
+      reset?: boolean;
+      staffRole?: StaffRole;
+      canTeach?: boolean;
+    };
 
     if (!email) {
       return NextResponse.json({ error: 'email is required' }, { status: 400 });
     }
+
+    // Which Nexus authority tier this test account gets.
+    //
+    // Default for role:'teacher' is MANAGER, not 'teacher', on purpose. Before
+    // the tier split a Nexus "teacher" could do everything an admin could
+    // (schedule classes, manage enrolments, delete batches), and the existing
+    // specs were written against that. `manager` is the tier that preserves
+    // those powers, so pre-existing tests keep passing untouched. A spec that
+    // wants the restricted external tier asks for it explicitly:
+    //   { role: 'teacher', staffRole: 'teacher' }
+    const effectiveStaffRole: StaffRole | null =
+      requestedStaffRole ??
+      (role === 'teacher' || role === undefined ? 'manager' : null);
 
     const supabase = getSupabaseAdminClient();
 
@@ -92,6 +112,8 @@ export async function POST(request: NextRequest) {
           email,
           ms_oid: `test-oid-${Date.now()}`,
           user_type: testRole === 'parent' ? 'student' : testRole,
+          staff_role: effectiveStaffRole,
+          can_teach: requestedCanTeach !== false,
           status: 'active',
           email_verified: true,
           phone_verified: false,
@@ -109,6 +131,23 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'User creation failed' }, { status: 500 });
+    }
+
+    // Re-apply the requested tier to an account that already existed. Test
+    // accounts are reused across specs (stable emails, not `${Date.now()}`), so
+    // without this a spec asking for the restricted 'teacher' tier would inherit
+    // whatever tier the previous spec left behind.
+    if (
+      effectiveStaffRole !== null &&
+      (user.staff_role !== effectiveStaffRole || user.can_teach !== (requestedCanTeach !== false))
+    ) {
+      const { data: retiered } = await supabase
+        .from('users')
+        .update({ staff_role: effectiveStaffRole, can_teach: requestedCanTeach !== false })
+        .eq('id', user.id)
+        .select()
+        .single();
+      if (retiered) user = retiered;
     }
 
     // Ensure the user has at least one classroom enrollment
@@ -168,17 +207,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine nexus role — for test-login, honour the requested role
-    // so parent E2E tests get nexusRole='parent' (matches RoleGuard).
+    // Determine the staff tier and nexus role the same way /api/auth/me does, so
+    // a test session is indistinguishable from a real one. The 'parent' override
+    // stays because parent E2E tests need nexusRole='parent' to match RoleGuard.
+    const staffRole: StaffRole | null =
+      role === 'parent'
+        ? null
+        : resolveStaffRole(user) ??
+          (enrollments?.some((e: any) => e.role === 'teacher') ? 'teacher' : null);
+
+    const canTeach = user.can_teach !== false;
+
     const nexusRole = role === 'parent'
       ? 'parent'
-      : user.user_type === 'admin'
+      : staffRole === 'admin'
         ? 'admin'
-        : user.user_type === 'teacher'
+        : staffRole
           ? 'teacher'
-          : enrollments?.some((e: any) => e.role === 'teacher')
-            ? 'teacher'
-            : 'student';
+          : 'student';
 
     // Generate test token: test_<base64(email)>
     const testToken = `test_${Buffer.from(email).toString('base64')}`;
@@ -193,6 +239,9 @@ export async function POST(request: NextRequest) {
         user_type: user.user_type,
       },
       nexusRole,
+      staffRole,
+      canTeach,
+      capabilities: capabilityMap(staffRole, canTeach),
       classrooms: (enrollments || []).map((e: any) => ({
         ...e.classroom,
         enrollmentRole: e.role,

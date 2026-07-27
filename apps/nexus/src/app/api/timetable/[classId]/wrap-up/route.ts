@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canRunSession, isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
 import { buildClassLinkPatch } from '@/lib/class-links';
 import { syncClassToLibrary } from '@/lib/class-library-bridge';
 
@@ -27,12 +28,12 @@ interface Ctx {
 }
 
 const CLASS_COLS =
-  'id, classroom_id, title, description, notes, summary_bullets, scheduled_date, start_time, end_time, topic_id, plan_entry_id, recording_url, youtube_url';
+  'id, classroom_id, teacher_id, title, description, notes, summary_bullets, scheduled_date, start_time, end_time, topic_id, plan_entry_id, recording_url, youtube_url';
 
 async function resolveAccess(supabase: any, msOid: string, classId: string) {
   const { data: user } = await supabase
     .from('users')
-    .select('id, user_type')
+    .select('id, user_type, staff_role, can_teach')
     .eq('ms_oid', msOid)
     .single();
   if (!user) return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
@@ -52,12 +53,16 @@ async function resolveAccess(supabase: any, msOid: string, classId: string) {
     .eq('is_active', true)
     .maybeSingle();
 
-  const isAdmin = user.user_type === 'admin';
-  if (!enrollment && !isAdmin) {
+  // Internal staff reach any classroom without being enrolled in it; that is
+  // the point of the tier. Everyone else must hold an active enrollment.
+  const internal = isInternalStaff(resolveStaffRole(user));
+  if (!enrollment && !internal) {
     return { error: NextResponse.json({ error: 'Not enrolled' }, { status: 403 }) };
   }
 
-  const canEdit = isAdmin || user.user_type === 'teacher' || enrollment?.role === 'teacher';
+  // Internal staff may act on any class; an external teacher only on the
+  // classes they are the tutor of. See canRunSession.
+  const canEdit = canRunSession(user, cls.teacher_id);
   return { userId: user.id as string, canEdit, cls };
 }
 

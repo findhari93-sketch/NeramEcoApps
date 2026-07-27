@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 
 /**
  * GET /api/classrooms/[id]
@@ -83,12 +84,17 @@ export async function PUT(
 
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Editing a classroom includes linking, unlinking and re-pointing its
+    // Microsoft Team, which changes where every student's class actually lives.
+    if (!canUser(user, 'structure.classroom.teams_link')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can change classroom settings.' },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();
@@ -149,11 +155,13 @@ export async function DELETE(
 
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || user.user_type !== 'admin') {
+    // Deactivating a classroom detaches a whole cohort and there is no undo in
+    // the UI, so it stays with the admin, not the manager tier.
+    if (!canUser(user, 'structure.classroom.delete')) {
       return NextResponse.json({ error: 'Admin only' }, { status: 403 });
     }
 

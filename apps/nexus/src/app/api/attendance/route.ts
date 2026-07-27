@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { assertSessionAccess } from '@/lib/staff-scope';
+import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient } from '@neram/database';
 import { recordGamificationEvent } from '@neram/database/queries/nexus';
 
@@ -10,13 +12,19 @@ import { recordGamificationEvent } from '@neram/database/queries/nexus';
  */
 export async function GET(request: NextRequest) {
   try {
-    await verifyMsToken(request.headers.get('Authorization'));
+    // Staff-only, and session-scoped: an external teacher may read the register
+    // for classes they tutor, the internal team for any class. Previously this
+    // only verified the token, so a student's token returned the whole register.
+    const caller = await getRequestUser(request.headers.get('Authorization'));
+    assertCapability(caller, 'coord.attendance.view');
 
     const classId = request.nextUrl.searchParams.get('scheduled_class_id');
 
     if (!classId) {
       return NextResponse.json({ error: 'Missing scheduled_class_id parameter' }, { status: 400 });
     }
+
+    await assertSessionAccess(caller, classId);
 
     const supabase = getSupabaseAdminClient();
 
@@ -30,9 +38,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ attendance: data || [] });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load attendance';
-    console.error('Attendance GET error:', message);
-    return NextResponse.json({ error: message }, { status: 401 });
+    console.error('Attendance GET error:', err instanceof Error ? err.message : err);
+    // errorResponse maps 401 auth vs 403 authorization vs 404, instead of
+    // labelling every failure as 401.
+    return errorResponse(err, 'Failed to load attendance');
   }
 }
 
@@ -44,7 +53,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    const user = await getRequestUser(request.headers.get('Authorization'));
+    assertCapability(user, 'teach.attendance.mark');
 
     const body = await request.json();
     const { scheduled_class_id, attendees } = body;
@@ -56,20 +66,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // An external teacher marks only the classes they tutor; the internal team
+    // marks any class.
+    //
+    // This replaces a per-classroom teacher-ENROLLMENT check, which had the side
+    // effect of refusing an admin who was not enrolled: the opposite of every
+    // other route, and the reason the office could not reconcile a register.
+    await assertSessionAccess(user, scheduled_class_id);
+
     const supabase = getSupabaseAdminClient();
 
-    // Look up user
-    const { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    // Get the class to find the classroom_id, then verify teacher role
+    // classroom_id is still needed below to resolve each student's batch for the
+    // gamification event.
     const { data: scheduledClass } = await supabase
       .from('nexus_scheduled_classes')
       .select('classroom_id')
@@ -78,18 +86,6 @@ export async function POST(request: NextRequest) {
 
     if (!scheduledClass) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 });
-    }
-
-    const { data: enrollment } = await supabase
-      .from('nexus_enrollments')
-      .select('role')
-      .eq('classroom_id', scheduledClass.classroom_id)
-      .eq('user_id', user.id)
-      .eq('role', 'teacher')
-      .single();
-
-    if (!enrollment) {
-      return NextResponse.json({ error: 'Only teachers can mark attendance' }, { status: 403 });
     }
 
     // Upsert attendance records
@@ -142,8 +138,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to mark attendance';
-    console.error('Attendance POST error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Attendance POST error:', err instanceof Error ? err.message : err);
+    return errorResponse(err, 'Failed to mark attendance');
   }
 }

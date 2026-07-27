@@ -1,20 +1,40 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Alert, Box, Button, Chip, IconButton, Snackbar, Typography, alpha } from '@neram/ui';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  IconButton,
+  Menu,
+  MenuItem,
+  Popover,
+  Snackbar,
+  Typography,
+  alpha,
+} from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useTimetableView } from '@/hooks/useTimetableView';
 import AgendaView from '@/components/timetable/views/AgendaView';
 import GridView from '@/components/timetable/views/GridView';
-import TimetableToolbar from '@/components/timetable/views/TimetableToolbar';
+import DayView from '@/components/timetable/views/DayView';
+import MonthView from '@/components/timetable/views/MonthView';
+import CalendarShell from '@/components/timetable/CalendarShell';
 import ClassReviewForm from '@/components/timetable/ClassReviewForm';
 import ClassDetailPanel, { type PanelAssignment } from '@/components/timetable/ClassDetailPanel';
 import RsvpReasonDialog, { type RsvpDeclinePayload } from '@/components/timetable/RsvpReasonDialog';
 import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
 import { type ClassCardData } from '@/components/timetable/ClassCard';
-import { type HolidayInfo, formatTime } from '@/components/timetable/date-utils';
+import {
+  formatDateISO,
+  formatTime,
+  monthGridRangeFor,
+  type HolidayInfo,
+} from '@/components/timetable/date-utils';
 import { describeReason } from '@/lib/rsvp-reasons';
 import { type PlanShape } from '@/lib/plan-shape';
 
@@ -62,16 +82,30 @@ export default function StudentTimetable() {
   const [openAbsences, setOpenAbsences] = useState<
     Array<{ class_id: string; title: string; scheduled_date: string; reason_given: boolean }>
   >([]);
+  /** Backlog items for a student who joined mid-course. Count only, on purpose. */
+  const [catchupPending, setCatchupPending] = useState(0);
 
-  const classes =
-    classroomFilter === 'all'
-      ? allClasses
-      : allClasses.filter((c) => c.classroom?.id === classroomFilter);
+  const classes = useMemo(
+    () =>
+      classroomFilter === 'all'
+        ? allClasses
+        : allClasses.filter((c) => c.classroom?.id === classroomFilter),
+    [allClasses, classroomFilter],
+  );
 
   // Agenda is the default everywhere: six columns do not fit a phone, and for a
   // one-hour-a-day timetable a list answers "what is on" faster than a grid.
   const viewState = useTimetableView(classes, 'agenda', planShapes);
-  const { week, band, view } = viewState;
+  const { week, band, view, anchorDate, setAnchorDate, range } = viewState;
+
+  /** What the current view draws. `classes` holds the whole loaded month. */
+  const visibleClasses = useMemo(
+    () => classes.filter((c) => c.scheduled_date >= range.start && c.scheduled_date <= range.end),
+    [classes, range.start, range.end],
+  );
+
+  const markedDates = useMemo(() => new Set(classes.map((c) => c.scheduled_date)), [classes]);
+  const holidayDates = useMemo(() => new Set(Object.keys(holidays)), [holidays]);
 
   const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
   const [reviewClass, setReviewClass] = useState<ClassCardData | null>(null);
@@ -82,6 +116,10 @@ export default function StudentTimetable() {
     classSubtitle?: string;
   } | null>(null);
   const [rsvpSubmitting, setRsvpSubmitting] = useState(false);
+  // Below xl there is no rail, so the classroom filter and the missed-classes
+  // list live behind these two toolbar chips instead.
+  const [filterAnchor, setFilterAnchor] = useState<null | HTMLElement>(null);
+  const [missedAnchor, setMissedAnchor] = useState<null | HTMLElement>(null);
 
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
@@ -93,15 +131,30 @@ export default function StudentTimetable() {
     ? allClasses.find((c) => c.status === 'live' && (c.teams_meeting_join_url || c.teams_meeting_url))
     : null;
 
-  const fetchSchedule = useCallback(async () => {
+  /**
+   * Load a whole month grid whatever the view shows, so paging weeks and
+   * switching week to month inside a loaded month cost no requests at all.
+   * The endpoint already takes an arbitrary range.
+   */
+  const fetchRange = useMemo(
+    () => monthGridRangeFor(anchorDate, range.start, range.end),
+    [anchorDate, range.start, range.end],
+  );
+  const loadedRange = useRef<{ start: string; end: string } | null>(null);
+
+  const fetchSchedule = useCallback(async (force = false) => {
+    const have = loadedRange.current;
+    if (!force && have && have.start <= fetchRange.start && have.end >= fetchRange.end) return;
+
     setLoading(true);
     try {
       const token = await getToken();
       if (!token) return;
 
-      const res = await fetch(`/api/timetable/my-schedule?start=${week.start}&end=${week.end}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `/api/timetable/my-schedule?start=${fetchRange.start}&end=${fetchRange.end}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
 
       if (res.ok) {
         const data = await res.json();
@@ -132,13 +185,15 @@ export default function StudentTimetable() {
         setHolidays(data.holidays || {});
         setPlanShapes(data.planShapes || []);
         setOpenAbsences(data.openAbsences || []);
+        setCatchupPending(data.catchupPending || 0);
+        loadedRange.current = { start: fetchRange.start, end: fetchRange.end };
       }
     } catch (err) {
       console.error('Failed to load timetable:', err);
     } finally {
       setLoading(false);
     }
-  }, [week.start, week.end, getToken]);
+  }, [fetchRange.start, fetchRange.end, getToken]);
 
   const fetchScheduleRef = useRef(fetchSchedule);
   const getTokenRef = useRef(getToken);
@@ -213,7 +268,7 @@ export default function StudentTimetable() {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.ok) await fetchScheduleRef.current();
+        if (res.ok) await fetchScheduleRef.current(true);
       } catch {
         // Sync failure is silent: the user already sees their existing data.
       }
@@ -369,105 +424,118 @@ export default function StudentTimetable() {
     setSnackbar({ open: true, message: 'Thanks for rating the class', severity: 'success' });
   };
 
-  return (
-    <Box>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: 2,
-          flexWrap: 'wrap',
-          mb: 2,
-        }}
+  /**
+   * A live class is genuinely urgent, so it keeps a strip of its own, but a
+   * slim one: it used to be a full Alert above the toolbar, which cost most of
+   * the vertical space this redesign exists to give back to the calendar.
+   */
+  const liveStrip = liveClass ? (
+    <Box
+      sx={{
+        flex: '0 0 auto',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        minHeight: 40,
+        px: { xs: 1.5, md: 2 },
+        bgcolor: 'success.main',
+        color: 'success.contrastText',
+      }}
+    >
+      <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontWeight: 700 }}>
+        {liveClass.title} is live now
+      </Typography>
+      <Button
+        color="inherit"
+        size="small"
+        variant="outlined"
+        href={liveClass.teams_meeting_join_url || liveClass.teams_meeting_url || ''}
+        target="_blank"
+        rel="noopener noreferrer"
+        sx={{ fontWeight: 700, borderColor: 'currentColor', minHeight: 32, textTransform: 'none' }}
       >
-        <Box>
-          <Typography variant="h5" component="h1" sx={{ fontWeight: 800, letterSpacing: '-.02em' }}>
-            Timetable
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Evening classes. You are attending everything unless you say otherwise.
-          </Typography>
-        </Box>
-        {activeClassroom && (
-          <TimetableNotificationBell classroomId={activeClassroom.id} getToken={getToken} />
-        )}
-      </Box>
+        Join now
+      </Button>
+      <IconButton
+        size="small"
+        color="inherit"
+        aria-label="Dismiss"
+        onClick={() => setLiveBannerDismissed(true)}
+        sx={{ width: 32, height: 32 }}
+      >
+        <CloseIcon fontSize="small" />
+      </IconButton>
+    </Box>
+  ) : null;
 
-      {/* Classroom filter, only when the student is in more than one */}
-      {enrolledClassrooms.length > 1 && (
-        <Box sx={{ display: 'flex', gap: 0.75, mb: 2, flexWrap: 'wrap' }}>
-          <Chip
-            label="All"
+  const missedList = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+      {openAbsences.slice(0, 4).map((a) => (
+        <Box key={a.class_id} sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap title={a.title}>
+            {a.title}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {a.scheduled_date}
+          </Typography>
+          <Button
             size="small"
-            variant={classroomFilter === 'all' ? 'filled' : 'outlined'}
-            color={classroomFilter === 'all' ? 'primary' : 'default'}
-            onClick={() => setClassroomFilter('all')}
-            sx={{ minHeight: 32, fontWeight: 600 }}
-          />
-          {enrolledClassrooms.map((c) => (
+            variant="contained"
+            onClick={() => router.push(`/student/timetable/${a.class_id}/catch-up`)}
+            sx={{ alignSelf: 'flex-start', textTransform: 'none', minHeight: 40 }}
+          >
+            {a.reason_given ? 'Catch up' : 'Tell us why'}
+          </Button>
+        </Box>
+      ))}
+    </Box>
+  );
+
+  /* The Teams "My calendars" slot: the classroom filter, plus the missed
+     classes that used to own a panel above the week. */
+  const railFooter = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {enrolledClassrooms.length > 1 && (
+        <Box>
+          <Typography
+            sx={{ mb: 1, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '.08em', color: 'text.disabled' }}
+          >
+            CLASSROOMS
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
             <Chip
-              key={c.id}
-              label={c.name}
+              label="All"
               size="small"
-              variant={classroomFilter === c.id ? 'filled' : 'outlined'}
-              color={classroomFilter === c.id ? 'primary' : 'default'}
-              onClick={() => setClassroomFilter(c.id)}
-              sx={{ minHeight: 32 }}
+              variant={classroomFilter === 'all' ? 'filled' : 'outlined'}
+              color={classroomFilter === 'all' ? 'primary' : 'default'}
+              onClick={() => setClassroomFilter('all')}
+              sx={{ minHeight: 32, fontWeight: 600 }}
             />
-          ))}
+            {enrolledClassrooms.map((c) => (
+              <Chip
+                key={c.id}
+                label={c.name}
+                size="small"
+                variant={classroomFilter === c.id ? 'filled' : 'outlined'}
+                color={classroomFilter === c.id ? 'primary' : 'default'}
+                onClick={() => setClassroomFilter(c.id)}
+                sx={{ minHeight: 32 }}
+              />
+            ))}
+          </Box>
         </Box>
       )}
 
-      {liveClass && (
-        <Alert
-          severity="success"
-          variant="filled"
-          sx={{ mb: 2, alignItems: 'center' }}
-          action={
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <Button
-                color="inherit"
-                size="small"
-                variant="outlined"
-                href={liveClass.teams_meeting_join_url || liveClass.teams_meeting_url || ''}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{ fontWeight: 700, borderColor: 'currentColor', minHeight: 40 }}
-              >
-                Join now
-              </Button>
-              <IconButton
-                size="small"
-                color="inherit"
-                aria-label="Dismiss"
-                onClick={() => setLiveBannerDismissed(true)}
-                sx={{ minWidth: 40, minHeight: 40 }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </Box>
-          }
-        >
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {liveClass.title} is live now
-          </Typography>
-        </Alert>
-      )}
-
-      {/* Needs your attention. Sits above the week because a missed class is
-          more urgent than the one coming up, and nothing else surfaces it. */}
       {openAbsences.length > 0 && (
         <Box
           sx={{
-            mb: 2,
-            p: 2,
+            p: 1.5,
             borderRadius: 2,
             border: (t) => `1px solid ${alpha(t.palette.warning.main, 0.4)}`,
             bgcolor: (t) => alpha(t.palette.warning.main, 0.06),
           }}
         >
-          <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', mb: 0.25 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', mb: 0.25 }}>
             {openAbsences.length === 1
               ? 'You missed a class'
               : `You missed ${openAbsences.length} classes`}
@@ -475,61 +543,188 @@ export default function StudentTimetable() {
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.25 }}>
             Watch the recording and finish the work to catch up.
           </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            {openAbsences.slice(0, 4).map((a) => (
-              <Box
-                key={a.class_id}
-                sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
-              >
-                <Typography variant="body2" sx={{ flex: 1, minWidth: 140, fontWeight: 600 }} noWrap>
-                  {a.title}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {a.scheduled_date}
-                </Typography>
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={() => router.push(`/student/timetable/${a.class_id}/catch-up`)}
-                  sx={{ textTransform: 'none', minHeight: 40 }}
-                >
-                  {a.reason_given ? 'Catch up' : 'Tell us why'}
-                </Button>
-              </Box>
-            ))}
-          </Box>
+          {missedList}
         </Box>
       )}
 
-      <TimetableToolbar state={viewState} />
+      {/* Classes taught before this student joined. A separate thing from a
+          missed class: there is no "why", and there are usually a lot of them,
+          so this is a pointer rather than a list. */}
+      {catchupPending > 0 && (
+        <Box
+          sx={{
+            p: 1.5,
+            borderRadius: 2,
+            border: (t) => `1px solid ${alpha(t.palette.primary.main, 0.35)}`,
+            bgcolor: (t) => alpha(t.palette.primary.main, 0.05),
+          }}
+        >
+          <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', mb: 0.25 }}>
+            {catchupPending === 1
+              ? '1 class to catch up on'
+              : `${catchupPending} classes to catch up on`}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.25 }}>
+            Taught before you joined. Work through them at your own pace.
+          </Typography>
+          <Button
+            size="small"
+            variant="contained"
+            onClick={() => router.push('/student/catch-up')}
+            sx={{ textTransform: 'none', minHeight: 40 }}
+          >
+            Open my catch-up list
+          </Button>
+        </Box>
+      )}
+    </Box>
+  );
 
-      {view === 'grid' ? (
-        // The grid works on a phone too: it scrolls sideways with a sticky hour
-        // gutter. Agenda is the default, so getting here is a deliberate choice.
-        <GridView
-          classes={classes}
-          week={week}
-          band={band}
-          loading={loading}
-          holidays={holidays}
-          role="student"
-          onClassClick={setSelectedClass}
-        />
-      ) : (
-        <AgendaView
-          classes={classes}
-          week={week}
-          loading={loading}
-          holidays={holidays}
-          role="student"
-          myRsvps={myRsvps}
-          myRsvpReasons={myRsvpReasons}
-          myAttendance={myAttendance}
-          onClassClick={setSelectedClass}
-          onDecline={handleDecline}
-          onCatchUp={handleCatchUp}
+  /* Below lg there is no rail, so the same two things become toolbar controls:
+     a filter chip and an amber count that opens the catch-up list. */
+  const toolbarActions = (
+    <>
+      {enrolledClassrooms.length > 1 && (
+        <Chip
+          label={
+            classroomFilter === 'all'
+              ? 'All classes'
+              : enrolledClassrooms.find((c) => c.id === classroomFilter)?.name ?? 'All classes'
+          }
+          size="small"
+          icon={<FilterListIcon fontSize="small" />}
+          onClick={(e) => setFilterAnchor(e.currentTarget)}
+          sx={{ display: { xs: 'inline-flex', xl: 'none' }, minHeight: 32, maxWidth: 150, fontWeight: 600 }}
         />
       )}
+      {openAbsences.length > 0 && (
+        <Chip
+          label={`${openAbsences.length} missed`}
+          size="small"
+          color="warning"
+          onClick={(e) => setMissedAnchor(e.currentTarget)}
+          sx={{ display: { xs: 'inline-flex', xl: 'none' }, minHeight: 32, fontWeight: 700 }}
+        />
+      )}
+      {activeClassroom && (
+        <Box sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
+          <TimetableNotificationBell classroomId={activeClassroom.id} getToken={getToken} />
+        </Box>
+      )}
+
+      <Menu
+        anchorEl={filterAnchor}
+        open={Boolean(filterAnchor)}
+        onClose={() => setFilterAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          selected={classroomFilter === 'all'}
+          onClick={() => { setClassroomFilter('all'); setFilterAnchor(null); }}
+          sx={{ minHeight: 44 }}
+        >
+          All classes
+        </MenuItem>
+        {enrolledClassrooms.map((c) => (
+          <MenuItem
+            key={c.id}
+            selected={classroomFilter === c.id}
+            onClick={() => { setClassroomFilter(c.id); setFilterAnchor(null); }}
+            sx={{ minHeight: 44 }}
+          >
+            {c.name}
+          </MenuItem>
+        ))}
+      </Menu>
+
+      <Popover
+        anchorEl={missedAnchor}
+        open={Boolean(missedAnchor)}
+        onClose={() => setMissedAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{ sx: { p: 2, maxWidth: 320 } }}
+      >
+        <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', mb: 0.25 }}>
+          {openAbsences.length === 1
+            ? 'You missed a class'
+            : `You missed ${openAbsences.length} classes`}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.25 }}>
+          Watch the recording and finish the work to catch up.
+        </Typography>
+        {missedList}
+      </Popover>
+    </>
+  );
+
+  return (
+    <Box>
+      <CalendarShell
+        state={viewState}
+        railSubtitle="You are attending everything unless you say otherwise."
+        railFooter={railFooter}
+        markedDates={markedDates}
+        holidayDates={holidayDates}
+        toolbarActions={toolbarActions}
+        banner={liveStrip}
+      >
+        {view === 'month' && range.month ? (
+          <MonthView
+            classes={visibleClasses}
+            month={range.month}
+            loading={loading}
+            holidays={holidays}
+            role="student"
+            anchorISO={formatDateISO(anchorDate)}
+            myRsvps={myRsvps}
+            onClassClick={setSelectedClass}
+            onOpenDay={(iso) => {
+              setAnchorDate(new Date(`${iso}T00:00:00`));
+              viewState.setView('day');
+            }}
+          />
+        ) : view === 'week' ? (
+          // The grid works on a phone too: it scrolls sideways with a sticky hour
+          // gutter. Agenda is the default, so getting here is a deliberate choice.
+          <GridView
+            classes={visibleClasses}
+            week={week}
+            band={band}
+            loading={loading}
+            holidays={holidays}
+            role="student"
+            onClassClick={setSelectedClass}
+          />
+        ) : view === 'day' ? (
+          <DayView
+            classes={visibleClasses}
+            week={week}
+            anchorDate={anchorDate}
+            band={band}
+            onSelectDate={setAnchorDate}
+            loading={loading}
+            holidays={holidays}
+            role="student"
+            onClassClick={setSelectedClass}
+          />
+        ) : (
+          <AgendaView
+            classes={visibleClasses}
+            week={week}
+            loading={loading}
+            holidays={holidays}
+            role="student"
+            myRsvps={myRsvps}
+            myRsvpReasons={myRsvpReasons}
+            myAttendance={myAttendance}
+            onClassClick={setSelectedClass}
+            onDecline={handleDecline}
+            onCatchUp={handleCatchUp}
+          />
+        )}
+      </CalendarShell>
 
       <ClassDetailPanel
         cls={selectedClass}

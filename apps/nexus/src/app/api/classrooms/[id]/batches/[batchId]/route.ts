@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 
 /**
  * PUT /api/classrooms/[id]/batches/[batchId]
@@ -17,12 +18,17 @@ export async function PUT(
 
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Deleting a batch unassigns every student in it, so this is internal-team
+    // work. Before the tier split any teacher could do it.
+    if (!canUser(user, 'structure.batch.manage')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can change or delete batches.' },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();
@@ -70,12 +76,17 @@ export async function DELETE(
 
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Deleting a batch unassigns every student in it, so this is internal-team
+    // work. Before the tier split any teacher could do it.
+    if (!canUser(user, 'structure.batch.manage')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can change or delete batches.' },
+        { status: 403 },
+      );
     }
 
     // Remove batch assignment from students

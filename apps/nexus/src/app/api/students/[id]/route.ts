@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /**
@@ -13,7 +14,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await verifyMsToken(request.headers.get('Authorization'));
+    const caller = await getRequestUser(request.headers.get('Authorization'));
+    // Staff-only: any student's profile, phone, attendance and progress. Previously
+    // authenticated but not authorised.
+    assertCapability(caller, 'coord.student.view');
 
     const { id: studentId } = await params;
     const classroomId = request.nextUrl.searchParams.get('classroom');

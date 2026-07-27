@@ -30,6 +30,7 @@ import {
   tagSx,
 } from '../timetable-theme';
 import { useNow } from '@/hooks/useNow';
+import CalendarEmptyState from './CalendarEmptyState';
 
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -92,9 +93,21 @@ export default function GridView({
 
   const columns = `${LAYOUT.gridGutter}px repeat(${week.days.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`;
 
+  /**
+   * Band geometry as a percentage of the band's natural height.
+   *
+   * date-utils computes everything in pixels at PX_PER_HOUR, which pinned a
+   * three-hour evening to ~280px and left the rest of the screen blank. Dividing
+   * through lets the band STRETCH to whatever height the calendar shell gives
+   * it, the way every full-height calendar does, while the maths stays pixel
+   * based and unit tested. Below its natural height the grid scrolls instead,
+   * so a full teaching day is never squashed.
+   */
+  const pct = (px: number) => `${(px / band.cellHeight) * 100}%`;
+
   if (loading) {
     return (
-      <Box sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: RADIUS.card, overflow: 'hidden' }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <Skeleton variant="rectangular" height={44} />
         <Skeleton variant="rectangular" height={band.cellHeight} sx={{ mt: 0.25 }} />
       </Box>
@@ -103,23 +116,42 @@ export default function GridView({
 
   return (
     <Box
+      data-testid="calendar-grid"
       sx={{
-        border: `1px solid ${theme.palette.divider}`,
-        borderRadius: RADIUS.card,
-        overflowX: 'auto',
-        overflowY: 'hidden',
+        // Fills the calendar shell and scrolls internally, so the page itself
+        // never scrolls and the grid gets every spare pixel.
+        position: 'relative',
+        flex: 1,
+        minHeight: 0,
+        minWidth: 0,
+        overflow: 'auto',
         bgcolor: 'background.paper',
-        boxShadow: SHADOW.card,
         WebkitOverflowScrolling: 'touch',
+        pb: { xs: 7, md: 0 }, // clears the mobile Fab at bottom: 80
       }}
     >
-      <Box sx={{ display: 'grid', gridTemplateColumns: columns, minWidth: 'fit-content' }}>
-        {/* Header: corner, then one cell per day */}
+      {classes.length === 0 && (
+        <CalendarEmptyState role={role} period={week.days.length === 1 ? 'day' : 'week'} overlay />
+      )}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: columns,
+          // Header row sizes to content, the band row takes the rest. minmax
+          // keeps the band from being squashed below its natural height.
+          gridTemplateRows: `auto minmax(${band.cellHeight}px, 1fr)`,
+          minWidth: 'fit-content',
+          minHeight: '100%',
+        }}
+      >
+        {/* Header: corner, then one cell per day. Sticky, since the band now
+            scrolls inside the grid rather than growing the page. */}
         <Box
           sx={{
             position: 'sticky',
             left: 0,
-            zIndex: 3,
+            top: 0,
+            zIndex: 4,
             bgcolor: 'background.paper',
             borderRight: `1px solid ${theme.palette.divider}`,
             borderBottom: `1px solid ${theme.palette.divider}`,
@@ -134,11 +166,16 @@ export default function GridView({
             <Box
               key={`h-${dateStr}`}
               sx={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 2,
                 px: 1.5,
                 py: 1.25,
                 borderRight: `1px solid ${theme.palette.divider}`,
                 borderBottom: today ? `2px solid ${theme.palette.primary.main}` : `1px solid ${theme.palette.divider}`,
-                bgcolor: holiday ? alpha(theme.palette.text.primary, 0.02) : 'transparent',
+                bgcolor: holiday
+                  ? alpha(theme.palette.text.primary, 0.02)
+                  : theme.palette.background.paper,
               }}
             >
               <Typography
@@ -173,7 +210,7 @@ export default function GridView({
             position: 'sticky',
             left: 0,
             zIndex: 3,
-            height: band.cellHeight,
+            height: '100%',
             bgcolor: 'background.paper',
             borderRight: `1px solid ${theme.palette.divider}`,
           }}
@@ -187,7 +224,7 @@ export default function GridView({
                   data-testid="grid-hour-label"
                   sx={{
                     position: 'absolute',
-                    top: segment.offset + ((h * 60 - segment.startMin) / 60) * PX_PER_HOUR - 6,
+                    top: `calc(${pct(segment.offset + ((h * 60 - segment.startMin) / 60) * PX_PER_HOUR)} - 6px)`,
                     right: 7,
                     fontSize: '0.5625rem',
                     color: 'text.disabled',
@@ -213,7 +250,7 @@ export default function GridView({
               key={`b-${dateStr}`}
               sx={{
                 position: 'relative',
-                height: band.cellHeight,
+                height: '100%',
                 borderRight: `1px solid ${theme.palette.divider}`,
                 bgcolor: holiday
                   ? alpha(theme.palette.text.primary, 0.02)
@@ -239,10 +276,10 @@ export default function GridView({
                           }
                           sx={{
                             position: 'absolute',
-                            top,
+                            top: pct(top),
                             left: 0,
                             right: 0,
-                            height: PX_PER_HOUR,
+                            height: pct(PX_PER_HOUR),
                             borderTop: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
                             cursor: onSlotClick ? 'pointer' : 'default',
                             transition: 'background-color 150ms ease',
@@ -260,10 +297,10 @@ export default function GridView({
                         aria-hidden
                         sx={{
                           position: 'absolute',
-                          top: segment.offset + segment.height,
+                          top: pct(segment.offset + segment.height),
                           left: 0,
                           right: 0,
-                          height: BREAK_HEIGHT,
+                          height: pct(BREAK_HEIGHT),
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -327,8 +364,8 @@ export default function GridView({
                     }}
                     sx={{
                       position: 'absolute',
-                      top,
-                      height,
+                      top: pct(top),
+                      height: pct(height),
                       left: 5,
                       right: 5,
                       zIndex: 2,

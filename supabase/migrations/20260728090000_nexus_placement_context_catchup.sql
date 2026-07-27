@@ -1,0 +1,18 @@
+-- ============================================
+-- PLACEMENT CONTEXT: catchup_class
+--
+-- The catch-up journey gates each past class behind a whole-class test that
+-- must be passed at 85%. That test is a normal nexus_tests row placed against
+-- the class, so it needs its own placement context.
+--
+-- Not a reuse of 'class_recap_section': that context's context_id is a single
+-- checkpoint section, and its pass rule is "how many of these 2-4 questions did
+-- you get right". The class test's context_id is the scheduled class itself, and
+-- its pass rule is a percentage across every question from the class.
+--
+-- Alone in its own migration on purpose. The Supabase CLI wraps a migration file
+-- in a transaction, and a value added by ALTER TYPE cannot be USED in the same
+-- transaction that added it. The very next migration references 'catchup_class'
+-- in an index predicate, so the two cannot share a file.
+-- ============================================
+ALTER TYPE nexus_placement_context ADD VALUE IF NOT EXISTS 'catchup_class';

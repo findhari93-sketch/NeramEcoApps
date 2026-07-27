@@ -52,6 +52,7 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.timetable', label: 'Timetable', surface: 'student', group: 'Live Class', paths: ['/student/timetable'], defaultEnabled: false },
   { id: 'student.course-plan', label: 'Course Plan', surface: 'student', group: 'Live Class', paths: ['/student/course-plan'], defaultEnabled: false },
   { id: 'student.assignments', label: 'Assignments', surface: 'student', group: 'Live Class', paths: ['/student/assignments'], defaultEnabled: false },
+  { id: 'student.catchup', label: 'Catch-up', surface: 'student', group: 'Live Class', paths: ['/student/catch-up'], defaultEnabled: false },
 
   { id: 'student.library', label: 'Library', surface: 'student', group: 'Learn', paths: ['/student/library'], defaultEnabled: false },
   { id: 'student.question-bank', label: 'Question Bank', surface: 'student', group: 'Learn', paths: ['/student/question-bank'], defaultEnabled: false },
@@ -111,6 +112,7 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.study-materials', label: 'Study Materials', surface: 'staff', group: 'Management', paths: ['/teacher/study-materials'], defaultEnabled: true },
   { id: 'staff.study-materials-feedback', label: 'Materials Feedback', surface: 'staff', group: 'Management', paths: ['/teacher/study-materials/feedback'], defaultEnabled: true },
   { id: 'staff.class-recaps', label: 'Class Recaps', surface: 'staff', group: 'Management', paths: ['/teacher/class-recaps'], defaultEnabled: true },
+  { id: 'staff.catchup', label: 'Catch-up', surface: 'staff', group: 'Management', paths: ['/teacher/catch-up'], defaultEnabled: true },
   { id: 'staff.checklists', label: 'Checklists', surface: 'staff', group: 'Management', paths: ['/teacher/checklists'], defaultEnabled: true },
   { id: 'staff.documents', label: 'Documents', surface: 'staff', group: 'Management', paths: ['/teacher/documents'], defaultEnabled: true },
   { id: 'staff.question-bank', label: 'Question Bank', surface: 'staff', group: 'Management', paths: ['/teacher/question-bank'], defaultEnabled: true },

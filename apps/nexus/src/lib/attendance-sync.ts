@@ -234,7 +234,22 @@ export function buildRosterIndex(
 export async function syncClassAttendance(
   supabase: any,
   cls: ClassMeetingRow,
-  opts?: { delegatedToken?: string | null },
+  opts?: {
+    delegatedToken?: string | null;
+    /**
+     * Forwarded to resolveOnlineMeetingDetailed. Set only when the caller is the
+     * meeting's organizer, whose own token bypasses the Teams application access
+     * policy entirely.
+     */
+    preferDelegated?: boolean;
+    /**
+     * Forwarded to pickReportForClass. The 12 hour default suits a nightly cron
+     * picking up one class; a backfill walking a month of a recurring channel
+     * meeting (which reuses one onlineMeeting id, so Graph returns one report per
+     * occurrence) wants a tighter window so it cannot attribute the wrong night.
+     */
+    reportToleranceHours?: number;
+  },
 ): Promise<AttendanceSyncOutcome> {
   if (!cls.teams_meeting_id) {
     return recordOutcome(supabase, cls.id, { ok: false, code: 'no_meeting_linked' });
@@ -264,6 +279,7 @@ export async function syncClassAttendance(
     joinUrl,
     organizerOid,
     knownOnlineMeetingId: cls.online_meeting_id,
+    preferDelegated: opts?.preferDelegated,
   });
 
   if (!resolution.meeting) {
@@ -308,7 +324,7 @@ export async function syncClassAttendance(
   }
 
   const classStart = new Date(`${cls.scheduled_date}T${cls.start_time.substring(0, 5)}:00+05:30`);
-  const report = pickReportForClass(reportsResult.items, classStart);
+  const report = pickReportForClass(reportsResult.items, classStart, opts?.reportToleranceHours);
 
   if (!report) {
     return recordOutcome(supabase, cls.id, {
@@ -434,18 +450,135 @@ export async function syncClassAttendance(
   return { ok: true, synced: rows.length, noShows, reportId: report.id, unmatched };
 }
 
+/** One roster-matched row from an uploaded Teams attendance report. */
+export interface CsvAttendanceRow {
+  student_id: string;
+  attended: boolean;
+  duration_minutes: number | null;
+  joined_at: string | null;
+  left_at: string | null;
+}
+
+/**
+ * Write attendance that came from an uploaded Teams attendance report.
+ *
+ * This is the fallback for the situation Nexus has actually been in since day
+ * one: Graph refuses every app-only attendance read because the tenant has no
+ * Teams application access policy, and no code can grant one. The organizer can
+ * still download the report out of the Teams meeting recap, so this path reaches
+ * real Teams attendance while depending on no Azure configuration at all.
+ *
+ * It lives beside `syncClassAttendance` rather than in the CSV parser because it
+ * has to obey exactly the same two rules, and those rules are written down here:
+ * a teacher's manual mark outranks any sync, and absences are derived, never
+ * asserted. `deriveNoShows` is module-private, which is the other half of the
+ * reason.
+ *
+ * Rows are written `source='teams_csv'`, deliberately distinct from `'teams'`.
+ * The day the access policy lands, the first useful thing to do is reconcile a
+ * Graph sync against these rows and look at where they disagree, and that is
+ * impossible if both claim the same provenance.
+ */
+export async function applyCsvAttendance(
+  supabase: any,
+  cls: Pick<ClassMeetingRow, 'id' | 'classroom_id'>,
+  rows: CsvAttendanceRow[],
+  opts: { markedBy: string; detail: string },
+): Promise<AttendanceSyncOutcome> {
+  if (rows.length === 0) {
+    return { ok: false, code: 'no_records', detail: 'The uploaded report matched nobody on this roster.' };
+  }
+
+  const { data: existingRows } = await supabase
+    .from('nexus_attendance')
+    .select('student_id, source, attended')
+    .eq('scheduled_class_id', cls.id);
+
+  const existing = new Map<string, { source: string | null; attended: boolean | null }>(
+    (existingRows || []).map((r: any) => [r.student_id, { source: r.source, attended: r.attended }]),
+  );
+
+  const now = new Date().toISOString();
+  const seen = new Set<string>();
+  const payload: Record<string, unknown>[] = [];
+
+  for (const row of rows) {
+    if (seen.has(row.student_id)) continue;
+    seen.add(row.student_id);
+
+    const prior = existing.get(row.student_id);
+    const manualOverride = prior?.source === 'manual';
+
+    payload.push({
+      scheduled_class_id: cls.id,
+      student_id: row.student_id,
+      // Same rule as the Graph sync: a teacher who marked this student by hand
+      // stays the authority on present/absent, and the report's telemetry is
+      // attached underneath their decision rather than replacing it.
+      attended: manualOverride ? prior?.attended ?? row.attended : row.attended,
+      joined_at: row.joined_at,
+      left_at: row.left_at,
+      duration_minutes: row.duration_minutes,
+      source: manualOverride ? 'manual' : 'teams_csv',
+      marked_by: opts.markedBy,
+      marked_at: now,
+    });
+  }
+
+  const { error: upsertError } = await supabase
+    .from('nexus_attendance')
+    .upsert(payload, { onConflict: 'scheduled_class_id,student_id' });
+
+  if (upsertError) {
+    return recordOutcome(supabase, cls.id, {
+      ok: false,
+      code: 'graph_error',
+      detail: `attendance upsert failed: ${upsertError.message}`,
+    });
+  }
+
+  const noShows = await deriveNoShows(supabase, cls.id, cls.classroom_id);
+
+  await supabase
+    .from('nexus_scheduled_classes')
+    .update({
+      // Stamping this retires the class from the nightly cron. That is correct
+      // while the policy is missing (Graph would only 403 again), and the
+      // backfill route's reset_attendance_attempts is the way back if it lands.
+      attendance_synced_at: now,
+      attendance_sync_status: 'ok',
+      attendance_sync_detail: opts.detail,
+    })
+    .eq('id', cls.id);
+
+  return { ok: true, synced: payload.length, noShows, reportId: 'teams_csv', unmatched: 0 };
+}
+
 /**
  * Enrolled students with no attended row become `nexus_class_absences` no_shows
  * so the catch-up loop can chase them. A student who did attend loses any stale
  * absence row; an existing opted_out row keeps its reason via ignoreDuplicates.
  */
 async function deriveNoShows(supabase: any, classId: string, classroomId: string): Promise<number> {
+  const { data: cls } = await supabase
+    .from('nexus_scheduled_classes')
+    .select('scheduled_date')
+    .eq('id', classId)
+    .maybeSingle();
+
+  let rosterQuery = supabase
+    .from('nexus_enrollments')
+    .select('user_id, role')
+    .eq('classroom_id', classroomId)
+    .eq('is_active', true);
+  // Only students who were enrolled on the day can be no-shows. A later joiner
+  // gets a catch-up backlog item for this class instead, not a chase.
+  if (cls?.scheduled_date) {
+    rosterQuery = rosterQuery.lte('enrolled_at', `${cls.scheduled_date}T23:59:59+05:30`);
+  }
+
   const [{ data: enrolled }, { data: attRows }] = await Promise.all([
-    supabase
-      .from('nexus_enrollments')
-      .select('user_id, role')
-      .eq('classroom_id', classroomId)
-      .eq('is_active', true),
+    rosterQuery,
     supabase.from('nexus_attendance').select('student_id, attended').eq('scheduled_class_id', classId),
   ]);
 
@@ -459,7 +592,13 @@ async function deriveNoShows(supabase: any, classId: string, classroomId: string
       .from('nexus_class_absences')
       .delete()
       .eq('scheduled_class_id', classId)
-      .in('student_id', attendedIds);
+      .in('student_id', attendedIds)
+      // Never delete a catch-up backlog item. Those rows carry real progress
+      // (rewatch counts, a passed 85% test) that a resync must not destroy. A
+      // late joiner cannot have attended a class held before they arrived, so
+      // this should never match today; the guard is here so a future change to
+      // how attendance is matched cannot quietly wipe someone's work.
+      .is('journey_id', null);
   }
 
   if (noShows.length > 0) {

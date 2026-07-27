@@ -4,11 +4,15 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { errorResponse } from '@/lib/api-errors';
 import {
   syncClassAttendance,
+  applyCsvAttendance,
   ATTENDANCE_FAILURE_MESSAGES,
   CLASS_SYNC_COLUMNS,
   type AttendanceSyncFailure,
   type ClassMeetingRow,
+  type CsvAttendanceRow,
 } from '@/lib/attendance-sync';
+import { parseChannelJoinUrl } from '@/lib/teams-attendance-probe';
+import { escapeIlike } from '@/lib/teams-online-meeting';
 
 /** HTTP status per sync failure, so the client can tell "wait" from "misconfigured". */
 const FAILURE_STATUS: Record<AttendanceSyncFailure, number> = {
@@ -30,6 +34,15 @@ interface Caller {
   id: string;
   user_type: string | null;
   isStaff: boolean;
+  /**
+   * The AAD object id the request actually authenticated as, lowercased.
+   *
+   * Deliberately the token's oid rather than `users.ms_oid`: it is the identity
+   * Graph will see if we hand its token onward, and it is what impersonation
+   * resolves through. Compared against a meeting's organizer to decide whether
+   * the delegated path is open.
+   */
+  msOid: string;
 }
 
 /**
@@ -52,6 +65,7 @@ async function resolveCaller(supabase: any, authHeader: string | null): Promise<
     id: user.id,
     user_type: user.user_type,
     isStaff: user.user_type === 'teacher' || user.user_type === 'admin',
+    msOid: String(msUser.oid ?? '').toLowerCase(),
   };
 }
 
@@ -77,7 +91,12 @@ export async function GET(request: NextRequest) {
     // mismatched pair cannot be used to read a roster from somewhere else.
     const { data: cls } = await supabase
       .from('nexus_scheduled_classes')
-      .select('id, attendance_synced_at, attendance_sync_status, attendance_sync_detail, teams_meeting_id')
+      .select(
+        // scheduled_date and start_time are here for the CSV import: the Teams
+        // export writes bare wall-clock times with no offset, so the client
+        // needs the class start to anchor them against.
+        'id, attendance_synced_at, attendance_sync_status, attendance_sync_detail, teams_meeting_id, scheduled_date, start_time',
+      )
       .eq('id', classId)
       .eq('classroom_id', classroomId)
       .maybeSingle();
@@ -119,7 +138,14 @@ export async function GET(request: NextRequest) {
     const [{ data: roster }, { data: attRows, error: attErr }] = await Promise.all([
       supabase
         .from('nexus_enrollments')
-        .select('user_id, student:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url)')
+        // linked_classroom_email and personal_email are selected purely so the
+        // CSV import can match on them client-side. Matching on `email` alone
+        // misses the students whose classroom account differs from their primary
+        // one, which is a large minority of the roster. Staff-only branch, and
+        // staff already see `email`, so this exposes nothing new.
+        .select(
+          'user_id, student:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, linked_classroom_email, personal_email)',
+        )
         .eq('classroom_id', classroomId)
         .eq('role', 'student')
         .eq('is_active', true),
@@ -145,6 +171,15 @@ export async function GET(request: NextRequest) {
         duration_minutes: a?.duration_minutes ?? null,
         attendance_intervals: a?.attendance_intervals ?? null,
         source: a?.source ?? null,
+        // Every address this student might have joined Teams under, lowercased,
+        // so the CSV import can match without a second round trip.
+        match_emails: [
+          r.student?.email,
+          r.student?.linked_classroom_email,
+          r.student?.personal_email,
+        ]
+          .filter(Boolean)
+          .map((e: string) => e.toLowerCase()),
         student: a?.student ?? r.student,
       };
     });
@@ -166,6 +201,11 @@ export async function GET(request: NextRequest) {
             ? ATTENDANCE_FAILURE_MESSAGES[status as AttendanceSyncFailure] ?? null
             : null,
         has_meeting: !!cls.teams_meeting_id,
+      },
+      class: {
+        id: cls.id,
+        scheduled_date: cls.scheduled_date,
+        start_time: cls.start_time,
       },
     });
   } catch (err) {
@@ -205,12 +245,28 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'sync_teams') {
-      // The delegated token is only an accelerator for meetings this person
-      // organized. Channel meetings resolve app-only, on behalf of the real
-      // organizer, which is why this works for any staff member.
+      const joinUrl = cls.teams_meeting_join_url || cls.teams_meeting_url || null;
+      const rowOrganizer =
+        cls.organizer_ms_oid || (joinUrl ? parseChannelJoinUrl(joinUrl).organizerOid : null);
+      const isOrganizer = !!rowOrganizer && rowOrganizer.toLowerCase() === caller.msOid;
+
+      // Passing the delegated token ONLY to the organizer is the whole point.
+      //
+      // An organizer's own token reads /me/onlineMeetings and needs no Teams
+      // application access policy at all, so `preferDelegated` is the one route
+      // that works while that tenant grant is outstanding. For everyone else the
+      // delegated attempt is not merely useless, it is actively harmful: it costs
+      // a guaranteed Graph round trip that returns 3003 "user does not have
+      // access to lookup meeting", and `failureRank` can only ever discard that
+      // result. This route used to pass the token unconditionally and so paid
+      // that cost on every single sync. The backfill route already does it this
+      // way; see backfill/route.ts.
       const result = await syncClassAttendance(supabase, cls as ClassMeetingRow, {
-        delegatedToken: token,
+        delegatedToken: isOrganizer ? token : null,
+        preferDelegated: isOrganizer,
       });
+
+      const mode = isOrganizer ? 'delegated_organizer' : 'app_only';
 
       if (result.ok) {
         return NextResponse.json({
@@ -218,7 +274,21 @@ export async function POST(request: NextRequest) {
           synced: result.synced,
           no_shows: result.noShows,
           unmatched: result.unmatched,
+          mode,
         });
+      }
+
+      // Name the organizer on the failure path only, so the happy path stays at
+      // its current query count. "Shanthi organized this" is actionable;
+      // "f51c6475-0c5e-4ba5-9876-474668f381ec organized this" is not.
+      let organizer: { name: string | null; is_caller: boolean } | null = null;
+      if (rowOrganizer) {
+        const { data: org } = await supabase
+          .from('users')
+          .select('name')
+          .ilike('ms_oid', escapeIlike(rowOrganizer))
+          .maybeSingle();
+        organizer = { name: org?.name ?? null, is_caller: isOrganizer };
       }
 
       // An empty report is not an error: Teams did answer, it just listed nobody.
@@ -227,11 +297,13 @@ export async function POST(request: NextRequest) {
           message: ATTENDANCE_FAILURE_MESSAGES.no_records,
           code: result.code,
           synced: 0,
+          mode,
+          organizer,
         });
       }
 
       return NextResponse.json(
-        { error: ATTENDANCE_FAILURE_MESSAGES[result.code], code: result.code },
+        { error: ATTENDANCE_FAILURE_MESSAGES[result.code], code: result.code, mode, organizer },
         { status: FAILURE_STATUS[result.code] },
       );
     }
@@ -240,10 +312,110 @@ export async function POST(request: NextRequest) {
       return await manualMarkAttendance(class_id, classroom_id, body.records, supabase, caller.id);
     }
 
+    if (action === 'import_teams_csv') {
+      return await importTeamsCsv(cls as ClassMeetingRow, body, supabase, caller.id);
+    }
+
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (err) {
     return errorResponse(err, 'Failed to update attendance');
   }
+}
+
+/**
+ * Commit an attendance report the organizer downloaded out of Teams.
+ *
+ * The file is decoded, parsed and matched entirely in the browser, so what
+ * arrives here is already a list of roster decisions. That is deliberate: it
+ * keeps a multi-hundred-kilobyte UTF-16 file off the serverless function, lets a
+ * teacher re-run the threshold with no round trip, and means exactly one
+ * invocation is spent, at commit.
+ *
+ * What must NOT be trusted from the client is which students exist. The
+ * enrollment re-check below is the same one `manual_mark` performs, and it is
+ * the only thing standing between a hand-crafted payload and attendance rows
+ * written against a student in another classroom.
+ */
+async function importTeamsCsv(
+  cls: ClassMeetingRow,
+  body: any,
+  supabase: any,
+  markedBy: string,
+): Promise<NextResponse> {
+  const rows = body.rows;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return NextResponse.json({ error: 'No attendance rows to import' }, { status: 400 });
+  }
+
+  const { data: enrolled } = await supabase
+    .from('nexus_enrollments')
+    .select('user_id')
+    .eq('classroom_id', cls.classroom_id)
+    .eq('role', 'student')
+    .eq('is_active', true);
+
+  const enrolledIds = new Set((enrolled || []).map((e: any) => e.user_id));
+  const accepted: CsvAttendanceRow[] = [];
+  let skipped = 0;
+
+  for (const row of rows) {
+    if (!row || typeof row.student_id !== 'string' || !enrolledIds.has(row.student_id)) {
+      skipped++;
+      continue;
+    }
+    accepted.push({
+      student_id: row.student_id,
+      attended: row.attended === true,
+      duration_minutes:
+        typeof row.duration_minutes === 'number' && Number.isFinite(row.duration_minutes)
+          ? Math.max(0, Math.round(row.duration_minutes))
+          : null,
+      joined_at: typeof row.joined_at === 'string' ? row.joined_at : null,
+      left_at: typeof row.left_at === 'string' ? row.left_at : null,
+    });
+  }
+
+  if (accepted.length === 0) {
+    return NextResponse.json(
+      { error: 'None of those students are enrolled in this classroom.', skipped },
+      { status: 400 },
+    );
+  }
+
+  const { data: staff } = await supabase.from('users').select('name').eq('id', markedBy).maybeSingle();
+
+  // Provenance goes in attendance_sync_detail rather than in new columns: it is
+  // the field the attendance sheet already surfaces, and it is what makes an
+  // imported class distinguishable from a Graph-synced one months later.
+  const meta = body.meta ?? {};
+  const detail = [
+    `Imported from the Teams attendance report${staff?.name ? ` by ${staff.name}` : ''}`,
+    meta.file_name ? ` (${String(meta.file_name).slice(0, 80)})` : '',
+    `: ${accepted.length} matched`,
+    typeof meta.unmatched === 'number' && meta.unmatched > 0 ? `, ${meta.unmatched} unmatched` : '',
+    typeof body.threshold_seconds === 'number'
+      ? `, present at ${Math.round(body.threshold_seconds / 60)}m or more`
+      : '',
+  ].join('');
+
+  const result = await applyCsvAttendance(supabase, cls, accepted, { markedBy, detail });
+
+  if (!result.ok) {
+    // Not FAILURE_STATUS here: that map means "an empty Teams report is a valid
+    // answer, so 200". An import that wrote nothing is a failed action from the
+    // caller's point of view, and must not come back as a success.
+    return NextResponse.json(
+      { error: result.detail || ATTENDANCE_FAILURE_MESSAGES[result.code], code: result.code },
+      { status: result.code === 'no_records' ? 400 : 502 },
+    );
+  }
+
+  return NextResponse.json({
+    message: `Imported ${result.synced} ${result.synced === 1 ? 'student' : 'students'} from the Teams report`,
+    synced: result.synced,
+    no_shows: result.noShows,
+    skipped,
+  });
 }
 
 /** Manually mark attendance for students. */

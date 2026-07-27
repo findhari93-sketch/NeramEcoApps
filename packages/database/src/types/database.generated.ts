@@ -15383,6 +15383,8 @@ export type Database = {
           is_alumni: boolean
           nexus_access_enabled: boolean
           student_program: string
+          staff_role: string | null
+          can_teach: boolean
           alumni_since: string | null
           last_login_at: string | null
           nexus_first_login_at: string | null
@@ -15434,6 +15436,8 @@ export type Database = {
           is_alumni?: boolean
           nexus_access_enabled?: boolean
           student_program?: string
+          staff_role?: string | null
+          can_teach?: boolean
           alumni_since?: string | null
           last_login_at?: string | null
           nexus_first_login_at?: string | null
@@ -15485,6 +15489,8 @@ export type Database = {
           is_alumni?: boolean
           nexus_access_enabled?: boolean
           student_program?: string
+          staff_role?: string | null
+          can_teach?: boolean
           alumni_since?: string | null
           last_login_at?: string | null
           nexus_first_login_at?: string | null

@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 import { Box, Container } from '@neram/ui';
+import { usePathname } from 'next/navigation';
+import { isFullBleedRoute } from '@/lib/full-bleed-routes';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -24,6 +26,7 @@ function StudentShell({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
   const { currentNavGroups, currentBottomNavItems, currentOverflowItems, currentHomePath } =
     useStudentZoneContext();
+  const fullBleed = isFullBleedRoute(usePathname());
 
   // Start passively capturing console/network errors so a later "Report a
   // problem" ticket can include what actually went wrong (staff-only).
@@ -54,12 +57,12 @@ function StudentShell({ children }: { children: React.ReactNode }) {
             overflowX: 'hidden',
             overflowY: 'auto',
             bgcolor: (theme) => (theme.palette.mode === 'light' ? '#FAFAFA' : 'background.default'),
-            pt: { xs: 2, md: 3 },
-            pb: { xs: 10, md: 3 },
-            px: { xs: 2, sm: 3, md: 4 },
+            pt: fullBleed ? 0 : { xs: 2, md: 3 },
+            pb: fullBleed ? { xs: 8, md: 0 } : { xs: 10, md: 3 },
+            px: fullBleed ? 0 : { xs: 2, sm: 3, md: 4 },
           }}
         >
-          <Container maxWidth="lg" disableGutters>
+          <Container maxWidth={fullBleed ? false : 'lg'} disableGutters>
             <DeviceRegistrationProvider>
               <WelcomeOrientation />
               <FeatureGate surface="student">{children}</FeatureGate>

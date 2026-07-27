@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 import { syncClassroomToTeam } from '@/lib/teams-sync';
 
 /**
@@ -20,12 +21,15 @@ export async function POST(
     // Verify teacher/admin role
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type || '')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!canUser(user, 'structure.classroom.teams_link')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can sync classroom members to Teams.' },
+        { status: 403 },
+      );
     }
 
     // Verify classroom has a linked team

@@ -1,6 +1,7 @@
 // @ts-nocheck — nexus_test_placements + nexus_tests.is_repository/created_from are not
 // yet in the generated Supabase types. Regenerate after 20260713190000 is applied.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { recordCatchupTestAttempt } from './catchup-journey';
 import type {
   NexusPlacementContext,
   NexusTestPlacement,
@@ -636,9 +637,14 @@ export async function gradeTestOneShot(
   if (error) throw error;
 
   // Dispatch the context side-effect keyed by the placement's context.
-  // student_practice + classroom_assignment have none. Recap/foundation/module land in Phases 5-6.
-  if (placement && passed) {
-    if (placement.context_type === 'study_file') {
+  // student_practice + classroom_assignment have none. Foundation/module land later.
+  //
+  // Note the shape: this is NOT nested inside `if (passed)`. A catch-up class
+  // test has a side-effect on failure too (it re-locks itself until the student
+  // goes back through the recording), and putting that anywhere other than here
+  // would let a different caller grade an attempt and skip the rule.
+  if (placement) {
+    if (placement.context_type === 'study_file' && passed) {
       // Re-fire the EXISTING study-material completion (best-score upsert on nexus_study_file_reads).
       // best_attempt_id has no FK, so a nexus_test_attempts id is accepted.
       await supabase.rpc('nexus_study_mark_completed', {
@@ -647,6 +653,18 @@ export async function gradeTestOneShot(
         p_score: Math.max(0, percentage),
         p_attempt: attempt.id,
       });
+    } else if (placement.context_type === 'catchup_class') {
+      // context_id is the scheduled class. Passing clears the class on the
+      // student's backlog; failing takes the test away again.
+      await recordCatchupTestAttempt(
+        {
+          studentId: input.studentId,
+          scheduledClassId: placement.context_id,
+          passed,
+          percentage: Math.max(0, percentage),
+        },
+        supabase,
+      );
     }
   }
 

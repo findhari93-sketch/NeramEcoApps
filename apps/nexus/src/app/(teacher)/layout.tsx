@@ -1,6 +1,8 @@
 'use client';
 
 import { Box, Container } from '@neram/ui';
+import { usePathname } from 'next/navigation';
+import { isFullBleedRoute } from '@/lib/full-bleed-routes';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -13,6 +15,7 @@ import FeatureGate from '@/components/FeatureGate';
 function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
   const { currentSidebarItems, currentBottomNavItems, currentOverflowItems } = usePanelContext();
+  const fullBleed = isFullBleedRoute(usePathname());
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -37,12 +40,12 @@ function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
             overflowX: 'hidden',
             overflowY: 'auto',
             bgcolor: (theme) => theme.palette.mode === 'light' ? '#FAFAFA' : 'background.default',
-            pt: { xs: 2, md: 3 },
-            pb: { xs: 10, md: 3 },
-            px: { xs: 2, sm: 3, md: 4 },
+            pt: fullBleed ? 0 : { xs: 2, md: 3 },
+            pb: fullBleed ? { xs: 8, md: 0 } : { xs: 10, md: 3 },
+            px: fullBleed ? 0 : { xs: 2, sm: 3, md: 4 },
           }}
         >
-          <Container maxWidth="lg" disableGutters>
+          <Container maxWidth={fullBleed ? false : 'lg'} disableGutters>
             <FeatureGate surface="staff">{children}</FeatureGate>
           </Container>
         </Box>

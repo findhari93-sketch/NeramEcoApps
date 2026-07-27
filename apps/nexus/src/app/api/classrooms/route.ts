@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser, resolveStaffRole } from '@/lib/staff-capabilities';
 
 /**
  * GET /api/classrooms
@@ -11,14 +12,14 @@ export async function GET(request: NextRequest) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient() as any;
 
-    // Look up user
+    // Look up user. Listing classrooms is a read every staff tier may perform.
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
+    if (resolveStaffRole(user) === null) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -111,12 +112,17 @@ export async function POST(request: NextRequest) {
 
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Creating a classroom defines a cohort (and auto-enrols the creator as its
+    // teacher), so it belongs to the internal team.
+    if (!canUser(user, 'structure.classroom.create')) {
+      return NextResponse.json(
+        { error: 'Only the Neram team can create a classroom.' },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();

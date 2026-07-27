@@ -18,6 +18,7 @@ import ViewModuleOutlinedIcon from '@mui/icons-material/ViewModuleOutlined';
 import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
+import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import DevicesOutlinedIcon from '@mui/icons-material/DevicesOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
@@ -33,6 +34,7 @@ import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import FaceRetouchingNaturalOutlinedIcon from '@mui/icons-material/FaceRetouchingNaturalOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
+import type { Capability } from '@/lib/staff-capabilities';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
 
@@ -55,13 +57,26 @@ export const COURSE_PLAN_SUBNAV: {
   { key: 'schedule', label: 'Schedule', planScreen: true, suffix: '/schedule' },
   { key: 'classday', label: 'Class Day', planScreen: true, suffix: '/class-day' },
   { key: 'health', label: 'Health', planScreen: true, suffix: '/health' },
-  { key: 'catchup', label: 'Catch-up', planScreen: true, suffix: '/catchup' },
+  // "Topic plan", not "Catch-up": this is the plan-scoped TOPIC track a teacher
+  // curates and shares. The class-by-class catch-up journey now owns the
+  // "Catch-up" name in Management, and two things under one label is how a
+  // teacher ends up on the wrong screen.
+  { key: 'catchup', label: 'Topic plan', planScreen: true, suffix: '/catchup' },
 ];
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
+  /**
+   * Capability required to see this item. Composes with the feature flag: a flag
+   * answers "is this feature switched on yet", a capability answers "may this
+   * person use it". Omit for items every staff tier may see.
+   *
+   * Panel-level `requiredRoles` is too coarse for this. Cohort management sits in
+   * the same panel as the teaching tools an external teacher genuinely needs.
+   */
+  capability?: Capability;
 }
 
 interface PanelConfig {
@@ -117,7 +132,10 @@ const PANELS: PanelConfig[] = [
     requiredRoles: ['teacher', 'admin'],
     defaultPath: '/teacher/classrooms',
     sidebarItems: [
-      { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
+      // Cohort structure: create classrooms, batches, enrolments, Teams links.
+      // Internal team only; an external teacher has no business in here and the
+      // matching API routes already refuse them.
+      { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon />, capability: 'structure.enrollment.add' },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
       { label: 'Photo Review', path: '/teacher/photo-review', icon: <FaceRetouchingNaturalOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
@@ -125,6 +143,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Study Materials', path: '/teacher/study-materials', icon: <FolderOutlinedIcon /> },
       { label: 'Materials Feedback', path: '/teacher/study-materials/feedback', icon: <RateReviewOutlinedIcon /> },
       { label: 'Class Recaps', path: '/teacher/class-recaps', icon: <VideoLibraryOutlinedIcon /> },
+      { label: 'Catch-up', path: '/teacher/catch-up', icon: <HistoryToggleOffOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'Question Bank', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
@@ -137,7 +156,10 @@ const PANELS: PanelConfig[] = [
       { label: 'Guide', path: '/teacher/management-guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
     bottomNavItems: [
-      { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
+      // Cohort structure: create classrooms, batches, enrolments, Teams links.
+      // Internal team only; an external teacher has no business in here and the
+      // matching API routes already refuse them.
+      { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon />, capability: 'structure.enrollment.add' },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
       { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
@@ -243,7 +265,7 @@ export function usePanelContext() {
 }
 
 export default function PanelProvider({ children }: { children: React.ReactNode }) {
-  const { nexusRole, featureFlags } = useNexusAuthContext();
+  const { nexusRole, featureFlags, can } = useNexusAuthContext();
   const pathname = usePathname();
   const router = useRouter();
   const [activePanel, setActivePanelState] = useState<PanelId>('teaching');
@@ -252,11 +274,18 @@ export default function PanelProvider({ children }: { children: React.ReactNode 
   // Filter panels by role AND by feature flags: a panel whose every nav item is
   // disabled disappears from the switcher (its pages are still blocked by
   // FeatureGate). The Admin panel is all-core so it never drops.
+  // An item must clear BOTH gates: the feature flag (is it switched on) and the
+  // capability (may this person use it).
+  const isItemVisible = useCallback(
+    (i: NavItem) => isPathEnabled(i.path, featureFlags) && (!i.capability || can(i.capability)),
+    [featureFlags, can],
+  );
+
   const availablePanels = useMemo(() => {
     return PANELS.filter((p) => nexusRole && p.requiredRoles.includes(nexusRole)).filter(
-      (p) => p.sidebarItems.some((i) => isPathEnabled(i.path, featureFlags)),
+      (p) => p.sidebarItems.some(isItemVisible),
     );
-  }, [nexusRole, featureFlags]);
+  }, [nexusRole, isItemVisible]);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
@@ -300,8 +329,7 @@ export default function PanelProvider({ children }: { children: React.ReactNode 
   const currentPanel = PANELS.find((p) => p.id === activePanel) || PANELS[0];
 
   const value = useMemo<PanelContextValue>(() => {
-    const filterItems = (items: NavItem[]) =>
-      items.filter((i) => isPathEnabled(i.path, featureFlags));
+    const filterItems = (items: NavItem[]) => items.filter(isItemVisible);
     // If the active panel got fully filtered out (every feature off), fall back
     // to the first still-available panel so staff are never stranded on an empty
     // sidebar.
@@ -318,7 +346,7 @@ export default function PanelProvider({ children }: { children: React.ReactNode 
       currentBottomNavItems: filterItems(resolvedPanel.bottomNavItems),
       currentOverflowItems: filterItems(resolvedPanel.overflowItems),
     };
-  }, [activePanel, setActivePanel, availablePanels, currentPanel, featureFlags]);
+  }, [activePanel, setActivePanel, availablePanels, currentPanel, isItemVisible]);
 
   return (
     <PanelContext.Provider value={value}>

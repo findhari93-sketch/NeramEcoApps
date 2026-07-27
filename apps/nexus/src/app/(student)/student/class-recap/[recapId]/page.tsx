@@ -7,7 +7,7 @@
  * them back to rewatch that segment.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -16,6 +16,7 @@ import {
   Chip,
   Button,
   EmptyState,
+  Alert,
   alpha,
 } from '@neram/ui';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -46,6 +47,8 @@ interface Recap {
   video_duration_seconds: number | null;
   sections: RecapSection[];
   progress_status: string | null;
+  /** Null for an ad-hoc recap, which can never be a catch-up backlog item. */
+  scheduled_class_id: string | null;
 }
 
 interface StrippedQuestion {
@@ -65,10 +68,18 @@ function fmt(seconds: number): string {
 
 export default function StudentClassRecapPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const recapId = params?.recapId as string;
   const { loading: authLoading, getToken } = useNexusAuthContext();
   const authFetch = useAuthFetch();
+
+  // Arrived here from a failed class test. The banner is the only difference:
+  // the gating below is unchanged, and the server decides whether the rewatch
+  // counted, so there is nothing here worth faking.
+  const rewatching = searchParams?.get('rewatch') === '1';
+  const [rearming, setRearming] = useState(false);
+  const [rearmMsg, setRearmMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [recap, setRecap] = useState<Recap | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -222,6 +233,57 @@ export default function StudentClassRecapPage() {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Watch the class. At each checkpoint, pass a short quiz to unlock the next part.
       </Typography>
+
+      {rewatching && recap.scheduled_class_id && (
+        <Alert
+          severity={rearmMsg && !rearmMsg.ok ? 'warning' : 'info'}
+          sx={{ mb: 2, borderRadius: 2 }}
+          action={
+            <Button
+              size="small"
+              disabled={rearming}
+              onClick={async () => {
+                setRearming(true);
+                setRearmMsg(null);
+                try {
+                  await authFetch(`/api/student/catchup-journey/${recap.scheduled_class_id}/rearm`, {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                  });
+                  setRearmMsg({ text: 'Test unlocked. Take it now.', ok: true });
+                } catch (err) {
+                  // The server checks how far through the recording they got, so
+                  // pressing this early simply fails and says why.
+                  setRearmMsg({
+                    text: err instanceof Error ? err.message : 'Could not unlock the test yet.',
+                    ok: false,
+                  });
+                } finally {
+                  setRearming(false);
+                }
+              }}
+              sx={{ textTransform: 'none', minHeight: 40, whiteSpace: 'nowrap' }}
+            >
+              {rearming ? 'Checking...' : 'Unlock my test'}
+            </Button>
+          }
+        >
+          {rearmMsg
+            ? rearmMsg.text
+            : 'Watch this through to the end, then unlock the class test and try again.'}
+        </Alert>
+      )}
+
+      {rewatching && rearmMsg?.ok && recap.scheduled_class_id && (
+        <Button
+          fullWidth
+          variant="contained"
+          onClick={() => router.push(`/student/catch-up/${recap.scheduled_class_id}/test`)}
+          sx={{ mb: 2, minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+        >
+          Take the class test
+        </Button>
+      )}
 
       {/* Player */}
       <Box

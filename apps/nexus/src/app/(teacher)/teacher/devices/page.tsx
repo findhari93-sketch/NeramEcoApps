@@ -28,6 +28,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import type { DeviceDistributionStats, StudentDeviceSummary } from '@neram/database';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 function formatTime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -180,16 +181,26 @@ function StudentDetailSheet({
 }) {
   const [detail, setDetail] = useState<StudentDeviceSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const { getToken } = useNexusAuthContext();
 
   useEffect(() => {
     if (!userId || !open) return;
     setLoading(true);
-    fetch(`/api/devices?type=student-detail&userId=${userId}`)
-      .then((r) => r.json())
-      .then((d) => setDetail(d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [userId, open]);
+    // /api/devices now requires a staff token (it used to be unauthenticated).
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`/api/devices?type=student-detail&userId=${userId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (res.ok) setDetail(await res.json());
+      } catch {
+        /* leave detail null; the dialog shows its empty state */
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [userId, open, getToken]);
 
   return (
     <Dialog
@@ -278,6 +289,7 @@ function StudentDetailSheet({
 }
 
 export default function TeacherDevicesPage() {
+  const { getToken } = useNexusAuthContext();
   const [stats, setStats] = useState<DeviceDistributionStats | null>(null);
   const [students, setStudents] = useState<StudentDeviceSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -292,25 +304,35 @@ export default function TeacherDevicesPage() {
   }, [searchInput]);
 
   useEffect(() => {
-    fetch('/api/devices?type=stats')
-      .then((r) => r.json())
-      .then((s) => setStats(s))
-      .catch(() => {});
-  }, []);
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch('/api/devices?type=stats', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (res.ok) setStats(await res.json());
+      } catch {
+        /* stats stay null; the tiles render their loading/empty state */
+      }
+    })();
+  }, [getToken]);
 
   const fetchStudents = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ type: 'students', limit: '50' });
       if (search) params.set('search', search);
-      const res = await fetch(`/api/devices?${params}`);
+      const token = await getToken();
+      const res = await fetch(`/api/devices?${params}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       if (res.ok) {
         const result = await res.json();
         setStudents(result.data || []);
       }
     } catch {}
     setLoading(false);
-  }, [search]);
+  }, [search, getToken]);
 
   useEffect(() => {
     fetchStudents();

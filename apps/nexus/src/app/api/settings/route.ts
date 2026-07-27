@@ -5,6 +5,7 @@ import {
   getNexusSetting,
   upsertNexusSetting,
 } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 
 /**
  * GET /api/settings?key=admin_teams_contacts
@@ -39,11 +40,15 @@ export async function PATCH(request: NextRequest) {
     const supabase = getSupabaseAdminClient();
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || user.user_type !== 'admin') {
+    // Gate on the capability, not on user_type. The internal team keeps
+    // user_type='admin' so they retain Admin app access, so a raw user_type check
+    // here would still let a manager rewrite the global feature flags and the
+    // Teams contact list. system.settings is admin-only.
+    if (!user || !canUser(user, 'system.settings')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

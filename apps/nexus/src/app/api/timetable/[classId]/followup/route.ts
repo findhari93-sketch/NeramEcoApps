@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canRunSession } from '@/lib/staff-capabilities';
 import { computeAbsencesForClass, LATE_THRESHOLD_MINUTES } from '@/lib/class-absences';
 import { notifyStudents } from '@/lib/notify-students';
 
@@ -21,14 +22,14 @@ interface Ctx {
 async function resolveStaff(supabase: any, msOid: string, classId: string) {
   const { data: user } = await supabase
     .from('users')
-    .select('id, user_type, name')
+    .select('id, user_type, staff_role, can_teach, name')
     .eq('ms_oid', msOid)
     .single();
   if (!user) return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
 
   const { data: cls } = await supabase
     .from('nexus_scheduled_classes')
-    .select('id, classroom_id, title, scheduled_date, start_time, end_time, status, recording_url, youtube_url')
+    .select('id, classroom_id, teacher_id, title, scheduled_date, start_time, end_time, status, recording_url, youtube_url')
     .eq('id', classId)
     .single();
   if (!cls) return { error: NextResponse.json({ error: 'Class not found' }, { status: 404 }) };
@@ -41,8 +42,9 @@ async function resolveStaff(supabase: any, msOid: string, classId: string) {
     .eq('is_active', true)
     .maybeSingle();
 
-  const isAdmin = user.user_type === 'admin';
-  const canEdit = isAdmin || user.user_type === 'teacher' || enrollment?.role === 'teacher';
+  // Internal staff may act on any class; an external teacher only on the
+  // classes they are the tutor of. See canRunSession.
+  const canEdit = canRunSession(user, cls.teacher_id);
   if (!canEdit) {
     return { error: NextResponse.json({ error: 'Only staff can reconcile attendance' }, { status: 403 }) };
   }

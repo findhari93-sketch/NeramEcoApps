@@ -3,6 +3,11 @@ import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { addMemberToTeam } from '@/lib/teams-sync';
 import { getSupabaseAdminClient } from '@neram/database';
+import {
+  buildStaffAttendees,
+  type GraphAttendee,
+  type StaffCalendarRow,
+} from '@/lib/class-attendees';
 
 /**
  * POST /api/timetable/teams-meeting
@@ -120,10 +125,9 @@ export async function POST(request: NextRequest) {
     }
     const postMeta = { tutorName, schedulerName };
 
-    // Every teacher (plus the chosen tutor) should see the class on their Teams
-    // calendar, so invite all teaching staff as attendees. The tutor is required;
-    // other teachers are optional. Admins are only invited when they are the tutor,
-    // to avoid sending every admin a calendar invite for every class.
+    // Who sees this class on their Teams calendar: the tutor (required) plus the
+    // internal core team (optional). External teachers are invited only to the
+    // classes they tutor. See buildStaffAttendees.
     const staffAttendees = await getStaffAttendees(supabase, tutorEmail);
 
     if (scope === 'channel_meeting' && classroom?.ms_team_id) {
@@ -539,10 +543,8 @@ async function getEnrolledAttendees(
 }
 
 /**
- * All teaching staff to invite so every teacher sees the class on their Teams
- * calendar. Teachers become 'optional' attendees; the tutor (matched by email) is
- * 'required'. Admins are only included when they are the tutor, so admins are not
- * sent a calendar invite for every class. Excludes test-login seeds.
+ * Load the staff rows and apply the attendee rule. The rule itself lives in
+ * @/lib/class-attendees (pure, unit tested); this only does the fetch.
  */
 async function getStaffAttendees(
   supabase: ReturnType<typeof getSupabaseAdminClient>,
@@ -550,30 +552,14 @@ async function getStaffAttendees(
 ): Promise<GraphAttendee[]> {
   const { data: staff } = await supabase
     .from('users')
-    .select('name, email, ms_oid, user_type')
+    .select('name, email, ms_oid, user_type, staff_role, is_disabled')
     .in('user_type', ['teacher', 'admin']);
 
-  const tutorKey = tutorEmail?.toLowerCase();
-  const out: GraphAttendee[] = [];
-  for (const s of (staff || []) as Array<Record<string, unknown>>) {
-    const email = s.email as string | null;
-    const msOid = s.ms_oid as string | null;
-    if (!email || !msOid || String(msOid).startsWith('test-oid-')) continue;
-    const isTutor = !!tutorKey && email.toLowerCase() === tutorKey;
-    if (s.user_type === 'admin' && !isTutor) continue;
-    out.push({
-      emailAddress: { address: email, name: (s.name as string) || email },
-      type: isTutor ? 'required' : 'optional',
-    });
-  }
-  return out;
+  return buildStaffAttendees((staff || []) as StaffCalendarRow[], tutorEmail);
 }
 
 /** Default channel to announce scheduled meetings in (falls back to General). */
 const MEETING_CHANNEL_NAME = 'Class Meeting Details';
-
-/** A calendar attendee in Microsoft Graph shape. */
-type GraphAttendee = { emailAddress: { address: string; name: string }; type: 'required' | 'optional' };
 
 /** Tutor + scheduler names surfaced in the Teams channel/chat announcement. */
 type PostMeta = { tutorName?: string; schedulerName?: string };

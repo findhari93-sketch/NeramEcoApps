@@ -241,13 +241,25 @@ export async function resolveOnlineMeetingDetailed(opts: {
   organizerOid?: string | null;
   /** Resolved by an earlier sync and cached on the class. Skips every lookup. */
   knownOnlineMeetingId?: string | null;
+  /**
+   * Try the delegated `/me` collection BEFORE app-only, even for a channel
+   * meeting. Set this only when the caller is known to BE the organizer: their
+   * own token needs no Teams application access policy, so it is the one route
+   * that works while that grant is outstanding. Default false keeps the
+   * app-only-first order every other caller relies on.
+   */
+  preferDelegated?: boolean;
 }): Promise<OnlineMeetingResolution> {
-  const { delegatedToken, teamsMeetingId, joinUrl, organizerOid, knownOnlineMeetingId } = opts;
+  const { delegatedToken, teamsMeetingId, joinUrl, organizerOid, knownOnlineMeetingId, preferDelegated } = opts;
 
   // Already resolved once: go straight to the artifact path, no lookup at all.
   // On a 40-class cron batch this is the difference between 3 and 2 Graph calls
   // per class, which is what keeps us under the cloud-communications throttles.
-  if (knownOnlineMeetingId && organizerOid) {
+  //
+  // Skipped when the caller is the organizer, because that shortcut hardcodes
+  // the app-only base and would walk straight back into the access-policy 403
+  // this option exists to route around.
+  if (knownOnlineMeetingId && organizerOid && !preferDelegated) {
     try {
       return {
         meeting: {
@@ -296,7 +308,8 @@ export async function resolveOnlineMeetingDetailed(opts: {
     return { ...result, base, token: appToken, appOnly: true };
   };
 
-  const steps = channelMeeting ? [tryAppOnly, tryDelegated] : [tryDelegated, tryAppOnly];
+  const steps =
+    channelMeeting && !preferDelegated ? [tryAppOnly, tryDelegated] : [tryDelegated, tryAppOnly];
 
   let bestFailure: MeetingLookupFailure | undefined;
   let bestDetail: string | undefined;

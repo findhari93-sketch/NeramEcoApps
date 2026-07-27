@@ -35,6 +35,8 @@ interface AgendaViewProps {
   onClassClick?: (cls: ClassCardData) => void;
   onDecline?: (cls: ClassCardData) => void;
   onCatchUp?: (cls: ClassCardData) => void;
+  /** Section label above the ledger. The ledger is not always "this week". */
+  heading?: string;
 }
 
 type RowKind = 'holiday' | 'done' | 'missed' | 'now' | 'upcoming' | 'cancelled';
@@ -59,6 +61,7 @@ export default function AgendaView({
   onClassClick,
   onDecline,
   onCatchUp,
+  heading = 'This week',
 }: AgendaViewProps) {
   const theme = useTheme();
 
@@ -119,7 +122,16 @@ export default function AgendaView({
   const heroIsLive = heroClass ? isLiveClass(heroClass) : false;
 
   return (
-    <Box>
+    <Box
+      sx={{
+        // Scrolls inside the calendar shell rather than growing the page.
+        flex: 1,
+        minHeight: 0,
+        overflowY: 'auto',
+        p: { xs: 1.5, md: 2 },
+        pb: { xs: 9, md: 2 },
+      }}
+    >
       {heroClass && (
         <UpNextHero
           cls={heroClass}
@@ -146,7 +158,7 @@ export default function AgendaView({
           color: 'text.disabled',
         }}
       >
-        This week
+        {heading}
       </Typography>
 
       <Box

@@ -14,6 +14,7 @@ import type {
   GalleryReactionType,
 } from '../../types';
 import { getTopicDrillFiles } from './curriculum';
+import { computeAssignmentClock, istTodayStr } from '../../utils/assignment-clock';
 
 const ASSIGNMENTS = 'nexus_class_assignments';
 const ATTACHMENTS = 'nexus_assignment_attachments';
@@ -486,40 +487,18 @@ export async function getAssignmentDrawingRoster(
 }
 
 // ------------------------------------------------------------------
-// Personal-clock helpers (day math). Canonical client-safe copy lives in
-// apps/nexus/src/lib/assignment-clock.ts; duplicated here (like
-// ASSIGNMENT_ATTACHMENTS_FOLDER_ID) so server rollups avoid importing app code.
+// Personal-clock helpers. There used to be a second copy of the rule here,
+// "mirroring assignment-clock.ts", which is exactly the arrangement where two
+// definitions of the same deadline quietly drift apart. The canonical one now
+// lives in ../../utils/assignment-clock and both the server rollups below and
+// the student's own cards read it.
 // ------------------------------------------------------------------
 const DAY_MS = 86_400_000;
-function istTodayYmd(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-}
 function dayEpoch(s: string): number {
   return Date.parse(`${s.slice(0, 10)}T00:00:00Z`);
 }
-function addDaysYmd(ymd: string, days: number): string {
-  return new Date(dayEpoch(ymd) + days * DAY_MS).toISOString().slice(0, 10);
-}
 function diffDaysYmd(from: string, to: string): number {
   return Math.round((dayEpoch(to) - dayEpoch(from)) / DAY_MS);
-}
-/** Personal start/due for one (assignment, student), mirroring assignment-clock.ts. */
-function personalDeadline(
-  classDate: string,
-  enrolledAt: string | null,
-  dueAt: string | null,
-  windowDays: number,
-): { personalStart: string; personalDue: string | null; isLate: boolean } {
-  const classDay = classDate.slice(0, 10);
-  const enrolledDay = enrolledAt ? enrolledAt.slice(0, 10) : null;
-  const isLate = !!enrolledDay && enrolledDay > classDay;
-  const personalStart = isLate ? (enrolledDay as string) : classDay;
-  const personalDue = isLate
-    ? addDaysYmd(personalStart, Math.max(0, windowDays || 0))
-    : dueAt
-      ? dueAt.slice(0, 10)
-      : null;
-  return { personalStart, personalDue, isLate };
 }
 
 /**
@@ -742,7 +721,7 @@ export async function getAssignmentEngagement(
   client?: TypedSupabaseClient,
 ): Promise<AssignmentEngagement> {
   const supabase = client || getSupabaseAdminClient();
-  const today = istTodayYmd();
+  const today = istTodayStr();
 
   const { data: assignments, error: aErr } = await supabase
     .from(ASSIGNMENTS)
@@ -826,10 +805,18 @@ export async function getAssignmentEngagement(
     let isLate = false;
     const dueByAssn = new Map<string, string | null>();
     for (const a of assns) {
-      const pd = personalDeadline(a.class_date, st.enrolled_at, a.due_at, a.catchup_window_days);
-      if (pd.isLate) isLate = true;
-      dueByAssn.set(a.id, pd.personalDue);
-      if (pd.personalStart <= today) applicable += 1;
+      const clock = computeAssignmentClock(
+        {
+          class_date: a.class_date,
+          enrolled_at: st.enrolled_at,
+          due_at: a.due_at,
+          catchup_window_days: a.catchup_window_days,
+        },
+        today,
+      );
+      if (clock.is_late_joiner) isLate = true;
+      dueByAssn.set(a.id, clock.personal_due);
+      if (clock.personal_start <= today) applicable += 1;
     }
 
     const subs = subsByStudent.get(st.id) || [];

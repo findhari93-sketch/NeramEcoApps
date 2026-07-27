@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser } from '@/lib/staff-capabilities';
 import {
   getAllPlatformUrlsWithCenters,
   upsertReviewPlatformUrl,
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!caller || caller.user_type !== 'admin') {
+    if (!canUser(caller, 'system.review_platforms')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -84,7 +85,7 @@ export async function DELETE(request: NextRequest) {
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!caller || caller.user_type !== 'admin') {
+    if (!canUser(caller, 'system.review_platforms')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

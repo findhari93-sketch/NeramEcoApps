@@ -10,6 +10,14 @@ import {
   removeTeamsAnnouncements,
   cancelTeamsEvent,
 } from '@/lib/teams-class-announcements';
+import { assertCanTutor, sessionScopeFilter } from '@/lib/staff-scope';
+import {
+  canTutor,
+  canUser,
+  isInternalStaff as isInternalStaffRole,
+  resolveStaffRole,
+} from '@/lib/staff-capabilities';
+import { ApiError } from '@/lib/api-errors';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
 
@@ -34,10 +42,11 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    // Look up user (need user_type so staff can browse archived past-year classrooms)
+    // Look up user (need the staff tier so staff can browse archived past-year
+    // classrooms, and so an external teacher's view can be session-scoped below)
     const { data: user } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
@@ -58,7 +67,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
     }
 
-    const isStaff = user.user_type === 'teacher' || user.user_type === 'admin';
+    const isStaff = resolveStaffRole(user) !== null;
 
     const { data: enrollment } = await supabase
       .from('nexus_enrollments')
@@ -112,6 +121,15 @@ export async function GET(request: NextRequest) {
       if (batchFilter) {
         query = query.eq('batch_id', batchFilter);
       }
+      // An external teacher sees only the classes they are the tutor of. The
+      // internal team sees the whole timetable. With a single live classroom this
+      // is the only scoping that actually distinguishes a visiting teacher from
+      // the core team, which is why the scope is the session and not the
+      // classroom. See @/lib/staff-scope.
+      const scope = sessionScopeFilter(user as never);
+      if (scope.teacherId) {
+        query = query.eq('teacher_id', scope.teacherId);
+      }
     }
 
     const { data, error } = await query;
@@ -145,7 +163,7 @@ async function verifyTeacherRole(msOid: string, classroomId: string) {
 
   const { data: user } = await supabase
     .from('users')
-    .select('id, user_type')
+    .select('id, user_type, staff_role, can_teach')
     .eq('ms_oid', msOid)
     .single();
 
@@ -162,9 +180,20 @@ async function verifyTeacherRole(msOid: string, classroomId: string) {
     throw new Error('This classroom is archived and read-only');
   }
 
-  // Admins manage any classroom (they schedule across cohorts). Teachers must hold a
-  // teacher enrollment in the specific classroom.
-  if (user.user_type !== 'admin') {
+  // Building the schedule is internal-team work (teach.timetable.schedule), so an
+  // external teacher cannot create, move or cancel classes. They still RUN the
+  // classes assigned to them: wrap-up, attendance, recap and grading are gated on
+  // teach.session.run plus assertSessionAccess, not on this helper.
+  if (!canUser(user, 'teach.timetable.schedule')) {
+    throw new ApiError(
+      'Only the Neram team can change the timetable. Ask them to schedule or move this class.',
+      403,
+    );
+  }
+
+  // Internal staff schedule across every cohort. Anyone else holding the
+  // capability must still hold a teacher enrollment in this specific classroom.
+  if (!isInternalStaffRole(resolveStaffRole(user))) {
     const { data: enrollment } = await supabase
       .from('nexus_enrollments')
       .select('role')
@@ -173,7 +202,7 @@ async function verifyTeacherRole(msOid: string, classroomId: string) {
       .single();
 
     if (!enrollment || enrollment.role !== 'teacher') {
-      throw new Error('Only teachers can manage the timetable');
+      throw new ApiError('You are not a teacher in this classroom.', 403);
     }
   }
 
@@ -222,19 +251,35 @@ export async function POST(request: NextRequest) {
       teacherId = await verifyTeacherRole(msUser.oid, cid);
     }
 
-    // The tutor who takes the class. Any teaching staff (teacher/admin) may be
-    // assigned; validate the picked id and fall back to the scheduler when absent
-    // or invalid. `teacherId` (the scheduler) remains the authorization check above.
+    // The tutor who takes the class.
+    //
+    // Eligibility is can_teach, not the authority tier: an office manager holds
+    // every other manager power but never takes a class. An ineligible pick is
+    // REJECTED rather than silently swapped for the scheduler, because silently
+    // reassigning the class to someone else is how a class ends up on the wrong
+    // person's calendar with nobody noticing.
+    //
+    // `teacherId` (the scheduler) remains the authorization check above.
     let tutorId: string | null = null;
     if (tutorIdInput) {
-      const { data: tutor } = await supabase
+      await assertCanTutor(tutorIdInput);
+      tutorId = tutorIdInput;
+    } else if (teacherId) {
+      // No explicit pick: default to the scheduler, but only if they can teach.
+      // Without this, a non-teaching manager scheduling a class would silently
+      // become its tutor.
+      const { data: scheduler } = await supabase
         .from('users')
-        .select('id, user_type')
-        .eq('id', tutorIdInput)
-        .single();
-      if (tutor && ['teacher', 'admin'].includes(tutor.user_type ?? '')) {
-        tutorId = tutor.id;
+        .select('id, user_type, staff_role, can_teach')
+        .eq('id', teacherId)
+        .maybeSingle();
+      if (!canTutor(scheduler)) {
+        return NextResponse.json(
+          { error: 'Choose who is taking this class. Your account is not set up to take classes.' },
+          { status: 400 },
+        );
       }
+      tutorId = teacherId;
     }
 
     // Classroom types drive the display-only target_scope ('all' for the common cohort).
@@ -334,7 +379,16 @@ export async function POST(request: NextRequest) {
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create class';
-    const status = message.includes('archived') ? 409 : message.includes('Only teachers') ? 403 : 500;
+    // ApiError already carries its intended status (e.g. an ineligible tutor is a
+    // 400, not a server fault), so honour it before the message heuristics.
+    const status =
+      err instanceof ApiError
+        ? err.status
+        : message.includes('archived')
+          ? 409
+          : message.includes('Only teachers')
+            ? 403
+            : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
@@ -366,6 +420,13 @@ export async function PATCH(request: NextRequest) {
     const safeUpdates: Record<string, unknown> = {};
     for (const key of allowedFields) {
       if (key in updates) safeUpdates[key] = updates[key];
+    }
+
+    // Reassigning the tutor goes through the same eligibility gate as creation,
+    // so a non-teaching staff member cannot be made tutor by editing a class
+    // that already exists. Clearing it (null) is allowed.
+    if (safeUpdates.teacher_id) {
+      await assertCanTutor(String(safeUpdates.teacher_id));
     }
 
     // What the class looked like before, so a move can be recognised and
@@ -438,7 +499,14 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ class: data, ...(teamsWarning && { teamsWarning }), moved });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update class';
-    const status = message.includes('archived') ? 409 : message.includes('Only teachers') ? 403 : 500;
+    const status =
+      err instanceof ApiError
+        ? err.status
+        : message.includes('archived')
+          ? 409
+          : message.includes('Only teachers')
+            ? 403
+            : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

@@ -7,12 +7,23 @@
 import { getSupabaseAdminClient } from '@neram/database';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { ApiError } from '@/lib/api-errors';
+import {
+  can,
+  isInternalStaff as isInternalStaffRole,
+  resolveStaffRole,
+  type Capability,
+  type StaffRole,
+} from '@/lib/staff-capabilities';
 
 export interface RequestUser {
   id: string;
   user_type: string | null;
   student_program: string | null;
   name: string | null;
+  /** Nexus authority tier. Null until the staff_role backfill reaches this row. */
+  staff_role: string | null;
+  /** Tutor eligibility. Orthogonal to staff_role. */
+  can_teach: boolean | null;
 }
 
 /** Verify the MS/test/impersonation token and load the matching Nexus user row. */
@@ -21,7 +32,7 @@ export async function getRequestUser(tokenString: string | null): Promise<Reques
   const supabase = getSupabaseAdminClient();
   const { data: user } = await supabase
     .from('users')
-    .select('id, user_type, student_program, name')
+    .select('id, user_type, student_program, name, staff_role, can_teach')
     .eq('ms_oid', msUser.oid)
     .single();
   if (!user) throw new Error('User not found');
@@ -29,7 +40,7 @@ export async function getRequestUser(tokenString: string | null): Promise<Reques
 }
 
 export function isStaff(user: RequestUser): boolean {
-  return user.user_type === 'teacher' || user.user_type === 'admin';
+  return staffRoleOf(user) !== null;
 }
 
 export function assertStaff(user: RequestUser): void {
@@ -37,16 +48,50 @@ export function assertStaff(user: RequestUser): void {
 }
 
 export function isAdmin(user: RequestUser): boolean {
-  return user.user_type === 'admin';
+  return staffRoleOf(user) === 'admin';
+}
+
+/** The caller's effective Nexus tier (staff_role, falling back to user_type). */
+export function staffRoleOf(user: RequestUser): StaffRole | null {
+  return resolveStaffRole(user);
+}
+
+/**
+ * admin or manager: the internal core team, who act across ALL classes.
+ * An external `teacher` is additionally session-scoped, see ./staff-scope.
+ */
+export function isInternalStaff(user: RequestUser): boolean {
+  return isInternalStaffRole(staffRoleOf(user));
+}
+
+/** Does the caller hold this capability? Fail-closed. */
+export function hasCapability(user: RequestUser, capability: Capability): boolean {
+  return can(staffRoleOf(user), capability, user.can_teach !== false);
+}
+
+/**
+ * Capability gate for a route handler. Throws a 403 ApiError naming the missing
+ * capability, so a denial is debuggable from the response instead of collapsing
+ * into a generic "Not authorized".
+ *
+ * Use this instead of an inline `user_type === 'teacher' || 'admin'` check. A
+ * bare assertStaff() still means "any staff tier" and is correct for reads that
+ * every staff member may perform.
+ */
+export function assertCapability(user: RequestUser, capability: Capability): void {
+  if (!hasCapability(user, capability)) {
+    throw new ApiError(`Not authorized: this action requires ${capability}.`, 403);
+  }
 }
 
 /**
  * Owner-or-admin gate for mutating a shared repository row (subject/topic).
- * Admin may act on anything; a teacher only on rows they created; a row with no
- * recorded owner (legacy data) is admin-only. Throws a 403 ApiError otherwise.
+ * Admin and manager may act on anything (they own the org-wide repository); a
+ * teacher only on rows they created; a row with no recorded owner (legacy data)
+ * is internal-staff-only. Throws a 403 ApiError otherwise.
  */
 export function assertCanMutate(user: RequestUser, createdBy: string | null | undefined): void {
-  if (isAdmin(user)) return;
+  if (isInternalStaff(user)) return;
   if (createdBy && createdBy === user.id) return;
   throw new ApiError('You can only edit or delete items you created.', 403);
 }

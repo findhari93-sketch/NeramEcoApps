@@ -3,7 +3,8 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { verifyTeacher } from '@/lib/verify-teacher';
 import { errorResponse } from '@/lib/api-errors';
 import { getAppOnlyToken, decodeAppTokenRoles, ATTENDANCE_APP_ROLES } from '@/lib/graph-app-token';
-import { resolveOrganizerOid } from '@/lib/teams-online-meeting';
+import { resolveOrganizerOid, isChannelMeeting, escapeIlike } from '@/lib/teams-online-meeting';
+import { buildAccessPolicyRemedy } from '@/lib/teams-access-policy';
 import { CLASS_SYNC_COLUMNS } from '@/lib/attendance-sync';
 
 /**
@@ -132,11 +133,27 @@ export async function GET(request: NextRequest) {
         teacherId: cls.teacher_id,
       }));
 
+    // Name the organizer wherever we can. The access-policy remedy has to be
+    // granted against a sign-in name, and a raw oid leaves whoever runs the
+    // PowerShell to go and look it up themselves.
+    const organizer = organizerOid
+      ? (
+          await supabase
+            .from('users')
+            .select('name, email, ms_teams_email')
+            // ilike, not eq: an oid lifted out of a join URL carries whatever
+            // casing Teams wrote, and PostgREST eq is case sensitive.
+            .ilike('ms_oid', escapeIlike(organizerOid))
+            .maybeSingle()
+        ).data
+      : null;
+    const organizerUpn: string | null = organizer?.ms_teams_email || organizer?.email || null;
+
     steps.push({
       step: 'organizer',
       ok: !!organizerOid,
       detail: organizerOid
-        ? `Resolved organizer ${organizerOid}${cls.organizer_ms_oid ? ' (cached on the class)' : ' (from the join URL)'}`
+        ? `Resolved organizer ${organizer?.name ? `${organizer.name} (${organizerUpn ?? organizerOid})` : organizerOid}${cls.organizer_ms_oid ? ', cached on the class' : ', from the join URL'}`
         : 'Could not resolve an organizer from the join URL, organizer_email, or teacher_id',
       remedy: organizerOid
         ? undefined
@@ -179,15 +196,7 @@ export async function GET(request: NextRequest) {
       detail: policyRefused
         ? `Graph refused: ${lookupRes.status} ${lookupBody}`
         : `Graph allowed an app-only read of this organizer's meetings (${lookupRes.status})`,
-      remedy: policyRefused
-        ? [
-            'Run as a Teams administrator:',
-            '  Connect-MicrosoftTeams',
-            `  New-CsApplicationAccessPolicy -Identity Nexus-Attendance-Read -AppIds "${process.env.AZ_CLIENT_ID}" -Description "Nexus reads Teams meeting attendance"`,
-            '  Grant-CsApplicationAccessPolicy -PolicyName Nexus-Attendance-Read -Global',
-            'Propagation can take 30 minutes or more.',
-          ].join('\n')
-        : undefined,
+      remedy: policyRefused ? buildAccessPolicyRemedy(organizerUpn) : undefined,
     });
     if (policyRefused) return respond(steps, cls);
 
@@ -265,9 +274,23 @@ function respond(steps: Step[], cls: any) {
     blocking_step: blocking?.step ?? null,
     class: {
       id: cls.id,
+      // Carried so this endpoint is self-sufficient: it is the only staff-facing
+      // route that finds a meeting-bearing class without needing a classroom
+      // enrollment, which makes it the natural starting point for anything that
+      // has to locate one (tooling and tests included).
+      classroom_id: cls.classroom_id,
       title: cls.title,
       scheduled_date: cls.scheduled_date,
-      teams_meeting_scope_hint: cls.teams_meeting_id?.startsWith('AAMk') ? 'channel_meeting' : 'online_meeting',
+      // Keyed on the join URL's thread type, with the id prefix only as a
+      // fallback. The previous `startsWith('AAMk')` test misclassified every
+      // production row whose Outlook event id begins `AQMk`, which is most of
+      // them, and reported a channel meeting as a standalone one.
+      teams_meeting_scope_hint: isChannelMeeting(
+        cls.teams_meeting_id ?? null,
+        cls.teams_meeting_join_url || cls.teams_meeting_url || null,
+      )
+        ? 'channel_meeting'
+        : 'online_meeting',
       last_sync_status: cls.attendance_sync_status ?? null,
       last_sync_detail: cls.attendance_sync_detail ?? null,
     },

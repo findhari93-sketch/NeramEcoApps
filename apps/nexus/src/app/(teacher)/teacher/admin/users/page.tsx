@@ -18,6 +18,8 @@ import {
   InputAdornment,
   Snackbar,
   Alert,
+  Switch,
+  FormControlLabel,
 } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -25,6 +27,10 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useRouter } from 'next/navigation';
+import { STAFF_ROLE_DESCRIPTIONS, STAFF_ROLE_LABELS } from '@/lib/staff-capabilities';
+
+const STAFF_ROLE_DESCRIPTIONS_NONE =
+  'Cannot open the staff side of Nexus. Use this for students, and to revoke staff access.';
 
 interface UserRow {
   id: string;
@@ -33,18 +39,37 @@ interface UserRow {
   phone: string | null;
   avatar_url: string | null;
   user_type: string;
+  /** Nexus authority tier. Null for students and unclassified staff. */
+  staff_role: string | null;
+  /** Whether they may be assigned as the tutor of a class. */
+  can_teach: boolean | null;
   status: string;
   created_at: string;
   ms_oid: string | null;
   firebase_uid: string | null;
 }
 
-const ROLE_COLORS: Record<string, 'primary' | 'success' | 'warning' | 'default'> = {
+const ROLE_COLORS: Record<string, 'primary' | 'success' | 'warning' | 'default' | 'info'> = {
   admin: 'primary',
+  manager: 'info',
   teacher: 'success',
   student: 'default',
   parent: 'warning',
 };
+
+/**
+ * The Nexus tier options. Kept next to the labels in @/lib/staff-capabilities so
+ * the wording an admin reads here matches the wording in the capability registry.
+ *
+ * 'none' maps to null: a student, or a staff member who should have no Nexus
+ * authority at all.
+ */
+const STAFF_ROLE_OPTIONS: { value: string; label: string; hint: string }[] = [
+  { value: 'none', label: 'No Nexus access', hint: STAFF_ROLE_DESCRIPTIONS_NONE },
+  { value: 'teacher', label: STAFF_ROLE_LABELS.teacher, hint: STAFF_ROLE_DESCRIPTIONS.teacher },
+  { value: 'manager', label: STAFF_ROLE_LABELS.manager, hint: STAFF_ROLE_DESCRIPTIONS.manager },
+  { value: 'admin', label: STAFF_ROLE_LABELS.admin, hint: STAFF_ROLE_DESCRIPTIONS.admin },
+];
 
 type RoleTab = 'all' | 'student' | 'teacher' | 'admin';
 
@@ -75,10 +100,29 @@ export default function AdminUsersPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // Edit state
+  // Edit state. Three independent fields:
+  //   editingRole      users.user_type  (Admin app access)
+  //   editingStaffRole users.staff_role (Nexus authority; 'none' means null)
+  //   editingCanTeach  users.can_teach  (may take a class)
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingRole, setEditingRole] = useState('');
+  const [editingStaffRole, setEditingStaffRole] = useState('none');
+  const [editingCanTeach, setEditingCanTeach] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const beginEdit = (user: UserRow) => {
+    setEditingUserId(user.id);
+    setEditingRole(user.user_type);
+    setEditingStaffRole(user.staff_role ?? 'none');
+    setEditingCanTeach(user.can_teach !== false);
+  };
+
+  const editingUser = users.find((u) => u.id === editingUserId) || null;
+  const isDirty =
+    !!editingUser &&
+    (editingRole !== editingUser.user_type ||
+      editingStaffRole !== (editingUser.staff_role ?? 'none') ||
+      editingCanTeach !== (editingUser.can_teach !== false));
 
   // Feedback
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -132,13 +176,19 @@ export default function AdminUsersPage() {
     setSaving(true);
     try {
       const token = await getToken();
+      const staffRole = editingStaffRole === 'none' ? null : editingStaffRole;
       const res = await fetch('/api/admin/users', {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId, user_type: editingRole }),
+        body: JSON.stringify({
+          userId,
+          user_type: editingRole,
+          staff_role: staffRole,
+          can_teach: editingCanTeach,
+        }),
       });
 
       if (!res.ok) {
@@ -147,7 +197,11 @@ export default function AdminUsersPage() {
       }
 
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, user_type: editingRole } : u))
+        prev.map((u) =>
+          u.id === userId
+            ? { ...u, user_type: editingRole, staff_role: staffRole, can_teach: editingCanTeach }
+            : u,
+        ),
       );
       setEditingUserId(null);
       setSnackbar({ open: true, message: 'Role updated successfully', severity: 'success' });
@@ -336,46 +390,87 @@ export default function AdminUsersPage() {
                     )}
                   </Box>
 
-                  {/* Role */}
+                  {/* Role: Admin app access + Nexus tier + tutor eligibility */}
                   {editingUserId === user.id ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: { xs: 'stretch', sm: 'center' },
+                        flexDirection: { xs: 'column', sm: 'row' },
+                        gap: 1,
+                        width: { xs: '100%', sm: 'auto' },
+                      }}
+                    >
                       <Select
                         size="small"
                         value={editingRole}
                         onChange={(e) => setEditingRole(e.target.value)}
-                        sx={{
-                          minWidth: 100,
-                          height: 32,
-                          fontSize: '0.8rem',
-                          borderRadius: 2,
-                        }}
+                        // 48px min height keeps this usable on a phone.
+                        sx={{ minWidth: 132, minHeight: 44, fontSize: '0.8rem', borderRadius: 2 }}
                       >
                         <MenuItem value="student">Student</MenuItem>
-                        <MenuItem value="teacher">Teacher</MenuItem>
-                        <MenuItem value="admin">Admin</MenuItem>
+                        <MenuItem value="teacher">Teacher (staff)</MenuItem>
+                        <MenuItem value="admin">Admin app access</MenuItem>
                       </Select>
-                      <IconButton
+
+                      <Select
                         size="small"
-                        color="primary"
-                        onClick={() => handleSaveRole(user.id)}
-                        disabled={saving || editingRole === user.user_type}
+                        value={editingStaffRole}
+                        onChange={(e) => setEditingStaffRole(e.target.value)}
+                        sx={{ minWidth: 168, minHeight: 44, fontSize: '0.8rem', borderRadius: 2 }}
                       >
-                        <CheckIcon sx={{ fontSize: '1rem' }} />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => setEditingUserId(null)}
-                        disabled={saving}
-                      >
-                        <CloseIcon sx={{ fontSize: '1rem' }} />
-                      </IconButton>
+                        {STAFF_ROLE_OPTIONS.map((opt) => (
+                          <MenuItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+
+                      {/* Only meaningful for staff: a student is never a tutor. */}
+                      {editingStaffRole !== 'none' && (
+                        <FormControlLabel
+                          sx={{ ml: 0, mr: 0 }}
+                          control={
+                            <Switch
+                              size="small"
+                              checked={editingCanTeach}
+                              onChange={(e) => setEditingCanTeach(e.target.checked)}
+                            />
+                          }
+                          label={
+                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                              Takes classes
+                            </Typography>
+                          }
+                        />
+                      )}
+
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={() => handleSaveRole(user.id)}
+                          disabled={saving || !isDirty}
+                        >
+                          <CheckIcon sx={{ fontSize: '1rem' }} />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => setEditingUserId(null)}
+                          disabled={saving}
+                        >
+                          <CloseIcon sx={{ fontSize: '1rem' }} />
+                        </IconButton>
+                      </Box>
                     </Box>
                   ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                      {/* The Nexus tier is what governs Nexus, so show it first and
+                          fall back to user_type when it has not been set. */}
                       <Chip
-                        label={user.user_type}
+                        label={user.staff_role || user.user_type}
                         size="small"
-                        color={ROLE_COLORS[user.user_type] || 'default'}
+                        color={ROLE_COLORS[user.staff_role || user.user_type] || 'default'}
                         variant="outlined"
                         sx={{
                           textTransform: 'capitalize',
@@ -384,12 +479,28 @@ export default function AdminUsersPage() {
                           fontSize: '0.75rem',
                         }}
                       />
+                      {/* Only worth surfacing when it differs from the tier, e.g.
+                          a manager who keeps full Admin app rights. */}
+                      {user.staff_role && user.staff_role !== user.user_type && (
+                        <Chip
+                          label={user.user_type === 'admin' ? 'Admin app' : user.user_type}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 22, fontSize: '0.65rem', textTransform: 'capitalize' }}
+                        />
+                      )}
+                      {user.staff_role && user.can_teach === false && (
+                        <Chip
+                          label="No classes"
+                          size="small"
+                          variant="outlined"
+                          color="warning"
+                          sx={{ height: 22, fontSize: '0.65rem' }}
+                        />
+                      )}
                       <IconButton
                         size="small"
-                        onClick={() => {
-                          setEditingUserId(user.id);
-                          setEditingRole(user.user_type);
-                        }}
+                        onClick={() => beginEdit(user)}
                         sx={{ color: 'text.secondary' }}
                       >
                         <EditOutlinedIcon sx={{ fontSize: '1rem' }} />

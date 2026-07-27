@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient, getCurrentBatch } from '@neram/database';
 import { pickClassroomEmail } from '@/lib/classroom-email';
 
@@ -14,7 +15,11 @@ import { pickClassroomEmail } from '@/lib/classroom-email';
  */
 export async function GET(request: NextRequest) {
   try {
-    await verifyMsToken(request.headers.get('Authorization'));
+    const caller = await getRequestUser(request.headers.get('Authorization'));
+    // Staff-only: this returns the full roster with emails, personal emails and
+    // phone numbers. It previously verified the token but never checked the role,
+    // so any student's token returned every classmate's contact details.
+    assertCapability(caller, 'coord.student.view');
 
     const classroomId = request.nextUrl.searchParams.get('classroom');
     const search = request.nextUrl.searchParams.get('search');

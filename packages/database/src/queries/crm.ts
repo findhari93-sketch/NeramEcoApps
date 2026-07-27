@@ -1145,8 +1145,12 @@ export async function markUserAsIrrelevant(
 
 /**
  * Append a user_profile_history row (best-effort audit, mirrors adminUpdateUserProfile).
+ *
+ * Exported so Nexus can audit its own role changes through the same trail the
+ * admin app uses. Before that, a role change made in Nexus left no history at
+ * all while the same change made in the admin app did.
  */
-async function recordUserHistory(
+export async function recordUserHistory(
   supabase: any,
   userId: string,
   fieldName: string,
@@ -2020,8 +2024,16 @@ export async function bulkSetStudentProgram(
   return { updated: (data || []).length };
 }
 
-/** A staff role a user can be reclassified to via "Mark as staff". */
-export type StaffRole = 'teacher' | 'admin';
+/**
+ * The `user_type` value a user can be reclassified to via "Mark as staff".
+ *
+ * Deliberately NOT called StaffRole: this writes users.user_type, which governs
+ * Admin app access, whereas `StaffRole` (in ../types) is the separate Nexus
+ * authority tier stored in users.staff_role. The two are independent, e.g. a
+ * person can be user_type='admin' (full CRM rights) and staff_role='manager'
+ * (restricted inside Nexus).
+ */
+export type StaffUserType = 'teacher' | 'admin';
 
 /**
  * Reclassify users to a staff role. Used by the admin "Mark as staff" action when
@@ -2038,7 +2050,7 @@ export type StaffRole = 'teacher' | 'admin';
  */
 export async function bulkSetUserRole(
   userIds: string[],
-  role: StaffRole,
+  role: StaffUserType,
   adminId: string,
   client?: TypedSupabaseClient
 ): Promise<{ updated: number }> {

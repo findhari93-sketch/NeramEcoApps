@@ -1,6 +1,8 @@
 'use client';
 
 import { Box, Container } from '@neram/ui';
+import { usePathname } from 'next/navigation';
+import { isFullBleedRoute } from '@/lib/full-bleed-routes';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
@@ -22,6 +24,7 @@ const parentNavItems = [
 
 export default function ParentLayout({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
+  const fullBleed = isFullBleedRoute(usePathname());
 
   return (
     <RoleGuard allowedRoles={['parent']}>
@@ -44,12 +47,12 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
             sx={{
               flexGrow: 1,
               bgcolor: (theme) => theme.palette.mode === 'light' ? '#FAFAFA' : 'background.default',
-              pt: { xs: 2, md: 3 },
-              pb: { xs: 10, md: 3 },
-              px: { xs: 2, sm: 3, md: 4 },
+              pt: fullBleed ? 0 : { xs: 2, md: 3 },
+              pb: fullBleed ? { xs: 8, md: 0 } : { xs: 10, md: 3 },
+              px: fullBleed ? 0 : { xs: 2, sm: 3, md: 4 },
             }}
           >
-            <Container maxWidth="md" disableGutters>
+            <Container maxWidth={fullBleed ? false : 'md'} disableGutters>
               {children}
             </Container>
           </Box>

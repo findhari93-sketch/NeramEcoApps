@@ -25,7 +25,15 @@ interface Ctx {
   classroomId: string;
 }
 
-/** Find any class in any classroom, which is the point: no enrollment needed. */
+/**
+ * Find any class in any classroom, which is the point: no enrollment needed.
+ *
+ * The query parameters are load-bearing and were wrong for a long time. The
+ * timetable route reads `classroom`, `start` and `end`, and 400s on anything
+ * else. This helper used to send `classroom_id` alone, so it always came back
+ * empty, every test guarded by it skipped, and the suite reported green while
+ * testing nothing. If this ever returns null again, look here first.
+ */
 async function findAnyClass(request: APIRequestContext, token: string): Promise<Ctx | null> {
   const classroomsRes = await request.get(`${NEXUS}/api/classrooms`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -33,16 +41,39 @@ async function findAnyClass(request: APIRequestContext, token: string): Promise<
   if (!classroomsRes.ok()) return null;
 
   const classrooms = (await classroomsRes.json())?.classrooms ?? [];
+  // A wide window on purpose: classes are sparse, and a narrow one around today
+  // would make this pass or fail depending on the day it runs.
+  const start = '2020-01-01';
+  const end = '2099-12-31';
+
   for (const classroom of classrooms) {
-    const res = await request.get(`${NEXUS}/api/timetable?classroom_id=${classroom.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await request.get(
+      `${NEXUS}/api/timetable?classroom=${classroom.id}&start=${start}&end=${end}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
     if (!res.ok()) continue;
-    const classes = (await res.json())?.classes ?? [];
-    if (classes.length > 0) {
+    const body = await res.json();
+    const classes = body?.classes ?? body?.scheduled_classes ?? [];
+    if (Array.isArray(classes) && classes.length > 0) {
       return { token, classId: classes[0].id, classroomId: classroom.id };
     }
   }
+
+  // Fallback, and in most environments the path that actually works. The
+  // timetable route requires an active enrollment even from staff, and the E2E
+  // teacher is deliberately not enrolled anywhere. Attendance diagnostics is the
+  // one staff route that finds a meeting-bearing class with no enrollment at
+  // all, so it is what keeps these tests running rather than silently skipping.
+  const diag = await request.get(`${NEXUS}/api/timetable/attendance-diagnostics`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (diag.ok()) {
+    const body = await diag.json();
+    if (body?.class?.id && body?.class?.classroom_id) {
+      return { token, classId: body.class.id, classroomId: body.class.classroom_id };
+    }
+  }
+
   return null;
 }
 
@@ -154,12 +185,20 @@ test.describe('Teams attendance', () => {
         'meeting_not_found',
         'app_permission_missing',
         'access_policy_missing',
+        'not_organizer',
         'report_not_ready',
+        'no_records',
         'graph_error',
       ]).toContain(body.code);
       expect(typeof body.error).toBe('string');
       expect(body.error.length).toBeGreaterThan(20);
     }
+
+    // Which token the server chose. Under Playwright the caller's oid is
+    // synthesised by the test-login bypass, so it can never equal a real
+    // organizer and this is always app_only. That is the safe default, and
+    // asserting it keeps the field from being dropped.
+    expect(['delegated_organizer', 'app_only']).toContain(body.mode);
   });
 
   test('diagnostics report every step with a remedy, and refuse students', async ({ request }) => {
@@ -189,6 +228,145 @@ test.describe('Teams attendance', () => {
       });
       expect(studentRes.status()).toBe(403);
     }
+  });
+
+  test('a student cannot import a Teams attendance report', async ({ request }) => {
+    const teacher = await getTestAuthToken(request, 'teacher');
+    const student = await getTestAuthToken(request, 'student');
+    test.skip(!teacher || !student, 'Nexus test-login unavailable');
+
+    const ctx = await findAnyClass(request, teacher!.testToken);
+    test.skip(!ctx, 'No class found');
+
+    const res = await request.post(`${NEXUS}/api/timetable/attendance-report`, {
+      headers: { Authorization: `Bearer ${student!.testToken}` },
+      data: {
+        class_id: ctx!.classId,
+        classroom_id: ctx!.classroomId,
+        action: 'import_teams_csv',
+        rows: [{ student_id: '00000000-0000-0000-0000-000000000001', attended: true }],
+      },
+    });
+
+    expect(res.status()).toBe(403);
+  });
+
+  test('a CSV import refuses a student who is not enrolled in this classroom', async ({ request }) => {
+    // The whole file is parsed and matched in the browser, so the server's
+    // enrollment re-check is the only thing between a hand-crafted payload and
+    // attendance rows written against someone else's classroom.
+    const auth = await getTestAuthToken(request, 'teacher');
+    test.skip(!auth, 'Nexus test-login unavailable');
+
+    const ctx = await findAnyClass(request, auth!.testToken);
+    test.skip(!ctx, 'No class found');
+
+    const res = await request.post(`${NEXUS}/api/timetable/attendance-report`, {
+      headers: { Authorization: `Bearer ${auth!.testToken}` },
+      data: {
+        class_id: ctx!.classId,
+        classroom_id: ctx!.classroomId,
+        action: 'import_teams_csv',
+        threshold_seconds: 300,
+        rows: [
+          { student_id: '00000000-0000-0000-0000-000000000001', attended: true, duration_minutes: 60 },
+        ],
+      },
+    });
+
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.skipped).toBe(1);
+    expect(body.error).toMatch(/enrolled/i);
+  });
+
+  test('a CSV import with no rows at all is rejected', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'teacher');
+    test.skip(!auth, 'Nexus test-login unavailable');
+
+    const ctx = await findAnyClass(request, auth!.testToken);
+    test.skip(!ctx, 'No class found');
+
+    const res = await request.post(`${NEXUS}/api/timetable/attendance-report`, {
+      headers: { Authorization: `Bearer ${auth!.testToken}` },
+      data: {
+        class_id: ctx!.classId,
+        classroom_id: ctx!.classroomId,
+        action: 'import_teams_csv',
+        rows: [],
+      },
+    });
+
+    expect(res.status()).toBe(400);
+  });
+
+  test('a real CSV import writes attendance and marks the class synced', async ({ request }) => {
+    // This is the first attendance WRITE this suite can assert end to end. Every
+    // Graph path needs a Teams application access policy that CI does not have,
+    // but the CSV import touches no Microsoft service at all.
+    //
+    // Opt-in, and deliberately so. Unlike every other test in this file it
+    // MUTATES data: it marks a real student present on a real class, and
+    // stamps that class as attendance-synced, which also retires it from the
+    // nightly cron. Local Nexus development in this repo points at the
+    // PRODUCTION Supabase project, so an unguarded write here would edit live
+    // attendance. Run it against a disposable environment with:
+    //   E2E_ALLOW_ATTENDANCE_WRITE=1 pnpm test:e2e --project=nexus-chrome
+    test.skip(
+      process.env.E2E_ALLOW_ATTENDANCE_WRITE !== '1',
+      'Writes real attendance. Set E2E_ALLOW_ATTENDANCE_WRITE=1 against a non-production database.',
+    );
+
+    const auth = await getTestAuthToken(request, 'teacher');
+    test.skip(!auth, 'Nexus test-login unavailable');
+
+    const ctx = await findAnyClass(request, auth!.testToken);
+    test.skip(!ctx, 'No class found');
+
+    const before = await request.get(
+      `${NEXUS}/api/timetable/attendance-report?class_id=${ctx!.classId}&classroom_id=${ctx!.classroomId}`,
+      { headers: { Authorization: `Bearer ${auth!.testToken}` } },
+    );
+    const roster = (await before.json())?.attendance ?? [];
+    test.skip(roster.length === 0, 'Classroom has no enrolled students');
+
+    const target = roster[0];
+    const res = await request.post(`${NEXUS}/api/timetable/attendance-report`, {
+      headers: { Authorization: `Bearer ${auth!.testToken}` },
+      data: {
+        class_id: ctx!.classId,
+        classroom_id: ctx!.classroomId,
+        action: 'import_teams_csv',
+        threshold_seconds: 300,
+        rows: [
+          { student_id: target.student_id, attended: true, duration_minutes: 88, joined_at: null, left_at: null },
+        ],
+        meta: { file_name: 'meetingAttendanceReport.csv', matched: 1, unmatched: 0 },
+      },
+    });
+
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.synced).toBe(1);
+
+    const after = await request.get(
+      `${NEXUS}/api/timetable/attendance-report?class_id=${ctx!.classId}&classroom_id=${ctx!.classroomId}`,
+      { headers: { Authorization: `Bearer ${auth!.testToken}` } },
+    );
+    const afterBody = await after.json();
+    expect(afterBody.sync.status).toBe('ok');
+    expect(afterBody.sync.synced_at).toBeTruthy();
+
+    const row = afterBody.attendance.find((a: any) => a.student_id === target.student_id);
+    expect(row.duration_minutes).toBe(88);
+    // 'manual' is legitimate here: if a teacher had already marked this student
+    // by hand, that decision outranks any import, by design.
+    expect(['teams_csv', 'manual']).toContain(row.source);
+
+    // The staff roster must carry every address a student might have joined
+    // under, or the importer silently misses the students whose classroom
+    // account differs from their primary email.
+    expect(Array.isArray(row.match_emails)).toBe(true);
   });
 
   test('mobile 375px: attendance sheet does not overflow and toggles clear 44px', async ({ browser }) => {

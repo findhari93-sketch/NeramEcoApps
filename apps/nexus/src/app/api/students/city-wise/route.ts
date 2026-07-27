@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { errorResponse } from '@/lib/api-errors';
 import { getActiveGeoStudents } from '@/lib/geo-students';
 import type { CityStudentCount } from '@neram/database';
 
@@ -11,7 +12,10 @@ import type { CityStudentCount } from '@neram/database';
  */
 export async function GET(request: NextRequest) {
   try {
-    await verifyMsToken(request.headers.get('Authorization'));
+    const caller = await getRequestUser(request.headers.get('Authorization'));
+    // Staff-only. The header comment already claimed "Teachers/admins only" but no
+    // check existed.
+    assertCapability(caller, 'coord.student.view');
 
     const students = await getActiveGeoStudents();
 

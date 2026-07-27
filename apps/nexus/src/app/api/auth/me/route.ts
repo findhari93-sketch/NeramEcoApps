@@ -4,6 +4,12 @@ import { getSupabaseAdminClient, reconcileMsIdentity, getNexusSetting, getCurren
 import { getUserProfile } from '@neram/auth';
 import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
 import {
+  capabilityMap,
+  resolveStaffRole,
+  type CapabilityMap,
+  type StaffRole,
+} from '@/lib/staff-capabilities';
+import {
   PHOTO_GATE_FEATURE,
   shouldBlockForPhoto,
   toPhotoStatus,
@@ -161,14 +167,30 @@ export async function GET(request: NextRequest) {
       return by.localeCompare(ay); // newest year first, null/blank years last
     });
 
-    // Determine the effective Nexus role from user_type or enrollments
-    const nexusRole = user.user_type === 'admin'
-      ? 'admin'
-      : user.user_type === 'teacher'
-        ? 'teacher'
-        : activeEnrollments.some((e: any) => e.role === 'teacher')
-          ? 'teacher'
-          : 'student';
+    // Determine the effective Nexus staff tier.
+    //
+    // staff_role is the authority column (migration 20260727100000);
+    // resolveStaffRole falls back to user_type when it is null so a row the
+    // backfill has not reached keeps exactly the authority it had before.
+    //
+    // The enrollment fallback below is preserved from the original derivation:
+    // someone whose user_type is neither admin nor teacher but who holds an
+    // active teacher enrollment still counts as a teacher. Without mapping that
+    // case onto a staff tier they would pass RoleGuard into /teacher/** and then
+    // fail every capability check, which is worse than being kept out.
+    const staffRole: StaffRole | null =
+      resolveStaffRole(user) ??
+      (activeEnrollments.some((e: any) => e.role === 'teacher') ? 'teacher' : null);
+
+    const canTeach = (user as any).can_teach !== false;
+
+    // nexusRole stays the coarse route-group role the client already understands
+    // (RoleGuard, the (teacher)/(student) layouts, isAdmin). A manager maps to
+    // 'teacher' on purpose: it keeps them inside the staff area while hiding the
+    // admin-only panel, which is exactly the intended tier. Fine-grained
+    // decisions must use `capabilities`, not nexusRole.
+    const nexusRole =
+      staffRole === 'admin' ? 'admin' : staffRole ? 'teacher' : 'student';
 
     // Access is governed solely by classroom membership. A student who is not
     // enrolled in any active classroom falls through to the client-side
@@ -237,6 +259,13 @@ export async function GET(request: NextRequest) {
         user_type: user.user_type,
       },
       nexusRole,
+      // The authority tier and its fully resolved capability map. The client uses
+      // `capabilities` to hide what this person cannot do; every server route
+      // re-checks independently, so this payload is a UI convenience and never
+      // the enforcement point.
+      staffRole,
+      canTeach,
+      capabilities: capabilityMap(staffRole, canTeach) satisfies CapabilityMap,
       classrooms: activeEnrollments.map((e: any) => ({
         ...e.classroom,
         enrollmentRole: e.role,

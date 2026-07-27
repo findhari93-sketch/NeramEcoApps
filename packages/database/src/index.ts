@@ -104,6 +104,28 @@ export { sendTeamsWebhook } from './services/teams-webhook';
 // Utils
 export { rewriteStorageUrl } from './utils/storage-url';
 export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscribe-token';
+export {
+  classifyCatchupCandidate,
+  catchupItemStep,
+  isCatchupItemComplete,
+  resolveCatchupBacklog,
+  summariseCatchupBacklog,
+} from './utils/catchup';
+export { computeAssignmentClock, isSubmissionOnTime, istTodayStr } from './utils/assignment-clock';
+export type {
+  AssignmentClock,
+  AssignmentClockInput,
+  AssignmentClockStatus,
+} from './utils/assignment-clock';
+export type {
+  CatchupCandidateClass,
+  CatchupCandidateRecap,
+  CatchupCandidateVerdict,
+  CatchupItemFacts,
+  CatchupStep,
+  CatchupItemStatus,
+  ResolvedCatchupItem,
+} from './utils/catchup';
 
 // Data
 export {

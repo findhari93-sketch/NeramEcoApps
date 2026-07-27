@@ -70,6 +70,12 @@ export default function TeacherClassRecapEditor() {
   const [sections, setSections] = useState<EditSection[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' | 'info' } | null>(null);
+  // The 85% paper a catch-up student sits after finishing this recap. Built
+  // from these checkpoints, so it only exists once they do.
+  const [classTest, setClassTest] = useState<{
+    test: { placement_id: string; test_id: string; passing_pct: number; question_count: number } | null;
+    buildable: boolean;
+  } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const teacherFetch = useCallback(
@@ -117,6 +123,40 @@ export default function TeacherClassRecapEditor() {
       setSections(toEdit(r.sections));
     } catch (err) {
       setSnack({ msg: err instanceof Error ? err.message : 'Failed to load', sev: 'error' });
+    }
+    // Separate and swallowed: the class test is extra information about this
+    // recap, not part of it, and failing to read it must not blank the editor.
+    try {
+      const t = await teacherFetch(`/api/class-recaps/${recapId}/class-test`);
+      setClassTest({ test: t.test ?? null, buildable: !!t.buildable });
+    } catch {
+      setClassTest({ test: null, buildable: false });
+    }
+  }, [teacherFetch, recapId]);
+
+  const buildClassTest = useCallback(async () => {
+    setBusy('class-test');
+    try {
+      const res = await teacherFetch(`/api/class-recaps/${recapId}/class-test`, { method: 'POST' });
+      setClassTest({
+        test: {
+          placement_id: res.placement_id,
+          test_id: res.test_id,
+          passing_pct: res.passing_pct,
+          question_count: res.question_count,
+        },
+        buildable: true,
+      });
+      setSnack({
+        msg:
+          res.warning ||
+          `Class test ready: ${res.question_count} questions, ${res.must_get_right} needed to pass.`,
+        sev: res.warning ? 'info' : 'success',
+      });
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Could not build the class test', sev: 'error' });
+    } finally {
+      setBusy(null);
     }
   }, [teacherFetch, recapId]);
 
@@ -326,6 +366,48 @@ export default function TeacherClassRecapEditor() {
           </Button>
         )}
       </Stack>
+
+      {/* The class test. Separate from the checkpoints above because it answers
+          a different question: the checkpoints prove someone watched, this
+          proves they learned it. Only a catch-up student sits it. */}
+      {classTest?.buildable && (
+        <Box
+          sx={{
+            mb: 2.5,
+            p: 2,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: alpha('#1A2027', 0.02),
+          }}
+        >
+          <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>
+            Class test for catch-up students
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.25 }}>
+            {classTest.test
+              ? `Ready: ${classTest.test.question_count} questions, ${classTest.test.passing_pct}% to pass. Built from the checkpoints below, so rebuild it after you change them.`
+              : 'Built from the checkpoint questions below, so it costs nothing to generate and every question has already been through your review. A student clears this class only after passing it.'}
+          </Typography>
+          <Button
+            variant={classTest.test ? 'outlined' : 'contained'}
+            disabled={!!busy || sections.length === 0}
+            onClick={buildClassTest}
+            sx={{ minHeight: 44, textTransform: 'none' }}
+          >
+            {busy === 'class-test'
+              ? 'Building...'
+              : classTest.test
+                ? 'Rebuild the class test'
+                : 'Build the class test'}
+          </Button>
+          {sections.length === 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+              Add checkpoints first. The test is assembled from their questions.
+            </Typography>
+          )}
+        </Box>
+      )}
 
       {sections.length === 0 && (
         <Box sx={{ p: 3, borderRadius: 2, border: '1px dashed', borderColor: 'divider', textAlign: 'center', color: 'text.secondary' }}>

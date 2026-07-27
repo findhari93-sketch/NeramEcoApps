@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { canUser, isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
 import { notifyWeekPublished } from '@/lib/timetable-notifications';
 
 /**
@@ -135,7 +136,11 @@ async function assertTeacher(
   msOid: string,
   classroomId: string,
 ): Promise<NextResponse | null> {
-  const { data: user } = await supabase.from('users').select('id').eq('ms_oid', msOid).single();
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, user_type, staff_role, can_teach')
+    .eq('ms_oid', msOid)
+    .single();
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
   const { data: classroom } = await supabase
@@ -151,16 +156,29 @@ async function assertTeacher(
     );
   }
 
-  const { data: enrollment } = await supabase
-    .from('nexus_enrollments')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('classroom_id', classroomId)
-    .eq('is_active', true)
-    .maybeSingle();
+  // Releasing a whole week to students is a scheduling action, so it belongs to
+  // the internal team rather than to any teacher who happens to be enrolled.
+  if (!canUser(user, 'teach.timetable.schedule')) {
+    return NextResponse.json(
+      { error: 'Only the Neram team can publish the week.' },
+      { status: 403 },
+    );
+  }
 
-  if (!enrollment || enrollment.role !== 'teacher') {
-    return NextResponse.json({ error: 'Only teachers can publish the week' }, { status: 403 });
+  // Internal staff publish across cohorts. Anyone else holding the capability
+  // must still be a teacher in this classroom.
+  if (!isInternalStaff(resolveStaffRole(user))) {
+    const { data: enrollment } = await supabase
+      .from('nexus_enrollments')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('classroom_id', classroomId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!enrollment || enrollment.role !== 'teacher') {
+      return NextResponse.json({ error: 'You are not a teacher in this classroom.' }, { status: 403 });
+    }
   }
 
   return null;

@@ -34,6 +34,10 @@
     {
       "path": "/api/cron/gamification-monthly",
       "schedule": "30 18 1 * *"
+    },
+    {
+      "path": "/api/cron/catchup-pace",
+      "schedule": "30 3 * * 1"
     }
   ],
   "headers": [
