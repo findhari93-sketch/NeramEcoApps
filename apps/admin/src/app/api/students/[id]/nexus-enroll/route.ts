@@ -2,7 +2,12 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getDefaultClassroom, removeEnrollments } from '@neram/database';
+import {
+  getSupabaseAdminClient,
+  getDefaultClassroom,
+  removeEnrollments,
+  ensureCatchupJourney,
+} from '@neram/database';
 import { addStudentToClassroomTeams } from '@neram/auth';
 
 /**
@@ -107,6 +112,17 @@ export async function POST(
       .single();
 
     if (error) throw error;
+
+    // Build the catch-up backlog for everything taught before today. This route
+    // upserts nexus_enrollments directly rather than going through enrollUser
+    // (it also has to flip is_active back on for a restored student), so it has
+    // to make the same call enrollUser makes. Non-blocking: a student who gets
+    // into the classroom without a to-do list is repaired by the weekly sweep.
+    try {
+      await ensureCatchupJourney(userId, classroomId, {}, supabase);
+    } catch (catchupErr: any) {
+      console.warn('[nexus-enroll] catch-up backlog generation failed:', catchupErr?.message);
+    }
 
     // Auto-approve Nexus onboarding (admin-assigned = pre-approved, skip request flow)
     try {

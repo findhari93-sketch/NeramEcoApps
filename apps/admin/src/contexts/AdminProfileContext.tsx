@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react';
-import { useMicrosoftAuth } from '@neram/auth';
+import { useMicrosoftAuth, getAccessToken, loginScopes } from '@neram/auth';
 import type { AuthUser } from '@neram/auth';
 
 interface AdminProfile {
@@ -35,13 +35,18 @@ export function AdminProfileProvider({ children }: { children: ReactNode }) {
     const resolve = async () => {
       setResolving(true);
       try {
-        const msOid = msUser.id; // account.localAccountId from MSAL
-        const email = msUser.email;
-        const params = new URLSearchParams();
-        if (msOid) params.set('msOid', msOid);
-        if (email) params.set('email', email);
+        // Send the Microsoft access token and let the server verify who this is.
+        // Previously the identity was passed as msOid/email query parameters,
+        // which the server then trusted; see the note in /api/auth/me.
+        const token = await getAccessToken(loginScopes.default);
+        if (!token) {
+          setError('Could not get a Microsoft token. Please sign in again.');
+          return;
+        }
 
-        const res = await fetch(`/api/auth/me?${params.toString()}`);
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (res.ok) {
           const data = await res.json();
           setSupabaseUserId(data.user.id);
