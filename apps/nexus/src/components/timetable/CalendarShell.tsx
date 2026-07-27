@@ -57,10 +57,20 @@ export default function CalendarShell({
   children,
 }: CalendarShellProps) {
   const theme = useTheme();
-  // The rail is only ever drawn at lg and up, but at exactly lg the content
-  // column is too narrow to spare 248px for it, so it starts closed there and
-  // open at xl. The user's stored preference still wins once they touch it.
-  const wideEnoughForRail = useMediaQuery(theme.breakpoints.up('xl'));
+  /**
+   * The rail is drawn at lg and up, matching exactly where the toolbar's toggle
+   * button is shown.
+   *
+   * This used to be `up('xl')` while the button appeared from `up('lg')`, so
+   * between 1200px and 1535px the button was visible and clicking it did
+   * nothing at all: the state flipped, the preference was saved, and no rail
+   * ever appeared. That band covers most laptops, including a 1080p screen at
+   * 125% Windows scaling (~1513 CSS px).
+   *
+   * Whether it starts open still depends on the viewport, but that belongs in
+   * useTimetableView with the rest of the stored preferences, not here.
+   */
+  const wideEnoughForRail = useMediaQuery(theme.breakpoints.up('lg'));
   const railVisible = state.railOpen && wideEnoughForRail;
   const isMobile = !useMediaQuery(theme.breakpoints.up('md'));
 

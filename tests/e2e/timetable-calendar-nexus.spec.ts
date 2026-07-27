@@ -87,6 +87,51 @@ test.describe('Teams-style calendar', () => {
     expect(overflow).toBeLessThanOrEqual(2);
   });
 
+  test('the first class of the week is on screen, even on a full-day band', async ({ page }) => {
+    const ok = await injectAuthForPage(page, 'student');
+    test.skip(!ok, 'Test auth not configured');
+
+    await openTimetable(page);
+    await selectView(page, 'Week');
+
+    // Open the band out to a full teaching day. This is the state that broke:
+    // 08:00 to 21:00 at 70px an hour is ~924px of band against ~600px of
+    // calendar, so the grid scrolls, and it used to open at 08:00 while every
+    // Neram class runs at 19:00. The classes rendered correctly and sat below
+    // the fold on every day at once, so the week read as completely empty.
+    await page.getByTestId('cal-view-switch').click();
+    const fullDay = page.getByRole('menuitemcheckbox', { name: /full day/i });
+    if ((await fullDay.count()) > 0) {
+      const checked = await fullDay.getAttribute('aria-checked');
+      if (checked !== 'true') await fullDay.click();
+    }
+    await page.keyboard.press('Escape');
+
+    // Page back to a week that actually has a class. The current week is often
+    // empty (Neram runs in terms), and a test that skips whenever it is empty
+    // would quietly stop guarding the regression for weeks at a time.
+    const blocks = page.getByTestId('grid-class-block');
+    let found = await blocks.count();
+    for (let back = 0; back < 10 && found === 0; back++) {
+      await page.getByTestId('cal-prev').click();
+      await page.waitForTimeout(700);
+      found = await blocks.count();
+    }
+    test.skip(found === 0, 'No classes in the last 10 weeks for this account');
+
+    const grid = await page.getByTestId('calendar-grid').boundingBox();
+    const first = await blocks.first().boundingBox();
+    expect(grid, 'the calendar grid must render').toBeTruthy();
+    expect(first, 'the first class block must render').toBeTruthy();
+
+    // Inside the grid's own scroll viewport, without the user scrolling.
+    expect(first!.y).toBeGreaterThanOrEqual(grid!.y - 1);
+    expect(
+      first!.y + first!.height,
+      'the first class must be visible without scrolling the grid',
+    ).toBeLessThanOrEqual(grid!.y + grid!.height + 1);
+  });
+
   test('the switcher offers Day, Week, Month and the list view', async ({ page }) => {
     const ok = await injectAuthForPage(page, 'student');
     test.skip(!ok, 'Test auth not configured');
@@ -112,7 +157,9 @@ test.describe('Teams-style calendar', () => {
     const cells = await page.getByTestId('month-cell').count();
     expect([35, 42]).toContain(cells);
 
-    await expect(page.getByTestId('cal-period-label')).toHaveText(/^[A-Z][a-z]+ \d{4}$/);
+    // MMM-YY, e.g. "Jul-26". Month view only: week and day still spell out the
+    // dates, which is what makes them readable.
+    await expect(page.getByTestId('cal-period-label')).toHaveText(/^[A-Z][a-z]{2}-\d{2}$/);
   });
 
   test('next and Today move by month while in month view', async ({ page }) => {
@@ -245,6 +292,33 @@ test.describe('Teams-style calendar', () => {
     // 87px per day column.
     await page.setViewportSize({ width: 1100, height: 800 });
     await expect(page.getByTestId('cal-rail')).toHaveCount(0);
+  });
+
+  test('the rail toggle is not a no-op between lg and xl', async ({ page }) => {
+    const ok = await injectAuthForPage(page, 'student');
+    test.skip(!ok, 'Test auth not configured');
+
+    // The regression this guards: the button was shown from lg (1200) while the
+    // rail only mounted from xl (1536), so anywhere in between, clicking it
+    // flipped the state, wrote localStorage, and drew nothing. The old 1600 and
+    // 1100 pair stepped straight over the hole. 1280 is a real laptop width,
+    // and so is a 1080p screen at 125% scaling (~1513 CSS px).
+    for (const width of [1280, 1440]) {
+      await page.setViewportSize({ width, height: 860 });
+      await openTimetable(page);
+
+      const toggle = page.getByTestId('cal-rail-toggle');
+      await expect(toggle).toBeVisible({ timeout: 30_000 });
+
+      // Closed by default at this width: the rail would crowd the day columns.
+      await expect(page.getByTestId('cal-rail')).toHaveCount(0);
+
+      await toggle.click();
+      await expect(page.getByTestId('cal-rail'), `rail must open at ${width}px`).toBeVisible();
+
+      await toggle.click();
+      await expect(page.getByTestId('cal-rail')).toHaveCount(0);
+    }
   });
 
   test('picking a date in the rail moves the view without changing the mode', async ({ page }) => {

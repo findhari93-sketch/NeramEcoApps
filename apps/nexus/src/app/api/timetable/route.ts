@@ -10,7 +10,7 @@ import {
   removeTeamsAnnouncements,
   cancelTeamsEvent,
 } from '@/lib/teams-class-announcements';
-import { assertCanTutor, sessionScopeFilter } from '@/lib/staff-scope';
+import { assertCanTutor } from '@/lib/staff-scope';
 import {
   canTutor,
   canUser,
@@ -121,15 +121,18 @@ export async function GET(request: NextRequest) {
       if (batchFilter) {
         query = query.eq('batch_id', batchFilter);
       }
-      // An external teacher sees only the classes they are the tutor of. The
-      // internal team sees the whole timetable. With a single live classroom this
-      // is the only scoping that actually distinguishes a visiting teacher from
-      // the core team, which is why the scope is the session and not the
-      // classroom. See @/lib/staff-scope.
-      const scope = sessionScopeFilter(user as never);
-      if (scope.teacherId) {
-        query = query.eq('teacher_id', scope.teacherId);
-      }
+      // No tutor scoping here, deliberately. This route once narrowed a
+      // non-internal teacher to `teacher_id = their own id`, which quietly hid
+      // two whole populations: classes tutored by a colleague, and the ~half of
+      // all rows that carry no teacher_id at all (everything imported by the
+      // Teams backfill and the older meeting sync). The result was a teacher
+      // opening the timetable to a completely empty month.
+      //
+      // The classroom timetable is shared context: every member of the
+      // classroom, students included, sees the same schedule. Tutor identity is
+      // shown on the class, not used to filter it. Calendar scoping, which is
+      // what staff tiers were actually introduced for, lives in the Teams
+      // meeting code, not here. See @/lib/staff-scope.
     }
 
     const { data, error } = await query;

@@ -341,6 +341,17 @@ export default function TeacherTimetable() {
   );
 
   /**
+   * The anchor's whole week, for the Day view's day strip.
+   *
+   * In Day view `visibleClasses` is one day, so deriving the strip's dots from
+   * it would mark only the day already selected and make the week look empty.
+   */
+  const weekClasses = useMemo(
+    () => classes.filter((c) => c.scheduled_date >= week.start && c.scheduled_date <= week.end),
+    [classes, week.start, week.end],
+  );
+
+  /**
    * The per-class fan-out, deliberately kept off the month.
    *
    * This is three to four requests per class. Over a week that is fine; over a
@@ -1135,10 +1146,12 @@ export default function TeacherTimetable() {
             onSlotClick={handleSlotClick}
             onClassClick={handleClassClick}
             rsvpData={rsvpData}
+            scrollToTime={configuredWindow.start}
           />
         ) : view === 'day' ? (
           <DayView
             classes={visibleClasses}
+            weekClasses={weekClasses}
             week={week}
             anchorDate={anchorDate}
             band={band}
@@ -1149,6 +1162,7 @@ export default function TeacherTimetable() {
             onSlotClick={handleSlotClick}
             onClassClick={handleClassClick}
             rsvpData={rsvpData}
+            scrollToTime={configuredWindow.start}
           />
         ) : (
           <Box
@@ -1194,7 +1208,10 @@ export default function TeacherTimetable() {
                 onCreateMeeting={handleCreateMeeting}
                 onCreateAssignment={setNewAssignmentClass}
                 onLinkExisting={setLinkDialogClass}
-                onChanged={fetchClasses}
+                // Forced: onChanged() is called with no arguments, so a bare
+                // `fetchClasses` reference leaves force undefined and the
+                // loadedRange cache silently swallows the refresh.
+                onChanged={() => fetchClasses(true)}
                 onNotify={(message, severity = 'success') =>
                   setSnackbar({ open: true, message, severity })
                 }
@@ -1317,7 +1334,10 @@ export default function TeacherTimetable() {
           classroomId={activeClassroom.id}
           classroomName={activeClassroom.name}
           getToken={getToken}
-          onApplied={fetchClasses}
+          // Forced, for the same reason as ClassEditPanel's onChanged above:
+          // this is exactly the path where a backfill wrote rows and the
+          // calendar then refused to re-read them.
+          onApplied={() => fetchClasses(true)}
           onNotify={(message, severity) =>
             setSnackbar({ open: true, message, severity: severity ?? 'success' })
           }

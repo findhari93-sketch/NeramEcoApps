@@ -96,12 +96,18 @@ export default function StudentTimetable() {
   // Agenda is the default everywhere: six columns do not fit a phone, and for a
   // one-hour-a-day timetable a list answers "what is on" faster than a grid.
   const viewState = useTimetableView(classes, 'agenda', planShapes);
-  const { week, band, view, anchorDate, setAnchorDate, range } = viewState;
+  const { week, band, view, anchorDate, setAnchorDate, range, configuredWindow } = viewState;
 
   /** What the current view draws. `classes` holds the whole loaded month. */
   const visibleClasses = useMemo(
     () => classes.filter((c) => c.scheduled_date >= range.start && c.scheduled_date <= range.end),
     [classes, range.start, range.end],
+  );
+
+  /** The anchor's whole week, so the Day view's strip marks every day with a class. */
+  const weekClasses = useMemo(
+    () => classes.filter((c) => c.scheduled_date >= week.start && c.scheduled_date <= week.end),
+    [classes, week.start, week.end],
   );
 
   const markedDates = useMemo(() => new Set(classes.map((c) => c.scheduled_date)), [classes]);
@@ -696,10 +702,12 @@ export default function StudentTimetable() {
             holidays={holidays}
             role="student"
             onClassClick={setSelectedClass}
+            scrollToTime={configuredWindow.start}
           />
         ) : view === 'day' ? (
           <DayView
             classes={visibleClasses}
+            weekClasses={weekClasses}
             week={week}
             anchorDate={anchorDate}
             band={band}
@@ -708,6 +716,7 @@ export default function StudentTimetable() {
             holidays={holidays}
             role="student"
             onClassClick={setSelectedClass}
+            scrollToTime={configuredWindow.start}
           />
         ) : (
           <AgendaView

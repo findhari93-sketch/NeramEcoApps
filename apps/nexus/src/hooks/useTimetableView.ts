@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMediaQuery, useTheme } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
   DEFAULT_WINDOW,
@@ -171,9 +172,20 @@ export function useTimetableView(
   const { user, timetableWindow } = useNexusAuthContext();
   const userId = user?.id ?? null;
 
+  const theme = useTheme();
+  /**
+   * Whether the rail should be open when the user has never said otherwise.
+   *
+   * The rail costs 248px. At xl and above that is spare change; at lg it would
+   * leave the seven day columns cramped, so it starts closed there and the
+   * toolbar button opens it on demand. A stored preference always wins over
+   * this, which is why it is only ever used as `readStored`'s fallback.
+   */
+  const railOpenByDefault = useMediaQuery(theme.breakpoints.up('xl'));
+
   const [view, setViewState] = useState<TimetableViewMode>(defaultView);
   const [density, setDensityState] = useState<TimetableDensity>('compact');
-  const [railOpen, setRailOpenState] = useState(true);
+  const [railOpen, setRailOpenState] = useState(false);
   // Lazy initialiser: computing the date during render would run on every
   // re-render, and on the server it would produce a different value than the
   // client.
@@ -186,11 +198,23 @@ export function useTimetableView(
     if (!userId) return;
     setViewState(readStored(VIEW_KEY, userId, VIEW_MODES, defaultView, VIEW_ALIASES));
     setDensityState(readStored(DENSITY_KEY, userId, ['compact', 'full'] as const, 'compact'));
-    setRailOpenState(
-      readStored(RAIL_KEY, userId, ['open', 'closed'] as const, 'open') === 'open',
-    );
     setHydrated(true);
   }, [userId, defaultView]);
+
+  // The rail is hydrated separately because its default depends on the viewport,
+  // so this has to re-run on a resize across xl. Folding it into the effect above
+  // would re-read view and density on every such resize for no reason.
+  useEffect(() => {
+    if (!userId) return;
+    setRailOpenState(
+      readStored(
+        RAIL_KEY,
+        userId,
+        ['open', 'closed'] as const,
+        railOpenByDefault ? 'open' : 'closed',
+      ) === 'open',
+    );
+  }, [userId, railOpenByDefault]);
 
   const setAnchorDate = useCallback((d: Date) => setAnchorDateState(startOfDay(d)), []);
 

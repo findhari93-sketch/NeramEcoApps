@@ -72,9 +72,9 @@ export default function DrawingReviewDetailPage() {
   const [draftSaved, setDraftSaved] = useState(false);
   const [error, setError] = useState('');
   const [action, setAction] = useState<'redo' | 'complete'>('complete');
-  // Default ON: any submission with rating + feedback goes into the unified
-  // gallery. Teacher flips off for anything they want kept private.
-  const [showInGallery, setShowInGallery] = useState(true);
+  // Default ON for standalone practice drawings (shared Drawing Reviews queue).
+  // Default OFF for assignment submissions, teacher opts in per student instead.
+  const [showInGallery, setShowInGallery] = useState(!fromAssignmentId);
   const [tagLabels, setTagLabels] = useState<string[]>([]);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -176,9 +176,12 @@ export default function DrawingReviewDetailPage() {
     const isReviewed = ['reviewed', 'redo', 'completed'].includes(submission.status);
     setIsEditMode(!isReviewed);
 
-    // Visibility toggle reflects the server state for reviewed submissions;
-    // for pending ones, default to true so a saved review lands in the gallery.
-    setShowInGallery(isReviewed ? !!(submission as any).is_gallery_visible : true);
+    // Visibility toggle reflects the server state for reviewed submissions.
+    // For pending ones: standalone practice drawings default to shown, but
+    // assignment submissions (from the roster link or their own assignment_id)
+    // default to hidden so classwork isn't published without an explicit opt-in.
+    const isFromAssignment = !!(fromAssignmentId || (submission as any).assignment_id);
+    setShowInGallery(isReviewed ? !!(submission as any).is_gallery_visible : !isFromAssignment);
 
     // Hydrate tag labels from the loaded submission.
     const existingTags = ((submission as any).tags as DrawingTag[] | undefined) || [];

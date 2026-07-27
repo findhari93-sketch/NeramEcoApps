@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { Box, Skeleton, Typography, alpha, useTheme } from '@neram/ui';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import VideocamIcon from '@mui/icons-material/Videocam';
@@ -49,6 +49,12 @@ interface GridViewProps {
   onSlotClick?: (date: string, startTime: string, event?: React.MouseEvent) => void;
   /** Teacher only: attending counts shown under the block title. */
   rsvpData?: Record<string, { attending: number; total: number }>;
+  /**
+   * Where to park the scroll when the visible range holds no class, as "HH:MM".
+   * Pass the configured window start: on a full-day band an empty week would
+   * otherwise open at 8 AM, hours above where classes actually happen.
+   */
+  scrollToTime?: string;
 }
 
 /**
@@ -73,6 +79,7 @@ export default function GridView({
   onClassClick,
   onSlotClick,
   rsvpData,
+  scrollToTime,
 }: GridViewProps) {
   const theme = useTheme();
 
@@ -92,6 +99,59 @@ export default function GridView({
   }, [classes]);
 
   const columns = `${LAYOUT.gridGutter}px repeat(${week.days.length}, minmax(${MIN_COLUMN_WIDTH}px, 1fr))`;
+
+  /**
+   * The earliest class on screen, and the plumbing to scroll it into view.
+   *
+   * The band is only as tall as the grid when it is short. On a full day
+   * (08:00 to 21:00 is 13 hours, ~924px) it is taller than the calendar, so the
+   * grid scrolls, and it used to open at 08:00. Every Neram class runs in the
+   * evening, which put all of them below the fold on every day at once: the
+   * calendar read as empty even though every block was rendered correctly.
+   */
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const firstBlockRef = useRef<HTMLDivElement>(null);
+
+  // Times are "HH:MM:SS", so a string compare is a time compare.
+  const firstClassId = useMemo(() => {
+    let earliest: ClassCardData | null = null;
+    for (const cls of classes) {
+      if (!earliest || cls.start_time < earliest.start_time) earliest = cls;
+    }
+    return earliest?.id ?? null;
+  }, [classes]);
+
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (!container || loading) return;
+
+    // The header is sticky, so landing the block at the container's top would
+    // slide it underneath. Measure rather than hardcode: the row sizes to its
+    // content and grows with the font.
+    const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0;
+    const GAP = 12;
+
+    const block = firstBlockRef.current;
+    if (block) {
+      const delta = block.getBoundingClientRect().top - container.getBoundingClientRect().top;
+      container.scrollTop = Math.max(0, container.scrollTop + delta - headerHeight - GAP);
+      return;
+    }
+
+    // Nothing to aim at. Fall back to the configured window, computed as a
+    // fraction of the band's natural height because the blocks are positioned
+    // in percentages of it (see pct below), not in raw pixels.
+    if (!scrollToTime || band.cellHeight <= 0) return;
+    const bandHeight = container.scrollHeight - headerHeight;
+    const offset =
+      (blockGeometry(scrollToTime, scrollToTime, band).top / band.cellHeight) * bandHeight;
+    container.scrollTop = Math.max(0, offset - GAP);
+    // Deliberately NOT keyed on `classes` or `band`: a background refetch makes
+    // a new array with the same ids, and re-scrolling then would yank the view
+    // out from under a teacher who had scrolled somewhere else.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, firstClassId, band.cellHeight, scrollToTime, week.days[0]?.getTime()]);
 
   /**
    * Band geometry as a percentage of the band's natural height.
@@ -116,6 +176,7 @@ export default function GridView({
 
   return (
     <Box
+      ref={scrollRef}
       data-testid="calendar-grid"
       sx={{
         // Fills the calendar shell and scrolls internally, so the page itself
@@ -147,6 +208,7 @@ export default function GridView({
         {/* Header: corner, then one cell per day. Sticky, since the band now
             scrolls inside the grid rather than growing the page. */}
         <Box
+          ref={headerRef}
           sx={{
             position: 'sticky',
             left: 0,
@@ -352,6 +414,8 @@ export default function GridView({
                 return (
                   <Box
                     key={cls.id}
+                    ref={cls.id === firstClassId ? firstBlockRef : undefined}
+                    data-testid="grid-class-block"
                     role="button"
                     tabIndex={0}
                     aria-label={`${cls.title}, ${formatTime(cls.start_time)} to ${formatTime(cls.end_time)}`}

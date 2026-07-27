@@ -398,7 +398,12 @@ export default function MonthView({
                 </Box>
               </Box>
 
-              {holiday ? (
+              {/* A holiday sits ABOVE the chips, it does not replace them. This
+                  was a ternary, so marking a day as a holiday hid every class
+                  scheduled on it: a makeup class on a public holiday, or a
+                  holiday added after the fact, simply disappeared from Month
+                  view while still showing in Week. */}
+              {holiday && (
                 <Box
                   component="span"
                   sx={{ ...tagSx(theme, 'neutral'), position: 'relative', zIndex: 1, maxWidth: '100%' }}
@@ -408,8 +413,8 @@ export default function MonthView({
                     {holiday.title}
                   </Box>
                 </Box>
-              ) : (
-                <>
+              )}
+              <>
                   {shown.map((cls) => {
                     const live = cls.status === 'live';
                     const declined = myRsvps?.[cls.id] === 'not_attending';
@@ -517,8 +522,7 @@ export default function MonthView({
                       +{overflow} more
                     </Box>
                   )}
-                </>
-              )}
+              </>
             </Box>
           );
         })}

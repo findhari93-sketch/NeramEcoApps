@@ -197,8 +197,13 @@ describe('getMonthGrid', () => {
     expect(grid.end > '2026-07-31').toBe(true);
   });
 
-  it('labels the month in full', () => {
-    expect(getMonthGrid(JUL_2026).label).toBe('July 2026');
+  it('labels the month as MMM-YY', () => {
+    expect(getMonthGrid(JUL_2026).label).toBe('Jul-26');
+  });
+
+  it('pads a single-digit year and never drifts into the next century', () => {
+    expect(getMonthGrid(new Date(2005, 0, 15)).label).toBe('Jan-05');
+    expect(getMonthGrid(new Date(2100, 11, 1)).label).toBe('Dec-00');
   });
 
   it('ignores the anchor day, only the month matters', () => {
@@ -280,8 +285,15 @@ describe('formatRangeLabel', () => {
 
   it('names the month for a month range', () => {
     const { label, shortLabel } = formatRangeLabel('month', getMonthGrid(JUL_2026).days);
-    expect(label).toBe('July 2026');
-    expect(shortLabel).toBe('Jul 2026');
+    expect(label).toBe('Jul-26');
+    // Already short enough for 375px, so both widths read the same.
+    expect(shortLabel).toBe('Jul-26');
+  });
+
+  it('names the target month, not the spill days it opens on', () => {
+    // The Jul 2026 grid opens on 29 Jun. Reading days[0] would say Jun-26.
+    expect(formatRangeLabel('month', getMonthGrid(JUL_2026).days).label).toBe('Jul-26');
+    expect(formatRangeLabel('month', getMonthGrid(new Date(2026, 10, 1)).days).label).toBe('Nov-26');
   });
 
   it('collapses a week inside one month', () => {

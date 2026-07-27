@@ -37,7 +37,10 @@ interface MiniCalendarRailProps {
  * Only drawn at lg and up. Below that the width simply is not there: at
  * lg (1200px) with the app sidebar expanded the content column is about 876px,
  * and giving 248 of it to the rail would leave roughly 87px per day column.
- * The shell handles that by defaulting the rail closed at lg and open at xl.
+ * That is why it starts CLOSED at lg and open only at xl (see
+ * useTimetableView's railOpenByDefault), while still being openable at lg for
+ * anyone who wants it. The grid keeps a minimum column width, so at lg with the
+ * rail open the band scrolls sideways rather than crushing the columns.
  */
 export default function MiniCalendarRail({
   state,

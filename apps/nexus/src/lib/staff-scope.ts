@@ -53,6 +53,12 @@ export async function assertSessionAccess(user: RequestUser, classId: string): P
  *   const scope = sessionScopeFilter(user);
  *   let q = supabase.from('nexus_scheduled_classes').select('*');
  *   if (scope.teacherId) q = q.eq('teacher_id', scope.teacherId);
+ *
+ * Currently unused. It was applied to GET /api/timetable and had to be taken
+ * back out: about half of all class rows carry no teacher_id (everything the
+ * Teams backfill and the older meeting sync imported), and `.eq` never matches
+ * NULL, so a teacher's timetable came back empty. Before reaching for this on
+ * any list of classes, check whether that column is actually populated.
  */
 export function sessionScopeFilter(user: RequestUser): { teacherId?: string } {
   return isInternalStaff(user) ? {} : { teacherId: user.id };

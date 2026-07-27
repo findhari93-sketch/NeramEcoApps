@@ -106,7 +106,12 @@ export default function PlannerWeekList({
           </Box>
         );
 
-        if (holiday) {
+        // A holiday only replaces the day's row when nothing is scheduled. It
+        // used to return unconditionally, which meant marking a day as a
+        // holiday hid every class already on it, in the teacher's default view,
+        // with no way to reach them. A class on a holiday is a makeup class,
+        // and it is exactly the one you need to see.
+        if (holiday && dayClasses.length === 0) {
           return (
             <Box key={dateStr} sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
               {stub}
@@ -168,6 +173,21 @@ export default function PlannerWeekList({
           <Box key={dateStr} sx={{ display: 'flex', gap: 1.5, alignItems: 'stretch' }}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>{stub}</Box>
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.875 }}>
+              {/* Classes scheduled on a holiday still show, with the holiday
+                  named above them so the day is not misread as normal. */}
+              {holiday && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box component="span" sx={tagSx(theme, 'neutral')}>
+                    Holiday
+                  </Box>
+                  <Typography
+                    sx={{ fontWeight: 700, fontSize: '0.75rem', color: 'text.secondary' }}
+                    noWrap
+                  >
+                    {holiday.title}
+                  </Typography>
+                </Box>
+              )}
               {dayClasses.map((cls) => {
                 const isDraft = (cls as any).publish_state === 'draft';
                 const isSelected = selectedId === cls.id;

@@ -10,6 +10,15 @@ import { type ClassCardData } from '../ClassCard';
 
 interface DayViewProps {
   classes: ClassCardData[];
+  /**
+   * The whole week's classes, for the day strip's dots.
+   *
+   * `classes` is normally already sliced to the visible range, which in Day
+   * view is the anchor day alone. Deriving the dots from it would mark only the
+   * selected day and make the rest of the week look empty. Defaults to
+   * `classes` for callers that pass an unsliced list.
+   */
+  weekClasses?: ClassCardData[];
   /** The week containing the anchor. Drives the day strip AND the band scale. */
   week: WeekDates;
   anchorDate: Date;
@@ -21,6 +30,7 @@ interface DayViewProps {
   onClassClick?: (cls: ClassCardData) => void;
   onSlotClick?: (date: string, startTime: string, event?: React.MouseEvent) => void;
   rsvpData?: Record<string, { attending: number; total: number }>;
+  scrollToTime?: string;
 }
 
 /**
@@ -33,6 +43,7 @@ interface DayViewProps {
  */
 export default function DayView({
   classes,
+  weekClasses,
   week,
   anchorDate,
   band,
@@ -43,6 +54,7 @@ export default function DayView({
   onClassClick,
   onSlotClick,
   rsvpData,
+  scrollToTime,
 }: DayViewProps) {
   const theme = useTheme();
   const anchorISO = formatDateISO(anchorDate);
@@ -58,8 +70,8 @@ export default function DayView({
   );
 
   const markedDates = useMemo(
-    () => new Set(classes.map((c) => c.scheduled_date)),
-    [classes],
+    () => new Set((weekClasses ?? classes).map((c) => c.scheduled_date)),
+    [weekClasses, classes],
   );
 
   const holidayDates = useMemo(() => new Set(Object.keys(holidays ?? {})), [holidays]);
@@ -114,6 +126,7 @@ export default function DayView({
         onClassClick={onClassClick}
         onSlotClick={onSlotClick}
         rsvpData={rsvpData}
+        scrollToTime={scrollToTime}
       />
     </Box>
   );

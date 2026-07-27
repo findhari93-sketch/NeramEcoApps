@@ -35,7 +35,7 @@ export default function ParentTimetable() {
   const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
 
   const viewState = useTimetableView(classes, 'agenda', planShapes);
-  const { week, band, view, anchorDate, setAnchorDate, range } = viewState;
+  const { week, band, view, anchorDate, setAnchorDate, range, configuredWindow } = viewState;
 
   // Whole month grids, so paging weeks inside a loaded month costs nothing.
   const fetchRange = useMemo(
@@ -47,6 +47,12 @@ export default function ParentTimetable() {
   const visibleClasses = useMemo(
     () => classes.filter((c) => c.scheduled_date >= range.start && c.scheduled_date <= range.end),
     [classes, range.start, range.end],
+  );
+
+  /** The anchor's whole week, so the Day view's strip marks every day with a class. */
+  const weekClasses = useMemo(
+    () => classes.filter((c) => c.scheduled_date >= week.start && c.scheduled_date <= week.end),
+    [classes, week.start, week.end],
   );
 
   const markedDates = useMemo(() => new Set(classes.map((c) => c.scheduled_date)), [classes]);
@@ -147,10 +153,12 @@ export default function ParentTimetable() {
             holidays={holidays}
             role="parent"
             onClassClick={setSelectedClass}
+            scrollToTime={configuredWindow.start}
           />
         ) : view === 'day' ? (
           <DayView
             classes={visibleClasses}
+            weekClasses={weekClasses}
             week={week}
             anchorDate={anchorDate}
             band={band}
@@ -159,6 +167,7 @@ export default function ParentTimetable() {
             holidays={holidays}
             role="parent"
             onClassClick={setSelectedClass}
+            scrollToTime={configuredWindow.start}
           />
         ) : (
           <AgendaView

@@ -191,8 +191,21 @@ export interface MonthGrid {
   start: string;
   /** Last cell, as YYYY-MM-DD. */
   end: string;
-  /** "July 2026" */
+  /** "Jul-26" */
   label: string;
+}
+
+/**
+ * A month as "Jul-26", the house format for month-and-year.
+ *
+ * Built by hand rather than with `year: '2-digit'`: locales disagree on how
+ * they join the two parts, and this string is compared exactly in tests and
+ * read at a glance in a toolbar, so it must not drift with the runtime's ICU
+ * data.
+ */
+export function formatMonthYear(d: Date): string {
+  const month = d.toLocaleDateString('en-IN', { month: 'short' });
+  return `${month}-${String(d.getFullYear() % 100).padStart(2, '0')}`;
 }
 
 /**
@@ -224,7 +237,7 @@ export function getMonthGrid(anchor: Date): MonthGrid {
     monthStart,
     start: formatDateISO(days[0]),
     end: formatDateISO(days[days.length - 1]),
-    label: monthStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+    label: formatMonthYear(monthStart),
   };
 }
 
@@ -261,7 +274,7 @@ export function monthGridRangeFor(
  *
  *   day    "Monday, 27 July 2026"    / "Mon 27 Jul"
  *   week   "20 to 26 July 2026"      / "20-26 Jul"
- *   month  "July 2026"               / "Jul 2026"
+ *   month  "Jul-26"                  / "Jul-26"
  *
  * A week straddling two months or two years spells both out, since "20 to 26"
  * would otherwise be ambiguous.
@@ -296,10 +309,11 @@ export function formatRangeLabel(
     // month, so July 2026 would announce itself as June. The middle cell is
     // always inside the target month, whether the grid is 35 or 42 cells.
     const inMonth = days[Math.floor(days.length / 2)];
-    return {
-      label: inMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
-      shortLabel: inMonth.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
-    };
+    // Same string at both widths: "Jul-26" already fits a 375px toolbar, and
+    // the toolbar renders `label` above 600px, so shortening it would only
+    // change the phone and leave the desktop untouched.
+    const monthYear = formatMonthYear(inMonth);
+    return { label: monthYear, shortLabel: monthYear };
   }
 
   // Week and agenda both show a week.
