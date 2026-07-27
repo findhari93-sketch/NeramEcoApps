@@ -329,6 +329,42 @@ export async function getCatchupBacklog(
     items.map((i: any) => toFacts(i, facts)),
   );
 
+  // Reconcile the stored caught_up_at against what the facts now say.
+  //
+  // Completion is DERIVED (watched + no assignment outstanding + test passed),
+  // but it is also STORED, because other surfaces read the column directly:
+  // /api/timetable/my-schedule counts a student's outstanding catch-up with
+  // `.is('caught_up_at', null)`, and the teacher attendance screen shows a
+  // "caught up" chip from it. Only a graded test attempt used to write it, so a
+  // student who passed the test first and submitted the assignment second ended
+  // up derived-done but stored-incomplete, and the timetable rail would nag them
+  // about a class they had finished.
+  //
+  // Doing it here rather than hooking every route that can change a fact (two
+  // assignment submission paths, a teacher un-submitting, a recording appearing
+  // later) keeps one definition of "done". Both directions, so a teacher
+  // restoring an excused item or resetting a test takes the stamp away again.
+  const toStamp: string[] = [];
+  const toClear: string[] = [];
+  items.forEach((i: any, idx: number) => {
+    const done = resolved[idx].status === 'done';
+    if (done && !i.caught_up_at) toStamp.push(i.id);
+    else if (!done && i.caught_up_at) toClear.push(i.id);
+  });
+  if (toStamp.length) {
+    const stampedAt = new Date().toISOString();
+    await supabase.from(ITEMS).update({ caught_up_at: stampedAt }).in('id', toStamp);
+    items.forEach((i: any) => {
+      if (toStamp.includes(i.id)) i.caught_up_at = stampedAt;
+    });
+  }
+  if (toClear.length) {
+    await supabase.from(ITEMS).update({ caught_up_at: null }).in('id', toClear);
+    items.forEach((i: any) => {
+      if (toClear.includes(i.id)) i.caught_up_at = null;
+    });
+  }
+
   return {
     journey,
     items: items.map((i: any, idx: number) => {
@@ -703,6 +739,34 @@ export async function recordCatchupTestAttempt(
 
   // Failed. Re-lock. The only way back in is through the recording.
   await supabase.from(ITEMS).update({ test_unlocked_at: null }).eq('id', item.id);
+
+  // Send them back to the start of the recording too.
+  //
+  // Clearing the unlock on its own is not enough. rearmCatchupTest decides
+  // "have they rewatched" from nexus_class_recap_progress, and a failed attempt
+  // leaves that row exactly as the FIRST watch left it: status 'completed' and
+  // the position at the end. So without this the student can fail, POST /rearm,
+  // and be handed the paper again having rewatched nothing. The rule would then
+  // live only in the UI, which offers no such button, rather than on the server.
+  //
+  // Only the position is reset. status stays 'completed' on purpose: the
+  // checkpoint quizzes are already passed and making someone re-answer them is
+  // a different punishment from the one the rule describes. The player
+  // heartbeats the position back up as they watch, so reaching
+  // REWATCH_COMPLETION_RATIO again is what re-opens the test.
+  const { data: recap } = await supabase
+    .from('nexus_class_recaps')
+    .select('id')
+    .eq('scheduled_class_id', input.scheduledClassId)
+    .eq('status', 'published')
+    .maybeSingle();
+  if (recap?.id) {
+    await supabase
+      .from('nexus_class_recap_progress')
+      .update({ last_video_position_seconds: 0 })
+      .eq('student_id', input.studentId)
+      .eq('recap_id', recap.id);
+  }
 }
 
 /**

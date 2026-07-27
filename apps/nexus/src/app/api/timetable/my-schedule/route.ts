@@ -151,7 +151,8 @@ export async function GET(request: NextRequest) {
       (supabase as any)
         .from('nexus_class_absences')
         .select(
-          'scheduled_class_id, kind, reason_code, caught_up_at, class:nexus_scheduled_classes!nexus_class_absences_scheduled_class_id_fkey(id, title, scheduled_date, start_time)',
+          'scheduled_class_id, kind, reason_code, caught_up_at, excused_at, ' +
+            'class:nexus_scheduled_classes!nexus_class_absences_scheduled_class_id_fkey(id, title, scheduled_date, start_time, recording_url, youtube_url)',
         )
         .eq('student_id', user.id)
         .is('caught_up_at', null)
@@ -216,7 +217,19 @@ export async function GET(request: NextRequest) {
 
     // Just the count, so the rail can point at the catch-up screen without
     // duplicating its list.
-    const catchupPending = absenceRows.filter((a) => a.kind === 'late_joiner').length;
+    //
+    // Counts only what the student can actually work through. A class with no
+    // recording can never be caught up and sits in a separate collapsed section
+    // on the catch-up screen, so including it here would promise work that does
+    // not exist: a classroom whose past classes were never recorded would tell a
+    // newcomer they owe a hundred and seventy classes, none of them openable.
+    // Excused items are gone from their list for the same reason.
+    const catchupPending = absenceRows.filter(
+      (a) =>
+        a.kind === 'late_joiner' &&
+        !a.excused_at &&
+        !!(a.class.recording_url || a.class.youtube_url),
+    ).length;
 
     return NextResponse.json({
       classes: uniqueClasses,
