@@ -243,13 +243,14 @@ export default function ParentAccessDialog({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              helperText="Needed only if they should receive the weekly digest."
+              helperText="Needed only if they should receive the weekly digest. Safe to reuse an address already on file for the family."
               fullWidth
             />
             <TextField
               label="Phone (optional)"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              helperText="A 10-digit mobile is saved with +91."
               fullWidth
             />
           </Stack>

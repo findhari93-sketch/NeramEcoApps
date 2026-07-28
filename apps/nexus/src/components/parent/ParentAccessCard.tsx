@@ -18,6 +18,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import FamilyRestroomOutlinedIcon from '@mui/icons-material/FamilyRestroomOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ParentAccessDialog from '@/components/parent/ParentAccessDialog';
+import ParentContactDialog from '@/components/parent/ParentContactDialog';
 
 /**
  * Parent access for one student, on the teacher's student detail page.
@@ -35,6 +36,13 @@ interface AccessRow {
   lastLoginAt: string | null;
   isActive: boolean;
   mustChangePassword: boolean;
+  /**
+   * Stored on nexus_parent_credentials, NOT on users.email/users.phone. Those
+   * two are unique across all four apps and a parent's address is usually
+   * already on the lead row from their own enquiry form.
+   */
+  contactEmail: string | null;
+  contactPhone: string | null;
 }
 
 interface Props {
@@ -63,6 +71,7 @@ export default function ParentAccessCard({ studentId, studentName, classroomId }
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!allowed || !classroomId) {
@@ -183,6 +192,11 @@ export default function ParentAccessCard({ studentId, studentName, classroomId }
             <Typography variant="body2" color="text.secondary">
               {relativeDay(row.lastLoginAt)}
             </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {row.contactEmail || row.contactPhone
+                ? [row.contactEmail, row.contactPhone].filter(Boolean).join(' . ')
+                : 'No contact details on file'}
+            </Typography>
           </Stack>
         )}
       </Paper>
@@ -196,6 +210,14 @@ export default function ParentAccessCard({ studentId, studentName, classroomId }
           }}
         >
           Regenerate password
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setMenuAnchor(null);
+            setContactOpen(true);
+          }}
+        >
+          Edit contact details
         </MenuItem>
         {row?.isActive ? (
           <MenuItem onClick={handleRevoke} sx={{ color: 'error.main' }}>
@@ -217,6 +239,18 @@ export default function ParentAccessCard({ studentId, studentName, classroomId }
         regenerateParentUserId={regenerating ? row?.parentUserId ?? null : null}
         onDone={load}
       />
+
+      {row?.parentUserId && (
+        <ParentContactDialog
+          open={contactOpen}
+          onClose={() => setContactOpen(false)}
+          parentUserId={row.parentUserId}
+          studentName={studentName}
+          currentEmail={row.contactEmail}
+          currentPhone={row.contactPhone}
+          onDone={load}
+        />
+      )}
     </>
   );
 }

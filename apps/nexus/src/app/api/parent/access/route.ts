@@ -8,6 +8,8 @@ import {
   generateLoginId,
   generateTempPassword,
   buildParentMsOid,
+  normalizeContactEmail,
+  normalizeContactPhone,
 } from '@/lib/parent-credentials';
 
 /**
@@ -67,7 +69,9 @@ export async function GET(request: NextRequest) {
     const { data: creds } = activeLinks.length
       ? await supabase
           .from('nexus_parent_credentials')
-          .select('parent_user_id, login_id, last_login_at, is_active, must_change_password')
+          .select(
+            'parent_user_id, login_id, last_login_at, is_active, must_change_password, contact_email, contact_phone'
+          )
           .in(
             'parent_user_id',
             activeLinks.map((l: any) => l.parent_user_id)
@@ -90,6 +94,8 @@ export async function GET(request: NextRequest) {
           lastLoginAt: cred?.last_login_at ?? null,
           isActive: cred?.is_active ?? false,
           mustChangePassword: cred?.must_change_password ?? false,
+          contactEmail: cred?.contact_email ?? null,
+          contactPhone: cred?.contact_phone ?? null,
         };
       }),
     });
@@ -116,11 +122,29 @@ export async function POST(request: NextRequest) {
       ? body.relationship
       : 'parent';
     const parentName = typeof body?.parentName === 'string' ? body.parentName.trim() : '';
-    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-    const phone = typeof body?.phone === 'string' ? body.phone.trim() : '';
+    const rawEmail = typeof body?.email === 'string' ? body.email.trim() : '';
+    const rawPhone = typeof body?.phone === 'string' ? body.phone.trim() : '';
 
     if (!studentId) {
       return NextResponse.json({ error: 'studentId is required' }, { status: 400 });
+    }
+
+    // Reject a malformed contact detail rather than storing null for it. Both
+    // fields are optional, so silently dropping a typo would look like success
+    // and then never deliver anything.
+    const contactEmail = normalizeContactEmail(rawEmail);
+    if (rawEmail && !contactEmail) {
+      throw new ApiError(
+        'That email address does not look right. Check it, or leave it blank.',
+        400
+      );
+    }
+    const contactPhone = normalizeContactPhone(rawPhone);
+    if (rawPhone && !contactPhone) {
+      throw new ApiError(
+        'That phone number does not look right. Check it, or leave it blank.',
+        400
+      );
     }
 
     const supabase = getSupabaseAdminClient();
@@ -176,10 +200,12 @@ export async function POST(request: NextRequest) {
       .from('users')
       .insert({
         name: displayName,
-        // Parents genuinely may have no email. users.email is unique, so a null
-        // is safer than a placeholder that could collide across two parents.
-        email: email || null,
-        phone: phone || null,
+        // Email and phone are deliberately NOT written here. Both columns are
+        // UNIQUE across all four apps, and a parent's address is usually
+        // already on a lead row from the enquiry form they filled in months
+        // ago, so writing it here fails with users_email_key on the most
+        // ordinary input there is. They are a delivery address for the digest,
+        // not an identity, so they live on nexus_parent_credentials below.
         ms_oid: msOid,
         user_type: 'parent',
         status: 'active',
@@ -191,6 +217,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (parentError || !parentUser) {
+      // The only unique column set above is a freshly generated uuid, so a
+      // constraint violation here means something unforeseen. Say so plainly
+      // instead of putting a raw Postgres constraint name on a teacher's screen.
+      if (parentError?.code === '23505') {
+        throw new ApiError(
+          'Could not create the parent account because it clashed with an existing record. Please try again.',
+          409
+        );
+      }
       throw new Error(parentError?.message || 'Could not create the parent account');
     }
 
@@ -210,6 +245,10 @@ export async function POST(request: NextRequest) {
         must_change_password: true,
         is_active: true,
         created_by: user.id,
+        // Not unique, unlike users.email/users.phone. Two guardians may share
+        // an inbox, and a parent's number may already be recorded elsewhere.
+        contact_email: contactEmail,
+        contact_phone: contactPhone,
       });
 
       if (!error) {
@@ -257,6 +296,10 @@ export async function POST(request: NextRequest) {
       loginId,
       // Shown once. Not stored, not retrievable, not logged.
       tempPassword,
+      // Echoed back normalised, so staff can see that a bare 10-digit number
+      // was stored as +91... rather than wondering whether it saved at all.
+      contactEmail,
+      contactPhone,
     });
   } catch (err) {
     return errorResponse(err, 'Could not create parent access');

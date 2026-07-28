@@ -107,3 +107,44 @@ export function buildParentMsOid(uuid: string): string {
 export function isParentMsOid(msOid: string | null | undefined): boolean {
   return !!msOid && msOid.startsWith('parent:');
 }
+
+/**
+ * Normalise a digest email, or return null if it is blank or malformed.
+ *
+ * Contact details deliberately do NOT live on users.email, which is unique
+ * across all four apps. A parent's address is usually already on a lead row
+ * from the enquiry form, so writing it there fails on the most ordinary input
+ * there is. These live on nexus_parent_credentials instead, where two
+ * guardians sharing one inbox is allowed.
+ *
+ * The check is a shape check, not a validity check. The only real test of an
+ * address is sending to it; the point here is to catch "madhu@gmail" before it
+ * bounces silently every week. Callers must treat null-from-non-blank as a
+ * user error rather than storing nothing, or a typo disappears without a word.
+ */
+export function normalizeContactEmail(raw: string | null | undefined): string | null {
+  const value = (raw || '').trim().toLowerCase();
+  if (!value) return null;
+  // Exactly one @, something either side, at least one dot in the domain.
+  if (!/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(value)) return null;
+  return value;
+}
+
+/**
+ * Normalise a contact number to E.164 where the input allows it.
+ *
+ * A bare 10-digit number beginning 6 to 9 is an Indian mobile and gains +91.
+ * Staff never type a country code, and a number without one is unusable to a
+ * WhatsApp provider later, so guessing here is worth it: in this dataset that
+ * pattern is unambiguous. Anything else is kept as typed after stripping
+ * spacing punctuation, and anything that is not a plausible number at all
+ * returns null.
+ */
+export function normalizeContactPhone(raw: string | null | undefined): string | null {
+  const compact = (raw || '').replace(/[\s()\-.]/g, '');
+  if (!compact) return null;
+  if (/^[6-9]\d{9}$/.test(compact)) return `+91${compact}`;
+  // E.164 allows at most 15 digits; below 8 is not a dialable number.
+  if (!/^\+?\d{8,15}$/.test(compact)) return null;
+  return compact;
+}

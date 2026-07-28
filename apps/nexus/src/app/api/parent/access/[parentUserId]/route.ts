@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
-import { errorResponse } from '@/lib/api-errors';
+import { errorResponse, ApiError } from '@/lib/api-errors';
 import { hashPassword } from '@/lib/parent-password';
-import { generateTempPassword } from '@/lib/parent-credentials';
+import {
+  generateTempPassword,
+  normalizeContactEmail,
+  normalizeContactPhone,
+} from '@/lib/parent-credentials';
 
 /**
- * PATCH  /api/parent/access/[parentUserId]   { action: 'regenerate' | 'revoke' | 'restore' }
- * DELETE /api/parent/access/[parentUserId]   same as action: 'revoke'
+ * PATCH /api/parent/access/[parentUserId]
+ *   { action: 'regenerate' | 'revoke' | 'restore' | 'update_contact' }
  *
- * Every action here bumps token_version, which is what makes them take effect
- * on the parent's very next request rather than whenever their 12-hour token
- * happens to expire. Without that bump, "Revoke" would be a promise the system
- * could not keep for up to half a day.
+ * Every action EXCEPT update_contact bumps token_version, which is what makes
+ * them take effect on the parent's very next request rather than whenever their
+ * 12-hour token happens to expire. Without that bump, "Revoke" would be a
+ * promise the system could not keep for up to half a day. Correcting a digest
+ * email is not a security event, so it deliberately does not sign anyone out.
  *
  * Node runtime required (crypto.scrypt).
  */
@@ -29,9 +34,9 @@ export async function PATCH(
     const body = await request.json().catch(() => ({}));
     const action = body?.action;
 
-    if (!['regenerate', 'revoke', 'restore'].includes(action)) {
+    if (!['regenerate', 'revoke', 'restore', 'update_contact'].includes(action)) {
       return NextResponse.json(
-        { error: 'action must be regenerate, revoke or restore' },
+        { error: 'action must be regenerate, revoke, restore or update_contact' },
         { status: 400 }
       );
     }
@@ -49,6 +54,43 @@ export async function PATCH(
 
     const now = new Date().toISOString();
     const nextVersion = (cred.token_version || 1) + 1;
+
+    if (action === 'update_contact') {
+      // Correcting a mistyped digest address. Notably this does NOT bump
+      // token_version: a parent should not be signed out because staff fixed a
+      // typo in their email. Both fields are clearable by sending an empty
+      // string, which is how staff remove an address that bounces.
+      const rawEmail = typeof body?.email === 'string' ? body.email.trim() : '';
+      const rawPhone = typeof body?.phone === 'string' ? body.phone.trim() : '';
+
+      const contactEmail = normalizeContactEmail(rawEmail);
+      if (rawEmail && !contactEmail) {
+        throw new ApiError(
+          'That email address does not look right. Check it, or leave it blank.',
+          400
+        );
+      }
+      const contactPhone = normalizeContactPhone(rawPhone);
+      if (rawPhone && !contactPhone) {
+        throw new ApiError(
+          'That phone number does not look right. Check it, or leave it blank.',
+          400
+        );
+      }
+
+      const { error } = await supabase
+        .from('nexus_parent_credentials')
+        .update({
+          contact_email: contactEmail,
+          contact_phone: contactPhone,
+          updated_at: now,
+        })
+        .eq('id', cred.id);
+
+      if (error) throw new Error(error.message);
+
+      return NextResponse.json({ ok: true, contactEmail, contactPhone });
+    }
 
     if (action === 'regenerate') {
       const tempPassword = generateTempPassword();
