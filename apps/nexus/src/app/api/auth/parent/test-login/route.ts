@@ -100,9 +100,13 @@ export async function POST(request: NextRequest) {
         .from('users')
         .insert({
           name: `${student.name || 'Test'} (parent)`,
-          // Parents have no email by default; a unique placeholder keeps the
-          // column's uniqueness constraint happy without implying a real inbox.
-          email: `${loginId}@e2e-parent.invalid`,
+          // Deliberately no email or phone, matching the production
+          // provisioning route exactly. This used to write a unique
+          // placeholder address, which meant the fixture exercised a
+          // different insert shape from the real one and could never have
+          // caught the users_email_key collision that broke provisioning in
+          // production. Contact details belong on
+          // nexus_parent_credentials.contact_email.
           ms_oid: msOid,
           user_type: 'parent',
           status: 'active',
