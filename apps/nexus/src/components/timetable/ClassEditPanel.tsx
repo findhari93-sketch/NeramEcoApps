@@ -13,11 +13,11 @@ import {
 } from '@neram/ui';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import LinkOffIcon from '@mui/icons-material/LinkOff';
 import type { ClassCardData } from './ClassCard';
 import { formatTime } from './date-utils';
 import { RADIUS, tagSx } from './timetable-theme';
 import WrapUpSection from './WrapUpSection';
+import ClassAssignmentsSection from './ClassAssignmentsSection';
 
 interface LinkedAssignment {
   id: string;
@@ -99,24 +99,6 @@ export default function ClassEditPanel({
     loadAssignments();
   }, [loadAssignments]);
 
-  const unlinkAssignment = async (assignmentId: string) => {
-    if (!classId) return;
-    setBusy(true);
-    try {
-      const token = await getToken();
-      const res = await fetch(`/api/timetable/${classId}/assignments`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ assignment_id: assignmentId }),
-      });
-      if (res.ok) {
-        onNotify('Assignment unlinked. It is still in the assignments space.');
-        await loadAssignments();
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const toggleAutoSync = async (next: boolean) => {
     if (!cls) return;
@@ -239,120 +221,20 @@ export default function ClassEditPanel({
         )}
       </Box>
 
-      {/* Assignment */}
+      {/* Assignment. The list itself is ClassAssignmentsSection, shared with
+          the class detail panel so Day, Week and Month get the same affordance
+          this rail used to keep to itself. */}
       <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
-        <SectionLabel>Assignment</SectionLabel>
-
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-            <CircularProgress size={20} />
-          </Box>
-        ) : assignments.length > 0 ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {assignments.map((a) => (
-              <Box
-                key={a.id}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.125,
-                  border: `1px solid ${theme.palette.divider}`,
-                  borderRadius: RADIUS.control,
-                  p: 1.375,
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 26,
-                    height: 26,
-                    borderRadius: 1,
-                    flexShrink: 0,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: alpha(theme.palette.primary.main, 0.1),
-                    color: 'primary.dark',
-                  }}
-                >
-                  <DescriptionOutlinedIcon sx={{ fontSize: 15 }} />
-                </Box>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 700, fontSize: '0.7813rem', lineHeight: 1.3 }} noWrap>
-                    {a.title}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {a.status === 'published' ? 'Published' : 'Draft'}
-                    {a.due_at
-                      ? `, due ${new Date(a.due_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-                      : ''}
-                  </Typography>
-                </Box>
-                <Button
-                  size="small"
-                  onClick={() => unlinkAssignment(a.id)}
-                  disabled={busy}
-                  aria-label={`Unlink ${a.title}`}
-                  sx={{ minWidth: 40, minHeight: 40, color: 'text.disabled' }}
-                >
-                  <LinkOffIcon fontSize="small" />
-                </Button>
-              </Box>
-            ))}
-          </Box>
-        ) : (
-          <Box
-            sx={{
-              border: `1px dashed ${theme.palette.divider}`,
-              borderRadius: RADIUS.control,
-              p: 1.5,
-              textAlign: 'center',
-            }}
-          >
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.125 }}>
-              No assignment linked yet
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 0.875, justifyContent: 'center', flexWrap: 'wrap' }}>
-              {/* Never disabled. Whether anything is linkable is the dialog's
-                  story to tell, and it tells it in words. */}
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => onLinkExisting(cls)}
-                sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
-              >
-                Link existing
-              </Button>
-              <Button
-                size="small"
-                variant="contained"
-                onClick={() => onCreateAssignment(cls)}
-                sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
-              >
-                Create new
-              </Button>
-            </Box>
-          </Box>
-        )}
-
-        {/* Attaching more work to a class that already has some. */}
-        {!loading && assignments.length > 0 && (
-          <Box sx={{ display: 'flex', gap: 0.875, mt: 1.25, flexWrap: 'wrap' }}>
-            <Button
-              size="small"
-              onClick={() => onLinkExisting(cls)}
-              sx={{ textTransform: 'none', minHeight: 40, borderRadius: RADIUS.control }}
-            >
-              Link another
-            </Button>
-            <Button
-              size="small"
-              onClick={() => onCreateAssignment(cls)}
-              sx={{ textTransform: 'none', minHeight: 40, borderRadius: RADIUS.control }}
-            >
-              Create new
-            </Button>
-          </Box>
-        )}
+        <ClassAssignmentsSection
+          cls={cls}
+          getToken={getToken}
+          editable
+          assignments={loading ? [] : (assignments as any)}
+          onLinkExisting={onLinkExisting}
+          onCreateAssignment={onCreateAssignment}
+          onNotify={onNotify}
+          header={<SectionLabel>Assignment</SectionLabel>}
+        />
       </Box>
 
       {/* Recording */}

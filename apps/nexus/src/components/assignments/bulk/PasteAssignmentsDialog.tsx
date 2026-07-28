@@ -56,6 +56,9 @@ interface PreviewDraft extends AssignmentDraft {
 function toDraft(r: ReviewAssignment): PreviewDraft {
   return {
     type: r.assignment_type,
+    // Bulk paste creates standalone assignments with no class attached, so
+    // "before the class" has nothing to refer to. Always homework.
+    timing: 'homework',
     title: r.title,
     instructions: r.instructions,
     classDate: r.class_date,

@@ -8,6 +8,7 @@ import {
 import { getRequestUser, assertStaff, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { istTodayStr } from '@/lib/assignment-clock';
+import { classStartIso } from '@/lib/prework';
 
 const FORMATS = ['pdf', 'image', 'pdf_or_image'] as const;
 const DRAWING_CATEGORIES = ['2d_composition', '3d_composition', 'kit_sculpture'] as const;
@@ -121,11 +122,29 @@ export async function POST(request: NextRequest) {
     // was given in and inherits that class's date, so the two can never drift.
     const scheduledClassId = String(body?.scheduled_class_id || '').trim() || null;
 
+    // Pre-class work is due when its class starts, so its deadline is derived,
+    // never typed. Homework keeps the end-of-day deadline the teacher picks.
+    const timing: 'prework' | 'homework' = body?.timing === 'prework' ? 'prework' : 'homework';
+
     let classDate = String(body?.class_date || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(classDate)) classDate = istTodayStr();
     // Personal deadline for on-time students = end of the due day (IST).
     const dueDate = String(body?.due_date || '').slice(0, 10);
-    const dueAt = /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? `${dueDate}T23:59:59+05:30` : null;
+    let dueAt = /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? `${dueDate}T23:59:59+05:30` : null;
+
+    if (timing === 'prework' && scheduledClassId) {
+      const { data: cls } = await (getSupabaseAdminClient() as any)
+        .from('nexus_scheduled_classes')
+        .select('scheduled_date, start_time')
+        .eq('id', scheduledClassId)
+        .maybeSingle();
+      if (!cls) throw new ApiError('That class no longer exists.', 404);
+      dueAt = classStartIso(cls.scheduled_date, cls.start_time || '00:00');
+      // Never date the work into the future: class_date drives the student's
+      // personal clock and the sort order of their assignment list.
+      const today = istTodayStr();
+      classDate = cls.scheduled_date > today ? today : cls.scheduled_date;
+    }
 
     let windowDays = Number(body?.catchup_window_days ?? 7);
     if (!Number.isFinite(windowDays) || windowDays < 0) windowDays = 7;
@@ -183,6 +202,7 @@ export async function POST(request: NextRequest) {
     const assignment = await createAssignment({
       classroom_id: classroomId,
       scheduled_class_id: scheduledClassId,
+      timing,
       class_date: classDate,
       title,
       instructions,

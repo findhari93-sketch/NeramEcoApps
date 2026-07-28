@@ -104,6 +104,45 @@ test.describe('Nexus, photo review queue', () => {
     expect(total).toBeGreaterThan(0);
   });
 
+  /**
+   * A student with no Microsoft account is enrolled (they paid through the
+   * marketing link) but has never opened Nexus, so the picture on their card is
+   * the Google account photo that arrived with their signup, not a submission.
+   * Approving it puts a face on the tenant identity that the student never
+   * offered. Three of these also turned out to be duplicates of a real
+   * @neramclasses.com row, so the same person appeared twice in the grid.
+   *
+   * The check comes from an independent endpoint (/api/students, which flags
+   * them) rather than from the queue itself, so a queue-side regression cannot
+   * hide behind its own filter.
+   */
+  test('students with no Microsoft account never reach the queue', async ({ request }) => {
+    test.skip(!ready);
+
+    const studentsRes = await request.get(`${NEXUS}/api/students?classroom=${classroomId}`, {
+      headers: authHeader(teacherToken),
+    });
+    test.skip(!studentsRes.ok(), 'Could not read the roster independently');
+    const { students } = await studentsRes.json();
+    const awaiting: string[] = (students || [])
+      .filter((s: any) => s.awaiting_microsoft)
+      .map((s: any) => s.id);
+    test.skip(awaiting.length === 0, 'Every student in this classroom already has a Microsoft account');
+
+    // Sweep all four buckets: the exclusion is in the roster loader, so it must
+    // hold whichever tab the teacher opens.
+    for (const status of ['pending', 'missing', 'rejected', 'approved']) {
+      const res = await request.get(
+        `${NEXUS}/api/photo-review?classroom=${classroomId}&status=${status}`,
+        { headers: authHeader(teacherToken) },
+      );
+      expect(res.status()).toBe(200);
+      const { rows } = await res.json();
+      const leaked = (rows || []).filter((r: any) => awaiting.includes(r.student?.id));
+      expect(leaked).toHaveLength(0);
+    }
+  });
+
   test('every status bucket is queryable', async ({ request }) => {
     test.skip(!ready);
     for (const status of ['pending', 'missing', 'rejected', 'approved']) {

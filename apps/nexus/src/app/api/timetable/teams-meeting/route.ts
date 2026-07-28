@@ -8,6 +8,7 @@ import {
   type GraphAttendee,
   type StaffCalendarRow,
 } from '@/lib/class-attendees';
+import { resolveClassAttendees } from '@/lib/class-calendar';
 
 /**
  * POST /api/timetable/teams-meeting
@@ -22,6 +23,11 @@ import {
  *   - link_only: standalone online meeting (join URL only)
  *   - channel_meeting: group calendar event on linked Teams team (proper Teams meeting)
  *   - calendar_event: standalone meeting + Outlook calendar invites to enrolled users
+ *
+ * Whatever path is taken, teams_calendar_event_id records whether a calendar
+ * entry actually exists. Do not infer that from teams_meeting_scope: the scope
+ * is also written on the failure path, and reading it as a result is how classes
+ * came to display "Calendar invites" when nobody had been invited.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -105,6 +111,9 @@ export async function POST(request: NextRequest) {
     const extras: Record<string, unknown> = {};
     let meetingId = '';
     let joinUrl = '';
+    // The Outlook / group event id, empty when no calendar entry was created.
+    let calendarEventId = '';
+    let degraded = false;
 
     // Resolve the tutor (who takes the class) and the scheduler (the caller) so the
     // meeting can be put on the tutor's calendar and both are named in the Teams post.
@@ -154,7 +163,9 @@ export async function POST(request: NextRequest) {
         const result = await createGroupEvent();
         meetingId = result.meetingId;
         joinUrl = result.joinUrl;
+        calendarEventId = result.meetingId;
         extras.attendeeCount = result.attendeeCount;
+        if (result.skipped.length) extras.notInvited = result.skipped;
       } catch (firstErr) {
         console.error('Group calendar event failed; adding organizer as team member and retrying:', firstErr);
         let retried = false;
@@ -164,7 +175,9 @@ export async function POST(request: NextRequest) {
           const result = await createGroupEvent();
           meetingId = result.meetingId;
           joinUrl = result.joinUrl;
+          calendarEventId = result.meetingId;
           extras.attendeeCount = result.attendeeCount;
+          if (result.skipped.length) extras.notInvited = result.skipped;
           extras.membershipHealed = true;
           retried = true;
         } catch (retryErr) {
@@ -172,14 +185,33 @@ export async function POST(request: NextRequest) {
         }
 
         if (!retried) {
-          const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
-          meetingId = meeting.id;
-          joinUrl = meeting.joinWebUrl;
+          // The group calendar is out of reach. Writing to it needs delegated
+          // Group.ReadWrite.All, and membership self-heal cannot supply a
+          // permission the token never carried, so this is where a tenant
+          // without that consent always lands.
+          //
+          // Falling back to /me/onlineMeetings ALONE is what left the class
+          // invisible to everybody: that endpoint returns a join link and
+          // creates no calendar item for anyone, by design. So fall back all
+          // the way to a personal calendar event, which needs only
+          // Calendars.ReadWrite, and the tutor plus every student still get
+          // the class on their Teams calendar.
+          const fallback = await createMeetingWithInvites(
+            supabase, token, classroom_id, scheduledClass.batch_id, scheduledClass,
+            user.email || '', ensureSec, staffAttendees,
+          );
+          meetingId = fallback.meetingId;
+          joinUrl = fallback.joinUrl;
+          calendarEventId = fallback.calendarEventId;
+          extras.invitedCount = fallback.invitedCount;
+          if (fallback.skipped.length) extras.notInvited = fallback.skipped;
           // The stored scope reflects what was actually created.
           scope = 'calendar_event';
+          degraded = true;
           extras.degraded = true;
-          extras.note =
-            'Created a standalone Teams meeting link this time. Microsoft was still setting up your access to the class team calendar, native channel meetings will work on the next try.';
+          extras.note = fallback.calendarEventId
+            ? 'Microsoft would not let us write to the class team calendar, so the meeting went on your own calendar instead and the invites were sent. Native channel meetings start working once the team calendar permission is granted.'
+            : 'Created the Teams meeting link, but Microsoft refused both calendars, so no invite was sent. Open the class and use "Fix calendar invites" once access is restored.';
         }
       }
 
@@ -211,17 +243,15 @@ export async function POST(request: NextRequest) {
       }
     } else if (scope === 'calendar_event') {
       // ── STANDALONE MEETING + PERSONAL CALENDAR INVITES ──
-      const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
-      meetingId = meeting.id;
-      joinUrl = meeting.joinWebUrl;
-
-      // Send personal calendar invites to all enrolled users
-      const invited = await createPersonalCalendarEvent(
-        supabase, token, classroom_id,
-        scheduledClass.batch_id, scheduledClass, meeting, user.email || '', ensureSec,
-        staffAttendees,
+      const created = await createMeetingWithInvites(
+        supabase, token, classroom_id, scheduledClass.batch_id, scheduledClass,
+        user.email || '', ensureSec, staffAttendees,
       );
-      extras.invitedCount = invited;
+      meetingId = created.meetingId;
+      joinUrl = created.joinUrl;
+      calendarEventId = created.calendarEventId;
+      extras.invitedCount = created.invitedCount;
+      if (created.skipped.length) extras.notInvited = created.skipped;
     } else {
       // ── LINK ONLY ──
       const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
@@ -250,6 +280,10 @@ export async function POST(request: NextRequest) {
       teams_meeting_url: joinUrl,
       teams_meeting_join_url: joinUrl,
       teams_meeting_scope: scope,
+      // The fact, not the intent. NULL here means the class has a join link and
+      // nobody was invited, which is what the repair action looks for.
+      teams_calendar_event_id: calendarEventId || null,
+      teams_meeting_degraded: degraded,
     };
     if (extras.teams_channel_id) meetingUpdate.teams_channel_id = extras.teams_channel_id;
     if (extras.teams_channel_message_id) meetingUpdate.teams_channel_message_id = extras.teams_channel_message_id;
@@ -332,6 +366,46 @@ async function createStandaloneMeeting(
 }
 
 /**
+ * Create a standalone Teams meeting AND put it on the organizer's calendar with
+ * invites to everyone enrolled.
+ *
+ * The two calls are deliberately welded together. A meeting without a calendar
+ * event is a join link that nobody was told about: /me/onlineMeetings does not
+ * create a calendar item for the organizer, let alone the students. Splitting
+ * these apart is precisely how the 403 fallback used to leave a class that
+ * looked scheduled and reached no one.
+ */
+async function createMeetingWithInvites(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  token: string,
+  classroomId: string,
+  batchId: string | null,
+  scheduledClass: Record<string, unknown>,
+  creatorEmail: string,
+  ensureSec: (t: string) => string,
+  extraAttendees: GraphAttendee[] = [],
+): Promise<{
+  meetingId: string;
+  joinUrl: string;
+  calendarEventId: string;
+  invitedCount: number;
+  skipped: string[];
+}> {
+  const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
+  const invite = await createPersonalCalendarEvent(
+    supabase, token, classroomId, batchId, scheduledClass, meeting,
+    creatorEmail, ensureSec, extraAttendees,
+  );
+  return {
+    meetingId: meeting.id,
+    joinUrl: meeting.joinWebUrl,
+    calendarEventId: invite.eventId,
+    invitedCount: invite.invited,
+    skipped: invite.skipped,
+  };
+}
+
+/**
  * Best-effort: turn on auto-recording for the online meeting behind a join URL.
  * Resolves the meeting via the organizer's /me/onlineMeetings (delegated token)
  * then PATCHes recordAutomatically. Only effective if the organizer's Teams
@@ -378,10 +452,10 @@ async function createGroupCalendarEvent(
   ensureSec: (t: string) => string,
   extraAttendees: GraphAttendee[] = [],
   meta?: PostMeta,
-): Promise<{ meetingId: string; joinUrl: string; attendeeCount: number }> {
+): Promise<{ meetingId: string; joinUrl: string; attendeeCount: number; skipped: string[] }> {
   // Enrolled users (students + teachers) plus all teaching staff, so the tutor and
   // every teacher get the class on their calendar.
-  const attendees = await getEnrolledAttendees(supabase, classroomId, batchId, creatorEmail, extraAttendees);
+  const { attendees, skipped } = await resolveClassAttendees(supabase, classroomId, batchId, creatorEmail, extraAttendees);
 
   const tutorLine = meta?.tutorName?.trim()
     ? `<p><strong>Tutor:</strong> ${meta.tutorName.trim()}</p>`
@@ -431,12 +505,16 @@ async function createGroupCalendarEvent(
   // Use the event ID as the meeting identifier (for later recording/attendance sync)
   const meetingId = event.id || '';
 
-  return { meetingId, joinUrl, attendeeCount: attendees.length };
+  return { meetingId, joinUrl, attendeeCount: attendees.length, skipped };
 }
 
 /**
  * Create a personal calendar event with meeting link and invite enrolled users.
- * Used when no team is linked (calendar_event scope).
+ * Used when no team is linked (calendar_event scope) and as the fallback when
+ * the group calendar refuses the write.
+ *
+ * Returns the created event id, which is the only trustworthy proof that a
+ * calendar entry exists. An empty id means nobody was invited.
  */
 async function createPersonalCalendarEvent(
   supabase: ReturnType<typeof getSupabaseAdminClient>,
@@ -448,10 +526,12 @@ async function createPersonalCalendarEvent(
   creatorEmail: string,
   ensureSec: (t: string) => string,
   extraAttendees: GraphAttendee[] = [],
-): Promise<number> {
-  const attendees = await getEnrolledAttendees(supabase, classroomId, batchId, creatorEmail, extraAttendees);
+): Promise<{ eventId: string; invited: number; skipped: string[] }> {
+  const { attendees, skipped } = await resolveClassAttendees(supabase, classroomId, batchId, creatorEmail, extraAttendees);
 
-  if (attendees.length === 0) return 0;
+  // Deliberately no early return on an empty attendee list. The organizer's own
+  // calendar entry is the point: a teacher whose class has no other invitees
+  // still needs the class to show up in their Teams calendar.
 
   const eventPayload = {
     subject: scheduledClass.title as string,
@@ -486,60 +566,11 @@ async function createPersonalCalendarEvent(
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
     console.error('Failed to create personal calendar event:', res.status, errText);
+    return { eventId: '', invited: 0, skipped };
   }
 
-  return attendees.length;
-}
-
-/**
- * Fetch enrolled students AND teachers as calendar attendees.
- * Excludes the meeting creator (they're already the organizer).
- */
-async function getEnrolledAttendees(
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
-  classroomId: string,
-  batchId: string | null,
-  creatorEmail: string,
-  extraAttendees: GraphAttendee[] = [],
-): Promise<GraphAttendee[]> {
-  // Fetch all enrolled users (both students and teachers)
-  let query = supabase
-    .from('nexus_enrollments')
-    .select('user_id, role, users!nexus_enrollments_user_id_fkey!inner(email, name)')
-    .eq('classroom_id', classroomId)
-    .eq('is_active', true);
-
-  // Batch filtering only applies to students; teachers always get invited
-  if (batchId) {
-    // Students in this batch OR all teachers
-    query = query.or(`batch_id.eq.${batchId},role.eq.teacher`);
-  }
-
-  const { data: enrollments } = await query;
-
-  const enrolled: GraphAttendee[] = (enrollments || [])
-    .map((e: Record<string, unknown>) => {
-      const u = e.users as Record<string, unknown> | null;
-      return { email: u?.email as string | undefined, name: u?.name as string | undefined };
-    })
-    .filter((u): u is { email: string; name: string | undefined } => !!u.email)
-    .map((u) => ({
-      emailAddress: { address: u.email, name: u.name || u.email },
-      type: 'required' as const,
-    }));
-
-  // Merge enrolled + extra (staff) attendees, drop the organizer, and de-dupe by
-  // email. A 'required' entry wins over an 'optional' one for the same person.
-  const byEmail = new Map<string, GraphAttendee>();
-  for (const a of [...enrolled, ...extraAttendees]) {
-    const key = a.emailAddress.address.toLowerCase();
-    if (!key || key === creatorEmail?.toLowerCase()) continue;
-    const existing = byEmail.get(key);
-    if (!existing || (existing.type === 'optional' && a.type === 'required')) {
-      byEmail.set(key, a);
-    }
-  }
-  return Array.from(byEmail.values());
+  const event = await res.json().catch(() => null);
+  return { eventId: (event?.id as string) || '', invited: attendees.length, skipped };
 }
 
 /**

@@ -7,6 +7,7 @@ import { notifyStudents } from '@/lib/notify-students';
 import { generateRecurrenceDates } from './recurrence';
 import {
   announceCancellationToTeams,
+  announceRescheduleToTeams,
   removeTeamsAnnouncements,
   cancelTeamsEvent,
 } from '@/lib/teams-class-announcements';
@@ -18,6 +19,7 @@ import {
   resolveStaffRole,
 } from '@/lib/staff-capabilities';
 import { ApiError } from '@/lib/api-errors';
+import { classStartIso } from '@/lib/prework';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
 
@@ -437,7 +439,9 @@ export async function PATCH(request: NextRequest) {
     // than the generated Database type, like the other recent Nexus columns.
     const { data: before } = (await (supabase as any)
       .from('nexus_scheduled_classes')
-      .select('title, scheduled_date, start_time, end_time, teams_meeting_id, teams_meeting_scope, publish_state')
+      .select(
+        'title, scheduled_date, start_time, end_time, teams_meeting_id, teams_meeting_scope, teams_calendar_event_id, teams_meeting_join_url, teams_meeting_url, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, publish_state',
+      )
       .eq('id', id)
       .eq('classroom_id', classroom_id)
       .single()) as {
@@ -448,9 +452,61 @@ export async function PATCH(request: NextRequest) {
         end_time: string;
         teams_meeting_id: string | null;
         teams_meeting_scope: string | null;
+        teams_calendar_event_id: string | null;
+        teams_meeting_join_url: string | null;
+        teams_meeting_url: string | null;
+        teams_channel_id: string | null;
+        teams_channel_message_id: string | null;
+        teams_group_chat_message_id: string | null;
         publish_state: string | null;
       } | null;
     };
+
+    // A class moved in Nexus used to leave its Teams meeting behind, so students
+    // saw one time in the app and another in their calendar.
+    const moved =
+      !!before &&
+      (('scheduled_date' in safeUpdates && safeUpdates.scheduled_date !== before.scheduled_date) ||
+        ('start_time' in safeUpdates && safeUpdates.start_time !== before.start_time) ||
+        ('end_time' in safeUpdates && safeUpdates.end_time !== before.end_time));
+
+    const when = before && {
+      date: (safeUpdates.scheduled_date as string) ?? before.scheduled_date,
+      start: (safeUpdates.start_time as string) ?? before.start_time,
+      end: (safeUpdates.end_time as string) ?? before.end_time,
+      title: (safeUpdates.title as string) ?? before.title,
+    };
+
+    // Teams FIRST, then the database. This order is load-bearing.
+    //
+    // The old order wrote the move locally and treated a Graph failure as a
+    // warning. But syncClassroomMeetings treats Teams as the source of truth and
+    // runs every few minutes, so it read the unmoved event and rewrote the date
+    // straight back: the teacher saw "Class updated", and ten minutes later the
+    // class was on its old day again with nothing to explain it. Refusing to
+    // move locally when Teams refused leaves the two in agreement, which is the
+    // only state the reconciler cannot damage.
+    if (moved && before?.teams_meeting_id && token && when) {
+      const result = await updateTeamsEvent(
+        token,
+        supabase,
+        classroom_id,
+        before.teams_meeting_id,
+        before.teams_meeting_scope,
+        before.teams_calendar_event_id,
+        when,
+      );
+      if (!result.success) {
+        return NextResponse.json(
+          {
+            error:
+              result.error ||
+              'Microsoft would not move the Teams meeting, so the class was left where it was. Try again in a moment.',
+          },
+          { status: 502 },
+        );
+      }
+    }
 
     const { data, error } = await supabase
       .from('nexus_scheduled_classes')
@@ -462,23 +518,51 @@ export async function PATCH(request: NextRequest) {
 
     if (error) throw error;
 
-    // A class moved in Nexus used to leave its Teams meeting behind, so students
-    // saw one time in the app and another in their calendar. Push the change.
-    const moved =
-      !!before &&
-      (('scheduled_date' in safeUpdates && safeUpdates.scheduled_date !== before.scheduled_date) ||
-        ('start_time' in safeUpdates && safeUpdates.start_time !== before.start_time) ||
-        ('end_time' in safeUpdates && safeUpdates.end_time !== before.end_time));
+    // Pre-class work is due when its class starts, so a class that moves takes
+    // its prework deadline with it. Homework is deliberately left alone: its
+    // date was set relative to the NEXT class, not this one.
+    if (moved && when) {
+      await (supabase as any)
+        .from('nexus_class_assignments')
+        .update({ due_at: classStartIso(when.date, when.start) })
+        .eq('scheduled_class_id', id)
+        .eq('timing', 'prework');
+    }
 
-    let teamsWarning: string | undefined;
-    if (moved && before?.teams_meeting_id && token) {
-      const result = await updateTeamsEvent(token, supabase, classroom_id, before.teams_meeting_id, before.teams_meeting_scope, {
-        date: (safeUpdates.scheduled_date as string) ?? before.scheduled_date,
-        start: (safeUpdates.start_time as string) ?? before.start_time,
-        end: (safeUpdates.end_time as string) ?? before.end_time,
-        title: (safeUpdates.title as string) ?? before.title,
-      });
-      if (!result.success) teamsWarning = result.error;
+    // The posted "Join Meeting" cards still advertise the old day. Graph cannot
+    // edit a message in place, so replace them the same way a cancellation does.
+    if (moved && token && before && when && before.publish_state !== 'draft') {
+      try {
+        const base = process.env.NEXT_PUBLIC_NEXUS_URL || request.nextUrl.origin;
+        const reposted = await announceRescheduleToTeams(
+          token,
+          supabase,
+          classroom_id,
+          {
+            teams_channel_id: before.teams_channel_id,
+            teams_channel_message_id: before.teams_channel_message_id,
+            teams_group_chat_message_id: before.teams_group_chat_message_id,
+          },
+          { title: when.title, scheduled_date: when.date, start_time: when.start, end_time: when.end },
+          { scheduled_date: before.scheduled_date, start_time: before.start_time },
+          {
+            joinUrl: before.teams_meeting_join_url || before.teams_meeting_url,
+            rsvpUrl: `${base.replace(/\/$/, '')}/student/rsvp/${id}`,
+          },
+        );
+        if (reposted) {
+          await (supabase as any)
+            .from('nexus_scheduled_classes')
+            .update({
+              teams_channel_message_id: reposted.channelMessageId,
+              teams_group_chat_message_id: reposted.chatMessageId,
+            })
+            .eq('id', id);
+        }
+      } catch (err) {
+        // The class has moved and Teams agrees; a stale card is not worth failing on.
+        console.error('Reschedule repost failed (non-blocking):', err);
+      }
     }
 
     // Tell the students, but only for a class they can already see. Moving a
@@ -499,7 +583,7 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ class: data, ...(teamsWarning && { teamsWarning }), moved });
+    return NextResponse.json({ class: data, moved });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update class';
     const status =
@@ -656,9 +740,16 @@ function formatWhen(date: string, time: string): string {
  *
  * Mirrors cancelTeamsEvent: a channel meeting is a group calendar event, a
  * standalone one is an online meeting, and the two take different payloads.
- * Failure returns a warning rather than throwing, because the class HAS moved
- * in Nexus by this point and rolling that back over a Graph hiccup would be
- * worse than a calendar entry that needs fixing by hand.
+ *
+ * The caller treats a failure here as fatal to the move and leaves the class
+ * where it was. That is deliberate: the Teams reconciler copies times from Teams
+ * back into Nexus, so a class that moved locally while Teams did not is a class
+ * that silently springs back to its old day a few minutes later.
+ *
+ * A standalone meeting can have TWO objects to move: the online meeting, which
+ * owns the join link, and the calendar event, which is what actually sits in the
+ * tutor's and the students' calendars. Patching only the first is what let a
+ * class change time in Nexus while everyone's calendar kept the old slot.
  */
 async function updateTeamsEvent(
   token: string,
@@ -666,6 +757,7 @@ async function updateTeamsEvent(
   classroomId: string,
   meetingId: string,
   scope: string | null,
+  calendarEventId: string | null,
   when: { date: string; start: string; end: string; title: string },
 ): Promise<{ success: boolean; error?: string }> {
   // Graph wants a local time plus a named zone, not an offset.
@@ -700,7 +792,13 @@ async function updateTeamsEvent(
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
         console.error('Failed to move group calendar event:', res.status, errText);
-        return { success: false, error: `The class moved here, but Teams still shows the old time (${res.status})` };
+        return {
+          success: false,
+          error:
+            res.status === 403
+              ? 'Microsoft would not let us move the meeting on the class team calendar, so the class was left where it was. Sign out of Nexus and sign back in, then try again.'
+              : `Teams would not move the meeting (${res.status}), so the class was left where it was`,
+        };
       }
       return { success: true };
     }
@@ -718,7 +816,30 @@ async function updateTeamsEvent(
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
       console.error('Failed to move online meeting:', res.status, errText);
-      return { success: false, error: `The class moved here, but Teams still shows the old time (${res.status})` };
+      return { success: false, error: `Teams would not move the meeting (${res.status}), so the class was left where it was` };
+    }
+
+    // The calendar event is the part everyone actually sees. Moving the online
+    // meeting alone changes the join link's schedule and leaves every invitee
+    // looking at the original slot, which is worse than not moving at all.
+    if (calendarEventId) {
+      const eventRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${calendarEventId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: when.title,
+          start: { dateTime: startDateTime, timeZone: TZ },
+          end: { dateTime: endDateTime, timeZone: TZ },
+        }),
+      });
+      if (!eventRes.ok) {
+        const errText = await eventRes.text().catch(() => '');
+        console.error('Failed to move personal calendar event:', eventRes.status, errText);
+        return {
+          success: false,
+          error: `The Teams meeting moved but the calendar invite did not (${eventRes.status}), so the class was left where it was`,
+        };
+      }
     }
     return { success: true };
   } catch (err) {

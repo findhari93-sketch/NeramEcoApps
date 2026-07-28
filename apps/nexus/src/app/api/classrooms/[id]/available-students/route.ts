@@ -4,14 +4,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getAppOnlyToken } from '@neram/auth';
+import { buildEnrollmentBlocklist, selectAddableStudents } from '@/lib/org-directory';
 
 /**
  * GET /api/classrooms/[id]/available-students
  *
  * Lists organisation (@neramclasses.com) student accounts from the Microsoft
  * Entra directory who are NOT yet enrolled in this classroom, so a teacher can
- * add them with one click. New Microsoft accounts appear here automatically —
- * no manual search required. Mirrors the admin sync-entra directory filter.
+ * add them with one click. New Microsoft accounts appear here automatically,
+ * no manual search required.
+ *
+ * Who counts as a student is decided in two independent steps, and keeping them
+ * apart is what makes this correct: the directory says whether the account is a
+ * usable org person (lib/org-directory.ts), and the users table says whether that
+ * person is staff or graduated. Guessing staff from the mailbox name is what this
+ * route used to do, and it hid real students whose names happened to contain a
+ * staff member's name. See lib/org-directory.ts for the full history.
  *
  * Teacher/admin only. Returns { students: [{ ms_oid, name, email, inDatabase }] }.
  * If app-only Graph credentials are unavailable, returns 502 so the UI can fall
@@ -49,10 +57,11 @@ export async function GET(
       );
     }
 
-    // 1. Page all Entra users (same fields the admin sync-entra flow uses)
+    // 1. Page all Entra users. userType is load-bearing: B2B guests carry a UPN on
+    // our own tenant domain, so without it they read as insiders. See org-directory.
     let allAdUsers: any[] = [];
     let nextLink: string | null =
-      'https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,accountEnabled&$top=100';
+      'https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,accountEnabled,userType&$top=100';
 
     while (nextLink) {
       const controller = new AbortController();
@@ -74,27 +83,7 @@ export async function GET(
       }
     }
 
-    // 2. Filter to student accounts only (exclude staff + service mailboxes).
-    // Kept in sync with apps/admin sync-entra GET.
-    const staffPatterns = ['admin', 'teacher', 'hari', 'info@neramclasses.com', 'shanthi', 'paramesh', 'tamil'];
-    const serviceLocalParts = new Set([
-      'noreply', 'no-reply', 'donotreply', 'do-not-reply', 'support', 'info', 'contact',
-      'hello', 'office', 'accounts', 'billing', 'help', 'mail', 'team', 'postmaster',
-      'webmaster', 'hr', 'careers', 'jobs', 'enquiry', 'enquiries', 'noreply-neram',
-    ]);
-    const studentAccounts = allAdUsers.filter((u: any) => {
-      if (!u.accountEnabled) return false;
-      const email = (u.userPrincipalName || '').toLowerCase();
-      if (serviceLocalParts.has(email.split('@')[0])) return false;
-      if (staffPatterns.some((p) => email.includes(p.toLowerCase()))) return false;
-      return (
-        email.includes('neramclasses') ||
-        email.includes('nerasmclasses') ||
-        email.includes('neram.co.in')
-      );
-    });
-
-    // 3. Exclude anyone already actively enrolled in THIS classroom.
+    // 2. Exclude anyone already actively enrolled in THIS classroom.
     const { data: enrolled } = await supabase
       .from('nexus_enrollments')
       .select('user:users!nexus_enrollments_user_id_fkey!inner(ms_oid)')
@@ -105,48 +94,35 @@ export async function GET(
       (enrolled || []).map((e: any) => e.user?.ms_oid).filter(Boolean)
     );
 
-    // 4. Flag which directory users already have a local users row (informational).
-    const allOids = studentAccounts.map((u: any) => u.id);
+    // 3. Build the "must never be offered" set: graduated (alumni) students and any
+    // staff member. This is the ONLY staff test, and it is on purpose: staff are
+    // recognised from their users row, never from their mailbox name. See
+    // lib/org-directory.ts for the student accounts a name-based rule was eating.
+    // staff_role covers a manager tier whose user_type is neither teacher nor admin.
+    const { data: blockedUsers } = await supabase
+      .from('users')
+      .select('ms_oid, email, personal_email, linked_classroom_email, is_alumni, user_type, staff_role')
+      .or('is_alumni.eq.true,user_type.in.(teacher,admin),staff_role.not.is.null');
+
+    const blocklist = buildEnrollmentBlocklist(blockedUsers || []);
+    const addable = selectAddableStudents(allAdUsers, enrolledOids as Set<string>, blocklist);
+
+    // 4. Flag which of them already have a local users row (informational only).
+    const addableOids = addable.map((u) => u.id);
     const { data: existingUsers } = await supabase
       .from('users')
       .select('ms_oid')
-      .in('ms_oid', allOids.length > 0 ? allOids : ['__none__']);
+      .in('ms_oid', addableOids.length > 0 ? addableOids : ['__none__']);
     const existingOids = new Set((existingUsers || []).map((u: any) => u.ms_oid));
 
-    // 5. Build the "must never be offered" set: graduated (alumni) students and
-    // any teacher/admin account. Match on BOTH ms_oid AND every known email, not
-    // ms_oid alone: some graduated rows have a null/mismatched ms_oid (e.g. a
-    // Google-first signup whose oid lives on a duplicate row), or a UPN whose
-    // casing differs from the stored email. Email matching closes those gaps.
-    const { data: blockedUsers } = await supabase
-      .from('users')
-      .select('ms_oid, email, personal_email, linked_classroom_email, is_alumni, user_type')
-      .or('is_alumni.eq.true,user_type.in.(teacher,admin)');
-
-    const blockedOids = new Set<string>();
-    const blockedEmails = new Set<string>();
-    for (const u of blockedUsers || []) {
-      if (u.ms_oid) blockedOids.add(u.ms_oid);
-      for (const e of [u.email, u.personal_email, u.linked_classroom_email]) {
-        if (e) blockedEmails.add(String(e).trim().toLowerCase());
-      }
-    }
-    const isBlocked = (u: any): boolean => {
-      if (blockedOids.has(u.id)) return true;
-      const upn = (u.userPrincipalName || '').trim().toLowerCase();
-      const mail = (u.mail || '').trim().toLowerCase();
-      return (!!upn && blockedEmails.has(upn)) || (!!mail && blockedEmails.has(mail));
-    };
-
-    const students = studentAccounts
-      .filter((u: any) => !enrolledOids.has(u.id) && !isBlocked(u))
-      .map((u: any) => ({
+    const students = addable
+      .map((u) => ({
         ms_oid: u.id,
         name: u.displayName || u.userPrincipalName?.split('@')[0] || 'Unknown',
         email: u.mail || u.userPrincipalName || '',
         inDatabase: existingOids.has(u.id),
       }))
-      .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
     return NextResponse.json({ students, total: students.length });
   } catch (err) {

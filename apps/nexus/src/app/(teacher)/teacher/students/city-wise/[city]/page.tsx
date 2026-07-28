@@ -22,6 +22,7 @@ import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import GraphAvatar from '@/components/GraphAvatar';
 import StudentsBreadcrumb, { type Crumb } from '@/components/students/StudentsBreadcrumb';
+import EmailDomainFlag from '@/components/students/EmailDomainFlag';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface CityStudent {
@@ -30,6 +31,7 @@ interface CityStudent {
   email: string | null;
   phone: string | null;
   ms_oid: string | null;
+  awaiting_microsoft?: boolean; // enrolled, but no Entra account yet: cannot sign in
   city: string | null;
   state: string | null;
   enrolled_at: string | null;
@@ -212,6 +214,9 @@ function CityStudentsPage() {
                           {student.phone}
                         </Typography>
                       </Box>
+                    )}
+                    {student.awaiting_microsoft && (
+                      <EmailDomainFlag status="none" awaitingMicrosoft />
                     )}
                   </Box>
                 </Box>

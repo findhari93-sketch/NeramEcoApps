@@ -189,7 +189,20 @@ interface ClassCreateDialogProps {
   /** Default classroom ID (active classroom) */
   defaultClassroomId: string;
   getToken: () => Promise<string | null>;
-  onSaved: () => void;
+  /**
+   * Extended-scope token, used only when saving. Editing a class can move its
+   * Teams meeting, and PATCH /groups/.../events needs Calendars.ReadWrite, which
+   * the base nexus scope set does not carry: saving with the base token returned
+   * 403 from Graph. Kept separate from getToken so merely OPENING the dialog
+   * never triggers an interactive consent redirect just to load the topic list.
+   */
+  getTeacherToken?: () => Promise<string | null>;
+  /**
+   * Called after a successful save. Receives the created rows so the caller can
+   * offer a follow-up action (attaching pre-class work) without a second fetch.
+   * Empty when editing.
+   */
+  onSaved: (created?: { id: string; classroom_id: string }[]) => void;
   prefillDate?: string;
   prefillTime?: string;
   holidays?: Record<string, HolidayInfo>;
@@ -214,6 +227,7 @@ export default function ClassCreateDialog({
   classrooms,
   defaultClassroomId,
   getToken,
+  getTeacherToken,
   onSaved,
   prefillDate,
   prefillTime,
@@ -488,8 +502,12 @@ export default function ClassCreateDialog({
     setError(null);
 
     try {
-      const token = await getToken();
-      if (!token) return;
+      // Saving may move a Teams meeting, so ask for the extended scopes here.
+      const token = (getTeacherToken ? await getTeacherToken() : null) || (await getToken());
+      if (!token) {
+        setError('Please sign in again to save this class (extended permissions needed).');
+        return;
+      }
 
       // Build recurrence_rule string
       let recurrenceRule: string | null = null;
@@ -541,8 +559,12 @@ export default function ClassCreateDialog({
       const wantsMeeting = !editingClass && formData.create_meeting;
       const meetingScope = formData.meeting_scope;
 
+      const createdRows: { id: string; classroom_id: string }[] = editingClass
+        ? []
+        : data.classes || (data.class ? [data.class] : []);
+
       onClose();
-      onSaved();
+      onSaved(createdRows);
 
       // Tell the parent to create the Teams meeting in the background. Rows can span
       // classrooms (and recurrence dates), so use each row's own classroom_id.

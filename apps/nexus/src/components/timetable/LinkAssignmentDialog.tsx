@@ -22,6 +22,8 @@ import {
   DialogContent,
   DialogTitle,
   Drawer,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
   alpha,
   useMediaQuery,
@@ -75,6 +77,8 @@ export default function LinkAssignmentDialog({
   const [items, setItems] = useState<LinkableAssignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Defaults to After class, which is what every existing link already means.
+  const [timing, setTiming] = useState<'prework' | 'homework'>('homework');
 
   const classId = cls?.id ?? null;
 
@@ -110,10 +114,14 @@ export default function LinkAssignmentDialog({
       const res = await fetch(`/api/timetable/${classId}/assignments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ assignment_id: assignmentId }),
+        body: JSON.stringify({ assignment_id: assignmentId, timing }),
       });
       if (res.ok) {
-        onNotify('Assignment linked to this class');
+        onNotify(
+          timing === 'prework'
+            ? 'Linked. Students must finish it before this class starts.'
+            : 'Assignment linked to this class',
+        );
         onLinked();
         onClose();
       } else {
@@ -150,6 +158,31 @@ export default function LinkAssignmentDialog({
           </Typography>
         </Box>
       )}
+
+      {/* When the work is due, chosen BEFORE picking the assignment, because it
+          changes what linking means. Tapping a row links immediately, so there
+          is no later screen to set this on. */}
+      <Box sx={{ mb: 2 }}>
+        <ToggleButtonGroup
+          value={timing}
+          exclusive
+          onChange={(_, v) => v && setTiming(v)}
+          fullWidth
+          size="small"
+        >
+          <ToggleButton value="prework" sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}>
+            Before class
+          </ToggleButton>
+          <ToggleButton value="homework" sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}>
+            After class
+          </ToggleButton>
+        </ToggleButtonGroup>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+          {timing === 'prework'
+            ? 'Before class work is due when the class starts, and the deadline follows the class if you move it.'
+            : 'Homework keeps its own due date.'}
+        </Typography>
+      </Box>
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

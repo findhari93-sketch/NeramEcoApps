@@ -73,6 +73,13 @@ export const loginScopes = {
     'Files.ReadWrite',
     'Sites.ReadWrite.All',
     'Calendars.ReadWrite',
+    // Writing a class meeting to the team's group calendar
+    // (POST /groups/{id}/calendar/events) needs this. Calendars.ReadWrite only
+    // reaches the signed-in user's own mailbox, never a group mailbox, so
+    // without this every channel meeting returns 403 ErrorAccessDenied and
+    // falls back to a personal calendar event. Admin consent is required in
+    // Azure before it takes effect, and teachers must sign in again once.
+    'Group.ReadWrite.All',
     'ChannelMessage.Send',
     'ChatMessage.Send',
     'Team.ReadBasic.All',

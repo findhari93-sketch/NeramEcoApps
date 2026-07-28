@@ -18,6 +18,7 @@
 import { getSupabaseAdminClient } from '@neram/database';
 import type { GeographicCountryNode, GeographicStateNode, GeographicCityNode } from '@neram/database';
 import { pickClassroomEmail, type EmailDomainStatus } from '@/lib/classroom-email';
+import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
 
 const COUNTRY_NAMES: Record<string, string> = {
   IN: 'India',
@@ -58,6 +59,8 @@ export interface ActiveGeoStudent {
   phone: string | null;
   avatar_url: string | null;
   ms_oid: string | null;
+  /** Enrolled but no Entra identity yet, so they cannot sign in to Nexus. */
+  awaiting_microsoft: boolean;
   country: string; // ISO-ish code, uppercased (default 'IN')
   country_display: string;
   state: string | null; // title-cased
@@ -97,11 +100,10 @@ export async function getActiveGeoStudents(): Promise<ActiveGeoStudent[]> {
     .eq('role', 'student')
     .in('classroom_id', classroomIds)
     .eq('users.is_alumni', false)
-    .eq('users.user_type', 'student')
-    // Org-identity gate: keep parity with the teacher students list (/api/students),
-    // which shows only students holding a real Microsoft org identity. Gmail-only
-    // shells (no ms_oid) can't log into Nexus and are excluded from the geo view too.
-    .not('users.ms_oid', 'is', null);
+    .eq('users.user_type', 'student');
+  // Students with no ms_oid stay in: they are enrolled and they live somewhere, so
+  // dropping them would under-count real cities. Each row carries
+  // `awaiting_microsoft` instead, matching /api/students. See lib/microsoft-account.ts.
 
   if (enrErr) {
     console.error('getActiveGeoStudents: enrollments query failed', enrErr);
@@ -166,6 +168,7 @@ export async function getActiveGeoStudents(): Promise<ActiveGeoStudent[]> {
       phone: u.phone,
       avatar_url: u.avatar_url,
       ms_oid: u.ms_oid,
+      awaiting_microsoft: isAwaitingMicrosoft(u.ms_oid),
       country,
       country_display: getCountryDisplay(country),
       state: titleCase(p.state),

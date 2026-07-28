@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { loadPlanShapes } from '@/lib/plan-shape-query';
+import { classifyPrework, classEndIso } from '@/lib/prework';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name), classroom:nexus_classrooms!nexus_scheduled_classes_classroom_id_fkey(id, name, type)`;
 
@@ -115,8 +116,14 @@ export async function GET(request: NextRequest) {
 
     // Three set-based lookups, whatever the class count. Each is independently
     // optional: a failure degrades one badge, it must not blank the timetable.
-    const [rsvpResult, attendanceResult, holidayResult, planResult, absenceResult] =
-      await Promise.allSettled([
+    const [
+      rsvpResult,
+      attendanceResult,
+      holidayResult,
+      planResult,
+      absenceResult,
+      preworkResult,
+    ] = await Promise.allSettled([
       classIds.length
         ? supabase
             .from('nexus_class_rsvp')
@@ -158,6 +165,17 @@ export async function GET(request: NextRequest) {
         .is('caught_up_at', null)
         .order('detected_at', { ascending: false })
         .limit(20),
+      // Published pre-class work attached to any class in the loaded range.
+      // Rides along with the schedule the student is already fetching, so the
+      // strip costs no extra function invocation.
+      classIds.length
+        ? (supabase as any)
+            .from('nexus_class_assignments')
+            .select('id, title, due_at, assignment_type, scheduled_class_id')
+            .in('scheduled_class_id', classIds)
+            .eq('timing', 'prework')
+            .eq('status', 'published')
+        : Promise.resolve({ data: [] as any[] }),
     ]);
 
     // Keyed by class id. A class absent from this map is one the student is
@@ -231,6 +249,79 @@ export async function GET(request: NextRequest) {
         !!(a.class.recording_url || a.class.youtube_url),
     ).length;
 
+    // ── Pre-class work ────────────────────────────────────────────────────
+    // Three follow-up reads, all keyed on the prework ids we just found, so the
+    // whole feature costs one round trip on top of the schedule.
+    const preworkRows =
+      preworkResult.status === 'fulfilled' ? ((preworkResult.value.data || []) as any[]) : [];
+    const preworkIds = preworkRows.map((p) => p.id);
+
+    let submittedIds = new Set<string>();
+    const reasonByAssignment = new Map<string, any>();
+
+    if (preworkIds.length) {
+      const [subsResult, drawingResult, reasonsResult] = await Promise.allSettled([
+        (supabase as any)
+          .from('nexus_assignment_submissions')
+          .select('assignment_id')
+          .eq('student_id', user.id)
+          .in('assignment_id', preworkIds),
+        // Drawing prework does NOT store its work in nexus_assignment_submissions.
+        // Reading only that table would show a student who did the drawing as
+        // overdue and shout at them for work they had already handed in.
+        (supabase as any)
+          .from('drawing_submissions')
+          .select('assignment_id')
+          .eq('student_id', user.id)
+          .in('assignment_id', preworkIds),
+        (supabase as any)
+          .from('nexus_prework_reasons')
+          .select('assignment_id, reason_code, reason_note, started')
+          .eq('student_id', user.id)
+          .in('assignment_id', preworkIds),
+      ]);
+
+      const collect = (r: PromiseSettledResult<any>) =>
+        r.status === 'fulfilled' ? ((r.value.data || []) as any[]) : [];
+      submittedIds = new Set([
+        ...collect(subsResult).map((s) => s.assignment_id),
+        ...collect(drawingResult).map((s) => s.assignment_id),
+      ]);
+      for (const r of collect(reasonsResult)) reasonByAssignment.set(r.assignment_id, r);
+    }
+
+    const classById = new Map(uniqueClasses.map((c) => [c.id, c]));
+    const prework = preworkRows
+      .map((p) => {
+        const cls = classById.get(p.scheduled_class_id);
+        if (!cls) return null;
+        const reason = reasonByAssignment.get(p.id) ?? null;
+        const state = classifyPrework({
+          dueAtIso: p.due_at,
+          classEndIso: classEndIso(cls.scheduled_date, cls.end_time),
+          classStatus: cls.status,
+          submitted: submittedIds.has(p.id),
+          hasReason: !!reason,
+        });
+        if (!state) return null;
+        return {
+          class_id: cls.id,
+          class_title: cls.title,
+          scheduled_date: cls.scheduled_date,
+          start_time: cls.start_time,
+          assignment_id: p.id,
+          assignment_title: p.title,
+          assignment_type: p.assignment_type,
+          due_at: p.due_at,
+          submitted: submittedIds.has(p.id),
+          reason_code: reason?.reason_code ?? null,
+          reason_note: reason?.reason_note ?? null,
+          reason_started: reason?.started ?? false,
+          state,
+        };
+      })
+      .filter(Boolean);
+
     return NextResponse.json({
       classes: uniqueClasses,
       classrooms: Array.from(classroomMap.values()),
@@ -240,6 +331,7 @@ export async function GET(request: NextRequest) {
       planShapes,
       openAbsences,
       catchupPending,
+      prework,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load schedule';

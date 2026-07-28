@@ -5,6 +5,7 @@ import { errorResponse } from '@/lib/api-errors';
 import { sendNudge } from '@/lib/nudge-delivery';
 import { toPhotoStatus, type PhotoStatus } from '@/lib/photo-gate';
 import { resolvePhotoOrigin } from '@/lib/photo-origin';
+import { filterPhotoRoster } from '@/lib/photo-roster';
 import { pushApprovedPhotoToMicrosoft, type MsPushResult } from '@/lib/photo-ms-sync';
 import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
 import { getNexusSetting } from '@neram/database';
@@ -31,6 +32,7 @@ interface RosterUser {
   id: string;
   name: string | null;
   email: string | null;
+  ms_oid: string | null;
   avatar_url: string | null;
   is_alumni: boolean | null;
   photo_status: string | null;
@@ -40,8 +42,15 @@ interface RosterUser {
   nexus_last_login_at: string | null;
 }
 
-/** Active, non-alumni students of one classroom. Same population the assignment
- *  roster and engagement dashboard use, so the counts always agree.
+/** Active, non-alumni students of one classroom who can actually sign in to Nexus.
+ *
+ *  Students with no Microsoft account are excluded. They are enrolled (they paid
+ *  through the marketing link before Entra provisioning) but they have never seen
+ *  Nexus, so there is no photo of theirs to judge: what shows on their card is the
+ *  Google account picture that came in with their signup, which they never offered
+ *  as a face photo. Reviewing it approves something the student never submitted,
+ *  and the photo gate it feeds can never apply to someone who cannot log in.
+ *  They stay visible on the Students screen, flagged. See lib/microsoft-account.ts.
  *
  *  The FK must be named. nexus_enrollments points at users TWICE (user_id and
  *  removed_by), so a bare `user:users(...)` embed is ambiguous and PostgREST
@@ -52,7 +61,7 @@ async function loadRoster(supabase: any, classroomId: string): Promise<RosterUse
   const { data, error } = await supabase
     .from('nexus_enrollments')
     .select(
-      'user_id, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni, photo_status, photo_submitted_at, photo_reviewed_at, photo_rejection_reason, nexus_last_login_at)',
+      'user_id, user:users!nexus_enrollments_user_id_fkey(id, name, email, ms_oid, avatar_url, is_alumni, photo_status, photo_submitted_at, photo_reviewed_at, photo_rejection_reason, nexus_last_login_at)',
     )
     .eq('classroom_id', classroomId)
     .eq('role', 'student')
@@ -62,9 +71,7 @@ async function loadRoster(supabase: any, classroomId: string): Promise<RosterUse
     throw new Error(`Could not load the classroom roster: ${error.message}`);
   }
 
-  return ((data || []) as any[])
-    .map((row) => row.user as RosterUser | null)
-    .filter((u): u is RosterUser => !!u && u.is_alumni !== true);
+  return filterPhotoRoster(((data || []) as any[]).map((row) => row.user as RosterUser | null));
 }
 
 /**

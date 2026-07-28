@@ -5,16 +5,22 @@ import DomainDisabledOutlinedIcon from '@mui/icons-material/DomainDisabledOutlin
 import NoAccountsOutlinedIcon from '@mui/icons-material/NoAccountsOutlined';
 import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import type { EmailDomainStatus } from '@/lib/classroom-email';
+import { AWAITING_MICROSOFT_LABEL, AWAITING_MICROSOFT_TOOLTIP } from '@/lib/microsoft-account';
 
 /**
  * Small indicator shown next to a student's email when it is NOT the class
  * @neramclasses.com identity. Colour is never the only signal: each state has an
  * icon + label + tooltip (accessibility: do not convey by colour alone).
  *
+ *   awaitingMicrosoft -> red "No Microsoft account" (no ms_oid: CANNOT sign in at all)
  *   onmicrosoft -> amber "Default domain"  (HAS an org ID, wrong domain: rename in Entra, then Refresh)
  *   personal    -> red   "No org ID"       (only a personal email: no @neramclasses.com account exists yet)
  *   none         -> red  "No email"        (nothing on file)
  *   org         -> nothing (the email is already correct)
+ *
+ * `awaitingMicrosoft` wins over every domain state, because "they cannot log in"
+ * is the fact that actually changes what staff should do next, and showing two
+ * red chips side by side would just dilute it.
  */
 const CONFIG: Record<
   Exclude<EmailDomainStatus, 'org'>,
@@ -44,13 +50,24 @@ const CONFIG: Record<
 
 export default function EmailDomainFlag({
   status,
+  awaitingMicrosoft = false,
   size = 'small',
 }: {
   status: EmailDomainStatus;
+  /** No Entra identity yet, so this student cannot sign in to Nexus at all. */
+  awaitingMicrosoft?: boolean;
   size?: 'small' | 'medium';
 }) {
-  if (status === 'org') return null;
-  const cfg = CONFIG[status];
+  const cfg = awaitingMicrosoft
+    ? {
+        label: AWAITING_MICROSOFT_LABEL,
+        tooltip: AWAITING_MICROSOFT_TOOLTIP,
+        color: 'error' as const,
+        Icon: NoAccountsOutlinedIcon,
+      }
+    : status === 'org'
+      ? null
+      : CONFIG[status];
   if (!cfg) return null;
   const { label, tooltip, color, Icon } = cfg;
 

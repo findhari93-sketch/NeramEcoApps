@@ -65,6 +65,8 @@ export default function NewAssignmentDialog({
   assignmentId,
   scheduledClassId,
   classContextLabel,
+  classStartLabel,
+  defaultTiming,
 }: {
   open: boolean;
   onClose: () => void;
@@ -83,6 +85,10 @@ export default function NewAssignmentDialog({
   scheduledClassId?: string | null;
   /** Human label for that class, shown so the link is never a surprise. */
   classContextLabel?: string;
+  /** "Thu 20 Aug, 7:00 PM", so a prework deadline reads as a real moment. */
+  classStartLabel?: string;
+  /** Preselect Before class, e.g. from the "Add pre-class work" snackbar action. */
+  defaultTiming?: 'prework' | 'homework';
 }) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
@@ -105,6 +111,7 @@ export default function NewAssignmentDialog({
   const prefill = useCallback((a: AssignmentDetail) => {
     setDraft({
       type: a.assignment_type,
+      timing: (a as any).timing === 'prework' ? 'prework' : 'homework',
       title: a.title,
       instructions: a.instructions || '',
       classDate: a.class_date,
@@ -122,8 +129,9 @@ export default function NewAssignmentDialog({
 
   useEffect(() => {
     if (!open) return;
-    // Reset first.
-    setDraft(blankDraft(istTodayStr()));
+    // Reset first. defaultTiming lets a caller open this already set to "Before
+    // class", e.g. the Add pre-class work action after a class is created.
+    setDraft({ ...blankDraft(istTodayStr()), timing: defaultTiming ?? 'homework' });
     setShowAdvanced(false);
     setCreated(null);
     setLinkUrl('');
@@ -134,7 +142,7 @@ export default function NewAssignmentDialog({
         .then((res) => prefill(res.assignment as AssignmentDetail))
         .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the assignment.'));
     }
-  }, [open, assignmentId, authFetch, prefill]);
+  }, [open, assignmentId, authFetch, prefill, defaultTiming]);
 
   const reloadDetail = async (id: string) => {
     const res = await authFetch(`/api/assignments/${id}`);
@@ -204,6 +212,9 @@ export default function NewAssignmentDialog({
           classroom_id: classroomId,
           ...(scheduledClassId ? { scheduled_class_id: scheduledClassId } : {}),
           assignment_type: draft.type,
+          // Only meaningful with a class; the server derives a prework deadline
+          // from the class start and ignores due_date entirely for one.
+          ...(scheduledClassId ? { timing: draft.timing } : {}),
           title: draft.title.trim(),
           instructions: draft.instructions.trim() || null,
           class_date: draft.classDate || undefined,
@@ -415,6 +426,8 @@ export default function NewAssignmentDialog({
       linkReference={linkReference}
       onReferenceChange={onReferenceChange}
       lockType={isEdit}
+      showTiming={!!scheduledClassId}
+      classStartLabel={classStartLabel}
       showCategory={!isEdit}
       autoFocusTitle={!isEdit}
       enableReferencePaste

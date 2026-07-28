@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { canRunSession, isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
+import { classStartIso } from '@/lib/prework';
 
 /**
  * The assignments attached to one timetable class.
@@ -19,7 +20,12 @@ interface Ctx {
 }
 
 const ASSIGNMENT_COLS =
-  'id, title, assignment_type, status, due_at, class_date, max_marks, evaluation_type, scheduled_class_id';
+  'id, title, assignment_type, status, due_at, class_date, max_marks, evaluation_type, scheduled_class_id, timing';
+
+/** Today in IST as YYYY-MM-DD. class_date is a wall-clock day, not an instant. */
+function istTodayStr(): string {
+  return new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+}
 
 /**
  * Resolve the caller and confirm they can see this class.
@@ -40,7 +46,7 @@ async function resolveAccess(supabase: any, msOid: string, classId: string) {
 
   const { data: cls } = await supabase
     .from('nexus_scheduled_classes')
-    .select('id, classroom_id, teacher_id, scheduled_date')
+    .select('id, classroom_id, teacher_id, scheduled_date, start_time')
     .eq('id', classId)
     .single();
 
@@ -117,12 +123,18 @@ export async function GET(request: NextRequest, { params }: Ctx) {
 
 /**
  * POST /api/timetable/[classId]/assignments  (teacher)
- * Body: { assignment_id }  — attach an existing assignment to this class.
+ * Body: { assignment_id, timing? }  — attach an existing assignment to this class.
+ *
+ * `timing: 'prework'` means the student is meant to finish it BEFORE the class,
+ * in which case the deadline is derived from the class start rather than typed,
+ * so the two can never contradict each other.
  */
 export async function POST(request: NextRequest, { params }: Ctx) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
-    const { assignment_id } = await request.json();
+    const body = await request.json();
+    const { assignment_id } = body;
+    const timing = body.timing === 'prework' ? 'prework' : 'homework';
 
     if (!assignment_id) {
       return NextResponse.json({ error: 'assignment_id is required' }, { status: 400 });
@@ -135,11 +147,35 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: 'Only staff can link assignments' }, { status: 403 });
     }
 
+    const today = istTodayStr();
+    const classDay: string = access.cls.scheduled_date;
+
+    const update: Record<string, unknown> = {
+      scheduled_class_id: params.classId,
+      timing,
+      // Never date an assignment into the future.
+      //
+      // class_date is "the day this work entered the student's world": it drives
+      // computeAssignmentClock's personal_start and it is the sort key of the
+      // student's assignment list. Copying a future class's date onto it, which
+      // is what this line used to do unconditionally, pinned the work to the top
+      // of every student's list weeks early, and when the deadline was set before
+      // the class it put personal_start AFTER personal_due, so a late joiner was
+      // granted a catch-up window that began after the deadline had passed.
+      class_date: classDay > today ? today : classDay,
+    };
+
+    if (timing === 'prework') {
+      // Derived, never typed. The teacher does not get a date field for prework,
+      // so there is no way for it to disagree with the class it belongs to.
+      update.due_at = classStartIso(classDay, access.cls.start_time || '00:00');
+    }
+
     // Scope the update to the same classroom so a valid-looking id from another
     // cohort cannot be pulled in.
     const { data, error } = await supabase
       .from('nexus_class_assignments')
-      .update({ scheduled_class_id: params.classId, class_date: access.cls.scheduled_date })
+      .update(update)
       .eq('id', assignment_id)
       .eq('classroom_id', access.cls.classroom_id)
       .select(ASSIGNMENT_COLS)

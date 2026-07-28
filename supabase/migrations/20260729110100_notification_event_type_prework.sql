@@ -1,0 +1,11 @@
+-- Bell/email event for the afternoon pre-class prompt.
+--
+-- Its own migration file, and nothing else in it, because ALTER TYPE ... ADD
+-- VALUE cannot share a transaction with a statement that then uses the new
+-- value. Same reason as 20260721100000 and 20260728090200.
+--
+-- Getting this wrong has bitten this codebase before: an earlier feature widened
+-- only the CHECK constraint on nexus_timetable_notifications and never touched
+-- this enum, so every fallback insert threw and was silently swallowed. The
+-- student's bell stayed empty while the teacher saw a false success.
+ALTER TYPE notification_event_type ADD VALUE IF NOT EXISTS 'prework_reason_needed';

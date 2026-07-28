@@ -42,6 +42,12 @@ export async function createAssignment(
      * can still be created from the course plan with no class attached.
      */
     scheduled_class_id?: string | null;
+    /**
+     * 'prework' = due before its class starts; 'homework' = set in the class.
+     * Explicit rather than inferred from due_at, so the hottest student query
+     * never has to join the class table to know which it is.
+     */
+    timing?: NexusAssignmentTiming;
     class_date: string;
     title: string;
     instructions?: string | null;
@@ -67,6 +73,7 @@ export async function createAssignment(
     .insert({
       classroom_id: input.classroom_id,
       scheduled_class_id: input.scheduled_class_id ?? null,
+      timing: input.timing ?? 'homework',
       plan_id: input.plan_id ?? null,
       plan_entry_id: input.plan_entry_id ?? null,
       topic_id: input.topic_id ?? null,

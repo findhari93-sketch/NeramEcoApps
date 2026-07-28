@@ -13,6 +13,13 @@ export interface ClassShareInput {
   end_time: string;
   joinUrl?: string | null;
   description?: string | null;
+  /**
+   * Who takes the class. The Teams channel post, the group chat post and the
+   * calendar invite all name the tutor; leaving it out of the WhatsApp version
+   * was an oversight, and a message that does not say who is teaching is the one
+   * students ask about. Optional so callers without a tutor simply omit the line.
+   */
+  tutorName?: string | null;
   /** One-tap RSVP link (the student RSVP page). Students are attending by default. */
   rsvpUrl?: string | null;
 }
@@ -45,6 +52,11 @@ export function buildClassWhatsAppMessage(input: ClassShareInput): string {
   lines.push('');
   lines.push(`🗓️ ${formatDate(input.scheduled_date)}`);
   lines.push(`⏰ ${formatTime(input.start_time)} to ${formatTime(input.end_time)} (IST)`);
+
+  const tutor = (input.tutorName || '').trim();
+  if (tutor) {
+    lines.push(`👩‍🏫 Tutor: ${tutor}`);
+  }
 
   const desc = (input.description || '').trim();
   if (desc) {

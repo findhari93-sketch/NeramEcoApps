@@ -21,12 +21,14 @@ import {
   updateDrawingQuestion,
   deleteDrawingQuestion,
   createUserNotification,
+  getSupabaseAdminClient,
 } from '@neram/database';
 import type { GalleryReactionType } from '@neram/database/types';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { notifyAssignmentPublished, notifyAssignmentReviewed } from '@/lib/timetable-notifications';
 import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
+import { classStartIso } from '@/lib/prework';
 
 const REACTION_TYPES: GalleryReactionType[] = ['heart', 'clap', 'fire', 'star', 'wow'];
 function parseReaction(input: unknown): GalleryReactionType | null {
@@ -201,6 +203,28 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }
         if (body.due_at !== undefined) updates.due_at = body.due_at || null;
         if (body.class_date !== undefined) updates.class_date = body.class_date;
+
+        // Pre-class work is due when its class starts, always. Re-derive rather
+        // than trusting the body: the edit form has no date field for prework,
+        // so anything arriving in due_at for one is stale or wrong, and a
+        // deadline that disagrees with its class is worse than no deadline.
+        const nextTiming =
+          body.timing === 'prework' || body.timing === 'homework'
+            ? body.timing
+            : ((assignment as any).timing ?? 'homework');
+        if (body.timing !== undefined) updates.timing = nextTiming;
+
+        const linkedClassId = (assignment as any).scheduled_class_id as string | null;
+        if (nextTiming === 'prework' && linkedClassId) {
+          const { data: cls } = await (getSupabaseAdminClient() as any)
+            .from('nexus_scheduled_classes')
+            .select('scheduled_date, start_time')
+            .eq('id', linkedClassId)
+            .maybeSingle();
+          if (cls) {
+            updates.due_at = classStartIso(cls.scheduled_date, cls.start_time || '00:00');
+          }
+        }
         if (body.content_image_url !== undefined) updates.content_image_url = body.content_image_url || null;
         // Multi-image reference path (drawing): the assignment keeps the first image
         // for its thumbnail; the full set syncs to the backing question below.

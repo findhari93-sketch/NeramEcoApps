@@ -25,6 +25,7 @@ import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlin
 import DensitySmallOutlinedIcon from '@mui/icons-material/DensitySmallOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
+import NoAccountsOutlinedIcon from '@mui/icons-material/NoAccountsOutlined';
 import GraphAvatar from '@/components/GraphAvatar';
 import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import AvailableStudentsSection from '@/components/AvailableStudentsSection';
@@ -45,6 +46,8 @@ interface EnrolledStudent {
   email_status: EmailDomainStatus; // class-domain status of the shown email
   avatar_url: string | null;
   ms_oid: string | null;
+  awaiting_microsoft: boolean; // enrolled, but no Entra account yet: cannot sign in
+
   batch: StudentBatch | null; // classroom section (nexus_batches)
   exam_batch: string | null; // exam-year cohort (users.academic_year)
   attendance: { attended: number; total: number; percentage: number };
@@ -153,7 +156,7 @@ function CompactRow({ student, checklistPct, attColor, doneColor, presenceStatus
           {student.exam_batch && (
             <Chip label={student.exam_batch} size="small" color="primary" sx={{ height: 18, fontSize: '0.62rem', fontFamily: 'monospace', flexShrink: 0 }} />
           )}
-          <EmailDomainFlag status={student.email_status} />
+          <EmailDomainFlag status={student.email_status} awaitingMicrosoft={student.awaiting_microsoft} />
         </Box>
         {student.email && (
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.72rem', lineHeight: 1.3 }}>
@@ -212,7 +215,7 @@ function StudentCard({ student, checklistPct, attColor, doneColor, presenceStatu
               <Chip label={student.exam_batch} size="small" color="primary" sx={{ height: 20, fontSize: '0.68rem', fontFamily: 'monospace' }} />
             )}
             {student.batch && <Chip label={student.batch.name} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
-            <EmailDomainFlag status={student.email_status} />
+            <EmailDomainFlag status={student.email_status} awaitingMicrosoft={student.awaiting_microsoft} />
           </Box>
         </Box>
       </Box>
@@ -260,7 +263,7 @@ function DetailedRow({ student, checklistPct, attColor, doneColor, presenceStatu
               <Chip label={student.exam_batch} size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, fontFamily: 'monospace' }} />
             )}
             {student.batch && <Chip label={student.batch.name} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }} />}
-            <EmailDomainFlag status={student.email_status} />
+            <EmailDomainFlag status={student.email_status} awaitingMicrosoft={student.awaiting_microsoft} />
           </Box>
           {student.email && !isMobile && (
             <Typography variant="body2" color="text.secondary" noWrap>
@@ -414,6 +417,12 @@ export default function TeacherStudents() {
     );
   });
 
+  // "Active" means "can sign in today". New joinees who paid before their Entra
+  // account existed are still listed (and flagged on their row), but counting
+  // them as active would overstate who is actually reachable in Nexus.
+  const awaitingCount = filteredStudents.filter((s) => s.awaiting_microsoft).length;
+  const activeCount = filteredStudents.length - awaitingCount;
+
   const handleCopyEmail = useCallback((e: React.MouseEvent, email: string) => {
     e.stopPropagation(); // Don't navigate to student detail
     navigator.clipboard.writeText(email).then(() => {
@@ -427,10 +436,26 @@ export default function TeacherStudents() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2 }}>
         <Chip
           icon={<PeopleOutlinedIcon sx={{ fontSize: 18 }} />}
-          label={loading ? 'Loading…' : `${filteredStudents.length} active`}
+          label={loading ? 'Loading…' : `${activeCount} active`}
           color="primary"
           sx={{ fontWeight: 700 }}
         />
+        {!loading && awaitingCount > 0 && (
+          <Tooltip
+            title="Enrolled and paid, but they have no @neramclasses.com account yet, so they cannot sign in to Nexus. Create the account in Entra, then use Refresh from Entra in Admin."
+            arrow
+            enterTouchDelay={0}
+            leaveTouchDelay={4000}
+          >
+            <Chip
+              icon={<NoAccountsOutlinedIcon sx={{ fontSize: 18 }} />}
+              label={`${awaitingCount} awaiting Microsoft`}
+              color="error"
+              variant="outlined"
+              sx={{ fontWeight: 700, cursor: 'help' }}
+            />
+          </Tooltip>
+        )}
         {currentBatch && (
           <Chip
             icon={<EventAvailableOutlinedIcon sx={{ fontSize: 18 }} />}

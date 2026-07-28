@@ -5121,6 +5121,12 @@ export type NexusAssignmentFormat = 'pdf' | 'image' | 'pdf_or_image';
  */
 export type NexusAssignmentType = 'drawing' | 'document';
 export type NexusAssignmentStatus = 'draft' | 'published' | 'closed';
+/**
+ * When the work is meant to be done, relative to the class it is attached to.
+ * 'prework' is due when the class starts; 'homework' is set in the class and
+ * keeps its own due date.
+ */
+export type NexusAssignmentTiming = 'prework' | 'homework';
 export type NexusAssignmentSubmissionStatus = 'submitted' | 'reviewed' | 'redo';
 /**
  * How an assignment is graded (teacher's choice, changeable):
@@ -5159,6 +5165,13 @@ export interface NexusAssignmentSubmissionHistoryEntry {
 export interface NexusClassAssignment {
   id: string;
   classroom_id: string;
+  /**
+   * The timetable class this work belongs to. Optional: assignments created from
+   * the course plan need not be pinned to a class.
+   */
+  scheduled_class_id: string | null;
+  /** Due before the class ('prework') or set in it ('homework'). */
+  timing: NexusAssignmentTiming;
   plan_id: string | null;
   plan_entry_id: string | null;
   topic_id: string | null;

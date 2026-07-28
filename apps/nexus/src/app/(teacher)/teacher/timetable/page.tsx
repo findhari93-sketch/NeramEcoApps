@@ -33,6 +33,7 @@ import AttendanceSheet from '@/components/timetable/AttendanceSheet';
 import BackfillFromTeamsDialog from '@/components/timetable/BackfillFromTeamsDialog';
 import ClassAttendanceInsights from '@/components/timetable/ClassAttendanceInsights';
 import ClassDetailPanel from '@/components/timetable/ClassDetailPanel';
+import RescheduleDialog, { type ReschedulePayload } from '@/components/timetable/RescheduleDialog';
 import HolidayManager from '@/components/timetable/HolidayManager';
 import RsvpDashboard from '@/components/timetable/RsvpDashboard';
 import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
@@ -44,6 +45,7 @@ import {
   type HolidayInfo,
 } from '@/components/timetable/date-utils';
 import { type PlanShape } from '@/lib/plan-shape';
+import { classStartIso, formatIstTime } from '@/lib/prework';
 
 interface ClassroomOption {
   id: string;
@@ -67,6 +69,10 @@ export default function TeacherTimetable() {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [classes, setClasses] = useState<ClassCardData[]>([]);
+  // Mirrors `classes` for callbacks that fire later than their closure, such as
+  // the snackbar's "Add pre-class work": the refetch it follows has landed by
+  // the time anyone taps it, but the closure was built before that.
+  const classesRef = useRef<ClassCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [planShapes, setPlanShapes] = useState<PlanShape[]>([]);
   // Plan is the teacher default: they arrive to build a week, not read one.
@@ -94,6 +100,8 @@ export default function TeacherTimetable() {
   const [assignmentMenuClass, setAssignmentMenuClass] = useState<ClassCardData | null>(null);
   const [linkDialogClass, setLinkDialogClass] = useState<ClassCardData | null>(null);
   const [newAssignmentClass, setNewAssignmentClass] = useState<ClassCardData | null>(null);
+  /** Preselects Before class when the dialog is opened from "Add pre-class work". */
+  const [newAssignmentTiming, setNewAssignmentTiming] = useState<'prework' | 'homework'>('homework');
   const [assignmentRefreshKey, setAssignmentRefreshKey] = useState(0);
   const [draftCount, setDraftCount] = useState(0);
   const [publishing, setPublishing] = useState(false);
@@ -109,6 +117,9 @@ export default function TeacherTimetable() {
   const [backfillOpen, setBackfillOpen] = useState(false);
   const [insightsClass, setInsightsClass] = useState<ClassCardData | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
+  const [reschedulingClass, setReschedulingClass] = useState<ClassCardData | null>(null);
+  const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   const [holidayManagerOpen, setHolidayManagerOpen] = useState(false);
   const [rsvpDashboardOpen, setRsvpDashboardOpen] = useState(false);
   const [rsvpDashboardClassId, setRsvpDashboardClassId] = useState<string | undefined>();
@@ -136,7 +147,13 @@ export default function TeacherTimetable() {
   const [slotMenuTime, setSlotMenuTime] = useState('');
 
   // Snackbar
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' }>({
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'warning' | 'info';
+    /** Optional follow-up, e.g. "Add pre-class work" after creating a class. */
+    action?: { label: string; onClick: () => void };
+  }>({
     open: false,
     message: '',
     severity: 'success',
@@ -188,6 +205,7 @@ export default function TeacherTimetable() {
       if (res.ok) {
         const data = await res.json();
         setClasses(data.classes || []);
+        classesRef.current = data.classes || [];
         setPlanShapes(data.planShapes || []);
         loadedRange.current = {
           classroomId: activeClassroom.id,
@@ -593,6 +611,94 @@ export default function TeacherTimetable() {
     setSelectedClass(null);
     setEditingClass(cls);
     setCreateDialogOpen(true);
+  };
+
+  const handleOpenReschedule = (cls: ClassCardData) => {
+    setSelectedClass(null);
+    setRescheduleError(null);
+    setReschedulingClass(cls);
+  };
+
+  /**
+   * Move a class. The server updates Teams first and refuses the move outright
+   * if Microsoft says no, so a failure here means nothing changed anywhere and
+   * the error belongs in the dialog rather than in a toast that scrolls away.
+   */
+  const handleReschedule = async (payload: ReschedulePayload) => {
+    if (!reschedulingClass) return;
+    const classroomId = getClassroomIdForClass(reschedulingClass.id);
+    setRescheduleSubmitting(true);
+    setRescheduleError(null);
+    try {
+      // Teacher token: moving a Teams event needs Calendars.ReadWrite.
+      const token = await getTeacherToken();
+      if (!token) {
+        setRescheduleError('Please sign in again to move Teams meetings (extended permissions needed).');
+        return;
+      }
+
+      const res = await fetch('/api/timetable', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: reschedulingClass.id, classroom_id: classroomId, ...payload }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setRescheduleError(data.error || 'Could not move the class. Please try again.');
+        return;
+      }
+
+      setReschedulingClass(null);
+      setSnackbar({ open: true, message: 'Class moved. Teams and the students have been updated.', severity: 'success' });
+      fetchClasses(true);
+    } catch (err) {
+      console.error('Failed to reschedule class:', err);
+      setRescheduleError('Could not move the class. Please try again.');
+    } finally {
+      setRescheduleSubmitting(false);
+    }
+  };
+
+  /**
+   * Give a calendar entry to a class that has a Teams link and no invites.
+   * Reuses the existing join URL, so links already posted to the channel, the
+   * group chat and WhatsApp keep working.
+   */
+  const handleRepairMeeting = async (cls: ClassCardData) => {
+    setSnackbar({ open: true, message: 'Sending the calendar invites...', severity: 'info' });
+    try {
+      const token = await getTeacherToken();
+      if (!token) {
+        setSnackbar({
+          open: true,
+          message: 'Please sign in again to send calendar invites (extended permissions needed)',
+          severity: 'error',
+        });
+        return;
+      }
+
+      const res = await fetch(`/api/timetable/${cls.id}/repair-meeting`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        setSelectedClass(null);
+        setSnackbar({
+          open: true,
+          message: data.message || 'Calendar invites sent',
+          severity: data.notInvited?.length ? 'warning' : 'success',
+        });
+        fetchClasses(true);
+      } else {
+        setSnackbar({ open: true, message: data.error || 'Could not send the invites', severity: 'error' });
+      }
+    } catch (err) {
+      console.error('Failed to repair meeting:', err);
+      setSnackbar({ open: true, message: 'Could not send the invites', severity: 'error' });
+    }
   };
 
   // Find the actual classroom_id for a class (may differ from activeClassroom for Common Classes)
@@ -1253,6 +1359,31 @@ export default function TeacherTimetable() {
         onSyncRecording={handleSyncRecording}
         onViewRsvpDashboard={handleViewRsvpDashboard}
         onCreateMeeting={handleCreateMeeting}
+        onReschedule={handleOpenReschedule}
+        onRepairMeeting={handleRepairMeeting}
+        assignmentsEditable
+        onLinkAssignment={(cls) => {
+          setSelectedClass(null);
+          setLinkDialogClass(cls);
+        }}
+        onCreateAssignment={(cls) => {
+          setSelectedClass(null);
+          setNewAssignmentTiming('homework');
+          setNewAssignmentClass(cls);
+        }}
+      />
+
+      {/* Move a class to another day or time */}
+      <RescheduleDialog
+        open={!!reschedulingClass}
+        onClose={() => {
+          setReschedulingClass(null);
+          setRescheduleError(null);
+        }}
+        cls={reschedulingClass}
+        onSubmit={handleReschedule}
+        submitting={rescheduleSubmitting}
+        error={rescheduleError}
       />
 
       {/* Create/Edit Dialog */}
@@ -1268,8 +1399,29 @@ export default function TeacherTimetable() {
         classrooms={classroomOptions}
         defaultClassroomId={activeClassroom?.id || ''}
         getToken={getToken}
-        onSaved={() => {
-          setSnackbar({ open: true, message: editingClass ? 'Class updated' : 'Class created', severity: 'success' });
+        getTeacherToken={getTeacherToken}
+        onSaved={(created) => {
+          // Offer the follow-up rather than adding an assignment field to a
+          // dialog that already carries thirteen. One extra tap, no new form,
+          // and recurrence stays unambiguous: the action targets the first
+          // occurrence, which is what the dialog then says.
+          const only = created && created.length ? created[0] : null;
+          setSnackbar({
+            open: true,
+            message: editingClass ? 'Class updated' : 'Class created',
+            severity: 'success',
+            action: only
+              ? {
+                  label: 'Add pre-class work',
+                  onClick: () => {
+                    const cls = classesRef.current.find((c) => c.id === only.id);
+                    if (!cls) return;
+                    setNewAssignmentTiming('prework');
+                    setNewAssignmentClass(cls);
+                  },
+                }
+              : undefined,
+          });
           fetchClasses(true);
           fetchHolidays();
           setPrefillDate('');
@@ -1417,6 +1569,10 @@ export default function TeacherTimetable() {
           getToken={getTeacherToken}
           scheduledClassId={newAssignmentClass.id}
           classContextLabel={`${newAssignmentClass.title}, ${formatDayLabel(newAssignmentClass.scheduled_date)}`}
+          classStartLabel={`${formatDayLabel(newAssignmentClass.scheduled_date)}, ${formatIstTime(
+            classStartIso(newAssignmentClass.scheduled_date, newAssignmentClass.start_time),
+          )}`}
+          defaultTiming={newAssignmentTiming}
           onCreated={refreshAssignments}
         />
       )}
@@ -1449,6 +1605,22 @@ export default function TeacherTimetable() {
         <Alert
           severity={snackbar.severity}
           onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+          action={
+            snackbar.action ? (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => {
+                  const run = snackbar.action?.onClick;
+                  setSnackbar((s) => ({ ...s, open: false }));
+                  run?.();
+                }}
+                sx={{ textTransform: 'none', fontWeight: 700, minHeight: 36 }}
+              >
+                {snackbar.action.label}
+              </Button>
+            ) : undefined
+          }
         >
           {snackbar.message}
         </Alert>

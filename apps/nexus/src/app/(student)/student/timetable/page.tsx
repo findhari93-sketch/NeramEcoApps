@@ -27,6 +27,25 @@ import CalendarShell from '@/components/timetable/CalendarShell';
 import ClassReviewForm from '@/components/timetable/ClassReviewForm';
 import ClassDetailPanel, { type PanelAssignment } from '@/components/timetable/ClassDetailPanel';
 import RsvpReasonDialog, { type RsvpDeclinePayload } from '@/components/timetable/RsvpReasonDialog';
+import PreworkReasonDialog, { type PreworkReasonPayload } from '@/components/timetable/PreworkReasonDialog';
+import { preworkStripCopy, preworkDueLabel, formatIstTime, type PreworkState } from '@/lib/prework';
+
+/** One piece of pre-class work, as my-schedule reports it for this student. */
+interface PreworkItem {
+  class_id: string;
+  class_title: string;
+  scheduled_date: string;
+  start_time: string;
+  assignment_id: string;
+  assignment_title: string;
+  assignment_type?: string | null;
+  due_at: string | null;
+  submitted: boolean;
+  reason_code: string | null;
+  reason_note: string | null;
+  reason_started: boolean;
+  state: PreworkState;
+}
 import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
 import { type ClassCardData } from '@/components/timetable/ClassCard';
 import {
@@ -84,6 +103,12 @@ export default function StudentTimetable() {
   >([]);
   /** Backlog items for a student who joined mid-course. Count only, on purpose. */
   const [catchupPending, setCatchupPending] = useState(0);
+  /** Work due BEFORE a class, with this student's submission and reason state. */
+  const [prework, setPrework] = useState<PreworkItem[]>([]);
+  const [preworkTarget, setPreworkTarget] = useState<PreworkItem | null>(null);
+  const [preworkSubmitting, setPreworkSubmitting] = useState(false);
+  const [preworkError, setPreworkError] = useState<string | null>(null);
+  const [preworkStripDismissed, setPreworkStripDismissed] = useState(false);
 
   const classes = useMemo(
     () =>
@@ -192,6 +217,7 @@ export default function StudentTimetable() {
         setPlanShapes(data.planShapes || []);
         setOpenAbsences(data.openAbsences || []);
         setCatchupPending(data.catchupPending || 0);
+        setPrework(data.prework || []);
         loadedRange.current = { start: fetchRange.start, end: fetchRange.end };
       }
     } catch (err) {
@@ -474,6 +500,138 @@ export default function StudentTimetable() {
     </Box>
   ) : null;
 
+  /**
+   * "You have not done the work for tonight."
+   *
+   * Reuses the same slot as the live-class strip and never competes with it: a
+   * class happening right now always wins.
+   *
+   * The red variant has no close button, and that omission IS the mechanic. The
+   * ask is loud and repeats until answered; what it never does is block anything.
+   * The Join button below is untouched, on purpose: locking a student out of a
+   * class over homework converts a homework problem into an attendance problem.
+   */
+  const preworkStrip = (() => {
+    const copy = preworkStripCopy(prework.map((p) => ({ state: p.state, dueAtIso: p.due_at })));
+    if (!copy) return null;
+    if (copy.dismissible && preworkStripDismissed) return null;
+
+    const first =
+      prework.find((p) => p.state === 'overdue_unanswered') ??
+      prework.find((p) => p.state === 'due_soon') ??
+      null;
+
+    return (
+      <Box
+        sx={{
+          flex: '0 0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          minHeight: 40,
+          px: { xs: 1.5, md: 2 },
+          bgcolor: copy.severity === 'error' ? 'error.main' : 'warning.main',
+          color: copy.severity === 'error' ? 'error.contrastText' : 'warning.contrastText',
+        }}
+      >
+        <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontWeight: 700 }}>
+          {copy.text}
+        </Typography>
+        <Button
+          color="inherit"
+          size="small"
+          variant="outlined"
+          onClick={() => {
+            if (!first) return;
+            setPreworkError(null);
+            if (copy.action === 'Tell us why') setPreworkTarget(first);
+            else router.push(`/student/assignments/${first.assignment_id}`);
+          }}
+          sx={{ fontWeight: 700, borderColor: 'currentColor', minHeight: 32, textTransform: 'none' }}
+        >
+          {copy.action}
+        </Button>
+        {copy.dismissible && (
+          <IconButton
+            size="small"
+            color="inherit"
+            aria-label="Dismiss"
+            onClick={() => setPreworkStripDismissed(true)}
+            sx={{ width: 32, height: 32 }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        )}
+      </Box>
+    );
+  })();
+
+  /**
+   * The class's assignments, with the prework facts folded in.
+   *
+   * /api/student/assignments does not know which of them are pre-class work or
+   * whether this student has already given a reason; my-schedule does. Merging
+   * here keeps both endpoints unchanged and means the panel and the strip read
+   * from one source of truth.
+   */
+  const assignmentsForPanel = (classId: string): PanelAssignment[] | undefined => {
+    const rows = classAssignments[classId];
+    if (!rows) return undefined;
+    return rows.map((a) => {
+      const p = prework.find((x) => x.assignment_id === a.id);
+      return p ? { ...a, timing: 'prework' as const, prework_reason_code: p.reason_code } : a;
+    });
+  };
+
+  /** Send the reason, then fold the answer back into state so the strip clears. */
+  const handlePreworkReasonSubmit = async (payload: PreworkReasonPayload) => {
+    if (!preworkTarget) return;
+    setPreworkSubmitting(true);
+    setPreworkError(null);
+    try {
+      const token = await getToken();
+      if (!token) {
+        setPreworkError('Please sign in again.');
+        return;
+      }
+      const res = await fetch('/api/timetable/prework-reason', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          assignment_id: preworkTarget.assignment_id,
+          reason_code: payload.reasonCode,
+          note: payload.note,
+          started: payload.started,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPreworkError(data.error || 'Could not save your reason. Please try again.');
+        return;
+      }
+
+      setPrework((prev) =>
+        prev.map((p) =>
+          p.assignment_id === preworkTarget.assignment_id
+            ? {
+                ...p,
+                reason_code: payload.reasonCode,
+                reason_note: payload.note || null,
+                reason_started: payload.started,
+                state: 'answered' as PreworkState,
+              }
+            : p,
+        ),
+      );
+      setPreworkTarget(null);
+    } catch (err) {
+      console.error('Failed to save prework reason:', err);
+      setPreworkError('Could not save your reason. Please try again.');
+    } finally {
+      setPreworkSubmitting(false);
+    }
+  };
+
   const missedList = (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
       {openAbsences.slice(0, 4).map((a) => (
@@ -674,7 +832,7 @@ export default function StudentTimetable() {
         markedDates={markedDates}
         holidayDates={holidayDates}
         toolbarActions={toolbarActions}
-        banner={liveStrip}
+        banner={liveStrip ?? preworkStrip}
       >
         {view === 'month' && range.month ? (
           <MonthView
@@ -744,8 +902,15 @@ export default function StudentTimetable() {
         getToken={getToken}
         myRsvp={selectedClass ? myRsvps[selectedClass.id] : null}
         myAttended={selectedClass ? (myAttendance[selectedClass.id] ?? null) : null}
-        assignments={selectedClass ? classAssignments[selectedClass.id] : undefined}
+        assignments={selectedClass ? assignmentsForPanel(selectedClass.id) : undefined}
         onOpenAssignment={(id) => router.push(`/student/assignments/${id}`)}
+        onPreworkReason={(a) => {
+          const item = prework.find((p) => p.assignment_id === a.id);
+          if (!item) return;
+          setPreworkError(null);
+          setSelectedClass(null);
+          setPreworkTarget(item);
+        }}
         onRsvp={handleRsvp}
         onRate={handleOpenRate}
       />
@@ -757,6 +922,33 @@ export default function StudentTimetable() {
         classSubtitle={rsvpReasonTarget?.classSubtitle}
         onSubmit={handleRsvpReasonSubmit}
         submitting={rsvpSubmitting}
+      />
+
+      <PreworkReasonDialog
+        open={!!preworkTarget}
+        onClose={() => {
+          setPreworkTarget(null);
+          setPreworkError(null);
+        }}
+        assignmentTitle={preworkTarget?.assignment_title || ''}
+        contextLine={
+          preworkTarget
+            ? `for ${preworkTarget.class_title} at ${formatIstTime(preworkTarget.due_at || '') || preworkTarget.start_time.slice(0, 5)}`
+            : undefined
+        }
+        existing={
+          preworkTarget?.reason_code
+            ? {
+                reasonCode: preworkTarget.reason_code,
+                note: preworkTarget.reason_note,
+                started: preworkTarget.reason_started,
+              }
+            : null
+        }
+        locked={preworkTarget?.state === 'stale'}
+        onSubmit={handlePreworkReasonSubmit}
+        submitting={preworkSubmitting}
+        error={preworkError}
       />
 
       {reviewClass && (

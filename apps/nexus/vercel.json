@@ -38,6 +38,10 @@
     {
       "path": "/api/cron/catchup-pace",
       "schedule": "30 3 * * 1"
+    },
+    {
+      "path": "/api/cron/prework-sweep",
+      "schedule": "30 10 * * 1-5"
     }
   ],
   "headers": [

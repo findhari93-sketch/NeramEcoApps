@@ -22,6 +22,15 @@ export interface ClassCardData {
   teams_meeting_join_url: string | null;
   teams_meeting_id: string | null;
   teams_meeting_scope: string | null;
+  /**
+   * The Outlook or group event id. NULL means the class has a join link and no
+   * calendar entry, so nobody was invited. Read THIS, never teams_meeting_scope,
+   * to decide whether invites went out: the scope is also written on the failure
+   * path and reading it as a result is how classes came to claim "Calendar
+   * invites" with an empty attendee list.
+   */
+  teams_calendar_event_id?: string | null;
+  teams_meeting_degraded?: boolean | null;
   recording_url: string | null;
   batch_id: string | null;
   target_scope?: string | null;

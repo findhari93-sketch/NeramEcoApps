@@ -26,8 +26,15 @@ import type { AssignmentFormat } from '@/lib/assignment-format';
 export type AssignmentType = 'drawing' | 'document';
 export type AssignmentEvaluation = 'marks' | 'stars';
 
+export type AssignmentTiming = 'prework' | 'homework';
+
 export interface AssignmentDraft {
   type: AssignmentType;
+  /**
+   * Whether the work is due BEFORE the class it is attached to, or set in it.
+   * Only meaningful with a class context, so the control is hidden without one.
+   */
+  timing: AssignmentTiming;
   title: string;
   instructions: string;
   classDate: string;
@@ -52,6 +59,7 @@ export const DRAWING_CATEGORIES: { value: string; label: string }[] = [
 export function blankDraft(classDate: string): AssignmentDraft {
   return {
     type: 'drawing',
+    timing: 'homework',
     title: '',
     instructions: '',
     classDate,
@@ -75,6 +83,13 @@ interface AssignmentFormFieldsProps {
   linkReference: (url: string) => Promise<{ url: string }>;
   /** Lock the type toggle (true only when editing an existing assignment). */
   lockType?: boolean;
+  /**
+   * Show the Before class / After class control. Only pass this with a class
+   * context: outside one, "before the class" has no referent.
+   */
+  showTiming?: boolean;
+  /** "Thu 20 Aug, 7:00 PM", so the derived prework deadline is legible. */
+  classStartLabel?: string;
   /** Show the drawing-category select (create / preview only, hidden on edit). */
   showCategory?: boolean;
   /**
@@ -101,6 +116,8 @@ export default function AssignmentFormFields({
   uploadReference,
   linkReference,
   lockType = false,
+  showTiming = false,
+  classStartLabel,
   showCategory = true,
   onReferenceChange,
   showAdvanced,
@@ -162,6 +179,27 @@ export default function AssignmentFormFields({
           </Box>
         </ToggleButton>
       </ToggleButtonGroup>
+
+      {/* When the work is due, relative to its class. Hidden without a class
+          context, where "before the class" would mean nothing. */}
+      {showTiming && (
+        <ToggleButtonGroup
+          value={value.timing}
+          exclusive
+          onChange={(_, v) => v && onChange({ timing: v })}
+          fullWidth
+          size="small"
+        >
+          <ToggleButton value="prework" sx={{ minHeight: 52, textTransform: 'none', gap: 0.75, flexDirection: 'column', py: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>Before class</Typography>
+            <Typography variant="caption" color="text.secondary">Do it before we meet</Typography>
+          </ToggleButton>
+          <ToggleButton value="homework" sx={{ minHeight: 52, textTransform: 'none', gap: 0.75, flexDirection: 'column', py: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>After class</Typography>
+            <Typography variant="caption" color="text.secondary">Homework from this class</Typography>
+          </ToggleButton>
+        </ToggleButtonGroup>
+      )}
 
       <TextField
         label="Title"
@@ -294,10 +332,25 @@ export default function AssignmentFormFields({
         )}
       </Box>
 
-      <Stack direction="row" spacing={2}>
-        <TextField label="Class date" type="date" value={value.classDate} onChange={(e) => onChange({ classDate: e.target.value })} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} />
-        <TextField label="Due (optional)" type="date" value={value.dueDate} onChange={(e) => onChange({ dueDate: e.target.value })} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} />
-      </Stack>
+      {/* Pre-class work has no date fields at all. Its deadline is the class
+          start, derived server side, so there is no way for a typed date to
+          contradict the class it belongs to. Removing the input removes the
+          whole bug class. */}
+      {showTiming && value.timing === 'prework' ? (
+        <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {classStartLabel ? `Due before ${classStartLabel}` : 'Due when the class starts'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            This follows the class. If you move the class, the deadline moves with it.
+          </Typography>
+        </Box>
+      ) : (
+        <Stack direction="row" spacing={2}>
+          <TextField label="Class date" type="date" value={value.classDate} onChange={(e) => onChange({ classDate: e.target.value })} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} />
+          <TextField label="Due (optional)" type="date" value={value.dueDate} onChange={(e) => onChange({ dueDate: e.target.value })} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} />
+        </Stack>
+      )}
 
       <Button
         onClick={onToggleAdvanced}

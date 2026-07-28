@@ -51,4 +51,24 @@ describe('buildClassWhatsAppMessage', () => {
     const msg = buildClassWhatsAppMessage(base);
     expect(msg).not.toContain('Tap to RSVP');
   });
+
+  it('names the tutor, so the group knows who is taking the class', () => {
+    const msg = buildClassWhatsAppMessage({ ...base, tutorName: 'Ar. Hari Babu' });
+    expect(msg).toContain('Tutor: Ar. Hari Babu');
+  });
+
+  it('puts the tutor above the description, not buried under it', () => {
+    const msg = buildClassWhatsAppMessage({
+      ...base,
+      tutorName: 'Ar. Hari Babu',
+      description: 'Bring a ruler.',
+    });
+    expect(msg.indexOf('Tutor:')).toBeLessThan(msg.indexOf('Bring a ruler.'));
+  });
+
+  it('omits the tutor line when there is no tutor', () => {
+    expect(buildClassWhatsAppMessage(base)).not.toContain('Tutor:');
+    expect(buildClassWhatsAppMessage({ ...base, tutorName: null })).not.toContain('Tutor:');
+    expect(buildClassWhatsAppMessage({ ...base, tutorName: '   ' })).not.toContain('Tutor:');
+  });
 });

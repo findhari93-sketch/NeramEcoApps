@@ -39,6 +39,31 @@ export function buildCancelledHtml(cls: {
 <p>This class has been cancelled, you do not need to join. We will let you know if it is rescheduled.</p>`;
 }
 
+/**
+ * Card shown in the channel/chat once a class has been moved.
+ *
+ * Carries the join link, because the meeting itself is unchanged: the student who
+ * reads this card is the same student who will click that link on the new day.
+ * The old date is spelled out so a student scrolling back does not have to guess
+ * which of two cards is current.
+ */
+export function buildRescheduledHtml(
+  cls: { title: string; scheduled_date: string; start_time: string; end_time: string },
+  was: { scheduled_date: string; start_time: string },
+  joinUrl?: string | null,
+  rsvpUrl?: string | null,
+): string {
+  return `<h3>🔁 Moved: ${cls.title}</h3>
+<p><strong>Now:</strong> ${cls.scheduled_date}, ${cls.start_time} to ${cls.end_time} (IST)<br/>
+<strong>Was:</strong> ${was.scheduled_date}, ${was.start_time}</p>${
+    joinUrl ? `\n<p><a href="${joinUrl}">🔗 Join Meeting</a></p>` : ''
+  }${
+    rsvpUrl
+      ? `\n<p>✋ Can't make the new time? <a href="${rsvpUrl}">Tap to RSVP</a> (you're marked attending by default).</p>`
+      : ''
+  }`;
+}
+
 /** Post an HTML message to a Teams channel; returns the new message ID or null. */
 export async function postChannelMessage(
   token: string,
@@ -187,6 +212,59 @@ export async function announceCancellationToTeams(
   let chatMessageId: string | null = null;
 
   // Channel: reuse the class's own channel if known, else resolve the meeting channel.
+  if (classroom?.ms_team_id) {
+    const channelId = oldRefs?.teams_channel_id || (await resolveMeetingChannelId(token, classroom.ms_team_id));
+    if (channelId) {
+      channelMessageId = await postChannelMessage(token, classroom.ms_team_id, channelId, html);
+    }
+  }
+
+  if (classroom?.ms_group_chat_id) {
+    chatMessageId = await postChatMessage(token, classroom.ms_group_chat_id, html);
+  }
+
+  return { channelMessageId, chatMessageId };
+}
+
+/**
+ * Mark a moved class in Teams: soft-delete the stale "Join Meeting" card and post
+ * a fresh one carrying the new time.
+ *
+ * Graph cannot edit a posted message body in place, which is why cancellation
+ * already works this way. Without this, moving a class left a card in the channel
+ * and the group chat still advertising the old day, indefinitely, and a student
+ * reading Teams rather than Nexus would turn up on the wrong evening.
+ *
+ * Returns the new message IDs so the class row can point at the current card,
+ * or null when the classroom has no Teams targets. Best-effort throughout: the
+ * class has already moved by the time this runs, and a failed repost must not
+ * undo that.
+ */
+export async function announceRescheduleToTeams(
+  token: string,
+  supabase: AdminClient,
+  classroomId: string,
+  oldRefs: TeamsAnnouncementRefs | null,
+  cls: { title: string; scheduled_date: string; start_time: string; end_time: string },
+  was: { scheduled_date: string; start_time: string },
+  links?: { joinUrl?: string | null; rsvpUrl?: string | null },
+): Promise<{ channelMessageId: string | null; chatMessageId: string | null } | null> {
+  if (oldRefs) {
+    await removeTeamsAnnouncements(token, supabase, classroomId, oldRefs);
+  }
+
+  const { data: classroom } = await supabase
+    .from('nexus_classrooms')
+    .select('ms_team_id, ms_group_chat_id')
+    .eq('id', classroomId)
+    .single();
+
+  if (!classroom?.ms_team_id && !classroom?.ms_group_chat_id) return null;
+
+  const html = buildRescheduledHtml(cls, was, links?.joinUrl, links?.rsvpUrl);
+  let channelMessageId: string | null = null;
+  let chatMessageId: string | null = null;
+
   if (classroom?.ms_team_id) {
     const channelId = oldRefs?.teams_channel_id || (await resolveMeetingChannelId(token, classroom.ms_team_id));
     if (channelId) {

@@ -3,6 +3,7 @@ import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient, getCurrentBatch } from '@neram/database';
 import { pickClassroomEmail } from '@/lib/classroom-email';
+import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
 
 /**
  * GET /api/students?classroom={id}&search={query}&batch={batchId|unassigned}&examBatch={code|current|none}
@@ -25,12 +26,6 @@ export async function GET(request: NextRequest) {
     const search = request.nextUrl.searchParams.get('search');
     const batchFilter = request.nextUrl.searchParams.get('batch');
     const examBatchParam = request.nextUrl.searchParams.get('examBatch');
-    // Nexus is an organisation (Microsoft-only) app: by default the roster shows
-    // only students who hold a real org identity (ms_oid => @neramclasses.com or the
-    // pending .onmicrosoft.com). Gmail-only self-enrolled shells (firebase_uid, no
-    // ms_oid) can't even log into Nexus, so they are hidden here (Admin keeps them
-    // visible for linking/merge). Pass includeNonOrg=1 to opt out (tests/admin).
-    const includeNonOrg = request.nextUrl.searchParams.get('includeNonOrg') === '1';
 
     if (!classroomId) {
       return NextResponse.json({ error: 'Missing classroom parameter' }, { status: 400 });
@@ -45,6 +40,13 @@ export async function GET(request: NextRequest) {
     // Get student enrollments with user info, classroom section (batch) and exam year (academic_year).
     // Hard-exclude graduated students (users.is_alumni) and deactivated enrollments (is_active):
     // once a student is graduated in Admin they lose Nexus access and must not appear here.
+    //
+    // Students with no ms_oid are deliberately KEPT. They are enrolled (usually a
+    // new joinee who paid through the marketing link before their
+    // @neramclasses.com mailbox existed) and staff need to see they are waiting
+    // rather than have them vanish. Each row carries `awaiting_microsoft` and they
+    // are counted separately, so they never inflate "N active". See
+    // lib/microsoft-account.ts.
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
       .select('user_id, enrolled_at, batch_id, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, is_alumni), batch:nexus_batches(id, name)')
@@ -52,12 +54,6 @@ export async function GET(request: NextRequest) {
       .eq('role', 'student')
       .eq('is_active', true)
       .eq('users.is_alumni', false);
-
-    // Org-identity gate (see includeNonOrg above). Same rule already applied to
-    // staff in lib/nexus-members.ts (isLicensedStaff requires a real ms_oid).
-    if (!includeNonOrg) {
-      enrollmentQuery = enrollmentQuery.not('users.ms_oid', 'is', null);
-    }
 
     if (search) {
       enrollmentQuery = enrollmentQuery.ilike('users.name', `%${search}%`);
@@ -214,6 +210,7 @@ export async function GET(request: NextRequest) {
         email_status: emailStatus,
         avatar_url: user.avatar_url,
         ms_oid: user.ms_oid,
+        awaiting_microsoft: isAwaitingMicrosoft(user.ms_oid),
         nexus_access_enabled: user.nexus_access_enabled ?? false,
         exam_batch: user.academic_year ?? null,
         enrolled_at: enrollment.enrolled_at,
@@ -239,7 +236,17 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
       .order('name');
 
-    return NextResponse.json({ students, batches: batches || [], currentBatch: currentCode });
+    // Split counts so the header can say "N active" honestly. `active` is the
+    // number who can actually sign in today; `awaitingMicrosoft` is the queue of
+    // paid students still waiting on Entra provisioning.
+    const awaitingMicrosoft = students.filter((s: any) => s.awaiting_microsoft).length;
+    const counts = {
+      total: students.length,
+      active: students.length - awaitingMicrosoft,
+      awaitingMicrosoft,
+    };
+
+    return NextResponse.json({ students, counts, batches: batches || [], currentBatch: currentCode });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load students';
     console.error('Students GET error:', message);

@@ -27,6 +27,8 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import EditIcon from '@mui/icons-material/Edit';
+import EventRepeatIcon from '@mui/icons-material/EventRepeat';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
@@ -48,8 +50,11 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import { type ClassCardData } from './ClassCard';
 import MeetingRecap from './MeetingRecap';
+import ClassAssignmentsSection from './ClassAssignmentsSection';
 import ClassCaptureView from './ClassCaptureView';
 import { buildClassWhatsAppMessage } from '@/lib/class-share-message';
+import { preworkDueLabel } from '@/lib/prework';
+import { preworkReasonShortLabel } from '@/lib/prework-reasons';
 import { reactionEmoji } from '@/lib/assignment-reactions';
 import type { GalleryReactionType } from '@neram/database/types';
 
@@ -70,6 +75,10 @@ export interface PanelAssignment {
   drawing_reaction?: string | null;
   /** How many reminders this student has been sent for this assignment. */
   reminder_count?: number | null;
+  /** 'prework' is due before the class; 'homework' is set in it. */
+  timing?: 'prework' | 'homework' | null;
+  /** This student's pre-class reason, when they have given one. */
+  prework_reason_code?: string | null;
 }
 
 interface ClassDetailPanelProps {
@@ -90,6 +99,16 @@ interface ClassDetailPanelProps {
   assignments?: PanelAssignment[];
   /** Open a specific assignment (student). Omitted for teacher usage. */
   onOpenAssignment?: (assignmentId: string) => void;
+  /** Open the pre-class reason sheet for a piece of prework (student). */
+  onPreworkReason?: (assignment: PanelAssignment) => void;
+  /**
+   * Teacher only: show Link / Create / Unlink for this class's assignments.
+   * Until this existed, attaching work to a class was possible ONLY from Plan
+   * view, so a teacher in Day, Week or Month had no route to it at all.
+   */
+  assignmentsEditable?: boolean;
+  onLinkAssignment?: (cls: ClassCardData) => void;
+  onCreateAssignment?: (cls: ClassCardData) => void;
   // Actions
   onEdit?: (cls: ClassCardData) => void;
   onDelete?: (classId: string) => void;
@@ -100,6 +119,10 @@ interface ClassDetailPanelProps {
   onViewInsights?: (cls: ClassCardData) => void;
   onSyncRecording?: (cls: ClassCardData) => void;
   onCreateMeeting?: (cls: ClassCardData) => void;
+  /** Move this class to another day or time. See RescheduleDialog. */
+  onReschedule?: (cls: ClassCardData) => void;
+  /** Give a calendar entry to a class that has a join link and no invites. */
+  onRepairMeeting?: (cls: ClassCardData) => void;
   onViewRsvpDashboard?: (classId: string) => void;
 }
 
@@ -185,6 +208,10 @@ export default function ClassDetailPanel({
   averageRating,
   assignments,
   onOpenAssignment,
+  onPreworkReason,
+  assignmentsEditable,
+  onLinkAssignment,
+  onCreateAssignment,
   onEdit,
   onDelete,
   onDeletePermanent,
@@ -194,6 +221,8 @@ export default function ClassDetailPanel({
   onViewInsights,
   onSyncRecording,
   onCreateMeeting,
+  onReschedule,
+  onRepairMeeting,
   onViewRsvpDashboard,
 }: ClassDetailPanelProps) {
   const theme = useTheme();
@@ -224,6 +253,12 @@ export default function ClassDetailPanel({
   const displayStatus = isCancelled ? 'cancelled' : isPast ? 'completed' : cls.status;
   const meetingUrl = cls.teams_meeting_join_url || cls.teams_meeting_url;
   const hasRecording = !!cls.recording_url;
+  // Whether the class actually reached anybody's calendar. Derived from the event
+  // id, never from teams_meeting_scope: the scope is written on the failure path
+  // too, so a class could claim "Calendar invites" having invited nobody.
+  const hasCalendarEntry = !!cls.teams_calendar_event_id;
+  const needsCalendarRepair =
+    role === 'teacher' && !!cls.teams_meeting_id && !hasCalendarEntry && !isCancelled;
 
   // Compute time-until-class indicator
   const getTimeIndicator = () => {
@@ -258,6 +293,9 @@ export default function ClassDetailPanel({
       end_time: cls.end_time,
       joinUrl: meetingUrl,
       description: cls.description,
+      // The class row already carries the tutor; organizer_name covers meetings
+      // imported from Teams, where teacher_id was never resolved.
+      tutorName: cls.teacher?.name ?? cls.organizer_name ?? undefined,
       rsvpUrl,
     });
     navigator.clipboard.writeText(message).then(() => setWaCopied(true));
@@ -680,6 +718,22 @@ export default function ClassDetailPanel({
             </Button>
           )}
 
+          {/* Moving a class to another day is its own action, not a field buried
+              in Edit. It is the thing a teacher reaches for when something comes
+              up, and it has to carry the Teams meeting and the posted cards with
+              it, which Edit alone never did. */}
+          {role === 'teacher' && isUpcoming && !isCancelled && onReschedule && (
+            <Button
+              variant="outlined"
+              fullWidth
+              startIcon={<EventRepeatIcon />}
+              onClick={() => onReschedule(cls)}
+              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+            >
+              Reschedule
+            </Button>
+          )}
+
           {role === 'teacher' && isUpcoming && !isCancelled && (
             <Box sx={{ display: 'flex', gap: 1 }}>
               {onEdit && (
@@ -727,6 +781,31 @@ export default function ClassDetailPanel({
             submit, kept visible after the class so a late joiner still owes it.
             Tapping a row opens a quick overview in place (status, grade, reminders,
             instructions) rather than navigating away and losing the timetable. */}
+        {/* Teacher: attach work to this class from ANY view. The student list
+            below is a different thing (their own status per assignment), so the
+            two do not share a renderer. */}
+        {assignmentsEditable && role === 'teacher' && (
+          <Box sx={{ pb: 1 }}>
+            <Divider sx={{ mb: 1.5 }} />
+            <ClassAssignmentsSection
+              cls={cls}
+              getToken={getToken}
+              editable
+              refreshKey={open ? 1 : 0}
+              onLinkExisting={onLinkAssignment}
+              onCreateAssignment={onCreateAssignment}
+              header={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <AssignmentOutlinedIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    Assignments
+                  </Typography>
+                </Box>
+              }
+            />
+          </Box>
+        )}
+
         {assignments && assignments.length > 0 && (
           <Box sx={{ pb: 1 }}>
             <Divider sx={{ mb: 1.5 }} />
@@ -818,9 +897,36 @@ export default function ClassDetailPanel({
                             variant="outlined"
                           />
                           <Typography variant="caption" color="text.secondary">
-                            {a.due_at ? `Due ${formatDate(a.due_at.slice(0, 10))}` : 'No due date'}
+                            {/* Prework is due at a TIME of day, not on a day. A
+                                bare date here reads as "any time that day", which
+                                is exactly the misunderstanding it has to avoid. */}
+                            {a.timing === 'prework'
+                              ? preworkDueLabel(a.due_at)
+                              : a.due_at
+                                ? `Due ${formatDate(a.due_at.slice(0, 10))}`
+                                : 'No due date'}
                           </Typography>
                         </Box>
+
+                        {/* Not done, class still to come: the one prompt that
+                            matters. Never disables anything, including Join. */}
+                        {a.timing === 'prework' &&
+                          role === 'student' &&
+                          st.key === 'todo' &&
+                          !isPast &&
+                          onPreworkReason && (
+                            <Button
+                              variant={a.prework_reason_code ? 'text' : 'contained'}
+                              color={a.prework_reason_code ? 'inherit' : 'warning'}
+                              fullWidth
+                              onClick={() => onPreworkReason(a)}
+                              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+                            >
+                              {a.prework_reason_code
+                                ? `You said: ${preworkReasonShortLabel(a.prework_reason_code)}. Change my answer`
+                                : 'Tell us why I have not done it'}
+                            </Button>
+                          )}
 
                         {a.instructions && (
                           <Typography
@@ -986,10 +1092,18 @@ export default function ClassDetailPanel({
                 {cls.teams_meeting_scope && (
                   <Box>
                     <Typography variant="caption" color="text.secondary">Teams type</Typography>
-                    <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-                      {cls.teams_meeting_scope === 'channel_meeting' ? 'Channel meeting'
-                       : cls.teams_meeting_scope === 'calendar_event' ? 'Calendar invites'
-                       : 'Link only'}
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontSize: '0.8rem',
+                        color: cls.teams_meeting_id && !hasCalendarEntry ? 'warning.dark' : 'inherit',
+                        fontWeight: cls.teams_meeting_id && !hasCalendarEntry ? 600 : 400,
+                      }}
+                    >
+                      {!cls.teams_meeting_id ? 'No meeting'
+                       : !hasCalendarEntry ? 'Link only, no invite sent'
+                       : cls.teams_meeting_scope === 'channel_meeting' ? 'Channel meeting'
+                       : 'Calendar invites'}
                     </Typography>
                   </Box>
                 )}
@@ -1000,6 +1114,40 @@ export default function ClassDetailPanel({
                   </Box>
                 )}
               </Box>
+
+              {/* A class with a join link but no calendar entry reached nobody:
+                  not the tutor, not one student. Say so plainly and offer the one
+                  action that fixes it, which reuses the existing join link so
+                  every link already posted to Teams and WhatsApp keeps working. */}
+              {needsCalendarRepair && onRepairMeeting && (
+                <Box
+                  sx={{
+                    mt: 0.5,
+                    p: 1.25,
+                    borderRadius: 1,
+                    bgcolor: 'warning.light',
+                    border: '1px solid',
+                    borderColor: 'warning.main',
+                  }}
+                >
+                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: 'warning.dark' }}>
+                    Nobody was invited to this class
+                  </Typography>
+                  <Typography variant="caption" sx={{ display: 'block', color: 'text.primary', mb: 1 }}>
+                    It has a Teams link but no calendar entry, so it will not appear on your calendar or on any student&apos;s.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    color="warning"
+                    fullWidth
+                    startIcon={<EventAvailableIcon />}
+                    onClick={() => onRepairMeeting(cls)}
+                    sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
+                  >
+                    Fix calendar invites
+                  </Button>
+                </Box>
+              )}
             </Box>
           </>
         )}

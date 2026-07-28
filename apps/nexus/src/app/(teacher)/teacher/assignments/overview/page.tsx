@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box, Typography, Stack, Chip, Button, Skeleton, IconButton, TextField, MenuItem, Checkbox, Avatar,
-  ToggleButton, ToggleButtonGroup, alpha,
+  ToggleButton, ToggleButtonGroup, alpha, Snackbar, Alert,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SendIcon from '@mui/icons-material/Send';
@@ -18,6 +18,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
+import PreworkEscalationCard from '@/components/assignments/PreworkEscalationCard';
 
 type Status = 'active' | 'partial' | 'inactive';
 interface EngagementRow {
@@ -52,6 +53,7 @@ export default function AssignmentsOverviewPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [nudgeOpen, setNudgeOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; severity: 'success' | 'error' | 'warning' } | null>(null);
 
   useEffect(() => {
     if (activeClassroom?.id && !classroomId) setClassroomId(activeClassroom.id);
@@ -130,6 +132,14 @@ export default function AssignmentsOverviewPage() {
           ))}
         </TextField>
       )}
+
+      {/* Students whose pre-class work has become a pattern. Renders nothing
+          when the queue is empty, which is the normal state. */}
+      <PreworkEscalationCard
+        classroomId={classroomId}
+        authFetch={authFetch}
+        onNotify={(message, severity = 'success') => setToast({ message, severity })}
+      />
 
       {/* Stat tiles */}
       <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
@@ -269,6 +279,17 @@ export default function AssignmentsOverviewPage() {
         getToken={getTeacherToken}
         onClose={() => setNudgeOpen(false)}
       />
+
+      <Snackbar
+        open={!!toast}
+        autoHideDuration={5000}
+        onClose={() => setToast(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={toast?.severity || 'success'} onClose={() => setToast(null)}>
+          {toast?.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
