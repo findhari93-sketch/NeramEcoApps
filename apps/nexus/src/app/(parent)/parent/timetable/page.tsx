@@ -1,194 +1,210 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Box } from '@neram/ui';
-import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { useTimetableView } from '@/hooks/useTimetableView';
-import CalendarShell from '@/components/timetable/CalendarShell';
-import AgendaView from '@/components/timetable/views/AgendaView';
-import GridView from '@/components/timetable/views/GridView';
-import DayView from '@/components/timetable/views/DayView';
-import MonthView from '@/components/timetable/views/MonthView';
-import ClassDetailPanel from '@/components/timetable/ClassDetailPanel';
-import { type ClassCardData } from '@/components/timetable/ClassCard';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  formatDateISO,
-  monthGridRangeFor,
-  type HolidayInfo,
-} from '@/components/timetable/date-utils';
-import { type PlanShape } from '@/lib/plan-shape';
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Skeleton,
+  Alert,
+  Stack,
+  Chip,
+} from '@neram/ui';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import AttendanceStrip from '@/components/parent/AttendanceStrip';
 
 /**
- * The parent's read-only view of the class timetable.
+ * The parent's Classes tab: what is coming up, and what happened.
  *
- * Migrated off the legacy WeeklyCalendarGrid onto the shared calendar, so a
- * parent now gets the same Day / Week / Month / Agenda views the teacher and
- * student have, plus holidays and tappable classes, none of which the old grid
- * was ever wired up for here.
+ * Reads /api/parent/timetable, NOT the shared /api/timetable. That matters for
+ * more than tidiness: the shared route takes its scope from a `?classroom=`
+ * query parameter and authorises by enrollment, which a parent can never hold.
+ * The parent route resolves the classroom from the parent-child link server
+ * side, so a parent cannot ask for a classroom that is not their child's.
+ *
+ * Every past class renders through AttendanceStrip, which draws "not recorded"
+ * for a class that was never synced instead of showing it as an absence.
  */
-export default function ParentTimetable() {
-  const { activeClassroom, getToken } = useNexusAuthContext();
-  const [classes, setClasses] = useState<ClassCardData[]>([]);
-  const [holidays, setHolidays] = useState<Record<string, HolidayInfo>>({});
-  const [planShapes, setPlanShapes] = useState<PlanShape[]>([]);
+
+type StripProps = React.ComponentProps<typeof AttendanceStrip>;
+
+interface TimetableResponse {
+  child: { id: string; name: string | null; classroom_name: string | null };
+  windowDays: number;
+  upcoming: Array<{
+    id: string;
+    title: string;
+    scheduled_date: string;
+    start_time: string;
+    end_time: string;
+  }>;
+  recent: Array<StripProps & { classId: string }>;
+  summary: {
+    measuredClasses: number;
+    notMeasuredClasses: number;
+    attended: number;
+    missed: number;
+    late: number;
+    droppedMidClass: number;
+    attendanceRate: number | null;
+  };
+}
+
+function friendlyDate(ymd: string): string {
+  const ms = Date.parse(`${ymd}T00:00:00+05:30`);
+  if (!Number.isFinite(ms)) return ymd;
+  return new Intl.DateTimeFormat('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'Asia/Kolkata',
+  }).format(ms);
+}
+
+function clock(time: string, date: string): string {
+  const ms = Date.parse(`${date}T${time}+05:30`);
+  if (!Number.isFinite(ms)) return time;
+  return new Intl.DateTimeFormat('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata',
+  }).format(ms);
+}
+
+export default function ParentTimetablePage() {
+  const { getToken } = useNexusAuthContext();
+
+  const [data, setData] = useState<TimetableResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const viewState = useTimetableView(classes, 'agenda', planShapes);
-  const { week, band, view, anchorDate, setAnchorDate, range, configuredWindow } = viewState;
-
-  // Whole month grids, so paging weeks inside a loaded month costs nothing.
-  const fetchRange = useMemo(
-    () => monthGridRangeFor(anchorDate, range.start, range.end),
-    [anchorDate, range.start, range.end],
-  );
-  const loadedRange = useRef<{ classroomId: string; start: string; end: string } | null>(null);
-
-  const visibleClasses = useMemo(
-    () => classes.filter((c) => c.scheduled_date >= range.start && c.scheduled_date <= range.end),
-    [classes, range.start, range.end],
-  );
-
-  /** The anchor's whole week, so the Day view's strip marks every day with a class. */
-  const weekClasses = useMemo(
-    () => classes.filter((c) => c.scheduled_date >= week.start && c.scheduled_date <= week.end),
-    [classes, week.start, week.end],
-  );
-
-  const markedDates = useMemo(() => new Set(classes.map((c) => c.scheduled_date)), [classes]);
-  const holidayDates = useMemo(() => new Set(Object.keys(holidays)), [holidays]);
-
-  const fetchClasses = useCallback(async () => {
-    if (!activeClassroom) return;
-
-    const have = loadedRange.current;
-    if (
-      have &&
-      have.classroomId === activeClassroom.id &&
-      have.start <= fetchRange.start &&
-      have.end >= fetchRange.end
-    ) {
-      return;
-    }
-
+  const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const token = await getToken();
-      if (!token) return;
-
-      // Deliberately /api/timetable rather than /my-schedule: that route is
-      // enrollment-scoped around a student, and repointing a parent at it is a
-      // behaviour change that does not belong in a UI migration.
-      const [classRes, holidayRes] = await Promise.all([
-        fetch(
-          `/api/timetable?classroom=${activeClassroom.id}&start=${fetchRange.start}&end=${fetchRange.end}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        ),
-        fetch(
-          `/api/timetable/holidays?classroom_id=${activeClassroom.id}&start=${fetchRange.start}&end=${fetchRange.end}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        ),
-      ]);
-
-      if (classRes.ok) {
-        const data = await classRes.json();
-        setClasses(data.classes || []);
-        // Previously fetched and thrown away, which left the parent's band on
-        // the global window even mid crash course.
-        setPlanShapes(data.planShapes || []);
-        loadedRange.current = {
-          classroomId: activeClassroom.id,
-          start: fetchRange.start,
-          end: fetchRange.end,
-        };
-      }
-
-      if (holidayRes.ok) {
-        const data = await holidayRes.json();
-        const map: Record<string, HolidayInfo> = {};
-        for (const h of data.holidays || []) {
-          map[h.holiday_date] = { title: h.title, description: h.description };
-        }
-        setHolidays(map);
-      }
+      const res = await fetch('/api/parent/timetable', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Could not load the timetable.');
+      setData(json);
     } catch (err) {
-      console.error('Failed to load timetable:', err);
+      setError(err instanceof Error ? err.message : 'Could not load the timetable.');
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, fetchRange.start, fetchRange.end, getToken]);
+  }, [getToken]);
 
   useEffect(() => {
-    fetchClasses();
-  }, [fetchClasses]);
+    load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <Stack spacing={2}>
+        <Skeleton variant="rounded" height={120} />
+        <Skeleton variant="rounded" height={110} />
+        <Skeleton variant="rounded" height={110} />
+      </Stack>
+    );
+  }
+
+  if (error) return <Alert severity="error">{error}</Alert>;
+  if (!data) return null;
+
+  const { summary } = data;
 
   return (
-    <Box>
-      <CalendarShell
-        state={viewState}
-        railSubtitle={activeClassroom?.name}
-        markedDates={markedDates}
-        holidayDates={holidayDates}
-      >
-        {view === 'month' && range.month ? (
-          <MonthView
-            classes={visibleClasses}
-            month={range.month}
-            loading={loading}
-            holidays={holidays}
-            role="parent"
-            anchorISO={formatDateISO(anchorDate)}
-            onClassClick={setSelectedClass}
-            onOpenDay={(iso) => {
-              setAnchorDate(new Date(`${iso}T00:00:00`));
-              viewState.setView('day');
-            }}
-          />
-        ) : view === 'week' ? (
-          <GridView
-            classes={visibleClasses}
-            week={week}
-            band={band}
-            loading={loading}
-            holidays={holidays}
-            role="parent"
-            onClassClick={setSelectedClass}
-            scrollToTime={configuredWindow.start}
-          />
-        ) : view === 'day' ? (
-          <DayView
-            classes={visibleClasses}
-            weekClasses={weekClasses}
-            week={week}
-            anchorDate={anchorDate}
-            band={band}
-            onSelectDate={setAnchorDate}
-            loading={loading}
-            holidays={holidays}
-            role="parent"
-            onClassClick={setSelectedClass}
-            scrollToTime={configuredWindow.start}
-          />
-        ) : (
-          <AgendaView
-            classes={visibleClasses}
-            week={week}
-            loading={loading}
-            holidays={holidays}
-            role="parent"
-            onClassClick={setSelectedClass}
-          />
-        )}
-      </CalendarShell>
+    <Stack spacing={2.5}>
+      <Typography sx={{ fontWeight: 700, fontSize: 20 }}>Classes</Typography>
 
-      <ClassDetailPanel
-        cls={selectedClass}
-        open={!!selectedClass}
-        onClose={() => setSelectedClass(null)}
-        role="parent"
-        classroomId={selectedClass?.classroom?.id || activeClassroom?.id || ''}
-        getToken={getToken}
-      />
-    </Box>
+      {/* Coming up */}
+      <Card sx={{ borderRadius: 3 }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: 16, mb: 1.5 }}>
+            Coming up
+          </Typography>
+          {data.upcoming.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: 15 }}>
+              No classes scheduled yet.
+            </Typography>
+          ) : (
+            <Stack spacing={1.5}>
+              {data.upcoming.map((c) => (
+                <Box
+                  key={c.id}
+                  sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 15, fontWeight: 500 }} noWrap>
+                      {c.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: 14 }}>
+                      {clock(c.start_time, c.scheduled_date)} to{' '}
+                      {clock(c.end_time, c.scheduled_date)}
+                    </Typography>
+                  </Box>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={friendlyDate(c.scheduled_date)}
+                    sx={{ flexShrink: 0, alignSelf: 'flex-start' }}
+                  />
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Past classes */}
+      <Box>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: 1,
+            mb: 1.5,
+          }}
+        >
+          <Typography sx={{ fontWeight: 700, fontSize: 16 }}>
+            Past {data.windowDays} days
+          </Typography>
+          {summary.measuredClasses > 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: 14 }}>
+              Attended {summary.attended} of {summary.measuredClasses}
+            </Typography>
+          )}
+        </Box>
+
+        {summary.notMeasuredClasses > 0 && (
+          <Alert severity="info" sx={{ mb: 1.5, fontSize: 14 }}>
+            {summary.notMeasuredClasses}{' '}
+            {summary.notMeasuredClasses === 1 ? 'class has' : 'classes have'} no
+            attendance recorded. Those are not counted above.
+          </Alert>
+        )}
+
+        {data.recent.length === 0 ? (
+          <Card sx={{ borderRadius: 3 }}>
+            <CardContent sx={{ p: 2.5 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: 15 }}>
+                No classes have happened in this period yet.
+              </Typography>
+            </CardContent>
+          </Card>
+        ) : (
+          <Stack spacing={1.5}>
+            {data.recent.map((c) => (
+              <AttendanceStrip key={c.classId} {...c} />
+            ))}
+          </Stack>
+        )}
+      </Box>
+    </Stack>
   );
 }

@@ -22,7 +22,7 @@ export class ApiError extends Error {
 
 /** Messages from verifyMsToken / getRequestUser that mean "not authenticated". */
 const AUTH_FAILURE =
-  /^(Missing or invalid Authorization header|Invalid Microsoft token|Invalid or expired impersonation token|Impersonation target is no longer valid|User not found|Test user not found)/;
+  /^(Missing or invalid Authorization header|Invalid Microsoft token|Invalid or expired impersonation token|Impersonation target is no longer valid|User not found|Test user not found|Invalid or expired parent session|Parent access has been revoked|Parent session is no longer valid|Parent account is no longer valid)/;
 
 function messageOf(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message;

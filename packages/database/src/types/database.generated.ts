@@ -9567,36 +9567,206 @@ export type Database = {
           },
         ]
       }
-      nexus_parent_links: {
+      nexus_parent_credentials: {
         Row: {
-          created_at: string | null
+          created_at: string
+          created_by: string | null
+          failed_attempts: number
           id: string
-          invite_expires_at: string
-          invite_token: string
-          is_active: boolean | null
-          linked_at: string | null
-          parent_user_id: string | null
-          student_user_id: string
+          is_active: boolean
+          last_login_at: string | null
+          locked_until: string | null
+          login_id: string
+          must_change_password: boolean
+          parent_user_id: string
+          password_hash: string
+          password_set_at: string
+          revoked_at: string | null
+          revoked_by: string | null
+          token_version: number
+          updated_at: string
         }
         Insert: {
-          created_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          failed_attempts?: number
           id?: string
-          invite_expires_at: string
-          invite_token: string
-          is_active?: boolean | null
-          linked_at?: string | null
-          parent_user_id?: string | null
-          student_user_id: string
+          is_active?: boolean
+          last_login_at?: string | null
+          locked_until?: string | null
+          login_id: string
+          must_change_password?: boolean
+          parent_user_id: string
+          password_hash: string
+          password_set_at?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          token_version?: number
+          updated_at?: string
         }
         Update: {
-          created_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          failed_attempts?: number
           id?: string
-          invite_expires_at?: string
-          invite_token?: string
-          is_active?: boolean | null
+          is_active?: boolean
+          last_login_at?: string | null
+          locked_until?: string | null
+          login_id?: string
+          must_change_password?: boolean
+          parent_user_id?: string
+          password_hash?: string
+          password_set_at?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          token_version?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_parent_credentials_parent_user_id_fkey"
+            columns: ["parent_user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_parent_login_attempts: {
+        Row: {
+          attempted_at: string
+          id: string
+          ip_hash: string | null
+          login_id: string | null
+          success: boolean
+          user_agent: string | null
+        }
+        Insert: {
+          attempted_at?: string
+          id?: string
+          ip_hash?: string | null
+          login_id?: string | null
+          success?: boolean
+          user_agent?: string | null
+        }
+        Update: {
+          attempted_at?: string
+          id?: string
+          ip_hash?: string | null
+          login_id?: string | null
+          success?: boolean
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
+      nexus_parent_digests: {
+        Row: {
+          channel: string
+          classroom_id: string | null
+          detail: string | null
+          id: string
+          kind: string
+          parent_user_id: string
+          period_key: string
+          sent_at: string
+          snapshot: Json | null
+          status: string
+          student_id: string
+        }
+        Insert: {
+          channel: string
+          classroom_id?: string | null
+          detail?: string | null
+          id?: string
+          kind: string
+          parent_user_id: string
+          period_key: string
+          sent_at?: string
+          snapshot?: Json | null
+          status?: string
+          student_id: string
+        }
+        Update: {
+          channel?: string
+          classroom_id?: string | null
+          detail?: string | null
+          id?: string
+          kind?: string
+          parent_user_id?: string
+          period_key?: string
+          sent_at?: string
+          snapshot?: Json | null
+          status?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_parent_digests_parent_user_id_fkey"
+            columns: ["parent_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_parent_digests_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_parent_links: {
+        Row: {
+          classroom_id: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          invite_expires_at: string | null
+          invite_token: string | null
+          is_active: boolean
+          is_primary: boolean
+          linked_at: string | null
+          parent_user_id: string
+          relationship: string
+          revoked_at: string | null
+          revoked_by: string | null
+          student_user_id: string
+          updated_at: string
+        }
+        Insert: {
+          classroom_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          invite_expires_at?: string | null
+          invite_token?: string | null
+          is_active?: boolean
+          is_primary?: boolean
           linked_at?: string | null
-          parent_user_id?: string | null
+          parent_user_id: string
+          relationship?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          student_user_id: string
+          updated_at?: string
+        }
+        Update: {
+          classroom_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          invite_expires_at?: string | null
+          invite_token?: string | null
+          is_active?: boolean
+          is_primary?: boolean
+          linked_at?: string | null
+          parent_user_id?: string
+          relationship?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
           student_user_id?: string
+          updated_at?: string
         }
         Relationships: [
           {

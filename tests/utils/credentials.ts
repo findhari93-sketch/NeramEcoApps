@@ -176,12 +176,68 @@ export function hasTestCredentials(role: 'student' | 'teacher' | 'admin' = 'teac
 // (Wraps existing accounts for use with auth-helpers.ts)
 // ============================================
 
-export const PARENT_ACCOUNT: TestAccount = {
-  email: process.env.E2E_TEST_PARENT_EMAIL || 'test-parent@neramclasses.com',
-  password: process.env.E2E_TEST_PARENT_PASSWORD || '',
-  role: 'student', // Parents share student-level auth
-  description: 'E2E test parent account (read-only access)',
+/**
+ * The E2E parent account.
+ *
+ * `role` used to say 'student' with the note "parents share student-level auth".
+ * That was never true, and it made loginAsRole(page, 'parent') silently sign in
+ * as the STUDENT account, so every parent assertion in the suite was exercising
+ * a student session and passing for the wrong reason. Parents now have their own
+ * credential-based login; see injectParentAuthForPage below.
+ *
+ * Note this is a login ID and password, not an email: parents have no Microsoft
+ * account and may have no email address at all.
+ */
+export const PARENT_ACCOUNT = {
+  loginId: process.env.E2E_TEST_PARENT_LOGIN_ID || 'e2e.parent',
+  password: process.env.E2E_TEST_PARENT_PASSWORD || 'e2e-parent-pass1',
+  role: 'parent' as const,
+  description: 'E2E test parent account (read-only, linked to the student account)',
 };
+
+/**
+ * Provision a real parent (user + credential + link to the E2E student) and
+ * inject the resulting session into the page.
+ *
+ * Deliberately goes through /api/auth/parent/test-login, which takes the genuine
+ * provisioning path and returns a real `par_` token, rather than faking one.
+ * A spec that passes with this therefore proves the parent path actually works.
+ * The password form itself is covered separately in parent-portal-nexus.spec.ts.
+ */
+export async function injectParentAuthForPage(
+  page: any,
+  opts: { studentEmail?: string; mustChangePassword?: boolean } = {}
+): Promise<boolean> {
+  const res = await page.request.post(`${APP_URLS.nexus}/api/auth/parent/test-login`, {
+    data: {
+      studentEmail: opts.studentEmail || STUDENT_ACCOUNT.email,
+      loginId: PARENT_ACCOUNT.loginId,
+      password: PARENT_ACCOUNT.password,
+      mustChangePassword: opts.mustChangePassword ?? false,
+      reset: true,
+    },
+  });
+
+  if (!res.ok()) return false;
+  const data = await res.json();
+  if (!data?.token) return false;
+
+  // localStorage must be written on the Nexus origin, so land there first.
+  await page.goto(`${APP_URLS.nexus}/parent/login`, { waitUntil: 'domcontentloaded' });
+
+  await page.evaluate((session: any) => {
+    localStorage.setItem('nexus_parent_session', JSON.stringify(session));
+  }, {
+    token: data.token,
+    expiresAt: data.expiresAt,
+    parent: data.parent,
+    mustChangePassword: data.mustChangePassword,
+  });
+
+  await page.context().setExtraHTTPHeaders({ Authorization: `Bearer ${data.token}` });
+
+  return true;
+}
 
 export const TEST_USERS = {
   admin: {
@@ -203,7 +259,9 @@ export const TEST_USERS = {
     displayName: 'Test Student',
   },
   parent: {
-    email: PARENT_ACCOUNT.email,
+    // Parents sign in with a login ID, not an email. The key stays `email` so
+    // the TEST_USERS shape is uniform for callers that only read it for display.
+    email: PARENT_ACCOUNT.loginId,
     password: PARENT_ACCOUNT.password,
     role: 'parent' as const,
     displayName: 'Test Parent',

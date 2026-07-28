@@ -15,6 +15,12 @@ import {
 } from '@/lib/timetable-window';
 import { DEFAULT_PHOTO_GATE, type PhotoGateState } from '@/lib/photo-gate';
 import {
+  readParentSession,
+  writeParentSession,
+  clearParentSession,
+  type StoredParentSession,
+} from '@/lib/parent-session';
+import {
   capabilityMap,
   isInternalStaff as isInternalStaffRole,
   type Capability,
@@ -169,6 +175,20 @@ interface NexusAuthState {
   ) => Promise<void>;
   /** Exit student view and return to the teacher/admin's own session. */
   exitImpersonation: () => Promise<void>;
+
+  /**
+   * Parent portal session state. `active` is the reliable "this is a parent"
+   * signal on the client; nexusRole is set from /api/auth/me a moment later.
+   */
+  parentSession: {
+    active: boolean;
+    parent: { id: string; name: string | null } | null;
+    /** True until they replace the admin-issued temporary password. */
+    mustChangePassword: boolean;
+    expiresAt: string | null;
+  };
+  /** Sign in with an admin-issued parent login ID and password. Throws on failure. */
+  parentLogin: (loginId: string, password: string) => Promise<StoredParentSession>;
 }
 
 const ACTIVE_CLASSROOM_KEY = 'nexus_active_classroom_id';
@@ -224,6 +244,18 @@ export function useNexusAuth(): NexusAuthState {
     () => readStoredImpersonation()
   );
 
+  // Parent portal session. Parents have no Microsoft account, so this is the
+  // only identity they ever have. Mirrors the impersonation block above, except
+  // it lives in localStorage: see lib/parent-session.ts for why.
+  const [parentSession, setParentSession] = useState<StoredParentSession | null>(
+    () => readParentSession()
+  );
+
+  const parentToken =
+    parentSession && Date.parse(parentSession.expiresAt) > Date.now()
+      ? parentSession.token
+      : null;
+
   // Active only while not expired. This is the token used for ALL API calls
   // while impersonating, so every request resolves to the target student.
   const impersonationToken =
@@ -245,6 +277,12 @@ export function useNexusAuth(): NexusAuthState {
     // (reads and writes) acts as the student.
     if (impersonationToken) return impersonationToken;
 
+    // A signed-in parent has no MSAL session at all, so this is their only
+    // token. Ordered after impersonation (a staff member viewing as a student
+    // is the more specific session) and before the test bypass, so an E2E run
+    // that injects a parent session is not silently downgraded to a test token.
+    if (parentToken) return parentToken;
+
     // E2E test-mode bypass: the harness injects a `test_`-prefixed token that
     // verifyMsToken accepts in non-production only. Without this fallback, a
     // page under the bypass renders its chrome but never fetches anything,
@@ -258,7 +296,7 @@ export function useNexusAuth(): NexusAuthState {
     }
 
     return getAccessToken(loginScopes.nexus);
-  }, [impersonationToken]);
+  }, [impersonationToken, parentToken]);
 
   const getTeacherToken = useCallback(async () => {
     return getAccessToken(loginScopes.nexusTeacher);
@@ -340,7 +378,11 @@ export function useNexusAuth(): NexusAuthState {
       try {
         // While impersonating, /api/auth/me is called with the impersonation
         // token so it returns the STUDENT's identity, role, and classrooms.
-        const token = impersonationToken || (await getAccessToken(loginScopes.default));
+        // A parent token does the same for the parent branch of that route.
+        // Falling through to getAccessToken for a parent would ask MSAL for a
+        // token it can never mint, and the whole context would stay empty.
+        const token =
+          impersonationToken || parentToken || (await getAccessToken(loginScopes.default));
         if (!token || isCancelled()) return;
 
         const response = await fetch('/api/auth/me', {
@@ -430,16 +472,19 @@ export function useNexusAuth(): NexusAuthState {
         }
       }
     },
-    [impersonationToken, clearImpersonation]
+    [impersonationToken, parentToken, clearImpersonation]
   );
 
   // Fetch DB user after MS auth succeeds. Also runs while impersonating (even
   // under the test-mode bypass) so identity swaps to the student via /me.
   useEffect(() => {
     // Skip MSAL auth fetch if test token bypass is active and not impersonating
-    if (testMode && !impersonationToken) return;
+    if (testMode && !impersonationToken && !parentToken) return;
 
-    if (!impersonationToken && (!msUser || msLoading)) {
+    // A parent is never expected to have an MSAL user, so this reset block must
+    // not fire for them. Without the guard, the moment MSAL reports "no account"
+    // it would blank a perfectly valid parent context.
+    if (!impersonationToken && !parentToken && (!msUser || msLoading)) {
       setUser(null);
       setNexusRole(null);
       setClassrooms([]);
@@ -458,7 +503,7 @@ export function useNexusAuth(): NexusAuthState {
     let cancelled = false;
     loadNexusUser(() => cancelled);
     return () => { cancelled = true; };
-  }, [msUser, msLoading, impersonationToken, testMode, loadNexusUser]);
+  }, [msUser, msLoading, impersonationToken, parentToken, testMode, loadNexusUser]);
 
   /**
    * Manual re-fetch. The photo blocker calls this after a successful upload so
@@ -480,6 +525,23 @@ export function useNexusAuth(): NexusAuthState {
     const t = setTimeout(() => clearImpersonation(), ms);
     return () => clearTimeout(t);
   }, [impersonationToken, impersonationState, clearImpersonation]);
+
+  // Drop an expired parent session so the UI falls back to the login screen
+  // rather than sitting on a dead token and 401-ing every request.
+  useEffect(() => {
+    if (!parentSession) return;
+    const ms = Date.parse(parentSession.expiresAt) - Date.now();
+    if (ms <= 0) {
+      clearParentSession();
+      setParentSession(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      clearParentSession();
+      setParentSession(null);
+    }, ms);
+    return () => clearTimeout(t);
+  }, [parentSession]);
 
   const startImpersonation = useCallback(
     async (studentId: string, opts?: { reason?: string; ticketId?: string; returnUrl?: string }) => {
@@ -563,6 +625,8 @@ export function useNexusAuth(): NexusAuthState {
   }, [msSignIn]);
 
   const signOut = useCallback(async () => {
+    const wasParent = !!parentToken;
+
     setUser(null);
     setNexusRole(null);
     setClassrooms([]);
@@ -575,8 +639,59 @@ export function useNexusAuth(): NexusAuthState {
     setPhotoGate(DEFAULT_PHOTO_GATE);
     localStorage.removeItem(ACTIVE_CLASSROOM_KEY);
     clearImpersonation();
+
+    if (wasParent) {
+      // Best effort: bump token_version server-side so the session really is
+      // dead everywhere, not just cleared from this browser. Parents share
+      // devices with their children, so "signed out" has to mean it.
+      try {
+        await fetch('/api/auth/parent/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${parentToken}` },
+        });
+      } catch {
+        /* the local clear below still signs them out of this device */
+      }
+      clearParentSession();
+      setParentSession(null);
+      // Return before msSignOut: a parent never had a Microsoft session, and
+      // MSAL would redirect them to a Microsoft logout page they never saw.
+      return;
+    }
+
     await msSignOut();
-  }, [msSignOut, clearImpersonation]);
+  }, [msSignOut, clearImpersonation, parentToken]);
+
+  /**
+   * Sign in with an admin-issued parent login. Setting the session state re-runs
+   * the /api/auth/me effect with the parent token, which swaps the whole context
+   * to the parent, exactly as startImpersonation does for a student.
+   */
+  const parentLogin = useCallback(
+    async (loginId: string, password: string): Promise<StoredParentSession> => {
+      const res = await fetch('/api/auth/parent/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginId, password }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Sign-in failed. Please try again.');
+      }
+
+      const stored: StoredParentSession = {
+        token: data.token,
+        expiresAt: data.expiresAt,
+        parent: data.parent,
+        mustChangePassword: !!data.mustChangePassword,
+      };
+      writeParentSession(stored);
+      setParentSession(stored);
+      return stored;
+    },
+    []
+  );
 
   return {
     msUser,
@@ -597,7 +712,12 @@ export function useNexusAuth(): NexusAuthState {
     timetableWindow,
     photoGate,
     refreshAuth,
-    loading: testMode ? dbLoading : msLoading || dbLoading,
+    // A parent's loading state must NOT be ORed with msLoading. useMicrosoftAuth
+    // resolves in all three of its branches so it cannot hang, but a parent
+    // would still sit waiting on initializeMsal()'s dynamic import for a result
+    // that is then discarded. This is what makes the parent path genuinely
+    // MSAL-independent rather than merely MSAL-tolerant.
+    loading: testMode || parentToken ? dbLoading : msLoading || dbLoading,
     error,
     accessEnded,
     isTeacher: nexusRole === 'teacher' || nexusRole === 'admin',
@@ -614,6 +734,13 @@ export function useNexusAuth(): NexusAuthState {
     },
     startImpersonation,
     exitImpersonation,
+    parentSession: {
+      active: !!parentToken,
+      parent: parentToken ? parentSession!.parent : null,
+      mustChangePassword: parentToken ? parentSession!.mustChangePassword : false,
+      expiresAt: parentToken ? parentSession!.expiresAt : null,
+    },
+    parentLogin,
   };
 }
 

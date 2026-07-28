@@ -14,6 +14,7 @@ import {
 } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ViewAsStudentButton from '@/components/ViewAsStudentButton';
+import ParentAccessCard from '@/components/parent/ParentAccessCard';
 
 interface StudentDetail {
   id: string;
@@ -176,6 +177,13 @@ export default function StudentDetailPage() {
           />
         </Box>
       </Paper>
+
+      {/* Parent access. Renders nothing for staff without the capability. */}
+      <ParentAccessCard
+        studentId={student.id}
+        studentName={student.name}
+        classroomId={activeClassroom?.id ?? null}
+      />
 
       {/* Attendance Summary */}
       <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 2 }}>

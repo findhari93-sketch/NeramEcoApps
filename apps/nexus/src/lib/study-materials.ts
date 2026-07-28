@@ -29,6 +29,15 @@ export interface RequestUser {
 /** Verify the MS/test/impersonation token and load the matching Nexus user row. */
 export async function getRequestUser(tokenString: string | null): Promise<RequestUser> {
   const msUser = await verifyMsToken(tokenString);
+
+  // Defence in depth. verifyMsToken already rejects parent tokens unless the
+  // caller passes allowParent, and this helper never does, so in practice this
+  // is unreachable. It stays because it costs nothing and it means a future
+  // change to that default cannot silently open the staff surface to parents.
+  if (msUser.parentUserId) {
+    throw new ApiError('Parent accounts cannot access this resource.', 403);
+  }
+
   const supabase = getSupabaseAdminClient();
   const { data: user } = await supabase
     .from('users')

@@ -471,25 +471,15 @@ export async function logSearch(
 // ============================================
 // PARENT VIEW
 // ============================================
-
-export async function getChildEngagement(
-  parentId: string,
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-
-  // Find the parent's linked child
-  // Check parent-student relationship via nexus_enrollments or a direct link
-  const { data: parentUser } = await supabase
-    .from('users')
-    .select('id, linked_student_ids')
-    .eq('id', parentId)
-    .single();
-
-  if (!parentUser || !(parentUser as any).linked_student_ids?.length) {
-    return null;
-  }
-
-  const childId = (parentUser as any).linked_student_ids[0];
-  return getMyActivity(childId, client);
-}
+//
+// `getChildEngagement(parentId)` was removed on 2026-07-29. It selected
+// `users.linked_student_ids`, a column that exists in no migration, so it
+// returned null 100% of the time and the parent library page it backed could
+// only ever render "No linked child found". Two `as any` casts hid the fact
+// from the type checker.
+//
+// The parent-to-child relationship lives in `nexus_parent_links`, and the parent
+// portal reads it through assertParentOf / resolveChildContext in
+// apps/nexus/src/lib/parent-auth.ts. A parent-facing engagement view should call
+// getMyActivity(childId) above, AFTER that gate has confirmed the link. Without
+// the gate, a parent could pass any student id and read another child's data.

@@ -15,13 +15,15 @@ import {
   APP_URLS,
   getTestAuthToken,
   injectAuthForPage,
+  injectParentAuthForPage,
 } from './credentials';
 
 /**
  * Login as a specific role via the fastest available method.
  *
  * For admin/teacher/student: uses the Nexus test-login API to inject auth state.
- * For parent: uses student-level auth with read-only context.
+ * For parent: provisions a real parent credential and injects a real `par_`
+ * session (parents have no Microsoft account, so there is no OAuth fallback).
  *
  * Falls back to browser-based Microsoft OAuth if the API is unavailable.
  */
@@ -32,9 +34,29 @@ export async function loginAsRole(
 ): Promise<void> {
   const user = TEST_USERS[role];
 
+  // Parents branch FIRST and never fall through.
+  //
+  // This used to map 'parent' onto 'student' below, which meant every parent
+  // test silently ran as a student: RoleGuard allowedRoles={['parent']} could
+  // never have passed, and assertAccessDenied(page, 'parent', ...) was really
+  // asserting about a student. Those tests passed for the wrong reason.
+  //
+  // There is no OAuth fallback here on purpose: a parent has no Microsoft
+  // account, so failing loudly is correct. A silent downgrade is what caused
+  // the original defect.
+  if (role === 'parent') {
+    const ok = await injectParentAuthForPage(page);
+    if (!ok) {
+      throw new Error(
+        'Parent auth injection failed. /api/auth/parent/test-login is non-production only, ' +
+          'and it needs the E2E student account to exist and be enrolled.'
+      );
+    }
+    return;
+  }
+
   // Map roles to the auth system's role types
-  const authRole: 'student' | 'teacher' =
-    role === 'student' || role === 'parent' ? 'student' : 'teacher';
+  const authRole: 'student' | 'teacher' = role === 'student' ? 'student' : 'teacher';
 
   // Try API-based auth injection first (fast path)
   if (!options.fresh) {

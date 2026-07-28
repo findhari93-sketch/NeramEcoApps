@@ -5,21 +5,26 @@ import { usePathname } from 'next/navigation';
 import { isFullBleedRoute } from '@/lib/full-bleed-routes';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
-import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
-import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
-import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
 import DesktopSidebar from '@/components/DesktopSidebar';
 import { useSidebarContext } from '@/components/SidebarProvider';
 
+/**
+ * Four tabs, so a bottom nav fits a 375px screen with 48px targets.
+ *
+ * Trimmed from the previous five. `/parent/checklist` was a nav entry with no
+ * page behind it (a guaranteed 404), and `/parent/library/engagement` was backed
+ * by a query against a `users.linked_student_ids` column that exists in no
+ * migration, so it could only ever render "No linked child found".
+ *
+ * Assignments and Help arrive in Phase 2 and Phase 3; their tabs land with the
+ * pages, never before them.
+ */
 const parentNavItems = [
-  { label: 'Dashboard', path: '/parent/dashboard', icon: <HomeOutlinedIcon /> },
-  { label: 'Timetable', path: '/parent/timetable', icon: <CalendarTodayOutlinedIcon /> },
-  { label: 'Library', path: '/parent/library/engagement', icon: <VideoLibraryOutlinedIcon /> },
-  { label: 'Checklist', path: '/parent/checklist', icon: <ChecklistOutlinedIcon /> },
-  { label: 'Tickets', path: '/parent/tickets', icon: <SupportAgentOutlinedIcon /> },
+  { label: 'Home', path: '/parent/dashboard', icon: <HomeOutlinedIcon /> },
+  { label: 'Classes', path: '/parent/timetable', icon: <CalendarTodayOutlinedIcon /> },
 ];
 
 export default function ParentLayout({ children }: { children: React.ReactNode }) {
@@ -27,7 +32,10 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   const fullBleed = isFullBleedRoute(usePathname());
 
   return (
-    <RoleGuard allowedRoles={['parent']}>
+    // loginPath matters: a parent whose 12-hour session expired has no Microsoft
+    // account, so the default /login would strand them on a sign-in screen they
+    // can never complete.
+    <RoleGuard allowedRoles={['parent']} loginPath="/parent/login">
       <Box sx={{ display: 'flex', minHeight: '100vh' }}>
         <DesktopSidebar items={parentNavItems} />
 

@@ -10,11 +10,13 @@ import {
   type StaffRole,
 } from '@/lib/staff-capabilities';
 import {
+  DEFAULT_PHOTO_GATE,
   PHOTO_GATE_FEATURE,
   shouldBlockForPhoto,
   toPhotoStatus,
   type PhotoGateState,
 } from '@/lib/photo-gate';
+import { listParentChildren, getChildClassrooms } from '@/lib/parent-auth';
 import {
   TIMETABLE_WINDOW_KEY,
   parseWindow,
@@ -31,7 +33,9 @@ import {
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization');
-    const msUser = await verifyMsToken(authHeader);
+    // The one route every signed-in identity hits, parents included: it has a
+    // dedicated parent branch below.
+    const msUser = await verifyMsToken(authHeader, { allowParent: true });
 
     const supabase = getSupabaseAdminClient();
 
@@ -41,6 +45,14 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('ms_oid', msUser.oid)
       .maybeSingle();
+
+    // A parent token whose users row has vanished must stop here. Falling
+    // through to reconcileMsIdentity would try to match a synthetic
+    // 'parent:<uuid>' ms_oid against real students and could mint a shell
+    // @neramclasses.com account for someone who is not a student at all.
+    if (!user && msUser.parentUserId) {
+      return NextResponse.json({ error: 'Parent account is no longer valid' }, { status: 404 });
+    }
 
     if (!user) {
       // First login / not yet linked. Reconcile against the student's existing
@@ -82,6 +94,79 @@ export async function GET(request: NextRequest) {
         },
         { status: 403 }
       );
+    }
+
+    // ── Parent branch ────────────────────────────────────────────────────
+    // Gated on msUser.parentUserId (set only by the par_ branch of
+    // verifyMsToken), NOT on user.user_type. A mis-set user_type on a
+    // Microsoft-authenticated row must never be able to yield the parent
+    // payload; only holding a parent session token can.
+    if (msUser.parentUserId) {
+      const children = await listParentChildren(msUser.parentUserId);
+
+      // Surfaced so the client can show the parent their own login ID and can
+      // route to /parent/set-password. verifyMsToken has already confirmed the
+      // row is active, so this read is for display only.
+      const { data: parentCredential } = await supabase
+        .from('nexus_parent_credentials')
+        .select('login_id, must_change_password')
+        .eq('parent_user_id', msUser.parentUserId)
+        .maybeSingle();
+
+      // The CHILD's classrooms, resolved by the shared helper that applies the
+      // same is_active/is_archived filter and current-year-first sort as the
+      // student path below. This is what makes RoleGuard's classrooms.length
+      // check pass: a parent can never hold a nexus_enrollments row of their
+      // own, because that table's CHECK allows only 'teacher' and 'student'.
+      const classroomMap = await getChildClassrooms(children.map((c) => c.id));
+      const seen = new Set<string>();
+      const classrooms = children
+        .map((c) => classroomMap.get(c.id))
+        .filter((c): c is NonNullable<typeof c> => {
+          if (!c || seen.has(c.id)) return false;
+          seen.add(c.id);
+          return true;
+        });
+
+      const [parentFlags, parentWindow] = await Promise.allSettled([
+        getNexusSetting(FEATURE_FLAGS_KEY),
+        getNexusSetting(TIMETABLE_WINDOW_KEY),
+      ]);
+
+      return NextResponse.json({
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          avatar_url: user.avatar_url,
+          user_type: 'parent',
+        },
+        nexusRole: 'parent',
+        staffRole: null,
+        canTeach: false,
+        // The all-false map. Any staff action that leaks into a shared component
+        // stays hidden even if that component forgets to check the role.
+        capabilities: capabilityMap(null) satisfies CapabilityMap,
+        classrooms,
+        children,
+        activeChildId: children[0]?.id ?? null,
+        featureFlags: resolveFlags(
+          parentFlags.status === 'fulfilled' ? ((parentFlags.value?.value as FlagMap) || {}) : {}
+        ),
+        timetableWindow:
+          parentWindow.status === 'fulfilled'
+            ? parseWindow(parentWindow.value?.value)
+            : cloneDefaultWindow(),
+        // Hard-coded rather than computed. shouldBlockForPhoto already returns
+        // false for non-students, but pinning it here means no future flag
+        // change can full-screen-block a parent over their child's photo.
+        photoGate: DEFAULT_PHOTO_GATE,
+        parent: {
+          loginId: parentCredential?.login_id ?? null,
+          mustChangePassword: parentCredential?.must_change_password ?? false,
+        },
+      });
     }
 
     // Sync name and update last login from Microsoft.

@@ -5,11 +5,19 @@ import { useRouter } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import NoClassroomWelcome from '@/components/NoClassroomWelcome';
+import ParentNoChildLinked from '@/components/ParentNoChildLinked';
 
 interface RoleGuardProps {
   children: React.ReactNode;
   allowedRoles: ('admin' | 'teacher' | 'student' | 'parent')[];
   redirectTo?: string;
+  /**
+   * Where to send someone who is not signed in at all. Defaults to the
+   * Microsoft login page. The parent area passes /parent/login, because a parent
+   * whose session expired has no Microsoft account and would be stranded on a
+   * sign-in screen they can never complete.
+   */
+  loginPath?: string;
 }
 
 /**
@@ -23,6 +31,7 @@ export default function RoleGuard({
   children,
   allowedRoles,
   redirectTo,
+  loginPath = '/login',
 }: RoleGuardProps) {
   const router = useRouter();
   const { user, nexusRole, classrooms, loading } = useNexusAuthContext();
@@ -31,7 +40,7 @@ export default function RoleGuard({
     if (loading) return;
 
     if (!user) {
-      router.push('/login');
+      router.push(loginPath);
       return;
     }
 
@@ -40,7 +49,7 @@ export default function RoleGuard({
       router.push(target);
       return;
     }
-  }, [user, nexusRole, loading, allowedRoles, redirectTo, router, classrooms]);
+  }, [user, nexusRole, loading, allowedRoles, redirectTo, loginPath, router, classrooms]);
 
   if (loading) {
     return (
@@ -66,10 +75,16 @@ export default function RoleGuard({
     return null;
   }
 
-  // User is authenticated but has no classrooms — show the "contact admin on
-  // Teams" welcome screen. This is the sole access gate for students.
+  // Authenticated but with no classrooms. That is two different failures with
+  // two different remedies: a student needs to be ADDED to a classroom, while a
+  // parent needs to be LINKED to a student. Showing a parent the student's
+  // "ask admin on Teams" screen would tell them to do something they cannot do,
+  // through a tool they do not have.
+  //
+  // For a parent, `classrooms` is their CHILD's classroom list (see the parent
+  // branch of /api/auth/me), so an empty list here means no live linked child.
   if (classrooms.length === 0) {
-    return <NoClassroomWelcome />;
+    return nexusRole === 'parent' ? <ParentNoChildLinked /> : <NoClassroomWelcome />;
   }
 
   return <>{children}</>;

@@ -1,238 +1,326 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
-  Paper,
+  Card,
+  CardContent,
   Skeleton,
+  Alert,
+  Stack,
+  Chip,
   UserAvatar,
   alpha,
-  useTheme,
-  Grid,
 } from '@neram/ui';
-import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
-import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
-import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
-import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import StatCard from '@/components/StatCard';
+import AttendanceStrip from '@/components/parent/AttendanceStrip';
 
-interface ProgressData {
-  child: { id: string; name: string; avatar_url: string | null } | null;
-  attendance: { total: number; present: number; percentage: number };
-  checklist: { total: number; completed: number; percentage: number };
-  drawings: { total: number; approved: number; percentage: number };
-  upcomingClasses: { id: string; title: string; start_time: string; end_time: string }[];
+/**
+ * The parent home screen.
+ *
+ * Answers one question, in this order: is my child okay, what are the numbers
+ * behind that, and what happened recently. Everything else is a tab away.
+ *
+ * Two rules this page exists to honour:
+ *  - counts, not percentages ("7 of 9 classes", never "78%"), because a bare
+ *    percentage reads like a grade being handed to the parent;
+ *  - anything we have not measured says so in words and shows no number at all.
+ *    Rendering 0 for "no attendance was ever synced" would tell every parent in
+ *    the school that their child attended nothing.
+ */
+
+type StripProps = React.ComponentProps<typeof AttendanceStrip>;
+
+interface OverviewResponse {
+  child: {
+    id: string;
+    name: string | null;
+    avatar_url: string | null;
+    classroom_name: string | null;
+  };
+  windowDays: number;
+  attendance: {
+    measuredClasses: number;
+    notMeasuredClasses: number;
+    attended: number;
+    missed: number;
+    droppedMidClass: number;
+    attendanceRate: number | null;
+  };
+  attendanceSentence: string;
+  assignments: {
+    total: number;
+    needsDoing: number;
+    overdue: number;
+    waitingOnTeacher: number;
+    marked: number;
+    averagePercent: number | null;
+  };
+  verdict: { band: string; headline: string; detail: string };
+  upcomingClasses: Array<{
+    id: string;
+    title: string;
+    scheduled_date: string;
+    start_time: string;
+  }>;
+  recentClasses: Array<StripProps & { classId: string }>;
 }
 
-export default function ParentDashboard() {
-  const theme = useTheme();
-  const { activeClassroom, getToken } = useNexusAuthContext();
-  const [data, setData] = useState<ProgressData | null>(null);
+const BAND_COLOUR: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
+  on_track: 'success',
+  slipping: 'warning',
+  needs_attention: 'error',
+  not_enough_data: 'info',
+};
+
+export default function ParentDashboardPage() {
+  const { getToken } = useNexusAuthContext();
+
+  const [data, setData] = useState<OverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!activeClassroom) return;
-
-    async function fetchProgress() {
-      setLoading(true);
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        const res = await fetch(
-          `/api/parent/progress?classroom=${activeClassroom!.id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (res.ok) {
-          setData(await res.json());
-        }
-      } catch (err) {
-        console.error('Failed to load progress:', err);
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/parent/overview', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Could not load the summary.');
+      setData(json);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load the summary.');
+    } finally {
+      setLoading(false);
     }
+  }, [getToken]);
 
-    fetchProgress();
-  }, [activeClassroom, getToken]);
-
-  const formatTime = (dateStr: string) =>
-    new Date(dateStr).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-
-  const progressColor = (pct: number) => {
-    if (pct >= 75) return theme.palette.success.main;
-    if (pct >= 50) return theme.palette.warning.main;
-    return theme.palette.error.main;
-  };
+  // Fetch once on mount. Deliberately no polling: a dashboard left open on a
+  // phone would otherwise generate serverless invocations all day for data that
+  // changes a few times a week.
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (loading) {
     return (
-      <Box>
-        <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3, mb: 2 }} />
-        <Grid container spacing={2} sx={{ mb: 2 }}>
-          {[1, 2, 3].map((i) => (
-            <Grid item xs={4} key={i}>
-              <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
-            </Grid>
-          ))}
-        </Grid>
-        <Skeleton variant="rounded" height={120} sx={{ borderRadius: 3 }} />
-      </Box>
+      <Stack spacing={2}>
+        <Skeleton variant="rounded" height={64} />
+        <Skeleton variant="rounded" height={110} />
+        <Skeleton variant="rounded" height={150} />
+        <Skeleton variant="rounded" height={200} />
+      </Stack>
     );
   }
 
+  if (error) {
+    return <Alert severity="error">{error}</Alert>;
+  }
+
+  if (!data) return null;
+
+  const firstName = data.child.name?.split(' ')[0] || 'Your child';
+  const bandColour = BAND_COLOUR[data.verdict.band] ?? 'info';
+
   return (
-    <Box>
-      {/* Child Header Card */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2.5,
-          mb: 2.5,
-          borderRadius: 3,
-          background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-          color: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          animation: 'fadeInUp 400ms cubic-bezier(0.05, 0.7, 0.1, 1) both',
-          '@keyframes fadeInUp': {
-            from: { opacity: 0, transform: 'translateY(12px)' },
-            to: { opacity: 1, transform: 'translateY(0)' },
-          },
-        }}
-      >
+    <Stack spacing={2.5}>
+      {/* Who this is about */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <UserAvatar
-          src={data?.child?.avatar_url}
-          name={data?.child?.name}
-          size={56}
-          sx={{
-            color: '#fff',
-            fontWeight: 700,
-            border: `3px solid ${alpha('#fff', 0.3)}`,
-          }}
+          src={data.child.avatar_url}
+          name={data.child.name || 'Student'}
+          size={44}
         />
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-            {data?.child?.name || 'Your Child'}
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: 18 }} noWrap>
+            {data.child.name || 'Your child'}
           </Typography>
-          <Typography variant="body2" sx={{ color: alpha('#fff', 0.7), mt: 0.25 }}>
-            {activeClassroom?.name || 'Classroom'}
-          </Typography>
+          {data.child.classroom_name && (
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {data.child.classroom_name}
+            </Typography>
+          )}
         </Box>
-      </Paper>
+      </Box>
 
-      {/* Progress StatCards */}
-      <Grid container spacing={2} sx={{ mb: 2.5 }}>
-        <Grid item xs={4}>
-          <StatCard
-            title="Attendance"
-            value={`${data?.attendance.percentage || 0}%`}
-            icon={<SchoolOutlinedIcon />}
-            variant="surface"
-            color={progressColor(data?.attendance.percentage || 0)}
-            subtitle={`${data?.attendance.present}/${data?.attendance.total}`}
-            delay={80}
-          />
-        </Grid>
-        <Grid item xs={4}>
-          <StatCard
-            title="Checklist"
-            value={`${data?.checklist.percentage || 0}%`}
-            icon={<ChecklistOutlinedIcon />}
-            variant="surface"
-            color={progressColor(data?.checklist.percentage || 0)}
-            subtitle={`${data?.checklist.completed}/${data?.checklist.total}`}
-            delay={160}
-          />
-        </Grid>
-        <Grid item xs={4}>
-          <StatCard
-            title="Drawings"
-            value={`${data?.drawings.percentage || 0}%`}
-            icon={<BrushOutlinedIcon />}
-            variant="surface"
-            color={progressColor(data?.drawings.percentage || 0)}
-            subtitle={`${data?.drawings.approved}/${data?.drawings.total}`}
-            delay={240}
-          />
-        </Grid>
-      </Grid>
-
-      {/* Upcoming Classes */}
-      <Paper
-        elevation={0}
+      {/* The one answer */}
+      <Card
         sx={{
-          p: { xs: 2, sm: 2.5 },
           borderRadius: 3,
-          border: `1px solid ${theme.palette.divider}`,
+          border: '1px solid',
+          borderColor: (t) => alpha(t.palette[bandColour].main, 0.4),
+          bgcolor: (t) => alpha(t.palette[bandColour].main, 0.07),
         }}
       >
-        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
-          Upcoming Classes
-        </Typography>
-
-        {data?.upcomingClasses && data.upcomingClasses.length > 0 ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            {data.upcomingClasses.map((cls, i) => (
-              <Paper
-                key={cls.id}
-                elevation={0}
-                sx={{
-                  p: 1.5,
-                  borderRadius: 2,
-                  bgcolor: alpha(theme.palette.background.default, 0.5),
-                  border: `1px solid ${theme.palette.divider}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  animation: `fadeInUp 350ms cubic-bezier(0.05, 0.7, 0.1, 1) ${i * 50}ms both`,
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 2,
-                    bgcolor: alpha(theme.palette.primary.main, 0.08),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <EventOutlinedIcon sx={{ fontSize: '1.1rem', color: 'primary.main' }} />
-                </Box>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" fontWeight={600} noWrap>
-                    {cls.title}
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <AccessTimeIcon sx={{ fontSize: '0.7rem', color: 'text.disabled' }} />
-                    <Typography variant="caption" color="text.secondary">
-                      {formatDate(cls.start_time)} &middot; {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Paper>
-            ))}
-          </Box>
-        ) : (
-          <Box sx={{ py: 3, textAlign: 'center' }}>
-            <CalendarTodayOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography variant="body2" color="text.secondary">
-              No upcoming classes this week
+        <CardContent sx={{ p: 2.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Box
+              sx={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                bgcolor: `${bandColour}.main`,
+                flexShrink: 0,
+              }}
+            />
+            <Typography sx={{ fontWeight: 700, fontSize: 17 }}>
+              {data.verdict.headline}
             </Typography>
           </Box>
-        )}
-      </Paper>
+          <Typography sx={{ fontSize: 16, lineHeight: 1.55 }}>
+            {data.verdict.detail}
+          </Typography>
+        </CardContent>
+      </Card>
+
+      {/* Three numbers, as counts */}
+      <Card sx={{ borderRadius: 3 }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(3, 1fr)' },
+              gap: 2.5,
+            }}
+          >
+            <Metric
+              label="Attended"
+              value={
+                data.attendance.measuredClasses > 0
+                  ? `${data.attendance.attended} of ${data.attendance.measuredClasses}`
+                  : 'Not recorded'
+              }
+              caption={`last ${data.windowDays} days`}
+              muted={data.attendance.measuredClasses === 0}
+            />
+            <Metric
+              label="Assignments"
+              value={
+                data.assignments.total > 0
+                  ? `${data.assignments.needsDoing} pending`
+                  : 'None yet'
+              }
+              caption={
+                data.assignments.overdue > 0
+                  ? `${data.assignments.overdue} overdue`
+                  : data.assignments.waitingOnTeacher > 0
+                    ? `${data.assignments.waitingOnTeacher} with the teacher`
+                    : 'nothing overdue'
+              }
+              muted={data.assignments.total === 0}
+            />
+            <Metric
+              label="Average"
+              value={
+                data.assignments.averagePercent !== null
+                  ? `${data.assignments.averagePercent}%`
+                  : 'Not marked yet'
+              }
+              caption={
+                data.assignments.marked > 0
+                  ? `${data.assignments.marked} marked`
+                  : 'no marks yet'
+              }
+              muted={data.assignments.averagePercent === null}
+            />
+          </Box>
+
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 2, fontSize: 14, lineHeight: 1.5 }}
+          >
+            {data.attendanceSentence}
+          </Typography>
+        </CardContent>
+      </Card>
+
+      {/* Next up */}
+      {data.upcomingClasses.length > 0 && (
+        <Card sx={{ borderRadius: 3 }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: 16, mb: 1.5 }}>
+              Coming up
+            </Typography>
+            <Stack spacing={1.25}>
+              {data.upcomingClasses.map((c) => (
+                <Box
+                  key={c.id}
+                  sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}
+                >
+                  <Typography sx={{ fontSize: 15 }} noWrap>
+                    {c.title}
+                  </Typography>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={new Intl.DateTimeFormat('en-IN', {
+                      weekday: 'short',
+                      day: 'numeric',
+                      month: 'short',
+                      timeZone: 'Asia/Kolkata',
+                    }).format(Date.parse(`${c.scheduled_date}T00:00:00+05:30`))}
+                    sx={{ flexShrink: 0 }}
+                  />
+                </Box>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent classes */}
+      {data.recentClasses.length > 0 && (
+        <Box>
+          <Typography sx={{ fontWeight: 700, fontSize: 16, mb: 1.5 }}>
+            Recent classes
+          </Typography>
+          <Stack spacing={1.5}>
+            {data.recentClasses.map((c) => (
+              <AttendanceStrip key={c.classId} {...c} />
+            ))}
+          </Stack>
+        </Box>
+      )}
+    </Stack>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  caption,
+  muted,
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  muted?: boolean;
+}) {
+  return (
+    <Box>
+      <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13, mb: 0.25 }}>
+        {label}
+      </Typography>
+      <Typography
+        sx={{
+          fontWeight: 700,
+          // Smaller when the value is a phrase like "Not recorded", so a
+          // non-number never masquerades as a headline figure.
+          fontSize: muted ? 16 : 20,
+          lineHeight: 1.25,
+          color: muted ? 'text.secondary' : 'text.primary',
+        }}
+      >
+        {value}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13 }}>
+        {caption}
+      </Typography>
     </Box>
   );
 }
