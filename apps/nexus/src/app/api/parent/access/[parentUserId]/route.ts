@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
-import { extractBearerToken } from '@/lib/ms-verify';
 import { errorResponse } from '@/lib/api-errors';
 import { hashPassword } from '@/lib/parent-password';
 import { generateTempPassword } from '@/lib/parent-credentials';
@@ -22,7 +21,9 @@ export async function PATCH(
   { params }: { params: { parentUserId: string } }
 ) {
   try {
-    const user = await getRequestUser(extractBearerToken(request.headers.get('Authorization')));
+    // Full Authorization header, not the bare token: getRequestUser passes it
+    // straight to verifyMsToken, which requires the "Bearer " prefix.
+    const user = await getRequestUser(request.headers.get('Authorization'));
     assertCapability(user, 'structure.enrollment.add');
 
     const body = await request.json().catch(() => ({}));

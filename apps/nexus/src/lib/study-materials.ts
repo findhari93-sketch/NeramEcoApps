@@ -26,9 +26,18 @@ export interface RequestUser {
   can_teach: boolean | null;
 }
 
-/** Verify the MS/test/impersonation token and load the matching Nexus user row. */
-export async function getRequestUser(tokenString: string | null): Promise<RequestUser> {
-  const msUser = await verifyMsToken(tokenString);
+/**
+ * Verify the MS/test/impersonation token and load the matching Nexus user row.
+ *
+ * @param authHeader the FULL `Authorization` header value, including the
+ *   "Bearer " prefix, i.e. `request.headers.get('Authorization')`.
+ *   Do NOT pass `extractBearerToken(...)`: verifyMsToken checks for the prefix
+ *   itself and a bare token fails with "Missing or invalid Authorization
+ *   header". (The parameter used to be named `tokenString`, which read like it
+ *   wanted the token alone and caused exactly that bug.)
+ */
+export async function getRequestUser(authHeader: string | null): Promise<RequestUser> {
+  const msUser = await verifyMsToken(authHeader);
 
   // Defence in depth. verifyMsToken already rejects parent tokens unless the
   // caller passes allowParent, and this helper never does, so in practice this

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getRequestUser, assertStaff, assertCapability } from '@/lib/study-materials';
-import { extractBearerToken } from '@/lib/ms-verify';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { hashPassword } from '@/lib/parent-password';
 import {
@@ -30,7 +29,11 @@ const LOGIN_ID_ATTEMPTS = 5;
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getRequestUser(extractBearerToken(request.headers.get('Authorization')));
+    // getRequestUser takes the FULL Authorization header, not the bare token:
+    // it hands the value straight to verifyMsToken, which requires the
+    // "Bearer " prefix. Passing extractBearerToken() here strips that prefix
+    // and every staff call fails with "Missing or invalid Authorization header".
+    const user = await getRequestUser(request.headers.get('Authorization'));
     assertStaff(user);
 
     const classroomId = request.nextUrl.searchParams.get('classroom');
@@ -97,7 +100,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getRequestUser(extractBearerToken(request.headers.get('Authorization')));
+    // getRequestUser takes the FULL Authorization header, not the bare token:
+    // it hands the value straight to verifyMsToken, which requires the
+    // "Bearer " prefix. Passing extractBearerToken() here strips that prefix
+    // and every staff call fails with "Missing or invalid Authorization header".
+    const user = await getRequestUser(request.headers.get('Authorization'));
     // Same authority question as "who may attach a person to a cohort", so it
     // reuses that capability rather than inventing a parallel one. Manager and
     // admin only.
