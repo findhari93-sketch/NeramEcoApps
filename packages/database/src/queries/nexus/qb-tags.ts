@@ -279,6 +279,70 @@ export async function createQBTag(
   return data as NexusQBTag;
 }
 
+/**
+ * Get the tag with this slug, creating it only if it does not exist yet.
+ *
+ * `createQBTag` is a plain insert against a UNIQUE(slug) index, so anything that
+ * derives a slug from a human or AI label eventually collides and throws 23505.
+ * In the wrap-up panel that surfaced as "That tag already exists" followed by the
+ * suggestion chip vanishing with nothing attached: the tag the teacher asked for
+ * existed the whole time.
+ *
+ * Two details that matter:
+ *   - The lookup ignores `is_active`, because the unique index does too. A
+ *     deactivated tag otherwise makes its own slug permanently uncreatable.
+ *   - An inactive match is reactivated rather than duplicated. Someone asking
+ *     for it again is the clearest signal it should be back.
+ *
+ * Same shape as addQuestionTags' idempotent upsert; both exist so that
+ * re-running a write is never an error.
+ */
+export async function findOrCreateQBTag(
+  input: {
+    group_type: NexusQBTagGroup;
+    label: string;
+    slug?: string;
+    parent_id?: string | null;
+    color?: string | null;
+    icon?: string | null;
+    sort_order?: number;
+    created_by?: string | null;
+  },
+  client?: TypedSupabaseClient,
+): Promise<{ tag: NexusQBTag; created: boolean }> {
+  const supabase = client || getSupabaseAdminClient();
+  const slug = qbSlugify(input.slug || input.label);
+  if (!slug) throw new Error('Tag label/slug cannot be empty');
+
+  const findBySlug = async (): Promise<NexusQBTag | null> => {
+    const { data } = await supabase.from(TAGS).select('*').eq('slug', slug).maybeSingle();
+    return (data as NexusQBTag) || null;
+  };
+
+  const existing = await findBySlug();
+  if (existing) {
+    if (existing.is_active === false) {
+      const { data } = await supabase
+        .from(TAGS)
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq('id', existing.id)
+        .select('*')
+        .single();
+      return { tag: (data as NexusQBTag) || existing, created: false };
+    }
+    return { tag: existing, created: false };
+  }
+
+  try {
+    return { tag: await createQBTag({ ...input, slug }, client), created: true };
+  } catch (err) {
+    // Lost a race with a concurrent create: the winner's row is the answer.
+    const raced = await findBySlug();
+    if (raced) return { tag: raced, created: false };
+    throw err;
+  }
+}
+
 /** Rename / recolor / reorder / (de)activate a tag. System tags cannot be deactivated. */
 export async function updateQBTag(
   id: string,

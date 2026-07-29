@@ -63,10 +63,14 @@ interface TopicOption {
   category: string | null;
 }
 
+/**
+ * A tag the class needs that the registry does not have yet. Anything that DID
+ * resolve to a registry tag never reaches here: it arrives in `auto_tag_ids` and
+ * is ticked on without a tap.
+ */
 interface SuggestedTag {
   label: string;
   group_type: string;
-  existing_tag_id: string | null;
 }
 
 interface ClassImage {
@@ -199,14 +203,38 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
         setShowDetailed(true);
       }
       if (Array.isArray(s.bullets) && s.bullets.length) setBullets(s.bullets);
+
+      // Tags that already exist in the registry go straight on. The teacher
+      // untick what does not belong, which is far less work than hunting for
+      // the right chip in a list of eighty.
+      const returnedTags = (data.tags || []) as TagOption[];
+      if (returnedTags.length) {
+        setAvailable((prev) => {
+          const known = new Set(prev.map((t) => t.id));
+          return [...prev, ...returnedTags.filter((t) => !known.has(t.id))];
+        });
+      }
+      const autoIds = (data.auto_tag_ids || []) as string[];
       const already = new Set(tagIds);
-      setSuggestedTags(
-        (data.suggested_tags || []).filter(
-          (t: SuggestedTag) => !(t.existing_tag_id && already.has(t.existing_tag_id)),
-        ),
-      );
+      const appliedCount = autoIds.filter((id) => !already.has(id)).length;
+      setTagIds((prev) => {
+        const next = [...prev];
+        for (const id of autoIds) if (!next.includes(id)) next.push(id);
+        return next;
+      });
+
+      // Only what the registry could not express is left to accept by hand.
+      const newSuggestions = (data.suggested_tags || []) as SuggestedTag[];
+      setSuggestedTags(newSuggestions);
       setNeedsManual(false);
-      onNotify('Draft ready. Review it, then Save.');
+
+      const tagNote = [
+        appliedCount ? `${appliedCount} tag${appliedCount === 1 ? '' : 's'} applied` : '',
+        newSuggestions.length ? `${newSuggestions.length} new suggested` : '',
+      ]
+        .filter(Boolean)
+        .join(', ');
+      onNotify(tagNote ? `Draft ready (${tagNote}). Review it, then Save.` : 'Draft ready. Review it, then Save.');
     } catch {
       onNotify('Could not generate the summary', 'error');
     } finally {
@@ -283,21 +311,29 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
   const toggleTag = (id: string) =>
     setTagIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
 
-  const createTag = async (label: string, group_type: 'subject' | 'theme'): Promise<string | null> => {
+  /**
+   * Make sure a tag with this label exists and return its id.
+   *
+   * `find_or_create` is what stops a slug that is already taken from coming back
+   * as a 409. It used to, and the caller then dropped the chip anyway, so the
+   * teacher was told "that tag already exists" and ended up with the tag on
+   * nothing.
+   */
+  const createTag = async (label: string, group_type: 'subject' | 'theme'): Promise<TagOption | null> => {
     try {
       const token = await getToken();
       const res = await fetch('/api/question-bank/tags', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ group_type, label }),
+        body: JSON.stringify({ group_type, label, find_or_create: true }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.data) {
         const t = data.data as TagOption;
         setAvailable((prev) => (prev.some((a) => a.id === t.id) ? prev : [...prev, t]));
-        return t.id;
+        return t;
       }
-      onNotify(res.status === 409 ? 'That tag already exists' : data.error || 'Could not create the tag', 'error');
+      onNotify(data.error || 'Could not create the tag', 'error');
       return null;
     } catch {
       onNotify('Could not create the tag', 'error');
@@ -306,26 +342,20 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
   };
 
   const acceptSuggested = async (s: SuggestedTag) => {
-    let id = s.existing_tag_id;
-    if (id) {
-      setAvailable((prev) =>
-        prev.some((a) => a.id === id)
-          ? prev
-          : [...prev, { id: id as string, slug: '', label: s.label, group_type: s.group_type, color: null }],
-      );
-    } else {
-      id = await createTag(s.label, s.group_type === 'subject' ? 'subject' : 'theme');
-    }
-    if (id) setTagIds((prev) => (prev.includes(id as string) ? prev : [...prev, id as string]));
+    const tag = await createTag(s.label, s.group_type === 'subject' ? 'subject' : 'theme');
+    // Keep the chip when the tag could not be created. Removing it regardless is
+    // how a suggestion used to disappear having attached nothing.
+    if (!tag) return;
+    setTagIds((prev) => (prev.includes(tag.id) ? prev : [...prev, tag.id]));
     setSuggestedTags((prev) => prev.filter((x) => x.label.toLowerCase() !== s.label.toLowerCase()));
   };
 
   const addNewTag = async () => {
     const label = newTagLabel.trim();
     if (!label) return;
-    const id = await createTag(label, newTagGroup);
-    if (id) {
-      setTagIds((prev) => [...prev, id]);
+    const tag = await createTag(label, newTagGroup);
+    if (tag) {
+      setTagIds((prev) => (prev.includes(tag.id) ? prev : [...prev, tag.id]));
       setNewTagLabel('');
     }
   };
@@ -404,13 +434,18 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
   const bySubject = available.filter((t) => t.group_type === 'subject');
   const byTheme = available.filter((t) => t.group_type === 'theme');
 
+  // Tag chips are the main thing a thumb aims at in this panel, so they meet
+  // WCAG 2.5.5 (44px) on a phone and stay compact in the desktop side rail.
+  const chipHeight = { xs: 44, sm: 30 };
+  const chipGap = { xs: 1, sm: 0.625 };
+
   const tagRow = (label: string, options: TagOption[]) =>
     options.length > 0 && (
       <Box sx={{ mt: 1.25 }}>
         <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.625 }}>
           {label}
         </Typography>
-        <Box sx={{ display: 'flex', gap: 0.625, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', gap: chipGap, flexWrap: 'wrap' }}>
           {options.map((t) => {
             const on = tagIds.includes(t.id);
             return (
@@ -419,8 +454,10 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
                 label={t.label}
                 size="small"
                 onClick={() => toggleTag(t.id)}
+                data-testid="wrapup-tag"
+                data-selected={on ? 'true' : 'false'}
                 sx={{
-                  height: 30,
+                  height: chipHeight,
                   fontWeight: on ? 700 : 500,
                   cursor: 'pointer',
                   bgcolor: on ? alpha(theme.palette.primary.main, 0.14) : 'transparent',
@@ -620,7 +657,7 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
           Tags
         </Typography>
         <Typography variant="caption" color="text.disabled" sx={{ display: 'block' }}>
-          Tap a suggestion or a chip to add it, or make a new one below (choose Subject or Theme). Tags let students find this class later.
+          Generate ticks the tags that already fit. Tap any chip to add or remove one, or make a new one below (choose Subject or Theme). Tags let students find this class later.
         </Typography>
       </Box>
 
@@ -628,18 +665,19 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
       {suggestedTags.length > 0 && (
         <Box sx={{ mt: 1.25 }}>
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.625 }}>
-            Suggested (tap to add)
+            New ideas (tap to add to the tag list)
           </Typography>
-          <Box sx={{ display: 'flex', gap: 0.625, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: chipGap, flexWrap: 'wrap' }}>
             {suggestedTags.map((s) => (
               <Chip
                 key={`${s.group_type}-${s.label}`}
-                label={s.existing_tag_id ? s.label : `${s.label} (new)`}
+                label={`${s.label} (new)`}
                 size="small"
                 icon={<AddIcon sx={{ fontSize: 15 }} />}
                 onClick={() => acceptSuggested(s)}
+                data-testid="wrapup-suggested-tag"
                 sx={{
-                  height: 30,
+                  height: chipHeight,
                   cursor: 'pointer',
                   color: 'primary.dark',
                   bgcolor: alpha(theme.palette.primary.main, 0.06),
@@ -673,7 +711,7 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
               size="small"
               onClick={() => setNewTagGroup(g)}
               sx={{
-                height: 30,
+                height: chipHeight,
                 cursor: 'pointer',
                 textTransform: 'capitalize',
                 fontWeight: newTagGroup === g ? 700 : 500,

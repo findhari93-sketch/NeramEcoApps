@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildQBTagTree, buildQBDescendantMap, type QBTagCount } from './qb-tags';
+import { buildQBTagTree, buildQBDescendantMap, findOrCreateQBTag, qbSlugify, type QBTagCount } from './qb-tags';
 import type { NexusQBTag } from '../../types';
 
 function tag(slug: string, id: string, parent_id: string | null = null, sort_order = 0): NexusQBTag {
@@ -164,5 +164,138 @@ describe('buildQBDescendantMap', () => {
     const map = buildQBDescendantMap(rows);
     expect(map.get('root')).toEqual(['mid', 'leaf']);
     expect(map.get('mid')).toEqual(['leaf']);
+  });
+});
+
+/**
+ * A stand-in for the tags table that behaves like the real one in the way that
+ * matters: UNIQUE(slug) does not care whether the row is active.
+ *
+ * `appearsMidFlight` simulates losing a race, where the slug is absent on the
+ * first read and present by the time the insert lands.
+ */
+function fakeTagsTable(rows: NexusQBTag[], opts?: { appearsMidFlight?: NexusQBTag }) {
+  const state = { rows: [...rows], inserted: [] as any[], updated: [] as any[], reads: 0 };
+
+  const client: any = {
+    from: () => ({
+      select: () => ({
+        eq: (_col: string, value: string) => ({
+          maybeSingle: async () => {
+            state.reads += 1;
+            if (opts?.appearsMidFlight && state.reads === 1) return { data: null };
+            const found =
+              state.rows.find((r) => r.slug === value) ||
+              (opts?.appearsMidFlight?.slug === value ? opts.appearsMidFlight : null);
+            return { data: found ?? null };
+          },
+        }),
+      }),
+      insert: (values: any) => ({
+        select: () => ({
+          single: async () => {
+            if (state.rows.some((r) => r.slug === values.slug) || opts?.appearsMidFlight) {
+              return {
+                data: null,
+                error: { code: '23505', message: 'duplicate key value violates unique constraint "nexus_qb_tags_slug_key"' },
+              };
+            }
+            const row = { id: `new-${values.slug}`, is_active: true, ...values } as NexusQBTag;
+            state.rows.push(row);
+            state.inserted.push(row);
+            return { data: row, error: null };
+          },
+        }),
+      }),
+      update: (patch: any) => ({
+        eq: (_col: string, id: string) => ({
+          select: () => ({
+            single: async () => {
+              const row = state.rows.find((r) => r.id === id)!;
+              Object.assign(row, patch);
+              state.updated.push(patch);
+              return { data: row, error: null };
+            },
+          }),
+        }),
+      }),
+    }),
+  };
+
+  return { client, state };
+}
+
+describe('findOrCreateQBTag', () => {
+  it('returns the existing tag instead of colliding with its slug', async () => {
+    // The wrap-up panel asking for "One Point Perspective" when
+    // one_point_perspective is already there used to 409 and attach nothing.
+    const { client, state } = fakeTagsTable([tag('one_point_perspective', 'existing')]);
+
+    const { tag: result, created } = await findOrCreateQBTag(
+      { group_type: 'theme', label: 'One Point Perspective' },
+      client,
+    );
+
+    expect(created).toBe(false);
+    expect(result.id).toBe('existing');
+    expect(state.inserted).toHaveLength(0);
+  });
+
+  it('creates the tag when the slug really is free', async () => {
+    const { client, state } = fakeTagsTable([]);
+
+    const { tag: result, created } = await findOrCreateQBTag(
+      { group_type: 'theme', label: 'Site Planning' },
+      client,
+    );
+
+    expect(created).toBe(true);
+    expect(result.slug).toBe('site_planning');
+    expect(state.inserted).toHaveLength(1);
+  });
+
+  it('reactivates an inactive tag rather than leaving its slug uncreatable', async () => {
+    // UNIQUE(slug) ignores is_active, so without this a deactivated tag makes
+    // its own name permanently impossible to add back from the UI.
+    const retired = { ...tag('shadow', 'retired'), is_active: false };
+    const { client, state } = fakeTagsTable([retired]);
+
+    const { tag: result, created } = await findOrCreateQBTag(
+      { group_type: 'theme', label: 'Shadow' },
+      client,
+    );
+
+    expect(created).toBe(false);
+    expect(result.id).toBe('retired');
+    expect(result.is_active).toBe(true);
+    expect(state.updated[0]).toMatchObject({ is_active: true });
+  });
+
+  it('returns the winner when a concurrent create got there first', async () => {
+    const winner = tag('isometric', 'winner');
+    const { client } = fakeTagsTable([], { appearsMidFlight: winner });
+
+    const { tag: result, created } = await findOrCreateQBTag(
+      { group_type: 'theme', label: 'Isometric' },
+      client,
+    );
+
+    expect(created).toBe(false);
+    expect(result.id).toBe('winner');
+  });
+
+  it('refuses a label that slugifies to nothing', async () => {
+    const { client } = fakeTagsTable([]);
+    await expect(findOrCreateQBTag({ group_type: 'theme', label: '  ***  ' }, client)).rejects.toThrow(
+      /cannot be empty/,
+    );
+  });
+});
+
+describe('qbSlugify', () => {
+  it('is the normalizer the tag matcher keys everything on', () => {
+    expect(qbSlugify('One Point Perspective')).toBe('one_point_perspective');
+    expect(qbSlugify('Shadows & Shading')).toBe('shadows_shading');
+    expect(qbSlugify('  3D Visualization  ')).toBe('3d_visualization');
   });
 });

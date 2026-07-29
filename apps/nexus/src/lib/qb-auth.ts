@@ -22,6 +22,14 @@ import { resolveStaffRole } from './staff-capabilities';
 export interface QBCaller {
   id: string;
   user_type: string;
+  /**
+   * Carried so callers can gate on the tier rather than on user_type alone.
+   * A manager row has user_type='student' with staff_role='manager', and a
+   * `['teacher','admin'].includes(user_type)` check refuses them: that is how
+   * tag creation came to 403 for people who could edit the wrap-up asking for it.
+   */
+  staff_role?: string | null;
+  can_teach?: boolean | null;
 }
 
 export type QBAccessResult =
@@ -64,7 +72,12 @@ export async function verifyQBAccess(
     return { ok: false, response: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
   }
 
-  const asCaller: QBCaller = { id: caller.id, user_type: caller.user_type ?? 'student' };
+  const asCaller: QBCaller = {
+    id: caller.id,
+    user_type: caller.user_type ?? 'student',
+    staff_role: caller.staff_role ?? null,
+    can_teach: caller.can_teach ?? null,
+  };
 
   // Any staff tier reaches the Question Bank without an enrollment check: they
   // author and review its content.

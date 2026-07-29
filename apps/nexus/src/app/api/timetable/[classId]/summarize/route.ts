@@ -3,6 +3,8 @@ import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { canRunSession } from '@/lib/staff-capabilities';
 import { resolveTranscript } from '@/lib/transcript-resolver';
+import { findRecordingForClass } from '@/lib/recording-locator';
+import { resolveSuggestedTags, type RegistryTag } from '@/lib/tag-resolver';
 import { generateClassSummary, type ClassImageInput } from '@/lib/class-summary-ai';
 
 /**
@@ -10,23 +12,64 @@ import { generateClassSummary, type ClassImageInput } from '@/lib/class-summary-
  *
  * Read the class transcript (and any drawings attached to the class) and return
  * a wrap-up draft: a real title, a short brief, a detailed paragraph, a
- * point-by-point list, and suggested subject/theme tags matched against the
- * registry. Nothing is saved: the teacher reviews and edits, then Save (the
- * wrap-up PATCH) commits it. This mirrors the class-recap generator.
+ * point-by-point list, and the tags it should carry. Nothing is saved: the
+ * teacher reviews and edits, then Save (the wrap-up PATCH) commits it. This
+ * mirrors the class-recap generator.
+ *
+ * Two things are done here that the teacher used to have to do by hand:
+ *
+ *   1. The recording is located if it has not been synced yet, because the
+ *      SharePoint item behind it is how the transcript is read (see
+ *      lib/transcript-resolver). Without this, a class nobody pressed Sync on
+ *      looks exactly like a class with no transcript.
+ *   2. Tags are resolved against the registry by slug, shape and alias rather
+ *      than by exact label equality, and the registry is shown to the model in
+ *      the first place, so it picks existing tags instead of inventing near
+ *      duplicates. See lib/tag-resolver.
  *
  * The transcript ladder itself lives in lib/transcript-resolver, shared with the
  * recap generator so the two cannot answer "is there a transcript" differently.
  *
- * If none resolve and there are no images, returns { needs_manual: true } so the
- * UI reveals the paste box instead of erroring.
+ * If nothing resolves and there are no images, returns { needs_manual: true }
+ * with a message naming the actual blocker, so the UI reveals the paste box
+ * instead of erroring.
  */
 
 interface Ctx {
   params: { classId: string };
 }
 
-const CLASS_COLS = 'id, classroom_id, teacher_id, title, transcript_url, recording_url, teams_meeting_id';
+const CLASS_COLS = [
+  'id',
+  'classroom_id',
+  'teacher_id',
+  'title',
+  'transcript_url',
+  'recording_url',
+  'teams_meeting_id',
+  'online_meeting_id',
+  'teams_meeting_join_url',
+  'teams_meeting_url',
+  'organizer_ms_oid',
+  'organizer_email',
+  'scheduled_date',
+  'start_time',
+].join(', ');
 const MAX_IMAGES = 4;
+
+/** What to tell the teacher when the ladder came back empty. */
+function manualMessage(hasRecording: boolean, sharepointError?: string): string {
+  if (!hasRecording) {
+    return 'No recording found for this class yet, so there is no transcript to read. Teams usually publishes it within an hour. Paste the transcript, upload the .vtt, or attach a class drawing to generate now.';
+  }
+  if (sharepointError === 'NO_ACCESS') {
+    return 'The recording exists but could not be opened, so the transcript could not be read. Paste the transcript or upload the .vtt from Teams.';
+  }
+  if (sharepointError === 'VIDEO_NOT_FOUND') {
+    return 'The recording link did not resolve. Re-sync the recording, or paste the transcript instead.';
+  }
+  return 'Teams has not published a transcript for this class yet. It usually appears a few minutes after the recording. Paste the transcript text, upload the .vtt, or attach a class drawing, then try again.';
+}
 
 async function resolveAccess(supabase: any, msOid: string, classId: string) {
   const { data: user } = await supabase
@@ -86,8 +129,16 @@ async function loadClassImages(supabase: any, classId: string): Promise<ClassIma
 }
 
 export async function POST(request: NextRequest, { params }: Ctx) {
+  // Outside the main try: a bad token is a 401, not the 500 that the catch-all
+  // was turning every missing Authorization header into.
+  let msUser: Awaited<ReturnType<typeof verifyMsToken>>;
   try {
-    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    msUser = await verifyMsToken(request.headers.get('Authorization'));
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const msToken = extractBearerToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient() as any;
     const body = await request.json().catch(() => ({}));
@@ -96,11 +147,30 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     if ('error' in access) return access.error;
     const cls = access.cls;
 
+    // --- Make sure we know where the recording is ---
+    // Only when the teacher has not supplied a transcript themselves, so a paste
+    // never pays for a Graph lookup it does not need.
+    const suppliedTranscript = !!body.transcript_text || !!body.vtt_content;
+    let recordingUrl: string | null = cls.recording_url ?? null;
+    if (!recordingUrl && !suppliedTranscript) {
+      try {
+        recordingUrl = await findRecordingForClass(supabase, cls);
+        if (recordingUrl) {
+          await supabase
+            .from('nexus_scheduled_classes')
+            .update({ recording_url: recordingUrl, recording_fetched_at: new Date().toISOString() })
+            .eq('id', params.classId);
+        }
+      } catch (err) {
+        console.error('[summarize] recording lookup failed:', err);
+      }
+    }
+
     // --- Resolve a transcript through the shared ladder ---
-    // Pasted text, then an uploaded .vtt, then a cached URL, then live from
-    // Graph (cached back), then the SharePoint recording. See lib/transcript-resolver.
-    const { entries: transcript } = await resolveTranscript({
-      cls: { ...cls, id: params.classId },
+    // Pasted text, then an uploaded .vtt, then a cached URL, then the SharePoint
+    // recording app-only, then the Teams artifact API. See lib/transcript-resolver.
+    const { entries: transcript, source, sharepointError, meetingFailure } = await resolveTranscript({
+      cls: { ...cls, id: params.classId, recording_url: recordingUrl },
       msToken,
       transcriptText: body.transcript_text,
       vttContent: body.vtt_content,
@@ -111,40 +181,39 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     const images = await loadClassImages(supabase, params.classId);
 
     if (transcript.length === 0 && images.length === 0) {
+      // Logged, not returned: "the tenant never granted the Teams access policy"
+      // is for us to act on, not something to put in front of a teacher.
+      if (meetingFailure) {
+        console.warn(`[summarize] class ${params.classId} meeting lookup: ${meetingFailure}`);
+      }
       return NextResponse.json({
         needs_manual: true,
-        message:
-          'No transcript found yet. Paste the transcript text (or upload the .vtt from Teams), or attach a class drawing, then try again.',
+        message: manualMessage(!!recordingUrl, sharepointError),
       });
     }
+
+    // --- The tag registry, both to prompt with and to match against ---
+    const { data: registryRows } = await supabase
+      .from('nexus_qb_tags')
+      .select('id, slug, label, group_type, color, aliases')
+      .in('group_type', ['subject', 'theme'])
+      .eq('is_active', true)
+      .order('group_type', { ascending: true })
+      .order('sort_order', { ascending: true });
+    const registry = (registryRows || []) as RegistryTag[];
 
     // --- Generate ---
     const summary = await generateClassSummary({
       transcript,
       images,
       fallbackTitle: cls.title || 'Untitled class',
+      tags: registry,
     });
 
-    // --- Match suggested tags against the shared registry ---
-    const { data: registry } = await supabase
-      .from('nexus_qb_tags')
-      .select('id, slug, label, group_type')
-      .in('group_type', ['subject', 'theme'])
-      .eq('is_active', true);
-
-    const byKey = new Map<string, { id: string; group_type: string }>();
-    for (const t of (registry || []) as Array<{ id: string; slug: string; label: string; group_type: string }>) {
-      byKey.set(t.label.toLowerCase(), { id: t.id, group_type: t.group_type });
-      byKey.set(t.slug.toLowerCase(), { id: t.id, group_type: t.group_type });
-    }
-
-    const suggested_tags = summary.suggested_tags.map((t) => {
-      const match = byKey.get(t.label.toLowerCase());
-      return {
-        label: t.label,
-        group_type: match?.group_type || t.group_type,
-        existing_tag_id: match?.id || null,
-      };
+    const { matched, unmatched } = resolveSuggestedTags({
+      registry,
+      tagSlugs: summary.tag_slugs,
+      newTags: summary.new_tags,
     });
 
     return NextResponse.json({
@@ -154,8 +223,20 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         detailed_description: summary.detailed_description,
         bullets: summary.bullets,
       },
-      suggested_tags,
-      used: { transcript: transcript.length > 0, images: images.length },
+      // Tags that already exist: the panel ticks these on without a tap.
+      auto_tag_ids: matched.map((t) => t.id),
+      // The registry rows behind them, so the panel can render a chip for a tag
+      // it did not have when the page loaded.
+      tags: matched.map((t) => ({
+        id: t.id,
+        slug: t.slug,
+        label: t.label,
+        group_type: t.group_type,
+        color: t.color ?? null,
+      })),
+      // Genuinely new ideas. Created only if the teacher taps one.
+      suggested_tags: unmatched,
+      used: { transcript: transcript.length > 0, images: images.length, source },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to summarize the class';

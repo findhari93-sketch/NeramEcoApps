@@ -27,6 +27,18 @@ dotenv.config({ path: path.resolve(__dirname, 'apps/nexus/.env.local') });
 const STUDENT_AUTH_FILE = path.join(__dirname, 'tests/.auth/user.json');
 const TEACHER_AUTH_FILE = path.join(__dirname, 'tests/.auth/teacher.json');
 
+/**
+ * Where the nexus specs point. Matches APP_URLS in tests/utils/credentials.ts,
+ * which the API-level specs use, so both follow the same override.
+ *
+ * A local dev server normally talks to the PRODUCTION Supabase through
+ * db.neramclasses.com. To run specs that write against staging instead, start a
+ * second server wired to the staging keys and point the suite at it:
+ *
+ *   E2E_NEXUS_URL=http://localhost:3022 pnpm test:e2e --project=nexus-chrome --no-deps
+ */
+const NEXUS_URL = process.env.E2E_NEXUS_URL || 'http://localhost:3012';
+
 export default defineConfig({
   testDir: './tests/e2e',
 
@@ -124,7 +136,7 @@ export default defineConfig({
       name: 'nexus-chrome',
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:3012',
+        baseURL: NEXUS_URL,
         // Reuse saved teacher authentication state
         storageState: TEACHER_AUTH_FILE,
       },
@@ -139,7 +151,7 @@ export default defineConfig({
       name: 'nexus-mobile',
       use: {
         ...devices['Pixel 5'],
-        baseURL: 'http://localhost:3012',
+        baseURL: NEXUS_URL,
         storageState: TEACHER_AUTH_FILE,
       },
       testMatch: /.*nexus-mobile.*\.spec\.ts/,

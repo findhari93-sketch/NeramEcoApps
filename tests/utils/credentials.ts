@@ -20,11 +20,21 @@
 // ============================================
 // App URLs
 // ============================================
+/**
+ * Where the specs point.
+ *
+ * Overridable so a suite can be run against a server wired to a different
+ * database. Local dev normally points at the production Supabase through
+ * db.neramclasses.com, so anything that writes (creating a registry tag, say)
+ * wants a staging-backed server on another port instead:
+ *
+ *   E2E_NEXUS_URL=http://localhost:3022 pnpm test:e2e --project=nexus-chrome
+ */
 export const APP_URLS = {
-  marketing: 'http://localhost:3010',
-  student: 'http://localhost:3011',
-  nexus: 'http://localhost:3012',
-  admin: 'http://localhost:3013',
+  marketing: process.env.E2E_MARKETING_URL || 'http://localhost:3010',
+  student: process.env.E2E_APP_URL || 'http://localhost:3011',
+  nexus: process.env.E2E_NEXUS_URL || 'http://localhost:3012',
+  admin: process.env.E2E_ADMIN_URL || 'http://localhost:3013',
 } as const;
 
 // ============================================
@@ -96,23 +106,40 @@ export async function getTestAuthToken(
   user: any;
   nexusRole: string;
   classrooms: any[];
+  /** Staff tier and per-person teaching flag, both consumed by injectAuthForPage. */
+  staffRole?: string | null;
+  canTeach?: boolean | null;
 } | null> {
   const account = role === 'student' ? STUDENT_ACCOUNT : TEACHER_ACCOUNT;
 
-  try {
-    const response = await request.post(`${APP_URLS.nexus}/api/auth/test-login`, {
-      data: { email: account.email, role },
-    });
+  // Retried, because a Next dev server serves /_not-found (404) for anything
+  // that arrives while it is compiling a route. A cold first run would otherwise
+  // fail login and skip a whole suite for a reason that has nothing to do with
+  // the code under test. A route that is genuinely missing 404s every attempt.
+  const attempts = 3;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const response = await request.post(`${APP_URLS.nexus}/api/auth/test-login`, {
+        data: { email: account.email, role },
+        timeout: 90_000,
+      });
 
-    if (response.ok()) {
-      return await response.json();
+      if (response.ok()) {
+        return await response.json();
+      }
+      if (response.status() !== 404 || i === attempts - 1) {
+        console.error(`Test login failed for ${role}: ${response.status()}`);
+        return null;
+      }
+    } catch (err: any) {
+      if (i === attempts - 1) {
+        console.error(`Test login error for ${role}: ${err.message}`);
+        return null;
+      }
     }
-    console.error(`Test login failed for ${role}: ${response.status()}`);
-    return null;
-  } catch (err: any) {
-    console.error(`Test login error for ${role}: ${err.message}`);
-    return null;
+    await new Promise((r) => setTimeout(r, 4000));
   }
+  return null;
 }
 
 /**
