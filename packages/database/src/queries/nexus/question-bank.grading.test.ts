@@ -52,6 +52,42 @@ describe('numerical answers respect their tolerance', () => {
   });
 });
 
+describe('a NUMERICAL answer that is not actually a number', () => {
+  // The bank really does contain these. 'In a 3x3 cube, ratio of 3-side-color
+  // face to 2-side-color face?' is stored as question_format NUMERICAL with
+  // correct_answer '2:3' and no tolerance, which is how this was found.
+  it('does not accept the leading number of a ratio', () => {
+    // parseFloat('2:3') is 2, so the previous implementation marked a student who
+    // answered '2' correct. An exact '2:3' also passed, so the fault was invisible
+    // unless you happened to try the wrong answer.
+    expect(gradeQBAnswerStrict('NUMERICAL', '2', '2:3', null)).toBe(false);
+    expect(gradeQBAnswerStrict('NUMERICAL', '2:9', '2:3', null)).toBe(false);
+  });
+
+  it('still accepts the ratio itself, however it is spaced', () => {
+    expect(gradeQBAnswerStrict('NUMERICAL', '2:3', '2:3', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', ' 2 : 3 ', '2:3', null)).toBe(true);
+  });
+
+  it('does not let tolerance loosen a non-numeric answer', () => {
+    // A tolerance of 5 must not make '7:3' an acceptable '2:3'.
+    expect(gradeQBAnswerStrict('NUMERICAL', '7:3', '2:3', 5)).toBe(false);
+  });
+
+  it('treats a unit suffix as text, not as its leading number', () => {
+    expect(gradeQBAnswerStrict('NUMERICAL', '5', '5cm', null)).toBe(false);
+    expect(gradeQBAnswerStrict('NUMERICAL', '5cm', '5cm', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', '1/2', '1/2', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', '1', '1/2', null)).toBe(false);
+  });
+
+  it('keeps numeric behaviour when both sides really are numbers', () => {
+    // The fallback must not cost us the fix it sits beside: '3.0' still matches '3'.
+    expect(gradeQBAnswerStrict('NUMERICAL', '3.0', '3', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', '-0.5', '-.5', null)).toBe(true);
+  });
+});
+
 describe('self-assessed formats are never silently marked correct', () => {
   it('returns null, never true, for a drawing prompt', () => {
     // The trap this whole function exists to avoid. checkQBAnswer returns TRUE

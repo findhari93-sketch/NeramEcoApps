@@ -813,14 +813,41 @@ export function gradeQBAnswerStrict(
     return studentAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
   }
 
-  // NUMERICAL. Compared as numbers, so '3.0' matches '3', which the strict ===
-  // this replaces got wrong. tolerance null means exact numeric equality, not
-  // exact string equality.
-  const studentVal = parseFloat(studentAnswer.trim());
-  const correctVal = parseFloat(correctAnswer.trim());
-  if (!Number.isFinite(studentVal) || !Number.isFinite(correctVal)) return false;
-  const tol = Math.abs(Number(tolerance) || 0);
-  return Math.abs(studentVal - correctVal) <= tol;
+  // NUMERICAL.
+  const student = studentAnswer.trim();
+  const correct = correctAnswer.trim();
+
+  // Numeric comparison ONLY when both sides are numbers end to end.
+  //
+  // parseFloat stops at the first character it cannot use, so it reads '2:3' as 2
+  // and '5cm' as 5. The bank genuinely contains NUMERICAL questions whose answer
+  // is a ratio ('2:3' is a real row), and a leading-prefix parse would mark a
+  // student who answered '2' correct for '2:3' while an exact '2:3' also passed,
+  // so the error would never show up in a spot check.
+  //
+  // When either side is not fully numeric, fall back to comparing the text. That
+  // is stricter than the old parseFloat path and never looser.
+  if (isFullyNumeric(student) && isFullyNumeric(correct)) {
+    const tol = Math.abs(Number(tolerance) || 0);
+    // '3.0' matches '3', which the strict === this replaces got wrong. tolerance
+    // null means exact numeric equality, not exact string equality.
+    return Math.abs(Number(student) - Number(correct)) <= tol;
+  }
+
+  // Whitespace collapsed and case ignored, so '2 : 3' matches '2:3'. Tolerance is
+  // meaningless here and is deliberately not applied.
+  return normaliseFreeText(student) === normaliseFreeText(correct);
+}
+
+/** True when the WHOLE string is a finite number, not merely starts with one. */
+function isFullyNumeric(value: string): boolean {
+  if (value === '') return false;
+  const n = Number(value);
+  return Number.isFinite(n);
+}
+
+function normaliseFreeText(value: string): string {
+  return value.replace(/\s+/g, '').toLowerCase();
 }
 
 /**
