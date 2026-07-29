@@ -17,8 +17,9 @@ import SelectAllIcon from '@mui/icons-material/SelectAll';
 import TranslateIcon from '@mui/icons-material/Translate';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import CancelIcon from '@mui/icons-material/Cancel';
-import type { QBFilterState } from '@neram/database';
-import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database';
+import type { QBFilterState, QBExamType } from '@neram/database';
+import { QB_EXAM_TYPE_LABELS } from '@neram/database';
+import { getFilterChips, removeFilterValue, type ActiveChip } from './FilterChips';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -47,172 +48,72 @@ export interface TopFilterBarProps {
   // Language
   lang: 'en' | 'hi';
   onLangChange: (lang: 'en' | 'hi') => void;
+
+  /**
+   * slug -> label for the subject tag tree, so a collapsed parent selection
+   * renders as "Coordinate Geometry" and not the raw slug. Parent slugs are not
+   * members of QBCategory, so QB_CATEGORY_LABELS cannot resolve them.
+   */
+  categoryLabels?: Record<string, string>;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-interface ActiveChip {
-  key: keyof QBFilterState;
-  label: string;
-  value?: string | number;
-}
-
-function getActiveChips(filters: QBFilterState): ActiveChip[] {
-  const chips: ActiveChip[] = [];
-
-  if (filters.exam_relevance) {
-    chips.push({
-      key: 'exam_relevance',
-      label: filters.exam_relevance === 'NATA' ? 'NATA' : filters.exam_relevance === 'JEE' ? 'JEE' : 'Both Exams',
-    });
-  }
-
-  if (filters.exam_type) {
-    chips.push({ key: 'exam_type', label: filters.exam_type });
-  }
-
-  if (filters.exam_years?.length) {
-    for (const y of filters.exam_years) {
-      chips.push({ key: 'exam_years', label: `Year: ${y}`, value: y });
-    }
-  }
-
-  if (filters.exam_sessions?.length) {
-    for (const s of filters.exam_sessions) {
-      chips.push({ key: 'exam_sessions', label: `Session: ${s}`, value: s });
-    }
-  }
-
-  if (filters.categories?.length) {
-    for (const c of filters.categories) {
-      const label = QB_CATEGORY_LABELS[c as QBCategory] ?? c;
-      chips.push({ key: 'categories', label, value: c });
-    }
-  }
-
-  if (filters.difficulty?.length) {
-    for (const d of filters.difficulty) {
-      chips.push({
-        key: 'difficulty',
-        label: d.charAt(0) + d.slice(1).toLowerCase(),
-        value: d,
-      });
-    }
-  }
-
-  if (filters.question_format?.length) {
-    for (const f of filters.question_format) {
-      const formatLabels: Record<string, string> = {
-        MCQ: 'MCQ',
-        NUMERICAL: 'Numerical',
-        DRAWING_PROMPT: 'Drawing',
-        IMAGE_BASED: 'Image Based',
-      };
-      chips.push({ key: 'question_format', label: formatLabels[f] ?? f, value: f });
-    }
-  }
-
-  if (filters.attempt_status && filters.attempt_status !== 'all') {
-    const statusLabels: Record<string, string> = {
-      unattempted: 'Unattempted',
-      correct: 'Correct',
-      incorrect: 'Incorrect',
-    };
-    chips.push({
-      key: 'attempt_status',
-      label: statusLabels[filters.attempt_status] ?? filters.attempt_status,
-    });
-  }
-
-  if (filters.solution_filter) {
-    const solLabels: Record<string, string> = {
-      has_video: 'Has Video',
-      has_image: 'Has Image',
-      has_explanation: 'Has Explanation',
-      no_solution: 'No Solution',
-    };
-    chips.push({
-      key: 'solution_filter',
-      label: solLabels[filters.solution_filter] ?? filters.solution_filter,
-    });
-  }
-
-  if (filters.search_text) {
-    chips.push({ key: 'search_text', label: `"${filters.search_text}"` });
-  }
-
-  return chips;
-}
-
-function removeFilter(
-  filters: QBFilterState,
-  key: keyof QBFilterState,
-  value?: string | number,
-): QBFilterState {
-  const next = { ...filters };
-
-  // Array-valued filters: remove specific value
-  if (value !== undefined) {
-    if (key === 'exam_years' && next.exam_years) {
-      next.exam_years = next.exam_years.filter((y) => y !== value);
-      if (next.exam_years.length === 0) delete next.exam_years;
-    } else if (key === 'exam_sessions' && next.exam_sessions) {
-      next.exam_sessions = next.exam_sessions.filter((s) => s !== value);
-      if (next.exam_sessions.length === 0) delete next.exam_sessions;
-    } else if (key === 'categories' && next.categories) {
-      next.categories = next.categories.filter((c) => c !== value);
-      if (next.categories.length === 0) delete next.categories;
-    } else if (key === 'difficulty' && next.difficulty) {
-      next.difficulty = next.difficulty.filter((d) => d !== value) as typeof next.difficulty;
-      if (next.difficulty.length === 0) delete next.difficulty;
-    } else if (key === 'question_format' && next.question_format) {
-      next.question_format = next.question_format.filter((f) => f !== value) as typeof next.question_format;
-      if (next.question_format.length === 0) delete next.question_format;
-    }
-  } else {
-    // Scalar-valued filters: clear entirely
-    delete next[key];
-  }
-
-  return next;
-}
+//
+// Chip derivation and removal both live in FilterChips.tsx so the chip row and
+// the filter-button badge cannot disagree. This file used to carry a parallel
+// copy of both, and the two had already drifted apart.
 
 // ─── Quick-access chip config ───────────────────────────────────────────────
 
 interface QuickChip {
   label: string;
   filterKey: keyof QBFilterState;
+  /**
+   * Extra state keys this chip also reflects.
+   *
+   * "Exam" is one control over two fields: the drawer's Exam Type accordion
+   * writes `exam_type`, while a preset or a shared URL can carry
+   * `exam_relevance`. Without this the chip sat unlit while an exam filter was
+   * plainly applied.
+   */
+  alsoKeys?: (keyof QBFilterState)[];
+}
+
+/** Every state key a quick chip speaks for, primary first. */
+function chipKeys(chip: QuickChip): (keyof QBFilterState)[] {
+  return [chip.filterKey, ...(chip.alsoKeys || [])];
 }
 
 const QUICK_CHIPS: QuickChip[] = [
-  { label: 'Exam', filterKey: 'exam_relevance' },
+  { label: 'Exam', filterKey: 'exam_type', alsoKeys: ['exam_relevance'] },
   { label: 'Difficulty', filterKey: 'difficulty' },
   { label: 'Category', filterKey: 'categories' },
   { label: 'Format', filterKey: 'question_format' },
   { label: 'Status', filterKey: 'attempt_status' },
 ];
 
+function isSet(val: unknown): boolean {
+  if (val === undefined || val === null) return false;
+  if (Array.isArray(val)) return val.length > 0;
+  if (val === 'all') return false;
+  return true;
+}
+
 function getQuickChipLabel(filters: QBFilterState, chip: QuickChip): string {
-  const val = filters[chip.filterKey];
-  if (!val || (Array.isArray(val) && val.length === 0) || val === 'all') {
-    return chip.label;
-  }
+  // Label from whichever of the chip's keys is actually set.
+  const key = chipKeys(chip).find((k) => isSet(filters[k]));
+  if (!key) return chip.label;
+  const val = filters[key];
+
   if (Array.isArray(val)) return `${chip.label} (${val.length})`;
-  if (chip.filterKey === 'exam_relevance') {
-    return val === 'BOTH' ? 'Both Exams' : String(val);
-  }
-  if (chip.filterKey === 'attempt_status') {
-    return String(val).charAt(0).toUpperCase() + String(val).slice(1);
-  }
+  if (key === 'exam_relevance') return val === 'BOTH' ? 'Both Exams' : String(val);
+  if (key === 'exam_type') return QB_EXAM_TYPE_LABELS[val as QBExamType] ?? String(val);
+  if (key === 'attempt_status') return String(val).charAt(0).toUpperCase() + String(val).slice(1);
   return String(val);
 }
 
 function isQuickChipActive(filters: QBFilterState, chip: QuickChip): boolean {
-  const val = filters[chip.filterKey];
-  if (!val) return false;
-  if (Array.isArray(val) && val.length === 0) return false;
-  if (val === 'all') return false;
-  return true;
+  return chipKeys(chip).some((k) => isSet(filters[k]));
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -240,11 +141,12 @@ export default function TopFilterBar({
   isYearPaperView,
   lang,
   onLangChange,
+  categoryLabels,
 }: TopFilterBarProps) {
-  const activeChips = getActiveChips(filters);
+  const activeChips: ActiveChip[] = getFilterChips(filters, categoryLabels);
 
   function handleDismissChip(key: keyof QBFilterState, value?: string | number) {
-    onFilterChange(removeFilter(filters, key, value));
+    onFilterChange(removeFilterValue(filters, key, value));
   }
 
   function handleClearAll() {

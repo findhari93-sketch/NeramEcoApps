@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
@@ -14,6 +14,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import ShareIcon from '@mui/icons-material/Share';
@@ -21,7 +22,10 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useWatchTracker } from '@/hooks/useWatchTracker';
 import VideoCard, { VideoCardSkeleton } from '@/components/library/VideoCard';
+import LibraryYouTubePlayer from '@/components/library/LibraryYouTubePlayer';
+import { parseChaptersFromDescription, formatChapterTime } from '@/lib/youtube-metadata';
 import type { LibraryVideo } from '@neram/database/types';
 
 function formatDuration(seconds: number | null): string {
@@ -89,6 +93,20 @@ export default function VideoPlayerPage() {
   const [relatedVideos, setRelatedVideos] = useState<LibraryVideo[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
 
+  // Filled by LibraryYouTubePlayer once the IFrame API is ready. Chapters seek
+  // through it, and the watch tracker attaches its listeners to it.
+  const playerRef = useRef<any>(null);
+
+  // The bare iframe this page used to render could not be controlled, so this
+  // hook existed but was never attached to anything. That is why Continue
+  // Watching, view counts and the teacher engagement dashboard were all empty.
+  useWatchTracker({
+    videoId: video?.id || '',
+    videoDurationSeconds: video?.duration_seconds || 0,
+    playerRef,
+    enabled: Boolean(video?.id),
+  });
+
   // Fetch video
   useEffect(() => {
     if (!videoId) return;
@@ -123,42 +141,53 @@ export default function VideoPlayerPage() {
     return () => { cancelled = true; };
   }, [videoId, getToken]);
 
-  // Fetch related videos once we have the video
+  /**
+   * Related videos.
+   *
+   * Searching this video's own topics beats listing its category: "Perspective"
+   * finds the other perspective classes, where "drawing" returns whatever
+   * happens to be newest across a category of 137 videos. Falls back to the
+   * category when the video carries no topics.
+   */
+  const relatedQuery = video?.topics?.[0] || '';
+  const relatedCategory = video?.category || '';
+  const currentVideoId = video?.id || '';
+
   useEffect(() => {
-    if (!video?.category) {
+    if (!currentVideoId || (!relatedQuery && !relatedCategory)) {
       setRelatedLoading(false);
       return;
     }
     let cancelled = false;
 
-    async function fetchRelated() {
+    (async () => {
       try {
         const token = await getToken();
         if (!token || cancelled) return;
 
-        const res = await fetch(
-          `/api/library/videos?category=${encodeURIComponent(video!.category!)}&limit=8`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        const params = new URLSearchParams({ limit: '8' });
+        if (relatedQuery) params.set('q', relatedQuery);
+        else params.set('category', relatedCategory);
 
+        const res = await fetch(`/api/library/search?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
-        if (!cancelled) {
-          const filtered = (data.videos || []).filter(
-            (v: LibraryVideo) => v.id !== video!.id
-          );
-          setRelatedVideos(filtered.slice(0, 6));
-        }
+        if (cancelled) return;
+        setRelatedVideos(
+          (data.data || [])
+            .filter((v: LibraryVideo) => v.id !== currentVideoId)
+            .slice(0, 6),
+        );
       } catch {
-        // Silently fail for related
+        // Related videos are a nicety; a failure here must not break playback.
       } finally {
         if (!cancelled) setRelatedLoading(false);
       }
-    }
-
-    fetchRelated();
+    })();
     return () => { cancelled = true; };
-  }, [video?.id, video?.category, getToken]);
+  }, [currentVideoId, relatedQuery, relatedCategory, getToken]);
 
   const handleBookmark = useCallback(async () => {
     if (!video || bookmarkLoading) return;
@@ -192,6 +221,18 @@ export default function VideoPlayerPage() {
   const description = video
     ? video.approved_description || video.suggested_description || video.original_description || ''
     : '';
+
+  // Chapters come from the description, which is the only place YouTube keeps
+  // them. Parsing rather than storing a copy means the several hundred videos
+  // already on the channel get chapters too, with nothing to backfill.
+  const chapters = useMemo(() => parseChaptersFromDescription(description), [description]);
+
+  const seekTo = useCallback((seconds: number) => {
+    const player = playerRef.current;
+    if (!player?.seekTo) return;
+    player.seekTo(seconds, true);
+    player.playVideo?.();
+  }, []);
 
   if (error) {
     return (
@@ -253,17 +294,7 @@ export default function VideoPlayerPage() {
         {loading ? (
           <Skeleton variant="rectangular" sx={{ width: '100%', height: '100%' }} />
         ) : video ? (
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${video.youtube_video_id}?rel=0&modestbranding=1`}
-            title={title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-            }}
-          />
+          <LibraryYouTubePlayer youtubeId={video.youtube_video_id} playerRef={playerRef} />
         ) : null}
       </Box>
 
@@ -413,17 +444,74 @@ export default function VideoPlayerPage() {
               )}
             </Box>
 
-            {/* Topic chips */}
+            {/* Chapters. Tapping one seeks the player, which is the whole
+                reason this page runs the IFrame API instead of a bare embed. */}
+            {chapters.length > 0 && (
+              <Paper variant="outlined" sx={{ borderRadius: 2, mb: 2, overflow: 'hidden' }}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{ fontWeight: 700, px: 2, pt: 1.5, pb: 1 }}
+                >
+                  In this class
+                </Typography>
+                <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+                  {chapters.map((c) => (
+                    <Box
+                      component="li"
+                      key={`${c.t}-${c.label}`}
+                      onClick={() => seekTo(c.t)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e: React.KeyboardEvent) => {
+                        if (e.key === 'Enter' || e.key === ' ') seekTo(c.t);
+                      }}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.25,
+                        px: 2,
+                        minHeight: 48,
+                        cursor: 'pointer',
+                        borderTop: `1px solid ${theme.palette.divider}`,
+                        '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.05) },
+                        '&:active': { bgcolor: alpha(theme.palette.primary.main, 0.1) },
+                      }}
+                    >
+                      <PlayArrowIcon sx={{ fontSize: 18, color: theme.palette.primary.main }} />
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontVariantNumeric: 'tabular-nums',
+                          fontWeight: 700,
+                          color: theme.palette.primary.main,
+                          minWidth: 46,
+                        }}
+                      >
+                        {formatChapterTime(c.t)}
+                      </Typography>
+                      <Typography variant="body2" sx={{ py: 1 }}>
+                        {c.label}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Paper>
+            )}
+
+            {/* Topic chips. Tapping one searches for it, so a student who likes
+                this class can reach every other class on the same topic. */}
             {video.topics && video.topics.length > 0 && (
-              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 2 }}>
+              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 2 }}>
                 {video.topics.map((topic) => (
                   <Chip
                     key={topic}
                     label={topic}
                     size="small"
+                    onClick={() =>
+                      router.push(`/student/library/search?q=${encodeURIComponent(topic)}`)}
                     sx={{
-                      height: 24,
-                      fontSize: '0.7rem',
+                      height: 32,
+                      fontSize: '0.75rem',
                       fontWeight: 500,
                       bgcolor: alpha(theme.palette.primary.main, 0.06),
                     }}

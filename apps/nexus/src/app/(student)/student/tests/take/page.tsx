@@ -28,6 +28,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useSearchParams, useRouter } from 'next/navigation';
 import MathText from '@/components/common/MathText';
+import AnswerInput from '@/components/tests/AnswerInput';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -634,7 +635,26 @@ export default function TakeTestPage() {
     </Box>
   );
 
-  // ----- Shared: Option cards -----
+  // ----- Shared: the answer control -----
+  //
+  // A NUMERICAL question used to render its text and then nothing at all: this
+  // block mapped over `options` unconditionally, and question_type was declared
+  // on the interface and read nowhere. So the paper was unanswerable and the
+  // student had no way to know why.
+  const isNumerical =
+    String(currentQuestion?.question.question_type || '').toUpperCase() === 'NUMERICAL';
+
+  const numericInput = currentQuestion ? (
+    <AnswerInput
+      question={{
+        question_id: currentQuestion.question.id,
+        question_format: 'NUMERICAL',
+      }}
+      value={selectedAnswer ?? null}
+      onChange={(v) => handleAnswer(currentQuestion.question.id, v)}
+    />
+  ) : null;
+
   const optionCards = currentQuestion ? (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 0.75, md: 1 } }}>
       {(currentQuestion.question.options || []).map((option, optIdx) => {
@@ -918,7 +938,7 @@ export default function TakeTestPage() {
                 )}
 
                 {/* Options */}
-                {optionCards}
+                {isNumerical ? numericInput : optionCards}
               </>
             )}
           </Box>

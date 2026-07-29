@@ -39,10 +39,17 @@ import ReplayIcon from '@mui/icons-material/Replay';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
+import AnswerInput from '@/components/tests/AnswerInput';
 
 interface Question {
   question_id: string;
   question_text: string | null;
+  /**
+   * Normalised uppercase by getComposedTestQuestions. It was missing from this
+   * interface entirely, which is how a NUMERICAL question ended up rendering its
+   * text and no way at all to answer it.
+   */
+  question_format?: string | null;
   options: Array<{ id: string; text: string }> | null;
   marks: number;
 }
@@ -343,6 +350,16 @@ export default function CatchUpTestPage() {
         </Box>
         {q.question_text}
       </Typography>
+      {/* A numerical question gets a numeric keypad instead of option cards.
+          Without this branch it rendered its text and nothing else, so a paper
+          containing one was unanswerable and the student could not tell why. */}
+      {String(q.question_format || '').toUpperCase() === 'NUMERICAL' ? (
+        <AnswerInput
+          question={{ question_id: q.question_id, question_format: 'NUMERICAL' }}
+          value={answers[q.question_id] ?? null}
+          onChange={(v) => setAnswers((prev) => ({ ...prev, [q.question_id]: v }))}
+        />
+      ) : (
       <RadioGroup
         value={answers[q.question_id] || ''}
         onChange={(e) => setAnswers((prev) => ({ ...prev, [q.question_id]: e.target.value }))}
@@ -379,6 +396,7 @@ export default function CatchUpTestPage() {
           );
         })}
       </RadioGroup>
+      )}
     </Box>
   );
 

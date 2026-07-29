@@ -32,6 +32,12 @@ interface AgendaViewProps {
   myRsvpReasons?: Record<string, string | null>;
   myAttendance?: Record<string, boolean>;
   rsvpData?: Record<string, { attending: number; total: number }>;
+  /**
+   * Class ids whose prep gate is shut for this student. Only used by the hero,
+   * which is the one place that renders a Join button, and empty for every class
+   * the gate never applied to.
+   */
+  prepShutIds?: Set<string>;
   onClassClick?: (cls: ClassCardData) => void;
   onDecline?: (cls: ClassCardData) => void;
   onCatchUp?: (cls: ClassCardData) => void;
@@ -58,6 +64,7 @@ export default function AgendaView({
   myRsvpReasons,
   myAttendance,
   rsvpData,
+  prepShutIds,
   onClassClick,
   onDecline,
   onCatchUp,
@@ -140,6 +147,7 @@ export default function AgendaView({
           role={role}
           myRsvp={myRsvps?.[heroClass.id]}
           myRsvpReason={myRsvpReasons?.[heroClass.id]}
+          prepShut={prepShutIds?.has(heroClass.id)}
           onDecline={onDecline}
           onCatchUp={onCatchUp}
           onDetails={onClassClick}

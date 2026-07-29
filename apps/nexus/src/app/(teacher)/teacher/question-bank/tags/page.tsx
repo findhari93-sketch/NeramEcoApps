@@ -15,6 +15,7 @@ import {
   Select,
   MenuItem,
   FormControl,
+  FormHelperText,
   InputLabel,
   Menu,
   IconButton,
@@ -44,6 +45,12 @@ type Draft = {
   id?: string;
   group_type: NexusQBTagGroup;
   label: string;
+  /**
+   * Nesting this tag under another one of the same group. This is what drives
+   * the two-level Category filter students see, so a parent can be added here
+   * without a deploy.
+   */
+  parent_id: string | null;
   sort_order: number;
   is_active: boolean;
   is_system: boolean;
@@ -93,7 +100,7 @@ export default function QuestionTagsPage() {
   }, [tags]);
 
   function openCreate(group: NexusQBTagGroup) {
-    setDraft({ group_type: group, label: '', sort_order: 0, is_active: true, is_system: false });
+    setDraft({ group_type: group, label: '', parent_id: null, sort_order: 0, is_active: true, is_system: false });
   }
   function openEdit(tag: NexusQBTagWithCount) {
     setMenuAnchor(null);
@@ -101,11 +108,43 @@ export default function QuestionTagsPage() {
       id: tag.id,
       group_type: tag.group_type,
       label: tag.label,
+      parent_id: tag.parent_id ?? null,
       sort_order: tag.sort_order,
       is_active: tag.is_active,
       is_system: tag.is_system,
     });
   }
+
+  /**
+   * Tags eligible to be this draft's parent: same group, active, not itself,
+   * and not one of its own descendants (which would create a cycle).
+   */
+  const parentOptions = useMemo(() => {
+    if (!draft) return [];
+    const childrenOf = new Map<string, string[]>();
+    for (const t of tags) {
+      if (t.parent_id) childrenOf.set(t.parent_id, [...(childrenOf.get(t.parent_id) || []), t.id]);
+    }
+    const descendants = new Set<string>();
+    const walk = (id: string) => {
+      for (const child of childrenOf.get(id) || []) {
+        if (descendants.has(child)) continue;
+        descendants.add(child);
+        walk(child);
+      }
+    };
+    if (draft.id) walk(draft.id);
+
+    return tags
+      .filter(
+        (t) =>
+          t.group_type === draft.group_type &&
+          t.is_active &&
+          t.id !== draft.id &&
+          !descendants.has(t.id),
+      )
+      .sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label));
+  }, [tags, draft]);
 
   async function saveDraft() {
     if (!draft || !draft.label.trim()) return;
@@ -117,8 +156,18 @@ export default function QuestionTagsPage() {
       const url = isEdit ? `/api/question-bank/tags/${draft.id}` : '/api/question-bank/tags';
       const method = isEdit ? 'PATCH' : 'POST';
       const body = isEdit
-        ? { label: draft.label, sort_order: draft.sort_order, is_active: draft.is_active }
-        : { group_type: draft.group_type, label: draft.label, sort_order: draft.sort_order };
+        ? {
+            label: draft.label,
+            parent_id: draft.parent_id,
+            sort_order: draft.sort_order,
+            is_active: draft.is_active,
+          }
+        : {
+            group_type: draft.group_type,
+            label: draft.label,
+            parent_id: draft.parent_id,
+            sort_order: draft.sort_order,
+          };
       const res = await fetch(url, {
         method,
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -321,6 +370,30 @@ export default function QuestionTagsPage() {
               onChange={(e) => setDraft((d) => (d ? { ...d, label: e.target.value } : d))}
               helperText="A tag with the same name is not allowed twice."
             />
+            <FormControl fullWidth size="small">
+              <InputLabel id="tag-parent">Parent topic</InputLabel>
+              <Select
+                labelId="tag-parent"
+                label="Parent topic"
+                value={draft?.parent_id ?? ''}
+                onChange={(e) =>
+                  setDraft((d) => (d ? { ...d, parent_id: (e.target.value as string) || null } : d))
+                }
+              >
+                <MenuItem value="">
+                  <em>None (top level)</em>
+                </MenuItem>
+                {parentOptions.map((t) => (
+                  <MenuItem key={t.id} value={t.id}>
+                    {t.label}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>
+                Nest this under a broader topic. Students can then filter by the parent and get every
+                topic inside it in one tap.
+              </FormHelperText>
+            </FormControl>
             <TextField
               fullWidth
               size="small"
@@ -328,7 +401,7 @@ export default function QuestionTagsPage() {
               label="Sort order"
               value={draft?.sort_order ?? 0}
               onChange={(e) => setDraft((d) => (d ? { ...d, sort_order: Number(e.target.value) || 0 } : d))}
-              helperText="Lower numbers appear first."
+              helperText="Lower numbers appear first, within the same parent."
             />
             {draft?.id && !draft.is_system && (
               <FormControlLabel

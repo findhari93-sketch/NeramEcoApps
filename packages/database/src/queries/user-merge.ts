@@ -74,17 +74,32 @@ export function buildMergePreview(a: MergeUserRow, b: MergeUserRow): {
   let winner = isNeramEmail(a.email) ? a : isNeramEmail(b.email) ? b : a;
   let loser = winner === a ? b : a;
 
-  // EXCEPTION — provisioning shell: the @neram row can be a hollow duplicate (no
-  // ms_oid, no Google/app login, no data) created before the person's real
-  // identity was linked, while the OTHER row (their Google row) holds the real
-  // logins + every reference. Keep that rich row as the survivor so its
-  // firebase_uid and all its data stay put and only the shell's few refs move.
-  // merge_user_records still adopts the @neram address as the primary email and
-  // COALESCEs ms_oid/firebase_uid from both sides, so the consolidated identity is
-  // identical either way. (Duplicate cleanup finding, 2026-07-07: the Google row
-  // is the correct survivor, not the empty @neramclasses.com shell.)
-  const isHollow = (r: MergeUserRow) => !r.ms_oid && !r.firebase_uid && !r.google_id;
-  const keptGoogleRowOverShell = isNeramEmail(winner.email) && isHollow(winner) && !isHollow(loser);
+  // EXCEPTION — provisioning shell: the @neram row can be a hollow duplicate
+  // created before the person's real identity was linked, while the OTHER row
+  // (their Google row) holds the real logins + every reference. Keep that rich row
+  // as the survivor so its firebase_uid and all its data stay put and only the
+  // shell's few refs move. merge_user_records still adopts the @neram address as
+  // the primary email and COALESCEs ms_oid/firebase_uid from both sides, so the
+  // consolidated identity is identical either way. (Duplicate cleanup finding,
+  // 2026-07-07: the Google row is the correct survivor, not the empty
+  // @neramclasses.com shell.)
+  //
+  // A shell is identified by the absence of an APP login (firebase/google), NOT by
+  // a missing ms_oid: shells minted by the admin "Sync from Entra" reconciler are
+  // inserted WITH the ms_oid already attached, so an ms_oid-based test never fired
+  // for them and the shell wrongly won. Direction matters, because
+  // merge_user_records resolves the student_profiles UNIQUE(user_id) collision by
+  // DELETING the LOSER's profile: with the shell as winner, the student's real
+  // profile (fees, enrollment date, NRM id) is the one dropped, and the merge then
+  // aborts on direct_enrollment_links.student_profile_id (ON DELETE NO ACTION).
+  // See the Chetana duplicate, 2026-07-28.
+  // Deliberately narrow: an app login is missing AND no personal detail was ever
+  // recorded. A genuine Microsoft-only student who has a phone or date of birth on
+  // file is NOT a shell and keeps its survivor status, so we never drop a real
+  // student_profile just because that student has not used the Tools app.
+  const hasAppLogin = (r: MergeUserRow) => !!r.firebase_uid || !!r.google_id;
+  const isHollow = (r: MergeUserRow) => !hasAppLogin(r) && !r.phone && !r.date_of_birth;
+  const keptGoogleRowOverShell = isNeramEmail(winner.email) && isHollow(winner) && hasAppLogin(loser);
   if (keptGoogleRowOverShell) {
     const tmp = winner;
     winner = loser;

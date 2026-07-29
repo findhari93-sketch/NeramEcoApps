@@ -47,6 +47,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import type { ClassCardData } from './ClassCard';
 import { RADIUS } from './timetable-theme';
+import ClassVideoMetaPanel from './ClassVideoMetaPanel';
 
 interface TagOption {
   id: string;
@@ -733,6 +734,15 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
       >
         {saving ? 'Saving...' : 'Save'}
       </Button>
+
+      {/* Publishing the recording is a separate job done at a separate time, so
+          it gets its own collapsed panel rather than more fields in this form. */}
+      <ClassVideoMetaPanel
+        classId={classId}
+        getToken={getToken}
+        onNotify={onNotify}
+        onSaved={onSaved}
+      />
 
       {/* When the class belongs to a plan entry, the Class Day screen already
           does coverage logging properly. Point at it rather than build a

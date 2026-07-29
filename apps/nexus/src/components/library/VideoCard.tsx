@@ -4,6 +4,27 @@ import { Box, Typography, Chip, LinearProgress, Skeleton, alpha, useTheme } from
 import { useRouter } from 'next/navigation';
 import type { LibraryVideo } from '@neram/database/types';
 
+/**
+ * Only the fields the card actually draws.
+ *
+ * Typed as a subset rather than as LibraryVideo so a search result, which is a
+ * deliberately narrower projection from the library_search RPC, can be rendered
+ * by the same card without a cast.
+ */
+export type VideoCardVideo = Pick<
+  LibraryVideo,
+  | 'id'
+  | 'youtube_video_id'
+  | 'approved_title'
+  | 'suggested_title'
+  | 'original_title'
+  | 'youtube_thumbnail_url'
+  | 'youtube_thumbnail_hq_url'
+  | 'duration_seconds'
+  | 'exam'
+  | 'difficulty'
+>;
+
 function formatDuration(seconds: number | null): string {
   if (!seconds || seconds <= 0) return '';
   const h = Math.floor(seconds / 3600);
@@ -14,7 +35,7 @@ function formatDuration(seconds: number | null): string {
 }
 
 interface VideoCardProps {
-  video: LibraryVideo;
+  video: VideoCardVideo;
   progress?: { completion_pct: number };
   onClick?: () => void;
   /** When true, card takes full width of parent (for grid layouts) */

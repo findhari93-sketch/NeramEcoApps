@@ -11,7 +11,7 @@ import {
   type SxProps,
   type Theme,
 } from '@neram/ui';
-import { useNexusAuth } from '@/hooks/useNexusAuth';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 // Module-level cache for blob URLs to avoid refetching across re-renders
 const NO_PHOTO = '__NO_PHOTO__';
@@ -86,7 +86,7 @@ export default function GraphAvatar({
   tapToView = true,
   fallbackSrc,
 }: GraphAvatarProps) {
-  const { getToken, impersonation } = useNexusAuth();
+  const { getToken, impersonation } = useNexusAuthContext();
   // Discriminates *who* "self" currently resolves to, so the photo cache
   // (keyed below) doesn't serve the real admin's photo while impersonating a
   // student, or vice versa after exiting. See GraphAvatar cache-key note.

@@ -2,8 +2,10 @@
 // yet in the generated Supabase types. Regenerate after 20260713190000 is applied.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { recordCatchupTestAttempt } from './catchup-journey';
+import { gradeQBAnswerStrict, normaliseQuestionFormat } from './question-bank';
 import type {
   NexusPlacementContext,
+  NexusTestKind,
   NexusTestPlacement,
   NexusComposedQuestion,
   NexusTestGradeResult,
@@ -34,6 +36,13 @@ export interface ComposeTestInput {
   title: string;
   description?: string | null;
   questionIds: string[];
+  /**
+   * What this test IS. Required, with no default, so every call site has to
+   * decide rather than inheriting someone else's answer. It drives grouping on
+   * both hubs and, for the two gated kinds, whether the generic student test
+   * list is allowed to show the test at all.
+   */
+  testKind: NexusTestKind;
   /** Per-question marks (aligned with questionIds) or a single value for all. Defaults to 1. */
   marks?: number[] | number;
   timerType?: TimerType;
@@ -93,6 +102,7 @@ export async function composeTest(
       is_published: input.isPublished ?? true,
       is_active: true,
       is_repository: input.isRepository ?? false,
+      test_kind: input.testKind,
       created_from: input.createdFrom ?? null,
       shuffle_questions: input.shuffle ?? false,
       is_custom: !input.isRepository,
@@ -114,6 +124,38 @@ export async function composeTest(
   if (tqErr) throw tqErr;
 
   return { id: test.id };
+}
+
+/**
+ * Which hub group a stored kind belongs in.
+ *
+ * 'content_gate' never reaches here: those tests are filed by their placement
+ * context instead, because one kind covers four different homes.
+ *
+ * hasClassroom is the legacy fallback. A pre-taxonomy row with a classroom_id and
+ * no placement is a classroom test, and the column default preserves that.
+ */
+function groupKeyForKind(kind: NexusTestKind, hasClassroom: boolean): NexusTestOverviewGroupKey {
+  switch (kind) {
+    case 'class_prep':
+      return 'class_prep';
+    case 'catchup_class':
+      return 'catchup';
+    case 'practice_pool':
+      return 'practice_pool';
+    case 'weekly':
+      return 'weekly';
+    case 'mock':
+      return 'mock';
+    case 'student_custom':
+      // A student's own paper is not staff work. It lands in the drafts bucket
+      // rather than pretending a teacher set it.
+      return 'practice';
+    case 'classroom_assigned':
+      return hasClassroom ? 'classroom' : 'practice';
+    default:
+      return 'practice';
+  }
 }
 
 /** List repository tests (optionally by author), newest first. */
@@ -149,7 +191,7 @@ export async function listTestsGroupedByContext(
   // 1. All active tests (repository + legacy classroom-scoped).
   const { data: tests, error: tErr } = await supabase
     .from(TESTS)
-    .select('id, title, test_type, total_marks, is_published, is_repository, created_from, created_at, classroom_id')
+    .select('id, title, test_type, total_marks, is_published, is_repository, test_kind, created_from, created_at, classroom_id')
     .eq('is_active', true)
     .order('created_at', { ascending: false });
   if (tErr) throw tErr;
@@ -204,12 +246,44 @@ export async function listTestsGroupedByContext(
     }
   }
   const classroomIds = new Set<string>();
-  for (const p of placements || []) if (p.context_type === 'classroom_assignment') classroomIds.add(p.context_id);
+  for (const p of placements || []) {
+    if (p.context_type === 'classroom_assignment' || p.context_type === 'student_practice') {
+      classroomIds.add(p.context_id);
+    }
+  }
   for (const t of testList) if (t.classroom_id) classroomIds.add(t.classroom_id);
   const classroomNameMap = new Map<string, string>();
   if (classroomIds.size > 0) {
     const { data: crs } = await supabase.from('nexus_classrooms').select('id, name').in('id', [...classroomIds]);
     for (const c of crs || []) classroomNameMap.set(c.id, c.name);
+  }
+
+  // class_prep_test and catchup_class both point context_id at a scheduled class,
+  // so both label as "{title}, {date}". Before test_kind these two contexts
+  // matched no branch and were silently filed as generic classroom tests.
+  const classCtxIds = [
+    ...new Set(
+      (placements || [])
+        .filter((p: any) => p.context_type === 'class_prep_test' || p.context_type === 'catchup_class')
+        .map((p: any) => p.context_id),
+    ),
+  ];
+  const classLabelMap = new Map<string, string>();
+  if (classCtxIds.length > 0) {
+    const { data: rows } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('id, title, scheduled_date')
+      .in('id', classCtxIds);
+    for (const c of rows || []) {
+      const day = c.scheduled_date
+        ? new Date(`${String(c.scheduled_date).slice(0, 10)}T00:00:00+05:30`).toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            timeZone: 'Asia/Kolkata',
+          })
+        : null;
+      classLabelMap.set(c.id, [c.title || 'Class', day].filter(Boolean).join(', '));
+    }
   }
 
   // Section names for the remaining contexts. context_id is the SECTION id in all
@@ -272,13 +346,28 @@ export async function listTestsGroupedByContext(
     }
   }
 
-  // 5. Categorize each test into a group (+ folder subgroup for study chapters).
+  // 5. Group each test by its STORED kind, then use the placement only to
+  //    resolve a human label.
+  //
+  //    Grouping used to be inferred from the placement context, which had two
+  //    silent failures: catchup_class and student_practice matched no branch, so
+  //    every catch-up test and every teacher-offered practice pool was labelled a
+  //    "Classroom test". nexus_tests.test_kind answers the question directly.
+  //
+  //    The four content contexts still route through the placement, because their
+  //    kind is one value ('content_gate') covering four different homes, and a
+  //    teacher needs to know which.
   const GROUP_ORDER: { key: NexusTestOverviewGroupKey; label: string }[] = [
+    { key: 'class_prep', label: 'Before class' },
     { key: 'study_materials', label: 'Study Materials' },
     { key: 'class_recaps', label: 'Class Recaps' },
     { key: 'foundation', label: 'Foundation' },
     { key: 'modules', label: 'Modules' },
     { key: 'classroom', label: 'Classroom tests' },
+    { key: 'catchup', label: 'Catch-up class tests' },
+    { key: 'weekly', label: 'Weekly tests' },
+    { key: 'mock', label: 'Mock tests' },
+    { key: 'practice_pool', label: 'Practice pool' },
     { key: 'practice', label: 'Practice / Drafts' },
   ];
   const flat = new Map<NexusTestOverviewGroupKey, NexusOverviewTest[]>();
@@ -297,12 +386,16 @@ export async function listTestsGroupedByContext(
       created_at: t.created_at,
       question_count: qCount.get(t.id) || 0,
       attempt_count: aCount.get(t.id) || 0,
+      test_kind: (t.test_kind as NexusTestKind) ?? 'classroom_assigned',
       context_type: (p?.context_type as NexusPlacementContext) ?? null,
       context_label: null,
       file_id: null,
     };
 
     const ctx = p?.context_type as NexusPlacementContext | undefined;
+
+    // A content mirror is filed by WHERE it lives, because 'content_gate' covers
+    // four different homes and the teacher needs to know which one.
     if (ctx === 'study_file') {
       const f = fileMap.get(p.context_id);
       base.context_label = f?.title || 'Chapter';
@@ -311,24 +404,36 @@ export async function listTestsGroupedByContext(
       const folderLabel = (f && folderNameMap.get(f.folder_id)) || 'Study Materials';
       if (!studySub.has(folderKey)) studySub.set(folderKey, { label: folderLabel, tests: [] });
       studySub.get(folderKey)!.tests.push(base);
-    } else if (ctx === 'class_recap_section') {
+      continue;
+    }
+    if (ctx === 'class_recap_section') {
       base.context_label = sectionLabelMap.get(p.context_id) || null;
       pushFlat(flat, 'class_recaps', base);
-    } else if (ctx === 'foundation_section') {
+      continue;
+    }
+    if (ctx === 'foundation_section') {
       base.context_label = sectionLabelMap.get(p.context_id) || null;
       pushFlat(flat, 'foundation', base);
-    } else if (ctx === 'module_item') {
+      continue;
+    }
+    if (ctx === 'module_item') {
       base.context_label = sectionLabelMap.get(p.context_id) || null;
       pushFlat(flat, 'modules', base);
-    } else if (ctx === 'classroom_assignment') {
+      continue;
+    }
+
+    // Everything else groups on the stored kind.
+    if (ctx === 'class_prep_test') {
+      base.context_label = classLabelMap.get(p.context_id) || 'A class';
+    } else if (ctx === 'catchup_class') {
+      base.context_label = classLabelMap.get(p.context_id) || 'A class';
+    } else if (ctx === 'classroom_assignment' || ctx === 'student_practice') {
       base.context_label = classroomNameMap.get(p.context_id) || 'Classroom';
-      pushFlat(flat, 'classroom', base);
     } else if (t.classroom_id) {
       base.context_label = classroomNameMap.get(t.classroom_id) || 'Classroom';
-      pushFlat(flat, 'classroom', base);
-    } else {
-      pushFlat(flat, 'practice', base);
     }
+
+    pushFlat(flat, groupKeyForKind(base.test_kind, !!t.classroom_id), base);
   }
 
   const groups: NexusTestOverviewGroup[] = [];
@@ -384,7 +489,10 @@ export async function getComposedTestQuestions(
   if (qbIds.length > 0) {
     const { data } = await supabase
       .from('nexus_qb_questions')
-      .select('id, question_text, question_image_url, question_format, options, correct_answer')
+      // answer_tolerance is load-bearing for NUMERICAL. Without it the grader
+      // fell back to an exact compare, so a question keyed 3.1416 with a 0.01
+      // tolerance marked 3.14 wrong and the tolerance was silently ignored.
+      .select('id, question_text, question_image_url, question_format, options, correct_answer, answer_tolerance')
       .in('id', qbIds);
     for (const q of data || []) qbMap.set(q.id, q);
   }
@@ -405,12 +513,20 @@ export async function getComposedTestQuestions(
       question_id: questionId,
       question_text: src?.question_text ?? null,
       question_image_url: src?.question_image_url ?? null,
-      question_format: src?.question_format || src?.question_type || 'MCQ',
+      // Normalised here so every consumer sees one vocabulary. Legacy verified
+      // questions carry a lowercase question_type, and the take page needs a
+      // reliable value to decide between option cards and a numeric input.
+      question_format: normaliseQuestionFormat(src?.question_format || src?.question_type),
       options: src?.options ?? null,
       marks: Number(tq.marks) || 1,
       sort_order: tq.sort_order ?? 0,
     };
-    if (withAnswers) out.correct_answer = src?.correct_answer ?? null;
+    if (withAnswers) {
+      out.correct_answer = src?.correct_answer ?? null;
+      // Answer key material. Only ever attached on the grading path, never in a
+      // student payload: the tolerance narrows the search space for a guesser.
+      out.answer_tolerance = src?.answer_tolerance ?? null;
+    }
     return out;
   });
 }
@@ -567,6 +683,34 @@ export async function deletePlacement(placementId: string, client?: TypedSupabas
 // ============================================
 
 /**
+ * The pass mark for one attempt, resolved in ONE place.
+ *
+ * The placement wins, then the test's own passing_marks, then "no bar at all".
+ * Exported because the class prep gate has to answer the same question, and if
+ * the two ever disagreed a student would see "Passed, 82%" on the result screen
+ * next to a Join button that is still locked, which reads as the app being broken
+ * rather than as a rule.
+ *
+ * Prefer the placement. A repository test can be the prep for two classes at two
+ * different bars, and updateTestMeta can change passing_marks without touching
+ * either placement.
+ *
+ * Returns null when nothing sets a bar, which the callers must read as "passed",
+ * not as "failed".
+ */
+export function resolvePassingPct(
+  placement: { passing_pct?: number | null } | null | undefined,
+  testMeta: { passing_marks?: number | null } | null | undefined,
+  totalMarks: number,
+): number | null {
+  if (placement?.passing_pct != null) return Number(placement.passing_pct);
+  if (testMeta?.passing_marks != null && totalMarks > 0) {
+    return Math.round((Number(testMeta.passing_marks) / totalMarks) * 100);
+  }
+  return null;
+}
+
+/**
  * Grade a submitted attempt for any placed/repository test in one shot:
  * grades against the bank, records a nexus_test_attempts row, and dispatches
  * the placement's context side-effect (study completion, recap gating, ...).
@@ -591,13 +735,34 @@ export async function gradeTestOneShot(
   if (!meta) throw new Error('Test not found');
   if (questions.length === 0) throw new Error('Test has no questions');
 
+  // A placement belonging to a DIFFERENT test would dispatch that placement's
+  // side-effect off the back of this test's score: pass a trivial one-question
+  // test with a catch-up placement id and the class clears itself. The side-effect
+  // dispatch below is the only reason placementId is accepted at all, so this
+  // assertion has to sit in front of it.
+  if (placement && placement.test_id !== input.testId) {
+    throw new Error('PLACEMENT_TEST_MISMATCH');
+  }
+
   let score = 0;
   let totalMarks = 0;
   const review = questions.map((q) => {
     const marks = Number(q.marks) || 1;
-    totalMarks += marks;
     const selected = input.answers?.[q.question_id] ?? null;
-    const isCorrect = selected != null && q.correct_answer != null && selected === q.correct_answer;
+    // null means "no machine can mark this" (a drawing prompt that slipped into
+    // a paper). Such a question is excluded from the denominator rather than
+    // marked wrong, so one stray prompt cannot make a paper unpassable, and it
+    // is never awarded marks, which is what reusing checkQBAnswer would have done.
+    const verdict = gradeQBAnswerStrict(
+      q.question_format,
+      selected,
+      q.correct_answer,
+      (q as any).answer_tolerance,
+    );
+    const gradable = verdict !== null;
+    if (gradable) totalMarks += marks;
+
+    const isCorrect = verdict === true;
     const awarded = isCorrect ? marks : 0;
     if (isCorrect) score += marks;
     return {
@@ -605,19 +770,13 @@ export async function gradeTestOneShot(
       correct_answer: q.correct_answer ?? null,
       selected,
       is_correct: isCorrect,
+      is_gradable: gradable,
       marks_awarded: awarded,
     };
   });
 
   const percentage = totalMarks > 0 ? Math.round((score / totalMarks) * 10000) / 100 : 0;
-
-  // Resolve pass threshold: placement.passing_pct wins, else derive from test.passing_marks.
-  let passingPct: number | null = null;
-  if (placement?.passing_pct != null) {
-    passingPct = placement.passing_pct;
-  } else if (meta.passing_marks != null && totalMarks > 0) {
-    passingPct = Math.round((Number(meta.passing_marks) / totalMarks) * 100);
-  }
+  const passingPct = resolvePassingPct(placement, meta, totalMarks);
   const passed = passingPct == null ? true : percentage >= passingPct;
 
   const { data: attempt, error } = await supabase
@@ -665,6 +824,16 @@ export async function gradeTestOneShot(
         },
         supabase,
       );
+    } else if (placement.context_type === 'class_prep_test') {
+      // context_id is the scheduled class. Recomputed on a FAIL too: the rule is
+      // retry until you pass, so a failed attempt still has to move
+      // test_attempts and test_best_pct, which is what the student sees on the
+      // result screen and what the teacher reads as effort.
+      //
+      // Imported lazily. class-prep imports composeTest/createPlacement from
+      // this module, so a top-level import here would close the cycle.
+      const { recomputeClassPrep } = await import('./class-prep');
+      await recomputeClassPrep(input.studentId, placement.context_id, supabase);
     }
   }
 

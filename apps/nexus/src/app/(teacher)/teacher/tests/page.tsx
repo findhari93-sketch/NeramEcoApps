@@ -19,6 +19,11 @@ import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import ViewModuleOutlinedIcon from '@mui/icons-material/ViewModuleOutlined';
 import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
 import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined';
+import LockClockOutlinedIcon from '@mui/icons-material/LockClockOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
+import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
+import FitnessCenterOutlinedIcon from '@mui/icons-material/FitnessCenterOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
 import ChevronRightOutlinedIcon from '@mui/icons-material/ChevronRightOutlined';
@@ -26,12 +31,21 @@ import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusTestOverviewGroup, NexusTestOverviewGroupKey, NexusOverviewTest } from '@neram/database';
 
+// Exhaustive on purpose. Adding a NexusTestOverviewGroupKey without a label and
+// a colour is a hard compile error here, which is the compiler telling you the
+// hub has a bucket nobody named.
 const GROUP_META: Record<NexusTestOverviewGroupKey, { icon: React.ReactNode; color: string }> = {
+  // Amber: the only group whose tests hold a student out of a class.
+  class_prep: { icon: <LockClockOutlinedIcon />, color: '#D97706' },
   study_materials: { icon: <MenuBookOutlinedIcon />, color: '#0EA5E9' },
   class_recaps: { icon: <VideoLibraryOutlinedIcon />, color: '#8B5CF6' },
   foundation: { icon: <SchoolOutlinedIcon />, color: '#10B981' },
   modules: { icon: <ViewModuleOutlinedIcon />, color: '#F59E0B' },
   classroom: { icon: <ClassOutlinedIcon />, color: '#6366F1' },
+  catchup: { icon: <HistoryOutlinedIcon />, color: '#0891B2' },
+  weekly: { icon: <EventRepeatOutlinedIcon />, color: '#DB2777' },
+  mock: { icon: <TimerOutlinedIcon />, color: '#DC2626' },
+  practice_pool: { icon: <FitnessCenterOutlinedIcon />, color: '#059669' },
   practice: { icon: <ScienceOutlinedIcon />, color: '#64748B' },
 };
 

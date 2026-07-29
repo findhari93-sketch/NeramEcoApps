@@ -18,6 +18,8 @@ import { formatTime } from './date-utils';
 import { RADIUS, tagSx } from './timetable-theme';
 import WrapUpSection from './WrapUpSection';
 import ClassAssignmentsSection from './ClassAssignmentsSection';
+import ClassPrepTestSection from './ClassPrepTestSection';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface LinkedAssignment {
   id: string;
@@ -37,6 +39,8 @@ interface ClassEditPanelProps {
   /** Opens the shared link picker. The page owns it, so the planner card menu
    *  and this panel reach the same dialog. */
   onLinkExisting: (cls: ClassCardData) => void;
+  /** Opens the prep-test dialog. The page owns it, like the assignment picker. */
+  onSetPrepTest: (cls: ClassCardData) => void;
   onChanged: () => void;
   onNotify: (message: string, severity?: 'success' | 'error') => void;
   /** Bumped by the page after an outside link or create, to force a reload. */
@@ -56,11 +60,16 @@ export default function ClassEditPanel({
   onCreateMeeting,
   onCreateAssignment,
   onLinkExisting,
+  onSetPrepTest,
   onChanged,
   onNotify,
   refreshKey = 0,
 }: ClassEditPanelProps) {
   const theme = useTheme();
+  const { featureFlags } = useNexusAuthContext();
+  // Staff flag, so it defaults on per the registry invariant. Switch it off from
+  // /teacher/admin/features to hide the section without a deploy.
+  const prepTestEnabled = featureFlags?.['staff.class-prep-test'] !== false;
   const [assignments, setAssignments] = useState<LinkedAssignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
@@ -236,6 +245,23 @@ export default function ClassEditPanel({
           header={<SectionLabel>Assignment</SectionLabel>}
         />
       </Box>
+
+      {/* Test before the class. Sits directly under Assignment because the two
+          together are what a student owes before they may join, and a teacher
+          setting one almost always wants to check the other. */}
+      {prepTestEnabled && (
+        <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+          <ClassPrepTestSection
+            cls={cls}
+            getToken={getToken}
+            editable
+            refreshKey={refreshKey}
+            onSetTest={onSetPrepTest}
+            onNotify={onNotify}
+            header={<SectionLabel>Test before class</SectionLabel>}
+          />
+        </Box>
+      )}
 
       {/* Recording */}
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>

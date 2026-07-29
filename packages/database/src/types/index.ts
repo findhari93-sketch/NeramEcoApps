@@ -6264,6 +6264,11 @@ export type QBCategory =
   | 'architecture_gk'
   | 'building_science'
   | 'design_fundamentals'
+  | '2d_composition'
+  | '3d_composition'
+  | 'kit_sculpture'
+  | 'geography_gk'
+  | 'environment_gk'
   // JEE Mathematics subcategories
   | 'trigonometry'
   | 'probability'
@@ -6276,6 +6281,11 @@ export type QBCategory =
   | 'conic_sections'
   | 'circles'
   | 'straight_lines'
+  | 'parabola'
+  | 'ellipse'
+  | 'hyperbola'
+  | 'locus'
+  | 'areas_of_triangles'
   | 'sequences_and_series'
   | 'binomial_theorem'
   | 'permutations_combinations'
@@ -6289,7 +6299,8 @@ export type QBCategory =
   | 'quadratic_equations'
   | 'functions'
   | 'sets_and_relations'
-  | 'mathematical_logic';
+  | 'mathematical_logic'
+  | 'logarithms';
 
 // QB Interfaces
 
@@ -6478,14 +6489,61 @@ export interface NexusQBTagWithCount extends NexusQBTag {
   question_count: number;
 }
 
+// A node in the subject tag hierarchy (nexus_qb_tags.parent_id), used by the
+// two-level Category filter.
+//
+// rollup_count is COUNT(DISTINCT question) over the node's transitive closure,
+// computed in SQL by nexus_qb_category_counts(). It is NOT the sum of the
+// children's self_counts: a question tagged both `locus` and `parabola` must
+// count once toward Coordinate Geometry, never twice.
+export interface NexusQBTagNode extends NexusQBTag {
+  self_count: number;   // questions carrying this exact slug
+  rollup_count: number; // DISTINCT questions carrying this slug or any descendant
+  children: NexusQBTagNode[];
+}
+
+// Payload of GET /api/question-bank/category-counts
+export interface QBCategoryCountsPayload {
+  counts: Record<string, number>; // slug -> self_count (flat, back-compat shape)
+  tree: NexusQBTagNode[];         // subject-group roots, ordered by sort_order
+}
+
 // Unified test engine: a test is placed into one or more contexts
+//
+// Keep this in step with the nexus_placement_context enum in the database. It
+// drifted once already: 'catchup_class' shipped in 20260728090000 and was never
+// added here, which only went unnoticed because catchup-test.ts carries a
+// file-wide @ts-nocheck.
 export type NexusPlacementContext =
   | 'study_file'
   | 'classroom_assignment'
   | 'class_recap_section'
   | 'foundation_section'
   | 'module_item'
-  | 'student_practice';
+  | 'student_practice'
+  /** context_id = nexus_scheduled_classes.id. "You missed it, prove you caught up." Re-locks on a fail. */
+  | 'catchup_class'
+  /** context_id = nexus_scheduled_classes.id. "Pass this before you attend." Retry until pass, never re-locks. */
+  | 'class_prep_test';
+
+/**
+ * What a test IS, stored on nexus_tests.test_kind rather than inferred from its
+ * placement. Two gated kinds ('class_prep', 'catchup_class') must only ever be
+ * opened through their own route, so api/tests excludes them from the student
+ * list. 'weekly' and 'mock' are reserved with no writer yet.
+ */
+export type NexusTestKind =
+  | 'class_prep'
+  | 'catchup_class'
+  | 'classroom_assigned'
+  | 'practice_pool'
+  | 'student_custom'
+  | 'content_gate'
+  | 'weekly'
+  | 'mock';
+
+/** Kinds a student must never reach through the generic test list or take page. */
+export const NEXUS_GATED_TEST_KINDS: readonly NexusTestKind[] = ['class_prep', 'catchup_class'];
 
 export interface NexusTestPlacement {
   id: string;
@@ -6521,6 +6579,12 @@ export interface NexusTestGradeReviewItem {
   correct_answer: string | null;
   selected: string | null;
   is_correct: boolean;
+  /**
+   * False when no machine could mark this question (a drawing prompt that ended
+   * up in a graded paper). Such a question is left out of total_marks entirely
+   * rather than marked wrong, so one stray prompt cannot make a paper unpassable.
+   */
+  is_gradable: boolean;
   marks_awarded: number;
 }
 
@@ -6546,6 +6610,7 @@ export interface NexusOverviewTest {
   created_at: string;
   question_count: number;
   attempt_count: number;
+  test_kind: NexusTestKind;
   context_type: NexusPlacementContext | null;
   context_label: string | null; // resolved chapter/file title, classroom name, ...
   file_id: string | null;        // study_file placements: deep-link target for the edit dialog
@@ -6563,7 +6628,15 @@ export type NexusTestOverviewGroupKey =
   | 'foundation'
   | 'modules'
   | 'classroom'
-  | 'practice';
+  | 'practice'
+  /** Short tests gating entry to a class. */
+  | 'class_prep'
+  /** Whole-class tests that clear a missed class off a backlog. */
+  | 'catchup'
+  /** Teacher-offered optional practice, distinct from mandatory classroom work. */
+  | 'practice_pool'
+  | 'weekly'
+  | 'mock';
 
 export interface NexusTestOverviewGroup {
   key: NexusTestOverviewGroupKey;
@@ -6571,6 +6644,81 @@ export interface NexusTestOverviewGroup {
   count: number;
   subgroups?: NexusTestOverviewSubgroup[]; // study_materials nests by folder -> chapter
   tests: NexusOverviewTest[];              // flat list for non-nested groups
+}
+
+// ---- Class prep gate ----
+
+/** What opened the door. 'not_required' means nothing was ever asked of them. */
+export type NexusPrepUnlockVia = 'earned' | 'reason' | 'not_required';
+
+/** Same vocabulary as nexus_prework_reasons, so a teacher's tally stays one set of words. */
+export type NexusPrepReasonCode = 'not_understood' | 'no_time' | 'materials' | 'unwell' | 'other';
+
+/**
+ * One row of nexus_class_prep_state: what a student owes before a class and what
+ * they did about it.
+ *
+ * A deliberate hybrid, and the split is the design. See the table comment in
+ * 20260801092100_nexus_class_prep_gate.sql.
+ */
+export interface NexusClassPrepState {
+  id: string;
+  student_id: string;
+  scheduled_class_id: string;
+  classroom_id: string;
+
+  // --- Derived: recomputeClassPrep is the only writer. Rebuildable cache. ---
+  placement_id: string | null;
+  passed_test_id: string | null;
+  test_best_pct: number | null;
+  test_attempts: number;
+  test_passed_at: string | null;
+  assignments_required: number;
+  assignments_submitted: number;
+  unlocked_at: string | null;
+  unlocked_via: NexusPrepUnlockVia | null;
+  /** Compared against class start, never against "now". Null = undecidable yet. */
+  prepared_at_class_start: boolean | null;
+
+  // --- Observed: never recomputed. System of record. ---
+  blocked_attempts: number;
+  last_blocked_at: string | null;
+  joined_via_nexus_at: string | null;
+  test_reason_code: NexusPrepReasonCode | null;
+  test_reason_note: string | null;
+  test_reason_at: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Where one student stands on the teacher's roster for a class.
+ *
+ * 'not_started' rather than a "failed" bucket: a student who has not opened the
+ * test yet has not failed anything, and inventing that bucket hands the teacher
+ * a list to chase that should not exist.
+ */
+export type NexusPrepRosterStatus =
+  | 'ready'
+  | 'test_pending'
+  | 'prework_pending'
+  | 'not_started'
+  | 'reason_given'
+  | 'attended_unprepared';
+
+export interface NexusClassPrepRosterRow {
+  student_id: string;
+  student_name: string | null;
+  avatar_url: string | null;
+  status: NexusPrepRosterStatus;
+  test_best_pct: number | null;
+  test_attempts: number;
+  assignments_required: number;
+  assignments_submitted: number;
+  reason_code: NexusPrepReasonCode | null;
+  blocked_attempts: number;
+  last_activity_at: string | null;
 }
 
 // QB Joined/Computed Types
@@ -6790,6 +6938,11 @@ export const QB_CATEGORY_LABELS: Record<QBCategory, string> = {
   architecture_gk: 'Architecture GK',
   building_science: 'Building Science',
   design_fundamentals: 'Design Fundamentals',
+  '2d_composition': '2D Composition',
+  '3d_composition': '3D Composition',
+  kit_sculpture: 'Kit Sculpture',
+  geography_gk: 'Geography GK',
+  environment_gk: 'Environment GK',
   // JEE Mathematics subcategories
   trigonometry: 'Trigonometry',
   probability: 'Probability',
@@ -6802,6 +6955,11 @@ export const QB_CATEGORY_LABELS: Record<QBCategory, string> = {
   conic_sections: 'Conic Sections',
   circles: 'Circles',
   straight_lines: 'Straight Lines',
+  parabola: 'Parabola',
+  ellipse: 'Ellipse',
+  hyperbola: 'Hyperbola',
+  locus: 'Locus',
+  areas_of_triangles: 'Areas of Triangles',
   sequences_and_series: 'Sequences & Series',
   binomial_theorem: 'Binomial Theorem',
   permutations_combinations: 'Permutations & Combinations',
@@ -6816,8 +6974,127 @@ export const QB_CATEGORY_LABELS: Record<QBCategory, string> = {
   functions: 'Functions',
   sets_and_relations: 'Sets & Relations',
   mathematical_logic: 'Mathematical Logic',
+  logarithms: 'Logarithms',
 };
 
+/**
+ * Leaf category -> the section header it sits under in TEACHER AUTHORING UIs.
+ *
+ * This is a presentational mirror of nexus_qb_tags.parent_id, kept here so the
+ * question editors can group a 58-chip wall without an extra authenticated
+ * fetch. The DATABASE remains the source of truth: the student filter reads the
+ * real hierarchy via /api/question-bank/category-counts, so a parent added in
+ * the tag registry takes effect for students with no deploy. If you re-parent a
+ * topic there, update this map too or the authoring UI will just group it under
+ * the old heading. Anything missing here falls into "Other".
+ */
+export const QB_CATEGORY_GROUP_LABELS: Partial<Record<QBCategory, string>> = {
+  mathematics: 'General',
+  aptitude: 'General',
+  drawing: 'General',
+
+  sets_and_relations: 'Algebra',
+  functions: 'Algebra',
+  complex_numbers: 'Algebra',
+  quadratic_equations: 'Algebra',
+  sequences_and_series: 'Algebra',
+  permutations_combinations: 'Algebra',
+  binomial_theorem: 'Algebra',
+  matrices: 'Algebra',
+  determinants: 'Algebra',
+  mathematical_logic: 'Algebra',
+  logarithms: 'Algebra',
+
+  straight_lines: 'Coordinate Geometry',
+  circles: 'Coordinate Geometry',
+  parabola: 'Coordinate Geometry',
+  ellipse: 'Coordinate Geometry',
+  hyperbola: 'Coordinate Geometry',
+  locus: 'Coordinate Geometry',
+  areas_of_triangles: 'Coordinate Geometry',
+  conic_sections: 'Coordinate Geometry',
+
+  continuity: 'Calculus',
+  differentiability: 'Calculus',
+  applications_of_derivatives: 'Calculus',
+  mean_value_theorems: 'Calculus',
+  indefinite_integrals: 'Calculus',
+  definite_integrals: 'Calculus',
+  differential_equations: 'Calculus',
+
+  trigonometry: 'Trigonometry',
+
+  vectors: 'Vectors & 3D Geometry',
+  '3d_geometry': 'Vectors & 3D Geometry',
+
+  probability: 'Probability & Statistics',
+  statistics: 'Probability & Statistics',
+
+  history_of_architecture: 'NATA Topics',
+  general_knowledge: 'NATA Topics',
+  puzzle: 'NATA Topics',
+  perspective: 'NATA Topics',
+  building_materials: 'NATA Topics',
+  building_services: 'NATA Topics',
+  planning: 'NATA Topics',
+  sustainability: 'NATA Topics',
+  famous_architects: 'NATA Topics',
+  current_affairs: 'NATA Topics',
+  visualization_3d: 'NATA Topics',
+  '2d_composition': 'NATA Topics',
+  '3d_composition': 'NATA Topics',
+  kit_sculpture: 'NATA Topics',
+
+  spatial_visualization: 'Aptitude Topics',
+  orthographic_projection: 'Aptitude Topics',
+  pattern_recognition: 'Aptitude Topics',
+  analogy: 'Aptitude Topics',
+  counting_figures: 'Aptitude Topics',
+  odd_one_out: 'Aptitude Topics',
+  surface_counting: 'Aptitude Topics',
+  mirror_image: 'Aptitude Topics',
+  embedded_figure: 'Aptitude Topics',
+  architecture_gk: 'Aptitude Topics',
+  building_science: 'Aptitude Topics',
+  design_fundamentals: 'Aptitude Topics',
+  geography_gk: 'Aptitude Topics',
+  environment_gk: 'Aptitude Topics',
+};
+
+/** Section order for the authoring pickers. */
+export const QB_CATEGORY_GROUP_ORDER: string[] = [
+  'General',
+  'Algebra',
+  'Coordinate Geometry',
+  'Calculus',
+  'Trigonometry',
+  'Vectors & 3D Geometry',
+  'Probability & Statistics',
+  'NATA Topics',
+  'Aptitude Topics',
+  'Other',
+];
+
+/** Group the full category vocabulary into ordered, labelled sections. */
+export function groupQBCategories(
+  categories: QBCategory[] = QB_CATEGORIES,
+): Array<{ label: string; categories: QBCategory[] }> {
+  const buckets = new Map<string, QBCategory[]>();
+  for (const cat of categories) {
+    const group = QB_CATEGORY_GROUP_LABELS[cat] || 'Other';
+    buckets.set(group, [...(buckets.get(group) || []), cat]);
+  }
+  return QB_CATEGORY_GROUP_ORDER.filter((g) => buckets.get(g)?.length).map((label) => ({
+    label,
+    categories: buckets.get(label)!,
+  }));
+}
+
+// NOTE: this feeds every teacher category picker, so it must stay leaf-only.
+// Parent slugs (coordinate_geometry, algebra, calculus, ...) deliberately live
+// in the nexus_qb_tags registry and NOT in QBCategory: a question tagged with a
+// parent would be a silent orphan, since filtering expands parents into leaves.
+// Parent labels come from the tag tree, see getQBSubjectTagTree.
 export const QB_CATEGORIES: QBCategory[] = Object.keys(QB_CATEGORY_LABELS) as QBCategory[];
 
 export const QB_DIFFICULTY_COLORS: Record<QBDifficulty, string> = {
@@ -6980,6 +7257,20 @@ export type LibrarySyncStatus = 'running' | 'completed' | 'failed';
 export type LibraryEngagementStatus = 'active' | 'moderate' | 'inactive' | 'new';
 export type LibraryDeviceType = 'mobile' | 'tablet' | 'desktop';
 
+/** The six categories the Library filter chips and CategoryRow sections query by. */
+export const LIBRARY_CATEGORIES = [
+  'drawing',
+  'aptitude',
+  'mathematics',
+  'general_knowledge',
+  'exam_preparation',
+  'orientation',
+] as const;
+export type LibraryCategory = (typeof LIBRARY_CATEGORIES)[number];
+
+/** Why a row came back from library_search, used to explain the result to the student. */
+export type LibraryMatchKind = 'browse' | 'topic' | 'text' | 'fuzzy';
+
 export interface LibraryVideo {
   id: string;
   youtube_video_id: string;
@@ -7062,6 +7353,43 @@ export interface LibraryVideoUpdate {
   transcript_is_generated?: boolean;
   transcript_segments?: unknown;
   transcript_status?: LibraryTranscriptStatus;
+}
+
+/**
+ * One row of library_search(). A projection of LibraryVideo, not the whole row:
+ * the card and the results list need a fraction of the columns, and this keeps
+ * the payload small on mobile. The detail page still fetches the full row.
+ */
+export interface LibrarySearchResult {
+  id: string;
+  youtube_video_id: string;
+  approved_title: string | null;
+  suggested_title: string | null;
+  original_title: string | null;
+  approved_description: string | null;
+  suggested_description: string | null;
+  youtube_thumbnail_url: string | null;
+  youtube_thumbnail_hq_url: string | null;
+  duration_seconds: number | null;
+  exam: LibraryVideoExam | null;
+  language: LibraryVideoLanguage | null;
+  difficulty: LibraryVideoDifficulty | null;
+  category: string | null;
+  topics: string[];
+  subcategories: string[];
+  published_at: string | null;
+  view_count: number;
+  rank: number;
+  match_kind: LibraryMatchKind;
+  /** Canonical topics the query resolved to, for the "matched on" chip. */
+  matched_topics: string[];
+  total_count: number;
+}
+
+/** One entry of library_topic_counts(), for the popular-topic chips. */
+export interface LibraryTopicCount {
+  topic: string;
+  video_count: number;
 }
 
 export interface LibraryCollection {
@@ -7211,6 +7539,47 @@ export interface LibrarySearchLog {
   results_count: number;
   clicked_video_id: string | null;
   created_at: string;
+}
+
+// ============================================================
+// CLASS VIDEO META (the YouTube upload record for one class)
+// ============================================================
+
+/** One chapter marker in the YouTube description. `t` is seconds from the start. */
+export interface ClassVideoChapter {
+  t: number;
+  label: string;
+}
+
+export type ClassVideoMetaStatus = 'draft' | 'ready' | 'published';
+
+/**
+ * What the teacher authored in Wrap up before uploading the recording to
+ * YouTube. Lives on its own row because the upload is a two-visit job: the
+ * metadata is written first, the video id only exists afterwards, and
+ * library_videos.youtube_video_id is NOT NULL UNIQUE.
+ *
+ * Topic tags are deliberately absent: they stay in nexus_class_tags pointing at
+ * the canonical nexus_qb_tags registry, so there is one vocabulary.
+ */
+export interface NexusClassVideoMeta {
+  id: string;
+  scheduled_class_id: string;
+  yt_title: string | null;
+  yt_description: string | null;
+  yt_tags: string[];
+  chapters: ClassVideoChapter[];
+  search_terms: string[];
+  language: LibraryVideoLanguage | null;
+  exam: LibraryVideoExam | null;
+  difficulty: LibraryVideoDifficulty | null;
+  category: LibraryCategory | null;
+  thumbnail_url: string | null;
+  status: ClassVideoMetaStatus;
+  generated_at: string | null;
+  generated_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ============================================

@@ -78,6 +78,10 @@ export const FEATURES: FeatureDef[] = [
   // full-screen photo blocker in AccessGate, which is why it must be turnable
   // off from the admin panel without a deploy.
   { id: 'student.photo-gate', label: 'Require an approved photo to enter', surface: 'student', group: 'Access', paths: [], defaultEnabled: false },
+  // Also not a page. Arms the class prep gate: with this OFF the join URL is
+  // never withheld and every student joins exactly as they do today, which is
+  // why it ships off. Reversing a rule this visible needs a switch, not a revert.
+  { id: 'student.class-prep-gate', label: 'Require class prep before joining', surface: 'student', group: 'Access', paths: [], defaultEnabled: false },
 
   // ── Staff: Teaching panel ─────────────────────────────────────────────────
   { id: 'staff.dashboard', label: 'Dashboard', surface: 'staff', group: 'Teaching', paths: ['/teacher/dashboard'], defaultEnabled: true, core: true },
@@ -120,6 +124,17 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.tests', label: 'Tests', surface: 'staff', group: 'Management', paths: ['/teacher/tests'], defaultEnabled: true },
   { id: 'staff.questions', label: 'Questions', surface: 'staff', group: 'Management', paths: ['/teacher/questions'], defaultEnabled: true },
   { id: 'staff.library', label: 'Library', surface: 'staff', group: 'Management', paths: ['/teacher/library/review'], defaultEnabled: true },
+  // Not a page (`paths: []`). Gates the "Publish to YouTube" panel inside the
+  // class wrap-up, so the metadata workflow can be switched off from
+  // /teacher/admin/features without hiding the wrap-up itself. Defaults ON per
+  // the registry invariant for staff features.
+  { id: 'staff.class-video-meta', label: 'Publish to YouTube', surface: 'staff', group: 'Management', paths: [], defaultEnabled: true },
+  // Not a page (`paths: []`). Shows the Test section in the timetable planning
+  // rail, so a teacher can attach a short prep test to a class. Separate from
+  // student.class-prep-gate on purpose: a teacher can set the tests and see who
+  // is ready long before anyone's Join button is withheld. Defaults ON per the
+  // registry invariant for staff features.
+  { id: 'staff.class-prep-test', label: 'Attach a prep test to a class', surface: 'staff', group: 'Teaching', paths: [], defaultEnabled: true },
   { id: 'staff.library-engagement', label: 'Engagement', surface: 'staff', group: 'Management', paths: ['/teacher/library/engagement'], defaultEnabled: true },
   { id: 'staff.devices', label: 'Devices', surface: 'staff', group: 'Management', paths: ['/teacher/devices'], defaultEnabled: true },
   { id: 'staff.issues', label: 'Issues', surface: 'staff', group: 'Management', paths: ['/teacher/issues'], defaultEnabled: true },

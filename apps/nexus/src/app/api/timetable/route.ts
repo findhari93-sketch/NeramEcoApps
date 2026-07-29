@@ -3,6 +3,7 @@ import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { notifyClassCreated, notifyClassCancelled } from '@/lib/timetable-notifications';
 import { loadPlanShapes } from '@/lib/plan-shape-query';
+import { applyClassPrepGate } from '@/lib/class-prep-server';
 import { notifyStudents } from '@/lib/notify-students';
 import { generateRecurrenceDates } from './recurrence';
 import {
@@ -147,11 +148,19 @@ export async function GET(request: NextRequest) {
     // window, never blank the week.
     const planShapes = await loadPlanShapes(supabase, [classroomId], start, end).catch(() => []);
 
+    // The class prep gate. effectiveRole is already resolved above, and this
+    // route is single-classroom, so the role map has exactly one entry.
+    const prep = await applyClassPrepGate(supabase as any, user.id, (data || []) as any, {
+      roleByClassroom: new Map([[classroomId, effectiveRole]]),
+      impersonating: !!msUser.impersonatorUserId,
+    });
+
     return NextResponse.json({
       classes: data || [],
       role: effectiveRole,
       archived: !!classroom.is_archived,
       planShapes,
+      prep,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load timetable';

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { applyClassPrepGate } from '@/lib/class-prep-server';
 
 /**
  * GET /api/dashboard/student?classroom={id}
@@ -51,7 +52,9 @@ export async function GET(request: NextRequest) {
       // Upcoming classes (over-fetch to filter today's ended classes in JS)
       supabase
         .from('nexus_scheduled_classes')
-        .select('id, title, scheduled_date, start_time, end_time, status, teams_meeting_url, topic:nexus_topics(title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(name)')
+        // classroom_id is selected for applyClassPrepGate, which keys the
+        // decision on that class's own enrolment role.
+        .select('id, title, classroom_id, scheduled_date, start_time, end_time, status, teams_meeting_url, topic:nexus_topics(title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(name)')
         .eq('classroom_id', classroomId)
         .gte('scheduled_date', today)
         .in('status', ['scheduled', 'live'])
@@ -123,8 +126,16 @@ export async function GET(request: NextRequest) {
     const totalClasses = completedClassesCountResult.count || 0;
     const attendedClasses = attendanceResult.count || 0;
 
+    // The class prep gate. This is a student-only route, so every class here is
+    // seen as a student, and the dashboard hero's Join must not outlive the lock
+    // that my-schedule already applies on the timetable.
+    const prep = await applyClassPrepGate(supabase as any, user.id, upcomingClasses as any, {
+      roleByClassroom: new Map([[classroomId, 'student']]),
+    });
+
     return NextResponse.json({
       upcomingClasses,
+      prep,
       completedClasses: recentCompletedResult.data || [],
       attendanceSummary: {
         total: totalClasses,

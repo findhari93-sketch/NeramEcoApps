@@ -48,8 +48,33 @@ interface Test {
   total_marks: number;
   published_at: string | null;
   is_custom?: boolean;
+  /**
+   * What this test is, stored on nexus_tests rather than inferred here. Optional
+   * because rows written before the column existed carry the default.
+   */
+  test_kind?: string | null;
   assignment?: TestAssignment | null;
   myAttempt: TestAttempt | null;
+}
+
+/**
+ * A short test gating entry to a class. Kept in its own shape rather than folded
+ * into Test, because it is opened by CLASS id and not by test id: the server has
+ * to re-derive the gate, so the generic take page is the wrong destination.
+ */
+interface ClassPrepTest {
+  class_id: string;
+  class_title: string;
+  scheduled_date: string;
+  start_time: string | null;
+  test_id: string;
+  title: string;
+  question_count: number;
+  passing_pct: number;
+  must_get_right: number;
+  best_pct: number | null;
+  attempts: number;
+  passed: boolean;
 }
 
 type WindowState = 'open' | 'not_yet' | 'closed';
@@ -75,6 +100,8 @@ export default function StudentTestsPage() {
   const { activeClassroom, getToken } = useNexusAuthContext();
   const router = useRouter();
   const [tests, setTests] = useState<Test[]>([]);
+  /** Returned separately by /api/tests: gated, so never merged into `tests`. */
+  const [classPrep, setClassPrep] = useState<ClassPrepTest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -95,6 +122,7 @@ export default function StudentTestsPage() {
       if (res.ok) {
         const data = await res.json();
         setTests(data.tests || []);
+        setClassPrep(data.classPrep || []);
       }
     } catch (err) {
       console.error('Failed to load tests:', err);
@@ -350,13 +378,23 @@ export default function StudentTestsPage() {
     );
   }
 
-  // Assigned: teacher-placed classroom assignments, plus legacy published tests
-  // without a placement (they were always mandatory-classroom tests).
-  const assigned = tests.filter(
-    (t) => !t.is_custom && (t.assignment ? t.assignment.context_type === 'classroom_assignment' : true),
+  // Grouped on the STORED test_kind now, not inferred from is_custom plus the
+  // placement context. The old inference is what let every catch-up class test
+  // land in "Assigned by your teacher" for the whole classroom: those rows have a
+  // classroom_id and no placement, so `t.assignment ? ... : true` swept them in.
+  //
+  // The two gated kinds no longer reach this page at all: /api/tests excludes
+  // them, because a gated test must only ever be opened from the class it belongs
+  // to, where the server can re-derive the gate. The fallbacks below are kept for
+  // rows written before test_kind existed.
+  const kindOf = (t: Test): string =>
+    t.test_kind || (t.is_custom ? 'student_custom' : 'classroom_assigned');
+
+  const assigned = tests.filter((t) => kindOf(t) === 'classroom_assigned');
+  const practice = tests.filter(
+    (t) => kindOf(t) === 'practice_pool' || t.assignment?.context_type === 'student_practice',
   );
-  const practice = tests.filter((t) => !t.is_custom && t.assignment?.context_type === 'student_practice');
-  const custom = tests.filter((t) => t.is_custom);
+  const custom = tests.filter((t) => kindOf(t) === 'student_custom');
 
   return (
     <Box>
@@ -375,7 +413,7 @@ export default function StudentTestsPage() {
             <Skeleton key={i} variant="rectangular" height={100} sx={{ borderRadius: 1 }} />
           ))}
         </Box>
-      ) : tests.length === 0 ? (
+      ) : tests.length === 0 && classPrep.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
           <Typography variant="body2" color="text.secondary">
@@ -384,6 +422,71 @@ export default function StudentTestsPage() {
         </Paper>
       ) : (
         <>
+          {/* Before your classes.
+              First, because it is the only group with a deadline attached to
+              something the student has to show up to, and it is the only one that
+              does NOT route to the generic take page: a gated test must be opened
+              from its class so the server can re-derive the gate. */}
+          {classPrep.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <EventOutlinedIcon sx={{ fontSize: 20, color: 'warning.main' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  Before your classes
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                Pass these to join the class. You can try as many times as you need.
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {classPrep.map((p) => (
+                  <Paper
+                    key={p.class_id}
+                    onClick={() => router.push(`/student/class-prep/${p.class_id}/test`)}
+                    sx={{
+                      p: 1.75,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      minHeight: 64,
+                      cursor: 'pointer',
+                      borderLeft: (t) =>
+                        `4px solid ${p.passed ? t.palette.success.main : t.palette.warning.main}`,
+                    }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.875rem' }} noWrap>
+                        {p.class_title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {/* The count, not the percentage. "70%" of 7 questions is
+                            not a number a student can hold in their head. */}
+                        {p.question_count} questions, get {p.must_get_right} right
+                        {p.attempts > 0 && p.best_pct != null
+                          ? ` · best ${Math.round(p.best_pct)}%`
+                          : ''}
+                      </Typography>
+                    </Box>
+                    {p.passed ? (
+                      <Chip
+                        size="small"
+                        color="success"
+                        icon={<CheckCircleOutlinedIcon />}
+                        label="Passed"
+                      />
+                    ) : (
+                      <Chip
+                        size="small"
+                        color="warning"
+                        label={p.attempts > 0 ? 'Try again' : 'Start'}
+                      />
+                    )}
+                  </Paper>
+                ))}
+              </Box>
+            </Box>
+          )}
+
           {renderSection(
             'Assigned by your teacher',
             'Complete these tests, they count for your class.',

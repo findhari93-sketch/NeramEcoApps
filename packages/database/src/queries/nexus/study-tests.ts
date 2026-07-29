@@ -315,6 +315,8 @@ async function composeAndPlaceStudyBankTest(
       is_published: true,
       is_active: true,
       is_repository: true,
+      // Owned by the study file, not editable as a standalone test.
+      test_kind: 'content_gate',
       created_from: 'study_authored',
       created_by: input.createdBy,
     })

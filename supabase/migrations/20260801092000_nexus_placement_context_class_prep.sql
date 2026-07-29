@@ -1,0 +1,26 @@
+-- ============================================
+-- PLACEMENT CONTEXT: class_prep_test
+--
+-- A short test a student must pass BEFORE a class, set by the teacher while
+-- planning it, alongside the prework assignment. That test is a normal
+-- nexus_tests row placed against the scheduled class, so it needs a context.
+--
+-- Not a reuse of 'catchup_class', even though both point context_id at
+-- nexus_scheduled_classes. That context means "you missed this class, prove you
+-- caught up": its consumer refuses any student without a nexus_class_absences
+-- row, and its state machine CLEARS test_unlocked_at on a failed attempt so the
+-- student has to rewatch the recording first. This one means "prepare before you
+-- attend", applies to everyone on the roster, and never re-locks: a student
+-- retries until they pass. Sharing one context would force both rules through
+-- one branch and one of them would lose.
+--
+-- Not a reuse of 'classroom_assignment' either: that context holds MANY tests
+-- per classroom with no pass gate, while a class holds at most one prep test
+-- and the pass mark is the whole point.
+--
+-- Alone in its own migration on purpose. The Supabase CLI wraps a migration file
+-- in a transaction, and a value added by ALTER TYPE cannot be USED in the same
+-- transaction that added it. The very next migration references
+-- 'class_prep_test' in an index predicate, so the two cannot share a file.
+-- ============================================
+ALTER TYPE nexus_placement_context ADD VALUE IF NOT EXISTS 'class_prep_test';

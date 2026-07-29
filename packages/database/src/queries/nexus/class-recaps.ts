@@ -388,6 +388,8 @@ async function composeAndPlaceRecapSection(
       is_published: true,
       is_active: true,
       is_repository: true,
+      // Owned by the recap checkpoint, not editable as a standalone test.
+      test_kind: 'content_gate',
       created_from: 'recap_authored',
     })
     .select('id')

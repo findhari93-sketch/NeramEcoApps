@@ -47,6 +47,8 @@ interface RecordingRow {
   youtube_url: string | null;
   teacher?: { name: string | null } | null;
   tags: TagRow[];
+  /** null when nobody has started the YouTube listing for this class yet. */
+  video_meta_status: 'draft' | 'ready' | 'published' | null;
 }
 
 function formatDay(ymd: string): string {
@@ -65,6 +67,7 @@ export default function RecordingsPage() {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [needsMeta, setNeedsMeta] = useState(false);
 
   // Typing should not fire a request per keystroke.
   useEffect(() => {
@@ -80,6 +83,7 @@ export default function RecordingsPage() {
       const params = new URLSearchParams();
       if (debounced) params.set('q', debounced);
       if (selectedTags.length) params.set('tags', selectedTags.join(','));
+      if (needsMeta) params.set('needs_meta', '1');
       const res = await fetch(`/api/timetable/recordings?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -95,7 +99,7 @@ export default function RecordingsPage() {
     } catch {
       setRows([]);
     }
-  }, [getToken, debounced, selectedTags]);
+  }, [getToken, debounced, selectedTags, needsMeta]);
 
   useEffect(() => {
     load();
@@ -110,7 +114,15 @@ export default function RecordingsPage() {
     return { bySubject, byTheme };
   }, [tags]);
 
-  const filtering = selectedTags.length > 0 || !!debounced;
+  const filtering = selectedTags.length > 0 || !!debounced || needsMeta;
+
+  /** Where a recording has got to on its way to the student Library. */
+  const metaBadge = (status: RecordingRow['video_meta_status']) => {
+    if (status === 'published') return { label: 'In the Library', color: 'success' as const };
+    if (status === 'ready') return { label: 'Ready to upload', color: 'warning' as const };
+    if (status === 'draft') return { label: 'Listing started', color: 'default' as const };
+    return { label: 'No listing yet', color: 'default' as const };
+  };
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 900, mx: 'auto' }}>
@@ -144,6 +156,18 @@ export default function RecordingsPage() {
         }}
         sx={{ mb: 1.5 }}
       />
+
+      {/* The upload queue. A recorded class with no published listing is a class
+          students cannot find, so it is worth being able to see them all. */}
+      <Box sx={{ mb: 1.25 }}>
+        <Chip
+          label="Needs YouTube listing"
+          onClick={() => setNeedsMeta((v) => !v)}
+          color={needsMeta ? 'primary' : 'default'}
+          variant={needsMeta ? 'filled' : 'outlined'}
+          sx={{ height: 34, fontWeight: 600 }}
+        />
+      </Box>
 
       {[
         { label: 'Subject', list: grouped.bySubject },
@@ -186,6 +210,7 @@ export default function RecordingsPage() {
           onClick={() => {
             setSelectedTags([]);
             setSearch('');
+            setNeedsMeta(false);
           }}
           sx={{ textTransform: 'none', minHeight: 40, mb: 1 }}
         >
@@ -276,15 +301,20 @@ export default function RecordingsPage() {
                     {r.description}
                   </Typography>
                 )}
-                {r.tags.length > 0 && (
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.75 }}>
-                    {r.tags.map((t) => (
-                      <Box key={t.id} component="span" sx={tagSx(theme, 'primary')}>
-                        {t.label}
-                      </Box>
-                    ))}
-                  </Box>
-                )}
+                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.75, alignItems: 'center' }}>
+                  {r.tags.map((t) => (
+                    <Box key={t.id} component="span" sx={tagSx(theme, 'primary')}>
+                      {t.label}
+                    </Box>
+                  ))}
+                  <Chip
+                    size="small"
+                    label={metaBadge(r.video_meta_status).label}
+                    color={metaBadge(r.video_meta_status).color}
+                    variant={r.video_meta_status === 'published' ? 'filled' : 'outlined'}
+                    sx={{ height: 22, fontSize: '0.68rem', fontWeight: 600 }}
+                  />
+                </Box>
               </Box>
 
               <Stack spacing={0.75} sx={{ flexShrink: 0 }}>

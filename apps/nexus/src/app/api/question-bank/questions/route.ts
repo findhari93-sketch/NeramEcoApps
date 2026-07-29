@@ -27,15 +27,30 @@ export async function GET(request: NextRequest) {
 
     const solutionFilter = params.get('solution_filter') || undefined;
 
+    // The student page sends the long names (question_format, search_text) while
+    // the teacher page sends the short ones (format, search). Accept both: the
+    // student's Format and Search filters silently did nothing for as long as
+    // only the short names were read, and old bookmarked URLs use the short form.
+    const first = (...names: string[]) => {
+      for (const n of names) {
+        const v = params.get(n);
+        if (v) return v;
+      }
+      return null;
+    };
+    const formatParam = first('question_format', 'format');
+    const searchParam = first('search_text', 'search');
+    const attemptParam = first('attempt_status', 'status');
+
     const filters: import('@neram/database').QBFilterState = {
       exam_relevance: (params.get('exam_relevance') as any) || undefined,
       exam_years: params.get('years') ? params.get('years')!.split(',').map(Number) : undefined,
       categories: params.get('categories') ? params.get('categories')!.split(',') : undefined,
       tag_ids: params.get('tag_ids') ? params.get('tag_ids')!.split(',') : undefined,
       difficulty: params.get('difficulty') ? params.get('difficulty')!.split(',') as any : undefined,
-      question_format: params.get('format') ? params.get('format')!.split(',') as any : undefined,
-      attempt_status: (params.get('status') as any) || undefined,
-      search_text: params.get('search') || undefined,
+      question_format: formatParam ? (formatParam.split(',') as any) : undefined,
+      attempt_status: (attemptParam as any) || undefined,
+      search_text: searchParam || undefined,
       topic_ids: params.get('topic_ids') ? params.get('topic_ids')!.split(',') : undefined,
       // Source-based filters from exam sidebar
       exam_type: (params.get('exam_type') as any) || undefined,

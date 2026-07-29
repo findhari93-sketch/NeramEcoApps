@@ -38,7 +38,7 @@ import type {
   QBExamType,
   NexusQBQuestionOption,
 } from '@neram/database';
-import { QB_CATEGORIES, QB_CATEGORY_LABELS, QB_EXAM_TYPE_LABELS } from '@neram/database';
+import { QB_CATEGORY_LABELS, QB_EXAM_TYPE_LABELS, groupQBCategories } from '@neram/database';
 import type { QBCategory } from '@neram/database';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import QuestionCard from './QuestionCard';
@@ -611,22 +611,34 @@ export default function QuestionFormWizard({
               <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
                 Categories
               </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {QB_CATEGORIES.map((cat: string) => {
-                  const selected = form.categories.includes(cat);
-                  return (
-                    <Chip
-                      key={cat}
-                      label={QB_CATEGORY_LABELS[cat as QBCategory]}
-                      size="small"
-                      variant={selected ? 'filled' : 'outlined'}
-                      color={selected ? 'primary' : 'default'}
-                      onClick={() => toggleCategory(cat)}
-                      sx={{ minHeight: 32 }}
-                    />
-                  );
-                })}
-              </Box>
+              {/* Grouped by the subject hierarchy so the list is scannable. */}
+              {groupQBCategories().map((group) => (
+                <Box key={group.label} sx={{ mb: 1.25 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.disabled"
+                    sx={{ display: 'block', fontWeight: 600, mb: 0.5 }}
+                  >
+                    {group.label}
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {group.categories.map((cat: string) => {
+                      const selected = form.categories.includes(cat);
+                      return (
+                        <Chip
+                          key={cat}
+                          label={QB_CATEGORY_LABELS[cat as QBCategory]}
+                          size="small"
+                          variant={selected ? 'filled' : 'outlined'}
+                          color={selected ? 'primary' : 'default'}
+                          onClick={() => toggleCategory(cat)}
+                          sx={{ minHeight: 32 }}
+                        />
+                      );
+                    })}
+                  </Box>
+                </Box>
+              ))}
             </Box>
 
             <Box>

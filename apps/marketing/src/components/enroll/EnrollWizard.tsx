@@ -425,6 +425,10 @@ export default function EnrollWizard() {
           targetExamYear: formData.academic.targetExamYear,
           schoolType: formData.academic.schoolType,
           parentPhone: formData.personal.parentPhone,
+          // The student's OWN number, so the server can persist it on users.phone.
+          // Google-login students have no phone on their user row, and that number
+          // is the key the admin Entra reconciler uses to recognise them later.
+          studentPhone: verifiedPhone || formData.personal.phone || null,
           phoneVerified,
           phoneVerifiedAt,
           // Payment details from student

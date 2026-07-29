@@ -1,34 +1,38 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+/**
+ * The Class Library home.
+ *
+ * Search is the point of this screen, so it gets a real field at the top rather
+ * than an icon in the corner, and the topics students actually have classes for
+ * sit right under it as one-tap chips. Everything below that is browsing.
+ *
+ * The category rows come from a single /api/library/home call. They used to
+ * fetch themselves, one request per row, which meant six function invocations
+ * on first paint of the most visited student screen for data identical to every
+ * student.
+ */
+
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
   Chip,
-  IconButton,
+  InputAdornment,
   Skeleton,
   Button,
+  TextField,
   alpha,
   useTheme,
 } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ContinueWatchingRow from '@/components/library/ContinueWatchingRow';
-import CategoryRow from '@/components/library/CategoryRow';
+import VideoRow from '@/components/library/VideoRow';
 import VideoCard, { VideoCardSkeleton } from '@/components/library/VideoCard';
 import CollectionCard, { CollectionCardSkeleton } from '@/components/library/CollectionCard';
-import type { LibraryCollection, LibraryVideo } from '@neram/database/types';
-
-const CATEGORIES = [
-  { key: 'drawing', label: 'Drawing' },
-  { key: 'aptitude', label: 'Aptitude' },
-  { key: 'mathematics', label: 'Mathematics' },
-  { key: 'general_knowledge', label: 'General Knowledge' },
-  { key: 'exam_preparation', label: 'Exam Preparation' },
-  { key: 'orientation', label: 'Orientation' },
-];
+import type { LibraryCollection, LibraryVideo, LibraryTopicCount } from '@neram/database/types';
 
 const EXAM_OPTIONS = [
   { key: '', label: 'All Exams' },
@@ -45,26 +49,84 @@ const LANGUAGE_OPTIONS = [
   { key: 'ta_en', label: 'Tamil + English' },
 ];
 
+interface HomeSection {
+  key: string;
+  label: string;
+  videos: LibraryVideo[];
+}
+
+const PAGE_SIZE = 20;
+
 export default function LibraryHomePage() {
   const theme = useTheme();
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
 
+  const [query, setQuery] = useState('');
   const [selectedExam, setSelectedExam] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('');
+
+  const [sections, setSections] = useState<HomeSection[]>([]);
+  const [topics, setTopics] = useState<LibraryTopicCount[]>([]);
+  const [homeLoading, setHomeLoading] = useState(true);
+
   const [collections, setCollections] = useState<LibraryCollection[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(true);
+
   const [allVideos, setAllVideos] = useState<LibraryVideo[]>([]);
   const [allVideosLoading, setAllVideosLoading] = useState(true);
   const [allVideosTotal, setAllVideosTotal] = useState(0);
   const [allVideosPage, setAllVideosPage] = useState(0);
-  const PAGE_SIZE = 20;
 
-  // Fetch all videos (no category filter)
+  const goToSearch = useCallback(
+    (q: string) => {
+      const params = new URLSearchParams({ q });
+      if (selectedExam) params.set('exam', selectedExam);
+      if (selectedLanguage) params.set('language', selectedLanguage);
+      router.push(`/student/library/search?${params.toString()}`);
+    },
+    [router, selectedExam, selectedLanguage],
+  );
+
+  /**
+   * Changing a filter resets the paged grid here, in the handler, rather than in
+   * an effect. With two effects both watching the filters, the fetch fired with
+   * the stale offset before the reset landed, so page 2 of the old filter got
+   * appended to page 1 of the new one.
+   */
+  const applyFilter = useCallback((setter: (v: string) => void, value: string) => {
+    setter(value);
+    setAllVideosPage(0);
+    setAllVideos([]);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const res = await fetch('/api/library/home', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('Failed to load the library');
+        const data = await res.json();
+        if (cancelled) return;
+        setSections(data.sections || []);
+        setTopics(data.topics || []);
+      } catch (err) {
+        console.error('Library home fetch error:', err);
+      } finally {
+        if (!cancelled) setHomeLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken]);
 
-    async function fetchAllVideos() {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setAllVideosLoading(true);
       try {
         const token = await getToken();
         if (!token || cancelled) return;
@@ -81,37 +143,25 @@ export default function LibraryHomePage() {
         });
         if (!res.ok) throw new Error('Failed to fetch');
         const data = await res.json();
-        if (!cancelled) {
-          setAllVideos(prev => allVideosPage === 0 ? (data.videos || []) : [...prev, ...(data.videos || [])]);
-          setAllVideosTotal(data.total || 0);
-        }
+        if (cancelled) return;
+        setAllVideos((prev) =>
+          allVideosPage === 0 ? data.videos || [] : [...prev, ...(data.videos || [])]);
+        setAllVideosTotal(data.total || 0);
       } catch (err) {
         console.error('All videos fetch error:', err);
       } finally {
         if (!cancelled) setAllVideosLoading(false);
       }
-    }
-
-    setAllVideosLoading(true);
-    fetchAllVideos();
+    })();
     return () => { cancelled = true; };
   }, [getToken, allVideosPage, selectedExam, selectedLanguage]);
 
-  // Reset page when filters change
-  useEffect(() => {
-    setAllVideosPage(0);
-    setAllVideos([]);
-  }, [selectedExam, selectedLanguage]);
-
-  // Fetch collections
   useEffect(() => {
     let cancelled = false;
-
-    async function fetchCollections() {
+    (async () => {
       try {
         const token = await getToken();
         if (!token || cancelled) return;
-
         const res = await fetch('/api/library/collections', {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -123,53 +173,76 @@ export default function LibraryHomePage() {
       } finally {
         if (!cancelled) setCollectionsLoading(false);
       }
-    }
-
-    fetchCollections();
+    })();
     return () => { cancelled = true; };
   }, [getToken]);
 
-  // Build filtered category list based on selected filters
-  const filteredCategories = CATEGORIES;
+  const chipSx = {
+    fontWeight: 600,
+    fontSize: '0.8rem',
+    height: 34,
+    flexShrink: 0,
+    borderRadius: 2,
+  };
 
   return (
     <Box sx={{ pb: 10 }}>
-      {/* Page Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: { xs: 2, sm: 3 },
-          pt: { xs: 2, sm: 3 },
-          pb: 1,
-        }}
-      >
+      <Box sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
         <Typography
           variant="h5"
-          sx={{
-            fontWeight: 800,
-            fontSize: { xs: '1.3rem', sm: '1.5rem' },
-          }}
+          sx={{ fontWeight: 800, fontSize: { xs: '1.3rem', sm: '1.5rem' }, mb: 1.5 }}
         >
           Class Library
         </Typography>
-        <IconButton
-          onClick={() => router.push('/student/library/search')}
-          sx={{
-            bgcolor: alpha(theme.palette.primary.main, 0.08),
-            width: 44,
-            height: 44,
-            '&:hover': {
-              bgcolor: alpha(theme.palette.primary.main, 0.15),
-            },
+
+        <TextField
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && query.trim()) goToSearch(query.trim());
           }}
-        >
-          <SearchIcon />
-        </IconButton>
+          fullWidth
+          placeholder="Search a topic, like perspective or series"
+          inputProps={{ 'aria-label': 'Search the class library', enterKeyHint: 'search' }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: 'text.secondary' }} />
+              </InputAdornment>
+            ),
+            sx: { borderRadius: 3, bgcolor: alpha(theme.palette.text.primary, 0.04) },
+          }}
+          // 16px keeps iOS from zooming the page when the field takes focus.
+          sx={{ '& .MuiInputBase-input': { fontSize: 16, minHeight: 28 } }}
+        />
       </Box>
 
-      {/* Filter Chips */}
+      {/* One-tap topics. Only topics with published classes behind them, so a
+          chip never leads to an empty result. */}
+      {topics.length > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 1,
+            px: { xs: 2, sm: 3 },
+            pt: 1.5,
+            overflowX: 'auto',
+            '&::-webkit-scrollbar': { display: 'none' },
+            scrollbarWidth: 'none',
+          }}
+        >
+          {topics.map((t) => (
+            <Chip
+              key={t.topic}
+              label={t.topic}
+              onClick={() => goToSearch(t.topic)}
+              variant="outlined"
+              sx={chipSx}
+            />
+          ))}
+        </Box>
+      )}
+
       <Box
         sx={{
           display: 'flex',
@@ -181,25 +254,17 @@ export default function LibraryHomePage() {
           scrollbarWidth: 'none',
         }}
       >
-        {/* Exam filter chips */}
         {EXAM_OPTIONS.map((opt) => (
           <Chip
             key={`exam-${opt.key}`}
             label={opt.label}
-            onClick={() => setSelectedExam(opt.key === selectedExam ? '' : opt.key)}
+            onClick={() => applyFilter(setSelectedExam, opt.key === selectedExam ? '' : opt.key)}
             variant={selectedExam === opt.key ? 'filled' : 'outlined'}
             color={selectedExam === opt.key ? 'primary' : 'default'}
-            sx={{
-              fontWeight: 600,
-              fontSize: '0.8rem',
-              height: 34,
-              flexShrink: 0,
-              borderRadius: 2,
-            }}
+            sx={chipSx}
           />
         ))}
 
-        {/* Divider dot */}
         <Box
           sx={{
             width: 4,
@@ -211,26 +276,19 @@ export default function LibraryHomePage() {
           }}
         />
 
-        {/* Language filter chips */}
         {LANGUAGE_OPTIONS.map((opt) => (
           <Chip
             key={`lang-${opt.key}`}
             label={opt.label}
-            onClick={() => setSelectedLanguage(opt.key === selectedLanguage ? '' : opt.key)}
+            onClick={() =>
+              applyFilter(setSelectedLanguage, opt.key === selectedLanguage ? '' : opt.key)}
             variant={selectedLanguage === opt.key ? 'filled' : 'outlined'}
             color={selectedLanguage === opt.key ? 'primary' : 'default'}
-            sx={{
-              fontWeight: 600,
-              fontSize: '0.8rem',
-              height: 34,
-              flexShrink: 0,
-              borderRadius: 2,
-            }}
+            sx={chipSx}
           />
         ))}
       </Box>
 
-      {/* Browse all button */}
       {(selectedExam || selectedLanguage) && (
         <Box sx={{ px: { xs: 2, sm: 3 }, py: 1 }}>
           <Button
@@ -242,24 +300,34 @@ export default function LibraryHomePage() {
               if (selectedLanguage) params.set('language', selectedLanguage);
               router.push(`/student/library/browse?${params.toString()}`);
             }}
-            sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
+            sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, minHeight: 44 }}
           >
             Browse filtered videos
           </Button>
         </Box>
       )}
 
-      {/* Content area */}
       <Box sx={{ mt: 1, px: { xs: 0, sm: 3 } }}>
-        {/* Continue Watching */}
         <ContinueWatchingRow />
 
-        {/* Category Rows (shown when categories are populated) */}
-        {filteredCategories.map((cat) => (
-          <CategoryRow key={cat.key} title={cat.label} category={cat.key} />
-        ))}
+        {homeLoading
+          ? [0, 1].map((i) => (
+              <Box key={i} sx={{ mb: 3, px: { xs: 2, sm: 0 } }}>
+                <Skeleton variant="text" sx={{ width: 160, mb: 1.5 }} />
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  {Array.from({ length: 4 }).map((_, j) => <VideoCardSkeleton key={j} />)}
+                </Box>
+              </Box>
+            ))
+          : sections.map((section) => (
+              <VideoRow
+                key={section.key}
+                title={section.label}
+                videos={section.videos}
+                seeAllHref={`/student/library/browse?category=${section.key}`}
+              />
+            ))}
 
-        {/* All Videos Grid */}
         <Box sx={{ mb: 3, px: { xs: 2, sm: 0 } }}>
           <Typography
             variant="subtitle1"
@@ -267,7 +335,10 @@ export default function LibraryHomePage() {
           >
             {selectedExam || selectedLanguage ? 'Filtered Videos' : 'All Recordings'}
             {allVideosTotal > 0 && (
-              <Typography component="span" sx={{ fontWeight: 400, fontSize: '0.85rem', color: 'text.secondary', ml: 1 }}>
+              <Typography
+                component="span"
+                sx={{ fontWeight: 400, fontSize: '0.85rem', color: 'text.secondary', ml: 1 }}
+              >
                 ({allVideosTotal})
               </Typography>
             )}
@@ -282,48 +353,44 @@ export default function LibraryHomePage() {
           >
             {allVideosLoading && allVideos.length === 0
               ? Array.from({ length: 8 }).map((_, i) => <VideoCardSkeleton key={i} />)
-              : allVideos.map((video) => (
-                  <VideoCard key={video.id} video={video} fullWidth />
-                ))}
+              : allVideos.map((video) => <VideoCard key={video.id} video={video} fullWidth />)}
           </Box>
 
-          {/* Load More */}
-          {allVideos.length < allVideosTotal && (
+          {!allVideosLoading && allVideos.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
+              No recordings match those filters yet. Clear a filter to see everything.
+            </Typography>
+          )}
+
+          {allVideos.length > 0 && allVideos.length < allVideosTotal && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
               <Button
                 variant="outlined"
-                onClick={() => setAllVideosPage(p => p + 1)}
+                onClick={() => setAllVideosPage((p) => p + 1)}
                 disabled={allVideosLoading}
-                sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 4 }}
+                sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 4, minHeight: 44 }}
               >
-                {allVideosLoading ? 'Loading...' : `Load More (${allVideosTotal - allVideos.length} remaining)`}
+                {allVideosLoading
+                  ? 'Loading...'
+                  : `Load More (${allVideosTotal - allVideos.length} remaining)`}
               </Button>
             </Box>
           )}
         </Box>
 
-        {/* Collections */}
         {(collectionsLoading || collections.length > 0) && (
           <Box sx={{ mb: 3 }}>
-            <Box
+            <Typography
+              variant="subtitle1"
               sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                fontWeight: 700,
+                fontSize: { xs: '1rem', sm: '1.1rem' },
                 mb: 1.5,
                 px: { xs: 2, sm: 0 },
               }}
             >
-              <Typography
-                variant="subtitle1"
-                sx={{
-                  fontWeight: 700,
-                  fontSize: { xs: '1rem', sm: '1.1rem' },
-                }}
-              >
-                Collections
-              </Typography>
-            </Box>
+              Collections
+            </Typography>
 
             <Box
               sx={{
@@ -339,12 +406,8 @@ export default function LibraryHomePage() {
               }}
             >
               {collectionsLoading
-                ? Array.from({ length: 3 }).map((_, i) => (
-                    <CollectionCardSkeleton key={i} />
-                  ))
-                : collections.map((col) => (
-                    <CollectionCard key={col.id} collection={col} />
-                  ))}
+                ? Array.from({ length: 3 }).map((_, i) => <CollectionCardSkeleton key={i} />)
+                : collections.map((col) => <CollectionCard key={col.id} collection={col} />)}
             </Box>
           </Box>
         )}

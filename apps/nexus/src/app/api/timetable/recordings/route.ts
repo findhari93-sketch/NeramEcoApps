@@ -12,6 +12,11 @@ import { getSupabaseAdminClient } from '@neram/database';
  * Searches the title and the brief. Tag filtering is AND, not OR: picking
  * Aptitude and Perspective means classes that were both, which is the narrowing
  * people expect from filter chips.
+ *
+ * `?needs_meta=1` narrows to classes that have been recorded but never had
+ * their YouTube listing published, which is the queue of work for whoever is
+ * uploading. It is a filter here rather than a page of its own so there is one
+ * recordings list, not two.
  */
 
 const SELECT =
@@ -80,6 +85,19 @@ export async function GET(request: NextRequest) {
     // Students never see a class their teacher has not published.
     if (!isStaff) query = query.eq('publish_state', 'published');
     if (idsWithAllTags) query = query.in('id', idsWithAllTags);
+
+    // Exclude classes already published to YouTube. Done as a NOT IN rather than
+    // an in-memory pass so the 200-row limit is spent on classes that still need
+    // work, instead of being filled with finished ones and showing nothing.
+    const needsMeta = request.nextUrl.searchParams.get('needs_meta') === '1';
+    if (needsMeta && isStaff) {
+      const { data: publishedMeta } = await supabase
+        .from('nexus_class_video_meta')
+        .select('scheduled_class_id')
+        .eq('status', 'published');
+      const doneIds = (publishedMeta || []).map((r: any) => r.scheduled_class_id);
+      if (doneIds.length > 0) query = query.not('id', 'in', `(${doneIds.join(',')})`);
+    }
     if (q) {
       // Escape the PostgREST or() separators so a comma in the search box does
       // not become a second filter.
@@ -94,14 +112,24 @@ export async function GET(request: NextRequest) {
     // filter bar can offer only tags that would find something.
     const ids = (classes || []).map((c: any) => c.id);
     const tagsByClass: Record<string, unknown[]> = {};
+    const metaStatusByClass: Record<string, string> = {};
     if (ids.length > 0) {
-      const { data: rows } = await supabase
-        .from('nexus_class_tags')
-        .select('scheduled_class_id, tag:nexus_qb_tags(id, slug, label, group_type)')
-        .in('scheduled_class_id', ids);
-      for (const r of rows || []) {
+      const [tagRes, metaRes] = await Promise.all([
+        supabase
+          .from('nexus_class_tags')
+          .select('scheduled_class_id, tag:nexus_qb_tags(id, slug, label, group_type)')
+          .in('scheduled_class_id', ids),
+        supabase
+          .from('nexus_class_video_meta')
+          .select('scheduled_class_id, status')
+          .in('scheduled_class_id', ids),
+      ]);
+      for (const r of tagRes?.data || []) {
         if (!r.tag) continue;
         (tagsByClass[r.scheduled_class_id] ||= []).push(r.tag);
+      }
+      for (const r of metaRes?.data || []) {
+        metaStatusByClass[r.scheduled_class_id] = r.status;
       }
     }
 
@@ -114,7 +142,12 @@ export async function GET(request: NextRequest) {
       .order('sort_order', { ascending: true });
 
     return NextResponse.json({
-      recordings: (classes || []).map((c: any) => ({ ...c, tags: tagsByClass[c.id] || [] })),
+      recordings: (classes || []).map((c: any) => ({
+        ...c,
+        tags: tagsByClass[c.id] || [],
+        // No row at all means nobody has started the listing yet.
+        video_meta_status: metaStatusByClass[c.id] || null,
+      })),
       tags: allTags || [],
       canSeeUnpublished: isStaff,
     });

@@ -14,6 +14,7 @@ import {
   enrollUserInDefaultClassroom,
 } from '@neram/database';
 import { verifyFirebaseToken } from '../../_lib/auth';
+import { normalisePhone } from '@/lib/phone';
 
 // POST /api/enroll/complete - Complete direct enrollment (requires Firebase auth)
 export async function POST(request: NextRequest) {
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
       schoolType,
       // Phone
       parentPhone,
+      studentPhone,
       phoneVerified,
       phoneVerifiedAt,
       // Payment details (student-provided)
@@ -96,7 +98,7 @@ export async function POST(request: NextRequest) {
     // Check if user is already a student
     const { data: existingUser } = await supabase
       .from('users')
-      .select('id, user_type')
+      .select('id, user_type, phone')
       .eq('id', auth.userId)
       .single();
 
@@ -108,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Update user profile with name and type
-    await updateUser(auth.userId, {
+    const userUpdate: Record<string, unknown> = {
       first_name: firstName,
       name: firstName,
       user_type: 'student',
@@ -117,7 +119,25 @@ export async function POST(request: NextRequest) {
       onboarding_completed: true, // Direct enrollment students skip the quiz wizard (data already collected)
       date_of_birth: dateOfBirth || null,
       gender: gender || null,
-    }, supabase);
+    };
+
+    // Persist the student's own number when the user row has none. Students who
+    // sign in with Google (rather than phone OTP) get a users row with phone NULL,
+    // and nothing else here ever filled it: the verified number went only to
+    // lead_profiles.parent_phone. That left users.phone NULL for exactly this
+    // cohort, which blinds the admin Entra reconciler (phone is its strongest
+    // signal for spotting that a new @neramclasses.com account belongs to an
+    // existing student) and makes it insert a DUPLICATE student row instead.
+    // See the Chetana duplicate, 2026-07-28.
+    if (!existingUser?.phone) {
+      const resolvedPhone =
+        normalisePhone(studentPhone) ||
+        normalisePhone(auth.phone) ||
+        normalisePhone(link.student_phone);
+      if (resolvedPhone) userUpdate.phone = resolvedPhone;
+    }
+
+    await updateUser(auth.userId, userUpdate, supabase);
 
     // 3. Create student profile first (to get DB-generated student_id)
     let studentProfile;
@@ -223,7 +243,12 @@ export async function POST(request: NextRequest) {
     const finalPaymentDate = paymentDate || link.payment_date || new Date().toISOString();
     const finalTransactionRef = transactionReference || link.transaction_reference || '';
     const receiptNumber = `NR-DE-${Date.now().toString(36).toUpperCase()}`;
-    await supabase
+    // `description`, NOT `notes`: payments has no `notes` column, so PostgREST
+    // rejected the whole row (PGRST204) and, because the error was discarded, this
+    // insert silently failed on EVERY direct enrolment since launch. The fee showed
+    // as paid on student_profiles while payments held no record of it. Found
+    // 2026-07-28 with 57 of 59 enrolments missing their row.
+    const { error: paymentError } = await supabase
       .from('payments')
       .insert({
         user_id: auth.userId,
@@ -237,8 +262,18 @@ export async function POST(request: NextRequest) {
         paid_at: finalPaymentDate,
         screenshot_url: paymentProofUrl || null,
         installment_number: installmentNumber || 1,
-        notes: `Direct payment (${paymentType || 'full'}). ${finalTransactionRef ? `Transaction: ${finalTransactionRef}` : ''}`,
+        description: `Direct payment (${paymentType || 'full'}).${finalTransactionRef ? ` Transaction: ${finalTransactionRef}` : ''}`,
       });
+
+    // Never block the enrolment on this, but never swallow it either: a missing
+    // payment row understates collected revenue and must be visible in the logs.
+    if (paymentError) {
+      console.error(
+        '[Direct Enrollment] Failed to create payment record:',
+        paymentError.message,
+        paymentError.details,
+      );
+    }
 
     // 6. Mark link as used + save student-provided payment details
     const linkUpdate: Record<string, unknown> = {

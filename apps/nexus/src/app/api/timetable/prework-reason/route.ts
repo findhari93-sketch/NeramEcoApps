@@ -14,9 +14,15 @@ import { classEndIso } from '@/lib/prework';
  * hours before the class is something the teacher can act on IN the class, which
  * a blank submission list never is.
  *
- * Answering is NOT a gate on anything. Nothing here touches the join URL, and
- * nothing in the app refuses a student entry to a class over homework. The
- * prompt is loud, the door stays open.
+ * This route still touches nothing. It records the reason for ONE assignment and
+ * that is all it does.
+ *
+ * The class prep gate, which does withhold the join URL, has its own reason
+ * endpoint at /api/student/class-prep/[classId]/reason, because a gate is per
+ * class while this table is per assignment: nexus_prework_reasons.assignment_id
+ * is NOT NULL, so the test half of the gate has nothing to hang a reason on here.
+ * The two share the same reason VOCABULARY so a teacher's tally stays one set of
+ * words.
  *
  * Body: { assignment_id, reason_code, note?, started? }
  */

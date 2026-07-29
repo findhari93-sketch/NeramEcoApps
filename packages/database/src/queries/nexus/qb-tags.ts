@@ -2,7 +2,7 @@
 // nexus_qb_tag_counts RPCs are not yet in the generated Supabase types.
 // Regenerate with pnpm supabase:gen:types after 20260713180000 is applied.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
-import type { NexusQBTag, NexusQBTagGroup, NexusQBTagWithCount } from '../../types';
+import type { NexusQBTag, NexusQBTagGroup, NexusQBTagWithCount, NexusQBTagNode } from '../../types';
 
 const TAGS = 'nexus_qb_tags';
 const QUESTION_TAGS = 'nexus_qb_question_tags';
@@ -55,6 +55,178 @@ export async function getQBTagsWithCounts(
     countMap.set(row.tag_id, Number(row.question_count) || 0);
   }
   return tags.map((t) => ({ ...t, question_count: countMap.get(t.id) || 0 }));
+}
+
+// ============================================
+// SUBJECT HIERARCHY (nexus_qb_tags.parent_id)
+// ============================================
+
+export interface QBTagCount {
+  self: number;
+  rollup: number;
+}
+
+/**
+ * Nest a flat tag list into a parent -> child forest.
+ *
+ * Pure and exported so it can be unit tested without a database. Mirrors the
+ * behaviour of getQBTopicTree: a row whose parent_id points at a tag that is
+ * missing or inactive surfaces as a root rather than disappearing. A cycle
+ * (A -> B -> A, only reachable via a hand-edited parent_id) is broken by
+ * treating the second visit as a root, so this can never loop.
+ *
+ * Sibling order follows the input order, which listQBTags already sorts by
+ * sort_order then label.
+ */
+export function buildQBTagTree(
+  rows: NexusQBTag[],
+  counts?: Map<string, QBTagCount>,
+): NexusQBTagNode[] {
+  const nodes = new Map<string, NexusQBTagNode>();
+  for (const row of rows) {
+    const c = counts?.get(row.slug);
+    nodes.set(row.id, {
+      ...row,
+      self_count: c?.self ?? 0,
+      rollup_count: c?.rollup ?? c?.self ?? 0,
+      children: [],
+    });
+  }
+
+  const roots: NexusQBTagNode[] = [];
+  for (const row of rows) {
+    const node = nodes.get(row.id)!;
+    const parent = row.parent_id ? nodes.get(row.parent_id) : undefined;
+    if (!parent || parent.id === node.id || isDescendantOf(parent, node.id, nodes)) {
+      roots.push(node);
+    } else {
+      parent.children.push(node);
+    }
+  }
+  return roots;
+}
+
+/** Walk up from `node` to detect whether `candidateId` is already below it. */
+function isDescendantOf(
+  node: NexusQBTagNode,
+  candidateId: string,
+  nodes: Map<string, NexusQBTagNode>,
+): boolean {
+  let cursor: NexusQBTagNode | undefined = node;
+  const seen = new Set<string>();
+  while (cursor) {
+    if (cursor.id === candidateId) return true;
+    if (seen.has(cursor.id)) return true; // pre-existing cycle, bail out
+    seen.add(cursor.id);
+    cursor = cursor.parent_id ? nodes.get(cursor.parent_id) : undefined;
+  }
+  return false;
+}
+
+/**
+ * The subject tag forest with facet counts, for the two-level Category filter.
+ *
+ * Counts come from nexus_qb_category_counts(), which computes rollup_count as
+ * COUNT(DISTINCT question) over each tag's transitive closure. Never sum
+ * children in JS: a question tagged both `locus` and `parabola` would then be
+ * counted twice under Coordinate Geometry.
+ */
+export async function getQBSubjectTagTree(
+  scope?: { exam_type?: string | null; year?: number | null; session?: string | null; shift?: string | null },
+  client?: TypedSupabaseClient,
+): Promise<{ tree: NexusQBTagNode[]; counts: Record<string, number> }> {
+  const supabase = client || getSupabaseAdminClient();
+  const [tags, countsRes] = await Promise.all([
+    listQBTags({ group: 'subject' }, supabase),
+    supabase.rpc('nexus_qb_category_counts', {
+      p_exam_type: scope?.exam_type ?? null,
+      p_year: scope?.year ?? null,
+      p_session: scope?.session ?? null,
+      p_shift: scope?.shift ?? null,
+    }),
+  ]);
+  if (countsRes.error) throw countsRes.error;
+
+  const countMap = new Map<string, QBTagCount>();
+  const flat: Record<string, number> = {};
+  for (const row of (countsRes.data || []) as Array<{
+    slug: string;
+    self_count: number | string;
+    rollup_count: number | string;
+  }>) {
+    const self = Number(row.self_count) || 0;
+    const rollup = Number(row.rollup_count) || 0;
+    countMap.set(row.slug, { self, rollup });
+    if (self > 0) flat[row.slug] = self;
+  }
+
+  return { tree: buildQBTagTree(tags, countMap), counts: flat };
+}
+
+// Parent slug -> all descendant slugs, cached because the registry is ~55 rows
+// and changes roughly monthly, while this is consulted on every filtered query.
+const SLUG_TREE_TTL_MS = 5 * 60 * 1000;
+let slugTreeCache: { at: number; map: Map<string, string[]> } | null = null;
+
+/** Test seam: drop the memoized descendant map. */
+export function clearQBCategorySlugCache(): void {
+  slugTreeCache = null;
+}
+
+/**
+ * Expand any parent slugs in a category selection into themselves plus all of
+ * their descendants.
+ *
+ * The client already does this before calling the API, so this is a safety net
+ * for hand-typed or bookmarked URLs (?cat=coordinate_geometry) and for any
+ * caller that stores a collapsed selection, such as a saved preset. It is
+ * idempotent, and unknown slugs pass through untouched so off-vocabulary
+ * categories keep working.
+ */
+export async function expandQBCategorySlugs(
+  slugs: string[],
+  client?: TypedSupabaseClient,
+): Promise<string[]> {
+  if (!slugs || slugs.length === 0) return [];
+
+  let map = slugTreeCache && Date.now() - slugTreeCache.at < SLUG_TREE_TTL_MS ? slugTreeCache.map : null;
+  if (!map) {
+    try {
+      const rows = await listQBTags({ group: 'subject' }, client);
+      map = buildQBDescendantMap(rows);
+      slugTreeCache = { at: Date.now(), map };
+    } catch {
+      // Registry unreachable: fall back to the caller's slugs verbatim rather
+      // than dropping their filter entirely.
+      return [...new Set(slugs)];
+    }
+  }
+
+  const out = new Set<string>();
+  for (const slug of slugs) {
+    out.add(slug);
+    for (const child of map.get(slug) || []) out.add(child);
+  }
+  return [...out];
+}
+
+/** Flat slug -> all descendant slugs (exclusive of the key itself). Pure. */
+export function buildQBDescendantMap(rows: NexusQBTag[]): Map<string, string[]> {
+  const bySlug = new Map<string, NexusQBTagNode>();
+  const tree = buildQBTagTree(rows);
+  const map = new Map<string, string[]>();
+
+  const walk = (node: NexusQBTagNode): string[] => {
+    const acc: string[] = [];
+    for (const child of node.children) {
+      acc.push(child.slug, ...walk(child));
+    }
+    map.set(node.slug, acc);
+    bySlug.set(node.slug, node);
+    return acc;
+  };
+  for (const root of tree) walk(root);
+  return map;
 }
 
 /** The tag ids applied to a question. */

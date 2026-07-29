@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Box,
   Drawer,
@@ -20,6 +20,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import type {
   QBFilterState,
   NexusQBTopic,
+  NexusQBTagNode,
   QBDifficulty,
   QBQuestionFormat,
   QBExamTree,
@@ -28,6 +29,7 @@ import type {
 } from '@neram/database';
 import { QB_CATEGORY_LABELS, QB_EXAM_TYPE_LABELS, QB_CONFIDENCE_TIER_LABELS, type QBCategory } from '@neram/database';
 import SubjectTree from './SubjectTree';
+import CategoryTree from './CategoryTree';
 
 interface FilterDrawerProps {
   open: boolean;
@@ -40,6 +42,13 @@ interface FilterDrawerProps {
   matchCount?: number;
   topicCounts?: Map<string, number>;
   categoryCounts?: Record<string, number>;
+  /** Subject tag forest from /api/question-bank/category-counts. */
+  categoryTree?: NexusQBTagNode[];
+  /**
+   * Fires as the in-drawer draft changes, so the page can debounce a count
+   * request and feed it back through `matchCount`.
+   */
+  onDraftChange?: (draft: QBFilterState) => void;
 }
 
 const DIFFICULTY_OPTIONS: { value: QBDifficulty; label: string }[] = [
@@ -62,6 +71,9 @@ const STATUS_OPTIONS: { value: NonNullable<QBFilterState['attempt_status']>; lab
   { value: 'incorrect', label: 'Incorrect' },
 ];
 
+// Aptitude / NATA / broad chips are still a flat presentational grouping. Give
+// those tags a parent_id in nexus_qb_tags and they move into the tree instead,
+// with no code change: the maths group already made exactly that move.
 const CATEGORY_GROUPS: { key: string; label: string; categories: QBCategory[]; exams: (QBExamType | 'ALL')[] }[] = [
   {
     key: 'broad',
@@ -72,21 +84,30 @@ const CATEGORY_GROUPS: { key: string; label: string; categories: QBCategory[]; e
   {
     key: 'nata',
     label: 'NATA Topics',
-    categories: ['history_of_architecture', 'general_knowledge', 'puzzle', 'perspective', 'building_materials', 'building_services', 'planning', 'sustainability', 'famous_architects', 'current_affairs', 'visualization_3d'],
+    categories: ['history_of_architecture', 'general_knowledge', 'puzzle', 'perspective', 'building_materials', 'building_services', 'planning', 'sustainability', 'famous_architects', 'current_affairs', 'visualization_3d', '2d_composition', '3d_composition', 'kit_sculpture'],
     exams: ['NATA'],
   },
   {
     key: 'jee_aptitude',
     label: 'Aptitude Topics',
-    categories: ['spatial_visualization', 'orthographic_projection', 'pattern_recognition', 'analogy', 'counting_figures', 'odd_one_out', 'surface_counting', 'mirror_image', 'embedded_figure', 'architecture_gk', 'building_science', 'building_materials', 'building_services', 'design_fundamentals'],
+    categories: ['spatial_visualization', 'orthographic_projection', 'pattern_recognition', 'analogy', 'counting_figures', 'odd_one_out', 'surface_counting', 'mirror_image', 'embedded_figure', 'architecture_gk', 'building_science', 'building_materials', 'building_services', 'design_fundamentals', 'geography_gk', 'environment_gk'],
     exams: ['JEE_PAPER_2'],
   },
-  {
-    key: 'jee_math',
-    label: 'Math Topics',
-    categories: ['trigonometry', 'probability', 'statistics', 'matrices', 'determinants', 'complex_numbers', 'vectors', '3d_geometry', 'conic_sections', 'circles', 'straight_lines', 'sequences_and_series', 'binomial_theorem', 'permutations_combinations', 'definite_integrals', 'indefinite_integrals', 'differential_equations', 'applications_of_derivatives', 'differentiability', 'continuity', 'mean_value_theorems', 'quadratic_equations', 'functions', 'sets_and_relations', 'mathematical_logic'],
-    exams: ['JEE_PAPER_2'],
-  },
+  // The former `jee_math` group lived here as 25 flat slugs. It is now the
+  // nexus_qb_tags hierarchy, rendered by <CategoryTree> below.
+];
+
+// The six maths roots seeded by 20260801090000. This names only the roots:
+// which topics sit under each, their labels, counts and order all come from
+// nexus_qb_tags, so adding a sub-topic needs no deploy. `trigonometry` is a root
+// with no children yet, so it is listed rather than inferred from having any.
+const MATH_ROOT_SLUGS = [
+  'algebra',
+  'coordinate_geometry',
+  'calculus',
+  'trigonometry',
+  'vectors_and_3d_geometry',
+  'probability_and_statistics',
 ];
 
 const EXAM_TYPE_OPTIONS: { value: QBExamType | 'ALL'; label: string }[] = [
@@ -106,10 +127,18 @@ export default function FilterDrawer({
   matchCount,
   topicCounts,
   categoryCounts,
+  categoryTree,
+  onDraftChange,
 }: FilterDrawerProps) {
   const [draft, setDraft] = useState<QBFilterState>(filters);
 
   const handleOpen = () => setDraft(filters);
+
+  // Report the draft upward so the page can price it. Kept in an effect rather
+  // than firing inside every setDraft call site, so no toggle can forget to.
+  useEffect(() => {
+    onDraftChange?.(draft);
+  }, [draft, onDraftChange]);
 
   const toggleArrayValue = <T extends string | number>(
     key: keyof QBFilterState,
@@ -139,6 +168,57 @@ export default function FilterDrawer({
     return Array.from(yearsSet).sort((a, b) => b - a);
   }, [examTree, draft.exam_type]);
 
+  // Only the maths roots go into the tree. Everything else stays as chip groups
+  // until those tags get a parent_id of their own.
+  const mathRoots = useMemo(
+    () => (categoryTree || []).filter((n) => MATH_ROOT_SLUGS.includes(n.slug)),
+    [categoryTree],
+  );
+
+  /**
+   * Non-maths chip groups, counts-driven.
+   *
+   * A category can appear in two groups (building_materials and
+   * building_services are in both `nata` and `jee_aptitude`), so a seen-set
+   * keeps the first occurrence and drops the duplicate chip.
+   */
+  const renderChipGroups = () => {
+    const seen = new Set<string>();
+    return CATEGORY_GROUPS.map((group) => {
+      const availableCats = group.categories.filter((cat) => {
+        if (seen.has(cat)) return false;
+        if (!categoryCounts?.[cat]) return false;
+        seen.add(cat);
+        return true;
+      });
+      if (availableCats.length === 0) return null;
+      return (
+        <Box key={group.key} sx={{ mb: 1.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block', fontWeight: 600 }}>
+            {group.label}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+            {availableCats.map((cat) => {
+              const isSelected = (draft.categories || []).includes(cat);
+              const count = categoryCounts?.[cat] || 0;
+              return (
+                <Chip
+                  key={cat}
+                  label={`${QB_CATEGORY_LABELS[cat]} (${count})`}
+                  onClick={() => toggleArrayValue('categories', cat as string)}
+                  variant={isSelected ? 'filled' : 'outlined'}
+                  color={isSelected ? 'primary' : 'default'}
+                  size="small"
+                  sx={{ minHeight: 32 }}
+                />
+              );
+            })}
+          </Box>
+        </Box>
+      );
+    }).filter(Boolean);
+  };
+
   const handleExamTypeChange = (value: QBExamType | 'ALL') => {
     setDraft((prev) => ({
       ...prev,
@@ -156,16 +236,24 @@ export default function FilterDrawer({
   };
 
   const handleApply = () => {
+    // Prune empties rather than whitelisting keys. The old whitelist silently
+    // dropped anything it forgot to name, which is how the entire Confidence
+    // Level accordion ended up inert.
     const cleaned: QBFilterState = {};
-    if (draft.exam_type) cleaned.exam_type = draft.exam_type;
-    if (draft.exam_relevance) cleaned.exam_relevance = draft.exam_relevance;
-    if (draft.exam_years?.length) cleaned.exam_years = draft.exam_years;
-    if (draft.categories?.length) cleaned.categories = draft.categories;
-    if (draft.difficulty?.length) cleaned.difficulty = draft.difficulty;
-    if (draft.question_format?.length) cleaned.question_format = draft.question_format;
-    if (draft.attempt_status && draft.attempt_status !== 'all') cleaned.attempt_status = draft.attempt_status;
-    if (draft.search_text?.trim()) cleaned.search_text = draft.search_text.trim();
-    if (draft.topic_ids?.length) cleaned.topic_ids = draft.topic_ids;
+    for (const [key, value] of Object.entries(draft) as [keyof QBFilterState, unknown][]) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        if (value.length === 0) continue;
+      } else if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) continue;
+        // 'all' is the no-op sentinel for attempt_status.
+        if (key === 'attempt_status' && trimmed === 'all') continue;
+        (cleaned as Record<string, unknown>)[key] = trimmed;
+        continue;
+      }
+      (cleaned as Record<string, unknown>)[key] = value;
+    }
     onApply(cleaned);
     onClose();
   };
@@ -306,38 +394,26 @@ export default function FilterDrawer({
           </AccordionSummary>
           <AccordionDetails>
             {categoryCounts && Object.keys(categoryCounts).length > 0 ? (
-              // Dynamic: show ALL groups that have questions in the current context
-              CATEGORY_GROUPS
-                .map((group) => {
-                  const availableCats = group.categories.filter(
-                    (cat) => categoryCounts[cat] && categoryCounts[cat] > 0,
-                  );
-                  if (availableCats.length === 0) return null;
-                  return (
-                    <Box key={group.key} sx={{ mb: 1.5 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block', fontWeight: 600 }}>
-                        {group.label}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {availableCats.map((cat) => {
-                          const isSelected = (draft.categories || []).includes(cat);
-                          const count = categoryCounts[cat] || 0;
-                          return (
-                            <Chip
-                              key={cat}
-                              label={`${QB_CATEGORY_LABELS[cat]} (${count})`}
-                              onClick={() => toggleArrayValue('categories', cat as string)}
-                              variant={isSelected ? 'filled' : 'outlined'}
-                              color={isSelected ? 'primary' : 'default'}
-                              size="small"
-                            />
-                          );
-                        })}
-                      </Box>
-                    </Box>
-                  );
-                })
-                .filter(Boolean)
+              <>
+                {/* Dynamic: show ALL groups that have questions in the current context */}
+                {renderChipGroups()}
+
+                {/* Maths, as the real parent -> child hierarchy */}
+                {mathRoots.length > 0 && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block', fontWeight: 600 }}>
+                      Math Topics
+                    </Typography>
+                    <CategoryTree
+                      tree={mathRoots}
+                      selected={draft.categories || []}
+                      onChange={(next) =>
+                        setDraft((prev) => ({ ...prev, categories: next.length > 0 ? next : undefined }))
+                      }
+                    />
+                  </Box>
+                )}
+              </>
             ) : (
               // Fallback: static groups filtered by exam type
               CATEGORY_GROUPS

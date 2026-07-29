@@ -148,6 +148,7 @@ export async function buildClassTestFromRecap(
       timerType: 'none',
       isPublished: true,
       isRepository: true,
+      testKind: 'catchup_class',
       // Reversibility stamp: DELETE FROM nexus_tests WHERE created_from='catchup_class'
       createdFrom: 'catchup_class',
       createdBy: opts.createdBy ?? null,

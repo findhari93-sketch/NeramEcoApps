@@ -55,6 +55,13 @@ interface CompletedClass {
 
 interface DashboardData {
   upcomingClasses: UpcomingClass[];
+  /**
+   * Class ids whose prep gate is shut, keyed by id. The server has already
+   * stripped teams_meeting_url from those rows, so without this the dashboard
+   * would show a class with no Join button and no reason why. Absent for every
+   * class the gate never applied to.
+   */
+  prep?: Record<string, { gated: boolean; open: boolean }>;
   completedClasses: CompletedClass[];
   attendanceSummary: { total: number; attended: number; percentage: number };
   checklistProgress: { completed: number; total: number };
@@ -301,6 +308,21 @@ export default function StudentDashboard() {
                   </Typography>
                 </Box>
               </Box>
+              {/* Gate shut: the server stripped the URL, so say why and send them
+                  to the timetable, where the full prep card has the buttons. */}
+              {!nextClass.teams_meeting_url &&
+                data?.prep?.[nextClass.id]?.gated &&
+                !data.prep[nextClass.id].open && (
+                  <Button
+                    variant="contained"
+                    color="warning"
+                    size="small"
+                    onClick={() => router.push('/student/timetable')}
+                    sx={{ textTransform: 'none', minHeight: 40, borderRadius: 2, fontWeight: 700 }}
+                  >
+                    Finish your work to join
+                  </Button>
+                )}
               {nextClass.teams_meeting_url && nextClass.status !== 'completed' && (
                 <Button
                   variant="contained"

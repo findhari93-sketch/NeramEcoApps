@@ -5,6 +5,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import VideocamIcon from '@mui/icons-material/Videocam';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { type ClassCardData } from '../ClassCard';
 import { classStartDate, formatCountdown, formatTime, isToday } from '../date-utils';
 import { RADIUS, SHADOW, pulseAnimation } from '../timetable-theme';
@@ -22,6 +23,12 @@ interface UpNextHeroProps {
   myRsvp?: 'attending' | 'not_attending' | null;
   /** Reason the student gave when opting out. */
   myRsvpReason?: string | null;
+  /**
+   * True when this student's class prep gate is shut. The server has already
+   * stripped the join URL, so without this the hero would show a class with no
+   * Join button and no explanation at all.
+   */
+  prepShut?: boolean;
   onDecline?: (cls: ClassCardData) => void;
   onCatchUp?: (cls: ClassCardData) => void;
   onDetails?: (cls: ClassCardData) => void;
@@ -43,6 +50,7 @@ export default function UpNextHero({
   role,
   myRsvp,
   myRsvpReason,
+  prepShut,
   onDecline,
   onCatchUp,
   onDetails,
@@ -128,7 +136,7 @@ export default function UpNextHero({
         )}
 
         <Box sx={{ display: 'flex', gap: 1.25, flexWrap: 'wrap' }}>
-          {meetingUrl && (
+          {meetingUrl ? (
             <Button
               variant="contained"
               href={meetingUrl}
@@ -146,6 +154,28 @@ export default function UpNextHero({
             >
               {isLive ? 'Join now' : 'Join on Teams'}
             </Button>
+          ) : (
+            // The server stripped the URL because this student's prep gate is
+            // shut. This is the most prominent Join on the student timetable, so
+            // it must say WHY rather than just vanish, and it must lead somewhere:
+            // the panel holds the full PrepGateCard with the actual buttons.
+            prepShut && (
+              <Button
+                variant="contained"
+                color="warning"
+                onClick={() => onDetails?.(cls)}
+                startIcon={<LockOutlinedIcon />}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  borderRadius: RADIUS.control,
+                  minHeight: 48,
+                  flex: { xs: 1, sm: '0 0 auto' },
+                }}
+              >
+                Finish your work to join
+              </Button>
+            )
           )}
           {onDetails && (
             <Button

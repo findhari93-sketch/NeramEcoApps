@@ -26,6 +26,7 @@ import PlannerWeekList from '@/components/timetable/views/PlannerWeekList';
 import CalendarShell from '@/components/timetable/CalendarShell';
 import ClassEditPanel from '@/components/timetable/ClassEditPanel';
 import LinkAssignmentDialog from '@/components/timetable/LinkAssignmentDialog';
+import LinkPrepTestDialog from '@/components/timetable/LinkPrepTestDialog';
 import NewAssignmentDialog from '@/components/assignments/NewAssignmentDialog';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import ClassCreateDialog from '@/components/timetable/ClassCreateDialog';
@@ -99,6 +100,7 @@ export default function TeacherTimetable() {
   const [assignmentMenuAnchor, setAssignmentMenuAnchor] = useState<HTMLElement | null>(null);
   const [assignmentMenuClass, setAssignmentMenuClass] = useState<ClassCardData | null>(null);
   const [linkDialogClass, setLinkDialogClass] = useState<ClassCardData | null>(null);
+  const [prepTestClass, setPrepTestClass] = useState<ClassCardData | null>(null);
   const [newAssignmentClass, setNewAssignmentClass] = useState<ClassCardData | null>(null);
   /** Preselects Before class when the dialog is opened from "Add pre-class work". */
   const [newAssignmentTiming, setNewAssignmentTiming] = useState<'prework' | 'homework'>('homework');
@@ -1314,6 +1316,7 @@ export default function TeacherTimetable() {
                 onCreateMeeting={handleCreateMeeting}
                 onCreateAssignment={setNewAssignmentClass}
                 onLinkExisting={setLinkDialogClass}
+                onSetPrepTest={setPrepTestClass}
                 // Forced: onChanged() is called with no arguments, so a bare
                 // `fetchClasses` reference leaves force undefined and the
                 // loadedRange cache silently swallows the refresh.
@@ -1348,6 +1351,9 @@ export default function TeacherTimetable() {
         role="teacher"
         classroomId={activeClassroom?.id || ''}
         getToken={getToken}
+        // Shares the assignment key: attaching a prep test or a piece of prework
+        // both change who counts as ready, so both must refresh the roster.
+        prepRosterKey={assignmentRefreshKey}
         rsvpSummary={selectedClass ? rsvpData[selectedClass.id] : null}
         attendanceSummary={selectedClass ? attendanceData[selectedClass.id] : null}
         averageRating={selectedClass ? averageRatings[selectedClass.id] : null}
@@ -1554,6 +1560,22 @@ export default function TeacherTimetable() {
         onClose={() => setLinkDialogClass(null)}
         onLinked={refreshAssignments}
         onCreateInstead={setNewAssignmentClass}
+        onNotify={(message, severity = 'success') =>
+          setSnackbar({ open: true, message, severity })
+        }
+      />
+
+      <LinkPrepTestDialog
+        open={!!prepTestClass}
+        cls={prepTestClass}
+        getToken={getToken}
+        onClose={() => setPrepTestClass(null)}
+        // Reuses the assignment refresh key: both live in the same rail and both
+        // need the panel to reload after the dialog writes.
+        onSaved={(message) => {
+          refreshAssignments();
+          setSnackbar({ open: true, message, severity: 'success' });
+        }}
         onNotify={(message, severity = 'success') =>
           setSnackbar({ open: true, message, severity })
         }

@@ -5,6 +5,10 @@ import dotenv from 'dotenv';
 // Load E2E test credentials from .env.test (then .env.local as fallback)
 dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 dotenv.config({ path: path.resolve(__dirname, '.env.local') });
+// Supabase URL + service key live in the app env, not the root one. Specs that
+// seed their own fixtures need them. dotenv does not overwrite already-set
+// values, so anything above still wins.
+dotenv.config({ path: path.resolve(__dirname, 'apps/nexus/.env.local') });
 
 /**
  * Playwright E2E Testing Configuration

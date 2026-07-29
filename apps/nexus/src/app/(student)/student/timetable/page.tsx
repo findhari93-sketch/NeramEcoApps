@@ -26,6 +26,7 @@ import MonthView from '@/components/timetable/views/MonthView';
 import CalendarShell from '@/components/timetable/CalendarShell';
 import ClassReviewForm from '@/components/timetable/ClassReviewForm';
 import ClassDetailPanel, { type PanelAssignment } from '@/components/timetable/ClassDetailPanel';
+import type { ClassPrepSummaryClient } from '@/components/timetable/PrepGateCard';
 import RsvpReasonDialog, { type RsvpDeclinePayload } from '@/components/timetable/RsvpReasonDialog';
 import PreworkReasonDialog, { type PreworkReasonPayload } from '@/components/timetable/PreworkReasonDialog';
 import { preworkStripCopy, preworkDueLabel, formatIstTime, type PreworkState } from '@/lib/prework';
@@ -105,6 +106,7 @@ export default function StudentTimetable() {
   const [catchupPending, setCatchupPending] = useState(0);
   /** Work due BEFORE a class, with this student's submission and reason state. */
   const [prework, setPrework] = useState<PreworkItem[]>([]);
+  const [prep, setPrep] = useState<Record<string, ClassPrepSummaryClient>>({});
   const [preworkTarget, setPreworkTarget] = useState<PreworkItem | null>(null);
   const [preworkSubmitting, setPreworkSubmitting] = useState(false);
   const [preworkError, setPreworkError] = useState<string | null>(null);
@@ -158,9 +160,30 @@ export default function StudentTimetable() {
     severity: 'success',
   });
 
+  // Selected on teams_meeting_id, NOT on the join URL.
+  //
+  // The URL used to be the predicate, which meant a class whose gate is shut
+  // (server nulls both URL fields) silently lost its live strip entirely: the
+  // student would see nothing at all during the one window where the class is
+  // actually happening. Selecting on the meeting id keeps the strip and lets it
+  // render the locked variant with an explanation.
   const liveClass = !liveBannerDismissed
-    ? allClasses.find((c) => c.status === 'live' && (c.teams_meeting_join_url || c.teams_meeting_url))
+    ? allClasses.find(
+        (c) =>
+          c.status === 'live' &&
+          ((c as any).teams_meeting_id || c.teams_meeting_join_url || c.teams_meeting_url),
+      )
     : null;
+  const liveJoinUrl = liveClass
+    ? liveClass.teams_meeting_join_url || liveClass.teams_meeting_url || null
+    : null;
+  const livePrep = liveClass ? prep[liveClass.id] ?? null : null;
+  // Only the shut ones. The hero needs a cheap membership test, and an empty set
+  // is the correct answer for a student with no gated classes.
+  const prepShutIds = useMemo(
+    () => new Set(Object.entries(prep).filter(([, p]) => p.gated && !p.open).map(([id]) => id)),
+    [prep],
+  );
 
   /**
    * Load a whole month grid whatever the view shows, so paging weeks and
@@ -218,6 +241,9 @@ export default function StudentTimetable() {
         setOpenAbsences(data.openAbsences || []);
         setCatchupPending(data.catchupPending || 0);
         setPrework(data.prework || []);
+        // Keyed by class id, and absent for every class the gate never applied
+        // to, which is the overwhelming majority.
+        setPrep(data.prep || {});
         loadedRange.current = { start: fetchRange.start, end: fetchRange.end };
       }
     } catch (err) {
@@ -477,17 +503,31 @@ export default function StudentTimetable() {
       <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontWeight: 700 }}>
         {liveClass.title} is live now
       </Typography>
-      <Button
-        color="inherit"
-        size="small"
-        variant="outlined"
-        href={liveClass.teams_meeting_join_url || liveClass.teams_meeting_url || ''}
-        target="_blank"
-        rel="noopener noreferrer"
-        sx={{ fontWeight: 700, borderColor: 'currentColor', minHeight: 32, textTransform: 'none' }}
-      >
-        Join now
-      </Button>
+      {liveJoinUrl ? (
+        <Button
+          color="inherit"
+          size="small"
+          variant="outlined"
+          href={liveJoinUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{ fontWeight: 700, borderColor: 'currentColor', minHeight: 32, textTransform: 'none' }}
+        >
+          Join now
+        </Button>
+      ) : (
+        // No URL and a shut gate: say why, and point at the fix. The full
+        // PrepGateCard lives in the class panel, so this stays one tap wide.
+        <Button
+          color="inherit"
+          size="small"
+          variant="outlined"
+          onClick={() => setSelectedClass(liveClass)}
+          sx={{ fontWeight: 700, borderColor: 'currentColor', minHeight: 32, textTransform: 'none' }}
+        >
+          {livePrep && !livePrep.open ? 'Finish to join' : 'Open'}
+        </Button>
+      )}
       <IconButton
         size="small"
         color="inherit"
@@ -886,6 +926,7 @@ export default function StudentTimetable() {
             myRsvps={myRsvps}
             myRsvpReasons={myRsvpReasons}
             myAttendance={myAttendance}
+            prepShutIds={prepShutIds}
             onClassClick={setSelectedClass}
             onDecline={handleDecline}
             onCatchUp={handleCatchUp}
@@ -911,6 +952,10 @@ export default function StudentTimetable() {
           setSelectedClass(null);
           setPreworkTarget(item);
         }}
+        prep={selectedClass ? prep[selectedClass.id] ?? null : null}
+        // Forced refetch: a recorded reason changes the server's answer, and the
+        // cached range would otherwise keep showing the locked card.
+        onPrepChanged={() => fetchSchedule(true)}
         onRsvp={handleRsvp}
         onRate={handleOpenRate}
       />

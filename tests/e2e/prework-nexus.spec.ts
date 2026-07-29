@@ -139,7 +139,18 @@ test.describe('Nexus, pre-class work', () => {
     }
   });
 
-  test('pre-class work NEVER withholds the join link', async ({ request }) => {
+  /**
+   * This test used to be called "pre-class work NEVER withholds the join link"
+   * and asserted exactly that, unconditionally. The class prep gate reverses the
+   * rule, so the assertion had to change, but deleting it would throw away the
+   * guard on the part that did NOT change: the door is gated, never bolted.
+   *
+   * So it is now two tests. With the gate off, the old guarantee still holds
+   * exactly as written. With it on, withholding is expected AND a class whose
+   * blockers are outstanding must still be explained rather than silently
+   * stripped of its button.
+   */
+  test('with the gate off, pre-class work never withholds the join link', async ({ request }) => {
     const auth = await getTestAuthToken(request, 'student');
     if (!auth) {
       test.skip(true, 'Nexus dev server / test-login unavailable');
@@ -153,6 +164,15 @@ test.describe('Nexus, pre-class work', () => {
       return;
     }
     const body = await res.json();
+
+    // The gate announces itself through the `prep` map. Anything in it means the
+    // flag is on for this student, and the other test owns that case.
+    const gateArmed = Object.keys(body.prep || {}).length > 0;
+    if (gateArmed) {
+      test.skip(true, 'student.class-prep-gate is ON in this environment, see the gated test');
+      return;
+    }
+
     const blocked = (body.prework || []).filter(
       (p: any) => p.state === 'overdue_unanswered' || p.state === 'due_soon',
     );
@@ -160,17 +180,56 @@ test.describe('Nexus, pre-class work', () => {
       test.skip(true, 'No outstanding prework for this student right now');
       return;
     }
-    // Every class with outstanding prework must still hand over its meeting.
-    // This is the guard on the whole "loud prompt, open door" design.
     for (const p of blocked) {
       const cls = (body.classes || []).find((c: any) => c.id === p.class_id);
       expect(cls, 'the class carrying outstanding prework is still in the schedule').toBeTruthy();
       if (cls.teams_meeting_id) {
         expect(
           cls.teams_meeting_join_url || cls.teams_meeting_url,
-          'a class with unfinished prework still gives the student its join link',
+          'with the gate off, unfinished prework still gives the student its join link',
         ).toBeTruthy();
       }
+    }
+  });
+
+  test('with the gate on, a shut class is withheld AND explained', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'student');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const res = await request.get(`${NEXUS}/api/timetable/my-schedule`, {
+      headers: { Authorization: `Bearer ${auth.testToken}` },
+    });
+    if (res.status() !== 200) {
+      test.skip(true, 'Timetable unavailable for this account in this environment');
+      return;
+    }
+    const body = await res.json();
+
+    const shut = Object.entries(body.prep || {}).filter(([, p]: [string, any]) => p.gated && !p.open);
+    if (!shut.length) {
+      test.skip(true, 'No class with a shut prep gate for this student right now');
+      return;
+    }
+
+    for (const [classId, p] of shut as [string, any][]) {
+      const cls = (body.classes || []).find((c: any) => c.id === classId);
+      expect(cls, 'a gated class is still in the schedule').toBeTruthy();
+
+      // Withheld.
+      expect(cls.teams_meeting_join_url, 'a shut gate withholds the join url').toBeFalsy();
+      expect(cls.teams_meeting_url, 'a shut gate withholds the fallback url too').toBeFalsy();
+
+      // But explained. Gated-and-silent is the failure mode that reads as a
+      // broken app rather than as a rule, so the payload must carry a reason.
+      expect(p.blockers.length, 'a shut gate names what is outstanding').toBeGreaterThan(0);
+      for (const b of p.blockers) {
+        expect(['test_not_passed', 'prework_missing']).toContain(b);
+      }
+
+      // And never bolted: a reason is always available as the way through.
+      expect(p.reason_given, 'a class shut with a reason already given is a contradiction').toBe(false);
     }
   });
 });

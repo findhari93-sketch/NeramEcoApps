@@ -3,6 +3,7 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { loadPlanShapes } from '@/lib/plan-shape-query';
 import { classifyPrework, classEndIso } from '@/lib/prework';
+import { applyClassPrepGate } from '@/lib/class-prep-server';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name), classroom:nexus_classrooms!nexus_scheduled_classes_classroom_id_fkey(id, name, type)`;
 
@@ -322,6 +323,27 @@ export async function GET(request: NextRequest) {
       })
       .filter(Boolean);
 
+    // ── The class prep gate ───────────────────────────────────────────────
+    //
+    // One .in() query, folded in alongside everything else, so the cost does not
+    // grow with the class count. A per-class fetch here would be the exact
+    // anti-pattern this route's own docblock was written to kill.
+    //
+    // Stripping happens HERE, at the API boundary, and not in the components.
+    // ClassDetailPanel and UpNextHero are shared by teachers and students, so a
+    // server that hands the teacher the URL and the student null makes both
+    // correct with no role branching in the UI.
+    // Per CLASS, keyed on that class's own enrolment role. A user can be a
+    // student in one classroom and a teacher in another, so a request-level role
+    // would either strip a teacher's own classes or leak a student's.
+    const roleByClassroom = new Map<string, string>();
+    for (const e of enrollments) roleByClassroom.set(e.classroom_id, e.role);
+
+    const prep = await applyClassPrepGate(supabase as any, user.id, uniqueClasses as any, {
+      roleByClassroom,
+      impersonating: !!msUser.impersonatorUserId,
+    });
+
     return NextResponse.json({
       classes: uniqueClasses,
       classrooms: Array.from(classroomMap.values()),
@@ -332,6 +354,7 @@ export async function GET(request: NextRequest) {
       openAbsences,
       catchupPending,
       prework,
+      prep,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load schedule';

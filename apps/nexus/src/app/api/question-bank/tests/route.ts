@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
       shuffle: Boolean(shuffle),
       isPublished: is_published ?? false,
       isRepository: true,
+      // An unplaced repository test. It becomes practice_pool or class_prep only
+      // when someone places it, and those routes set the kind themselves.
+      testKind: 'classroom_assigned',
       createdBy: access.caller.id,
     });
 

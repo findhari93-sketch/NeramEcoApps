@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       perQuestionSeconds: per_question_seconds ?? null,
       isPublished: true, // immediately available to the student
       isRepository: false,
+      testKind: 'student_custom',
       createdBy: caller.id,
       createdByStudent: caller.id,
       classroomId: classroom_id ?? null,

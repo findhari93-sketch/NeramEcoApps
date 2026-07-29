@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, loadClassPrepStates } from '@neram/database';
 
 /**
  * GET /api/tests?classroom={id}
@@ -51,7 +51,17 @@ export async function GET(request: NextRequest) {
       if (error) throw error;
       return NextResponse.json({ tests: tests || [], role: 'teacher' });
     } else {
-      // Students see published non-custom tests + their own custom tests
+      // Students see published non-custom tests + their own custom tests.
+      //
+      // GATED KINDS ARE EXCLUDED, and this is a fix, not a precaution. Every
+      // catch-up class test is composed with a classroom_id, is_published and
+      // is_repository, and carries no classroom_assignment placement, so it used
+      // to arrive here, fall through to the "no assignment" branch on the student
+      // page, and render as "Assigned by your teacher" for the whole classroom.
+      // A student could then open it through /api/tests/attempt, which only
+      // validates a placement when the client supplies one, and so never checked
+      // test_unlocked_at at all. A gated test must be reachable ONLY through its
+      // own route, which re-derives the gate server side.
       const { data: publishedTests, error: pubErr } = await supabase
         .from('nexus_tests')
         .select('*, questions:nexus_test_questions(count)')
@@ -59,6 +69,7 @@ export async function GET(request: NextRequest) {
         .eq('is_published', true)
         .eq('is_active', true)
         .or('is_custom.is.null,is_custom.eq.false')
+        .not('test_kind', 'in', '("class_prep","catchup_class")')
         .order('created_at', { ascending: false });
 
       if (pubErr) throw pubErr;
@@ -146,7 +157,85 @@ export async function GET(request: NextRequest) {
         myAttempt: (attempts || []).find((a: any) => a.test_id === test.id) || null,
       }));
 
-      return NextResponse.json({ tests: testsWithAttempts, role: 'student' });
+      // Class prep tests, returned SEPARATELY and never merged into `tests`.
+      //
+      // Excluding them from the list above was necessary (a gated test opened
+      // through the legacy engine skips its own gate), but on its own it left the
+      // student with no way to find out a test exists before Wednesday's class
+      // except by opening that class. So they come back as their own list,
+      // carrying the class they belong to, and the page links to the class prep
+      // route rather than the generic take page.
+      const { data: prepPlacements } = await (supabase as any)
+        .from('nexus_test_placements')
+        .select('id, context_id, passing_pct, test_id')
+        .eq('context_type', 'class_prep_test')
+        .eq('is_active', true);
+
+      let classPrep: unknown[] = [];
+      const prepClassIds = (prepPlacements || []).map((p: any) => p.context_id);
+      if (prepClassIds.length > 0) {
+        // Scoped to THIS classroom and to classes that have not finished. A prep
+        // test for a class that already ran is not pre-class work anymore.
+        const todayIst = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+        const [{ data: prepClasses }, { data: prepTests }] = await Promise.all([
+          supabase
+            .from('nexus_scheduled_classes')
+            .select('id, title, scheduled_date, start_time, status')
+            .in('id', prepClassIds)
+            .eq('classroom_id', classroomId)
+            .gte('scheduled_date', todayIst)
+            .in('status', ['scheduled', 'live']),
+          (supabase as any)
+            .from('nexus_tests')
+            .select('id, title, total_marks, questions:nexus_test_questions(count)')
+            .in(
+              'id',
+              (prepPlacements || []).map((p: any) => p.test_id),
+            ),
+        ]);
+
+        // Typed as any: nexus_test_placements and nexus_tests.test_kind are not in
+        // database.generated.ts yet, so the inferred row type is {}.
+        const testById = new Map<string, any>((prepTests || []).map((t: any) => [t.id, t]));
+        const placementByClass = new Map<string, any>(
+          (prepPlacements || []).map((p: any) => [p.context_id, p]),
+        );
+
+        const prepStateRows = await loadClassPrepStates(
+          user.id,
+          (prepClasses || []).map((c: any) => c.id),
+          supabase as any,
+        );
+
+        classPrep = (prepClasses || [])
+          .map((cls: any) => {
+            const placement = placementByClass.get(cls.id);
+            const t = placement ? testById.get(placement.test_id) : null;
+            if (!t) return null;
+            const state = prepStateRows.get(cls.id);
+            const questionCount = t.questions?.[0]?.count ?? 0;
+            return {
+              class_id: cls.id,
+              class_title: cls.title,
+              scheduled_date: cls.scheduled_date,
+              start_time: cls.start_time,
+              test_id: t.id,
+              title: t.title,
+              question_count: questionCount,
+              passing_pct: placement.passing_pct ?? 70,
+              must_get_right: Math.ceil(((placement.passing_pct ?? 70) / 100) * questionCount),
+              best_pct: state?.test_best_pct ?? null,
+              attempts: state?.test_attempts ?? 0,
+              passed: !!state?.test_passed_at,
+            };
+          })
+          .filter(Boolean)
+          .sort((a: any, b: any) =>
+            `${a.scheduled_date}${a.start_time}`.localeCompare(`${b.scheduled_date}${b.start_time}`),
+          );
+      }
+
+      return NextResponse.json({ tests: testsWithAttempts, classPrep, role: 'student' });
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load tests';

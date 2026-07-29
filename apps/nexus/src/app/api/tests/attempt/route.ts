@@ -39,6 +39,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Test not found or not available' }, { status: 404 });
     }
 
+    // Gated kinds are refused outright, and this closes a live hole rather than
+    // guarding a hypothetical one.
+    //
+    // A catch-up class test is composed with a classroom_id and is_published, so
+    // it used to be listable and openable here, and this route only validates a
+    // placement when the CLIENT supplies one. That meant a student could take a
+    // catch-up test through this engine without its test_unlocked_at check ever
+    // running, and a prep test without recomputeClassPrep ever firing, so they
+    // would pass and stay locked out.
+    //
+    // Not fixed by teaching this route about gating: it 409s on resubmit (which
+    // is incompatible with retry-until-pass), its abandon path writes a status
+    // the CHECK rejects, and it has no placement side-effects. Three graders that
+    // must agree is how the numerical bug survived this long.
+    // Cast because nexus_tests.test_kind is not in database.generated.ts yet.
+    const testKind = (test as any).test_kind as string | undefined;
+    if (testKind === 'class_prep' || testKind === 'catchup_class') {
+      return NextResponse.json(
+        {
+          error: 'Open this test from the class it belongs to.',
+          code: 'WRONG_ENGINE',
+        },
+        { status: 403 },
+      );
+    }
+
     // Check availability window
     const now = new Date();
     if (test.available_from && new Date(test.available_from) > now) {

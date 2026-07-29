@@ -51,6 +51,8 @@ import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import { type ClassCardData } from './ClassCard';
 import MeetingRecap from './MeetingRecap';
 import ClassAssignmentsSection from './ClassAssignmentsSection';
+import PrepGateCard, { type ClassPrepSummaryClient } from './PrepGateCard';
+import ClassPrepRoster from './ClassPrepRoster';
 import ClassCaptureView from './ClassCaptureView';
 import { buildClassWhatsAppMessage } from '@/lib/class-share-message';
 import { preworkDueLabel } from '@/lib/prework';
@@ -109,6 +111,16 @@ interface ClassDetailPanelProps {
   assignmentsEditable?: boolean;
   onLinkAssignment?: (cls: ClassCardData) => void;
   onCreateAssignment?: (cls: ClassCardData) => void;
+  /**
+   * This class's entry from the `prep` map the student class routes return.
+   * Absent means the class was never gated, which is the common case and must
+   * behave exactly as it did before the gate existed.
+   */
+  prep?: ClassPrepSummaryClient | null;
+  /** Refetch after a reason is recorded, so the panel reflects the open door. */
+  onPrepChanged?: () => void;
+  /** Teacher side: bump to refetch the readiness roster. */
+  prepRosterKey?: number;
   // Actions
   onEdit?: (cls: ClassCardData) => void;
   onDelete?: (classId: string) => void;
@@ -212,6 +224,9 @@ export default function ClassDetailPanel({
   assignmentsEditable,
   onLinkAssignment,
   onCreateAssignment,
+  prep,
+  onPrepChanged,
+  prepRosterKey,
   onEdit,
   onDelete,
   onDeletePermanent,
@@ -252,6 +267,10 @@ export default function ClassDetailPanel({
   // "Completed" even if its stored status is still "scheduled".
   const displayStatus = isCancelled ? 'cancelled' : isPast ? 'completed' : cls.status;
   const meetingUrl = cls.teams_meeting_join_url || cls.teams_meeting_url;
+  // The gate is shut for this viewer. The server has already nulled meetingUrl in
+  // that case, so this only decides whether we can EXPLAIN the absence instead of
+  // showing a class with no button and no reason why.
+  const prepShut = !!prep?.gated && !prep.open;
   const hasRecording = !!cls.recording_url;
   // Whether the class actually reached anybody's calendar. Derived from the event
   // id, never from teams_meeting_scope: the scope is written on the failure path
@@ -432,6 +451,13 @@ export default function ClassDetailPanel({
 
         {/* RSVP summary for teachers, upcoming classes: RSVP is the only number
             that means anything before the class has happened. */}
+        {/* Who is ready. Above the RSVP strip because "did the work" is the newer
+            and more actionable question ten minutes before a class than "said
+            they were coming". Self-hiding when nothing was asked of anybody. */}
+        {role === 'teacher' && (
+          <ClassPrepRoster classId={cls.id} getToken={getToken} refreshKey={prepRosterKey} />
+        )}
+
         {role === 'teacher' && rsvpSummary && isUpcoming && (
           <Box
             sx={{
@@ -591,6 +617,15 @@ export default function ClassDetailPanel({
             )
           )}
 
+          {/* The prep gate, when it is shut. Rendered INSTEAD of Join, not
+              alongside a disabled one: a greyed button says nothing about what to
+              do next, and this card is entirely about what to do next.
+              The server has already stripped meetingUrl, so the Join block below
+              cannot render at the same time. */}
+          {isUpcoming && !isCancelled && prepShut && prep && (
+            <PrepGateCard classId={cls.id} prep={prep} getToken={getToken} onChanged={onPrepChanged} />
+          )}
+
           {/* Join meeting + Copy Link */}
           {isUpcoming && !isCancelled && meetingUrl && (
             <Box sx={{ display: 'flex', gap: 1 }}>
@@ -604,6 +639,10 @@ export default function ClassDetailPanel({
               >
                 Join in Teams
               </Button>
+              {/* Copy is suppressed while the gate is shut for this student.
+                  Handing over the URL through a copy button would make the whole
+                  gate decorative. Teachers are unaffected: they still receive
+                  meetingUrl from the server, so prepShut is false for them. */}
               <IconButton
                 onClick={handleCopyLink}
                 sx={{

@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
         .from('users')
         .select('id, name, email, linked_classroom_email, avatar_url, ms_oid')
         .eq('user_type', 'student')
+        .eq('is_alumni', false)
         .not('ms_oid', 'is', null)
         // Hide synthetic E2E test accounts (e2e-<purpose>@…). Anchored on the dash
         // so the canonical e2etesting* account stays selectable for impersonation.
@@ -108,12 +109,19 @@ export async function GET(request: NextRequest) {
     // ---- Teacher: students in classrooms they teach ----
     const { data: myTeacherClassrooms } = await supabase
       .from('nexus_enrollments')
-      .select('classroom_id, classroom:nexus_classrooms(id, name)')
+      .select('classroom_id, classroom:nexus_classrooms(id, name, is_active, is_archived)')
       .eq('user_id', caller.id)
       .eq('role', 'teacher')
       .eq('is_active', true);
 
-    const teacherClassroomIds = (myTeacherClassrooms || []).map((e: any) => e.classroom_id);
+    // A classroom's own is_active/is_archived flags aren't mirrored onto its
+    // enrollments (see /api/auth/me), so an archived or disabled classroom
+    // would otherwise keep surfacing its (stale) roster here indefinitely.
+    const teacherClassroomIds = (myTeacherClassrooms || [])
+      .filter(
+        (e: any) => e.classroom && e.classroom.is_active !== false && e.classroom.is_archived !== true
+      )
+      .map((e: any) => e.classroom_id);
     if (teacherClassroomIds.length === 0) {
       return NextResponse.json({ students: [] });
     }
@@ -147,6 +155,7 @@ export async function GET(request: NextRequest) {
       .select('id, name, email, linked_classroom_email, avatar_url, ms_oid')
       .in('id', studentIds)
       .eq('user_type', 'student')
+      .eq('is_alumni', false)
       .not('ms_oid', 'is', null)
       // Hide synthetic E2E test accounts (e2e-<purpose>@…). Anchored on the dash
       // so the canonical e2etesting* account stays selectable for impersonation.

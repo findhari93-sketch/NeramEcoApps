@@ -6,6 +6,8 @@ import type {
   LibraryCollection,
   LibraryBookmark,
   LibraryWatchHistory,
+  LibrarySearchResult,
+  LibraryTopicCount,
 } from '../../types';
 
 // ============================================
@@ -62,21 +64,88 @@ export async function getPublishedVideos(
   return { videos: (data || []) as LibraryVideo[], total: count || 0 };
 }
 
+/**
+ * Fetch one video.
+ *
+ * These queries run on the admin client with RLS bypassed, so `is_published`
+ * is the only thing standing between a student and an unreviewed video. Pass
+ * `publishedOnly` from any student-facing caller; the review queue and other
+ * staff tooling leave it off deliberately.
+ */
 export async function getVideoById(
   videoId: string,
+  options?: { publishedOnly?: boolean },
   client?: TypedSupabaseClient
 ) {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('library_videos')
     .select('*')
-    .eq('id', videoId)
-    .single();
+    .eq('id', videoId);
+  if (options?.publishedOnly) query = query.eq('is_published', true);
+  const { data, error } = await query.single();
   if (error) {
     if (error.code === 'PGRST116') return null;
     throw error;
   }
   return data as LibraryVideo;
+}
+
+/**
+ * Search the Library.
+ *
+ * Everything that makes search feel smart lives in the library_search RPC:
+ * weighted full text over title, topics and description, canonical tag
+ * expansion so "vanishing point" finds every perspective class, and a
+ * word_similarity fallback for typos. Keeping it in one SQL function means one
+ * round trip, one place to test the ranking, and no chance of the browse path
+ * and the search path disagreeing about what is visible.
+ *
+ * getPublishedVideos still handles plain browsing with no query.
+ */
+export async function searchVideos(
+  filters: {
+    query?: string;
+    category?: string;
+    exam?: string;
+    language?: string;
+    difficulty?: string;
+    limit?: number;
+    offset?: number;
+  },
+  client?: TypedSupabaseClient
+) {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await (supabase as any).rpc('library_search', {
+    p_query: filters.query?.trim() || null,
+    p_exam: filters.exam || null,
+    p_language: filters.language || null,
+    p_category: filters.category || null,
+    p_difficulty: filters.difficulty || null,
+    p_limit: filters.limit ?? 20,
+    p_offset: filters.offset ?? 0,
+  });
+  if (error) throw error;
+
+  const rows = (data || []) as LibrarySearchResult[];
+  return {
+    videos: rows,
+    // The RPC repeats the windowed total on every row, so an empty page
+    // legitimately means zero.
+    total: rows.length ? Number(rows[0].total_count) : 0,
+    // 'fuzzy' means nothing matched literally and these are near misses, which
+    // the results page says out loud rather than pretending it understood.
+    matchKind: rows.length ? rows[0].match_kind : null,
+    matchedTopics: rows.length ? rows[0].matched_topics : [],
+  };
+}
+
+/** Topics with published videos behind them, for the discovery chips. */
+export async function getTopicCounts(limit = 20, client?: TypedSupabaseClient) {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await (supabase as any).rpc('library_topic_counts', { p_limit: limit });
+  if (error) throw error;
+  return (data || []) as LibraryTopicCount[];
 }
 
 export async function getVideosByCategory(

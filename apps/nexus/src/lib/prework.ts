@@ -2,10 +2,21 @@
  * Pre-class work: the rules, in one place.
  *
  * "Prework" is an assignment a student is meant to finish BEFORE the class it is
- * attached to. The deadline is not an enforcement mechanism, nobody is ever
- * locked out of a class over homework. It is the moment we ask, because a
- * student who says "I did not understand the task" three hours before the class
- * has handed the teacher something they can act on in the class itself.
+ * attached to. The deadline is the moment we ask, because a student who says "I
+ * did not understand the task" three hours before the class has handed the
+ * teacher something they can act on in the class itself.
+ *
+ * This file used to say the deadline was never an enforcement mechanism and
+ * nobody was ever locked out of a class over homework. That changed: prework is
+ * now half of the class prep gate, alongside the short test, and an unmet gate
+ * withholds the Join link. See class-prep-gate.ts for the rule.
+ *
+ * What has NOT changed is the reason the old rule existed. Locking a student out
+ * of a class over homework converts a homework problem into an attendance
+ * problem, so the door is gated but never bolted: giving a reason opens it
+ * immediately and the blockers stay on the record for the teacher. The functions
+ * in this file still answer "should we ask now", which is a different question
+ * from "may they join" and must not be used to decide the latter.
  *
  * Pure functions, no framework, no fetching, so the schedule API, the afternoon
  * sweep and the student page all classify a piece of work identically. If the

@@ -1,4 +1,5 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { expandQBCategorySlugs } from './qb-tags';
 import type {
   QBQuestionFormat,
   QBDifficulty,
@@ -233,7 +234,11 @@ export async function getQBTopicCounts(
 
 /**
  * Get count of active questions per category, optionally filtered by exam context.
- * Unnests the categories array and counts per value.
+ *
+ * Backed by the nexus_qb_category_counts RPC (see 20260801090100). This used to
+ * build a SQL string and call a non-existent `exec_sql` RPC, which meant it
+ * always failed over to the JS fallback below and silently truncated at
+ * PostgREST's 1000-row default, under-reporting every count students saw.
  */
 export async function getQBCategoryCounts(
   filters?: { exam_type?: QBExamType; source_year?: number; source_session?: string },
@@ -241,64 +246,61 @@ export async function getQBCategoryCounts(
 ): Promise<Record<string, number>> {
   const supabase = client || getSupabaseAdminClient();
 
-  let sql: string;
-  if (filters?.exam_type) {
-    // Filter by exam source
-    const conditions: string[] = [
-      `s.exam_type = '${filters.exam_type}'`,
-    ];
-    if (filters.source_year) conditions.push(`s.year = ${filters.source_year}`);
-    if (filters.source_session) {
-      const parsed = parseSessionKey(filters.source_session);
-      conditions.push(`s.session = '${parsed.session.replace(/'/g, "''")}'`);
-      if (parsed.shift) {
-        conditions.push(`s.shift = '${parsed.shift}'`);
-      }
-    }
-
-    sql = `
-      SELECT cat, COUNT(DISTINCT q.id) as cnt
-      FROM nexus_qb_questions q
-      JOIN nexus_qb_question_sources s ON s.question_id = q.id
-      CROSS JOIN LATERAL unnest(q.categories) AS cat
-      WHERE q.is_active = true AND q.status = 'active'
-        AND ${conditions.join(' AND ')}
-      GROUP BY cat
-      ORDER BY cnt DESC
-    `;
-  } else {
-    // No filter — all active questions
-    sql = `
-      SELECT cat, COUNT(DISTINCT q.id) as cnt
-      FROM nexus_qb_questions q
-      CROSS JOIN LATERAL unnest(q.categories) AS cat
-      WHERE q.is_active = true AND q.status = 'active'
-      GROUP BY cat
-      ORDER BY cnt DESC
-    `;
+  let session: string | null = null;
+  let shift: string | null = null;
+  if (filters?.source_session) {
+    const parsed = parseSessionKey(filters.source_session);
+    session = parsed.session;
+    shift = parsed.shift || null;
   }
 
-  const { data, error } = await supabase.rpc('exec_sql' as any, { query: sql }) as any;
-  // Fallback: if rpc doesn't work, try via .from with raw
+  const { data, error } = (await supabase.rpc('nexus_qb_category_counts' as any, {
+    p_exam_type: filters?.exam_type ?? null,
+    p_year: filters?.source_year ?? null,
+    p_session: session,
+    p_shift: shift,
+  })) as any;
+
   if (error) {
-    // Use direct fetch to Supabase REST
-    // Fallback: fetch all categories and count client-side
     return getQBCategoryCountsFallback(filters, supabase);
   }
 
+  // self_count only: the flat map is the per-chip count. Parent rollups are
+  // consumed via getQBSubjectTagTree, which reads rollup_count from the same RPC.
   const counts: Record<string, number> = {};
   for (const row of data || []) {
-    counts[row.cat] = parseInt(row.cnt, 10);
+    const n = Number(row.self_count) || 0;
+    if (n > 0) counts[row.slug] = n;
   }
   return counts;
 }
 
-/** Fallback: fetch categories for all matching questions and count client-side. */
+/**
+ * Fallback: fetch categories for all matching questions and count client-side.
+ *
+ * Pages in 1000-row chunks. An unpaged select here silently stops at PostgREST's
+ * default limit and returns counts that look plausible but are short, which is
+ * exactly how the broken exec_sql path went unnoticed.
+ */
 async function getQBCategoryCountsFallback(
   filters?: { exam_type?: QBExamType; source_year?: number; source_session?: string },
   client?: TypedSupabaseClient
 ): Promise<Record<string, number>> {
   const supabase = client || getSupabaseAdminClient();
+
+  const PAGE = 1000;
+  async function fetchAll<T>(query: any): Promise<T[]> {
+    let all: T[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await query.range(offset, offset + PAGE - 1);
+      if (error) throw error;
+      all = all.concat((data || []) as T[]);
+      if (!data || data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  }
 
   let questionIds: string[] | null = null;
 
@@ -316,9 +318,8 @@ async function getQBCategoryCountsFallback(
       }
     }
 
-    const { data: sourceData, error: sourceError } = await sourceQuery;
-    if (sourceError) throw sourceError;
-    questionIds = [...new Set((sourceData || []).map((s: any) => s.question_id))];
+    const sourceData = await fetchAll<any>(sourceQuery);
+    questionIds = [...new Set(sourceData.map((s: any) => s.question_id))];
     if (questionIds.length === 0) return {};
   }
 
@@ -332,11 +333,10 @@ async function getQBCategoryCountsFallback(
     query = query.in('id', questionIds);
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
+  const data = await fetchAll<any>(query);
 
   const counts: Record<string, number> = {};
-  for (const row of data || []) {
+  for (const row of data) {
     const cats = (row as any).categories as string[] | null;
     if (!cats) continue;
     for (const cat of cats) {
@@ -377,7 +377,11 @@ export async function getQBQuestions(
     query = query.eq('exam_relevance', filters.exam_relevance);
   }
   if (filters.categories && filters.categories.length > 0) {
-    query = query.overlaps('categories', filters.categories);
+    // Parent slugs (coordinate_geometry, algebra, ...) are never written onto a
+    // question, so expand them into their leaves. The client already does this;
+    // repeating it here is idempotent and makes a hand-typed or bookmarked
+    // ?cat=coordinate_geometry correct too. .overlaps is Postgres && (OR).
+    query = query.overlaps('categories', await expandQBCategorySlugs(filters.categories, supabase));
   }
   if (filters.difficulty && filters.difficulty.length > 0) {
     query = query.in('difficulty', filters.difficulty);
@@ -468,6 +472,57 @@ export async function getQBQuestions(
     query = query.in('id', tagFilteredIds);
   }
 
+  // Attempt-status filter, resolved into the query rather than applied to the
+  // page afterwards.
+  //
+  // This used to filter `result` after pagination and then scale `total` by the
+  // surviving ratio, which meant a student could see 3 rows while the pager
+  // claimed 8 pages, and page 2 would re-filter a different slice. Turning it
+  // into an id constraint before .range() makes both the rows and the count
+  // exact.
+  if (studentId && filters.attempt_status && filters.attempt_status !== 'all') {
+    const attempted = new Set<string>();
+    const everCorrect = new Set<string>();
+
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('nexus_qb_student_attempts')
+        .select('question_id, is_correct')
+        .eq('student_id', studentId)
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      for (const row of (data || []) as any[]) {
+        attempted.add(row.question_id);
+        if (row.is_correct) everCorrect.add(row.question_id);
+      }
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    if (filters.attempt_status === 'correct') {
+      if (everCorrect.size === 0) return { questions: [], total: 0 };
+      query = query.in('id', [...everCorrect]);
+    } else if (filters.attempt_status === 'incorrect') {
+      // Attempted at least once, never got it right.
+      const wrongOnly = [...attempted].filter((id) => !everCorrect.has(id));
+      if (wrongOnly.length === 0) return { questions: [], total: 0 };
+      query = query.in('id', wrongOnly);
+    } else if (filters.attempt_status === 'unattempted' && attempted.size > 0) {
+      // A NOT IN list is only viable while it stays URL-sized. Past that the
+      // filter is skipped rather than silently returning a wrong page, and the
+      // caller still gets a correct (unfiltered) result set.
+      if (attempted.size <= 2000) {
+        query = query.not('id', 'in', `(${[...attempted].join(',')})`);
+      } else {
+        console.warn(
+          `[QB] unattempted filter skipped: student ${studentId} has ${attempted.size} attempted questions`,
+        );
+      }
+    }
+  }
+
   // Order and paginate
   query = query
     .order('display_order', { ascending: true, nullsFirst: false })
@@ -548,37 +603,16 @@ export async function getQBQuestions(
   }
 
   // --- Assemble list items ---
-  let result: NexusQBQuestionListItem[] = questions.map(q => ({
+  const result: NexusQBQuestionListItem[] = questions.map(q => ({
     ...q,
     sources: sourcesMap.get(q.id) || [],
     topic: q.topic_id ? topicMap.get(q.topic_id) || null : null,
     attempt_summary: attemptMap.get(q.id) || null,
   }));
 
-  // --- Post-filter by attempt_status ---
-  let total = count || 0;
-
-  if (studentId && filters.attempt_status && filters.attempt_status !== 'all') {
-    const beforeCount = result.length;
-    switch (filters.attempt_status) {
-      case 'unattempted':
-        result = result.filter(q => !q.attempt_summary);
-        break;
-      case 'correct':
-        result = result.filter(q => q.attempt_summary?.best_result === true);
-        break;
-      case 'incorrect':
-        result = result.filter(
-          q => q.attempt_summary && q.attempt_summary.best_result === false
-        );
-        break;
-    }
-    // Adjust total estimate (approximation since we can't know server-side count)
-    const filterRatio = beforeCount > 0 ? result.length / beforeCount : 0;
-    total = Math.round(total * filterRatio);
-  }
-
-  return { questions: result, total };
+  // attempt_status was already applied as an id constraint before pagination,
+  // so `count` is exact and needs no adjustment.
+  return { questions: result, total: count || 0 };
 }
 
 // ============================================
@@ -716,6 +750,77 @@ export function checkQBAnswer(
     default:
       return false;
   }
+}
+
+// ============================================
+// STRICT GRADING (composed tests)
+// ============================================
+
+/** Formats a machine can actually mark. Everything else needs a human. */
+const GRADABLE_FORMATS = new Set(['MCQ', 'NUMERICAL']);
+
+/**
+ * Normalise a question format to the bank's uppercase vocabulary.
+ *
+ * Legacy nexus_verified_questions rows carry `question_type` from a lowercase
+ * CHECK ('mcq', 'true_false', 'short_answer', 'drawing', 'numerical'), and
+ * getComposedTestQuestions passes whichever field it finds straight through. So
+ * a legacy MCQ arrives here as 'mcq', falls through checkQBAnswer's `default`,
+ * and is marked wrong no matter what the student picked.
+ */
+export function normaliseQuestionFormat(format: string | null | undefined): string {
+  const raw = String(format || '').trim().toUpperCase();
+  switch (raw) {
+    case 'MCQ':
+    case 'NUMERICAL':
+    case 'IMAGE_BASED':
+      return raw;
+    case 'DRAWING':
+    case 'DRAWING_PROMPT':
+      return 'DRAWING_PROMPT';
+    // true_false and short_answer have no machine answer key in this engine.
+    default:
+      return raw || 'MCQ';
+  }
+}
+
+export function isGradableFormat(format: string | null | undefined): boolean {
+  return GRADABLE_FORMATS.has(normaliseQuestionFormat(format));
+}
+
+/**
+ * Grade one answer inside a composed test.
+ *
+ * Returns `null`, NEVER `true`, for anything a machine cannot mark. That is the
+ * entire reason this exists rather than reusing checkQBAnswer, which returns
+ * `true` unconditionally for DRAWING_PROMPT and IMAGE_BASED because single
+ * question practice self-assesses. Reusing it in a graded test would hand full
+ * marks to anyone who pressed submit.
+ *
+ * checkQBAnswer keeps its lenient behaviour: submitQBAttempt depends on it.
+ */
+export function gradeQBAnswerStrict(
+  format: string | null | undefined,
+  studentAnswer: string | null | undefined,
+  correctAnswer: string | null | undefined,
+  tolerance?: number | null,
+): boolean | null {
+  const fmt = normaliseQuestionFormat(format);
+  if (!GRADABLE_FORMATS.has(fmt)) return null;
+  if (studentAnswer == null || correctAnswer == null) return false;
+
+  if (fmt === 'MCQ') {
+    return studentAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+  }
+
+  // NUMERICAL. Compared as numbers, so '3.0' matches '3', which the strict ===
+  // this replaces got wrong. tolerance null means exact numeric equality, not
+  // exact string equality.
+  const studentVal = parseFloat(studentAnswer.trim());
+  const correctVal = parseFloat(correctAnswer.trim());
+  if (!Number.isFinite(studentVal) || !Number.isFinite(correctVal)) return false;
+  const tol = Math.abs(Number(tolerance) || 0);
+  return Math.abs(studentVal - correctVal) <= tol;
 }
 
 /**
@@ -1638,7 +1743,11 @@ export async function getTeacherQBQuestions(
     query = query.eq('exam_relevance', filters.exam_relevance);
   }
   if (filters.categories && filters.categories.length > 0) {
-    query = query.overlaps('categories', filters.categories);
+    // Parent slugs (coordinate_geometry, algebra, ...) are never written onto a
+    // question, so expand them into their leaves. The client already does this;
+    // repeating it here is idempotent and makes a hand-typed or bookmarked
+    // ?cat=coordinate_geometry correct too. .overlaps is Postgres && (OR).
+    query = query.overlaps('categories', await expandQBCategorySlugs(filters.categories, supabase));
   }
   if (filters.difficulty && filters.difficulty.length > 0) {
     query = query.in('difficulty', filters.difficulty);

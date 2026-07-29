@@ -18,6 +18,8 @@ import {
   DialogActions,
   Button,
   CircularProgress,
+  Autocomplete,
+  TextField,
 } from '@neram/ui';
 import SchoolIcon from '@mui/icons-material/School';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -320,6 +322,11 @@ export default function StudentsPage() {
   const [entraResults, setEntraResults] = useState<any>(null);
   const [entraCourseMap, setEntraCourseMap] = useState<Record<string, string>>({});
   const [entraSelected, setEntraSelected] = useState<Set<string>>(new Set());
+  // Manual Entra-account -> existing-student links, keyed by msOid. Lets the admin
+  // attach a new mailbox to a student the reconciler could not match on its own,
+  // instead of being forced into "enroll" (which inserts a duplicate row).
+  const [entraLinkCandidates, setEntraLinkCandidates] = useState<any[]>([]);
+  const [entraLinkMap, setEntraLinkMap] = useState<Record<string, string>>({});
   const [refreshingEntra, setRefreshingEntra] = useState(false);
 
   // Sync current batch → the single classroom + linked Team + group chat
@@ -590,6 +597,8 @@ export default function StudentsPage() {
       });
       setEntraCourseMap(courseMap);
       setEntraSelected(selected);
+      setEntraLinkCandidates(data.linkCandidates || []);
+      setEntraLinkMap({});
     } catch (err: any) {
       setError(err.message || 'Failed to fetch from Entra');
     } finally {
@@ -633,8 +642,9 @@ export default function StudentsPage() {
         name: s.name,
         course: entraCourseMap[s.msOid],
         // When the picker found an existing student (their Google row), link this
-        // Entra account onto it explicitly instead of creating a duplicate.
-        linkUserId: s.suggestedMatch?.id,
+        // Entra account onto it explicitly instead of creating a duplicate. An
+        // explicit choice by the admin always wins over the auto-suggestion.
+        linkUserId: entraLinkMap[s.msOid] || s.suggestedMatch?.id,
       }));
 
     if (studentsToEnroll.length === 0) return;
@@ -1189,9 +1199,22 @@ export default function StudentsPage() {
                         <Box>
                           <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
                           <Typography variant="caption" color="text.secondary">{s.email}</Typography>
-                          {s.suggestedMatch && (
+                          {s.suggestedMatch && !entraLinkMap[s.msOid] && (
                             <Typography variant="caption" sx={{ display: 'block', color: 'success.main', fontWeight: 600 }}>
                               Links to existing student: {s.suggestedMatch.name || s.suggestedMatch.email} (matched by {s.suggestedMatch.matchedBy})
+                            </Typography>
+                          )}
+                          {!s.suggestedMatch && !entraLinkMap[s.msOid] && (
+                            <Typography variant="caption" sx={{ display: 'block', color: 'warning.main', fontWeight: 600 }}>
+                              No existing student matched. Enrolling creates a NEW record, pick the student below if they already exist.
+                            </Typography>
+                          )}
+                          {entraLinkMap[s.msOid] && (
+                            <Typography variant="caption" sx={{ display: 'block', color: 'success.main', fontWeight: 600 }}>
+                              Will link to: {(() => {
+                                const c = entraLinkCandidates.find((x: any) => x.id === entraLinkMap[s.msOid]);
+                                return c ? (c.name || c.email) : 'selected student';
+                              })()} (chosen manually)
                             </Typography>
                           )}
                         </Box>
@@ -1212,6 +1235,40 @@ export default function StudentsPage() {
                         <MenuItem value="both" sx={{ fontSize: 12 }}>Both</MenuItem>
                       </Select>
                     </Box>
+
+                    {/* Manual link. Only rows with no auto-match need it, and only
+                        while selected. Choosing a student here attaches this Entra
+                        account to that existing record instead of inserting a new
+                        one, which is the duplicate the reconciler cannot prevent
+                        when the two rows share no phone, email or classroom email. */}
+                    {entraSelected.has(s.msOid) && !s.suggestedMatch && (
+                      <Box sx={{ mt: 1 }} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                        <Autocomplete
+                          size="small"
+                          options={entraLinkCandidates}
+                          value={entraLinkCandidates.find((c: any) => c.id === entraLinkMap[s.msOid]) || null}
+                          getOptionLabel={(o: any) =>
+                            `${o.name || '(no name)'} — ${o.email || o.personalEmail || 'no email'}${o.phone ? ` — ${o.phone}` : ''}`
+                          }
+                          isOptionEqualToValue={(o: any, v: any) => o.id === v?.id}
+                          onChange={(_e: unknown, picked: any) => {
+                            setEntraLinkMap((prev) => {
+                              const next = { ...prev };
+                              if (picked?.id) next[s.msOid] = picked.id;
+                              else delete next[s.msOid];
+                              return next;
+                            });
+                          }}
+                          renderInput={(params: any) => (
+                            <TextField
+                              {...params}
+                              label="Link to existing student (optional)"
+                              placeholder="Search by name, email or phone"
+                            />
+                          )}
+                        />
+                      </Box>
+                    )}
                   </Paper>
                 ))}
 

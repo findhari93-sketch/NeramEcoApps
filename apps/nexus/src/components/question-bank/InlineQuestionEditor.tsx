@@ -39,8 +39,8 @@ import type {
   NexusQBQuestionOption,
 } from '@neram/database';
 import {
-  QB_CATEGORIES,
   QB_CATEGORY_LABELS,
+  groupQBCategories,
   QB_EXAM_TYPE_LABELS,
   QB_QUESTION_STATUS_LABELS,
   QB_QUESTION_STATUS_COLORS,
@@ -560,17 +560,32 @@ export default function InlineQuestionEditor({
             <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
               Categories
             </Typography>
-            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 2 }}>
-              {QB_CATEGORIES.map((cat) => (
-                <Chip
-                  key={cat}
-                  label={QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS] || cat}
-                  size="small"
-                  variant={form.categories.includes(cat) ? 'filled' : 'outlined'}
-                  color={form.categories.includes(cat) ? 'primary' : 'default'}
-                  onClick={() => toggleCategory(cat)}
-                  sx={{ fontSize: '0.7rem', cursor: 'pointer' }}
-                />
+            {/* Grouped rather than one flat wall of 58 chips. Sections mirror
+                the subject hierarchy in nexus_qb_tags. */}
+            <Box sx={{ mb: 2 }}>
+              {groupQBCategories().map((group) => (
+                <Box key={group.label} sx={{ mb: 1 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.disabled"
+                    sx={{ display: 'block', fontWeight: 600, mb: 0.25 }}
+                  >
+                    {group.label}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                    {group.categories.map((cat) => (
+                      <Chip
+                        key={cat}
+                        label={QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS] || cat}
+                        size="small"
+                        variant={form.categories.includes(cat) ? 'filled' : 'outlined'}
+                        color={form.categories.includes(cat) ? 'primary' : 'default'}
+                        onClick={() => toggleCategory(cat)}
+                        sx={{ fontSize: '0.7rem', cursor: 'pointer' }}
+                      />
+                    ))}
+                  </Box>
+                </Box>
               ))}
             </Box>
 

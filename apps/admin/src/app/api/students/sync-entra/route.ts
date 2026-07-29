@@ -145,6 +145,39 @@ export async function GET() {
       }
     }
 
+    // Link candidates: every active person who holds NO Microsoft account yet. That
+    // is the only pool an Entra account may legitimately attach to, and it is small,
+    // so the dialog can offer it as a manual dropdown for accounts the reconciler
+    // could not match by itself.
+    //
+    // Automatic reconciliation needs a shared key (ms_oid, classroom email, UPN,
+    // phone, or a Graph otherMails entry). A student who signed in with Google and
+    // whose phone was never captured on their user row shares NONE of those with a
+    // freshly created mailbox, and their Entra display name is often a different
+    // surname than their Google name, so nothing can match them. Before this the
+    // admin's only available action was "enroll", which inserted a duplicate
+    // student row. See the Chetana duplicate, 2026-07-28.
+    const { data: linkable } = await supabase
+      .from('users')
+      .select('id, name, email, personal_email, phone, user_type, created_at')
+      .is('ms_oid', null)
+      .in('user_type', ['student', 'lead'])
+      // NULL counts as active on both flags: older rows predate these columns, and
+      // silently hiding a candidate is what forces the duplicate in the first place.
+      .or('lifecycle_status.is.null,lifecycle_status.eq.active')
+      .or('is_alumni.is.null,is_alumni.eq.false')
+      .order('created_at', { ascending: false })
+      .limit(300);
+
+    const linkCandidates = (linkable || []).map((u: any) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      personalEmail: u.personal_email || null,
+      phone: u.phone || null,
+      userType: u.user_type,
+    }));
+
     // Sort: needs setup first, then by name
     students.sort((a: any, b: any) => {
       if (a.needsSetup !== b.needsSetup) return a.needsSetup ? -1 : 1;
@@ -154,6 +187,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       students,
+      linkCandidates,
       summary: {
         totalInEntra: students.length,
         alreadyInNexus: students.filter((s: any) => !s.needsSetup).length,

@@ -5,7 +5,9 @@ import { getVideoById } from '@neram/database/queries/nexus';
 /**
  * GET /api/library/videos/[id]
  *
- * Get a single video by ID.
+ * Get a single video by ID. Student-facing, so it only ever returns published
+ * videos: the query runs with the service-role client, and without this an
+ * unreviewed or rejected video was playable by anyone holding its UUID.
  */
 export async function GET(
   request: NextRequest,
@@ -16,7 +18,7 @@ export async function GET(
 
     const { id } = await params;
 
-    const video = await getVideoById(id);
+    const video = await getVideoById(id, { publishedOnly: true });
 
     if (!video) {
       return NextResponse.json({ error: 'Video not found' }, { status: 404 });

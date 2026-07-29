@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
@@ -33,12 +33,14 @@ import InlineQuestionCard from '@/components/question-bank/InlineQuestionCard';
 import FilterDrawer from '@/components/question-bank/FilterDrawer';
 import { countActiveFilters } from '@/components/question-bank/FilterChips';
 import SwipeableQuestionCard from '@/components/question-bank/SwipeableQuestionCard';
+import { expandCategories, categoryLabelMap } from '@/lib/qb-category-tree';
 import type {
   QBExamTree,
   QBFilterState,
   NexusQBQuestionListItem,
   NexusQBQuestionDetail,
   NexusQBTopic,
+  NexusQBTagNode,
   QBDifficulty,
   QBQuestionFormat,
 } from '@neram/database';
@@ -107,6 +109,7 @@ export default function QuestionListPage() {
   const [topics, setTopics] = useState<NexusQBTopic[]>([]);
   const [topicCounts, setTopicCounts] = useState<Map<string, number>>(new Map());
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
+  const [categoryTree, setCategoryTree] = useState<NexusQBTagNode[]>([]);
 
   // Inline expansion state
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
@@ -263,6 +266,7 @@ export default function QuestionListPage() {
       if (res.ok) {
         const json = await res.json();
         setCategoryCounts(json.data || {});
+        setCategoryTree(json.tree || []);
       }
     } catch (err) {
       console.error('Failed to fetch category counts:', err);
@@ -288,6 +292,96 @@ export default function QuestionListPage() {
     }
   }
 
+  /**
+   * Write the drawer filters onto an outgoing request.
+   *
+   * Shared by fetchQuestions and selectAllFiltered: if only one of them expanded
+   * parent categories, "Select all" would silently select a different set than
+   * the list on screen.
+   *
+   * Filter state is kept COLLAPSED (a parent slug stands in for all its
+   * children) so the chip row, the URL and saved presets stay compact. The leaf
+   * expansion happens here, at the network boundary. The server repeats it
+   * defensively for hand-typed URLs.
+   */
+  const applyFilterParams = useCallback(
+    (params: URLSearchParams, f: QBFilterState = filters) => {
+      if (f.categories?.length) {
+        params.set('categories', expandCategories(f.categories, categoryTree).join(','));
+      }
+      if (f.difficulty?.length) params.set('difficulty', f.difficulty.join(','));
+      if (f.question_format?.length) params.set('question_format', f.question_format.join(','));
+      if (f.attempt_status && f.attempt_status !== 'all') params.set('attempt_status', f.attempt_status);
+      if (f.search_text) params.set('search_text', f.search_text);
+      if (f.topic_ids?.length) params.set('topic_ids', f.topic_ids.join(','));
+      if (f.confidence_tier?.length) params.set('confidence_tier', f.confidence_tier.join(','));
+      // Exam context from the URL wins; the drawer only fills these in when the
+      // page is not already scoped to a specific paper.
+      if (f.exam_type && !params.has('exam_type')) params.set('exam_type', f.exam_type);
+      if (f.exam_years?.length) params.set('years', f.exam_years.join(','));
+    },
+    [filters, categoryTree],
+  );
+
+  /** Resolves parent slugs, which QB_CATEGORY_LABELS cannot. */
+  const categoryLabels = useMemo(() => categoryLabelMap(categoryTree), [categoryTree]);
+
+  /**
+   * Live "Apply (N Qs)" count for the drawer.
+   *
+   * Debounced and fetched with page_size=1, so it costs one cheap invocation per
+   * pause in editing rather than one per tap, and only while the drawer is open.
+   */
+  const [draftFilters, setDraftFilters] = useState<QBFilterState | null>(null);
+  const [matchCount, setMatchCount] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!filterOpen || !draftFilters || !activeClassroom) {
+      setMatchCount(undefined);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const params = new URLSearchParams();
+        params.set('classroom_id', activeClassroom.id);
+        params.set('page', '1');
+        params.set('page_size', '1');
+        params.set('mode', 'practice');
+        if (selectedExam) params.set('exam_type', selectedExam);
+        if (selectedYear) params.set('year', String(selectedYear));
+        if (selectedSession) params.set('session', selectedSession);
+        applyFilterParams(params, draftFilters);
+
+        const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        const payload = json.data || json;
+        if (!cancelled) setMatchCount(payload?.total ?? undefined);
+      } catch {
+        if (!cancelled) setMatchCount(undefined);
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    filterOpen,
+    draftFilters,
+    activeClassroom,
+    getToken,
+    selectedExam,
+    selectedYear,
+    selectedSession,
+    applyFilterParams,
+  ]);
+
   async function fetchQuestions(pageNum: number) {
     setLoading(true);
     setQuestions([]);
@@ -306,12 +400,7 @@ export default function QuestionListPage() {
       if (selectedSession) params.set('session', selectedSession);
 
       // Filter drawer filters
-      if (filters.categories?.length) params.set('categories', filters.categories.join(','));
-      if (filters.difficulty?.length) params.set('difficulty', filters.difficulty.join(','));
-      if (filters.question_format?.length) params.set('question_format', filters.question_format.join(','));
-      if (filters.attempt_status && filters.attempt_status !== 'all') params.set('attempt_status', filters.attempt_status);
-      if (filters.search_text) params.set('search_text', filters.search_text);
-      if (filters.topic_ids?.length) params.set('topic_ids', filters.topic_ids.join(','));
+      applyFilterParams(params);
 
       const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -528,12 +617,7 @@ export default function QuestionListPage() {
       if (selectedExam) params.set('exam_type', selectedExam);
       if (selectedYear) params.set('year', String(selectedYear));
       if (selectedSession) params.set('session', selectedSession);
-      if (filters.categories?.length) params.set('categories', filters.categories.join(','));
-      if (filters.difficulty?.length) params.set('difficulty', filters.difficulty.join(','));
-      if (filters.question_format?.length) params.set('question_format', filters.question_format.join(','));
-      if (filters.attempt_status && filters.attempt_status !== 'all') params.set('attempt_status', filters.attempt_status);
-      if (filters.search_text) params.set('search_text', filters.search_text);
-      if (filters.topic_ids?.length) params.set('topic_ids', filters.topic_ids.join(','));
+      applyFilterParams(params);
 
       const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -644,6 +728,7 @@ export default function QuestionListPage() {
         isYearPaperView={isYearPaperView}
         lang={lang}
         onLangChange={(v) => setLang(v)}
+        categoryLabels={categoryLabels}
       />
 
       {/* Question list (scrollable) */}
@@ -939,6 +1024,10 @@ export default function QuestionListPage() {
         topics={topics}
         topicCounts={topicCounts}
         categoryCounts={categoryCounts}
+        categoryTree={categoryTree}
+        examTree={examTree}
+        matchCount={matchCount}
+        onDraftChange={setDraftFilters}
         contextLabel={contextLabel}
       />
 
