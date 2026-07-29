@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { errorResponse } from '@/lib/api-errors';
 import {
   getSupabaseAdminClient,
   recomputeClassPrep,
@@ -154,7 +155,6 @@ export async function GET(request: NextRequest, { params }: Ctx) {
 
     return NextResponse.json({ join_url: url, via: decision.via });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to open the class';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, 'Failed to open the class');
   }
 }

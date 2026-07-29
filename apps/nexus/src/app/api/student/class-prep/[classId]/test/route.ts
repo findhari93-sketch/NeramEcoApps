@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { errorResponse } from '@/lib/api-errors';
 import {
   getSupabaseAdminClient,
   getClassPrepTest,
@@ -132,8 +133,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       passed: !!state?.test_passed_at,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load the test';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, 'Failed to load the test');
   }
 }
 
@@ -186,8 +186,13 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       unlocked: !!state?.unlocked_at,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to submit the test';
-    const status = message === 'PLACEMENT_TEST_MISMATCH' ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    // The grader's own guard: a placement that does not belong to the test it was
+    // handed. Everything else, including a missing Authorization header, is
+    // classified by errorResponse so an unauthenticated call is a 401 and not a
+    // 500 that looks like the server broke.
+    if (err instanceof Error && err.message === 'PLACEMENT_TEST_MISMATCH') {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    return errorResponse(err, 'Failed to submit the test');
   }
 }

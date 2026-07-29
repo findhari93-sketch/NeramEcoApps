@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { errorResponse } from '@/lib/api-errors';
 import {
   getSupabaseAdminClient,
   attachClassPrepTest,
@@ -106,8 +107,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       class_topic: acc.cls.title ?? null,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load the prep test';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, 'Failed to load the prep test');
   }
 }
 
@@ -169,15 +169,23 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     return NextResponse.json({ prep_test: info }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to set the prep test';
-    // The partial unique index is the backstop behind attachClassPrepTest's
-    // deactivate-then-insert. Surfacing it as a 409 tells the teacher to reload
-    // rather than showing them a Postgres constraint name.
-    const status = /duplicate key|uq_placement/i.test(message)
-      ? 409
-      : /only hold MCQ|already started|Provide/i.test(message)
-        ? 400
-        : 500;
-    return NextResponse.json({ error: message }, { status });
+    // Two shapes this route owns, then everything else goes to errorResponse so a
+    // missing Authorization header is a 401 rather than a 500.
+    //
+    // The unique-violation branch is a backstop, not the main path:
+    // attachClassPrepTest now revives an existing placement rather than inserting
+    // a duplicate triple. If this ever fires, the teacher is told to reload
+    // instead of being shown a Postgres constraint name.
+    if (/duplicate key|uq_placement/i.test(message)) {
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+    // 'already started' is deliberately absent: the guard above returns 409 for
+    // that before attachClassPrepTest is ever called, so listing it here would
+    // only suggest this branch can produce a 400 for it.
+    if (/only hold MCQ|Provide/i.test(message)) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    return errorResponse(err, 'Failed to set the prep test');
   }
 }
 
@@ -210,8 +218,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (!info) return NextResponse.json({ error: 'No prep test on this class' }, { status: 404 });
     return NextResponse.json({ prep_test: info });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to change the pass mark';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, 'Failed to change the pass mark');
   }
 }
 
@@ -235,7 +242,6 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
     await detachClassPrepTest(params.classId, supabase);
     return NextResponse.json({ detached: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to remove the prep test';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, 'Failed to remove the prep test');
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient, recordClassPrepReason } from '@neram/database';
 import { isPreworkReasonCode } from '@/lib/prework-reasons';
 
@@ -74,7 +75,6 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       unlocked_via: state?.unlocked_via ?? null,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to record your reason';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, 'Failed to record your reason');
   }
 }

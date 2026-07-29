@@ -32,11 +32,22 @@ function messageOf(err: unknown, fallback: string): string {
   return fallback;
 }
 
+/**
+ * Messages that mean "we know who you are, you may not be here".
+ *
+ * verifyMsToken's parent branch fails closed on any `par_` token for a route that
+ * did not opt in, and getRequestUser rejects one again. That is the correct
+ * behaviour, but the message was not classified here, so every one of the ~50
+ * routes a parent can reach answered 500 instead of 403: a wrong-role request
+ * looked to the client exactly like a broken server.
+ */
+const AUTHZ_FAILURE = /^(Not authorized|Parent accounts cannot access this resource\.)$/;
+
 /** HTTP status for a thrown route error: 401 auth, 403 authorization, else 500. */
 export function httpStatusForError(err: unknown): number {
   if (err instanceof ApiError) return err.status;
   const message = err instanceof Error ? err.message : '';
-  if (message === 'Not authorized') return 403;
+  if (AUTHZ_FAILURE.test(message)) return 403;
   if (AUTH_FAILURE.test(message)) return 401;
   return 500;
 }
