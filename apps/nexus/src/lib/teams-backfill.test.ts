@@ -56,7 +56,13 @@ function existingRow(over: Partial<ExistingClassRow> = {}): ExistingClassRow {
 }
 
 function recording(name: string, createdDateTime: string): RecordingFile {
-  return { name, createdDateTime, webUrl: `https://sp/${encodeURIComponent(name)}`, size: 1 };
+  return {
+    name,
+    createdDateTime,
+    webUrl: `https://sp/${encodeURIComponent(name)}`,
+    size: 370 * 1024 * 1024,
+    durationMs: 62 * 60 * 1000,
+  };
 }
 
 describe('canonicalJoinUrl', () => {
@@ -161,6 +167,20 @@ describe('planBackfill', () => {
     ];
     const { rows } = planBackfill([], files, [existingRow()]);
     expect(rows).toHaveLength(0);
+  });
+
+  it('does not invent a class out of a stub recording', () => {
+    // Anyone in a meeting can press record. A student who joins early and starts
+    // one leaves a file with the meeting's name on it, and it must not become a
+    // class in the timetable.
+    const junk: RecordingFile = {
+      name: 'Perspective drill-20260703_183000-Meeting Recording.mp4',
+      createdDateTime: '2026-07-03T13:20:00Z',
+      webUrl: 'https://sp/junk',
+      size: 218_000,
+      durationMs: 64_000,
+    };
+    expect(planBackfill([], [junk], []).rows).toHaveLength(0);
   });
 
   it('orders rows by start time', () => {

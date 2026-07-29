@@ -5,7 +5,7 @@ vi.mock('./graph-app-token', () => ({
   getAppOnlyToken: vi.fn(async () => 'test-token'),
 }));
 
-import { getSharePointStreamUrl } from './sharepoint';
+import { getSharePointStreamUrl, unwrapTeamsRecapUrl } from './sharepoint';
 
 type FetchHandler = (url: string, opts?: RequestInit) => Promise<unknown>;
 
@@ -37,9 +37,51 @@ function redirectRes(status: number, location: string | null) {
 const DOC_URL = 'https://nerasmclasses.sharepoint.com/:b:/s/Site/IQabc?e=xyz';
 const VIDEO_URL = 'https://nerasmclasses.sharepoint.com/:v:/s/Site/IQvid?e=xyz';
 
+/**
+ * What Teams puts on the clipboard for a class recording: a recap page whose
+ * `fileUrl` parameter is the only part that points at the video.
+ */
+const RECAP_URL =
+  'https://teams.microsoft.com/l/meetingrecap?driveId=b%21abc&driveItemId=01XYZ' +
+  '&fileUrl=https%3A%2F%2Fnerasmclasses-my.sharepoint.com%2Fpersonal%2Fharibabu_neramclasses_com' +
+  // Teams writes spaces in this parameter as "+", exactly as here.
+  '%2FDocuments%2FRecordings%2FClass-20260728_132838UTC-Meeting+Recording.mp4' +
+  '&threadId=19%3Ameeting_abc%40thread.v2';
+
+describe('unwrapTeamsRecapUrl', () => {
+  it('reads the file out of a Teams recap link', () => {
+    expect(unwrapTeamsRecapUrl(RECAP_URL)).toBe(
+      'https://nerasmclasses-my.sharepoint.com/personal/haribabu_neramclasses_com/Documents/Recordings/Class-20260728_132838UTC-Meeting Recording.mp4',
+    );
+  });
+
+  it('leaves anything else alone', () => {
+    expect(unwrapTeamsRecapUrl(VIDEO_URL)).toBe(VIDEO_URL);
+    expect(unwrapTeamsRecapUrl('https://teams.microsoft.com/l/meetup-join/19%3aabc')).toBe(
+      'https://teams.microsoft.com/l/meetup-join/19%3aabc',
+    );
+    expect(unwrapTeamsRecapUrl('not a url')).toBe('not a url');
+  });
+});
+
 describe('getSharePointStreamUrl', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('streams a recording stored as a Teams recap link', async () => {
+    // Teachers paste these, and the sync stored them before it knew better. The
+    // host is teams.microsoft.com, so without unwrapping there is nothing here
+    // any SharePoint call can resolve and the class plays for nobody.
+    mockFetch(async (url) => {
+      if (url.includes('/driveItem/content')) return redirectRes(302, null);
+      if (url.includes('/shares/') && url.includes('/driveItem')) {
+        return jsonRes(200, { id: 'x', '@microsoft.graph.downloadUrl': 'https://blob/class.mp4' });
+      }
+      return jsonRes(404, {});
+    });
+
+    await expect(getSharePointStreamUrl(RECAP_URL)).resolves.toBe('https://blob/class.mp4');
   });
 
   it('resolves a /:b:/ document link via the downloadUrl annotation (requested WITHOUT $select)', async () => {

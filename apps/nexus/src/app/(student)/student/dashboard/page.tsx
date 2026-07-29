@@ -27,6 +27,7 @@ import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StatCard from '@/components/StatCard';
 import FoundationOverviewCard from '@/components/foundation/FoundationOverviewCard';
+import RecordingPlayerDialog from '@/components/timetable/RecordingPlayerDialog';
 import type { NexusFoundationChapterWithProgress } from '@neram/database/types';
 
 interface UpcomingClass {
@@ -77,6 +78,10 @@ export default function StudentDashboard() {
   const [foundationChapters, setFoundationChapters] = useState<NexusFoundationChapterWithProgress[] | null>(null);
   const [foundationLoading, setFoundationLoading] = useState(true);
   const [profileIncomplete, setProfileIncomplete] = useState(false);
+  // The class whose recording is playing. Students watch in-app, because the
+  // SharePoint link only works for whoever Microsoft happened to share the file
+  // with, which for a non-channel meeting is just the meeting's invitees.
+  const [playingClass, setPlayingClass] = useState<CompletedClass | null>(null);
 
   const noClassrooms = !authLoading && classrooms.length === 0;
 
@@ -723,8 +728,7 @@ export default function StudentDashboard() {
                   <Button
                     variant="contained"
                     size="small"
-                    href={cls.recording_url}
-                    target="_blank"
+                    onClick={() => setPlayingClass(cls)}
                     startIcon={<PlayCircleOutlinedIcon sx={{ fontSize: '1rem !important' }} />}
                     color="success"
                     sx={{
@@ -758,6 +762,16 @@ export default function StudentDashboard() {
           </Box>
         )}
       </Box>
+
+      {playingClass && (
+        <RecordingPlayerDialog
+          open
+          onClose={() => setPlayingClass(null)}
+          classId={playingClass.id}
+          title={playingClass.title}
+          getToken={getToken}
+        />
+      )}
     </Box>
   );
 }

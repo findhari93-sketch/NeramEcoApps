@@ -3,6 +3,7 @@ import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { notifyRecordingAvailable } from '@/lib/timetable-notifications';
 import { resolveOnlineMeeting, resolveOrganizerOid } from '@/lib/teams-online-meeting';
+import { findRecordingForClass } from '@/lib/recording-locator';
 
 /**
  * GET /api/timetable/recording?class_id={id}
@@ -75,7 +76,9 @@ export async function POST(request: NextRequest) {
     // Get class details
     const { data: cls } = await supabase
       .from('nexus_scheduled_classes')
-      .select('teams_meeting_id, teams_meeting_join_url, teams_meeting_url, title, teacher_id, organizer_email')
+      .select(
+        'teams_meeting_id, teams_meeting_join_url, teams_meeting_url, title, teacher_id, organizer_email, classroom_id, scheduled_date, start_time',
+      )
       .eq('id', class_id)
       .single();
 
@@ -92,9 +95,19 @@ export async function POST(request: NextRequest) {
       teacherId: cls.teacher_id,
     });
 
-    // The stored teams_meeting_id is an Outlook event id for channel/group meetings,
-    // not an onlineMeeting id, so resolve the real onlineMeeting (delegated if the
-    // caller organized it, else app-only on behalf of the organizer).
+    // ── The recording file ──
+    //
+    // Found as a driveItem, never through /onlineMeetings/{id}/recordings. See
+    // lib/recording-locator for why, and for the two folders it looks in.
+    const recordingUrl = await findRecordingForClass(supabase, cls, organizerOid);
+
+    // ── The transcript ──
+    //
+    // Still read from Graph. Unlike the recording, transcript_url is only ever
+    // fetched server-side with a token (see lib/transcript-resolver), so a Graph
+    // content URL is the right thing to store.
+    let transcriptUrl: string | null = null;
+
     const resolved = await resolveOnlineMeeting({
       delegatedToken: token!,
       teamsMeetingId: cls.teams_meeting_id,
@@ -102,41 +115,18 @@ export async function POST(request: NextRequest) {
       organizerOid,
     });
 
-    if (!resolved) {
-      return NextResponse.json({
-        error: 'Could not find this class’s Teams online meeting. It may not have taken place yet, or Nexus does not have permission to read its recording.',
-      }, { status: 400 });
-    }
+    if (resolved) {
+      const transcriptsRes = await fetch(
+        `https://graph.microsoft.com/v1.0/${resolved.artifactBase}/transcripts`,
+        { headers: { Authorization: `Bearer ${resolved.token}` } }
+      );
 
-    // Fetch recordings via Graph API
-    const recordingsRes = await fetch(
-      `https://graph.microsoft.com/v1.0/${resolved.artifactBase}/recordings`,
-      { headers: { Authorization: `Bearer ${resolved.token}` } }
-    );
-
-    let recordingUrl: string | null = null;
-    let transcriptUrl: string | null = null;
-
-    if (recordingsRes.ok) {
-      const recordingsData = await recordingsRes.json();
-      const recordings = recordingsData.value || [];
-      if (recordings.length > 0) {
-        // Use the content URL of the first recording
-        recordingUrl = recordings[0].recordingContentUrl || recordings[0].content || null;
-      }
-    }
-
-    // Fetch transcripts via Graph API
-    const transcriptsRes = await fetch(
-      `https://graph.microsoft.com/v1.0/${resolved.artifactBase}/transcripts`,
-      { headers: { Authorization: `Bearer ${resolved.token}` } }
-    );
-
-    if (transcriptsRes.ok) {
-      const transcriptsData = await transcriptsRes.json();
-      const transcripts = transcriptsData.value || [];
-      if (transcripts.length > 0) {
-        transcriptUrl = transcripts[0].transcriptContentUrl || transcripts[0].content || null;
+      if (transcriptsRes.ok) {
+        const transcriptsData = await transcriptsRes.json();
+        const transcripts = transcriptsData.value || [];
+        if (transcripts.length > 0) {
+          transcriptUrl = transcripts[0].transcriptContentUrl || transcripts[0].content || null;
+        }
       }
     }
 
@@ -177,3 +167,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

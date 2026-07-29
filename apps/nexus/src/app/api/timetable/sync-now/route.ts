@@ -6,8 +6,13 @@ import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { notifyRecordingAvailable, notifyClassCancelled } from '@/lib/timetable-notifications';
 import { syncClassroomMeetings } from '@/lib/teams-meeting-sync';
 import { announceCancellationToTeams } from '@/lib/teams-class-announcements';
-import { extractOidFromJoinUrl } from '@/lib/teams-online-meeting';
-import { fetchChannelRecordings, matchRecordingToClass } from '@/lib/channel-recordings';
+import { extractOidFromJoinUrl, resolveOrganizerOid } from '@/lib/teams-online-meeting';
+import {
+  fetchChannelRecordings,
+  fetchOrganizerRecordings,
+  matchRecordingToClass,
+  type RecordingFile,
+} from '@/lib/channel-recordings';
 
 /**
  * POST /api/timetable/sync-now
@@ -135,7 +140,7 @@ export async function POST(request: NextRequest) {
 
     const { data: recentClasses } = await supabase
       .from('nexus_scheduled_classes')
-      .select('id, classroom_id, title, teams_meeting_join_url, teacher_id, scheduled_date, start_time, end_time')
+      .select('id, classroom_id, title, teams_meeting_join_url, teacher_id, organizer_email, scheduled_date, start_time, end_time')
       .in('classroom_id', classroomIds)
       .is('recording_url', null)
       .is('recording_fetched_at', null)
@@ -153,8 +158,7 @@ export async function POST(request: NextRequest) {
 
     let recordingsFound = 0;
 
-    // Approach: Fetch recordings from SharePoint (channel Recordings folder)
-    // Group classes by classroom to batch the SharePoint lookups
+    // Group classes by classroom to batch the SharePoint lookups.
     const classesByClassroom = new Map<string, typeof classesToCheck>();
     for (const cls of classesToCheck) {
       const existing = classesByClassroom.get(cls.classroom_id) || [];
@@ -162,86 +166,98 @@ export async function POST(request: NextRequest) {
       classesByClassroom.set(cls.classroom_id, existing);
     }
 
+    // A recording lives in one of two places, decided by how the meeting was
+    // created: a channel meeting drops it in the team's document library, anything
+    // else drops it in the ORGANIZER'S OneDrive. Both are scanned, because classes
+    // created with the calendar_event scope only ever appear in the second.
+    // Keyed by organizer oid so a 40-class batch lists each OneDrive once.
+    const oneDriveByOrganizer = new Map<string, RecordingFile[]>();
+
+    const organizerRecordingsFor = async (cls: (typeof classesToCheck)[number]): Promise<RecordingFile[]> => {
+      const oid = await resolveOrganizerOid(supabase, {
+        joinUrl: cls.teams_meeting_join_url,
+        organizerEmail: cls.organizer_email,
+        teacherId: cls.teacher_id,
+      });
+      if (!oid) return [];
+      const cached = oneDriveByOrganizer.get(oid);
+      if (cached) return cached;
+      try {
+        const files = await fetchOrganizerRecordings(appToken, oid);
+        oneDriveByOrganizer.set(oid, files);
+        console.log(`[sync-now] Found ${files.length} OneDrive recordings for organizer ${oid}`);
+        return files;
+      } catch (err) {
+        console.error(`[sync-now] OneDrive recording fetch failed for organizer ${oid}:`, err);
+        oneDriveByOrganizer.set(oid, []);
+        return [];
+      }
+    };
+
     for (const [classroomId, classes] of classesByClassroom) {
       const classroom = (classrooms || []).find((c) => c.id === classroomId);
       if (!classroom?.ms_team_id) continue;
 
+      let channelRecordings: RecordingFile[] = [];
       try {
-        const recordings = await fetchChannelRecordings(appToken, classroom.ms_team_id);
-        console.log(`[sync-now] Found ${recordings.length} recording files in team ${classroom.ms_team_id}`);
+        channelRecordings = await fetchChannelRecordings(appToken, classroom.ms_team_id);
+        console.log(`[sync-now] Found ${channelRecordings.length} recording files in team ${classroom.ms_team_id}`);
+      } catch (err) {
+        // Loud, but not fatal: the OneDrive scan below may still find the class.
+        console.error(`[sync-now] SharePoint recording fetch failed for team ${classroom.ms_team_id}:`, err);
+      }
 
-        for (const cls of classes) {
-          // Match recording to class by date and approximate time
-          const matched = matchRecordingToClass(recordings, cls);
-          if (matched) {
-            // Best-effort transcript fetch (feeds the class-recap generator).
-            let transcriptUrl: string | null = null;
-            try {
-              const oid = extractOidFromJoinUrl(cls.teams_meeting_join_url!);
-              transcriptUrl = await fetchTranscriptByJoinUrl(
-                supabase, appToken, cls.teams_meeting_join_url!, cls.teacher_id, oid,
-              );
-            } catch (tErr) {
-              console.error(`[sync-now] Transcript fetch failed for class ${cls.id}:`, tErr);
-            }
+      for (const cls of classes) {
+        // Match recording to class by date and approximate time, channel first.
+        let matched = matchRecordingToClass(channelRecordings, cls);
+        if (!matched) {
+          // No fuzzy fallback on OneDrive. A team's Recordings folder holds class
+          // recordings and nothing else, so "the only one that day" is a safe
+          // guess there; a teacher's personal OneDrive holds anything they ever
+          // recorded, so the same guess would staple a private meeting to a class.
+          matched = matchRecordingToClass(await organizerRecordingsFor(cls), cls, {
+            allowFuzzy: false,
+          });
+        }
 
-            const recordingUpdate: Record<string, unknown> = {
-              recording_url: matched.webUrl,
-              recording_fetched_at: now.toISOString(),
-            };
-            if (transcriptUrl) recordingUpdate.transcript_url = transcriptUrl;
+        if (matched) {
+          // Best-effort transcript fetch (feeds the class-recap generator). Unlike
+          // the recording, transcript_url is only ever read server-side with a
+          // token, so a Graph content URL is fine here.
+          let transcriptUrl: string | null = null;
+          try {
+            const oid = extractOidFromJoinUrl(cls.teams_meeting_join_url!);
+            transcriptUrl = await fetchTranscriptByJoinUrl(
+              supabase, appToken, cls.teams_meeting_join_url!, cls.teacher_id, oid,
+            );
+          } catch (tErr) {
+            console.error(`[sync-now] Transcript fetch failed for class ${cls.id}:`, tErr);
+          }
+
+          const recordingUpdate: Record<string, unknown> = {
+            // The driveItem webUrl, never a Graph content URL: this value is
+            // handed to a browser and to getSharePointStreamUrl.
+            recording_url: matched.webUrl,
+            recording_fetched_at: now.toISOString(),
+          };
+          if (transcriptUrl) recordingUpdate.transcript_url = transcriptUrl;
+          await supabase
+            .from('nexus_scheduled_classes')
+            .update(recordingUpdate)
+            .eq('id', cls.id);
+
+          await notifyRecordingAvailable(cls.classroom_id, cls.title, cls.id).catch(() => {});
+          recordingsFound++;
+          console.log(`[sync-now] Matched recording for "${cls.title}" on ${cls.scheduled_date}: ${matched.name}`);
+        } else {
+          // No recording found. Mark old classes so we don't re-check every load.
+          const classAge = now.getTime() - new Date(cls.scheduled_date).getTime();
+          const sevenDays = 7 * 24 * 60 * 60 * 1000;
+          if (classAge > sevenDays) {
             await supabase
               .from('nexus_scheduled_classes')
-              .update(recordingUpdate)
+              .update({ recording_fetched_at: now.toISOString() })
               .eq('id', cls.id);
-
-            await notifyRecordingAvailable(cls.classroom_id, cls.title, cls.id).catch(() => {});
-            recordingsFound++;
-            console.log(`[sync-now] Matched recording for "${cls.title}" on ${cls.scheduled_date}: ${matched.name}`);
-          } else {
-            // No recording found. Mark old classes so we don't re-check every load.
-            const classAge = now.getTime() - new Date(cls.scheduled_date).getTime();
-            const sevenDays = 7 * 24 * 60 * 60 * 1000;
-            if (classAge > sevenDays) {
-              await supabase
-                .from('nexus_scheduled_classes')
-                .update({ recording_fetched_at: now.toISOString() })
-                .eq('id', cls.id);
-            }
-          }
-        }
-      } catch (err) {
-        console.error(`[sync-now] SharePoint recording fetch failed for team ${classroom.ms_team_id}:`, err);
-
-        // Fallback: try the onlineMeetings API for individual classes
-        for (const cls of classes) {
-          try {
-            const organizerOid = extractOidFromJoinUrl(cls.teams_meeting_join_url!);
-            const recordingUrl = await fetchRecordingByJoinUrl(
-              supabase, appToken, cls.teams_meeting_join_url!, cls.teacher_id, organizerOid,
-            );
-            if (recordingUrl) {
-              let transcriptUrl: string | null = null;
-              try {
-                transcriptUrl = await fetchTranscriptByJoinUrl(
-                  supabase, appToken, cls.teams_meeting_join_url!, cls.teacher_id, organizerOid,
-                );
-              } catch (tErr) {
-                console.error(`[sync-now] Transcript fetch failed for class ${cls.id}:`, tErr);
-              }
-              const recordingUpdate: Record<string, unknown> = {
-                recording_url: recordingUrl,
-                recording_fetched_at: now.toISOString(),
-              };
-              if (transcriptUrl) recordingUpdate.transcript_url = transcriptUrl;
-              await supabase
-                .from('nexus_scheduled_classes')
-                .update(recordingUpdate)
-                .eq('id', cls.id);
-              recordingsFound++;
-            }
-          } catch (fallbackErr) {
-            console.error(`[sync-now] Fallback recording fetch failed for class ${cls.id}:`, fallbackErr);
           }
         }
       }
@@ -264,74 +280,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── OnlineMeetings recording fetch helpers (fallback) ──────────────────────
-
-/**
- * Look up a Teams online meeting by its join URL, then fetch the first recording.
- *
- * Requires the Azure app registration to have:
- *   OnlineMeetingRecording.Read.All  (Application permission, admin consent)
- *
- * Uses organizerOid (extracted from join URL) as primary lookup.
- * Falls back to teacher_id -> ms_oid if organizerOid is not available.
- */
-async function fetchRecordingByJoinUrl(
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
-  appToken: string,
-  joinUrl: string,
-  teacherId: string | null,
-  organizerOid: string | null,
-): Promise<string | null> {
-  // Determine the user OID for the Graph API call
-  let userOid = organizerOid;
-
-  if (!userOid && teacherId) {
-    const { data: teacher } = await supabase
-      .from('users')
-      .select('ms_oid')
-      .eq('id', teacherId)
-      .single();
-    userOid = teacher?.ms_oid || null;
-  }
-
-  if (!userOid) return null;
-
-  // Look up the online meeting by JoinWebUrl
-  const filterQuery = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
-  const meetingRes = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${userOid}/onlineMeetings?$filter=${encodeURIComponent(filterQuery)}`,
-    { headers: { Authorization: `Bearer ${appToken}` } }
-  );
-
-  if (!meetingRes.ok) {
-    const errText = await meetingRes.text().catch(() => '');
-    throw new Error(`Meeting lookup failed: ${meetingRes.status} ${errText}`);
-  }
-
-  const meetingData = await meetingRes.json();
-  const meetings = meetingData.value || [];
-  if (meetings.length === 0) return null;
-
-  const meetingId = meetings[0].id as string;
-
-  // Fetch recordings for this online meeting
-  const recordingsRes = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${userOid}/onlineMeetings/${meetingId}/recordings`,
-    { headers: { Authorization: `Bearer ${appToken}` } }
-  );
-
-  if (!recordingsRes.ok) {
-    const errText = await recordingsRes.text().catch(() => '');
-    throw new Error(`Recordings fetch failed: ${recordingsRes.status} ${errText}`);
-  }
-
-  const recordingsData = await recordingsRes.json();
-  const recordings = recordingsData.value || [];
-  if (recordings.length === 0) return null;
-
-  // Prefer recordingContentUrl (direct playable link), fall back to content stream URL
-  return recordings[0].recordingContentUrl || recordings[0].content || null;
-}
+// ─── OnlineMeetings transcript fetch helper ─────────────────────────────────
+//
+// There is deliberately no recording equivalent here. The old
+// fetchRecordingByJoinUrl returned `recordingContentUrl`, a Graph endpoint that
+// only resolves with a bearer token, and that value was written to
+// recording_url and rendered as a plain href. Every teacher and student who
+// clicked it got `InvalidAuthenticationToken: Access token is empty`. Recordings
+// are now found as driveItems, which have a real webUrl. See channel-recordings.
 
 /**
  * Look up a Teams online meeting by its join URL, then fetch the first transcript.

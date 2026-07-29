@@ -38,6 +38,14 @@ export function buildClassLinkPatch(body: {
     if (url && !/^https?:\/\//i.test(url)) {
       return { ok: false, error: 'The recording link must start with http or https.', patch: {} };
     }
+    if (url && isGraphApiUrl(url)) {
+      return {
+        ok: false,
+        error:
+          'That is a Microsoft Graph API address, not a link anyone can open. It needs an access token, so it plays for nobody. Use the SharePoint or OneDrive link to the recording file instead.',
+        patch: {},
+      };
+    }
     patch.recording_url = url || null;
   }
 
@@ -55,4 +63,22 @@ export function buildClassLinkPatch(body: {
   }
 
   return { ok: true, error: null, patch };
+}
+
+/**
+ * A Microsoft Graph address masquerading as a recording link.
+ *
+ * `/onlineMeetings/{id}/recordings/{id}/content` is a real Graph endpoint, but it
+ * resolves only when called with a bearer token, and recording_url is rendered
+ * straight into an href and fed to getSharePointStreamUrl. Storing one is how
+ * every "Watch Recording" button came to answer `InvalidAuthenticationToken:
+ * Access token is empty`, so it is rejected at every write path rather than
+ * discovered by a student.
+ */
+export function isGraphApiUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.toLowerCase() === 'graph.microsoft.com';
+  } catch {
+    return false;
+  }
 }

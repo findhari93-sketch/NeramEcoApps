@@ -585,6 +585,15 @@ export default function ClassCreateDialog({
   // Meeting posts into a Team channel only when every selected classroom has a linked Team.
   const selectedHasTeam = selectedClassrooms.length > 0 && selectedClassrooms.every((c) => !!c.ms_team_id);
 
+  // Picking Calendar Event and THEN switching to a team-linked classroom would
+  // leave a hidden option selected. The server refuses that combination anyway,
+  // so snap back to Auto rather than showing an empty radio group.
+  useEffect(() => {
+    if (selectedHasTeam && formData.meeting_scope === 'calendar_event') {
+      setFormData((f) => ({ ...f, meeting_scope: 'auto' }));
+    }
+  }, [selectedHasTeam, formData.meeting_scope]);
+
   const toggleRecurrenceDay = (day: string) => {
     setFormData((f) => ({
       ...f,
@@ -1084,17 +1093,25 @@ export default function ClassCreateDialog({
                       sx={{ minHeight: 48, alignItems: 'flex-start', py: 0.5 }}
                     />
                   )}
-                  <FormControlLabel
-                    value="calendar_event"
-                    control={<Radio size="small" />}
-                    label={
-                      <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>Calendar Event</Typography>
-                        <Typography variant="caption" color="text.secondary">Meeting link + Outlook invites to students</Typography>
-                      </Box>
-                    }
-                    sx={{ minHeight: 48, alignItems: 'flex-start', py: 0.5 }}
-                  />
+                  {/* Offered only when there is no team to hold the recording.
+                      A calendar event makes a standalone meeting whose recording
+                      goes to the organizer's own OneDrive, shared with the invitees
+                      and nobody else, so on a team-linked classroom it hides the
+                      class recording from the channel and from every teacher who
+                      was not invited. The server enforces this too. */}
+                  {!selectedHasTeam && (
+                    <FormControlLabel
+                      value="calendar_event"
+                      control={<Radio size="small" />}
+                      label={
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>Calendar Event</Typography>
+                          <Typography variant="caption" color="text.secondary">Meeting link + Outlook invites to students</Typography>
+                        </Box>
+                      }
+                      sx={{ minHeight: 48, alignItems: 'flex-start', py: 0.5 }}
+                    />
+                  )}
                   <FormControlLabel
                     value="link_only"
                     control={<Radio size="small" />}

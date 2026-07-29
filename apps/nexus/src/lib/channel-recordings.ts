@@ -8,6 +8,10 @@
  * subject and start timestamp, the only record of a class that was started with
  * "Meet now" and so never produced a calendar event.
  *
+ * A meeting that is NOT a channel meeting puts its recording somewhere else
+ * entirely, in the organizer's own OneDrive, so {@link fetchOrganizerRecordings}
+ * covers that second location.
+ *
  * Extracted from api/timetable/sync-now so the backfill can reuse it. Three
  * things changed on the way out, all of them bugs in the original:
  *  - the listing never followed `@odata.nextLink`, so anything past the newest
@@ -15,6 +19,10 @@
  *  - matching compared a UTC date string against an IST date;
  *  - matching compared whole `getUTCHours()` against `startHour - 5.5`, which is
  *    blind to minutes and wraps at midnight.
+ *
+ * A fourth, worse one was found later: the listing sent `$orderby`, which Graph
+ * rejects on these drives, and the 400 was swallowed into an empty result. See
+ * `childrenQuery` for why nothing here may ever sort server-side again.
  */
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
@@ -29,6 +37,38 @@ export interface RecordingFile {
   webUrl: string;
   createdDateTime: string;
   size: number;
+  /** Playing length in ms, from the driveItem's video facet. Absent if Graph did not report one. */
+  durationMs?: number;
+}
+
+/**
+ * Below this, a file is somebody's abandoned recording rather than a class.
+ *
+ * Anyone in a Teams meeting can press record, and a student who joins early and
+ * does so leaves a file carrying the meeting's own name and timestamp. One such
+ * file sits against the 28 July class: 64 seconds and 0.2 MB, next to the real
+ * 66 minute, 370 MB recording. Every genuine class in this tenant runs 53 to 80
+ * minutes at 130 to 450 MB, so three minutes is far above the noise and far
+ * below anything real.
+ */
+export const MIN_RECORDING_DURATION_MS = 3 * 60 * 1000;
+
+/** The size floor used when Graph reports no duration. */
+export const MIN_RECORDING_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Is this file worth showing to a student?
+ *
+ * Fails open on purpose. Only positive evidence that a file is trivial rejects
+ * it; a recording still being processed can report neither duration nor size,
+ * and losing a real class is worse than attaching a short one.
+ */
+export function isSubstantialRecording(file: RecordingFile): boolean {
+  if (file.durationMs != null && file.durationMs > 0) {
+    return file.durationMs >= MIN_RECORDING_DURATION_MS;
+  }
+  if (file.size > 0) return file.size >= MIN_RECORDING_BYTES;
+  return true;
 }
 
 export interface RecordingFetchOpts {
@@ -117,7 +157,6 @@ export async function fetchRecordingsFromChannel(
   opts?: RecordingFetchOpts,
 ): Promise<RecordingFile[]> {
   const maxItems = opts?.maxItems ?? 50;
-  const top = Math.min(opts?.top ?? 50, 200);
 
   const folderRes = await fetch(
     `${GRAPH}/teams/${teamId}/channels/${channelId}/filesFolder`,
@@ -134,36 +173,109 @@ export async function fetchRecordingsFromChannel(
     throw new Error('Missing driveId or folderId from filesFolder');
   }
 
-  const query = `?$select=name,webUrl,createdDateTime,size&$orderby=createdDateTime desc&$top=${top}`;
-  const recordingsUrl = `${GRAPH}/drives/${driveId}/items/${folderId}:/Recordings:/children${query}`;
+  const query = childrenQuery(opts);
+  const base = `${GRAPH}/drives/${driveId}/items/${folderId}`;
 
-  const fromRecordings = await listVideoFiles(recordingsUrl, token, maxItems);
-  if (fromRecordings !== null) return fromRecordings;
+  const fromRecordings = await listVideoFiles(`${base}:/Recordings:/children${query}`, token, maxItems);
+  if (!fromRecordings.failure) return fromRecordings.files;
+  if (fromRecordings.failure.status !== 404) {
+    throw new Error(`Failed to list channel Recordings folder: ${describe(fromRecordings.failure)}`);
+  }
 
   // No Recordings subfolder (older teams, or nothing recorded yet). Fall back to
   // the channel root and keep only the video files.
-  const rootUrl = `${GRAPH}/drives/${driveId}/items/${folderId}/children${query}`;
-  return (await listVideoFiles(rootUrl, token, maxItems)) ?? [];
+  const fromRoot = await listVideoFiles(`${base}/children${query}`, token, maxItems);
+  if (fromRoot.failure && fromRoot.failure.status !== 404) {
+    throw new Error(`Failed to list channel files: ${describe(fromRoot.failure)}`);
+  }
+  return fromRoot.files;
 }
 
 /**
- * Page through a driveItem children listing, keeping video files only.
- * Returns null when the first request fails, so the caller can fall back.
+ * Recordings from a user's own OneDrive `Recordings/` folder.
+ *
+ * A meeting that is not a channel meeting (a personal or group calendar event,
+ * whose join URL is on `@thread.v2`) drops its recording here rather than in the
+ * team's document library, and shares it only with the people on the invite. So
+ * this is the second place a class recording can be, and the only place to look
+ * for classes created with the `calendar_event` scope.
+ *
+ * An organizer who has never recorded to OneDrive simply has no such folder, so
+ * a 404 means "nothing recorded", not a fault.
+ */
+export async function fetchOrganizerRecordings(
+  token: string,
+  organizerOid: string,
+  opts?: RecordingFetchOpts,
+): Promise<RecordingFile[]> {
+  const maxItems = opts?.maxItems ?? 50;
+  const url = `${GRAPH}/users/${organizerOid}/drive/root:/Recordings:/children${childrenQuery(opts)}`;
+
+  const result = await listVideoFiles(url, token, maxItems);
+  if (!result.failure) return result.files;
+  if (result.failure.status === 404) return [];
+  throw new Error(`Failed to list OneDrive Recordings folder: ${describe(result.failure)}`);
+}
+
+/**
+ * The children query shared by both listings.
+ *
+ * Deliberately carries NO `$orderby`. Graph rejects it outright on a SharePoint
+ * or OneDrive drive (`400 notSupported`), and the old listing sent
+ * `$orderby=createdDateTime desc` on every request. Every channel recording was
+ * therefore invisible to Nexus for as long as this code has existed, because the
+ * 400 was swallowed and reported as an empty folder. Ordering is applied in
+ * {@link listVideoFiles} instead.
+ */
+function childrenQuery(opts?: RecordingFetchOpts): string {
+  const top = Math.min(opts?.top ?? 50, 200);
+  // `video` carries the playing length, which is how a real class is told from a
+  // recording somebody started and abandoned. See isSubstantialRecording.
+  return `?$select=name,webUrl,createdDateTime,size,video&$top=${top}`;
+}
+
+interface ListFailure {
+  status: number;
+  body: string;
+}
+
+function describe(failure: ListFailure): string {
+  return `${failure.status} ${failure.body.slice(0, 300)}`;
+}
+
+interface ListResult {
+  files: RecordingFile[];
+  /** Set when the FIRST page failed, so the caller can tell 404 from a real fault. */
+  failure?: ListFailure;
+}
+
+/**
+ * Page through a driveItem children listing, keeping video files only, newest first.
+ *
+ * Every page is read before truncating to `maxItems`. Graph hands SharePoint
+ * children back in an arbitrary order and will not sort them, so stopping early
+ * would keep an arbitrary subset rather than the newest one.
  */
 async function listVideoFiles(
   firstUrl: string,
   token: string,
   maxItems: number,
-): Promise<RecordingFile[] | null> {
+): Promise<ListResult> {
   const out: RecordingFile[] = [];
   let url: string | null = firstUrl;
   let page = 0;
 
-  while (url && out.length < maxItems && page < MAX_PAGES) {
+  while (url && page < MAX_PAGES) {
     const res: Response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return page === 0 ? null : out;
+    if (!res.ok) {
+      // A later page failing still leaves usable results; only the first page
+      // failing means we learnt nothing and the caller must be told why.
+      if (page > 0) break;
+      const body = await res.text().catch(() => '');
+      return { files: [], failure: { status: res.status, body } };
+    }
 
     const data = await res.json();
     for (const f of data.value || []) {
@@ -173,15 +285,16 @@ async function listVideoFiles(
         webUrl: f.webUrl,
         createdDateTime: f.createdDateTime,
         size: f.size ?? 0,
+        durationMs: typeof f.video?.duration === 'number' ? f.video.duration : undefined,
       });
-      if (out.length >= maxItems) break;
     }
 
     url = data['@odata.nextLink'] || null;
     page++;
   }
 
-  return out;
+  out.sort((a, b) => Date.parse(b.createdDateTime) - Date.parse(a.createdDateTime));
+  return { files: out.slice(0, maxItems) };
 }
 
 /**
@@ -218,12 +331,18 @@ export function parseRecordingFileName(
  * and takes the closest one inside tolerance. Only when nothing is in tolerance
  * does it fall back to a title-word match on the same IST day, and then to
  * "there was only one recording that day".
+ *
+ * Stub recordings are dropped before any of that, so a 64-second file started by
+ * a student who joined early can neither beat the real recording on time nor be
+ * picked up by a fallback. A class whose only file is a stub reports no
+ * recording, which is honest: there is nothing there to watch.
  */
 export function matchRecordingToClass(
-  recordings: RecordingFile[],
+  all: RecordingFile[],
   cls: { scheduled_date: string; start_time: string; title: string },
   opts?: MatchOpts,
 ): RecordingFile | null {
+  const recordings = all.filter(isSubstantialRecording);
   if (recordings.length === 0) return null;
 
   const toleranceMs = (opts?.toleranceHours ?? 1.5) * 60 * 60 * 1000;

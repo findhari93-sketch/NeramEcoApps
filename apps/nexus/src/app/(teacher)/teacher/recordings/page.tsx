@@ -28,6 +28,7 @@ import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { RADIUS, SHADOW, tagSx } from '@/components/timetable/timetable-theme';
 import { formatTime } from '@/components/timetable/date-utils';
+import RecordingPlayerDialog from '@/components/timetable/RecordingPlayerDialog';
 
 interface TagRow {
   id: string;
@@ -68,6 +69,9 @@ export default function RecordingsPage() {
   const [debounced, setDebounced] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [needsMeta, setNeedsMeta] = useState(false);
+  // The recording playing in the in-app player, so a teacher who did not organize
+  // the meeting can still watch it. "Open in Teams" stays available underneath.
+  const [playing, setPlaying] = useState<RecordingRow | null>(null);
 
   // Typing should not fire a request per keystroke.
   useEffect(() => {
@@ -335,19 +339,29 @@ export default function RecordingsPage() {
                   <Button
                     size="small"
                     variant="outlined"
-                    href={r.recording_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    onClick={() => setPlaying(r)}
                     startIcon={<VideocamOutlinedIcon sx={{ fontSize: 15 }} />}
                     sx={{ textTransform: 'none', minHeight: 40, whiteSpace: 'nowrap' }}
                   >
-                    Teams
+                    Watch
                   </Button>
                 )}
               </Stack>
             </Box>
           ))}
         </Stack>
+      )}
+
+      {playing && (
+        <RecordingPlayerDialog
+          open
+          onClose={() => setPlaying(null)}
+          classId={playing.id}
+          title={playing.title}
+          getToken={getToken}
+          fallbackUrl={playing.recording_url}
+          showFallbackLink
+        />
       )}
     </Box>
   );

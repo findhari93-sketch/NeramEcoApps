@@ -26,6 +26,7 @@
 import type { TeamsCalendarEvent } from './teams-meeting-sync';
 import {
   parseRecordingFileName,
+  isSubstantialRecording,
   classStartMs,
   type RecordingFile,
 } from './channel-recordings';
@@ -264,6 +265,10 @@ export function planBackfill(
   for (const file of recordings) {
     const parsed = parseRecordingFileName(file.name);
     if (!parsed) continue;
+    // Anyone in a meeting can press record, so a student who joins early leaves a
+    // file with the meeting's name and timestamp on it. Importing that as a class
+    // would put a minute of nothing in the timetable.
+    if (!isSubstantialRecording(file)) continue;
 
     const scheduledDate = parsed.startedAt.substring(0, 10);
     const startTime = parsed.startedAt.substring(11, 16);

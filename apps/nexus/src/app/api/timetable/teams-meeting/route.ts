@@ -74,12 +74,29 @@ export async function POST(request: NextRequest) {
       .eq('id', classroom_id)
       .single();
 
-    // Determine scope
+    // Determine scope.
+    //
+    // A linked team overrides an explicit `calendar_event`, and that is the whole
+    // point rather than an inconvenience. Where the recording ends up is decided
+    // here and nowhere else: a channel meeting stores it in the team's document
+    // library, where every member can watch it forever, while a calendar event
+    // makes a standalone `@thread.v2` meeting whose recording goes to the
+    // ORGANIZER'S OneDrive and is shared only with the people on the invite. One
+    // class scheduled that way in July left the recording out of the channel and
+    // invisible to every teacher who was not invited. So the choice is refused
+    // whenever there is a team to hold the recording, for `auto` and explicit
+    // callers alike. `link_only` is left alone: it deliberately creates no
+    // calendar entry at all and is not a recording path.
     let scope: string;
+    let scopeUpgraded = false;
     if (auto) {
       scope = classroom?.ms_team_id ? 'channel_meeting' : 'calendar_event';
     } else {
       scope = explicitScope || 'link_only';
+      if (scope === 'calendar_event' && classroom?.ms_team_id) {
+        scope = 'channel_meeting';
+        scopeUpgraded = true;
+      }
     }
 
     // Get the scheduled class details
@@ -109,6 +126,11 @@ export async function POST(request: NextRequest) {
 
     const ensureSec = (t: string) => t.length === 5 ? `${t}:00` : t;
     const extras: Record<string, unknown> = {};
+    if (scopeUpgraded) {
+      extras.scopeUpgraded = true;
+      extras.scopeNote =
+        'This class has a Teams team, so it was scheduled as a channel meeting. The recording then lands in the team files where every student and teacher can watch it, instead of in your personal OneDrive.';
+    }
     let meetingId = '';
     let joinUrl = '';
     // The Outlook / group event id, empty when no calendar entry was created.

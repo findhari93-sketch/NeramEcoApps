@@ -54,6 +54,7 @@ import ClassAssignmentsSection from './ClassAssignmentsSection';
 import PrepGateCard, { type ClassPrepSummaryClient } from './PrepGateCard';
 import ClassPrepRoster from './ClassPrepRoster';
 import ClassCaptureView from './ClassCaptureView';
+import RecordingPlayerDialog from './RecordingPlayerDialog';
 import { buildClassWhatsAppMessage } from '@/lib/class-share-message';
 import { preworkDueLabel } from '@/lib/prework';
 import { preworkReasonShortLabel } from '@/lib/prework-reasons';
@@ -247,6 +248,7 @@ export default function ClassDetailPanel({
   const [waCopied, setWaCopied] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'cancel' | 'delete' | null>(null);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
+  const [recordingOpen, setRecordingOpen] = useState(false);
 
   if (!cls) return null;
 
@@ -672,15 +674,17 @@ export default function ClassDetailPanel({
             </Button>
           )}
 
-          {/* Watch recording */}
+          {/* Watch recording.
+              Opens the in-app player rather than linking out to Microsoft: a
+              recording that lives in the organizer's OneDrive is shared only
+              with the meeting invitees, so the outbound link refuses most
+              students and any teacher who was not invited. */}
           {isPast && hasRecording && (
             <Button
               variant="contained"
               color="success"
               fullWidth
-              href={cls.recording_url!}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={() => setRecordingOpen(true)}
               startIcon={<PlayCircleOutlineIcon />}
               sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
             >
@@ -1289,6 +1293,20 @@ export default function ClassDetailPanel({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* In-app recording player. Only teachers are offered the raw Teams link:
+          for a student it is the very link that refuses them. */}
+      {hasRecording && (
+        <RecordingPlayerDialog
+          open={recordingOpen}
+          onClose={() => setRecordingOpen(false)}
+          classId={cls.id}
+          title={cls.title}
+          getToken={getToken}
+          fallbackUrl={cls.recording_url}
+          showFallbackLink={role === 'teacher'}
+        />
+      )}
     </>
   );
 }

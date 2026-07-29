@@ -65,17 +65,38 @@ async function shareDownloadUrl(encoded: string, token: string): Promise<string 
 }
 
 /**
+ * Unwrap a Teams "meeting recap" link to the file it is about.
+ *
+ * `https://teams.microsoft.com/l/meetingrecap?...&fileUrl=<encoded>&threadId=...`
+ * is what Teams puts on the clipboard for a class recording, and it is what some
+ * stored `recording_url` values are. Nothing about that host is resolvable as a
+ * file: only the `fileUrl` parameter points at the video. Anything else is
+ * returned untouched, so this is safe to run over every URL.
+ */
+export function unwrapTeamsRecapUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.toLowerCase().endsWith('teams.microsoft.com')) return url;
+    const fileUrl = u.searchParams.get('fileUrl');
+    return fileUrl && /^https:\/\//i.test(fileUrl) ? fileUrl : url;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Resolve a SharePoint video URL to a temporary streaming URL.
- * Works with sharing links, stream.aspx URLs, and direct webUrls.
+ * Works with sharing links, stream.aspx URLs, direct webUrls, and Teams recap links.
  * Returns a pre-authenticated download URL that can be used in <video> elements.
  */
 export async function getSharePointStreamUrl(sharepointUrl: string): Promise<string> {
   const token = await getAppOnlyToken();
-  const u = new URL(sharepointUrl);
+  const target = unwrapTeamsRecapUrl(sharepointUrl);
+  const u = new URL(target);
 
   // For sharing links (/:v:/ videos), use the /shares endpoint.
   if (u.pathname.match(/\/:v:\//)) {
-    const dl = await shareDownloadUrl(encodeSharingUrl(sharepointUrl), token);
+    const dl = await shareDownloadUrl(encodeSharingUrl(target), token);
     if (dl) return dl;
   }
 
@@ -149,7 +170,7 @@ export async function getSharePointStreamUrl(sharepointUrl: string): Promise<str
   // /:w:/ word, /:x:/ excel, /:p:/ powerpoint, /:i:/ image, …). This is the
   // path a pasted PDF/document reference takes.
   if (u.hostname.includes('sharepoint.com') && !u.pathname.includes('_layouts')) {
-    const dl = await shareDownloadUrl(encodeSharingUrl(sharepointUrl), token);
+    const dl = await shareDownloadUrl(encodeSharingUrl(target), token);
     if (dl) return dl;
   }
 
