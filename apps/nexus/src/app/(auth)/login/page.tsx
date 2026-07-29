@@ -124,7 +124,28 @@ function LoginContent() {
         </Button>
       )}
 
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 3, display: 'block' }}>
+      {/*
+        Parents have no Microsoft account, so this page is a dead end for them.
+        A text link rather than a second button on purpose: students and
+        teachers are the overwhelming majority here, and two equal-weight
+        buttons would make them stop and choose. Same reasoning as keeping the
+        parent sign-in on its own page instead of adding a tab.
+      */}
+      <Button
+        variant="text"
+        onClick={() => router.push('/parent/login')}
+        sx={{
+          mt: 2,
+          textTransform: 'none',
+          minHeight: 48,
+          color: 'text.secondary',
+          fontSize: '0.95rem',
+        }}
+      >
+        Parent? Sign in with the ID Neram gave you
+      </Button>
+
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
         By signing in, you agree to our Terms of Service and Privacy Policy
       </Typography>
     </Box>
