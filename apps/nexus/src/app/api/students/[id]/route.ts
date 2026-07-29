@@ -38,7 +38,9 @@ export async function GET(
 
       supabase
         .from('nexus_enrollments')
-        .select('role, enrolled_at')
+        .select(
+          'role, enrolled_at, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason',
+        )
         .eq('classroom_id', classroomId)
         .eq('user_id', studentId)
         .eq('role', 'student')
@@ -123,10 +125,20 @@ export async function GET(
 
     const completedChecklist = checklistItems.filter((i) => i.is_completed).length;
 
+    const enrollment = enrollmentResult.data as any;
+
     return NextResponse.json({
       student: {
         ...userResult.data,
-        enrolled_at: enrollmentResult.data.enrolled_at,
+        enrolled_at: enrollment.enrolled_at,
+        // Two orthogonal axes: where they are in their studies, and whether they
+        // are still participating. See migration 20260802090000.
+        study_stage: enrollment.current_standard ?? null,
+        study_stage_source: enrollment.current_standard_source ?? null,
+        study_stage_set_at: enrollment.current_standard_set_at ?? null,
+        participation_status: enrollment.participation_status ?? 'active',
+        dormant_since: enrollment.dormant_since ?? null,
+        dormant_reason: enrollment.dormant_reason ?? null,
       },
       attendanceSummary: {
         total: totalClasses,

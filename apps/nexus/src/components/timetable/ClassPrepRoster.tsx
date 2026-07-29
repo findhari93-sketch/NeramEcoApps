@@ -10,9 +10,10 @@ import {
   alpha,
   useTheme,
 } from '@neram/ui';
-import { UserAvatar } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import StudentStageAvatar from '@/components/students/StudentStageAvatar';
+import { stageKeyOf } from '@/lib/student-stage';
 import type { PrepRosterRow, PrepRosterSummary } from '@/lib/class-prep-roster';
 import { preworkReasonShortLabel } from '@/lib/prework-reasons';
 
@@ -179,7 +180,15 @@ export default function ClassPrepRoster({ classId, getToken, refreshKey }: Class
                   borderTop: `1px solid ${theme.palette.divider}`,
                 }}
               >
-                <UserAvatar name={r.name} src={r.avatar_url} size={32} />
+                {/* The ring carries the study stage, so a teacher scanning who
+                    is ready ten minutes before class can also see at a glance
+                    that the two unprepared names are break-year students. */}
+                <StudentStageAvatar
+                  stage={stageKeyOf(r.study_stage)}
+                  name={r.name}
+                  src={r.avatar_url}
+                  size={32}
+                />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontWeight: 700, fontSize: '0.8125rem' }} noWrap>
                     {r.name || 'Unnamed student'}

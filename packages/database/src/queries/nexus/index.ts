@@ -1,4 +1,5 @@
 export * from './classrooms';
+export * from './roster';
 export * from './photo-sync-policy';
 export * from './batches';
 export * from './timetable';

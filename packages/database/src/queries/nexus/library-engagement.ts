@@ -1,4 +1,5 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { loadClassroomRoster } from './roster';
 import type {
   LibraryWatchSessionUpsert,
   LibraryStudentStreak,
@@ -79,24 +80,18 @@ export async function getEngagementDashboard(
       dateFrom = '2000-01-01';
   }
 
-  // Get students in classroom (or all)
-  let studentsQuery = supabase
-    .from('nexus_enrollments')
-    .select('user_id, user:users!nexus_enrollments_user_id_fkey(id, first_name, last_name, avatar_url)')
-    .eq('role', 'student')
-    .eq('is_active', true);
+  // Students in the classroom, or org-wide when no classroom is given. Dormant
+  // and graduated students are dropped by the helper, so the active/moderate/
+  // inactive buckets below describe only students who are actually expected to
+  // be reading.
+  const { members: enrollments, ids: studentIds } = await loadClassroomRoster(
+    options.classroomId ?? null,
+    { userColumns: 'first_name, last_name', client: supabase },
+  );
 
-  if (options.classroomId) {
-    studentsQuery = studentsQuery.eq('classroom_id', options.classroomId);
-  }
-
-  const { data: enrollments, error: enrollError } = await studentsQuery;
-  if (enrollError) throw enrollError;
-
-  const studentIds = (enrollments || []).map((e: any) => e.user_id);
   const studentMap = new Map<string, any>();
-  for (const e of enrollments || []) {
-    studentMap.set((e as any).user_id, (e as any).user);
+  for (const e of enrollments) {
+    studentMap.set(e.user_id, e.user);
   }
 
   if (studentIds.length === 0) {

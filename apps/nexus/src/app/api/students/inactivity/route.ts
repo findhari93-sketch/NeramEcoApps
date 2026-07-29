@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getAssignmentEngagement } from '@neram/database';
+import { getSupabaseAdminClient, getAssignmentEngagement, loadClassroomRoster } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { scoreInactivity, TIER_ORDER, type InactivityTier } from '@/lib/inactivity-score';
@@ -37,27 +37,30 @@ export async function GET(request: NextRequest) {
     // Roster: the same population the assignment roster and photo queue use, so
     // the three screens never disagree about who is in the class.
     //
-    // The FK must be named: nexus_enrollments points at users twice (user_id and
-    // removed_by), so a bare `user:users(...)` embed is ambiguous and PostgREST
-    // refuses it. Raise the error instead of discarding it, otherwise a broken
-    // query looks identical to "nobody in this class is disengaged", which is
-    // the most dangerous possible way for this screen to be wrong.
-    const { data: enrollmentRows, error: rosterError } = await supabase
-      .from('nexus_enrollments')
-      .select(
-        'id, user_id, enrolled_at, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni, photo_status, nexus_first_login_at, nexus_last_login_at)',
-      )
-      .eq('classroom_id', classroomId)
-      .eq('role', 'student')
-      .eq('is_active', true);
-
-    if (rosterError) {
-      throw new Error(`Could not load the classroom roster: ${rosterError.message}`);
+    // Dormant students are excluded, and this is the single most important place
+    // that happens. Disengagement is precisely what this screen scores, so every
+    // dormant student would otherwise land in tier `critical` and bury the
+    // students who have gone quiet without anyone noticing yet.
+    //
+    // Raise the error instead of discarding it: a broken query looks identical
+    // to "nobody in this class is disengaged", which is the most dangerous
+    // possible way for this screen to be wrong.
+    let roster: any[];
+    try {
+      const { members } = await loadClassroomRoster(classroomId, {
+        userColumns: 'photo_status, nexus_first_login_at, nexus_last_login_at',
+        client: supabase,
+      });
+      roster = members.map((m) => ({
+        id: m.enrollment_id,
+        user_id: m.user_id,
+        enrolled_at: m.enrolled_at,
+        user: m.user,
+      }));
+    } catch (rosterError: any) {
+      throw new Error(`Could not load the classroom roster: ${rosterError?.message ?? rosterError}`);
     }
 
-    const roster = ((enrollmentRows || []) as any[]).filter(
-      (r) => r.user && r.user.is_alumni !== true,
-    );
     const studentIds = roster.map((r) => r.user.id as string);
 
     if (studentIds.length === 0) {

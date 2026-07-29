@@ -1,3 +1,4 @@
+import { loadClassroomRoster, type RosterMemberUser } from '@neram/database';
 import {
   resolveOnlineMeetingDetailed,
   resolveOrganizerOid,
@@ -357,17 +358,17 @@ export async function syncClassAttendance(
   }
 
   // Enrolled roster with every identity key we might match on, in one query
-  // rather than the previous two-queries-per-record loop.
-  const { data: roster } = await supabase
-    .from('nexus_enrollments')
-    .select(
-      'user_id, user:users!nexus_enrollments_user_id_fkey(id, ms_oid, email, linked_classroom_email, personal_email)',
-    )
-    .eq('classroom_id', cls.classroom_id)
-    .eq('role', 'student')
-    .eq('is_active', true);
+  // rather than the previous two-queries-per-record loop. Dormant students are
+  // excluded, so a Teams join by someone who is paused does not resurrect them
+  // into the class's attendance numbers.
+  const { members: roster } = await loadClassroomRoster<
+    RosterMemberUser & { linked_classroom_email: string | null; personal_email: string | null }
+  >(cls.classroom_id, {
+    userColumns: 'linked_classroom_email, personal_email',
+    client: supabase,
+  });
 
-  const { byOid, byEmail } = buildRosterIndex(roster || []);
+  const { byOid, byEmail } = buildRosterIndex(roster);
 
   // Existing rows, so a teacher's manual mark is never silently overwritten.
   const { data: existingRows } = await supabase
@@ -566,23 +567,15 @@ async function deriveNoShows(supabase: any, classId: string, classroomId: string
     .eq('id', classId)
     .maybeSingle();
 
-  let rosterQuery = supabase
-    .from('nexus_enrollments')
-    .select('user_id, role')
-    .eq('classroom_id', classroomId)
-    .eq('is_active', true);
-  // Only students who were enrolled on the day can be no-shows. A later joiner
-  // gets a catch-up backlog item for this class instead, not a chase.
-  if (cls?.scheduled_date) {
-    rosterQuery = rosterQuery.lte('enrolled_at', `${cls.scheduled_date}T23:59:59+05:30`);
-  }
-
-  const [{ data: enrolled }, { data: attRows }] = await Promise.all([
-    rosterQuery,
+  // `asOf`: only students who were enrolled on the day can be no-shows. A later
+  // joiner gets a catch-up backlog item for this class instead, not a chase.
+  // The helper also drops dormant students and filters role='student' itself,
+  // which is why the JS role filter this function used to carry has gone.
+  const [{ ids: studentIds }, { data: attRows }] = await Promise.all([
+    loadClassroomRoster(classroomId, { asOf: cls?.scheduled_date ?? null, client: supabase }),
     supabase.from('nexus_attendance').select('student_id, attended').eq('scheduled_class_id', classId),
   ]);
 
-  const studentIds = (enrolled || []).filter((e: any) => e.role === 'student').map((e: any) => e.user_id);
   const attendedIds = (attRows || []).filter((a: any) => a.attended).map((a: any) => a.student_id);
   const attendedSet = new Set(attendedIds);
   const noShows = studentIds.filter((id: string) => !attendedSet.has(id));

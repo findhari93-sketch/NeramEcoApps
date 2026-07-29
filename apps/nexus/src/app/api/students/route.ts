@@ -1,18 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
-import { getSupabaseAdminClient, getCurrentBatch } from '@neram/database';
+import { getSupabaseAdminClient, getCurrentBatch, isTracked } from '@neram/database';
 import { pickClassroomEmail } from '@/lib/classroom-email';
 import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
+import {
+  matchesSegment,
+  segmentCounts,
+  stageCounts,
+  stageKeyOf,
+  type StageFacts,
+  type StudentSegment,
+} from '@/lib/student-stage';
+
+const SEGMENTS: readonly string[] = [
+  'exam_this_year',
+  'all_active',
+  '11th',
+  'lower',
+  'unset',
+  'dormant',
+];
 
 /**
- * GET /api/students?classroom={id}&search={query}&batch={batchId|unassigned}&examBatch={code|current|none}
+ * GET /api/students?classroom={id}&search={query}&batch={batchId|unassigned}
+ *                  &examBatch={code|current|none|all}&segment={segment}
+ *                  &stage={csv}&participation={active|dormant|any}
  *
  * List enrolled students for a classroom with attendance and checklist stats.
  *
- * Two independent "batch" axes (do not confuse them):
+ * Three independent axes (do not confuse them):
  *   - `batch`     = the classroom SECTION (nexus_enrollments.batch_id -> nexus_batches)
  *   - `examBatch` = the EXAM-YEAR COHORT (users.academic_year, e.g. '2026-27')
+ *   - `stage`     = the STUDY STAGE (nexus_enrollments.current_standard), which
+ *                   with participation_status drives the segment bar.
+ *
+ * This is the ONE route that deliberately returns dormant students: they must
+ * still be findable and reactivatable, they just live behind their own segment.
+ * Every other monitoring surface uses loadClassroomRoster, which drops them.
+ *
+ * Segment counts are computed over the COMPLETE roster before any segment
+ * narrowing, so the pill counts stay honest no matter which pill is active. The
+ * client filters rows with the same matchesSegment(), so the header count and
+ * the list length cannot disagree.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -25,7 +55,21 @@ export async function GET(request: NextRequest) {
     const classroomId = request.nextUrl.searchParams.get('classroom');
     const search = request.nextUrl.searchParams.get('search');
     const batchFilter = request.nextUrl.searchParams.get('batch');
-    const examBatchParam = request.nextUrl.searchParams.get('examBatch');
+    const segmentParam = request.nextUrl.searchParams.get('segment');
+    const stageParam = request.nextUrl.searchParams.get('stage');
+    const participationParam = request.nextUrl.searchParams.get('participation');
+    let examBatchParam = request.nextUrl.searchParams.get('examBatch');
+
+    const segment: StudentSegment | null =
+      segmentParam && SEGMENTS.includes(segmentParam) ? (segmentParam as StudentSegment) : null;
+
+    // users.academic_year is noisy: one classroom legitimately carries NULL,
+    // 2025-26, 2026-27, 2027-28 and 2028-29 at once. The default 'current'
+    // cohort filter would therefore hide some of the very students the "Not set"
+    // and "Dormant" segments exist to surface, and the pill count would not
+    // match the list. Those two segments are about fixing data, so the cohort
+    // narrowing is dropped for them.
+    if (segment === 'unset' || segment === 'dormant') examBatchParam = 'all';
 
     if (!classroomId) {
       return NextResponse.json({ error: 'Missing classroom parameter' }, { status: 400 });
@@ -47,9 +91,14 @@ export async function GET(request: NextRequest) {
     // rather than have them vanish. Each row carries `awaiting_microsoft` and they
     // are counted separately, so they never inflate "N active". See
     // lib/microsoft-account.ts.
+    //
+    // The `user:users!nexus_enrollments_user_id_fkey` hint is mandatory, not
+    // stylistic: nexus_enrollments references users FOUR times (user_id,
+    // removed_by, dormant_by, current_standard_set_by), so a bare embed is
+    // ambiguous and PostgREST rejects it.
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('user_id, enrolled_at, batch_id, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, is_alumni), batch:nexus_batches(id, name)')
+      .select('id, user_id, enrolled_at, batch_id, is_active, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, is_alumni), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
       .eq('role', 'student')
       .eq('is_active', true)
@@ -65,6 +114,23 @@ export async function GET(request: NextRequest) {
       } else {
         enrollmentQuery = enrollmentQuery.eq('batch_id', batchFilter);
       }
+    }
+
+    // Explicit stage / participation narrowing for API consumers and for the day
+    // a classroom is 300 students rather than 28. The segment bar itself filters
+    // client-side off the complete roster so the counts stay honest.
+    if (stageParam) {
+      const wanted = stageParam.split(',').map((s) => s.trim()).filter(Boolean);
+      const settable = wanted.filter((s) => s !== 'unset');
+      if (wanted.includes('unset') && !settable.length) {
+        enrollmentQuery = enrollmentQuery.is('current_standard', null);
+      } else if (settable.length && !wanted.includes('unset')) {
+        enrollmentQuery = enrollmentQuery.in('current_standard', settable);
+      }
+    }
+
+    if (participationParam === 'active' || participationParam === 'dormant') {
+      enrollmentQuery = enrollmentQuery.eq('participation_status', participationParam);
     }
 
     // Exam-year cohort filter (users.academic_year), independent of the classroom section.
@@ -96,7 +162,22 @@ export async function GET(request: NextRequest) {
     });
 
     if (enrollments.length === 0) {
-      return NextResponse.json({ students: [], batches: [], currentBatch: currentCode });
+      // Ship a fully-shaped counts object even when empty, so the client never
+      // has to guess whether a missing key means zero or means stale payload.
+      return NextResponse.json({
+        students: [],
+        counts: {
+          total: 0,
+          active: 0,
+          awaitingMicrosoft: 0,
+          tracked: 0,
+          dormant: 0,
+          stage: stageCounts([]),
+          segments: segmentCounts([]),
+        },
+        batches: [],
+        currentBatch: currentCode,
+      });
     }
 
     const studentIds = enrollments.map((e: any) => e.user_id);
@@ -215,6 +296,14 @@ export async function GET(request: NextRequest) {
         exam_batch: user.academic_year ?? null,
         enrolled_at: enrollment.enrolled_at,
         batch: batch ? { id: batch.id, name: batch.name } : null,
+        // Two orthogonal axes. A student can be Class 11 AND dormant, so these
+        // are never folded into a single field.
+        study_stage: enrollment.current_standard ?? null,
+        study_stage_source: enrollment.current_standard_source ?? null,
+        study_stage_set_at: enrollment.current_standard_set_at ?? null,
+        participation_status: enrollment.participation_status ?? 'active',
+        dormant_since: enrollment.dormant_since ?? null,
+        dormant_reason: enrollment.dormant_reason ?? null,
         attendance: {
           attended: attendance.attended,
           total: totalClasses,
@@ -240,13 +329,45 @@ export async function GET(request: NextRequest) {
     // number who can actually sign in today; `awaitingMicrosoft` is the queue of
     // paid students still waiting on Entra provisioning.
     const awaitingMicrosoft = students.filter((s: any) => s.awaiting_microsoft).length;
+
+    // Counted over the COMPLETE roster, deliberately before the segment
+    // narrowing below, so every pill shows its true size whichever pill is
+    // active. isTracked is imported rather than reimplemented: it is the single
+    // written-down definition of "counts towards this classroom's numbers".
+    const facts: StageFacts[] = enrollments.map((e: any) => ({
+      stage: stageKeyOf(e.current_standard),
+      dormant: e.participation_status === 'dormant',
+    }));
+    const trackedCount = enrollments.filter((e: any) => isTracked(e)).length;
+
     const counts = {
       total: students.length,
       active: students.length - awaitingMicrosoft,
       awaitingMicrosoft,
+      tracked: trackedCount,
+      dormant: students.length - trackedCount,
+      stage: stageCounts(facts),
+      segments: segmentCounts(facts),
     };
 
-    return NextResponse.json({ students, counts, batches: batches || [], currentBatch: currentCode });
+    // Server-side segment narrowing is applied LAST, after the counts, and only
+    // when asked for. The screen normally filters client-side so that typing in
+    // the search box does not cost a round trip.
+    const visible = segment
+      ? students.filter((s: any) =>
+          matchesSegment(
+            { stage: stageKeyOf(s.study_stage), dormant: s.participation_status === 'dormant' },
+            segment,
+          ),
+        )
+      : students;
+
+    return NextResponse.json({
+      students: visible,
+      counts,
+      batches: batches || [],
+      currentBatch: currentCode,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load students';
     console.error('Students GET error:', message);

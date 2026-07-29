@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
 import { tallyReasons } from '@/lib/rsvp-reasons';
 
 /**
@@ -51,15 +51,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Only teachers can view the RSVP dashboard' }, { status: 403 });
     }
 
-    // Get enrolled students for this classroom
-    const { data: students } = await supabase
-      .from('nexus_enrollments')
-      .select('user_id, batch_id, user:users!nexus_enrollments_user_id_fkey(id, name, avatar_url)')
-      .eq('classroom_id', classroomId)
-      .eq('role', 'student')
-      .eq('is_active', true);
+    // Enrolled students, minus anyone dormant. "No response" is a list a teacher
+    // is expected to chase, so a paused student sitting in it permanently is
+    // exactly the wrong kind of work to manufacture.
+    //
+    // Note this is NOT the enrolment lookup above: that one answers "is the
+    // caller a teacher here" and must keep its own query, because dormancy is
+    // not an access rule.
+    const { members: students } = await loadClassroomRoster(classroomId, { client: supabase });
 
-    const allStudents = (students || []).map((s: any) => ({
+    const allStudents = students.map((s) => ({
       id: s.user_id,
       name: s.user?.name || 'Unknown',
       avatar_url: s.user?.avatar_url || null,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
 
 /**
  * GET /api/documents/class-overview?classroom={id}
@@ -42,15 +42,12 @@ export async function GET(request: NextRequest) {
     // Use 'any' cast for columns not in generated types (current_standard, is_current, is_deleted, etc.)
     const db = supabase as any;
 
-    // Get enrolled students with current_standard
-    const { data: enrollments, error: enrollErr } = await db
-      .from('nexus_enrollments')
-      .select('user_id, current_standard, users:user_id(id, name, email, avatar_url)')
-      .eq('classroom_id', classroomId)
-      .eq('role', 'student')
-      .eq('is_active', true);
-
-    if (enrollErr) throw enrollErr;
+    // Enrolled students with their study stage. The old query used a bare
+    // `users:user_id(...)` embed; nexus_enrollments now references users four
+    // times, so the helper's explicit FK hint is what keeps this resolvable.
+    // Dormant students are dropped: an empty document row for someone who has
+    // paused is not a gap anyone should be chasing.
+    const { members: enrollments } = await loadClassroomRoster(classroomId, { client: db });
 
     // Get active templates
     const { data: templates, error: tmplErr } = await db
@@ -84,10 +81,10 @@ export async function GET(request: NextRequest) {
       current_standard: string | null;
     }> = [];
 
-    for (const enrollment of (enrollments || [])) {
-      const u = enrollment.users as unknown as { id: string; name: string; email: string; avatar_url: string | null };
+    for (const enrollment of enrollments) {
+      const u = enrollment.user as unknown as { id: string; name: string; email: string; avatar_url: string | null };
       if (!u) continue;
-      const cs = (enrollment as Record<string, unknown>).current_standard as string | null;
+      const cs = enrollment.current_standard;
       students.push({ ...u, current_standard: cs });
       matrix[u.id] = {};
       for (const tmpl of (templates || [])) {

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, getClassPrepTest, loadClassPrepRoster } from '@neram/database';
+import { errorResponse } from '@/lib/api-errors';
+import {
+  getSupabaseAdminClient,
+  getClassPrepTest,
+  loadClassPrepRoster,
+  loadClassroomRoster,
+} from '@neram/database';
 import { resolveClassStaffAccess } from '@/lib/class-staff-access';
 import { buildPrepRoster, summarisePrepRoster, prepRosterHeadline } from '@/lib/class-prep-roster';
 
@@ -25,6 +31,8 @@ interface RosterClass {
   classroom_id: string;
   teacher_id: string | null;
   title: string | null;
+  /** Needed to scope the roster to who was enrolled on the day. */
+  scheduled_date: string | null;
 }
 
 export async function GET(request: NextRequest, { params }: Ctx) {
@@ -36,19 +44,21 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       supabase,
       msUser.oid,
       params.classId,
-      'id, classroom_id, teacher_id, title',
+      'id, classroom_id, teacher_id, title, scheduled_date',
     );
     if ('error' in access) return access.error;
     // Read-only, so canEdit is not required: any staff member who can see the
     // classroom may see who is ready. Only WRITING a prep test needs canEdit.
 
-    const [enrollmentsRes, states, prepTest, preworkRes, attendanceRes] = await Promise.all([
-      supabase
-        .from('nexus_enrollments')
-        .select('user_id, user:users!nexus_enrollments_user_id_fkey(id, name, avatar_url)')
-        .eq('classroom_id', access.cls.classroom_id)
-        .eq('role', 'student')
-        .eq('is_active', true),
+    // Moving to the shared helper GAINS this route two filters it never had: it
+    // previously counted graduated students, and it counted students who joined
+    // after the class was scheduled. Both dragged the readiness rate down. It
+    // also drops dormant students, who cannot meaningfully be "not ready".
+    const [rosterRes, states, prepTest, preworkRes, attendanceRes] = await Promise.all([
+      loadClassroomRoster(access.cls.classroom_id, {
+        asOf: access.cls.scheduled_date,
+        client: supabase,
+      }),
       loadClassPrepRoster(params.classId, supabase),
       getClassPrepTest(params.classId, supabase),
       supabase
@@ -63,13 +73,12 @@ export async function GET(request: NextRequest, { params }: Ctx) {
         .eq('scheduled_class_id', params.classId),
     ]);
 
-    const students = ((enrollmentsRes.data || []) as any[])
-      .filter((e) => e.user)
-      .map((e) => ({
-        student_id: e.user.id as string,
-        name: (e.user.name as string) ?? null,
-        avatar_url: (e.user.avatar_url as string) ?? null,
-      }));
+    const students = rosterRes.members.map((e) => ({
+      student_id: e.user.id,
+      name: e.user.name ?? null,
+      avatar_url: e.user.avatar_url ?? null,
+      study_stage: e.current_standard,
+    }));
 
     // A row absent from this map is NOT MEASURED, which is why it is a Map rather
     // than a boolean defaulted to false.
@@ -105,7 +114,6 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       headline: prepRosterHeadline(summary),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load the roster';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, 'Failed to load the roster');
   }
 }

@@ -7,14 +7,19 @@ import {
   Typography,
   Paper,
   Skeleton,
-  UserAvatar,
   Button,
   LinearProgress,
   Divider,
+  Snackbar,
 } from '@neram/ui';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import ParentAccessCard from '@/components/parent/ParentAccessCard';
+import ClassifyDrawer, { type ClassifyMode } from '@/components/students/ClassifyDrawer';
+import StudentStageAvatar from '@/components/students/StudentStageAvatar';
+import { DormantChip, StudentStageChip } from '@/components/students/StudentStageChip';
+import { stageKeyOf, type StageKey } from '@/lib/student-stage';
 
 interface StudentDetail {
   id: string;
@@ -22,6 +27,10 @@ interface StudentDetail {
   email: string | null;
   avatar_url: string | null;
   enrollment_date: string | null;
+  study_stage: string | null;
+  participation_status: 'active' | 'dormant';
+  dormant_since: string | null;
+  dormant_reason: string | null;
   attendance: {
     attended: number;
     total: number;
@@ -41,10 +50,15 @@ interface StudentDetail {
 export default function StudentDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { activeClassroom, getToken } = useNexusAuthContext();
+  const { activeClassroom, getToken, can } = useNexusAuthContext();
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [drawer, setDrawer] = useState<ClassifyMode | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [snackbar, setSnackbar] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
+  const canClassify = can('coord.student.classify');
   const studentId = params.id as string;
 
   useEffect(() => {
@@ -73,6 +87,10 @@ export default function StudentDetailPage() {
             email: s.email,
             avatar_url: s.avatar_url,
             enrollment_date: s.enrolled_at || s.enrollment_date || null,
+            study_stage: s.study_stage ?? null,
+            participation_status: s.participation_status ?? 'active',
+            dormant_since: s.dormant_since ?? null,
+            dormant_reason: s.dormant_reason ?? null,
             attendance: {
               attended: att.attended || 0,
               total: att.total || 0,
@@ -97,7 +115,45 @@ export default function StudentDetailPage() {
     }
 
     fetchStudent();
-  }, [activeClassroom, studentId, getToken]);
+  }, [activeClassroom, studentId, getToken, reloadKey]);
+
+  /**
+   * The same PATCH the bulk bar uses, with a one-element id list. One editor and
+   * one endpoint for both entry points, so the rules cannot diverge.
+   */
+  async function applyClassification(payload: {
+    studyStage?: StageKey | null;
+    participationStatus?: 'active' | 'dormant';
+    reason?: string;
+  }) {
+    if (!activeClassroom || !student) return;
+    setSaving(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/students/classification', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          classroomId: activeClassroom.id,
+          studentIds: [student.id],
+          ...payload,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSnackbar(data?.error || 'Could not update this student');
+        return;
+      }
+      setDrawer(null);
+      setReloadKey((k) => k + 1);
+      setSnackbar('Updated');
+    } catch {
+      setSnackbar('Could not update this student');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-IN', {
@@ -150,12 +206,15 @@ export default function StudentDetailPage() {
 
       {/* Student Header */}
       <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 2, textAlign: 'center' }}>
-        <UserAvatar
-          src={student.avatar_url}
-          name={student.name}
-          size={80}
-          sx={{ mx: 'auto', mb: 1.5 }}
-        />
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
+          <StudentStageAvatar
+            stage={stageKeyOf(student.study_stage)}
+            dormant={student.participation_status === 'dormant'}
+            src={student.avatar_url}
+            name={student.name}
+            size={80}
+          />
+        </Box>
         <Typography variant="h6" sx={{ fontWeight: 700 }}>
           {student.name}
         </Typography>
@@ -164,17 +223,52 @@ export default function StudentDetailPage() {
             {student.email}
           </Typography>
         )}
+
+        {/* Classification. Two chips, never one: they answer two different
+            questions and a student can legitimately be both. */}
+        <Box sx={{ display: 'flex', gap: 0.75, justifyContent: 'center', flexWrap: 'wrap', mt: 1.25 }}>
+          <StudentStageChip stage={stageKeyOf(student.study_stage)} density="detailed" />
+          {student.participation_status === 'dormant' && (
+            <DormantChip
+              since={student.dormant_since}
+              reason={student.dormant_reason}
+              density="detailed"
+            />
+          )}
+          {canClassify && (
+            <Button
+              size="small"
+              startIcon={<EditOutlinedIcon sx={{ fontSize: '0.9rem' }} />}
+              onClick={() => setDrawer('stage')}
+              sx={{ minHeight: 32, py: 0, fontSize: '0.72rem', fontWeight: 700 }}
+            >
+              Edit
+            </Button>
+          )}
+        </Box>
+
         {student.enrollment_date && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
             Enrolled: {formatDate(student.enrollment_date)}
           </Typography>
         )}
-        <Box sx={{ mt: 2 }}>
+
+        <Box sx={{ mt: 2, display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
           <ViewAsStudentButton
             studentId={student.id}
             reason={`Student detail: ${student.name}`}
             variant="contained"
           />
+          {canClassify && (
+            <Button
+              variant="outlined"
+              color={student.participation_status === 'dormant' ? 'success' : 'warning'}
+              onClick={() => setDrawer(student.participation_status === 'dormant' ? 'reactivate' : 'dormant')}
+              sx={{ minHeight: 48, fontWeight: 700 }}
+            >
+              {student.participation_status === 'dormant' ? 'Bring back' : 'Mark dormant'}
+            </Button>
+          )}
         </Box>
       </Paper>
 
@@ -241,6 +335,23 @@ export default function StudentDetailPage() {
           </Typography>
         </Box>
       </Paper>
+
+      <ClassifyDrawer
+        open={!!drawer}
+        mode={drawer ?? 'stage'}
+        names={[student.name]}
+        busy={saving}
+        onClose={() => setDrawer(null)}
+        onApply={applyClassification}
+      />
+
+      <Snackbar
+        open={!!snackbar}
+        autoHideDuration={2500}
+        onClose={() => setSnackbar(null)}
+        message={snackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   );
 }

@@ -14,6 +14,7 @@ import type {
   GalleryReactionType,
 } from '../../types';
 import { getTopicDrillFiles } from './curriculum';
+import { loadClassroomRoster } from './roster';
 import { computeAssignmentClock, istTodayStr } from '../../utils/assignment-clock';
 
 const ASSIGNMENTS = 'nexus_class_assignments';
@@ -367,13 +368,13 @@ export async function getAssignmentRoster(
   const assignment = await getAssignment(assignmentId, supabase);
   if (!assignment) throw new Error('Assignment not found');
 
-  const { data: enrollments, error: enErr } = await supabase
-    .from('nexus_enrollments')
-    .select('user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni)')
-    .eq('classroom_id', assignment.classroom_id)
-    .eq('role', 'student')
-    .eq('is_active', true);
-  if (enErr) throw enErr;
+  // Dormant students are excluded: chasing a missing submission from someone who
+  // has paused is noise, and counting them keeps the class submission rate
+  // permanently and misleadingly low. Alumni exclusion now lives in the helper
+  // too, so the JS `is_alumni` guard this loop used to carry is gone.
+  const { members: enrollments } = await loadClassroomRoster(assignment.classroom_id, {
+    client: supabase,
+  });
 
   const { data: subs, error: sErr } = await supabase
     .from(SUBMISSIONS)
@@ -386,10 +387,9 @@ export async function getAssignmentRoster(
   const due = assignment.due_at ? new Date(assignment.due_at).getTime() : null;
   const rows: AssignmentRosterRow[] = [];
   const seen = new Set<string>();
-  for (const en of enrollments || []) {
-    const user = en.user as unknown as AssignmentRosterRow['student'] & { is_alumni?: boolean };
-    if (!user || user.is_alumni) continue; // never list graduated students
-    if (seen.has(user.id)) continue;
+  for (const en of enrollments) {
+    const user = en.user as unknown as AssignmentRosterRow['student'];
+    if (!user || seen.has(user.id)) continue;
     seen.add(user.id);
     const submission = subByStudent.get(user.id) ?? null;
     let bucket: AssignmentRosterRow['bucket'] = 'missing';
@@ -439,13 +439,11 @@ export async function getAssignmentDrawingRoster(
   const assignment = await getAssignment(assignmentId, supabase);
   if (!assignment) throw new Error('Assignment not found');
 
-  const { data: enrollments, error: enErr } = await supabase
-    .from('nexus_enrollments')
-    .select('user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni)')
-    .eq('classroom_id', assignment.classroom_id)
-    .eq('role', 'student')
-    .eq('is_active', true);
-  if (enErr) throw enErr;
+  // Same population as getAssignmentRoster: dormant and graduated students are
+  // both dropped by the shared helper.
+  const { members: enrollments } = await loadClassroomRoster(assignment.classroom_id, {
+    client: supabase,
+  });
 
   const { data: subs, error: sErr } = await supabase
     .from('drawing_submissions')
@@ -464,9 +462,9 @@ export async function getAssignmentDrawingRoster(
 
   const rows: AssignmentDrawingRosterRow[] = [];
   const seen = new Set<string>();
-  for (const en of enrollments || []) {
-    const user = en.user as unknown as AssignmentDrawingRosterRow['student'] & { is_alumni?: boolean };
-    if (!user || user.is_alumni || seen.has(user.id)) continue;
+  for (const en of enrollments) {
+    const user = en.user as unknown as AssignmentDrawingRosterRow['student'];
+    if (!user || seen.has(user.id)) continue;
     seen.add(user.id);
     const d = latestByStudent.get(user.id) || null;
     const count = countByStudent.get(user.id) || 0;
@@ -746,21 +744,17 @@ export async function getAssignmentEngagement(
   }>;
   const assnById = new Map(assns.map((a) => [a.id, a]));
 
-  const { data: enrollments, error: enErr } = await supabase
-    .from('nexus_enrollments')
-    .select(
-      'enrolled_at, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni)',
-    )
-    .eq('classroom_id', classroomId)
-    .eq('role', 'student')
-    .eq('is_active', true);
-  if (enErr) throw enErr;
+  // Dormant students are excluded. This function is the submission-rate engine
+  // behind both the teacher assignments dashboard and the inactivity watchlist,
+  // so leaving them in would drag every class-level ratio down and flood the
+  // at-risk list with people who are deliberately paused.
+  const { members: enrollments } = await loadClassroomRoster(classroomId, { client: supabase });
 
   const students: { id: string; name: string | null; email: string | null; avatar_url: string | null; enrolled_at: string | null }[] = [];
   const seen = new Set<string>();
-  for (const en of enrollments || []) {
-    const u = en.user as unknown as { id: string; name: string | null; email: string | null; avatar_url: string | null; is_alumni?: boolean };
-    if (!u || u.is_alumni || seen.has(u.id)) continue;
+  for (const en of enrollments) {
+    const u = en.user as unknown as { id: string; name: string | null; email: string | null; avatar_url: string | null };
+    if (!u || seen.has(u.id)) continue;
     seen.add(u.id);
     students.push({ id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url, enrolled_at: en.enrolled_at ?? null });
   }

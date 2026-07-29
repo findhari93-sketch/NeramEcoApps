@@ -112,6 +112,7 @@ describe('teacher tier (external, restricted)', () => {
     'structure.enrollment.remove',
     'structure.plan.delete',
     'teach.timetable.schedule',
+    'coord.student.classify',
     'coord.photo_ms_push',
     'impersonate.any',
   ];
@@ -139,6 +140,16 @@ describe('teacher tier (external, restricted)', () => {
   it('cannot schedule a class even though it can run one', () => {
     expect(can('teacher', 'teach.timetable.schedule')).toBe(false);
     expect(can('teacher', 'teach.session.run')).toBe(true);
+  });
+
+  it('can see a student but cannot classify one', () => {
+    // Marking a student dormant removes them from attendance %, submission
+    // rates, the watchlist and every automated reminder. A visiting teacher
+    // must not be able to do that silently.
+    expect(can('teacher', 'coord.student.view')).toBe(true);
+    expect(can('teacher', 'coord.student.classify')).toBe(false);
+    expect(can('manager', 'coord.student.classify')).toBe(true);
+    expect(can('admin', 'coord.student.classify')).toBe(true);
   });
 });
 

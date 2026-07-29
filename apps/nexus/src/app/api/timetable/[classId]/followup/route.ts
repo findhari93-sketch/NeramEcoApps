@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
 import { canRunSession } from '@/lib/staff-capabilities';
 import { computeAbsencesForClass, LATE_THRESHOLD_MINUTES } from '@/lib/class-absences';
 import { notifyStudents } from '@/lib/notify-students';
@@ -72,14 +72,11 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     // is worse than a slow one.
     const stats = await computeAbsencesForClass(supabase, cls).catch(() => null);
 
-    const [{ data: roster }, { data: attendance }, { data: absences }, { data: assignments }] =
+    // Dormant students are excluded: the whole point of this screen is chasing
+    // an unexplained absence, and a paused student's absence is explained.
+    const [{ members: roster }, { data: attendance }, { data: absences }, { data: assignments }] =
       await Promise.all([
-        supabase
-          .from('nexus_enrollments')
-          .select('user_id, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url)')
-          .eq('classroom_id', cls.classroom_id)
-          .eq('role', 'student')
-          .eq('is_active', true),
+        loadClassroomRoster(cls.classroom_id, { client: supabase }),
         supabase
           .from('nexus_attendance')
           .select('student_id, attended, joined_at, duration_minutes')
@@ -98,7 +95,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     const absById = new Map((absences || []).map((a: any) => [a.student_id, a]));
     const startedAt = new Date(`${cls.scheduled_date}T${cls.start_time}+05:30`).getTime();
 
-    const students = (roster || []).map((r: any) => {
+    const students = roster.map((r: any) => {
       const att: any = attById.get(r.user_id);
       const abs: any = absById.get(r.user_id);
       const joinedAt = att?.attended ? att.joined_at : null;

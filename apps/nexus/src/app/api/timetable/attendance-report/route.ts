@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
 import { errorResponse } from '@/lib/api-errors';
 import {
   syncClassAttendance,
@@ -135,20 +135,19 @@ export async function GET(request: NextRequest) {
     // Staff: the FULL enrolled roster, not just students who already have an
     // attendance row. Channel classes commonly have zero rows, so the teacher
     // needs every student listed with a present/absent toggle.
-    const [{ data: roster }, { data: attRows, error: attErr }] = await Promise.all([
-      supabase
-        .from('nexus_enrollments')
-        // linked_classroom_email and personal_email are selected purely so the
-        // CSV import can match on them client-side. Matching on `email` alone
-        // misses the students whose classroom account differs from their primary
-        // one, which is a large minority of the roster. Staff-only branch, and
-        // staff already see `email`, so this exposes nothing new.
-        .select(
-          'user_id, student:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, linked_classroom_email, personal_email)',
-        )
-        .eq('classroom_id', classroomId)
-        .eq('role', 'student')
-        .eq('is_active', true),
+    // linked_classroom_email and personal_email are requested purely so the CSV
+    // import can match on them client-side. Matching on `email` alone misses the
+    // students whose classroom account differs from their primary one, which is
+    // a large minority of the roster. Staff-only branch, and staff already see
+    // `email`, so this exposes nothing new.
+    //
+    // Dormant students are excluded: an unmarked register row defaults to
+    // "absent", so leaving them in would manufacture an absence every class.
+    const [{ members: roster }, { data: attRows, error: attErr }] = await Promise.all([
+      loadClassroomRoster(classroomId, {
+        userColumns: 'linked_classroom_email, personal_email',
+        client: supabase,
+      }),
       supabase
         .from('nexus_attendance')
         .select('*, student:users!nexus_attendance_student_id_fkey(id, name, email, avatar_url)')
@@ -160,7 +159,7 @@ export async function GET(request: NextRequest) {
     const attByStudent = new Map<string, any>((attRows || []).map((a: any) => [a.student_id, a]));
     // One row per enrolled student, carrying their attendance state (unmarked =
     // treated as absent) so the sheet can render a switch for everyone.
-    const merged = (roster || []).map((r: any) => {
+    const merged = roster.map((r: any) => {
       const a = attByStudent.get(r.user_id);
       return {
         id: a?.id ?? null,
@@ -174,13 +173,16 @@ export async function GET(request: NextRequest) {
         // Every address this student might have joined Teams under, lowercased,
         // so the CSV import can match without a second round trip.
         match_emails: [
-          r.student?.email,
-          r.student?.linked_classroom_email,
-          r.student?.personal_email,
+          r.user?.email,
+          r.user?.linked_classroom_email,
+          r.user?.personal_email,
         ]
           .filter(Boolean)
           .map((e: string) => e.toLowerCase()),
-        student: a?.student ?? r.student,
+        student: a?.student ?? r.user,
+        // Carried so the register can show who is a break-year or Class 12
+        // student without a second request. It never affects the toggle.
+        study_stage: r.current_standard ?? null,
       };
     });
 

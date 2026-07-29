@@ -1,4 +1,5 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { loadClassroomRoster } from './roster';
 import type {
   GamificationPointEventType,
   GamificationActivityType,
@@ -433,26 +434,29 @@ export async function getLiveLeaderboard(
 ): Promise<LeaderboardEntry[]> {
   const supabase = (client || getSupabaseAdminClient()) as any;
 
-  // Get all enrolled students
-  let enrollmentQuery = supabase
-    .from('nexus_enrollments')
-    .select('user_id, batch_id, user:users!inner(id, name, avatar_url)')
-    .eq('role', 'student');
+  // Enrolled students.
+  //
+  // This query previously filtered on NEITHER is_active NOR is_alumni, so
+  // students who had been removed from the classroom and students who had
+  // already graduated were both still being ranked. It also used a bare
+  // `user:users!inner(...)` embed, which is now ambiguous because
+  // nexus_enrollments references users four times. Moving to the shared helper
+  // fixes all three at once, and additionally drops dormant students: ranking
+  // someone who has paused, necessarily near the bottom, is a pointless
+  // public comparison.
+  //
+  // 'all_neram' scope passes a null classroom, which the helper reads as "every
+  // classroom".
+  const crossClassroom = options.scope === 'all_neram';
+  const { members: enrollments, ids: studentIds } = await loadClassroomRoster(
+    crossClassroom ? null : classroomId,
+    {
+      batchId: crossClassroom ? null : options.batchId ?? null,
+      client: supabase,
+    },
+  );
 
-  if (options.scope === 'all_neram') {
-    // Cross-classroom — no classroom filter
-  } else {
-    enrollmentQuery = enrollmentQuery.eq('classroom_id', classroomId);
-    if (options.batchId) {
-      enrollmentQuery = enrollmentQuery.eq('batch_id', options.batchId);
-    }
-  }
-
-  const { data: enrollments, error: enrollError } = await enrollmentQuery;
-  if (enrollError) throw enrollError;
-  if (!enrollments || enrollments.length === 0) return [];
-
-  const studentIds = enrollments.map((e: any) => e.user_id);
+  if (studentIds.length === 0) return [];
 
   // Aggregate points for each student in the period
   const { data: points, error: ptsError } = await supabase

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
 import { LATE_THRESHOLD_MINUTES } from '@/lib/class-absences';
 import { tallyReasons } from '@/lib/rsvp-reasons';
 import { ATTENDANCE_FAILURE_MESSAGES, type AttendanceSyncFailure } from '@/lib/attendance-sync';
@@ -47,13 +47,10 @@ export async function GET(request: NextRequest) {
       .single();
     if (!cls) return NextResponse.json({ error: 'Class not found in this classroom' }, { status: 404 });
 
-    const [{ data: roster }, { data: attendance }, { data: optOuts }] = await Promise.all([
-      supabase
-        .from('nexus_enrollments')
-        .select('user_id, student:users!nexus_enrollments_user_id_fkey(id, name, avatar_url)')
-        .eq('classroom_id', classroomId)
-        .eq('role', 'student')
-        .eq('is_active', true),
+    // Dormant students are excluded, so the attendance rate on this panel counts
+    // only the students who are actually expected in the room.
+    const [{ members }, { data: attendance }, { data: optOuts }] = await Promise.all([
+      loadClassroomRoster(classroomId, { client: supabase }),
       supabase
         .from('nexus_attendance')
         .select('student_id, attended, joined_at, left_at, duration_minutes, attendance_intervals')
@@ -72,7 +69,7 @@ export async function GET(request: NextRequest) {
     const attById = new Map<string, any>((attendance || []).map((a: any) => [a.student_id, a]));
     const optById = new Map<string, any>((optOuts || []).map((o: any) => [o.student_id, o]));
 
-    const students = (roster || []).map((r: any) => {
+    const students = members.map((r: any) => {
       const a = attById.get(r.user_id);
       const opt = optById.get(r.user_id);
       const attended = !!a?.attended;
@@ -81,8 +78,8 @@ export async function GET(request: NextRequest) {
       const segments = Array.isArray(a?.attendance_intervals) ? a.attendance_intervals.length : (attended ? 1 : 0);
       return {
         id: r.user_id,
-        name: r.student?.name || 'Student',
-        avatar_url: r.student?.avatar_url || null,
+        name: r.user?.name || 'Student',
+        avatar_url: r.user?.avatar_url || null,
         rsvp: opt ? 'not_attending' : 'attending',
         reason: opt ? (opt.reason_code || opt.reason || null) : null,
         attended,

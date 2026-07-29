@@ -5258,6 +5258,28 @@ export interface NexusBatch extends Timestamps {
   is_active: boolean;
 }
 
+/**
+ * Where a student is in their studies. Drives priority and focus.
+ *
+ * `gap_year` means they finished Class 12 and are preparing full time, so their
+ * exam is THIS year exactly like `12th`. The UI labels it "Break Year".
+ *
+ * Deliberately the same union as DocumentStandard, which is the pre-existing
+ * name for the same four values. Two names, one set, because the document vault
+ * got there first and renaming it is not worth the churn.
+ */
+export type NexusStudyStage = '10th' | '11th' | '12th' | 'gap_year';
+
+/**
+ * Whether a student is still engaging. Drives inclusion in monitoring, NOT
+ * access. See the COMMENT ON COLUMN in migration 20260802090000 for how this
+ * differs from the six status axes on `users` and from `is_active`.
+ */
+export type NexusParticipationStatus = 'active' | 'dormant';
+
+/** How a study stage got its value. See migration 20260802090000. */
+export type NexusStudyStageSource = 'staff' | 'onboarding_backfill';
+
 export interface NexusEnrollment {
   id: string;
   user_id: string;
@@ -5270,6 +5292,33 @@ export interface NexusEnrollment {
   removed_by: string | null;
   removal_reason_category: RemovalReasonCategory | null;
   removal_notes: string | null;
+
+  // Study stage (migration 20260415 for the column, 20260802090000 for provenance).
+  current_standard: NexusStudyStage | null;
+  current_standard_set_at: string | null;
+  current_standard_set_by: string | null;
+  current_standard_source: NexusStudyStageSource | null;
+
+  // Participation (migration 20260802090000). Orthogonal to current_standard:
+  // a student can be Class 11 AND dormant.
+  participation_status: NexusParticipationStatus;
+  dormant_since: string | null;
+  dormant_reason: string | null;
+  dormant_by: string | null;
+}
+
+/** One axis changed on one enrolment. Append-only. Migration 20260802090000. */
+export interface NexusEnrollmentClassificationEvent {
+  id: string;
+  enrollment_id: string;
+  classroom_id: string;
+  student_id: string;
+  axis: 'study_stage' | 'participation';
+  from_value: string | null;
+  to_value: string | null;
+  reason: string | null;
+  performed_by: string;
+  created_at: string;
 }
 
 export interface ProgressSnapshot {

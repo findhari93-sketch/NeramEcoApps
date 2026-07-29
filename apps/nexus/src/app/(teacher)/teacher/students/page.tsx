@@ -1,16 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
+  Button,
   Typography,
   Paper,
   Chip,
-  Skeleton,
   TextField,
   MenuItem,
-  IconButton,
   Snackbar,
   Tooltip,
   ToggleButton,
@@ -19,329 +18,121 @@ import {
   useMediaQuery,
   alpha,
 } from '@neram/ui';
-import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import DensitySmallOutlinedIcon from '@mui/icons-material/DensitySmallOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import NoAccountsOutlinedIcon from '@mui/icons-material/NoAccountsOutlined';
-import GraphAvatar from '@/components/GraphAvatar';
-import ViewAsStudentButton from '@/components/ViewAsStudentButton';
+import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import AvailableStudentsSection from '@/components/AvailableStudentsSection';
-import EmailDomainFlag from '@/components/students/EmailDomainFlag';
-import type { EmailDomainStatus } from '@/lib/classroom-email';
+import BulkSelectBar from '@/components/students/BulkSelectBar';
+import ClassifyDrawer, { type ClassifyMode } from '@/components/students/ClassifyDrawer';
+import StudentListSkeleton from '@/components/students/StudentListSkeleton';
+import StudentSegmentBar from '@/components/students/StudentSegmentBar';
+import UnsetStagePrompt from '@/components/students/UnsetStagePrompt';
+import { CompactRow, StudentCard, DetailedRow } from '@/components/students/StudentRows';
+import {
+  VIEW_STORAGE_KEY,
+  type EnrolledStudent,
+  type StudentBatch,
+  type ViewMode,
+} from '@/components/students/studentRow.types';
+import {
+  DEFAULT_SEGMENT,
+  SEGMENT_LABEL,
+  SEGMENT_STORAGE_KEY,
+  matchesSegment,
+  segmentCounts,
+  stageCounts,
+  stageKeyOf,
+  type StageKey,
+  type StudentSegment,
+} from '@/lib/student-stage';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { usePresence } from '@/hooks/usePresence';
 
-interface StudentBatch {
-  id: string;
-  name: string;
+const SEGMENTS: StudentSegment[] = [
+  'exam_this_year',
+  'all_active',
+  '11th',
+  'lower',
+  'unset',
+  'dormant',
+];
+
+interface StudentCounts {
+  total: number;
+  active: number;
+  awaitingMicrosoft: number;
+  tracked: number;
+  dormant: number;
+  stage: Record<StageKey, number>;
+  segments: Record<StudentSegment, number>;
 }
 
-interface EnrolledStudent {
-  id: string;
-  name: string;
-  email: string | null;
-  email_status: EmailDomainStatus; // class-domain status of the shown email
-  avatar_url: string | null;
-  ms_oid: string | null;
-  awaiting_microsoft: boolean; // enrolled, but no Entra account yet: cannot sign in
-
-  batch: StudentBatch | null; // classroom section (nexus_batches)
-  exam_batch: string | null; // exam-year cohort (users.academic_year)
-  attendance: { attended: number; total: number; percentage: number };
-  checklist: { completed: number; total: number };
-}
-
-/** Thin labeled progress bar (attendance / checklist), clearer than a plain chip. */
-function Meter({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <Box sx={{ minWidth: 92, flex: '0 1 130px' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.25 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem', fontWeight: 600 }}>
-          {label}
-        </Typography>
-        <Typography variant="caption" sx={{ fontSize: '0.72rem', fontWeight: 700, color }}>
-          {value}%
-        </Typography>
-      </Box>
-      <Box sx={{ height: 5, borderRadius: 3, bgcolor: alpha(color, 0.16), overflow: 'hidden' }}>
-        <Box sx={{ height: '100%', width: `${Math.min(100, Math.max(0, value))}%`, bgcolor: color, borderRadius: 3, transition: 'width .3s ease' }} />
-      </Box>
-    </Box>
-  );
-}
-
-/** Density modes for the roster: dense scan list, avatar card grid, or roomy rows. */
-type ViewMode = 'compact' | 'cards' | 'detailed';
-const VIEW_STORAGE_KEY = 'nexus:students:view';
-
-/** Compact colored pill showing a single percentage stat (used in the dense list). */
-function StatPill({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <Box
-      sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.85, height: 22, borderRadius: 1.5, bgcolor: alpha(color, 0.12), flexShrink: 0 }}
-    >
-      <Typography component="span" sx={{ fontSize: '0.58rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.3px', lineHeight: 1 }}>
-        {label}
-      </Typography>
-      <Typography component="span" sx={{ fontSize: '0.72rem', fontWeight: 800, color, lineHeight: 1 }}>
-        {value}%
-      </Typography>
-    </Box>
-  );
-}
-
-/** Copy-email icon button shared by every view mode. */
-function CopyEmailButton({ email, title, onCopy }: { email: string; title: string; onCopy: (e: React.MouseEvent, email: string) => void }) {
-  return (
-    <Tooltip title={title} arrow>
-      <IconButton
-        size="small"
-        aria-label="Copy email"
-        onClick={(e) => onCopy(e, email)}
-        sx={{
-          flexShrink: 0,
-          width: 40,
-          height: 40,
-          color: 'primary.main',
-          bgcolor: (t) => alpha(t.palette.primary.main, 0.06),
-          '&:hover': { bgcolor: (t) => alpha(t.palette.primary.main, 0.14) },
-        }}
-      >
-        <ContentCopyOutlinedIcon sx={{ fontSize: '1rem' }} />
-      </IconButton>
-    </Tooltip>
-  );
-}
-
-interface StudentRowProps {
-  student: EnrolledStudent;
-  checklistPct: number;
-  attColor: string;
-  doneColor: string;
-  presenceStatus?: string | null;
-  isMobile: boolean;
-  onOpen: () => void;
-  onCopy: (e: React.MouseEvent, email: string) => void;
-}
-
-/** Compact: single-line scan row. Small avatar, name, muted email, tiny stat pills. */
-function CompactRow({ student, checklistPct, attColor, doneColor, presenceStatus, onOpen, onCopy }: StudentRowProps) {
-  return (
-    <Paper
-      variant="outlined"
-      onClick={onOpen}
-      sx={{
-        px: 1.5,
-        py: 1,
-        cursor: 'pointer',
-        minHeight: 56,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.25,
-        borderRadius: 2,
-        transition: 'background-color .2s, border-color .2s',
-        '&:hover': { backgroundColor: 'action.hover', borderColor: (t) => alpha(t.palette.primary.main, 0.4) },
-        '&:active': { backgroundColor: 'action.selected' },
-      }}
-    >
-      <GraphAvatar msOid={student.ms_oid} name={student.name} size={36} tapToView={false} presenceStatus={presenceStatus} />
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-          <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
-            {student.name}
-          </Typography>
-          {student.exam_batch && (
-            <Chip label={student.exam_batch} size="small" color="primary" sx={{ height: 18, fontSize: '0.62rem', fontFamily: 'monospace', flexShrink: 0 }} />
-          )}
-          <EmailDomainFlag status={student.email_status} awaitingMicrosoft={student.awaiting_microsoft} />
-        </Box>
-        {student.email && (
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.72rem', lineHeight: 1.3 }}>
-            {student.email}
-          </Typography>
-        )}
-      </Box>
-      <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 0.75, flexShrink: 0 }}>
-        <StatPill label="Att" value={student.attendance.percentage} color={attColor} />
-        <StatPill label="List" value={checklistPct} color={doneColor} />
-      </Box>
-      {student.email && <CopyEmailButton email={student.email} title="Copy email" onCopy={onCopy} />}
-      <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0 }}>
-        <ViewAsStudentButton studentId={student.id} reason={`Student list: ${student.name}`} iconOnly />
-      </Box>
-    </Paper>
-  );
-}
-
-/** Cards: avatar tile with chips + both progress meters, laid out in a grid. */
-function StudentCard({ student, checklistPct, attColor, doneColor, presenceStatus, onOpen, onCopy }: StudentRowProps) {
-  return (
-    <Paper
-      variant="outlined"
-      onClick={onOpen}
-      sx={{
-        p: 2,
-        cursor: 'pointer',
-        borderRadius: 2.5,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 1.25,
-        transition: 'background-color .2s, border-color .2s, box-shadow .2s',
-        '&:hover': {
-          backgroundColor: 'action.hover',
-          borderColor: (t) => alpha(t.palette.primary.main, 0.4),
-          boxShadow: (t) => `0 4px 14px ${alpha(t.palette.primary.main, 0.1)}`,
-        },
-        '&:active': { backgroundColor: 'action.selected' },
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-        <GraphAvatar msOid={student.ms_oid} name={student.name} size={48} tapToView={false} presenceStatus={presenceStatus} />
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
-            {student.name}
-          </Typography>
-          {student.email && (
-            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-              {student.email}
-            </Typography>
-          )}
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
-            {student.exam_batch && (
-              <Chip label={student.exam_batch} size="small" color="primary" sx={{ height: 20, fontSize: '0.68rem', fontFamily: 'monospace' }} />
-            )}
-            {student.batch && <Chip label={student.batch.name} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
-            <EmailDomainFlag status={student.email_status} awaitingMicrosoft={student.awaiting_microsoft} />
-          </Box>
-        </Box>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 2, mt: 'auto', pt: 0.5 }}>
-        <Meter label="Attendance" value={student.attendance.percentage} color={attColor} />
-        <Meter label="Checklist" value={checklistPct} color={doneColor} />
-      </Box>
-      <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end', alignItems: 'center' }}>
-        {student.email && <CopyEmailButton email={student.email} title="Copy email" onCopy={onCopy} />}
-        <ViewAsStudentButton studentId={student.id} reason={`Student list: ${student.name}`} iconOnly />
-      </Box>
-    </Paper>
-  );
-}
-
-/** Detailed: the roomy two-row layout (avatar + chips on top, full meters below). */
-function DetailedRow({ student, checklistPct, attColor, doneColor, presenceStatus, isMobile, onOpen, onCopy }: StudentRowProps) {
-  return (
-    <Paper
-      variant="outlined"
-      onClick={onOpen}
-      sx={{
-        p: 2,
-        cursor: 'pointer',
-        minHeight: 48,
-        borderRadius: 2,
-        transition: 'background-color .2s, border-color .2s, box-shadow .2s',
-        '&:hover': {
-          backgroundColor: 'action.hover',
-          borderColor: (t) => alpha(t.palette.primary.main, 0.4),
-          boxShadow: (t) => `0 2px 10px ${alpha(t.palette.primary.main, 0.08)}`,
-        },
-        '&:active': { backgroundColor: 'action.selected' },
-      }}
-    >
-      {/* Top row: Avatar + Name + actions */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <GraphAvatar msOid={student.ms_oid} name={student.name} size={isMobile ? 44 : 48} tapToView={false} presenceStatus={presenceStatus} />
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-            <Typography variant="body1" sx={{ fontWeight: 700, fontSize: { xs: '0.92rem', sm: '1rem' } }} noWrap>
-              {student.name}
-            </Typography>
-            {student.exam_batch && (
-              <Chip label={student.exam_batch} size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, fontFamily: 'monospace' }} />
-            )}
-            {student.batch && <Chip label={student.batch.name} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }} />}
-            <EmailDomainFlag status={student.email_status} awaitingMicrosoft={student.awaiting_microsoft} />
-          </Box>
-          {student.email && !isMobile && (
-            <Typography variant="body2" color="text.secondary" noWrap>
-              {student.email}
-            </Typography>
-          )}
-        </Box>
-        {student.email && <CopyEmailButton email={student.email} title={isMobile ? student.email : 'Copy email'} onCopy={onCopy} />}
-        <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0 }}>
-          <ViewAsStudentButton studentId={student.id} reason={`Student list: ${student.name}`} iconOnly />
-        </Box>
-      </Box>
-      {/* Bottom row: progress meters */}
-      <Box sx={{ display: 'flex', gap: 2, mt: 1.25, ml: { xs: 0, sm: 7.5 }, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Meter label="Attendance" value={student.attendance.percentage} color={attColor} />
-        <Meter label="Checklist" value={checklistPct} color={doneColor} />
-        {student.email && isMobile && (
-          <Typography variant="caption" color="text.disabled" noWrap sx={{ ml: 'auto', maxWidth: 130, fontSize: '0.65rem' }}>
-            {student.email}
-          </Typography>
-        )}
-      </Box>
-    </Paper>
-  );
-}
-
-/** Per-view loading skeleton (shape matches the chosen density). */
-function StudentListSkeleton({ viewMode }: { viewMode: ViewMode }) {
-  if (viewMode === 'cards') {
-    return (
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 1.5 }}>
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <Skeleton key={i} variant="rectangular" height={158} sx={{ borderRadius: 2.5 }} />
-        ))}
-      </Box>
-    );
-  }
-  const h = viewMode === 'compact' ? 56 : 92;
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: viewMode === 'compact' ? 1 : 1.5 }}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Skeleton key={i} variant="rectangular" height={h} sx={{ borderRadius: 2 }} />
-      ))}
-    </Box>
-  );
-}
+const EMPTY_COUNTS: StudentCounts = {
+  total: 0,
+  active: 0,
+  awaitingMicrosoft: 0,
+  tracked: 0,
+  dormant: 0,
+  stage: { gap_year: 0, '12th': 0, '11th': 0, '10th': 0, unset: 0 },
+  segments: { exam_this_year: 0, all_active: 0, '11th': 0, lower: 0, unset: 0, dormant: 0 },
+};
 
 export default function TeacherStudents() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const router = useRouter();
-  const { activeClassroom, getToken } = useNexusAuthContext();
+  const { activeClassroom, getToken, can } = useNexusAuthContext();
+
+  // can() is fail-closed: an unknown capability, or a payload from before this
+  // rollout, returns false. So a stale /api/auth/me hides the controls rather
+  // than offering an action the server will refuse.
+  const canClassify = can('coord.student.classify');
+
   const [students, setStudents] = useState<EnrolledStudent[]>([]);
+  const [counts, setCounts] = useState<StudentCounts>(EMPTY_COUNTS);
   const [batches, setBatches] = useState<StudentBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [batchFilter, setBatchFilter] = useState<string | null>(null);
-  // Exam-year cohort filter (users.academic_year). Default to the ACTIVE cohort
-  // (current + upcoming years); graduated/alumni students are never shown.
   const [examBatches, setExamBatches] = useState<{ code: string }[]>([]);
   // Default 'current' = the current exam-year cohort PLUS any upcoming years
   // (and untagged), so the primary view is the batch the teacher runs now
-  // together with students already enrolled for a future batch. Past cohorts are
-  // hidden by default (near-zero hold access, and they are managed in Admin);
-  // switch to 'All with access' to include any re-added past student.
+  // together with students already enrolled for a future batch.
   const [examBatchFilter, setExamBatchFilter] = useState<string>('current');
   const [currentBatch, setCurrentBatch] = useState<string | null>(null);
-  const [snackbar, setSnackbar] = useState<string | null>(null);
-  // Density mode for the roster. Default 'compact' (best for scanning a long
-  // list); restored from localStorage after mount to avoid SSR hydration drift.
+  const [snackbar, setSnackbar] = useState<{ message: string; undo?: () => void } | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('compact');
 
+  // The landing filter: the students who actually sit the exam this year. This
+  // makes the priority the default daily experience instead of something a
+  // teacher has to remember to filter for.
+  const [segment, setSegment] = useState<StudentSegment>(DEFAULT_SEGMENT);
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  /** Set only by the "N not set" banner, so a manual Select starts empty. */
+  const [autoSelectPending, setAutoSelectPending] = useState(false);
+  const [drawer, setDrawer] = useState<{ mode: ClassifyMode } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Both preferences are read AFTER mount, not during render: reading
+  // localStorage while rendering a client page produces a hydration mismatch.
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(VIEW_STORAGE_KEY);
-      if (saved === 'compact' || saved === 'cards' || saved === 'detailed') setViewMode(saved);
+      const savedView = localStorage.getItem(VIEW_STORAGE_KEY);
+      if (savedView === 'compact' || savedView === 'cards' || savedView === 'detailed') {
+        setViewMode(savedView);
+      }
+      const savedSegment = localStorage.getItem(SEGMENT_STORAGE_KEY);
+      if (savedSegment && (SEGMENTS as string[]).includes(savedSegment)) {
+        setSegment(savedSegment as StudentSegment);
+      }
     } catch {
-      /* localStorage unavailable, keep default */
+      /* localStorage unavailable, keep defaults */
     }
   }, []);
 
@@ -350,6 +141,16 @@ export default function TeacherStudents() {
     setViewMode(next);
     try {
       localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
+  const handleSegmentChange = useCallback((next: StudentSegment) => {
+    setSegment(next);
+    setSelectedIds(new Set());
+    try {
+      localStorage.setItem(SEGMENT_STORAGE_KEY, next);
     } catch {
       /* non-fatal */
     }
@@ -381,17 +182,24 @@ export default function TeacherStudents() {
       const token = await getToken();
       if (!token) return;
 
+      // The exam-year cohort filter is deliberately dropped for the two
+      // data-hygiene segments. users.academic_year is noisy (one classroom
+      // spans NULL, 2025-26, 2026-27, 2027-28 and 2028-29), so leaving it on
+      // would hide some of the very students those segments exist to surface,
+      // and the pill count would not match the list.
+      const cohortFree = segment === 'unset' || segment === 'dormant';
+      const examParam = cohortFree ? 'all' : examBatchFilter;
+
       let url = `/api/students?classroom=${activeClassroom.id}`;
       if (batchFilter) url += `&batch=${batchFilter}`;
-      if (examBatchFilter && examBatchFilter !== 'all') url += `&examBatch=${examBatchFilter}`;
+      if (examParam && examParam !== 'all') url += `&examBatch=${examParam}`;
 
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 
       if (res.ok) {
         const data = await res.json();
         setStudents(data.students || []);
+        if (data.counts) setCounts({ ...EMPTY_COUNTS, ...data.counts });
         if (data.batches) setBatches(data.batches);
         if (data.currentBatch) setCurrentBatch(data.currentBatch);
       }
@@ -400,7 +208,7 @@ export default function TeacherStudents() {
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, getToken, batchFilter, examBatchFilter]);
+  }, [activeClassroom, getToken, batchFilter, examBatchFilter, segment]);
 
   useEffect(() => {
     fetchStudents();
@@ -409,37 +217,203 @@ export default function TeacherStudents() {
   // Bulk presence for all loaded students
   const { presenceMap } = usePresence(students.map((s) => s.ms_oid));
 
-  const filteredStudents = students.filter((s) => {
-    const query = searchQuery.toLowerCase();
-    return (
-      s.name.toLowerCase().includes(query) ||
-      (s.email && s.email.toLowerCase().includes(query))
-    );
-  });
+  // Counts come from the server over the COMPLETE roster; these local ones only
+  // exist so the pills stay honest while a request is in flight or if an older
+  // payload arrives without them.
+  const localCounts = useMemo(() => {
+    const facts = students.map((s) => ({
+      stage: stageKeyOf(s.study_stage),
+      dormant: s.participation_status === 'dormant',
+    }));
+    return { segments: segmentCounts(facts), stage: stageCounts(facts) };
+  }, [students]);
 
-  // "Active" means "can sign in today". New joinees who paid before their Entra
-  // account existed are still listed (and flagged on their row), but counting
-  // them as active would overstate who is actually reachable in Nexus.
-  const awaitingCount = filteredStudents.filter((s) => s.awaiting_microsoft).length;
-  const activeCount = filteredStudents.length - awaitingCount;
+  const segmentTotals = counts.segments ?? localCounts.segments;
+  const unsetTotal = counts.stage?.unset ?? localCounts.stage.unset;
+
+  // Never land on an empty list. A remembered segment can legitimately go to
+  // zero between visits (the last dormant student came back, every stage got
+  // set), and restoring it would show a teacher an empty screen with no clue
+  // that 28 students are one tap away. Falls back to the first segment that
+  // actually has somebody, preferring the default.
+  useEffect(() => {
+    if (loading || counts.total === 0) return;
+    if (segmentTotals[segment] > 0) return;
+    const fallback =
+      segmentTotals[DEFAULT_SEGMENT] > 0
+        ? DEFAULT_SEGMENT
+        : SEGMENTS.find((s) => segmentTotals[s] > 0);
+    if (fallback && fallback !== segment) handleSegmentChange(fallback);
+  }, [loading, counts.total, segmentTotals, segment, handleSegmentChange]);
+
+  // Segment first, then the free-text search, so the count on the active pill
+  // and the length of the list agree except when the user is searching.
+  const visibleStudents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return students.filter((s) => {
+      const inSegment = matchesSegment(
+        { stage: stageKeyOf(s.study_stage), dormant: s.participation_status === 'dormant' },
+        segment,
+      );
+      if (!inSegment) return false;
+      if (!query) return true;
+      return (
+        s.name.toLowerCase().includes(query) ||
+        (!!s.email && s.email.toLowerCase().includes(query))
+      );
+    });
+  }, [students, segment, searchQuery]);
+
+  const awaitingCount = visibleStudents.filter((s) => s.awaiting_microsoft).length;
 
   const handleCopyEmail = useCallback((e: React.MouseEvent, email: string) => {
     e.stopPropagation(); // Don't navigate to student detail
     navigator.clipboard.writeText(email).then(() => {
-      setSnackbar(`Copied ${email}`);
+      setSnackbar({ message: `Copied ${email}` });
     });
   }, []);
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setAutoSelectPending(false);
+  }, []);
+
+  /** One tap from the "N not set" banner to about-to-fix-them-all. */
+  const startFixingUnset = useCallback(() => {
+    handleSegmentChange('unset');
+    setSelectMode(true);
+    setAutoSelectPending(true);
+  }, [handleSegmentChange]);
+
+  // Selecting everyone has to wait for the segment switch and the refetch to
+  // land, so it runs off the rendered list rather than being folded into
+  // startFixingUnset.
+  //
+  // Gated on the banner flag, NOT just on being in select mode on this segment:
+  // a manager who taps "Select" themselves must start from an EMPTY selection,
+  // because the very next control is "Mark dormant" and silently pre-selecting
+  // the whole segment turns one tap into a bulk change nobody asked for.
+  useEffect(() => {
+    if (!autoSelectPending) return;
+    if (segment !== 'unset' || !visibleStudents.length) return;
+    setSelectedIds(new Set(visibleStudents.map((s) => s.id)));
+    setAutoSelectPending(false);
+  }, [autoSelectPending, segment, visibleStudents]);
+
+  const applyClassification = useCallback(
+    async (payload: {
+      studyStage?: StageKey | null;
+      participationStatus?: 'active' | 'dormant';
+      reason?: string;
+    }, ids?: string[], silent = false) => {
+      if (!activeClassroom) return;
+      const studentIds = ids ?? Array.from(selectedIds);
+      if (!studentIds.length) return;
+
+      setSaving(true);
+      try {
+        const token = await getToken();
+        if (!token) return;
+
+        const res = await fetch('/api/students/classification', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ classroomId: activeClassroom.id, studentIds, ...payload }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setSnackbar({ message: data?.error || 'Could not update those students' });
+          return;
+        }
+
+        setDrawer(null);
+        exitSelectMode();
+        await fetchStudents();
+
+        if (silent) return;
+
+        const skipped = (data.skipped || []).length;
+        const what = payload.participationStatus === 'dormant'
+          ? 'Marked dormant'
+          : payload.participationStatus === 'active'
+            ? 'Brought back'
+            : payload.studyStage === null
+              ? 'Cleared stage'
+              : 'Stage set';
+        const message = skipped
+          ? `${what} for ${data.updated}. ${skipped} skipped (not in this classroom).`
+          : `${what} for ${data.updated} student${data.updated === 1 ? '' : 's'}.`;
+
+        // A bulk write over seventeen rows needs a way back that does not
+        // involve redoing the whole selection by hand.
+        const previous = (data.students || []) as Array<{ id: string; previous: Record<string, unknown> }>;
+        const undo = previous.length
+          ? () => {
+              const first = previous[0]?.previous || {};
+              const revert: Record<string, unknown> = {};
+              if ('study_stage' in first) revert.studyStage = first.study_stage ?? null;
+              if ('participation_status' in first) {
+                revert.participationStatus = first.participation_status ?? 'active';
+                if (revert.participationStatus === 'dormant') revert.reason = 'Undo';
+              }
+              applyClassification(revert as never, previous.map((p) => p.id), true);
+            }
+          : undefined;
+
+        setSnackbar({ message, undo });
+      } catch (err) {
+        console.error('Classification failed:', err);
+        setSnackbar({ message: 'Could not update those students' });
+      } finally {
+        setSaving(false);
+      }
+    },
+    [activeClassroom, getToken, selectedIds, exitSelectMode, fetchStudents],
+  );
+
+  const selectedNames = useMemo(
+    () => students.filter((s) => selectedIds.has(s.id)).map((s) => s.name),
+    [students, selectedIds],
+  );
+
   return (
-    <Box>
-      {/* Context header: scope of what's shown (active students only) */}
+    <Box sx={{ pb: selectMode ? 12 : 0 }}>
+      {/* Context header: what the numbers on this page are counting */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-        <Chip
-          icon={<PeopleOutlinedIcon sx={{ fontSize: 18 }} />}
-          label={loading ? 'Loading…' : `${activeCount} active`}
-          color="primary"
-          sx={{ fontWeight: 700 }}
-        />
+        <Tooltip
+          title="Students counted in attendance, submissions, prep readiness and the watchlist. Dormant students are excluded from all of those."
+          arrow
+          enterTouchDelay={0}
+          leaveTouchDelay={4000}
+        >
+          <Chip
+            icon={<PeopleOutlinedIcon sx={{ fontSize: 18 }} />}
+            label={loading ? 'Loading…' : `${counts.tracked} tracked`}
+            color="primary"
+            sx={{ fontWeight: 700, cursor: 'help' }}
+          />
+        </Tooltip>
+        {/* Dormant shrank the denominator of every metric on this page; hiding
+            that is how people stop trusting the numbers. */}
+        {!loading && counts.dormant > 0 && (
+          <Chip
+            label={`${counts.dormant} dormant`}
+            variant="outlined"
+            onClick={() => handleSegmentChange('dormant')}
+            sx={{ fontWeight: 700, cursor: 'pointer' }}
+          />
+        )}
         {!loading && awaitingCount > 0 && (
           <Tooltip
             title="Enrolled and paid, but they have no @neramclasses.com account yet, so they cannot sign in to Nexus. Create the account in Entra, then use Refresh from Entra in Admin."
@@ -464,12 +438,24 @@ export default function TeacherStudents() {
             sx={{ fontWeight: 600 }}
           />
         )}
-        <Typography variant="caption" color="text.secondary" sx={{ ml: { sm: 'auto' }, width: { xs: '100%', sm: 'auto' } }}>
-          Current and upcoming batches with Nexus access. Add anyone not yet in class below. Switch Exam year to All with access to see re-added past students. Graduated students are managed in Admin.
-        </Typography>
+        {canClassify && !selectMode && (
+          <Button
+            size="small"
+            startIcon={<ChecklistOutlinedIcon />}
+            onClick={() => setSelectMode(true)}
+            sx={{ ml: { sm: 'auto' }, minHeight: 40, fontWeight: 700 }}
+          >
+            Select
+          </Button>
+        )}
+        {selectMode && (
+          <Button size="small" onClick={exitSelectMode} sx={{ ml: { sm: 'auto' }, minHeight: 40 }}>
+            Done
+          </Button>
+        )}
       </Box>
 
-      {/* Sticky search + filters */}
+      {/* Sticky filters */}
       <Box
         sx={{
           position: 'sticky',
@@ -481,6 +467,10 @@ export default function TeacherStudents() {
           bgcolor: (t) => (t.palette.mode === 'light' ? '#FAFAFA' : t.palette.background.default),
         }}
       >
+        <Box sx={{ mb: 1 }}>
+          <StudentSegmentBar value={segment} counts={segmentTotals} onChange={handleSegmentChange} />
+        </Box>
+
         <TextField
           fullWidth
           placeholder="Search by name or email..."
@@ -499,6 +489,12 @@ export default function TeacherStudents() {
             label="Exam year"
             value={examBatchFilter}
             onChange={(e) => setExamBatchFilter(e.target.value)}
+            disabled={segment === 'unset' || segment === 'dormant'}
+            helperText={
+              segment === 'unset' || segment === 'dormant'
+                ? 'Showing all exam years for this view'
+                : undefined
+            }
             sx={{ minWidth: 190, '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}
           >
             <MenuItem value="current">Current + upcoming</MenuItem>
@@ -588,36 +584,46 @@ export default function TeacherStudents() {
         </Box>
       </Box>
 
+      {!loading && segment !== 'unset' && (
+        <Box sx={{ mb: 1.5 }}>
+          <UnsetStagePrompt count={unsetTotal} canClassify={canClassify} onFix={startFixingUnset} />
+        </Box>
+      )}
+
       {/* Student List */}
       {loading ? (
         <StudentListSkeleton viewMode={viewMode} />
-      ) : filteredStudents.length === 0 ? (
+      ) : visibleStudents.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 5, textAlign: 'center', borderRadius: 2, borderStyle: 'dashed' }}>
           <PeopleOutlinedIcon sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
           <Typography variant="body1" sx={{ fontWeight: 600 }}>
             {searchQuery
               ? 'No students match your search'
-              : batchFilter
-                ? 'No students in this section'
-                : examBatchFilter === 'none'
-                  ? 'No students without an exam year'
-                  : 'No active students yet'}
+              : segment === 'dormant'
+                ? 'Nobody is marked dormant'
+                : segment === 'unset'
+                  ? 'Every student has a study stage'
+                  : `No students in ${SEGMENT_LABEL[segment]}`}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {searchQuery
               ? 'Try a different name or email.'
-              : 'Students appear here once you add them to the class below.'}
+              : segment === 'exam_this_year'
+                ? 'Break Year and Class 12 students appear here once their stage is set.'
+                : 'Try another category, or All active to see everyone.'}
           </Typography>
         </Paper>
       ) : (
         <Box
+          role={selectMode ? 'listbox' : undefined}
+          aria-multiselectable={selectMode || undefined}
           sx={
             viewMode === 'cards'
               ? { display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 1.5 }
               : { display: 'flex', flexDirection: 'column', gap: viewMode === 'compact' ? 1 : 1.5 }
           }
         >
-          {filteredStudents.map((student) => {
+          {visibleStudents.map((student) => {
             const checklistPct = student.checklist.total > 0
               ? Math.round((student.checklist.completed / student.checklist.total) * 100)
               : 0;
@@ -632,6 +638,9 @@ export default function TeacherStudents() {
               doneColor,
               presenceStatus,
               isMobile,
+              selectMode,
+              selected: selectedIds.has(student.id),
+              onToggleSelect: () => toggleSelect(student.id),
               onOpen: () => router.push(`/teacher/students/${student.id}`),
               onCopy: handleCopyEmail,
             };
@@ -645,7 +654,7 @@ export default function TeacherStudents() {
 
       {/* Add students who are not yet in this classroom (reads the live Microsoft
           directory, so their @neramclasses.com address shows correctly). */}
-      {activeClassroom && (
+      {activeClassroom && !selectMode && (
         <Box sx={{ mt: 2 }}>
           <AvailableStudentsSection
             classroomId={activeClassroom.id}
@@ -655,14 +664,51 @@ export default function TeacherStudents() {
         </Box>
       )}
 
-      {/* Copy confirmation snackbar */}
+      {selectMode && (
+        <BulkSelectBar
+          selectedCount={selectedIds.size}
+          visibleCount={visibleStudents.length}
+          canClassify={canClassify}
+          onSelectAll={() => setSelectedIds(new Set(visibleStudents.map((s) => s.id)))}
+          onClear={() => setSelectedIds(new Set())}
+          onSetStage={() => setDrawer({ mode: 'stage' })}
+          onMarkDormant={() => setDrawer({ mode: 'dormant' })}
+          onReactivate={() => setDrawer({ mode: 'reactivate' })}
+          showReactivate={segment === 'dormant'}
+        />
+      )}
+
+      <ClassifyDrawer
+        open={!!drawer}
+        mode={drawer?.mode ?? 'stage'}
+        names={selectedNames}
+        busy={saving}
+        onClose={() => setDrawer(null)}
+        onApply={(payload) => applyClassification(payload)}
+      />
+
       <Snackbar
         open={!!snackbar}
-        autoHideDuration={2000}
+        autoHideDuration={snackbar?.undo ? 8000 : 2500}
         onClose={() => setSnackbar(null)}
-        message={snackbar}
+        message={snackbar?.message}
+        action={
+          snackbar?.undo ? (
+            <Button
+              size="small"
+              color="secondary"
+              onClick={() => {
+                snackbar.undo?.();
+                setSnackbar(null);
+              }}
+            >
+              Undo
+            </Button>
+          ) : undefined
+        }
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         sx={{
+          bottom: { xs: selectMode ? 96 : 16 },
           '& .MuiSnackbarContent-root': {
             minWidth: 'auto',
             borderRadius: 2,

@@ -32,8 +32,9 @@ export const LAYOUT = {
   dayStub: 44,
   /** Hour gutter in the grid. */
   gridGutter: 46,
-  /** Right-hand editing panel. */
-  editPanel: 340,
+  /** Right-hand editing panel: floor and ceiling for its flexible share of the row. */
+  editPanelMinWidth: 420,
+  editPanelMaxWidth: 720,
 
   // ─── Calendar shell (the Teams-shaped layout) ──────────────────────────────
 

@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
 
 /**
  * GET /api/checklists/[id]/progress?classroom={classroomId}
@@ -33,15 +33,12 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Get all students enrolled in this classroom
-    const { data: enrollments } = await supabase
-      .from('nexus_enrollments')
-      .select('user_id, users!inner(id, name, email)')
-      .eq('classroom_id', classroomId)
-      .eq('role', 'student')
-      .eq('is_active', true);
+    // Students enrolled in this classroom, minus anyone dormant: an untouched
+    // checklist from a paused student would otherwise drag averageCompletion
+    // down and make the class look further behind than it is.
+    const { members: enrollments } = await loadClassroomRoster(classroomId, { client: supabase });
 
-    if (!enrollments || enrollments.length === 0) {
+    if (enrollments.length === 0) {
       return NextResponse.json({ students: [], overall: { averageCompletion: 0, totalStudents: 0 } });
     }
 
@@ -54,8 +51,8 @@ export async function GET(
 
     if (!entries || entries.length === 0) {
       const students = enrollments.map((e: any) => ({
-        id: e.users.id,
-        name: e.users.name || e.users.email || 'Unknown',
+        id: e.user.id,
+        name: e.user.name || e.user.email || 'Unknown',
         completedEntries: 0,
         totalEntries: 0,
         percentage: 0,
@@ -194,8 +191,8 @@ export async function GET(
       if (isStale) staleCount++;
 
       return {
-        id: e.users.id,
-        name: e.users.name || e.users.email || 'Unknown',
+        id: e.user.id,
+        name: e.user.name || e.user.email || 'Unknown',
         completedEntries: completedCount,
         totalEntries: totalItems,
         percentage: totalItems > 0 ? Math.round((completedCount / totalItems) * 100) : 0,

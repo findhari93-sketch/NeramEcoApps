@@ -21,12 +21,16 @@ import TroubleshootIcon from '@mui/icons-material/Troubleshoot';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DiagnosticsStepList, { type DiagnosticStep } from './DiagnosticsStepList';
 import TeamsCsvImportDialog from './TeamsCsvImportDialog';
+import StudentStageAvatar from '@/components/students/StudentStageAvatar';
+import { stageKeyOf } from '@/lib/student-stage';
 import type { RosterCandidate } from '@/lib/teams-attendance-csv';
 
 interface AttendanceRecord {
   id: string;
   student_id: string;
   attended: boolean;
+  /** nexus_enrollments.current_standard, display only. */
+  study_stage?: string | null;
   joined_at: string | null;
   left_at: string | null;
   duration_minutes: number | null;
@@ -452,7 +456,8 @@ export default function AttendanceSheet({
                   bgcolor: record.attended ? 'success.50' : record.source ? 'error.50' : 'action.hover',
                 }}
               >
-                <UserAvatar
+                <StudentStageAvatar
+                  stage={stageKeyOf(record.study_stage)}
                   src={record.student?.avatar_url}
                   name={record.student?.name}
                   size={32}

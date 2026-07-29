@@ -94,6 +94,7 @@ export type Capability =
   | 'moderate.recall'
   // ── coordination ───────────────────────────────────────────────────────────
   | 'coord.student.view'
+  | 'coord.student.classify'
   | 'coord.attendance.view'
   | 'coord.nudge'
   | 'coord.watchlist'
@@ -144,6 +145,14 @@ const SHARED_STAFF: readonly Capability[] = [
  * `structure.classroom.delete` is deliberately NOT here. Deleting a classroom
  * detaches an entire cohort and there is no undo in the UI, so it stays with
  * the admin.
+ *
+ * `coord.student.classify` is here rather than in SHARED_STAFF even though
+ * setting a study stage looks like harmless data entry. The same route also
+ * marks a student dormant, which silently removes them from attendance %,
+ * submission rates, the watchlist and every automated reminder. A visiting
+ * teacher should not be able to drop a student out of all monitoring, and
+ * splitting the two axes across two capabilities would mean two routes, two
+ * capability checks and two audit paths for one form.
  */
 const MANAGER_EXTRA: readonly Capability[] = [
   'structure.classroom.create',
@@ -153,6 +162,7 @@ const MANAGER_EXTRA: readonly Capability[] = [
   'structure.enrollment.remove',
   'structure.plan.delete',
   'teach.timetable.schedule',
+  'coord.student.classify',
   'coord.photo_ms_push',
   'impersonate.any',
 ];
@@ -297,6 +307,7 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   'moderate.gallery',
   'moderate.recall',
   'coord.student.view',
+  'coord.student.classify',
   'coord.attendance.view',
   'coord.nudge',
   'coord.watchlist',

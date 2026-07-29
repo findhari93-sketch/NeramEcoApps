@@ -39,6 +39,7 @@ import HolidayManager from '@/components/timetable/HolidayManager';
 import RsvpDashboard from '@/components/timetable/RsvpDashboard';
 import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
 import { type ClassCardData } from '@/components/timetable/ClassCard';
+import { LAYOUT } from '@/components/timetable/timetable-theme';
 import {
   formatDateISO,
   formatRangeLabel,
@@ -1276,8 +1277,10 @@ export default function TeacherTimetable() {
           <Box
             sx={{
               display: 'flex',
-              // Side by side once there is room for the 340px rail, stacked
-              // below that with the whole column scrolling as one.
+              // Side by side at lg+, each pane taking an even share of the row
+              // (within the edit pane's min/max) so the list doesn't dominate
+              // a dense editing form. Stacked below that, with the whole
+              // column scrolling as one.
               flexDirection: { xs: 'column', lg: 'row' },
               flex: 1,
               minHeight: 0,
@@ -1298,8 +1301,10 @@ export default function TeacherTimetable() {
             />
             <Box
               sx={{
-                flex: '0 0 auto',
-                width: { xs: 'auto', lg: 340 },
+                flex: { xs: '0 0 auto', lg: '1 1 0%' },
+                width: { xs: 'auto' },
+                minWidth: { lg: LAYOUT.editPanelMinWidth },
+                maxWidth: { lg: LAYOUT.editPanelMaxWidth },
                 minHeight: 0,
                 overflowY: { xs: 'visible', lg: 'auto' },
                 borderLeft: { lg: `1px solid ${theme.palette.divider}` },

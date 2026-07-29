@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, filterTrackedStudentIds } from '@neram/database';
 import { assertCronRequest } from '@/lib/cron-auth';
 
 /**
@@ -35,10 +35,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: 'No reminders to send', count: 0 });
     }
 
+    // This cron is driven entirely off exam attempts and has never checked
+    // enrolment, so without this guard it is the one reminder path that would
+    // keep messaging a dormant student. Their attempt is still marked handled
+    // below, so they do not accumulate a backlog of chasing to receive the day
+    // they come back.
+    const { kept } = await filterTrackedStudentIds(
+      attempts.map((a: any) => a.student_id),
+    );
+    const reachable = new Set(kept);
+
     // Create notifications for each attempt
     // Check if user_notifications table exists, if not just mark as sent
     let notificationCount = 0;
+    let skippedDormant = 0;
     for (const attempt of attempts) {
+      if (!reachable.has(attempt.student_id)) {
+        skippedDormant++;
+        await supabase
+          .from('nexus_student_exam_attempts')
+          .update({ scorecard_reminder_sent: true, updated_at: new Date().toISOString() })
+          .eq('id', attempt.id);
+        continue;
+      }
       // Try to insert notification (table may or may not exist)
       try {
         await supabase.from('user_notifications').insert({

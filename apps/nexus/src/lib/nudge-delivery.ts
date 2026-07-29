@@ -18,9 +18,16 @@
  * Never throws. A recipient we could not reach comes back with ok: false and
  * channel 'failed', because a partial send must still report honestly rather
  * than fail the whole batch.
+ *
+ * THIS IS ALSO THE DORMANT CHOKE POINT. Every student-facing automated message
+ * in Nexus routes through here (prework-sweep, catchup-pace, assignment nudges,
+ * catch-up nudges, study-material nudges), and several of those callers pass
+ * client-supplied or escalation-derived id lists rather than a roster query. So
+ * filtering dormant students at each roster query would leak; filtering here
+ * cannot. See filterTrackedStudentIds.
  */
 
-import { getSupabaseAdminClient, sendEmail } from '@neram/database';
+import { getSupabaseAdminClient, sendEmail, filterTrackedStudentIds } from '@neram/database';
 import { sendTeamsActivityNotification } from '@neram/auth';
 
 export interface NudgeResult {
@@ -75,7 +82,7 @@ export function plainToHtml(text: string): string {
 export async function sendNudge(
   input: SendNudgeInput,
 ): Promise<{ results: NudgeResult[]; counts: NudgeCounts }> {
-  const { studentIds, subject, plain, eventType } = input;
+  const { studentIds: requestedIds, subject, plain, eventType } = input;
   const html = input.html || plainToHtml(plain);
   const teamsText = input.teamsText || subject;
   const metadata = input.metadata || {};
@@ -84,6 +91,31 @@ export async function sendNudge(
   // When unset, the Teams tier is skipped and delivery is in-app + email. This
   // lets every nudge feature work before the one-time Teams admin setup is done.
   const catalogAppId = process.env.TEAMS_APP_CATALOG_ID || null;
+
+  // Drop dormant students. A dormant student keeps their access and their class
+  // invites, but chasing them about work they have paused is exactly the noise
+  // marking them dormant is meant to stop.
+  //
+  // Non-student ids pass through untouched, which is load-bearing rather than
+  // incidental: api/timetable/prework-escalations sends PARENT ids through this
+  // function and says so in a comment. An inner-join style filter here would
+  // silently kill every parent escalation.
+  const { kept: studentIds, dropped } = await filterTrackedStudentIds(requestedIds);
+
+  if (dropped.length) {
+    console.info(
+      `${eventType}: skipped ${dropped.length} dormant recipient(s) of ${requestedIds.length}`,
+    );
+  }
+
+  if (!studentIds.length) {
+    // Still report on everyone the caller asked about, so a queue that emptied
+    // because everybody is dormant does not look like a silent success.
+    return {
+      results: dormantResults(dropped),
+      counts: { total: dropped.length, teams: 0, inapp: 0, email: 0, failed: dropped.length },
+    };
+  }
 
   const [{ data: users }, { data: profiles }] = await Promise.all([
     supabase.from('users').select('id, name, email, ms_oid').in('id', studentIds),
@@ -168,14 +200,32 @@ export async function sendNudge(
     }),
   );
 
+  // Dormant recipients are reported alongside the real ones with their own
+  // channel, so a caller counting failures can tell "we could not reach them"
+  // apart from "we deliberately did not try".
+  const allResults = [...results, ...dormantResults(dropped)];
+
   return {
-    results,
+    results: allResults,
     counts: {
-      total: results.length,
-      teams: results.filter((r) => r.teams).length,
-      inapp: results.filter((r) => r.inapp).length,
-      email: results.filter((r) => r.email).length,
-      failed: results.filter((r) => !r.ok).length,
+      total: allResults.length,
+      teams: allResults.filter((r) => r.teams).length,
+      inapp: allResults.filter((r) => r.inapp).length,
+      email: allResults.filter((r) => r.email).length,
+      failed: allResults.filter((r) => !r.ok).length,
     },
   };
+}
+
+/** Placeholder results for recipients we deliberately skipped. */
+function dormantResults(studentIds: string[]): NudgeResult[] {
+  return studentIds.map((studentId) => ({
+    studentId,
+    name: null,
+    teams: false,
+    inapp: false,
+    email: false,
+    ok: false,
+    channel: 'dormant',
+  }));
 }

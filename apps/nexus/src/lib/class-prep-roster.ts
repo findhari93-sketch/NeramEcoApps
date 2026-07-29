@@ -45,12 +45,19 @@ export interface RosterStudent {
   student_id: string;
   name: string | null;
   avatar_url: string | null;
+  /**
+   * nexus_enrollments.current_standard, carried through untouched so the roster
+   * can show who is a break-year or Class 12 student. It never affects status:
+   * readiness is readiness whatever year they are in.
+   */
+  study_stage?: string | null;
 }
 
 export interface PrepRosterRow {
   student_id: string;
   name: string | null;
   avatar_url: string | null;
+  study_stage: string | null;
   status: PrepRosterStatus;
   test_best_pct: number | null;
   test_attempts: number;
@@ -82,6 +89,7 @@ export function buildPrepRoster(input: BuildPrepRosterInput): PrepRosterRow[] {
       student_id: student.student_id,
       name: student.name,
       avatar_url: student.avatar_url,
+      study_stage: student.study_stage ?? null,
       test_best_pct: s?.test_best_pct ?? null,
       test_attempts: s?.test_attempts ?? 0,
       assignments_required: s?.assignments_required ?? input.preworkRequired,

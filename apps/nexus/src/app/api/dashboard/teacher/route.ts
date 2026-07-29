@@ -40,13 +40,16 @@ export async function GET(request: NextRequest) {
         .eq('scheduled_date', today)
         .order('start_time', { ascending: true }),
 
-      // Student count
+      // Student count. Dormant students are excluded so this headline number
+      // agrees with the "N tracked" figure on the students screen and with the
+      // denominator of every rate on this dashboard.
       supabase
         .from('nexus_enrollments')
         .select('id', { count: 'exact', head: true })
         .eq('classroom_id', classroomId)
         .eq('role', 'student')
-        .eq('is_active', true),
+        .eq('is_active', true)
+        .eq('participation_status', 'active'),
 
       // Pending tickets (from existing support_tickets table)
       supabase

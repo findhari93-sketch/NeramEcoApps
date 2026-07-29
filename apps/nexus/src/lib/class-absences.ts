@@ -10,6 +10,8 @@
  * can never produce different lists for the same class.
  */
 
+import { loadClassroomRoster } from '@neram/database';
+
 /** A student who joins this many minutes after the start is "late", not absent. */
 export const LATE_THRESHOLD_MINUTES = 10;
 
@@ -56,20 +58,20 @@ export async function computeAbsencesForClass(
   // A cancelled class has no absences: nobody missed something that did not run.
   if (cls.status === 'cancelled') return empty;
 
-  const [{ data: roster }, { data: attendance }, { data: optOuts }] = await Promise.all([
-    supabase
-      .from('nexus_enrollments')
-      .select('user_id, enrolled_at')
-      .eq('classroom_id', cls.classroom_id)
-      .eq('role', 'student')
-      .eq('is_active', true)
-      // The roster is who was in the class THAT DAY, not who is in it now.
-      // Without this, a student who joined in July is marked a no-show for every
-      // class held in June: work they could not possibly have attended, chased
-      // by the follow-up cron as if they had skipped it. Those classes are a
-      // catch-up backlog item instead (see ensureCatchupJourney), which is a
-      // different thing with a different conversation attached to it.
-      .lte('enrolled_at', `${cls.scheduled_date}T23:59:59+05:30`),
+  const [{ members: roster }, { data: attendance }, { data: optOuts }] = await Promise.all([
+    // `asOf` makes the roster who was in the class THAT DAY, not who is in it
+    // now. Without it, a student who joined in July is marked a no-show for
+    // every class held in June: work they could not possibly have attended,
+    // chased by the follow-up cron as if they had skipped it. Those classes are
+    // a catch-up backlog item instead (see ensureCatchupJourney), which is a
+    // different thing with a different conversation attached to it.
+    //
+    // Dormant students are dropped by the helper: they cannot be "absent" from
+    // a class everyone knows they are not attending.
+    loadClassroomRoster(cls.classroom_id, {
+      asOf: cls.scheduled_date,
+      client: supabase,
+    }),
     supabase
       .from('nexus_attendance')
       .select('student_id, attended, joined_at')
@@ -81,7 +83,7 @@ export async function computeAbsencesForClass(
       .eq('response', 'not_attending'),
   ]);
 
-  const rosterIds: string[] = (roster || []).map((r: any) => r.user_id);
+  const rosterIds: string[] = roster.map((r) => r.user_id);
   if (rosterIds.length === 0) return empty;
 
   const attended = new Set<string>(

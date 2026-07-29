@@ -63,12 +63,14 @@ export default function PlannerWeekList({
         display: 'flex',
         flexDirection: 'column',
         gap: 1.125,
-        // At lg the list is its own scrolling column beside the editing rail.
-        // Below that the two stack, and the shared parent does the scrolling,
+        // At lg the list is its own scrolling column beside the editing rail,
+        // sharing the row evenly with it (the edit pane has its own min/max
+        // in LAYOUT, so this floor keeps the list from being squeezed out).
+        // Below lg the two stack, and the shared parent does the scrolling,
         // so the list must take its natural height instead of claiming all of it.
-        flex: { xs: '0 0 auto', lg: 1 },
+        flex: { xs: '0 0 auto', lg: '1 1 0%' },
         minHeight: 0,
-        minWidth: 0,
+        minWidth: { xs: 0, lg: 380 },
         overflowY: { xs: 'visible', lg: 'auto' },
         p: { xs: 1.5, md: 2 },
         pb: { xs: 9, lg: 2 }, // clears the mobile Fab at bottom: 80
