@@ -19,6 +19,43 @@ import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../utils/mobi
 const NEXUS = APP_URLS.nexus;
 const IPHONE_SE = { width: 375, height: 667 };
 
+/**
+ * The first class whose gate is shut, else the soonest FUTURE scheduled class.
+ *
+ * Filtering on the date is what makes this useful. A class that ran and was never
+ * marked completed keeps status 'scheduled' forever, so over a wide range the
+ * first match is normally in the past and carries no prep test, which made every
+ * test in this file skip while looking like it had run.
+ */
+function pickClassId(body: any): string | null {
+  const gated = Object.keys(body.prep || {})[0];
+  if (gated) return gated;
+  const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  const future = (body.classes || [])
+    .filter((c: any) => c.status === 'scheduled' && c.scheduled_date > today)
+    .sort((a: any, b: any) => a.scheduled_date.localeCompare(b.scheduled_date));
+  return future[0]?.id ?? null;
+}
+
+/**
+ * Mark the first-run welcome tour as already seen.
+ *
+ * WelcomeOrientation opens a full-screen overlay on first visit, gated on the
+ * localStorage key below. Playwright starts from a clean profile every run, so
+ * without this every page in this file is measured behind that overlay: the first
+ * version of these tests failed on a hidden "Next" button that belonged to the
+ * tour, not to the page under test.
+ */
+async function dismissWelcomeTour(page: import('@playwright/test').Page) {
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.setItem('nexus_welcome_seen_v1', new Date().toISOString());
+    } catch {
+      /* a blocked storage write just means the overlay shows; the skip below covers it */
+    }
+  });
+}
+
 test.use({ viewport: IPHONE_SE });
 
 test.describe('Class prep on a 375px phone', () => {
@@ -30,7 +67,7 @@ test.describe('Class prep on a 375px phone', () => {
     }
 
     // Find a class the student can actually reach, then its prep test.
-    const res = await request.get(`${NEXUS}/api/timetable/my-schedule`, {
+    const res = await request.get(`${NEXUS}/api/timetable/my-schedule?start=2020-01-01&end=2030-01-01`, {
       headers: { Authorization: `Bearer ${auth.testToken}` },
     });
     if (res.status() !== 200) {
@@ -38,9 +75,7 @@ test.describe('Class prep on a 375px phone', () => {
       return;
     }
     const body = await res.json();
-    const gated = Object.keys(body.prep || {})[0];
-    const candidate =
-      gated || (body.classes || []).find((c: any) => c.status === 'scheduled')?.id;
+    const candidate = pickClassId(body);
     if (!candidate) {
       test.skip(true, 'No class to open a prep test against');
       return;
@@ -54,15 +89,24 @@ test.describe('Class prep on a 375px phone', () => {
       return;
     }
 
+    await dismissWelcomeTour(page);
     await injectAuthForPage(page, 'student');
     await page.goto(`${NEXUS}/student/class-prep/${candidate}/test`);
     await page.waitForLoadState('networkidle');
 
+    // Wait for the page's OWN content, not just networkidle.
+    //
+    // networkidle resolves while the client-side fetch is still in flight, and on
+    // a cold Next dev compile (this repo runs Node 24 against Next 14.2, where
+    // .nvmrc pins 20) the first hit of a route can take far longer than the
+    // default 5s expect timeout. The first version of this test measured a loading
+    // spinner and blamed the layout.
+    const actionBar = page.locator('button', { hasText: /Next|Submit/ }).first();
+    await expect(actionBar).toBeVisible({ timeout: 60_000 });
+
     await assertNoHorizontalOverflow(page);
 
-    // One question per screen, with the submit bar pinned in the thumb zone.
-    const actionBar = page.locator('button', { hasText: /Next|Submit/ }).first();
-    await expect(actionBar).toBeVisible();
+    // One question per screen, with the action bar pinned in the thumb zone.
     const box = await actionBar.boundingBox();
     expect(box?.height ?? 0, 'the primary action is a 48px target').toBeGreaterThanOrEqual(44);
   });
@@ -76,7 +120,7 @@ test.describe('Class prep on a 375px phone', () => {
       test.skip(true, 'Nexus dev server / test-login unavailable');
       return;
     }
-    const res = await request.get(`${NEXUS}/api/timetable/my-schedule`, {
+    const res = await request.get(`${NEXUS}/api/timetable/my-schedule?start=2020-01-01&end=2030-01-01`, {
       headers: { Authorization: `Bearer ${auth.testToken}` },
     });
     if (res.status() !== 200) {
@@ -84,9 +128,7 @@ test.describe('Class prep on a 375px phone', () => {
       return;
     }
     const body = await res.json();
-    const candidate =
-      Object.keys(body.prep || {})[0] ||
-      (body.classes || []).find((c: any) => c.status === 'scheduled')?.id;
+    const candidate = pickClassId(body);
     if (!candidate) {
       test.skip(true, 'No class to open a prep test against');
       return;
@@ -101,6 +143,7 @@ test.describe('Class prep on a 375px phone', () => {
     }
     const questions = (await paper.json()).questions || [];
 
+    await dismissWelcomeTour(page);
     await injectAuthForPage(page, 'student');
     await page.goto(`${NEXUS}/student/class-prep/${candidate}/test`);
     await page.waitForLoadState('networkidle');
@@ -149,20 +192,22 @@ test.describe('Class prep on a 375px phone', () => {
       test.skip(true, 'Nexus dev server / test-login unavailable');
       return;
     }
-    const res = await request.get(`${NEXUS}/api/timetable/my-schedule`, {
+    const res = await request.get(`${NEXUS}/api/timetable/my-schedule?start=2020-01-01&end=2030-01-01`, {
       headers: { Authorization: `Bearer ${auth.testToken}` },
     });
     if (res.status() !== 200) {
       test.skip(true, 'Timetable unavailable for this account');
       return;
     }
-    const cls = ((await res.json()).classes || []).find((c: any) => c.status === 'scheduled');
+    const body = await res.json();
+    const clsId = pickClassId(body);
+    const cls = (body.classes || []).find((c: any) => c.id === clsId);
     if (!cls) {
-      test.skip(true, 'No upcoming class for this teacher');
+      test.skip(true, 'No FUTURE scheduled class for this teacher');
       return;
     }
 
-    const roster = await request.get(`${NEXUS}/api/timetable/${cls.id}/prep-roster`, {
+    const roster = await request.get(`${NEXUS}/api/timetable/${clsId}/prep-roster`, {
       headers: { Authorization: `Bearer ${auth.testToken}` },
     });
     if (roster.status() !== 200) {
@@ -175,6 +220,7 @@ test.describe('Class prep on a 375px phone', () => {
       return;
     }
 
+    await dismissWelcomeTour(page);
     await injectAuthForPage(page, 'teacher');
     await page.goto(`${NEXUS}/teacher/timetable`);
     await page.waitForLoadState('networkidle');

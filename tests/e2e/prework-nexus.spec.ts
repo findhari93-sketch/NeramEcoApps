@@ -67,7 +67,7 @@ test.describe('Nexus, pre-class work', () => {
       return;
     }
     const headers = { Authorization: `Bearer ${auth.testToken}` };
-    const sched = await request.get(`${NEXUS}/api/timetable/my-schedule`, { headers });
+    const sched = await request.get(`${NEXUS}/api/timetable/my-schedule?start=2020-01-01&end=2030-01-01`, { headers });
     if (sched.status() !== 200) {
       test.skip(true, 'Timetable unavailable for this account in this environment');
       return;
@@ -124,7 +124,7 @@ test.describe('Nexus, pre-class work', () => {
       test.skip(true, 'Nexus dev server / test-login unavailable');
       return;
     }
-    const res = await request.get(`${NEXUS}/api/timetable/my-schedule`, {
+    const res = await request.get(`${NEXUS}/api/timetable/my-schedule?start=2020-01-01&end=2030-01-01`, {
       headers: { Authorization: `Bearer ${auth.testToken}` },
     });
     if (res.status() !== 200) {
@@ -156,7 +156,7 @@ test.describe('Nexus, pre-class work', () => {
       test.skip(true, 'Nexus dev server / test-login unavailable');
       return;
     }
-    const res = await request.get(`${NEXUS}/api/timetable/my-schedule`, {
+    const res = await request.get(`${NEXUS}/api/timetable/my-schedule?start=2020-01-01&end=2030-01-01`, {
       headers: { Authorization: `Bearer ${auth.testToken}` },
     });
     if (res.status() !== 200) {
@@ -198,7 +198,7 @@ test.describe('Nexus, pre-class work', () => {
       test.skip(true, 'Nexus dev server / test-login unavailable');
       return;
     }
-    const res = await request.get(`${NEXUS}/api/timetable/my-schedule`, {
+    const res = await request.get(`${NEXUS}/api/timetable/my-schedule?start=2020-01-01&end=2030-01-01`, {
       headers: { Authorization: `Bearer ${auth.testToken}` },
     });
     if (res.status() !== 200) {

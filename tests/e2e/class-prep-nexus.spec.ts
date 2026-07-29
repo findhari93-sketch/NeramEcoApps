@@ -11,6 +11,24 @@ import { APP_URLS, getTestAuthToken } from '../utils/credentials';
  * including on a 500, which is what an unmigrated database produces here. That
  * convention is copied from course-plan-assignments-nexus.spec.ts so a developer
  * running the suite against an older branch does not see a wall of red.
+ *
+ * FIXTURE REQUIREMENT: a FUTURE scheduled class the test accounts share.
+ *
+ * Attaching a prep test to a class that has already started is refused by design,
+ * and a class that ran without being marked completed keeps status 'scheduled'
+ * forever, so "the first scheduled class" is normally a past one. If every test
+ * here skips with "No FUTURE scheduled class", seed one in the E2E classroom:
+ *
+ *   INSERT INTO nexus_scheduled_classes (id, classroom_id, teacher_id, title,
+ *     scheduled_date, start_time, end_time, status, teams_meeting_id, publish_state)
+ *   VALUES ('e2ec1a55-0000-4000-8000-000000000001', <e2e classroom>, <e2e teacher>,
+ *     'E2E future class for prep tests', CURRENT_DATE + 7, '19:00', '20:00',
+ *     'scheduled', 'e2e-fake-meeting-id', 'published')
+ *   ON CONFLICT (id) DO UPDATE SET scheduled_date = CURRENT_DATE + 7,
+ *                                 status = 'scheduled';
+ *
+ * Stable id plus a date reset, so re-running moves it forward rather than
+ * accumulating a new class per run.
  */
 
 const NEXUS = APP_URLS.nexus;
@@ -34,7 +52,7 @@ test.describe('Class prep test and join gate', () => {
 
     // A future class, because attaching a prep test to one that has already
     // started is refused by design.
-    const res = await request.get(`${NEXUS}/api/timetable/my-schedule`, {
+    const res = await request.get(`${NEXUS}/api/timetable/my-schedule?start=2020-01-01&end=2030-01-01`, {
       headers: { Authorization: `Bearer ${teacherToken}` },
     });
     if (res.status() !== 200) {
@@ -42,9 +60,17 @@ test.describe('Class prep test and join gate', () => {
       return;
     }
     const body = await res.json();
-    const upcoming = (body.classes || []).find((c: any) => c.status === 'scheduled');
+    // status === 'scheduled' is NOT enough. Classes that ran and were never marked
+    // completed keep that status forever, so over a wide range the first match is
+    // usually in the past, and the route then correctly refuses to attach a prep
+    // test to it. Filtering on the DATE is what makes this spec test the feature
+    // rather than the already-started guard.
+    const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+    const upcoming = (body.classes || [])
+      .filter((c: any) => c.status === 'scheduled' && c.scheduled_date > today)
+      .sort((a: any, b: any) => a.scheduled_date.localeCompare(b.scheduled_date))[0];
     if (!upcoming) {
-      test.skip(true, 'No upcoming class in range for this account');
+      test.skip(true, 'No FUTURE scheduled class for this account, so a prep test cannot be attached');
       return;
     }
     classId = upcoming.id;
@@ -197,6 +223,54 @@ test.describe('Class prep test and join gate', () => {
       data: { passing_pct: 0 },
     });
     expect(bad.status()).toBe(400);
+  });
+
+  test('detaching and re-attaching the SAME test does not collide', async ({ request }) => {
+    if (!classId || !teacherToken) {
+      test.skip(true, 'setup incomplete');
+      return;
+    }
+    // The regression this guards.
+    //
+    // nexus_test_placements has two uniqueness rules and only one is partial.
+    // uq_placement_single_test is `WHERE is_active`, so deactivating frees the
+    // class for a different paper. uq_placement_test_context is
+    // `UNIQUE (context_type, context_id, test_id)` with no predicate, so a
+    // deactivated row keeps its triple forever. The original attach code
+    // deactivated then inserted, which threw 23505 the moment a teacher put the
+    // same paper back. The test above never caught it because every attach there
+    // composed a brand new test.
+    const list = await request.get(`${NEXUS}/api/timetable/${classId}/prep-test`, {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+    });
+    if (list.status() !== 200) {
+      test.skip(true, 'class prep migrations not applied in this environment');
+      return;
+    }
+    const reusable = (await list.json()).linkable?.[0];
+    if (!reusable) {
+      test.skip(true, 'no reusable repository test to re-attach');
+      return;
+    }
+
+    const first = await request.post(`${NEXUS}/api/timetable/${classId}/prep-test`, {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+      data: { test_id: reusable.id, passing_pct: 70 },
+    });
+    expect(first.status()).toBe(201);
+
+    const detached = await request.delete(`${NEXUS}/api/timetable/${classId}/prep-test`, {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+    });
+    expect(detached.status()).toBe(200);
+
+    // The same test, back again. Must succeed, not 500.
+    const again = await request.post(`${NEXUS}/api/timetable/${classId}/prep-test`, {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+      data: { test_id: reusable.id, passing_pct: 60 },
+    });
+    expect(again.status(), 're-attaching the same paper must not collide').toBe(201);
+    expect((await again.json()).prep_test.passing_pct).toBe(60);
   });
 
   test('the roster reports everyone as not started before anyone opens it', async ({ request }) => {

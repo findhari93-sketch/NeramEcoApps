@@ -238,17 +238,54 @@ export async function attachClassPrepTest(
 
   await deactivatePrepPlacements(supabase, input.scheduledClassId);
 
-  await createPlacement(
-    {
-      testId: testId as string,
-      contextType: CONTEXT,
-      contextId: input.scheduledClassId,
-      passingPct,
-      gating: { blocks_join: true },
-      createdBy: input.createdBy ?? null,
-    },
-    supabase,
-  );
+  // Reactivate rather than insert when this exact test has been placed on this
+  // exact class before.
+  //
+  // nexus_test_placements carries TWO uniqueness rules and only one of them is
+  // partial. uq_placement_single_test is `WHERE is_active`, so deactivating frees
+  // the class for a DIFFERENT test. uq_placement_test_context is
+  // `UNIQUE (context_type, context_id, test_id)` with no predicate at all, so a
+  // deactivated row still occupies its triple forever. Deactivate-then-insert
+  // therefore works for "swap in a different paper" and throws 23505 for "put the
+  // same paper back", which is an ordinary thing for a teacher to do: attach a
+  // repository test, remove it, change their mind.
+  //
+  // Found by probing the live schema, not by reading it: the E2E path built a new
+  // test each time and so never collided.
+  const { data: prior } = await supabase
+    .from('nexus_test_placements')
+    .select('id')
+    .eq('context_type', CONTEXT)
+    .eq('context_id', input.scheduledClassId)
+    .eq('test_id', testId)
+    .maybeSingle();
+
+  if (prior) {
+    // Same row, revived. Keeping the id means anything that referenced this
+    // placement historically still resolves.
+    const { error } = await supabase
+      .from('nexus_test_placements')
+      .update({
+        is_active: true,
+        is_visible: true,
+        passing_pct: passingPct,
+        gating: { blocks_join: true },
+      })
+      .eq('id', prior.id);
+    if (error) throw error;
+  } else {
+    await createPlacement(
+      {
+        testId: testId as string,
+        contextType: CONTEXT,
+        contextId: input.scheduledClassId,
+        passingPct,
+        gating: { blocks_join: true },
+        createdBy: input.createdBy ?? null,
+      },
+      supabase,
+    );
+  }
 
   const info = await getClassPrepTest(input.scheduledClassId, supabase);
   if (!info) throw new Error('Placement was created but could not be read back');
