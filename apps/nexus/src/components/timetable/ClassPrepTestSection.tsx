@@ -104,8 +104,12 @@ export default function ClassPrepTestSection({
     }
   };
 
-  // Nothing to say about a class that has already run and never had a test.
-  if (hasStarted && !prepTest) return null;
+  // A past class with no test says so, rather than rendering nothing.
+  //
+  // Returning null here was wrong in exactly the case that matters: on a database
+  // where every class has already run, the section disappeared from every single
+  // class and the feature read as "not shipped". "Feature missing" and "nothing
+  // left to prepare for" must not look identical.
 
   return (
     <Box>
@@ -194,17 +198,23 @@ export default function ClassPrepTestSection({
             textAlign: 'center',
           }}
         >
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.125 }}>
-            No test before this class
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: hasStarted ? 0 : 1.125 }}>
+            {hasStarted ? 'No test was set before this class' : 'No test before this class'}
           </Typography>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => onSetTest?.(cls)}
-            sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
-          >
-            Set a short test
-          </Button>
+          {/* Past classes get the sentence and no button: there is genuinely
+              nothing to set now, and an enabled control that always refuses is
+              worse than no control. The sentence is what tells a teacher the
+              feature exists and where it will appear on their next class. */}
+          {!hasStarted && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => onSetTest?.(cls)}
+              sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
+            >
+              Set a short test
+            </Button>
+          )}
         </Box>
       ) : null}
     </Box>
