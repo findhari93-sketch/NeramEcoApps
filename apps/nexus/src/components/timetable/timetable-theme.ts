@@ -100,6 +100,62 @@ export function accentGradient(theme: Theme): string {
   return `linear-gradient(120deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`;
 }
 
+/**
+ * A colour for a subject, stable across every view and every session.
+ *
+ * Used by the cover tile on a class that has ended without any images: the tint
+ * plus the subject's initial says "Mathematics, no picture yet" instead of
+ * looking like a broken image. Because the same subject always hashes to the
+ * same hue, a week reads as bands of subject rather than noise.
+ *
+ * A hash, not a lookup table, because the subject list is teacher-editable
+ * (nexus_class_tags) and a table would silently fall back to grey for anything
+ * new. Deterministic, so it cannot mismatch between server and client render.
+ */
+export function subjectTint(theme: Theme, key: string | null | undefined): { bg: string; fg: string } {
+  const trimmed = (key || '').trim();
+  if (!trimmed) {
+    return {
+      bg: alpha(theme.palette.text.primary, 0.05),
+      fg: theme.palette.text.disabled,
+    };
+  }
+
+  const hues = [
+    theme.palette.primary,
+    theme.palette.secondary,
+    theme.palette.success,
+    theme.palette.warning,
+    theme.palette.info,
+    theme.palette.error,
+  ];
+
+  let hash = 0;
+  const lower = trimmed.toLowerCase();
+  for (let i = 0; i < lower.length; i += 1) {
+    hash = (hash * 31 + lower.charCodeAt(i)) % 100_000;
+  }
+
+  const hue = hues[hash % hues.length];
+  return { bg: alpha(hue.main, 0.14), fg: hue.dark };
+}
+
+/**
+ * The subject a class should be tinted by.
+ *
+ * course_topic wins over topic, matching the "preferred over topic" note on
+ * ClassCardData, and topic.category is nullable so the title is the next best
+ * thing. Falling back to the class title means two classes on the same topic
+ * still agree even when neither is linked to a topic row.
+ */
+export function classSubjectKey(cls: {
+  title?: string | null;
+  topic?: { title?: string | null; category?: string | null } | null;
+  course_topic?: { title?: string | null } | null;
+}): string {
+  return cls.course_topic?.title || cls.topic?.category || cls.topic?.title || cls.title || '';
+}
+
 export type TagTone = 'success' | 'error' | 'primary' | 'neutral';
 
 /**

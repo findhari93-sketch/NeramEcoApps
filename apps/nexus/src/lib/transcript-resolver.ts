@@ -57,6 +57,14 @@ export const MAX_TRANSCRIPT_ATTEMPTS = 6;
  */
 const CLASS_MATCH_TOLERANCE_MS = 4 * 60 * 60 * 1000;
 
+/**
+ * How many of a meeting's transcripts we will try to download before giving up.
+ * Teams offers two per class (see rankTranscriptsForClass), so this only needs to
+ * be greater than one; it exists to keep a strange meeting from costing an
+ * unbounded number of Graph calls.
+ */
+const MAX_TRANSCRIPT_CANDIDATES = 3;
+
 export interface TranscriptSourceClass {
   id: string;
   transcript_url?: string | null;
@@ -183,33 +191,39 @@ interface GraphTranscript {
 }
 
 /**
- * Choose which of a meeting's transcripts belongs to this class.
+ * Which of a meeting's transcripts could belong to this class, best guess first.
  *
- * A recurring meeting reuses one onlineMeeting id for every occurrence, so the
- * list can hold many. Taking [0] attributes some other night's transcript to
- * this class, which is the same trap `pickReportForClass` fixes for attendance.
- * With exactly one candidate we take it and do not second-guess the tolerance.
+ * Returns a RANKED LIST rather than one winner, and that is the whole point.
+ * Teams offers two entries per meeting: the real transcript, and a phantom
+ * created two or three seconds earlier whose /content answers
+ * `404 No transcript content found`. Being created earlier makes the phantom
+ * nearer the class start, so it always won, and a picker that commits to one
+ * candidate then threw away a complete transcript sitting in the next entry.
+ * Verified on production for the 20 and 22 July classes on 2026-07-30.
+ *
+ * A recurring meeting reuses one onlineMeeting id across every occurrence, so
+ * the list can also hold genuinely unrelated nights. Those are still excluded by
+ * the tolerance, which is why this ranks and filters rather than just returning
+ * everything: the caller must not be handed last week's class as a fallback.
  */
-function pickTranscriptForClass(
+function rankTranscriptsForClass(
   items: GraphTranscript[],
   startMs: number | null,
-): GraphTranscript | null {
-  if (items.length === 0) return null;
-  if (items.length === 1) return items[0];
-  if (!startMs) return items[items.length - 1];
+): GraphTranscript[] {
+  if (items.length <= 1) return items.slice();
+  // No class start to compare against, so recency is the only signal we have.
+  // Reversed because Graph lists these oldest first.
+  if (!startMs) return items.slice().reverse();
 
-  let best: GraphTranscript | null = null;
-  let bestDelta = Infinity;
+  const scored: Array<{ item: GraphTranscript; delta: number }> = [];
   for (const item of items) {
     const created = item.createdDateTime ? new Date(item.createdDateTime).getTime() : NaN;
     if (!Number.isFinite(created)) continue;
     const delta = Math.abs(created - startMs);
-    if (delta < bestDelta) {
-      best = item;
-      bestDelta = delta;
-    }
+    if (delta <= CLASS_MATCH_TOLERANCE_MS) scored.push({ item, delta });
   }
-  return bestDelta <= CLASS_MATCH_TOLERANCE_MS ? best : null;
+  scored.sort((a, b) => a.delta - b.delta);
+  return scored.map((s) => s.item);
 }
 
 /** Read the stored copy. Free: one primary-key lookup, no token, no network. */
@@ -412,32 +426,38 @@ export async function resolveTranscript(input: ResolveTranscriptInput): Promise<
         );
         if (listRes.ok) {
           const list = await listRes.json();
-          const pick = pickTranscriptForClass(list.value || [], classStartMs(cls));
-          const contentUrl = pick?.transcriptContentUrl || pick?.content || null;
-          if (!pick) {
+          const candidates = rankTranscriptsForClass(list.value || [], classStartMs(cls));
+          if (candidates.length === 0) {
             meetingFailure = (list.value || []).length
               ? 'no_transcript_matches_this_class'
               : 'NO_TRANSCRIPT';
-          } else if (contentUrl) {
-            const text = await fetchTranscriptContent(contentUrl, [
-              resolution.meeting.token,
-              msToken,
-            ]);
-            if (text && parseVTT(text).length > 0) {
-              // Remember the pointer too. Cheap, and other code reads it.
-              if (supabase) {
-                try {
-                  await supabase
-                    .from('nexus_scheduled_classes')
-                    .update({ transcript_url: contentUrl })
-                    .eq('id', cls.id);
-                } catch {
-                  // A failed cache write is not a failed lookup.
+          } else {
+            // Work down the ranking until one actually yields readable content.
+            // Bounded so a meeting listing many entries cannot turn one class
+            // into an unbounded run of Graph calls.
+            for (const pick of candidates.slice(0, MAX_TRANSCRIPT_CANDIDATES)) {
+              const contentUrl = pick.transcriptContentUrl || pick.content || null;
+              if (!contentUrl) continue;
+              const text = await fetchTranscriptContent(contentUrl, [
+                resolution.meeting.token,
+                msToken,
+              ]);
+              if (text && parseVTT(text).length > 0) {
+                // Remember the pointer too. Cheap, and other code reads it.
+                if (supabase) {
+                  try {
+                    await supabase
+                      .from('nexus_scheduled_classes')
+                      .update({ transcript_url: contentUrl })
+                      .eq('id', cls.id);
+                  } catch {
+                    // A failed cache write is not a failed lookup.
+                  }
                 }
+                return await found(text, 'graph_live');
               }
-              return await found(text, 'graph_live');
+              meetingFailure = 'transcript_content_unreadable';
             }
-            meetingFailure = 'transcript_content_unreadable';
           }
         } else {
           meetingFailure = `transcripts responded ${listRes.status}`;

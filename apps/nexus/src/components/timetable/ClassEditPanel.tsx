@@ -14,7 +14,7 @@ import {
 import VideocamIcon from '@mui/icons-material/Videocam';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import type { ClassCardData } from './ClassCard';
-import { formatTime } from './date-utils';
+import { formatTime, hasClassEnded } from './date-utils';
 import { RADIUS, tagSx } from './timetable-theme';
 import WrapUpSection from './WrapUpSection';
 import ClassAssignmentsSection from './ClassAssignmentsSection';
@@ -154,9 +154,10 @@ export default function ClassEditPanel({
 
   const isDraft = (cls as any).publish_state === 'draft';
   const hasMeeting = !!cls.teams_meeting_id;
-  // Built in IST explicitly: a 9 PM class must not read as "ended" to a browser
-  // in another timezone, nor stay open past midnight here.
-  const hasEnded = new Date(`${cls.scheduled_date}T${cls.end_time}+05:30`).getTime() < Date.now();
+  // hasClassEnded builds the boundary in IST explicitly: a 9 PM class must not
+  // read as "ended" to a browser in another timezone, nor stay open past
+  // midnight here.
+  const hasEnded = hasClassEnded(cls);
 
   return (
     <Box

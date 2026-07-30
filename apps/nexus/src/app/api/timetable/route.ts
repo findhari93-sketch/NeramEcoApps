@@ -21,8 +21,19 @@ import {
 } from '@/lib/staff-capabilities';
 import { ApiError } from '@/lib/api-errors';
 import { classStartIso } from '@/lib/prework';
+import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
+
+/**
+ * The week/month read, which also needs each class's images so the planner can
+ * show a cover in front of every finished class.
+ *
+ * A SEPARATE constant from CLASS_SELECT on purpose: that one is also the
+ * `.select()` on the POST and PATCH below, where a gallery join would be pure
+ * waste on every class create and every class edit.
+ */
+const CLASS_SELECT_WITH_IMAGES = `${CLASS_SELECT}, ${CLASS_IMAGES_EMBED}`;
 
 /**
  * GET /api/timetable?classroom={id}&start={date}&end={date}
@@ -99,7 +110,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('nexus_scheduled_classes')
-      .select(CLASS_SELECT)
+      .select(CLASS_SELECT_WITH_IMAGES)
       .eq('classroom_id', classroomId)
       .gte('scheduled_date', start)
       .lte('scheduled_date', end)

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 import { applyClassPrepGate } from '@/lib/class-prep-server';
+import { resolveExamCountdown } from '@/lib/exam-countdown-server';
 
 /**
  * GET /api/dashboard/student?classroom={id}
  *
  * Returns student dashboard data: upcoming classes, attendance summary,
- * checklist progress, and topic progress.
+ * checklist progress, topic progress, and the exam countdown.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -48,6 +50,7 @@ export async function GET(request: NextRequest) {
       checklistCompletedResult,
       topicTotalResult,
       topicCompletedResult,
+      examCountdown,
     ] = await Promise.all([
       // Upcoming classes (over-fetch to filter today's ended classes in JS)
       supabase
@@ -76,10 +79,13 @@ export async function GET(request: NextRequest) {
         .eq('classroom_id', classroomId)
         .eq('status', 'completed'),
 
-      // Recent completed classes with recordings (for dashboard section)
-      supabase
+      // Recent completed classes with recordings (for dashboard section).
+      // cover_image_id + class_images drive the cover thumbnail on each card.
+      // Cast because neither is in the generated Database type, and an unknown
+      // COLUMN (unlike an unresolvable embed) collapses the whole row type.
+      (supabase as any)
         .from('nexus_scheduled_classes')
-        .select('id, title, scheduled_date, start_time, end_time, status, recording_url, topic:nexus_topics(title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(name)')
+        .select(`id, title, scheduled_date, start_time, end_time, status, recording_url, cover_image_id, topic:nexus_topics(title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(name), ${CLASS_IMAGES_EMBED}`)
         .eq('classroom_id', classroomId)
         .eq('status', 'completed')
         .order('scheduled_date', { ascending: false })
@@ -115,6 +121,11 @@ export async function GET(request: NextRequest) {
         .eq('student_id', user.id)
         .eq('classroom_id', classroomId)
         .eq('status', 'completed'),
+
+      // Days left until the exam this classroom's active plan targets. The
+      // student's own booked slot, if they have one, outranks the cohort date, so
+      // this number can never contradict the one on their exam screen.
+      resolveExamCountdown(supabase, { classroomId, studentId: user.id }),
     ]);
 
     // Filter out today's classes whose end_time has already passed
@@ -150,6 +161,7 @@ export async function GET(request: NextRequest) {
         completed: topicCompletedResult.count || 0,
         total: topicTotalResult.count || 0,
       },
+      examCountdown,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load dashboard';

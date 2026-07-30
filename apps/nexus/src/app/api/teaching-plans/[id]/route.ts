@@ -114,9 +114,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       'status',
       'saturday_classes',
       'exam_date',
+      // Which exam this season targets. Plain staff access is right: pointing a
+      // plan at a registry row states an intention, it does not change any date.
+      // Changing the date itself is gated on the registry side, which is the
+      // whole reason the countdown resolves through there (20260804090000).
+      'target_exam_date_id',
     ] as const) {
       if (key in body) updates[key] = body[key];
     }
+
+    // A plan targets a national exam OR carries its own date, never both, so the
+    // teacher cannot leave two controls disagreeing about when the exam is.
+    if (updates.target_exam_date_id) updates.exam_date = null;
 
     // Archiving retires a whole season of teaching and is the precondition for a
     // hard delete, so it needs structure.plan.delete rather than plain staff
@@ -165,7 +174,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
                   ? 'restored the plan'
                   : shapeChanged
                     ? `set class hours to ${describeBands(updates.class_bands as TimeBand[])}`
-                    : 'edited the plan details',
+                    : 'target_exam_date_id' in updates
+                      ? updates.target_exam_date_id
+                        ? 'set the target exam for this plan'
+                        : 'cleared the target exam for this plan'
+                      : 'edited the plan details',
       },
     });
     return NextResponse.json({ plan });

@@ -6,7 +6,7 @@
  *    point-by-point "what we did" list.
  *  - A brand-new tag created during wrap-up enters the shared registry and comes
  *    back attached to the class.
- *  - Class drawings upload, list, and delete; an enrolled student can read the
+ *  - Class images upload, list, and delete; an enrolled student can read the
  *    gallery but not write to it.
  *  - The summarizer asks for a manual transcript when none can be fetched
  *    (deterministic: it never calls the AI in this path), and refuses students.
@@ -144,7 +144,7 @@ test.describe('Class capture', () => {
     expect(body.tags.map((t: any) => t.id)).toContain(newTagId);
   });
 
-  test('AC3: class drawings upload, list, and an enrolled student can read them', async ({ request }) => {
+  test('AC3: class images upload, list, and an enrolled student can read them', async ({ request }) => {
     test.skip(!classId, 'No class');
 
     const up = await request.post(`${NEXUS}/api/timetable/${classId}/images`, {
@@ -180,7 +180,7 @@ test.describe('Class capture', () => {
     });
     expect(res.ok()).toBe(true);
     const body = await res.json();
-    // Either it asks for manual input, or (if drawings exist) it produced a
+    // Either it asks for manual input, or (if class images exist) it produced a
     // summary. Both are valid; what must never happen is a hard failure.
     expect(body.needs_manual === true || !!body.summary).toBe(true);
   });

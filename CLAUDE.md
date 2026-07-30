@@ -423,7 +423,7 @@ If the answer to #1 or #2 is yes, use a Server Component or cached fetch. Only c
 | CI / deploy secrets (tokens) | **GitHub repo Secrets** | GitHub UI → Settings → Secrets → Actions | `.github/workflows/*.yml` (`VERCEL_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD_{STAGING,PRODUCTION}`, `SUPABASE_PROJECT_ID_{STAGING,PRODUCTION}`, `TURBO_TOKEN`, `TURBO_TEAM`) |
 | Cloudflare Worker config (Supabase proxy) | `cloudflare/supabase-proxy/wrangler.toml` (plaintext `vars`) + `wrangler secret` for secrets | Edit `wrangler.toml` or `wrangler secret put` | Worker runtime |
 | Firebase / Microsoft credentials | Vercel env vars (runtime) + Firebase Console / Azure portal (provider config) | Vercel CLI for env; provider consoles for auth config | Vercel runtime |
-| Supabase migrations | `packages/database/supabase/migrations/*.sql` in git | Write a new `.sql` file; GHA applies on deploy | GHA `supabase db push` |
+| Supabase migrations | `supabase/migrations/*.sql` at the repo ROOT, in git | Write a new `.sql` file; GHA applies on deploy | GHA `supabase db push` |
 
 **Cloudflare does NOT hold any app env vars.** It only holds DNS records and the Supabase-proxy Worker's own config.
 

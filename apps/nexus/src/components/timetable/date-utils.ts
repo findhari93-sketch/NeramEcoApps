@@ -628,6 +628,20 @@ export function classEndDate(scheduledDate: string, endTime: string): Date {
   return new Date(`${scheduledDate}T${endTime.substring(0, 5)}:00+05:30`);
 }
 
+/**
+ * Has this class finished?
+ *
+ * Five places were deriving this by hand, each rebuilding the IST date inline.
+ * Pass `now` when the caller already tracks a clock (the agenda's useNow), so a
+ * single render cannot disagree with itself about where the boundary is.
+ */
+export function hasClassEnded(
+  cls: { scheduled_date: string; end_time: string },
+  now: Date = new Date(),
+): boolean {
+  return classEndDate(cls.scheduled_date, cls.end_time).getTime() < now.getTime();
+}
+
 /** "4h 12m", "12m", or null once the class has started. */
 export function formatCountdown(target: Date, from: Date = new Date()): string | null {
   const diffMs = target.getTime() - from.getTime();

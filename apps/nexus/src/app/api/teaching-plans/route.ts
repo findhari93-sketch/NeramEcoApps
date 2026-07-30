@@ -29,8 +29,11 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/teaching-plans  (staff)
  * body { classroom_id, title, exam_type?, start_date, expected_end_date,
- *        saturday_classes?, exam_date?, duplicate_from? }
+ *        saturday_classes?, exam_date?, target_exam_date_id?, duplicate_from? }
  * duplicate_from: copy another plan's queue (statuses and coverage reset) as a template.
+ * target_exam_date_id: the nexus_exam_dates row this season prepares for, which is
+ *   what the countdown on every dashboard resolves through. Mutually exclusive
+ *   with exam_date, which is the fallback for foundation and custom plans.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -51,7 +54,12 @@ export async function POST(request: NextRequest) {
       expected_end_date: body.expected_end_date,
       created_by: user.id,
       ...(body.saturday_classes !== undefined ? { saturday_classes: !!body.saturday_classes } : {}),
-      ...(body.exam_date ? { exam_date: body.exam_date } : {}),
+      // A plan targets a registry row OR carries its own date, never both.
+      ...(body.target_exam_date_id
+        ? { target_exam_date_id: body.target_exam_date_id }
+        : body.exam_date
+          ? { exam_date: body.exam_date }
+          : {}),
     } as Parameters<typeof createTeachingPlan>[0]);
 
     let copied = 0;

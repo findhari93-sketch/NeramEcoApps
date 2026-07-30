@@ -65,12 +65,12 @@ const MAX_IMAGES = 4;
  * published a transcript yet" call for different things from a human.
  *
  * None of these mention pasting any more. The paste box is gone, so the only two
- * manual routes left are uploading the .vtt Teams hands out, or attaching the
- * class drawing and summarizing from that.
+ * manual routes left are uploading the .vtt Teams hands out, or attaching a
+ * class image and summarizing from that.
  */
 function manualMessage(hasRecording: boolean, sharepointError?: string): string {
   if (!hasRecording) {
-    return 'Teams has not published anything for this class yet, no recording and no transcript. It usually appears within an hour. Upload the .vtt from Teams, or attach a class drawing to generate now.';
+    return 'Teams has not published anything for this class yet, no recording and no transcript. It usually appears within an hour. Upload the .vtt from Teams, or attach a class image to generate now.';
   }
   if (sharepointError === 'NO_ACCESS') {
     return 'The recording exists but could not be opened, so the transcript could not be read. Upload the .vtt from Teams instead.';
@@ -78,7 +78,7 @@ function manualMessage(hasRecording: boolean, sharepointError?: string): string 
   if (sharepointError === 'VIDEO_NOT_FOUND') {
     return 'The recording link did not resolve. Re-sync the recording, or upload the .vtt from Teams.';
   }
-  return 'Teams has not published a transcript for this class yet. It usually appears a few minutes after the recording. Upload the .vtt from Teams, or attach a class drawing, then try again.';
+  return 'Teams has not published a transcript for this class yet. It usually appears a few minutes after the recording. Upload the .vtt from Teams, or attach a class image, then try again.';
 }
 
 async function resolveAccess(supabase: any, msOid: string, classId: string) {
@@ -113,7 +113,7 @@ async function resolveAccess(supabase: any, msOid: string, classId: string) {
   return { cls };
 }
 
-/** Fetch attached class drawings and convert to base64 parts for the model. */
+/** Fetch attached class images and convert to base64 parts for the model. */
 async function loadClassImages(supabase: any, classId: string): Promise<ClassImageInput[]> {
   const { data } = await supabase
     .from('nexus_class_images')
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       supabase,
     });
 
-    // --- Load class drawings (a drawing class can be summarized from these alone) ---
+    // --- Load class images (a drawing class can be summarized from these alone) ---
     const images = await loadClassImages(supabase, params.classId);
 
     if (transcript.length === 0 && images.length === 0) {

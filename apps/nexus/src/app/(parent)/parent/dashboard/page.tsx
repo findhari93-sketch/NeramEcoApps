@@ -15,6 +15,8 @@ import {
 } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import AttendanceStrip from '@/components/parent/AttendanceStrip';
+import ExamCountdown from '@/components/ExamCountdown';
+import type { ExamCountdownTarget } from '@/lib/exam-countdown';
 
 /**
  * The parent home screen.
@@ -58,6 +60,8 @@ interface OverviewResponse {
     averagePercent: number | null;
   };
   verdict: { band: string; headline: string; detail: string };
+  /** The exam this child is preparing for, or null when none is set. */
+  examCountdown: ExamCountdownTarget | null;
   upcomingClasses: Array<{
     id: string;
     title: string;
@@ -176,6 +180,23 @@ export default function ParentDashboardPage() {
           </Typography>
         </CardContent>
       </Card>
+
+      {/*
+        How long until the exam.
+
+        Its own card rather than a fourth cell in the grid below: that grid is
+        three columns at sm, so a fourth cell would leave a hole. Its own card
+        also means "no exam date set" is expressed by rendering nothing at all,
+        which needs no copy and cannot be misread. ExamCountdown returns null in
+        that case, so the Card is conditional on there being something to say.
+      */}
+      {data.examCountdown && (
+        <Card sx={{ borderRadius: 3 }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <ExamCountdown target={data.examCountdown} variant="metric" />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Three numbers, as counts */}
       <Card sx={{ borderRadius: 3 }}>

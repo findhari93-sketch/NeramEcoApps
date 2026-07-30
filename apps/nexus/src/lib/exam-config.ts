@@ -2,6 +2,19 @@
  * Static exam type configuration.
  * Replaces hardcoded getPhaseConfig() in API routes.
  * To add a new exam type, add an entry here. No code changes needed elsewhere.
+ *
+ * KNOWN GAP, and the next consolidation target. These entries are keyed by
+ * examType alone with `year` as a plain field, so getExamConfig('jee') always
+ * returns the 2026 row. /api/exam-schedule/my-date validates a student's chosen
+ * date against that row's startDate/endDate/dayFilter, which means a legitimate
+ * 2027 date is checked against a 2026 window.
+ *
+ * Deliberately NOT patched with an invented 2027 window: the whole point of
+ * nexus_exam_dates.date_confidence (20260804090000) is that we do not fabricate
+ * dates the conducting body has not published. The fix is to make this module
+ * read the nexus_exam_dates registry instead of carrying its own copy, which
+ * would collapse one of the remaining duplicate sources of an exam date rather
+ * than add to them. The countdown does not use this file.
  */
 
 export interface ExamPhaseConfig {

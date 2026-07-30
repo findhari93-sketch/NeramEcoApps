@@ -2,8 +2,8 @@
 
 /**
  * Read-only view of what a class turned out to be: the point-by-point record,
- * the tags, and the drawings done in class. Shown to students (and anyone) on a
- * completed class, so "what we drew today" lives in the app next to the class
+ * the tags, and the images from the class. Shown to students (and anyone) on a
+ * completed class, so "what we did today" lives in the app next to the class
  * instead of only in the Teams chat.
  *
  * Both endpoints it reads are open to enrolled students: the wrap-up GET returns
@@ -11,19 +11,16 @@
  * gallery to enrolled users.
  */
 import { useEffect, useState } from 'react';
-import { Box, Chip, CircularProgress, Dialog, IconButton, Typography } from '@neram/ui';
-import CloseIcon from '@mui/icons-material/Close';
+import { Box, Chip, CircularProgress, Typography } from '@neram/ui';
+import { sortClassImages, type ClassImageRef } from '@/lib/class-cover';
+import ClassImagesViewer from './ClassImagesViewer';
 
 interface Props {
   classId: string;
   getToken: () => Promise<string | null>;
 }
 
-interface Img {
-  id: string;
-  url: string;
-  caption: string | null;
-}
+type Img = ClassImageRef;
 
 interface Tag {
   id: string;
@@ -36,7 +33,7 @@ export default function ClassCaptureView({ classId, getToken }: Props) {
   const [bullets, setBullets] = useState<string[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [images, setImages] = useState<Img[]>([]);
-  const [zoom, setZoom] = useState<string | null>(null);
+  const [zoomIndex, setZoomIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -55,7 +52,7 @@ export default function ClassCaptureView({ classId, getToken }: Props) {
         }
         if (active && i.ok) {
           const d = await i.json();
-          setImages(d.images || []);
+          setImages(sortClassImages(d.images || []));
         }
       } catch {
         /* leave empty */
@@ -106,16 +103,17 @@ export default function ClassCaptureView({ classId, getToken }: Props) {
       {images.length > 0 && (
         <Box>
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-            Class drawings
+            Class images
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
-            {images.map((img) => (
+            {images.map((img, i) => (
               <Box
                 key={img.id}
                 component="img"
-                src={img.url}
-                alt={img.caption || 'Class drawing'}
-                onClick={() => setZoom(img.url)}
+                src={img.thumb_url || img.url}
+                alt={img.caption || 'Class image'}
+                loading="lazy"
+                onClick={() => setZoomIndex(i)}
                 sx={{
                   width: 80,
                   height: 80,
@@ -131,20 +129,14 @@ export default function ClassCaptureView({ classId, getToken }: Props) {
         </Box>
       )}
 
-      <Dialog open={!!zoom} onClose={() => setZoom(null)} maxWidth="md">
-        <Box sx={{ position: 'relative' }}>
-          <IconButton
-            onClick={() => setZoom(null)}
-            aria-label="Close"
-            sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.55)', color: '#fff' }}
-          >
-            <CloseIcon />
-          </IconButton>
-          {zoom && (
-            <Box component="img" src={zoom} alt="Class drawing" sx={{ display: 'block', maxWidth: '90vw', maxHeight: '85vh' }} />
-          )}
-        </Box>
-      </Dialog>
+      {zoomIndex !== null && (
+        <ClassImagesViewer
+          open
+          onClose={() => setZoomIndex(null)}
+          images={images}
+          startIndex={zoomIndex}
+        />
+      )}
     </Box>
   );
 }

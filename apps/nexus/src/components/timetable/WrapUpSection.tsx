@@ -6,11 +6,16 @@
  * A class is often scheduled before anyone knows what it will cover, so it goes
  * into the calendar as "Class by Ar Hari Babu" and stays that way. This is
  * where it gets a real name, a short brief, a point-by-point record, the subject
- * it belonged to, the drawings done in class, and the recording, so the same
+ * it belonged to, the images from the class, and the recording, so the same
  * class can be found again months later.
  *
+ * One image is the COVER: the teacher stars it, and it then stands in front of
+ * this class everywhere it is listed, so a student can scan a week of history by
+ * eye. Starring saves immediately rather than waiting for Save, because a star
+ * that lies until you press a button is worse than no star.
+ *
  * The teacher can fill it all in by hand, or click Generate: the app reads the
- * class transcript (and any attached drawings) and drafts the title, brief,
+ * class transcript (and any attached images) and drafts the title, brief,
  * detailed note, bullet points, and tags for review. Generation runs in-app on
  * the shared AI key; on a busy signal the teacher just types instead.
  *
@@ -27,7 +32,6 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
-  ImageUploadList,
   InputAdornment,
   Link as MuiLink,
   MenuItem,
@@ -48,6 +52,8 @@ import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import type { ClassCardData } from './ClassCard';
 import { RADIUS } from './timetable-theme';
 import ClassVideoMetaPanel from './ClassVideoMetaPanel';
+import ClassImagesEditor, { type ClassImage } from './ClassImagesEditor';
+import { makeThumbnail } from '@/lib/image-downscale';
 
 interface TagOption {
   id: string;
@@ -71,14 +77,6 @@ interface TopicOption {
 interface SuggestedTag {
   label: string;
   group_type: string;
-}
-
-interface ClassImage {
-  id: string;
-  url: string;
-  caption: string | null;
-  sort_order: number;
-  source: string;
 }
 
 interface YtResult {
@@ -117,7 +115,8 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
   const [planEntryId, setPlanEntryId] = useState<string | null>(null);
 
   const [images, setImages] = useState<ClassImage[]>([]);
-  const [pastingDrawing, setPastingDrawing] = useState(false);
+  const [coverImageId, setCoverImageId] = useState<string | null>(null);
+  const [pastingImage, setPastingImage] = useState(false);
 
   const [needsManual, setNeedsManual] = useState(false);
   const [showManual, setShowManual] = useState(false);
@@ -160,6 +159,7 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
       if (imgRes.ok) {
         const data = await imgRes.json();
         setImages(data.images || []);
+        setCoverImageId(data.cover_image_id ?? null);
       }
     } catch {
       /* the fields simply stay empty */
@@ -244,17 +244,28 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
     }
   };
 
-  // --- Drawings ------------------------------------------------------------
+  // --- Class images --------------------------------------------------------
   const uploadClassImage = async (file: File): Promise<{ url: string; path?: string }> => {
     const token = await getToken();
     const fd = new FormData();
     fd.append('file', file);
+
+    // A small copy for the cover tiles, made here so a student scanning a week
+    // of history does not download multi-megabyte whiteboard shots. Optional by
+    // design: makeThumbnail returns null rather than throwing, and the server
+    // falls back to the full-size url.
+    const thumb = await makeThumbnail(file);
+    if (thumb) fd.append('thumb', thumb.blob, `thumb.${thumb.ext === 'jpeg' ? 'jpg' : 'webp'}`);
+
     const res = await fetch(`/api/timetable/${classId}/images`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: fd,
     });
-    if (!res.ok) throw new Error('Upload failed');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Upload failed');
+    }
     const data = await res.json();
     if (data.image) setImages((prev) => [...prev, data.image]);
     return { url: data.url, path: data.path };
@@ -273,10 +284,10 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
     await runGenerate(isVtt ? { vtt_content: text } : { transcript_text: text });
   };
 
-  // Explicit, discoverable paste for a drawing: read the clipboard image and run
-  // it through the same uploader the drop/choose path uses.
-  const pasteDrawingFromClipboard = async () => {
-    setPastingDrawing(true);
+  // Explicit, discoverable paste for a class image: read the clipboard image and
+  // run it through the same uploader the drop/choose path uses.
+  const pasteImageFromClipboard = async () => {
+    setPastingImage(true);
     try {
       const items = await navigator.clipboard.read();
       for (const item of items) {
@@ -286,27 +297,47 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
         const ext = type.split('/')[1] || 'png';
         const file = new File([blob], `pasted-${ext}.${ext}`, { type });
         await uploadClassImage(file); // appends to images on success
-        onNotify('Drawing pasted');
+        onNotify('Image pasted');
         return;
       }
       onNotify('Nothing to paste. Copy an image first, or use Ctrl+V / drop.', 'error');
-    } catch {
-      onNotify('Could not read the clipboard. Use Ctrl+V or drop the image instead.', 'error');
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : null;
+      onNotify(message || 'Could not read the clipboard. Use Ctrl+V or drop the image instead.', 'error');
     } finally {
-      setPastingDrawing(false);
+      setPastingImage(false);
     }
   };
 
-  const onImagesChange = (urls: string[]) => {
-    const removed = images.filter((r) => !urls.includes(r.url));
-    setImages((prev) => prev.filter((r) => urls.includes(r.url)));
-    removed.forEach(async (r) => {
+  const removeClassImage = async (image: ClassImage) => {
+    setImages((prev) => prev.filter((r) => r.id !== image.id));
+    // The database clears cover_image_id itself (ON DELETE SET NULL), but stale
+    // local state would leave the filled star pointing at nothing.
+    if (coverImageId === image.id) setCoverImageId(null);
+
+    const token = await getToken();
+    fetch(`/api/timetable/${classId}/images?id=${image.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+  };
+
+  const setClassCover = async (imageId: string | null) => {
+    const previous = coverImageId;
+    setCoverImageId(imageId);
+    try {
       const token = await getToken();
-      fetch(`/api/timetable/${classId}/images?id=${r.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {});
-    });
+      const res = await fetch(`/api/timetable/${classId}/images`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ cover_image_id: imageId }),
+      });
+      if (!res.ok) throw new Error('failed');
+      onNotify(imageId ? 'Cover set' : 'Cover cleared');
+    } catch {
+      setCoverImageId(previous);
+      onNotify('Could not set the cover', 'error');
+    }
   };
 
   // --- Tags ----------------------------------------------------------------
@@ -475,7 +506,7 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
 
   return (
     <Box>
-      {/* Generate: reads the transcript + drawings and drafts the wrap-up. */}
+      {/* Generate: reads the transcript + class images and drafts the wrap-up. */}
       <Button
         variant="outlined"
         onClick={() => runGenerate()}
@@ -530,7 +561,7 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
           </Button>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
             {needsManual
-              ? 'Could not fetch the transcript from Teams. Download the .vtt from the meeting and upload it, or attach a class drawing, then Generate.'
+              ? 'Could not fetch the transcript from Teams. Download the .vtt from the meeting and upload it, or attach a class image, then Generate.'
               : 'Only needed when Teams has not published the transcript yet.'}
           </Typography>
         </Box>
@@ -609,27 +640,27 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
         </Button>
       </Box>
 
-      {/* Drawings done in class: paste, drop, or choose. */}
+      {/* Pictures from the class: paste, drop, or choose. Star one as the cover. */}
       <Box sx={{ mb: 1.75 }}>
         <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 0.625 }}>
-          Class drawings
+          Class images
         </Typography>
-        <ImageUploadList
-          values={images.map((r) => r.url)}
-          onChange={onImagesChange}
+        <ClassImagesEditor
+          images={images}
+          coverImageId={coverImageId}
           upload={uploadClassImage}
+          onRemove={removeClassImage}
+          onSetCover={setClassCover}
           maxFiles={8}
-          enableGlobalPaste
-          helperText="Paste (Ctrl+V), drop, or choose"
         />
         <Button
           size="small"
-          onClick={pasteDrawingFromClipboard}
-          disabled={pastingDrawing}
-          startIcon={pastingDrawing ? <CircularProgress size={14} /> : <ContentPasteIcon sx={{ fontSize: 16 }} />}
+          onClick={pasteImageFromClipboard}
+          disabled={pastingImage}
+          startIcon={pastingImage ? <CircularProgress size={14} /> : <ContentPasteIcon sx={{ fontSize: 16 }} />}
           sx={{ textTransform: 'none', minHeight: 32, px: 0, mt: 0.5 }}
         >
-          {pastingDrawing ? 'Pasting...' : 'Paste from clipboard'}
+          {pastingImage ? 'Pasting...' : 'Paste from clipboard'}
         </Button>
       </Box>
 

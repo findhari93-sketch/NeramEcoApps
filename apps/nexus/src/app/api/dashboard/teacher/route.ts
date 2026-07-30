@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient } from '@neram/database';
+import { istToday } from '@/lib/plan-flow';
+import { resolveExamCountdown } from '@/lib/exam-countdown-server';
 
 /**
  * GET /api/dashboard/teacher?classroom={id}
  *
  * Returns teacher dashboard data: today's classes, student count,
- * attendance stats, and pending tickets.
+ * attendance stats, pending tickets, and the exam countdown for this classroom.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -25,12 +27,16 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    const today = new Date().toISOString().split('T')[0];
+    // IST, not UTC. toISOString().split('T')[0] is a day behind between 00:00
+    // and 05:30 IST, so "Classes Today" showed yesterday's list to anyone opening
+    // the dashboard late at night.
+    const today = istToday();
 
     const [
       todayClassesResult,
       studentCountResult,
       pendingTicketsResult,
+      examCountdown,
     ] = await Promise.all([
       // Today's classes
       supabase
@@ -57,6 +63,10 @@ export async function GET(request: NextRequest) {
         .select('id', { count: 'exact', head: true })
         .eq('assigned_to', user.id)
         .in('status', ['open', 'in_progress']),
+
+      // Days left until this classroom's target exam. studentId null: a teacher
+      // sees the cohort date, never a particular student's booked slot.
+      resolveExamCountdown(supabase, { classroomId, studentId: null }),
     ]);
 
     return NextResponse.json({
@@ -64,6 +74,7 @@ export async function GET(request: NextRequest) {
       studentCount: studentCountResult.count || 0,
       attendanceTodayCount: 0, // Will be populated when attendance is recorded
       pendingTickets: pendingTicketsResult.count || 0,
+      examCountdown,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load dashboard';

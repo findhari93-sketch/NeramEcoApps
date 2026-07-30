@@ -38,6 +38,8 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { RSVP_REASONS } from '@/lib/rsvp-reasons';
 import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
 import { formatTime } from '@/components/timetable/date-utils';
+import ClassCoverThumb from '@/components/timetable/ClassCoverThumb';
+import type { ClassImageRef } from '@/lib/class-cover';
 
 interface CatchUpData {
   class: {
@@ -49,6 +51,8 @@ interface CatchUpData {
     end_time: string;
     recording_url: string | null;
     youtube_url: string | null;
+    cover_image_id?: string | null;
+    class_images?: ClassImageRef[] | null;
   };
   absence: { reason_code: string | null; reason_note: string | null; kind?: string } | null;
   assignments: Array<{ id: string; title: string; assignment_type: string; submitted: boolean }>;
@@ -243,12 +247,19 @@ export default function CatchUpPage() {
           ? `Catch up, this was taught on ${formatDay(cls.scheduled_date)}`
           : `Catch up, you missed this on ${formatDay(cls.scheduled_date)}`}
       </Typography>
-      <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, lineHeight: 1.25 }}>
-        {cls.title}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {formatTime(cls.start_time)} to {formatTime(cls.end_time)}
-      </Typography>
+      {/* The picture from the class, ahead of the work. Seeing what was actually
+          drawn or shown is the fastest way to know what you missed. */}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.75, mt: 0.5, mb: 2 }}>
+        <ClassCoverThumb cls={cls} size="md" />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.25 }}>
+            {cls.title}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {formatTime(cls.start_time)} to {formatTime(cls.end_time)}
+          </Typography>
+        </Box>
+      </Box>
 
       {cls.description && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

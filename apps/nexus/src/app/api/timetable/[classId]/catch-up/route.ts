@@ -10,6 +10,7 @@ import {
   catchupItemStep,
   isCatchupItemComplete,
 } from '@neram/database';
+import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 import { isRsvpReasonCode } from '@/lib/rsvp-reasons';
 
 /**
@@ -46,7 +47,7 @@ async function resolveStudent(supabase: any, msOid: string, classId: string) {
   const { data: cls } = await supabase
     .from('nexus_scheduled_classes')
     .select(
-      'id, classroom_id, title, description, scheduled_date, start_time, end_time, status, recording_url, youtube_url',
+      `id, classroom_id, title, description, scheduled_date, start_time, end_time, status, recording_url, youtube_url, cover_image_id, ${CLASS_IMAGES_EMBED}`,
     )
     .eq('id', classId)
     .single();

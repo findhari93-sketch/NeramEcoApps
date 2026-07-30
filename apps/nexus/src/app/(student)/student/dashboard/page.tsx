@@ -28,6 +28,10 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StatCard from '@/components/StatCard';
 import FoundationOverviewCard from '@/components/foundation/FoundationOverviewCard';
 import RecordingPlayerDialog from '@/components/timetable/RecordingPlayerDialog';
+import ClassCoverThumb from '@/components/timetable/ClassCoverThumb';
+import type { ClassImageRef } from '@/lib/class-cover';
+import ExamCountdown from '@/components/ExamCountdown';
+import { describeExamCountdown, type ExamCountdownTarget } from '@/lib/exam-countdown';
 import type { NexusFoundationChapterWithProgress } from '@neram/database/types';
 
 interface UpcomingClass {
@@ -52,6 +56,9 @@ interface CompletedClass {
   recording_url: string | null;
   topic: { title: string; category: string } | null;
   teacher: { name: string } | null;
+  /** Drives the cover picture in front of the card. */
+  cover_image_id?: string | null;
+  class_images?: ClassImageRef[] | null;
 }
 
 interface DashboardData {
@@ -67,6 +74,8 @@ interface DashboardData {
   attendanceSummary: { total: number; attended: number; percentage: number };
   checklistProgress: { completed: number; total: number };
   topicProgress: { completed: number; total: number };
+  /** The exam this classroom's active plan targets, or null. */
+  examCountdown: ExamCountdownTarget | null;
 }
 
 export default function StudentDashboard() {
@@ -221,17 +230,60 @@ export default function StudentDashboard() {
   const nextClass = data?.upcomingClasses?.[0];
   const hasUpcomingClassSoon = !!nextClass;
 
+  /**
+   * Whether the exam has earned the full-width strip rather than a chip on the
+   * greeting line. Inside a month it is worth interrupting for; before that a
+   * permanent coloured banner is just months of low-grade anxiety. An
+   * unconfirmed date this close is also promoted, because that is a problem the
+   * student should be able to raise with their teacher.
+   */
+  const examView = describeExamCountdown(data?.examCountdown ?? null);
+  const examIsClose =
+    !!examView && examView.visible && (examView.days_left <= 30 || examView.band === 'unconfirmed_near');
+
   return (
     <Box>
       {/* ── Compact Greeting ── */}
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-          Welcome, {user?.name?.split(' ')[0] || 'Student'}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {activeClassroom?.name || 'No classroom selected'}
-        </Typography>
+      <Box
+        sx={{
+          mb: 2,
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 1,
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+            Welcome, {user?.name?.split(' ')[0] || 'Student'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+            {activeClassroom?.name || 'No classroom selected'}
+          </Typography>
+        </Box>
+        {/*
+          While the exam is far out the countdown is ambient context, not an
+          action, so it rides on the greeting line as a chip and leaves the
+          "Next Up" hero as the page's single call to action. It earns the
+          full-width strip below only once it is close.
+        */}
+        {!examIsClose && (
+          <ExamCountdown
+            target={data?.examCountdown ?? null}
+            variant="inline"
+            onClick={() => router.push('/student/course-plan')}
+          />
+        )}
       </Box>
+
+      {/* ── Exam countdown, promoted once it is close enough to earn the space ── */}
+      {examIsClose && (
+        <ExamCountdown
+          target={data?.examCountdown ?? null}
+          variant="strip"
+          onClick={() => router.push('/student/course-plan')}
+        />
+      )}
 
       {/* ── Complete Profile Banner ── */}
       {profileIncomplete && (
@@ -699,30 +751,45 @@ export default function StudentDashboard() {
                   },
                 }}
               >
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {cls.title}
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-                    <AccessTimeIcon sx={{ fontSize: '0.8rem', color: 'text.disabled' }} />
-                    <Typography variant="caption" color="text.secondary">
-                      {formatRelativeDate(cls.scheduled_date)} &middot; {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
+                {/* Nested row rather than a sibling, so the picture stays beside
+                    the title on a phone where the Paper itself stacks. */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    flex: 1,
+                    minWidth: 0,
+                    width: { xs: '100%', sm: 'auto' },
+                  }}
+                >
+                  <ClassCoverThumb cls={cls} size="sm" />
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      {cls.title}
                     </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                      <AccessTimeIcon sx={{ fontSize: '0.8rem', color: 'text.disabled' }} />
+                      <Typography variant="caption" color="text.secondary">
+                        {formatRelativeDate(cls.scheduled_date)} &middot; {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
+                      </Typography>
+                    </Box>
+                    {cls.topic && (
+                      <Chip
+                        label={cls.topic.title}
+                        size="small"
+                        sx={{
+                          mt: 0.75,
+                          height: 22,
+                          fontSize: '0.675rem',
+                          bgcolor: alpha(theme.palette.primary.main, 0.08),
+                          color: 'primary.main',
+                          fontWeight: 500,
+                        }}
+                      />
+                    )}
                   </Box>
-                  {cls.topic && (
-                    <Chip
-                      label={cls.topic.title}
-                      size="small"
-                      sx={{
-                        mt: 0.75,
-                        height: 22,
-                        fontSize: '0.675rem',
-                        bgcolor: alpha(theme.palette.primary.main, 0.08),
-                        color: 'primary.main',
-                        fontWeight: 500,
-                      }}
-                    />
-                  )}
                 </Box>
                 {cls.recording_url ? (
                   <Button

@@ -4,8 +4,16 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { loadPlanShapes } from '@/lib/plan-shape-query';
 import { classifyPrework, classEndIso } from '@/lib/prework';
 import { applyClassPrepGate } from '@/lib/class-prep-server';
+import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 
-const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name), classroom:nexus_classrooms!nexus_scheduled_classes_classroom_id_fkey(id, name, type)`;
+/**
+ * The class_images embed feeds the cover shown in front of every finished class.
+ *
+ * It exposes nothing new: this route already scopes to active enrolments,
+ * published classes and the student's batch, and GET /api/timetable/[id]/images
+ * already hands those same rows to any enrolled student.
+ */
+const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name), classroom:nexus_classrooms!nexus_scheduled_classes_classroom_id_fkey(id, name, type), ${CLASS_IMAGES_EMBED}`;
 
 /**
  * GET /api/timetable/my-schedule?start={date}&end={date}

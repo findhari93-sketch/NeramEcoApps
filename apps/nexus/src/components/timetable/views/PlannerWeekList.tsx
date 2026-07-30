@@ -7,8 +7,9 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import AddTaskOutlinedIcon from '@mui/icons-material/AddTaskOutlined';
 import type { ClassCardData } from '../ClassCard';
-import { type HolidayInfo, formatDateISO, formatTime, isToday, type WeekDates } from '../date-utils';
+import { type HolidayInfo, formatDateISO, formatTime, hasClassEnded, isToday, type WeekDates } from '../date-utils';
 import { LAYOUT, RADIUS, SHADOW, iconTagSx, tagSx } from '../timetable-theme';
+import ClassCoverThumb from '../ClassCoverThumb';
 
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -50,6 +51,11 @@ export default function PlannerWeekList({
   onAssignmentClick,
 }: PlannerWeekListProps) {
   const theme = useTheme();
+
+  // One clock for the whole render, so no two rows can disagree about where the
+  // past/future boundary is. Deliberately NOT a ticking useNow: a planner does
+  // not need a cover tile to appear the instant a class ends.
+  const now = new Date();
 
   if (loading) {
     return (
@@ -199,6 +205,10 @@ export default function PlannerWeekList({
                 const isSelected = selectedId === cls.id;
                 const isCancelled = cls.status === 'cancelled';
                 const assignmentCount = assignmentCounts?.[cls.id] ?? 0;
+                // Only a class that actually happened can have a picture of
+                // itself. A tile on a future class would promise content that
+                // does not exist, and a cancelled one has nothing to show.
+                const showCover = !isCancelled && hasClassEnded(cls, now);
 
                 return (
                   <Box
@@ -240,6 +250,8 @@ export default function PlannerWeekList({
                       },
                     }}
                   >
+                    {showCover && <ClassCoverThumb cls={cls} size="sm" />}
+
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography
                         sx={{

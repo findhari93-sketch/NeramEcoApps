@@ -6,12 +6,14 @@ import { Box, Button, Skeleton, Typography, alpha, useTheme } from '@neram/ui';
 import CheckIcon from '@mui/icons-material/Check';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { type ClassCardData } from '../ClassCard';
+import ClassCoverThumb from '../ClassCoverThumb';
 import {
   type HolidayInfo,
   classEndDate,
   classStartDate,
   formatDateISO,
   formatTime,
+  hasClassEnded,
   isToday,
   type WeekDates,
 } from '../date-utils';
@@ -109,8 +111,7 @@ export default function AgendaView({
   function rowKind(cls: ClassCardData): RowKind {
     if (cls.status === 'cancelled') return 'cancelled';
     if (isLiveClass(cls)) return 'now';
-    const ended = classEndDate(cls.scheduled_date, cls.end_time) < now;
-    if (!ended) return 'upcoming';
+    if (!hasClassEnded(cls, now)) return 'upcoming';
     // Attendance is only known for students, and only once Teams has synced.
     if (role === 'student' && myAttendance?.[cls.id] === false) return 'missed';
     if (role === 'student' && myRsvps?.[cls.id] === 'not_attending') return 'missed';
@@ -241,24 +242,30 @@ export default function AgendaView({
                 dimmed={kind === 'done' || kind === 'cancelled'}
                 onClick={onClassClick ? () => onClassClick(cls) : undefined}
               >
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography
-                    sx={{
-                      fontWeight: 700,
-                      fontSize: '0.9063rem',
-                      lineHeight: 1.35,
-                      textDecoration: kind === 'cancelled' ? 'line-through' : 'none',
-                    }}
-                  >
-                    {cls.title}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    {kind === 'missed' && reason
-                      ? `Reason logged: ${reason}`
-                      : [cls.teacher?.name, `${formatTime(cls.start_time)} to ${formatTime(cls.end_time)}`]
-                          .filter(Boolean)
-                          .join(' · ')}
-                  </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+                  {/* 'done' and 'missed' both mean the class has ended and was
+                      not cancelled, which is exactly when a cover can exist. */}
+                  {(kind === 'done' || kind === 'missed') && <ClassCoverThumb cls={cls} size="sm" />}
+
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.9063rem',
+                        lineHeight: 1.35,
+                        textDecoration: kind === 'cancelled' ? 'line-through' : 'none',
+                      }}
+                    >
+                      {cls.title}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      {kind === 'missed' && reason
+                        ? `Reason logged: ${reason}`
+                        : [cls.teacher?.name, `${formatTime(cls.start_time)} to ${formatTime(cls.end_time)}`]
+                            .filter(Boolean)
+                            .join(' · ')}
+                    </Typography>
+                  </Box>
                 </Box>
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>

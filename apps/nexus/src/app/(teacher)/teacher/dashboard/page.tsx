@@ -24,6 +24,8 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StatCard from '@/components/StatCard';
+import ExamCountdown from '@/components/ExamCountdown';
+import type { ExamCountdownTarget } from '@/lib/exam-countdown';
 
 interface TodayClass {
   id: string;
@@ -40,6 +42,7 @@ interface TeacherDashboardData {
   studentCount: number;
   attendanceTodayCount: number;
   pendingTickets: number;
+  examCountdown: ExamCountdownTarget | null;
 }
 
 export default function TeacherDashboard() {
@@ -156,7 +159,7 @@ export default function TeacherDashboard() {
         </Typography>
       </Box>
 
-      {/* ── Stat Cards: Hero + 2 ── */}
+      {/* ── Stat Cards: Hero + 3 ── */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         {/* Hero stat — full width on mobile, 1/3 on tablet+ */}
         <Grid item xs={12} sm={4}>
@@ -171,6 +174,34 @@ export default function TeacherDashboard() {
               size="wide"
               delay={0}
               onClick={() => router.push('/teacher/timetable')}
+            />
+          )}
+        </Grid>
+        {/*
+          Days to the exam sits second, ahead of Students and Open Tickets: for a
+          teacher it is a planning input, the thing that decides whether the plan
+          still fits. The card is only rendered when there is a classroom to
+          resolve it against, and its own empty state tells the teacher to link
+          the plan, since they are the only person who can.
+        */}
+        <Grid item xs={6} sm={4}>
+          {loading ? (
+            <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3 }} />
+          ) : (
+            <ExamCountdown
+              target={data?.examCountdown ?? null}
+              variant="stat"
+              onClick={() =>
+                router.push(
+                  data?.examCountdown?.plan
+                    ? `/teacher/course-plans/${data.examCountdown.plan.id}`
+                    : '/teacher/course-plans',
+                )
+              }
+              emptyAction={{
+                label: 'Link this plan to an exam date',
+                onClick: () => router.push('/teacher/course-plans'),
+              }}
             />
           )}
         </Grid>

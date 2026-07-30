@@ -405,6 +405,69 @@ describe('resolveTranscript', () => {
     expect(fetched.some((u) => u.startsWith('https://graph/last-week'))).toBe(false);
   });
 
+  it('moves on to the next transcript when the nearest one has no content', async () => {
+    // Exactly what production hands back. Every Teams meeting here offers two
+    // entries for the same class: a real one, and a phantom created about three
+    // seconds earlier whose /content answers 404 "No transcript content found".
+    // Nearest-to-the-class-start therefore always chooses the phantom, so trying
+    // one candidate and giving up loses a transcript that is sitting right there.
+    resolveOnlineMeetingDetailed.mockResolvedValue({
+      meeting: { artifactBase: 'users/o/onlineMeetings/m', token: 'app-token' },
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      const target = String(url);
+      if (target.endsWith('/transcripts')) {
+        return new Response(
+          JSON.stringify({
+            value: [
+              {
+                id: 'real-TranscriptV2',
+                createdDateTime: '2026-07-28T13:35:07.361Z',
+                transcriptContentUrl: 'https://graph/real',
+              },
+              {
+                id: 'phantom_Transcript',
+                createdDateTime: '2026-07-28T13:35:04.260Z',
+                transcriptContentUrl: 'https://graph/phantom',
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (target.startsWith('https://graph/phantom')) {
+        return new Response(
+          JSON.stringify({ error: { code: 'NotFound', message: 'No transcript content found' } }),
+          { status: 404 },
+        );
+      }
+      return new Response(VTT, { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { supabase, upsert } = makeSupabase(null);
+
+    const result = await resolveTranscript({
+      cls: {
+        id: 'c1',
+        online_meeting_id: 'm',
+        organizer_ms_oid: 'o',
+        scheduled_date: '2026-07-28',
+        start_time: '19:00:00',
+      },
+      supabase,
+    });
+
+    expect(result.source).toBe('graph_live');
+    expect(result.entries).toHaveLength(1);
+    const fetched = fetchMock.mock.calls.map(([u]) => String(u));
+    expect(fetched.some((u) => u.startsWith('https://graph/phantom'))).toBe(true);
+    expect(fetched.some((u) => u.startsWith('https://graph/real'))).toBe(true);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'graph_live', status: 'ok' }),
+      { onConflict: 'class_id' },
+    );
+  });
+
   it('refuses a transcript that cannot belong to this class', async () => {
     resolveOnlineMeetingDetailed.mockResolvedValue({
       meeting: { artifactBase: 'users/o/onlineMeetings/m', token: 'app-token' },

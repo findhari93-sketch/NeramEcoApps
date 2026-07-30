@@ -41,6 +41,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { addDays, isClassDay, istToday } from '@/lib/plan-flow';
+import { EXAM_TYPE_LABELS, PHASE_LABELS } from '@/lib/exam-countdown';
 import type { NexusTeachingPlan } from '@neram/database';
 
 type PlanCard = NexusTeachingPlan & {
@@ -49,6 +50,24 @@ type PlanCard = NexusTeachingPlan & {
   test_count: number;
   topic_count: number;
   module_count: number;
+  /**
+   * The nexus_exam_dates row this season targets (20260804090000). Typed here
+   * rather than on NexusTeachingPlan on purpose: nexus_teaching_plans is not in
+   * database.generated.ts, and keeping it local means iterating on the countdown
+   * does not rebuild all four apps.
+   */
+  target_exam_date_id: string | null;
+};
+
+/** An option in the Target exam selector, from GET /api/documents/exam-dates. */
+type ExamDateOption = {
+  id: string;
+  exam_type: string;
+  year: number;
+  phase: string;
+  exam_date: string;
+  label: string | null;
+  date_confidence: string | null;
 };
 
 const EXAM_OPTIONS = [
@@ -107,9 +126,18 @@ export default function CoursePlansPage() {
   const [pStart, setPStart] = useState('');
   const [pEnd, setPEnd] = useState('');
   const [pExamDate, setPExamDate] = useState('');
+  const [pTargetExamDateId, setPTargetExamDateId] = useState('');
   const [pSaturday, setPSaturday] = useState(true);
   const [duplicateFrom, setDuplicateFrom] = useState<PlanCard | null>(null);
   const [editingPlan, setEditingPlan] = useState<PlanCard | null>(null);
+  const [examDateOptions, setExamDateOptions] = useState<ExamDateOption[]>([]);
+
+  /**
+   * The exam this plan counts down to. Only nata and jee have a national registry;
+   * foundation and custom plans keep using the plan's own date field.
+   */
+  const targetExamApplies = pExam === 'nata' || pExam === 'jee';
+  const targetChoices = examDateOptions.filter((o) => o.exam_type === pExam);
 
   const load = useCallback(async () => {
     try {
@@ -125,6 +153,23 @@ export default function CoursePlansPage() {
     if (!authLoading) load();
   }, [authLoading, load]);
 
+  /**
+   * The exam date registry, for the Target exam selector. Fetched once when the
+   * dialog first opens, from this calendar year onward: a plan running now can
+   * target a session in either this year or the next.
+   */
+  const loadExamDates = useCallback(async () => {
+    try {
+      const thisYear = Number(today.slice(0, 4));
+      const data = await authFetch(`/api/documents/exam-dates?from_year=${thisYear}`);
+      setExamDateOptions(data.exam_dates || []);
+    } catch {
+      // A missing registry must not block creating a plan. The selector simply
+      // shows nothing to pick and the plan's own date field stays available.
+      setExamDateOptions([]);
+    }
+  }, [authFetch, today]);
+
   const openDialog = (source?: PlanCard) => {
     setEditingPlan(null);
     setDuplicateFrom(source || null);
@@ -134,8 +179,10 @@ export default function CoursePlansPage() {
     setPStart(today);
     setPEnd(addDays(today, 90));
     setPExamDate(source?.exam_date || '');
+    setPTargetExamDateId(source?.target_exam_date_id || '');
     setPSaturday(source?.saturday_classes ?? true);
     setDialog(true);
+    loadExamDates();
   };
 
   // Edit an existing plan's basic details in place (PATCH, classroom stays fixed).
@@ -148,12 +195,17 @@ export default function CoursePlansPage() {
     setPStart(p.start_date);
     setPEnd(p.expected_end_date);
     setPExamDate(p.exam_date || '');
+    setPTargetExamDateId(p.target_exam_date_id || '');
     setPSaturday(p.saturday_classes ?? true);
     setDialog(true);
+    loadExamDates();
   };
 
   const savePlan = async () => {
     setBusy(true);
+    // A plan targets a registry row OR carries its own date, never both, so the
+    // countdown has one unambiguous answer. The API enforces this too.
+    const targetId = targetExamApplies ? pTargetExamDateId || null : null;
     try {
       if (editingPlan) {
         await authFetch(`/api/teaching-plans/${editingPlan.id}`, {
@@ -164,7 +216,8 @@ export default function CoursePlansPage() {
             start_date: pStart,
             expected_end_date: pEnd,
             saturday_classes: pSaturday,
-            exam_date: pExamDate || null,
+            target_exam_date_id: targetId,
+            exam_date: targetId ? null : pExamDate || null,
           }),
         });
         setDialog(false);
@@ -181,7 +234,8 @@ export default function CoursePlansPage() {
           start_date: pStart,
           expected_end_date: pEnd,
           saturday_classes: pSaturday,
-          exam_date: pExamDate || undefined,
+          target_exam_date_id: targetId || undefined,
+          exam_date: targetId ? undefined : pExamDate || undefined,
           duplicate_from: duplicateFrom?.id,
         }),
       });
@@ -487,7 +541,47 @@ export default function CoursePlansPage() {
               <TextField label="Start date" type="date" value={pStart} onChange={(e) => setPStart(e.target.value)} fullWidth InputLabelProps={{ shrink: true }} />
               <TextField label="Expected completion" type="date" value={pEnd} onChange={(e) => setPEnd(e.target.value)} fullWidth InputLabelProps={{ shrink: true }} />
             </Stack>
-            <TextField label="Exam date (optional)" type="date" value={pExamDate} onChange={(e) => setPExamDate(e.target.value)} fullWidth InputLabelProps={{ shrink: true }} />
+            {targetExamApplies && (
+              <TextField
+                select
+                label="Target exam"
+                value={pTargetExamDateId}
+                onChange={(e) => setPTargetExamDateId(e.target.value)}
+                fullWidth
+                helperText="Drives the days-left countdown for students, parents and teachers. Set the date itself under Exam Tracking."
+              >
+                <MenuItem value="">Not set</MenuItem>
+                {targetChoices.map((o) => (
+                  <MenuItem key={o.id} value={o.id}>
+                    {o.label || `${EXAM_TYPE_LABELS[o.exam_type]} ${o.year} ${PHASE_LABELS[o.phase] || o.phase}`}
+                    {' · '}
+                    {fmtDate(o.exam_date)}
+                    {o.date_confidence === 'expected' ? ' (expected)' : ''}
+                  </MenuItem>
+                ))}
+                {targetChoices.length === 0 && (
+                  <MenuItem value="" disabled>
+                    No {EXAM_TYPE_LABELS[pExam] || pExam} dates in the registry yet
+                  </MenuItem>
+                )}
+              </TextField>
+            )}
+            <TextField
+              label="Exam date (optional)"
+              type="date"
+              value={pTargetExamDateId ? '' : pExamDate}
+              onChange={(e) => setPExamDate(e.target.value)}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+              disabled={!!pTargetExamDateId}
+              helperText={
+                pTargetExamDateId
+                  ? 'Coming from the target exam you selected.'
+                  : targetExamApplies
+                    ? 'Only needed if this plan targets no exam in the registry.'
+                    : undefined
+              }
+            />
             <FormControlLabel
               control={<Switch checked={pSaturday} onChange={(e) => setPSaturday(e.target.checked)} />}
               label={<Typography sx={{ fontWeight: 600, fontSize: '0.88rem' }}>Saturday classes</Typography>}

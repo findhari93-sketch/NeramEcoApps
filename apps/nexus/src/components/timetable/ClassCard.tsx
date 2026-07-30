@@ -8,6 +8,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import { formatTimeCompact } from './time-utils';
+import type { ClassImageRef } from '@/lib/class-cover';
 
 export { formatTimeCompact };
 
@@ -44,6 +45,14 @@ export interface ClassCardData {
   description?: string | null;
   organizer_name?: string | null;
   attendance_synced_at?: string | null;
+  /**
+   * The image the teacher starred as this class's cover, and the gallery it came
+   * from. Both optional: only the week/month reads embed the gallery, and a class
+   * nobody wrapped up has neither. resolveClassCover falls back to the first
+   * image when nothing is starred.
+   */
+  cover_image_id?: string | null;
+  class_images?: ClassImageRef[] | null;
 }
 
 interface ClassCardProps {

@@ -4931,6 +4931,15 @@ export interface NexusCourseTopicTest {
   purpose: 'quiz' | 'practice';
 }
 
+/**
+ * NOTE: the plan also carries `target_exam_date_id` (20260804090000), the
+ * nexus_exam_dates row this season prepares for. It is deliberately absent from
+ * this interface: nexus_teaching_plans is not in database.generated.ts at all,
+ * and the only consumer types it locally in an intersection
+ * (apps/nexus/.../course-plans/page.tsx PlanCard). Read it through the nexus
+ * resolver at apps/nexus/src/lib/exam-countdown.ts, never by widening this type,
+ * so wording and placement can iterate without rebuilding all four apps.
+ */
 export interface NexusTeachingPlan {
   id: string;
   classroom_id: string;
@@ -4941,6 +4950,7 @@ export interface NexusTeachingPlan {
   status: NexusTeachingPlanStatus;
   activated_at: string | null;
   saturday_classes: boolean;
+  /** Fallback target date for foundation/custom plans. Always treated as unconfirmed. */
   exam_date: string | null;
   created_by: string | null;
   created_at: string;
@@ -5594,6 +5604,16 @@ export interface NexusDocumentAuditLog {
 
 export type ExamPhase = 'phase_1' | 'phase_2' | 'session_1' | 'session_2';
 export type ExamAttemptState = 'planning' | 'applied' | 'completed' | 'scorecard_uploaded';
+
+/**
+ * How sure we are of an exam date.
+ *
+ * 'confirmed' came from the conducting body's published notification and may be
+ * rendered as an exact date and a precise day count. 'expected' is our own
+ * estimate from previous years and must always be rendered hedged, never as a
+ * precise countdown. See 20260804090000_exam_target_and_date_confidence.sql.
+ */
+export type NexusExamDateConfidence = 'expected' | 'confirmed';
 export type ExamBroadcastType = 'scorecard_released' | 'registration_reminder' | 'general';
 
 export interface NexusExamDate {
@@ -5606,6 +5626,10 @@ export interface NexusExamDate {
   label: string | null;
   registration_deadline: string | null;
   is_active: boolean;
+  /** Whether exam_date is official or our own estimate. Drives all countdown copy. */
+  date_confidence: NexusExamDateConfidence;
+  /** Shown verbatim to students and parents under an expected date. */
+  date_note: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

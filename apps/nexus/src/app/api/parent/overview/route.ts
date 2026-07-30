@@ -5,6 +5,8 @@ import { errorResponse } from '@/lib/api-errors';
 import { summarise, describeAttendance } from '@/lib/parent-attendance';
 import { buildParentAssignmentViews, summariseAssignments } from '@/lib/parent-assignments';
 import { loadChildAttendance, loadUpcomingClasses, istDaysAgo } from '@/lib/parent-data';
+import { resolveExamCountdown } from '@/lib/exam-countdown-server';
+import { getSupabaseAdminClient } from '@neram/database';
 
 /**
  * GET /api/parent/overview?student=&days=
@@ -39,10 +41,17 @@ export async function GET(request: NextRequest) {
       Math.max(7, Number(request.nextUrl.searchParams.get('days')) || DEFAULT_WINDOW_DAYS)
     );
 
-    const [attendanceWindow, assignmentItems, upcoming] = await Promise.all([
+    const [attendanceWindow, assignmentItems, upcoming, examCountdown] = await Promise.all([
       loadChildAttendance(child.id, classroomId, istDaysAgo(days)),
       listAssignmentsForStudent(child.id, classroomId).catch(() => []),
       loadUpcomingClasses(classroomId, 3),
+      // Days left until the child's exam. resolveChildContext has already proved
+      // this parent is linked to this student, so passing the child id here is
+      // safe; it is what lets the child's own booked slot outrank the cohort date.
+      resolveExamCountdown(getSupabaseAdminClient(), {
+        classroomId,
+        studentId: child.id,
+      }),
     ]);
 
     const attendance = summarise(attendanceWindow.views);
@@ -64,6 +73,12 @@ export async function GET(request: NextRequest) {
       attendanceSentence: describeAttendance(attendance),
       assignments,
       verdict: buildVerdict(attendance, assignments, child.name),
+      /**
+       * The exam this child is preparing for, or null. Only the date crosses the
+       * wire: the client words it, so a page left open overnight self-corrects
+       * without the polling this route deliberately avoids.
+       */
+      examCountdown,
       upcomingClasses: upcoming,
       /**
        * Recent classes for the home screen strip. The full list lives at
