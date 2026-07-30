@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
-import { getSupabaseAdminClient, getCurrentBatch, isTracked } from '@neram/database';
+import { getSupabaseAdminClient, getCurrentBatch, isTracked, pairStatus } from '@neram/database';
 import { pickClassroomEmail } from '@/lib/classroom-email';
 import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
 import {
@@ -174,6 +174,8 @@ export async function GET(request: NextRequest) {
           dormant: 0,
           stage: stageCounts([]),
           segments: segmentCounts([]),
+          mismatch: 0,
+          noYear: 0,
         },
         batches: [],
         currentBatch: currentCode,
@@ -293,7 +295,15 @@ export async function GET(request: NextRequest) {
         ms_oid: user.ms_oid,
         awaiting_microsoft: isAwaitingMicrosoft(user.ms_oid),
         nexus_access_enabled: user.nexus_access_enabled ?? false,
+        // Same value under two names for one release. `exam_batch` is the older
+        // name and still has consumers; `academic_year` matches the column and the
+        // field the classification route writes.
         exam_batch: user.academic_year ?? null,
+        academic_year: user.academic_year ?? null,
+        // Does the class agree with the exam year? Computed server-side from the
+        // current batch so the row badge, the banner count and the drawer's
+        // warning can never disagree about the same student.
+        pair_status: pairStatus(enrollment.current_standard ?? null, user.academic_year ?? null, currentCode),
         enrolled_at: enrollment.enrolled_at,
         batch: batch ? { id: batch.id, name: batch.name } : null,
         // Two orthogonal axes. A student can be Class 11 AND dormant, so these
@@ -340,6 +350,19 @@ export async function GET(request: NextRequest) {
     }));
     const trackedCount = enrollments.filter((e: any) => isTracked(e)).length;
 
+    // Class-versus-exam-year problems, over the students who can actually be
+    // targeted. Dormant students are excluded: they are out of every metric and
+    // every reminder, so asking a teacher to fix their exam year is busywork.
+    //
+    // These counts sit INSIDE the cohort filter, like every other count here, so
+    // a student parked on a past year is invisible under "Current + upcoming".
+    // That is why the Review action on the banner forces examBatch=all.
+    const targetable = students.filter((s: any) => s.participation_status !== 'dormant');
+    const mismatch = targetable.filter((s: any) => s.pair_status === 'mismatch').length;
+    const noYear = targetable.filter(
+      (s: any) => s.pair_status === 'no_year' || s.pair_status === 'unknown',
+    ).length;
+
     const counts = {
       total: students.length,
       active: students.length - awaitingMicrosoft,
@@ -348,6 +371,8 @@ export async function GET(request: NextRequest) {
       dormant: students.length - trackedCount,
       stage: stageCounts(facts),
       segments: segmentCounts(facts),
+      mismatch,
+      noYear,
     };
 
     // Server-side segment narrowing is applied LAST, after the counts, and only

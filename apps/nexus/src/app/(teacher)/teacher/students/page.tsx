@@ -28,9 +28,12 @@ import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import AvailableStudentsSection from '@/components/AvailableStudentsSection';
 import BulkSelectBar from '@/components/students/BulkSelectBar';
 import ClassifyDrawer, { type ClassifyMode } from '@/components/students/ClassifyDrawer';
+import ClassYearIssues from '@/components/students/ClassYearIssues';
+import PrefillReviewSheet, {
+  type PrefillSuggestion,
+} from '@/components/students/PrefillReviewSheet';
 import StudentListSkeleton from '@/components/students/StudentListSkeleton';
 import StudentSegmentBar from '@/components/students/StudentSegmentBar';
-import UnsetStagePrompt from '@/components/students/UnsetStagePrompt';
 import { CompactRow, StudentCard, DetailedRow } from '@/components/students/StudentRows';
 import {
   VIEW_STORAGE_KEY,
@@ -69,6 +72,22 @@ interface StudentCounts {
   dormant: number;
   stage: Record<StageKey, number>;
   segments: Record<StudentSegment, number>;
+  /** Class and exam year contradict each other. Excludes dormant students. */
+  mismatch: number;
+  /** No exam year at all. Excludes dormant students. */
+  noYear: number;
+}
+
+/** Snackbar verb for a class and/or exam year edit, naming what actually changed. */
+function describeFieldChange(payload: {
+  studyStage?: string | null;
+  academicYear?: string | null;
+}): string {
+  const touchedStage = 'studyStage' in payload;
+  const touchedYear = 'academicYear' in payload;
+  if (touchedStage && touchedYear) return 'Class and exam year set';
+  if (touchedYear) return payload.academicYear === null ? 'Cleared exam year' : 'Exam year set';
+  return payload.studyStage === null ? 'Cleared class' : 'Class set';
 }
 
 const EMPTY_COUNTS: StudentCounts = {
@@ -79,6 +98,8 @@ const EMPTY_COUNTS: StudentCounts = {
   dormant: 0,
   stage: { gap_year: 0, '12th': 0, '11th': 0, '10th': 0, unset: 0 },
   segments: { exam_this_year: 0, all_active: 0, '11th': 0, lower: 0, unset: 0, dormant: 0 },
+  mismatch: 0,
+  noYear: 0,
 };
 
 export default function TeacherStudents() {
@@ -90,7 +111,14 @@ export default function TeacherStudents() {
   // can() is fail-closed: an unknown capability, or a payload from before this
   // rollout, returns false. So a stale /api/auth/me hides the controls rather
   // than offering an action the server will refuse.
-  const canClassify = can('coord.student.classify');
+  //
+  // Two capabilities, deliberately asymmetric. Any teaching staff can set a class
+  // or an exam year, because that is data entry after speaking to a student and a
+  // wrong value is visible and self-correcting. Only a manager or admin can mark
+  // someone dormant, because that removes them from every metric and every
+  // reminder with nothing on screen turning red.
+  const canSetStage = can('coord.student.stage');
+  const canSetDormancy = can('coord.student.dormancy');
 
   const [students, setStudents] = useState<EnrolledStudent[]>([]);
   const [counts, setCounts] = useState<StudentCounts>(EMPTY_COUNTS);
@@ -118,6 +146,22 @@ export default function TeacherStudents() {
   const [autoSelectPending, setAutoSelectPending] = useState(false);
   const [drawer, setDrawer] = useState<{ mode: ClassifyMode } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  /**
+   * A transient narrowing to the students whose class and exam year disagree.
+   * Sits alongside the segment rather than inside it, because a mismatch can occur
+   * in any segment, and it is always rendered as a removable chip so the narrowing
+   * is never invisible.
+   */
+  const [mismatchOnly, setMismatchOnly] = useState(false);
+
+  const [prefill, setPrefill] = useState<{
+    open: boolean;
+    loading: boolean;
+    suggestions: PrefillSuggestion[];
+  }>({ open: false, loading: false, suggestions: [] });
+  /** Count only, so the banner can hide the prefill button when there is nothing. */
+  const [suggestionCount, setSuggestionCount] = useState(0);
 
   // Both preferences are read AFTER mount, not during render: reading
   // localStorage while rendering a client page produces a hydration mismatch.
@@ -229,7 +273,15 @@ export default function TeacherStudents() {
   }, [students]);
 
   const segmentTotals = counts.segments ?? localCounts.segments;
-  const unsetTotal = counts.stage?.unset ?? localCounts.stage.unset;
+  /**
+   * Non-dormant students with no class, which is `segments.unset` rather than
+   * `stage.unset`. Both are correct and that was the problem: stageCounts files a
+   * dormant student under their own stage, segmentCounts excludes them entirely, so
+   * the banner said 15 while the pill beside it said 13. A dormant student cannot
+   * be prioritised or targeted anyway, so the smaller number is the actionable one
+   * and it now matches the pill.
+   */
+  const unsetTotal = segmentTotals.unset ?? localCounts.segments.unset;
 
   // Never land on an empty list. A remembered segment can legitimately go to
   // zero between visits (the last dormant student came back, every stage got
@@ -238,31 +290,41 @@ export default function TeacherStudents() {
   // actually has somebody, preferring the default.
   useEffect(() => {
     if (loading || counts.total === 0) return;
+    // While reviewing mismatches the segment is not what is on screen, so moving
+    // it would silently drop the review the moment the last one was fixed.
+    if (mismatchOnly) return;
     if (segmentTotals[segment] > 0) return;
     const fallback =
       segmentTotals[DEFAULT_SEGMENT] > 0
         ? DEFAULT_SEGMENT
         : SEGMENTS.find((s) => segmentTotals[s] > 0);
     if (fallback && fallback !== segment) handleSegmentChange(fallback);
-  }, [loading, counts.total, segmentTotals, segment, handleSegmentChange]);
+  }, [loading, counts.total, segmentTotals, segment, handleSegmentChange, mismatchOnly]);
 
   // Segment first, then the free-text search, so the count on the active pill
   // and the length of the list agree except when the user is searching.
   const visibleStudents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return students.filter((s) => {
-      const inSegment = matchesSegment(
-        { stage: stageKeyOf(s.study_stage), dormant: s.participation_status === 'dormant' },
-        segment,
-      );
-      if (!inSegment) return false;
+      // The mismatch review deliberately overrides the segment: a contradictory
+      // pair can occur at any stage, so narrowing within a segment would show only
+      // some of them and quietly imply the rest were fine.
+      if (mismatchOnly) {
+        if (s.pair_status !== 'mismatch') return false;
+      } else {
+        const inSegment = matchesSegment(
+          { stage: stageKeyOf(s.study_stage), dormant: s.participation_status === 'dormant' },
+          segment,
+        );
+        if (!inSegment) return false;
+      }
       if (!query) return true;
       return (
         s.name.toLowerCase().includes(query) ||
         (!!s.email && s.email.toLowerCase().includes(query))
       );
     });
-  }, [students, segment, searchQuery]);
+  }, [students, segment, searchQuery, mismatchOnly]);
 
   const awaitingCount = visibleStudents.filter((s) => s.awaiting_microsoft).length;
 
@@ -290,10 +352,75 @@ export default function TeacherStudents() {
 
   /** One tap from the "N not set" banner to about-to-fix-them-all. */
   const startFixingUnset = useCallback(() => {
+    setMismatchOnly(false);
     handleSegmentChange('unset');
     setSelectMode(true);
     setAutoSelectPending(true);
   }, [handleSegmentChange]);
+
+  /**
+   * Review the students whose class and exam year contradict each other.
+   *
+   * Forces the cohort filter to "all" first. The mismatch count is computed inside
+   * the cohort filter like every other count on this page, so under the default
+   * "Current + upcoming" a student parked on a past year is not even in the payload.
+   * Reviewing a subset while the banner counts a different set is worse than not
+   * offering the review at all.
+   */
+  const reviewMismatches = useCallback(() => {
+    setExamBatchFilter('all');
+    setMismatchOnly(true);
+    setSelectMode(true);
+    setAutoSelectPending(true);
+  }, []);
+
+  /** The students with a class but no cohort. */
+  const startFixingYears = useCallback(() => {
+    setMismatchOnly(false);
+    setExamBatchFilter('none');
+    handleSegmentChange('all_active');
+    setSelectMode(true);
+    setAutoSelectPending(true);
+  }, [handleSegmentChange]);
+
+  const loadSuggestions = useCallback(
+    async (openSheet: boolean) => {
+      if (!activeClassroom) return;
+      if (openSheet) setPrefill((p) => ({ ...p, open: true, loading: true }));
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch(
+          `/api/students/classification/suggestions?classroom=${activeClassroom.id}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!res.ok) {
+          setSuggestionCount(0);
+          if (openSheet) setPrefill({ open: true, loading: false, suggestions: [] });
+          return;
+        }
+        const data = await res.json();
+        const suggestions = (data.suggestions || []) as PrefillSuggestion[];
+        setSuggestionCount(suggestions.length);
+        if (openSheet) setPrefill({ open: true, loading: false, suggestions });
+      } catch {
+        setSuggestionCount(0);
+        if (openSheet) setPrefill({ open: true, loading: false, suggestions: [] });
+      }
+    },
+    [activeClassroom, getToken],
+  );
+
+  // Probe for suggestions in the background so the banner knows whether to offer
+  // the button at all. Only worth asking when something is actually missing.
+  useEffect(() => {
+    if (!canSetStage) return;
+    if (unsetTotal <= 0 && counts.noYear <= 0) {
+      setSuggestionCount(0);
+      return;
+    }
+    loadSuggestions(false);
+  }, [canSetStage, unsetTotal, counts.noYear, loadSuggestions]);
 
   // Selecting everyone has to wait for the segment switch and the refetch to
   // land, so it runs off the rendered list rather than being folded into
@@ -305,30 +432,56 @@ export default function TeacherStudents() {
   // the whole segment turns one tap into a bulk change nobody asked for.
   useEffect(() => {
     if (!autoSelectPending) return;
-    if (segment !== 'unset' || !visibleStudents.length) return;
+    if (loading || !visibleStudents.length) return;
     setSelectedIds(new Set(visibleStudents.map((s) => s.id)));
     setAutoSelectPending(false);
-  }, [autoSelectPending, segment, visibleStudents]);
+  }, [autoSelectPending, loading, visibleStudents]);
 
+  interface ClassifyPayload {
+    studyStage?: StageKey | null;
+    academicYear?: string | null;
+    participationStatus?: 'active' | 'dormant';
+    reason?: string;
+  }
+
+  interface Assignment {
+    studentId: string;
+    studyStage?: string | null;
+    academicYear?: string | null;
+  }
+
+  /**
+   * One writer for both request shapes.
+   *
+   * `payload` + ids applies the same value to many students (the bulk-fix gesture).
+   * `assignments` applies a different value per student, which is what the
+   * application-form prefill produces. The API accepts exactly one of the two.
+   */
   const applyClassification = useCallback(
-    async (payload: {
-      studyStage?: StageKey | null;
-      participationStatus?: 'active' | 'dormant';
-      reason?: string;
-    }, ids?: string[], silent = false) => {
+    async (
+      payload: ClassifyPayload,
+      ids?: string[],
+      silent = false,
+      assignments?: Assignment[],
+    ) => {
       if (!activeClassroom) return;
       const studentIds = ids ?? Array.from(selectedIds);
-      if (!studentIds.length) return;
+      if (!assignments && !studentIds.length) return;
+      if (assignments && !assignments.length) return;
 
       setSaving(true);
       try {
         const token = await getToken();
         if (!token) return;
 
+        const body = assignments
+          ? { classroomId: activeClassroom.id, assignments }
+          : { classroomId: activeClassroom.id, studentIds, ...payload };
+
         const res = await fetch('/api/students/classification', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ classroomId: activeClassroom.id, studentIds, ...payload }),
+          body: JSON.stringify(body),
         });
 
         const data = await res.json();
@@ -338,38 +491,65 @@ export default function TeacherStudents() {
         }
 
         setDrawer(null);
+        setPrefill({ open: false, loading: false, suggestions: [] });
         exitSelectMode();
         await fetchStudents();
 
         if (silent) return;
 
         const skipped = (data.skipped || []).length;
-        const what = payload.participationStatus === 'dormant'
-          ? 'Marked dormant'
-          : payload.participationStatus === 'active'
-            ? 'Brought back'
-            : payload.studyStage === null
-              ? 'Cleared stage'
-              : 'Stage set';
+        const what = assignments
+          ? 'Filled in'
+          : payload.participationStatus === 'dormant'
+            ? 'Marked dormant'
+            : payload.participationStatus === 'active'
+              ? 'Brought back'
+              : describeFieldChange(payload);
         const message = skipped
           ? `${what} for ${data.updated}. ${skipped} skipped (not in this classroom).`
           : `${what} for ${data.updated} student${data.updated === 1 ? '' : 's'}.`;
 
-        // A bulk write over seventeen rows needs a way back that does not
-        // involve redoing the whole selection by hand.
-        const previous = (data.students || []) as Array<{ id: string; previous: Record<string, unknown> }>;
-        const undo = previous.length
-          ? () => {
-              const first = previous[0]?.previous || {};
-              const revert: Record<string, unknown> = {};
-              if ('study_stage' in first) revert.studyStage = first.study_stage ?? null;
-              if ('participation_status' in first) {
-                revert.participationStatus = first.participation_status ?? 'active';
-                if (revert.participationStatus === 'dormant') revert.reason = 'Undo';
-              }
-              applyClassification(revert as never, previous.map((p) => p.id), true);
-            }
-          : undefined;
+        // A bulk write over thirteen rows needs a way back that does not involve
+        // redoing the whole selection by hand.
+        //
+        // Undo rebuilds from EACH student's own `previous`, not from the first
+        // one's. A prefill applies different values per student, so reverting them
+        // all to the first student's old class would be worse than no undo at all.
+        const returned = (data.students || []) as Array<{
+          id: string;
+          previous: Record<string, unknown>;
+        }>;
+
+        let undo: (() => void) | undefined;
+        if (returned.length) {
+          const touchedParticipation = returned.some((r) => 'participation_status' in (r.previous || {}));
+          if (touchedParticipation) {
+            // Participation is uniform by construction (the API refuses it per
+            // student), so the flat shape is correct and is the only one that can
+            // carry the required reason.
+            const first = returned[0]?.previous || {};
+            const revert: ClassifyPayload = {
+              participationStatus: (first.participation_status as 'active' | 'dormant') ?? 'active',
+            };
+            if (revert.participationStatus === 'dormant') revert.reason = 'Undo';
+            undo = () => applyClassification(revert, returned.map((r) => r.id), true);
+          } else {
+            const revertAssignments: Assignment[] = returned.map((r) => ({
+              studentId: r.id,
+              ...('study_stage' in (r.previous || {})
+                ? { studyStage: (r.previous.study_stage as string | null) ?? null }
+                : {}),
+              ...('academic_year' in (r.previous || {})
+                ? { academicYear: (r.previous.academic_year as string | null) ?? null }
+                : {}),
+            }));
+            // A revert to "no exam year" is a real edit, but the API rejects an
+            // assignment with no fields, so drop any student whose previous state
+            // held nothing we touched.
+            const usable = revertAssignments.filter((a) => 'studyStage' in a || 'academicYear' in a);
+            if (usable.length) undo = () => applyClassification({}, undefined, true, usable);
+          }
+        }
 
         setSnackbar({ message, undo });
       } catch (err) {
@@ -386,6 +566,21 @@ export default function TeacherStudents() {
     () => students.filter((s) => selectedIds.has(s.id)).map((s) => s.name),
     [students, selectedIds],
   );
+
+  /**
+   * Selectable exam years for the drawer. The registry plus whatever the roster
+   * already carries, so a cohort that exists on students but has no batch row
+   * (which is how this classroom ended up spanning five different years) is still
+   * pickable rather than silently unavailable.
+   */
+  const examYears = useMemo(() => {
+    const codes = new Set<string>(examBatches.map((b) => b.code));
+    for (const student of students) {
+      if (student.exam_batch) codes.add(student.exam_batch);
+    }
+    if (currentBatch) codes.add(currentBatch);
+    return Array.from(codes).sort().reverse();
+  }, [examBatches, students, currentBatch]);
 
   return (
     <Box sx={{ pb: selectMode ? 12 : 0 }}>
@@ -438,7 +633,7 @@ export default function TeacherStudents() {
             sx={{ fontWeight: 600 }}
           />
         )}
-        {canClassify && !selectMode && (
+        {canSetStage && !selectMode && (
           <Button
             size="small"
             startIcon={<ChecklistOutlinedIcon />}
@@ -584,9 +779,35 @@ export default function TeacherStudents() {
         </Box>
       </Box>
 
-      {!loading && segment !== 'unset' && (
+      {mismatchOnly && (
         <Box sx={{ mb: 1.5 }}>
-          <UnsetStagePrompt count={unsetTotal} canClassify={canClassify} onFix={startFixingUnset} />
+          <Chip
+            label={`Showing ${visibleStudents.length} that need a year check`}
+            onDelete={() => {
+              setMismatchOnly(false);
+              exitSelectMode();
+            }}
+            color="warning"
+            sx={{ fontWeight: 700, minHeight: 36 }}
+          />
+        </Box>
+      )}
+
+      {!loading && !mismatchOnly && (
+        <Box sx={{ mb: 1.5 }}>
+          <ClassYearIssues
+            mismatchCount={counts.mismatch}
+            // Hidden while already looking at the unset segment: the list below IS
+            // the answer, so restating it just costs a row of vertical space.
+            noStageCount={segment === 'unset' ? 0 : unsetTotal}
+            noYearCount={counts.noYear}
+            suggestionCount={suggestionCount}
+            canEdit={canSetStage}
+            onReviewMismatches={reviewMismatches}
+            onFixStages={startFixingUnset}
+            onFixYears={startFixingYears}
+            onPrefill={() => loadSuggestions(true)}
+          />
         </Box>
       )}
 
@@ -637,6 +858,7 @@ export default function TeacherStudents() {
               attColor,
               doneColor,
               presenceStatus,
+              currentBatch,
               isMobile,
               selectMode,
               selected: selectedIds.has(student.id),
@@ -668,7 +890,8 @@ export default function TeacherStudents() {
         <BulkSelectBar
           selectedCount={selectedIds.size}
           visibleCount={visibleStudents.length}
-          canClassify={canClassify}
+          canClassify={canSetStage}
+          canSetDormancy={canSetDormancy}
           onSelectAll={() => setSelectedIds(new Set(visibleStudents.map((s) => s.id)))}
           onClear={() => setSelectedIds(new Set())}
           onSetStage={() => setDrawer({ mode: 'stage' })}
@@ -683,8 +906,19 @@ export default function TeacherStudents() {
         mode={drawer?.mode ?? 'stage'}
         names={selectedNames}
         busy={saving}
+        examYears={examYears}
+        currentBatch={currentBatch}
         onClose={() => setDrawer(null)}
         onApply={(payload) => applyClassification(payload)}
+      />
+
+      <PrefillReviewSheet
+        open={prefill.open}
+        loading={prefill.loading}
+        busy={saving}
+        suggestions={prefill.suggestions}
+        onClose={() => setPrefill({ open: false, loading: false, suggestions: [] })}
+        onApply={(assignments) => applyClassification({}, undefined, false, assignments)}
       />
 
       <Snackbar

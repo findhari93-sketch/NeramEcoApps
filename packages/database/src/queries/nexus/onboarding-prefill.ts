@@ -1,12 +1,14 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { ACADEMIC_YEAR_REGEX, deriveAcademicYearFromExamYear } from '../../utils/academic-year';
+import type { NexusStudyStage } from '../../types';
 
 /**
  * Fetch enrollment data from lead_profiles to pre-fill Nexus onboarding fields.
  * Maps enrollment academic data → Nexus onboarding standard/year/exam.
  */
 export interface OnboardingPrefillData {
-  currentStandard: string | null; // '10th' | '11th' | '12th' | 'gap_year'
-  academicYear: string | null;    // '2025-26' format
+  currentStandard: NexusStudyStage | null; // '10th' | '11th' | '12th' | 'gap_year'
+  academicYear: string | null;    // 'YYYY-YY' format
   examInterest: string | null;    // 'nata' | 'jee_paper2' | 'both'
   // Enhanced fields from enrollment
   schoolName: string | null;
@@ -52,53 +54,68 @@ export async function getEnrollmentPrefillData(
 }
 
 /**
- * Map enrollment academic_data.current_class to Nexus standard format.
- * Enrollment: "Class 12", "Class 11", "Class 10"
- * Nexus: "12th", "11th", "10th", "gap_year"
+ * Map `lead_profiles.academic_data.current_class` to a Nexus study stage.
+ *
+ * The stored values come from CLASS_OPTIONS on the apply and enroll wizards and
+ * are bare strings: '8' | '9' | '10' | '11' | '12' | '12_completed'. Older rows
+ * and the chat-widget flow can carry human text ('Class 12', '12th Standard'),
+ * hence the substring fallbacks.
+ *
+ * Classes 8 and 9 map to null on purpose: Nexus only models 10th upward, so
+ * there is no honest stage for them and "nobody has said yet" is the truthful
+ * answer.
  */
-function mapClassToStandard(
+export function mapClassToStandard(
   academicData: Record<string, any> | null,
   applicantCategory: string | null
-): string | null {
-  // Professionals, diploma, and college students → gap_year
-  if (applicantCategory === 'professional' || applicantCategory === 'diploma_student' || applicantCategory === 'college_student') {
+): NexusStudyStage | null {
+  // Anyone past school is preparing full time, which is what gap_year means.
+  // 'working_professional' is the real enum value in the applicant_category type
+  // ('professional' was a long-standing typo here that sent every working
+  // professional down the current_class path, where they have no value to read).
+  if (
+    applicantCategory === 'working_professional' ||
+    applicantCategory === 'professional' ||
+    applicantCategory === 'diploma_student' ||
+    applicantCategory === 'college_student'
+  ) {
     return 'gap_year';
   }
 
   const currentClass = academicData?.current_class;
   if (!currentClass) return null;
 
-  const classStr = String(currentClass).toLowerCase();
-  if (classStr === '12_completed' || classStr.includes('12th completed')) return 'gap_year';
-  if (classStr.includes('12') || classStr === 'class 12') return '12th';
-  if (classStr.includes('11') || classStr === 'class 11') return '11th';
-  if (classStr.includes('10') || classStr === 'class 10') return '10th';
+  const classStr = String(currentClass).toLowerCase().trim();
+  if (classStr === '12_completed' || classStr.includes('12th completed') || classStr.includes('completed 12')) {
+    return 'gap_year';
+  }
+  if (classStr.includes('12')) return '12th';
+  if (classStr.includes('11')) return '11th';
+  if (classStr.includes('10')) return '10th';
 
   return null;
 }
 
 /**
- * Infer Nexus academic_year from enrollment target_exam_year.
- * target_exam_year "2026-27" → academic_year "2025-26" (year before exam)
- * target_exam_year "2027" → academic_year "2026-27"
+ * Read `lead_profiles.target_exam_year` as a 'YYYY-YY' cohort.
+ *
+ * The column is INTEGER and admin writes a calendar exam year into it (2027),
+ * so that is the path that fires in practice. The public apply form's
+ * "Planning to Write Exam In" dropdown emits an academic-year string ('2026-27')
+ * instead, which is accepted here as already being the cohort. That is the
+ * opposite of what this function used to do: it subtracted a year from the
+ * string form, contradicting `examYearFromAcademicYear` and the batch registry's
+ * own labels ('2026-27' is seeded as 'NATA/JEE 2027').
  */
-function inferAcademicYear(targetExamYear: string | null): string | null {
-  if (!targetExamYear) return null;
+function inferAcademicYear(targetExamYear: string | number | null): string | null {
+  if (targetExamYear === null || targetExamYear === undefined || targetExamYear === '') return null;
 
-  // Handle "YYYY-YY" format (e.g., "2026-27")
-  const rangeMatch = targetExamYear.match(/^(\d{4})-(\d{2})$/);
-  if (rangeMatch) {
-    const startYear = parseInt(rangeMatch[1]) - 1;
-    const endYear = startYear + 1;
-    return `${startYear}-${String(endYear).slice(-2)}`;
+  // Already a cohort code, e.g. '2026-27' straight off the apply form.
+  if (typeof targetExamYear === 'string' && ACADEMIC_YEAR_REGEX.test(targetExamYear)) {
+    return targetExamYear;
   }
 
-  // Handle "YYYY" format (e.g., "2027")
-  const yearMatch = targetExamYear.match(/^(\d{4})$/);
-  if (yearMatch) {
-    const year = parseInt(yearMatch[1]);
-    return `${year - 1}-${String(year).slice(-2)}`;
-  }
-
-  return null;
+  // A calendar exam year, e.g. 2027 or '2027'. Rejects NaN and out-of-range.
+  const asNumber = typeof targetExamYear === 'number' ? targetExamYear : Number(targetExamYear);
+  return deriveAcademicYearFromExamYear(asNumber);
 }

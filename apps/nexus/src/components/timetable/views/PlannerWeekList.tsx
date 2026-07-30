@@ -1,10 +1,14 @@
 'use client';
 
-import { Box, Button, Skeleton, Typography, alpha, useTheme } from '@neram/ui';
+import { Box, Button, Skeleton, Tooltip, Typography, alpha, useTheme } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
+import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
+import AddTaskOutlinedIcon from '@mui/icons-material/AddTaskOutlined';
 import type { ClassCardData } from '../ClassCard';
 import { type HolidayInfo, formatDateISO, formatTime, isToday, type WeekDates } from '../date-utils';
-import { LAYOUT, RADIUS, SHADOW, tagSx } from '../timetable-theme';
+import { LAYOUT, RADIUS, SHADOW, iconTagSx, tagSx } from '../timetable-theme';
 
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -172,9 +176,9 @@ export default function PlannerWeekList({
         }
 
         return (
-          <Box key={dateStr} sx={{ display: 'flex', gap: 1.5, alignItems: 'stretch' }}>
+          <Box key={dateStr} sx={{ display: 'flex', gap: 1.5, alignItems: 'stretch', minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>{stub}</Box>
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.875 }}>
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.875, minWidth: 0 }}>
               {/* Classes scheduled on a holiday still show, with the holiday
                   named above them so the day is not misread as normal. */}
               {holiday && (
@@ -216,6 +220,7 @@ export default function PlannerWeekList({
                       px: 1.75,
                       py: 1.5,
                       minHeight: 56,
+                      minWidth: 0,
                       cursor: 'pointer',
                       borderRadius: RADIUS.card,
                       bgcolor: 'background.paper',
@@ -253,68 +258,103 @@ export default function PlannerWeekList({
                       </Typography>
                     </Box>
 
-                    <Box sx={{ display: 'flex', gap: 0.625, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {/* Icon-only, stacked and right-aligned: a column this narrow
+                        always leaves the title its own space to truncate into,
+                        instead of the two competing for the same line. */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-end',
+                        gap: 0.5,
+                        flexShrink: 0,
+                      }}
+                    >
                       {isDraft && (
-                        <Box component="span" sx={tagSx(theme, 'neutral')}>
-                          Draft
-                        </Box>
+                        <Tooltip title="Draft, not visible to students yet" arrow enterTouchDelay={0} leaveTouchDelay={3000}>
+                          <Box component="span" aria-label="Draft" sx={iconTagSx(theme, 'neutral')}>
+                            <EditNoteOutlinedIcon sx={{ fontSize: 13 }} />
+                          </Box>
+                        </Tooltip>
                       )}
                       {cls.teams_meeting_id && (
-                        <Box component="span" sx={tagSx(theme, 'success')}>
-                          Teams
-                        </Box>
+                        <Tooltip title="Teams meeting scheduled" arrow enterTouchDelay={0} leaveTouchDelay={3000}>
+                          <Box component="span" aria-label="Teams meeting scheduled" sx={iconTagSx(theme, 'success')}>
+                            <VideocamIcon sx={{ fontSize: 13 }} />
+                          </Box>
+                        </Tooltip>
                       )}
                       {assignmentCount > 0 ? (
-                        <Box component="span" sx={tagSx(theme, 'primary')}>
-                          {assignmentCount === 1 ? 'Assignment' : `${assignmentCount} assignments`}
-                        </Box>
+                        <Tooltip
+                          title={assignmentCount === 1 ? '1 assignment attached' : `${assignmentCount} assignments attached`}
+                          arrow
+                          enterTouchDelay={0}
+                          leaveTouchDelay={3000}
+                        >
+                          <Box
+                            component="span"
+                            aria-label={assignmentCount === 1 ? '1 assignment attached' : `${assignmentCount} assignments attached`}
+                            sx={{
+                              ...iconTagSx(theme, 'primary'),
+                              ...(assignmentCount > 1 && { width: 'auto', minWidth: 22, px: 0.625, gap: 0.25 }),
+                            }}
+                          >
+                            <AssignmentOutlinedIcon sx={{ fontSize: 13 }} />
+                            {assignmentCount > 1 && (
+                              <Typography component="span" sx={{ fontSize: '0.625rem', fontWeight: 700, lineHeight: 1 }}>
+                                {assignmentCount}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Tooltip>
                       ) : (
                         /* A real button, not a tag. As a span inside the card it
                            swallowed its own tap: the click bubbled to the card and
                            opened the panel instead of attaching work. */
-                        <Box
-                          component="button"
-                          type="button"
-                          aria-label={`Add an assignment to ${cls.title}`}
-                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                            e.stopPropagation();
-                            onAssignmentClick?.(cls, e.currentTarget);
-                          }}
-                          onKeyDown={(e: React.KeyboardEvent) => {
-                            // The card also listens for Enter and Space.
-                            if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
-                          }}
-                          sx={{
-                            ...tagSx(theme, 'neutral'),
-                            borderStyle: 'dashed',
-                            color: theme.palette.primary.dark,
-                            cursor: 'pointer',
-                            fontFamily: 'inherit',
-                            appearance: 'none',
-                            // The pill stays small; the touch target does not.
-                            position: 'relative',
-                            '&::after': {
-                              content: '""',
-                              position: 'absolute',
-                              top: '50%',
-                              left: '50%',
-                              transform: 'translate(-50%, -50%)',
-                              width: '100%',
-                              minWidth: 44,
-                              height: 44,
-                            },
-                            '&:hover': {
-                              borderColor: theme.palette.primary.main,
-                              bgcolor: alpha(theme.palette.primary.main, 0.06),
-                            },
-                            '&:focus-visible': {
-                              outline: `2px solid ${theme.palette.primary.main}`,
-                              outlineOffset: 2,
-                            },
-                          }}
-                        >
-                          + Assignment
-                        </Box>
+                        <Tooltip title={`Add an assignment to ${cls.title}`} arrow enterTouchDelay={0} leaveTouchDelay={3000}>
+                          <Box
+                            component="button"
+                            type="button"
+                            aria-label={`Add an assignment to ${cls.title}`}
+                            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                              e.stopPropagation();
+                              onAssignmentClick?.(cls, e.currentTarget);
+                            }}
+                            onKeyDown={(e: React.KeyboardEvent) => {
+                              // The card also listens for Enter and Space.
+                              if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+                            }}
+                            sx={{
+                              ...iconTagSx(theme, 'neutral'),
+                              borderStyle: 'dashed',
+                              color: theme.palette.primary.dark,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                              appearance: 'none',
+                              // The badge stays small; the touch target does not.
+                              position: 'relative',
+                              '&::after': {
+                                content: '""',
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                width: 44,
+                                height: 44,
+                              },
+                              '&:hover': {
+                                borderColor: theme.palette.primary.main,
+                                bgcolor: alpha(theme.palette.primary.main, 0.06),
+                              },
+                              '&:focus-visible': {
+                                outline: `2px solid ${theme.palette.primary.main}`,
+                                outlineOffset: 2,
+                              },
+                            }}
+                          >
+                            <AddTaskOutlinedIcon sx={{ fontSize: 13 }} />
+                          </Box>
+                        </Tooltip>
                       )}
                     </Box>
                   </Box>

@@ -14,6 +14,7 @@ export default function BulkSelectBar({
   selectedCount,
   visibleCount,
   canClassify,
+  canSetDormancy = false,
   onSelectAll,
   onClear,
   onSetStage,
@@ -23,7 +24,14 @@ export default function BulkSelectBar({
 }: {
   selectedCount: number;
   visibleCount: number;
+  /** Covers "Set class and exam year". Any teaching staff hold this. */
   canClassify: boolean;
+  /**
+   * Covers "Mark dormant" and "Bring back" only. Manager and admin. Kept separate
+   * from canClassify so a teacher gets the class button live and the dormancy
+   * button disabled, rather than all-or-nothing.
+   */
+  canSetDormancy?: boolean;
   onSelectAll: () => void;
   onClear: () => void;
   onSetStage: () => void;
@@ -68,15 +76,19 @@ export default function BulkSelectBar({
       </Box>
 
       <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
-        <Button
-          variant="outlined"
-          onClick={showReactivate ? onReactivate : onMarkDormant}
-          disabled={none || !canClassify}
-          color={showReactivate ? 'success' : 'warning'}
-          sx={{ minHeight: 44, flex: { xs: 1, sm: 'none' }, fontWeight: 700 }}
-        >
-          {showReactivate ? 'Bring back' : 'Mark dormant'}
-        </Button>
+        {/* Hidden rather than disabled for a teacher: a permanently greyed control
+            reads as a bug, and dormancy is not something they will ever gain here. */}
+        {canSetDormancy && (
+          <Button
+            variant="outlined"
+            onClick={showReactivate ? onReactivate : onMarkDormant}
+            disabled={none}
+            color={showReactivate ? 'success' : 'warning'}
+            sx={{ minHeight: 44, flex: { xs: 1, sm: 'none' }, fontWeight: 700 }}
+          >
+            {showReactivate ? 'Bring back' : 'Mark dormant'}
+          </Button>
+        )}
         <Button
           variant="contained"
           onClick={onSetStage}

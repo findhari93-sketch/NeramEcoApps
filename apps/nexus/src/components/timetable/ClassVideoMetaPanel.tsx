@@ -17,7 +17,7 @@
  * topic-quick-add.ts established: no server AI, no cost, no rate limit.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -44,6 +44,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import {
   parseVideoMeta,
   parseChapterTime,
@@ -161,7 +162,7 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
   const [prompt, setPrompt] = useState('');
   const [promptLoading, setPromptLoading] = useState(false);
   const [transcriptInfo, setTranscriptInfo] = useState<{ found: boolean; segments: number } | null>(null);
-  const [transcriptPaste, setTranscriptPaste] = useState('');
+  const transcriptFileRef = useRef<HTMLInputElement>(null);
 
   // Step 2
   const [pasteText, setPasteText] = useState('');
@@ -242,12 +243,17 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
     [registry],
   );
 
-  const buildPrompt = async () => {
+  /**
+   * Build the prompt. An empty body is the normal case: the server resolves the
+   * transcript itself, from the copy stored for this class or from Graph. A body
+   * only appears when the teacher just uploaded a file.
+   */
+  const buildPrompt = async (bodyOverride?: Record<string, unknown>) => {
     setPromptLoading(true);
     try {
       const res = await authed(`/api/timetable/${classId}/video-meta/prompt`, {
         method: 'POST',
-        body: JSON.stringify(transcriptPaste.trim() ? { transcript_text: transcriptPaste } : {}),
+        body: JSON.stringify(bodyOverride ?? {}),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Could not build the prompt');
@@ -258,6 +264,22 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
     } finally {
       setPromptLoading(false);
     }
+  };
+
+  /**
+   * Read the teacher's downloaded transcript and rebuild from it. A .vtt keeps
+   * its timestamps, which is the whole point here: without them the prompt is
+   * told not to invent chapters. Mirrors onTranscriptFile in WrapUpSection.
+   */
+  const onTranscriptFile = async (file: File | null | undefined) => {
+    if (!file) return;
+    const text = await file.text().catch(() => '');
+    if (!text.trim()) {
+      onNotify?.('That file looks empty');
+      return;
+    }
+    const isVtt = /\.vtt$/i.test(file.name) || text.trimStart().toUpperCase().startsWith('WEBVTT');
+    await buildPrompt(isVtt ? { vtt_content: text } : { transcript_text: text });
   };
 
   /** Turn the pasted JSON into the three fields that go to YouTube. */
@@ -416,27 +438,48 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
                     <Alert severity={transcriptInfo.found ? 'success' : 'warning'} sx={{ mb: 1.5 }}>
                       {transcriptInfo.found
                         ? `Transcript found, ${transcriptInfo.segments} segments. Chapters will have real timestamps.`
-                        : 'No transcript found. The prompt will work from the class notes, and it will not invent chapters. You can paste the transcript below instead.'}
+                        : 'No transcript found. The prompt will work from the class notes, and it will not invent chapters. Upload the .vtt from the meeting to get real chapter timestamps.'}
                     </Alert>
                   )}
 
+                  {/*
+                    Upload, not paste. This step used to offer a paste box and
+                    nothing else, so the only way to supply a transcript by hand
+                    was to paste tens of thousands of characters into a three-row
+                    field. The file goes to the same route as a `vtt_content`
+                    body, and the server stores it, so it also fixes the Wrap Up
+                    section above and never has to be supplied twice.
+                  */}
                   {transcriptInfo && !transcriptInfo.found && (
-                    <TextField
-                      label="Paste the transcript (optional)"
-                      value={transcriptPaste}
-                      onChange={(e) => setTranscriptPaste(e.target.value)}
-                      fullWidth
-                      multiline
-                      minRows={3}
-                      size="small"
-                      sx={{ mb: 1.5 }}
-                    />
+                    <Box sx={{ mb: 1.5 }}>
+                      <input
+                        ref={transcriptFileRef}
+                        type="file"
+                        accept=".vtt,.txt,text/vtt,text/plain"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          void onTranscriptFile(e.target.files?.[0]);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<UploadFileIcon sx={{ fontSize: 16 }} />}
+                        onClick={() => transcriptFileRef.current?.click()}
+                        disabled={promptLoading}
+                        fullWidth
+                        sx={{ textTransform: 'none', minHeight: 44 }}
+                      >
+                        Upload transcript file (.vtt)
+                      </Button>
+                    </Box>
                   )}
 
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
                     <Button
                       variant="contained"
-                      onClick={buildPrompt}
+                      onClick={() => void buildPrompt()}
                       disabled={promptLoading}
                       sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
                     >

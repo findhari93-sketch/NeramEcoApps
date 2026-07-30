@@ -112,7 +112,7 @@ describe('teacher tier (external, restricted)', () => {
     'structure.enrollment.remove',
     'structure.plan.delete',
     'teach.timetable.schedule',
-    'coord.student.classify',
+    'coord.student.dormancy',
     'coord.photo_ms_push',
     'impersonate.any',
   ];
@@ -142,14 +142,30 @@ describe('teacher tier (external, restricted)', () => {
     expect(can('teacher', 'teach.session.run')).toBe(true);
   });
 
-  it('can see a student but cannot classify one', () => {
-    // Marking a student dormant removes them from attendance %, submission
-    // rates, the watchlist and every automated reminder. A visiting teacher
-    // must not be able to do that silently.
+  it('can set a class or exam year, which is data entry after talking to a student', () => {
+    // A wrong class is visible and self-correcting, so this is not worth a
+    // manager's time. The public apply form got three Class 11 students tagged as
+    // writing the exam this year; whoever notices should be able to fix it.
+    expect(can('teacher', 'coord.student.stage')).toBe(true);
+    expect(can('manager', 'coord.student.stage')).toBe(true);
+    expect(can('admin', 'coord.student.stage')).toBe(true);
+  });
+
+  it('cannot mark a student dormant, which is the half that hides them', () => {
+    // Dormant removes a student from attendance %, submission rates, prep
+    // readiness, the watchlist and every automated reminder, with nothing on
+    // screen turning red. A visiting teacher must not be able to do that.
     expect(can('teacher', 'coord.student.view')).toBe(true);
-    expect(can('teacher', 'coord.student.classify')).toBe(false);
-    expect(can('manager', 'coord.student.classify')).toBe(true);
-    expect(can('admin', 'coord.student.classify')).toBe(true);
+    expect(can('teacher', 'coord.student.dormancy')).toBe(false);
+    expect(can('manager', 'coord.student.dormancy')).toBe(true);
+    expect(can('admin', 'coord.student.dormancy')).toBe(true);
+  });
+
+  it('holds exactly one half of the old coord.student.classify', () => {
+    // The asymmetry IS the feature. If a future refactor collapses these back
+    // into one capability, this test is what should fail.
+    expect(can('teacher', 'coord.student.stage')).toBe(true);
+    expect(can('teacher', 'coord.student.dormancy')).toBe(false);
   });
 });
 

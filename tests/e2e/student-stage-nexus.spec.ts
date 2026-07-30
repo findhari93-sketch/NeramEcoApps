@@ -27,8 +27,15 @@ test.describe('Student study stage and participation', () => {
   let classroomId: string | null = null;
   let subjectId: string | null = null;
   /** What the subject looked like before this file touched it. */
-  let original: { study_stage: string | null; participation_status: string } | null = null;
+  let original: {
+    study_stage: string | null;
+    participation_status: string;
+    academic_year: string | null;
+  } | null = null;
   let migrated = false;
+  /** The current cohort, and a later one that is always a legal target. */
+  let currentBatch: string | null = null;
+  let futureYear = '';
 
   async function listStudents(request: any, query = '') {
     return request.get(`${NEXUS}/api/students?classroom=${classroomId}${query}`, {
@@ -71,7 +78,15 @@ test.describe('Student study stage and participation', () => {
       original = {
         study_stage: first.study_stage ?? null,
         participation_status: first.participation_status ?? 'active',
+        academic_year: first.academic_year ?? first.exam_batch ?? null,
       };
+    }
+    currentBatch = body.currentBatch ?? null;
+    // The route refuses a cohort earlier than the current one (it would hide the
+    // student), so tests must aim forward. +1 is what Class 11 expects anyway.
+    if (currentBatch) {
+      const start = Number(currentBatch.slice(0, 4));
+      futureYear = `${start + 1}-${String((start + 2) % 100).padStart(2, '0')}`;
     }
   });
 
@@ -86,6 +101,18 @@ test.describe('Student study stage and participation', () => {
       participationStatus: original.participation_status,
       reason: original.participation_status === 'dormant' ? 'Restoring E2E fixture' : undefined,
     });
+    // The exam year lives on users, not the enrolment, so it needs its own
+    // restore. Leaking it would move this student's cohort for EVERY other spec,
+    // and for the admin CRM, because that column is global.
+    //
+    // "No year" has to be restored explicitly. Guarding on a truthy original
+    // silently skipped the clear, which left this student tagged with a cohort
+    // they never had.
+    if (!original.academic_year) {
+      await classify(request, { studentIds: [subjectId], academicYear: null });
+    } else if (currentBatch && original.academic_year >= currentBatch) {
+      await classify(request, { studentIds: [subjectId], academicYear: original.academic_year });
+    }
   });
 
   test('the roster carries both axes and a full counts object', async ({ request }) => {
@@ -123,23 +150,59 @@ test.describe('Student study stage and participation', () => {
     expect(segments.all_active + segments.dormant).toBe(body.counts.total);
   });
 
-  test('a restricted teacher cannot classify, a manager can', async ({ request }) => {
+  test('a teacher may set a class and an exam year but NOT mark someone dormant', async ({ request }) => {
     test.skip(!migrated || !subjectId, 'Migration not applied or no student to work with');
 
-    // The restricted external tier. test-login defaults role:'teacher' to
-    // MANAGER for backwards compatibility, so this asks for it explicitly.
+    // THE most important test in this file after the two-axis one. The whole point
+    // of splitting coord.student.classify is this asymmetry: setting a class is
+    // data entry a teacher does after speaking to a student, while marking someone
+    // dormant silently removes them from every metric and every reminder.
+    //
+    // The restricted external tier. test-login defaults role:'teacher' to MANAGER
+    // for backwards compatibility, so this asks for it explicitly.
     const restricted = await request.post(`${NEXUS}/api/auth/test-login`, {
       data: { email: TEACHER_ACCOUNT.email, role: 'teacher', staffRole: 'teacher' },
     });
     expect(restricted.ok()).toBeTruthy();
     const restrictedToken = (await restricted.json()).testToken;
 
-    const denied = await classify(
+    // Allowed: the class.
+    const stageOk = await classify(
       request,
       { studentIds: [subjectId], studyStage: '11th' },
       restrictedToken,
     );
+    expect(stageOk.status()).toBe(200);
+
+    // Allowed: the exam year.
+    const yearOk = await classify(
+      request,
+      { studentIds: [subjectId], academicYear: futureYear },
+      restrictedToken,
+    );
+    expect(yearOk.status()).toBe(200);
+
+    // Refused: dormancy. 403, not 400, so the client can tell "you may not" from
+    // "you sent nonsense".
+    const denied = await classify(
+      request,
+      { studentIds: [subjectId], participationStatus: 'dormant', reason: 'E2E: should be refused' },
+      restrictedToken,
+    );
     expect(denied.status()).toBe(403);
+
+    // And refused even when smuggled in alongside a field the teacher CAN set.
+    const smuggled = await classify(
+      request,
+      {
+        studentIds: [subjectId],
+        studyStage: '12th',
+        participationStatus: 'dormant',
+        reason: 'E2E: should be refused',
+      },
+      restrictedToken,
+    );
+    expect(smuggled.status()).toBe(403);
 
     // Put the shared account back on the manager tier before anything else runs.
     const asManager = await request.post(`${NEXUS}/api/auth/test-login`, {
@@ -147,8 +210,13 @@ test.describe('Student study stage and participation', () => {
     });
     token = (await asManager.json()).testToken;
 
-    const allowed = await classify(request, { studentIds: [subjectId], studyStage: '11th' });
-    expect(allowed.status()).toBe(200);
+    const managerDormant = await classify(request, {
+      studentIds: [subjectId],
+      participationStatus: 'dormant',
+      reason: 'E2E: manager may',
+    });
+    expect(managerDormant.status()).toBe(200);
+    await classify(request, { studentIds: [subjectId], participationStatus: 'active' });
   });
 
   test('setting a stage stamps staff provenance', async ({ request }) => {
@@ -288,8 +356,216 @@ test.describe('Student study stage and participation', () => {
     await page.goto(`${NEXUS}/teacher/students`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('tablist', { name: /filter students/i })).toBeVisible({ timeout: 15000 });
 
-    const banner = page.getByText(/no study stage set/i);
-    if (counts.stage.unset > 0) await expect(banner).toBeVisible();
+    // segments.unset, NOT stage.unset. Both are correct, which was the bug:
+    // stageCounts files a dormant student under their own stage while
+    // segmentCounts excludes them, so the banner read 15 beside a pill reading 13.
+    const banner = page.getByText(/no class set/i);
+    if (counts.segments.unset > 0) await expect(banner).toBeVisible();
     else await expect(banner).toHaveCount(0);
   });
+
+  // ── Exam year (users.academic_year) ───────────────────────────────────────
+
+  test('the exam year round-trips and lands in the audit trail', async ({ request }) => {
+    test.skip(!migrated || !subjectId || !futureYear, 'Migration not applied');
+
+    const res = await classify(request, { studentIds: [subjectId], academicYear: futureYear });
+    expect(res.status()).toBe(200);
+
+    const payload = await res.json();
+    // Undo needs the OLD value back, per student, not just a success flag.
+    expect(payload.students[0].previous).toHaveProperty('academic_year');
+    expect(payload.students[0].academic_year).toBe(futureYear);
+
+    const body = await (await listStudents(request, '&examBatch=all')).json();
+    const subject = body.students.find((s: any) => s.id === subjectId);
+    expect(subject.academic_year).toBe(futureYear);
+    // Same value under the older name for one release, so nothing downstream breaks.
+    expect(subject.exam_batch).toBe(futureYear);
+  });
+
+  test('pair_status flags the exact production bug and clears when fixed', async ({ request }) => {
+    test.skip(!migrated || !subjectId || !currentBatch, 'Migration not applied');
+
+    // Class 11 sitting the exam in the CURRENT cohort. This is precisely what the
+    // apply form produced for Humaira, YahulKishore and Abhitha.
+    await classify(request, {
+      studentIds: [subjectId],
+      studyStage: '11th',
+      academicYear: currentBatch,
+    });
+
+    let body = await (await listStudents(request, '&examBatch=all')).json();
+    let subject = body.students.find((s: any) => s.id === subjectId);
+    expect(subject.pair_status).toBe('mismatch');
+    expect(body.counts.mismatch).toBeGreaterThan(0);
+
+    // Moving the year forward one cohort is the fix, and it must clear the flag.
+    await classify(request, { studentIds: [subjectId], academicYear: futureYear });
+
+    body = await (await listStudents(request, '&examBatch=all')).json();
+    subject = body.students.find((s: any) => s.id === subjectId);
+    expect(subject.pair_status).toBe('ok');
+    expect(subject.study_stage).toBe('11th'); // the class was NOT touched
+  });
+
+  test('a cohort earlier than the current one is refused, pointing at graduation', async ({ request }) => {
+    test.skip(!migrated || !subjectId || !currentBatch, 'Migration not applied');
+
+    const start = Number(currentBatch!.slice(0, 4));
+    const past = `${start - 1}-${String(start % 100).padStart(2, '0')}`;
+
+    const res = await classify(request, { studentIds: [subjectId], academicYear: past });
+    // A past year would hide the student from the default view, which reads as
+    // them vanishing. Graduating is the intended exit and it revokes access.
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toMatch(/graduate/i);
+  });
+
+  test('a malformed exam year is refused', async ({ request }) => {
+    test.skip(!migrated || !subjectId, 'Migration not applied');
+    for (const bad of ['2026', '2026-2027', 'next year', '26-27']) {
+      const res = await classify(request, { studentIds: [subjectId], academicYear: bad });
+      expect(res.status(), `${bad} should be rejected`).toBe(400);
+    }
+  });
+
+  test('clearing the exam year is allowed and shows up as no_year', async ({ request }) => {
+    test.skip(!migrated || !subjectId, 'Migration not applied');
+
+    await classify(request, { studentIds: [subjectId], studyStage: '12th', academicYear: null });
+
+    const body = await (await listStudents(request, '&examBatch=all')).json();
+    const subject = body.students.find((s: any) => s.id === subjectId);
+    expect(subject.academic_year).toBeNull();
+    // Chetana AjayKumar's state: a class, no cohort. Distinct from 'unknown'
+    // because the fix is different.
+    expect(subject.pair_status).toBe('no_year');
+  });
+
+  // ── The per-student `assignments` shape (the prefill review) ──────────────
+
+  test('assignments applies a DIFFERENT value to each student in one call', async ({ request }) => {
+    test.skip(!migrated, 'Migration not applied');
+
+    const roster = await (await listStudents(request, '&examBatch=all')).json();
+    const two = (roster.students || []).slice(0, 2);
+    test.skip(two.length < 2, 'Need two students in the classroom');
+
+    const res = await request.patch(`${NEXUS}/api/students/classification`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: {
+        classroomId,
+        assignments: [
+          { studentId: two[0].id, studyStage: '11th' },
+          { studentId: two[1].id, studyStage: '10th' },
+        ],
+      },
+    });
+    expect(res.status()).toBe(200);
+
+    const after = await (await listStudents(request, '&examBatch=all')).json();
+    const find = (id: string) => after.students.find((s: any) => s.id === id);
+    expect(find(two[0].id).study_stage).toBe('11th');
+    expect(find(two[1].id).study_stage).toBe('10th');
+
+    // Restore whichever of the two is not the tracked subject; afterAll covers it.
+    for (const student of two) {
+      if (student.id === subjectId) continue;
+      await classify(request, { studentIds: [student.id], studyStage: student.study_stage });
+    }
+  });
+
+  test('mixing assignments with studentIds is refused', async ({ request }) => {
+    test.skip(!migrated || !subjectId, 'Migration not applied');
+
+    const res = await request.patch(`${NEXUS}/api/students/classification`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: {
+        classroomId,
+        studentIds: [subjectId],
+        studyStage: '11th',
+        assignments: [{ studentId: subjectId, studyStage: '12th' }],
+      },
+    });
+    // Two shapes with two different answers has no defined outcome, so say so
+    // rather than silently letting one win.
+    expect(res.status()).toBe(400);
+  });
+
+  test('assignments cannot set participation, even for a manager', async ({ request }) => {
+    test.skip(!migrated || !subjectId, 'Migration not applied');
+
+    const res = await request.patch(`${NEXUS}/api/students/classification`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: {
+        classroomId,
+        assignments: [{ studentId: subjectId, studyStage: '11th' }],
+        participationStatus: 'dormant',
+        reason: 'E2E: should be refused',
+      },
+    });
+    // Bulk dormancy is always one uniform decision. Allowing it here would let a
+    // prefill review quietly hide people.
+    expect(res.status()).toBe(400);
+  });
+
+  test('a duplicate studentId in assignments is refused', async ({ request }) => {
+    test.skip(!migrated || !subjectId, 'Migration not applied');
+
+    const res = await request.patch(`${NEXUS}/api/students/classification`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: {
+        classroomId,
+        assignments: [
+          { studentId: subjectId, studyStage: '11th' },
+          { studentId: subjectId, studyStage: '10th' },
+        ],
+      },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  // ── Suggestions from the application form ────────────────────────────────
+
+  test('suggestions never propose changing a value that is already set', async ({ request }) => {
+    test.skip(!migrated || !subjectId || !futureYear, 'Migration not applied');
+
+    // Give the subject both fields, so they must NOT appear in the suggestions.
+    await classify(request, {
+      studentIds: [subjectId],
+      studyStage: '12th',
+      academicYear: futureYear,
+    });
+
+    const res = await request.get(
+      `${NEXUS}/api/students/classification/suggestions?classroom=${classroomId}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(res.status()).toBe(200);
+    const { suggestions } = await res.json();
+    expect(Array.isArray(suggestions)).toBe(true);
+
+    // Overwriting a decision a human made from talking to a student would be worse
+    // than leaving it, so a complete student is never in this list.
+    expect(suggestions.some((s: any) => s.studentId === subjectId)).toBe(false);
+
+    // Anything that IS suggested must say where it came from, or a teacher is
+    // being asked to approve a number with no provenance.
+    for (const suggestion of suggestions) {
+      expect(suggestion.suggestedStage || suggestion.suggestedYear).toBeTruthy();
+      expect(Array.isArray(suggestion.evidence)).toBe(true);
+    }
+  });
+
+  test('suggestions require the stage capability', async ({ request }) => {
+    test.skip(!migrated, 'Migration not applied');
+
+    const res = await request.get(
+      `${NEXUS}/api/students/classification/suggestions?classroom=${classroomId}`,
+      { headers: { Authorization: 'Bearer not-a-real-token' } },
+    );
+    expect([401, 403]).toContain(res.status());
+  });
 });
+

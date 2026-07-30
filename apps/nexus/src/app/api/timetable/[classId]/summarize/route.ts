@@ -31,7 +31,7 @@ import { generateClassSummary, type ClassImageInput } from '@/lib/class-summary-
  * recap generator so the two cannot answer "is there a transcript" differently.
  *
  * If nothing resolves and there are no images, returns { needs_manual: true }
- * with a message naming the actual blocker, so the UI reveals the paste box
+ * with a message naming the actual blocker, so the UI reveals the upload button
  * instead of erroring.
  */
 
@@ -57,18 +57,28 @@ const CLASS_COLS = [
 ].join(', ');
 const MAX_IMAGES = 4;
 
-/** What to tell the teacher when the ladder came back empty. */
+/**
+ * What to tell the teacher when the ladder came back empty.
+ *
+ * Each branch names the step that actually failed. Deliberately not collapsed
+ * into one line: "the recording is there but cannot be opened" and "Teams has not
+ * published a transcript yet" call for different things from a human.
+ *
+ * None of these mention pasting any more. The paste box is gone, so the only two
+ * manual routes left are uploading the .vtt Teams hands out, or attaching the
+ * class drawing and summarizing from that.
+ */
 function manualMessage(hasRecording: boolean, sharepointError?: string): string {
   if (!hasRecording) {
-    return 'No recording found for this class yet, so there is no transcript to read. Teams usually publishes it within an hour. Paste the transcript, upload the .vtt, or attach a class drawing to generate now.';
+    return 'Teams has not published anything for this class yet, no recording and no transcript. It usually appears within an hour. Upload the .vtt from Teams, or attach a class drawing to generate now.';
   }
   if (sharepointError === 'NO_ACCESS') {
-    return 'The recording exists but could not be opened, so the transcript could not be read. Paste the transcript or upload the .vtt from Teams.';
+    return 'The recording exists but could not be opened, so the transcript could not be read. Upload the .vtt from Teams instead.';
   }
   if (sharepointError === 'VIDEO_NOT_FOUND') {
-    return 'The recording link did not resolve. Re-sync the recording, or paste the transcript instead.';
+    return 'The recording link did not resolve. Re-sync the recording, or upload the .vtt from Teams.';
   }
-  return 'Teams has not published a transcript for this class yet. It usually appears a few minutes after the recording. Paste the transcript text, upload the .vtt, or attach a class drawing, then try again.';
+  return 'Teams has not published a transcript for this class yet. It usually appears a few minutes after the recording. Upload the .vtt from Teams, or attach a class drawing, then try again.';
 }
 
 async function resolveAccess(supabase: any, msOid: string, classId: string) {
@@ -148,8 +158,8 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     const cls = access.cls;
 
     // --- Make sure we know where the recording is ---
-    // Only when the teacher has not supplied a transcript themselves, so a paste
-    // never pays for a Graph lookup it does not need.
+    // Only when the teacher has not supplied a transcript themselves, so an
+    // upload never pays for a Graph lookup it does not need.
     const suppliedTranscript = !!body.transcript_text || !!body.vtt_content;
     let recordingUrl: string | null = cls.recording_url ?? null;
     if (!recordingUrl && !suppliedTranscript) {
@@ -167,8 +177,10 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     }
 
     // --- Resolve a transcript through the shared ladder ---
-    // Pasted text, then an uploaded .vtt, then a cached URL, then the SharePoint
-    // recording app-only, then the Teams artifact API. See lib/transcript-resolver.
+    // What the teacher uploaded, then the copy already stored for this class, then
+    // a cached URL, then the Teams artifact API, then the recording's folder in
+    // SharePoint. Anything found is stored, so a second press costs nothing.
+    // See lib/transcript-resolver.
     const { entries: transcript, source, sharepointError, meetingFailure } = await resolveTranscript({
       cls: { ...cls, id: params.classId, recording_url: recordingUrl },
       msToken,

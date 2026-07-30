@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
+import { createAdminClient, parseExamYearAnswer } from '@neram/database';
 import {
   createApplication,
   getApplicationsByUserId,
@@ -175,7 +175,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       applicant_category: sanitizedCategory,
       academic_data: body.academic_data,
       caste_category: body.caste_category || undefined,
-      target_exam_year: body.target_exam_year ? Number(body.target_exam_year) : undefined,
+      // See parseExamYearAnswer: the form sends '2026-27', not an integer.
+      target_exam_year: parseExamYearAnswer(body.target_exam_year).examYear ?? undefined,
       interest_course: sanitizedCourse,
       selected_course_id: body.selected_course_id || undefined,
       selected_center_id: body.selected_center_id || undefined,

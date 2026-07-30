@@ -7,18 +7,25 @@ import {
   Chip,
   Divider,
   Drawer,
+  MenuItem,
   TextField,
   Typography,
   alpha,
   useTheme,
 } from '@neram/ui';
+import { expectedYearForStage } from '@neram/database';
 import {
   DORMANT_EXPLAINER,
   DORMANT_REASON_PRESETS,
+  EXAM_YEAR_HELP,
+  EXAM_YEAR_LABEL,
+  EXAM_YEAR_SCOPE_WARNING,
   SETTABLE_STAGES,
   STAGE_LABEL,
   STAGE_MEANING,
   dormantColor,
+  examYearOf,
+  pairMismatchColor,
   stageColor,
   type StageKey,
 } from '@/lib/student-stage';
@@ -35,14 +42,26 @@ import { DormantIcon, stageIconFor } from './StageGlyph';
 
 export type ClassifyMode = 'stage' | 'dormant' | 'reactivate';
 
+/** Sentinel for "clear the exam year", distinct from "leave it alone" (''). */
+const CLEAR_YEAR = '__clear__';
+
 export interface ClassifyDrawerProps {
   open: boolean;
   mode: ClassifyMode;
   /** Names of the affected students, for the header and the avatar strip. */
   names: string[];
   busy?: boolean;
+  /** Selectable exam-year cohorts, from the batch registry. */
+  examYears?: readonly string[];
+  /** The current cohort, used to name the expected pairing. */
+  currentBatch?: string | null;
   onClose: () => void;
-  onApply: (payload: { studyStage?: StageKey | null; participationStatus?: 'active' | 'dormant'; reason?: string }) => void;
+  onApply: (payload: {
+    studyStage?: StageKey | null;
+    academicYear?: string | null;
+    participationStatus?: 'active' | 'dormant';
+    reason?: string;
+  }) => void;
 }
 
 export default function ClassifyDrawer({
@@ -50,12 +69,15 @@ export default function ClassifyDrawer({
   mode,
   names,
   busy = false,
+  examYears = [],
+  currentBatch = null,
   onClose,
   onApply,
 }: ClassifyDrawerProps) {
   const theme = useTheme();
   const paletteMode = theme.palette.mode === 'dark' ? 'dark' : 'light';
   const [stage, setStage] = useState<StageKey | null>(null);
+  const [year, setYear] = useState('');
   const [reason, setReason] = useState('');
 
   // Reset every time the sheet opens, so a previous selection can never be
@@ -63,6 +85,7 @@ export default function ClassifyDrawer({
   useEffect(() => {
     if (open) {
       setStage(null);
+      setYear('');
       setReason('');
     }
   }, [open, mode]);
@@ -70,12 +93,33 @@ export default function ClassifyDrawer({
   const count = names.length;
   const who = count === 1 ? names[0] : `${count} students`;
 
+  // The two fields are independent: either one alone is a valid edit. Requiring
+  // both would force a teacher who only knows the class to guess the year.
   const canApply =
-    mode === 'stage' ? stage !== null : mode === 'dormant' ? reason.trim().length > 0 : true;
+    mode === 'stage'
+      ? stage !== null || year !== ''
+      : mode === 'dormant'
+        ? reason.trim().length > 0
+        : true;
+
+  // What the class implies, so a disagreement can be named rather than just felt.
+  // Nothing auto-fills from this: a repeater or an early attempt is legitimate.
+  const expectedYear =
+    stage && stage !== 'unset' && currentBatch ? expectedYearForStage(stage, currentBatch) : null;
+  const chosenYear = year === '' || year === CLEAR_YEAR ? null : year;
+  const willMismatch = !!expectedYear && !!chosenYear && expectedYear !== chosenYear;
 
   function handleApply() {
     if (mode === 'stage') {
-      onApply({ studyStage: stage === 'unset' ? null : stage });
+      const payload: {
+        studyStage?: StageKey | null;
+        academicYear?: string | null;
+      } = {};
+      // Only send what was actually touched. An untouched field must stay
+      // untouched: the API treats a present key as an instruction to write.
+      if (stage !== null) payload.studyStage = stage === 'unset' ? null : stage;
+      if (year !== '') payload.academicYear = year === CLEAR_YEAR ? null : year;
+      onApply(payload);
     } else if (mode === 'dormant') {
       onApply({ participationStatus: 'dormant', reason: reason.trim() });
     } else {
@@ -85,7 +129,7 @@ export default function ClassifyDrawer({
 
   const title =
     mode === 'stage'
-      ? `Set study stage for ${who}`
+      ? `Set class and exam year for ${who}`
       : mode === 'dormant'
         ? `Mark ${who} dormant`
         : `Bring ${who} back to active`;
@@ -179,6 +223,56 @@ export default function ClassifyDrawer({
                 Clear, back to Not set
               </Typography>
             </Box>
+
+            {/* Exam year: a separate, independent field. Deliberately not derived
+                from the class above, and it does not derive the class either. */}
+            <Divider sx={{ mt: 1 }} />
+
+            <TextField
+              select
+              size="small"
+              label={EXAM_YEAR_LABEL}
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              helperText={EXAM_YEAR_HELP}
+              SelectProps={{ native: false }}
+              sx={{ mt: 0.5, '& .MuiInputBase-root': { minHeight: 48 } }}
+            >
+              <MenuItem value="">
+                <em>Leave unchanged</em>
+              </MenuItem>
+              {examYears.map((code) => (
+                <MenuItem key={code} value={code}>
+                  {code}
+                  {code === currentBatch ? '  (current)' : ''}
+                  {`  ,  writes in ${examYearOf(code) ?? '?'}`}
+                </MenuItem>
+              ))}
+              <MenuItem value={CLEAR_YEAR}>Clear, no exam year</MenuItem>
+            </TextField>
+
+            {willMismatch && (
+              <Box
+                sx={{
+                  p: 1.25,
+                  borderRadius: 2,
+                  bgcolor: alpha(pairMismatchColor(paletteMode), 0.1),
+                  border: `1px solid ${alpha(pairMismatchColor(paletteMode), 0.35)}`,
+                }}
+              >
+                <Typography variant="caption" sx={{ color: pairMismatchColor(paletteMode), fontWeight: 600 }}>
+                  {STAGE_LABEL[stage as StageKey]} normally sits the exam in {expectedYear}. Saving{' '}
+                  {chosenYear} will flag this student for a check. That is fine for a repeater or an
+                  early attempt.
+                </Typography>
+              </Box>
+            )}
+
+            {year !== '' && (
+              <Typography variant="caption" color="text.secondary">
+                {EXAM_YEAR_SCOPE_WARNING}
+              </Typography>
+            )}
           </Box>
         )}
 

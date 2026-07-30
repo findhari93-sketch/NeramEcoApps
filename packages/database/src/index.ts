@@ -101,6 +101,23 @@ export {
 // Services - Teams Webhook
 export { sendTeamsWebhook } from './services/teams-webhook';
 
+// Utils - Academic year
+// currentAcademicYear / deriveAcademicYearFromExamYear / examYearFromAcademicYear
+// already reach consumers through `export * from './queries'` (crm.ts re-exports
+// them), so only the names that are new here are listed, to avoid an ambiguous
+// re-export.
+export {
+  ACADEMIC_YEAR_REGEX,
+  academicYearOptions,
+  addAcademicYears,
+  startYearOf,
+  expectedYearForStage,
+  yearTier,
+  pairStatus,
+  parseExamYearAnswer,
+} from './utils/academic-year';
+export type { YearTier, PairStatus } from './utils/academic-year';
+
 // Utils
 export { rewriteStorageUrl } from './utils/storage-url';
 export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscribe-token';

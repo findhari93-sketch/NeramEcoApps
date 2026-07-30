@@ -61,6 +61,8 @@ export function CompactRow(props: StudentRowProps) {
             dormantSince={student.dormant_since}
             dormantReason={student.dormant_reason}
             examBatch={student.exam_batch}
+            pairStatus={student.pair_status}
+            currentBatch={props.currentBatch}
             emailStatus={student.email_status}
             awaitingMicrosoft={student.awaiting_microsoft}
             density="compact"
@@ -126,6 +128,8 @@ export function StudentCard(props: StudentRowProps) {
               dormantSince={student.dormant_since}
               dormantReason={student.dormant_reason}
               examBatch={student.exam_batch}
+            pairStatus={student.pair_status}
+            currentBatch={props.currentBatch}
               batchName={student.batch?.name}
               emailStatus={student.email_status}
               awaitingMicrosoft={student.awaiting_microsoft}
@@ -182,6 +186,8 @@ export function DetailedRow(props: StudentRowProps) {
               dormantSince={student.dormant_since}
               dormantReason={student.dormant_reason}
               examBatch={student.exam_batch}
+            pairStatus={student.pair_status}
+            currentBatch={props.currentBatch}
               batchName={student.batch?.name}
               emailStatus={student.email_status}
               awaitingMicrosoft={student.awaiting_microsoft}

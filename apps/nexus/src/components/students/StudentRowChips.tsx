@@ -1,7 +1,9 @@
 'use client';
 
 import { Box, Chip } from '@neram/ui';
+import { expectedYearForStage } from '@neram/database';
 import EmailDomainFlag from './EmailDomainFlag';
+import ExamYearChip from './ExamYearChip';
 import { DormantChip, StudentStageChip, type ChipDensity } from './StudentStageChip';
 import { stageKeyOf } from '@/lib/student-stage';
 import type { EmailDomainStatus } from '@/lib/classroom-email';
@@ -27,6 +29,10 @@ export interface StudentRowChipsProps {
   dormantSince?: string | null;
   dormantReason?: string | null;
   examBatch?: string | null;
+  /** Per-student pair_status from the API. 'mismatch' turns the year chip amber. */
+  pairStatus?: string | null;
+  /** The current cohort code, so the mismatch tooltip can name the expected year. */
+  currentBatch?: string | null;
   batchName?: string | null;
   emailStatus: EmailDomainStatus;
   awaitingMicrosoft?: boolean;
@@ -41,6 +47,8 @@ export default function StudentRowChips({
   dormantSince,
   dormantReason,
   examBatch,
+  pairStatus,
+  currentBatch,
   batchName,
   emailStatus,
   awaitingMicrosoft = false,
@@ -57,14 +65,13 @@ export default function StudentRowChips({
         <DormantChip since={dormantSince} reason={dormantReason} density={density} />
       )}
       <StudentStageChip stage={stage} density={density} />
-      {examBatch && (
-        <Chip
-          label={examBatch}
-          size="small"
-          color="primary"
-          sx={{ ...geo, fontFamily: 'monospace', flexShrink: 0 }}
-        />
-      )}
+      <ExamYearChip
+        academicYear={examBatch}
+        pairStatus={pairStatus}
+        studyStage={studyStage}
+        expectedYear={currentBatch ? expectedYearForStage(stage, currentBatch) : null}
+        density={density}
+      />
       {showSection && batchName && (
         <Chip label={batchName} size="small" variant="outlined" sx={{ ...geo, flexShrink: 0 }} />
       )}

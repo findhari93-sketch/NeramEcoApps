@@ -3,11 +3,12 @@
   "version": "0.1.1",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3010",
+    "dev": "node ../../scripts/ensure-search-index.mjs && next dev -p 3010",
     "build": "npx tsx ../../scripts/generate-search-index.ts && next build",
+    "search-index": "npx tsx ../../scripts/generate-search-index.ts",
     "start": "next start -p 3010",
     "lint": "next lint",
-    "type-check": "npx tsx ../../scripts/generate-search-index.ts && tsc --noEmit",
+    "type-check": "node ../../scripts/ensure-search-index.mjs && tsc --noEmit",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\"",
     "clean:build": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\""
   },

@@ -26,6 +26,7 @@ on:
 jobs:
   seo-analysis:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,6 +53,7 @@ jobs:
 
   cwv-monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event_name == 'schedule' || github.event.inputs.run_cwv == 'true'
     needs: seo-analysis
     steps:
@@ -87,6 +89,7 @@ jobs:
 
   indexnow-submit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.ref == 'refs/heads/main' || github.event.inputs.run_indexnow == 'true'
     needs: [seo-analysis]
     steps:

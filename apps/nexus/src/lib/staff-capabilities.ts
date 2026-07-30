@@ -94,7 +94,8 @@ export type Capability =
   | 'moderate.recall'
   // ── coordination ───────────────────────────────────────────────────────────
   | 'coord.student.view'
-  | 'coord.student.classify'
+  | 'coord.student.stage'
+  | 'coord.student.dormancy'
   | 'coord.attendance.view'
   | 'coord.nudge'
   | 'coord.watchlist'
@@ -128,6 +129,7 @@ const SHARED_STAFF: readonly Capability[] = [
   'moderate.gallery',
   'moderate.recall',
   'coord.student.view',
+  'coord.student.stage',
   'coord.attendance.view',
   'coord.nudge',
   'coord.watchlist',
@@ -146,13 +148,22 @@ const SHARED_STAFF: readonly Capability[] = [
  * detaches an entire cohort and there is no undo in the UI, so it stays with
  * the admin.
  *
- * `coord.student.classify` is here rather than in SHARED_STAFF even though
- * setting a study stage looks like harmless data entry. The same route also
- * marks a student dormant, which silently removes them from attendance %,
- * submission rates, the watchlist and every automated reminder. A visiting
- * teacher should not be able to drop a student out of all monitoring, and
- * splitting the two axes across two capabilities would mean two routes, two
- * capability checks and two audit paths for one form.
+ * `coord.student.dormancy` is here, while its sibling `coord.student.stage` is in
+ * SHARED_STAFF. The two used to be one capability, `coord.student.classify`, kept
+ * manager-only because the same route does both jobs. They are separated because
+ * the jobs are not comparable:
+ *
+ *   coord.student.stage    sets a class and an exam year. Data entry a teacher
+ *                          does after speaking to a student, and it corrects
+ *                          itself the moment anyone notices it is wrong.
+ *   coord.student.dormancy marks a student dormant, which silently removes them
+ *                          from attendance %, submission rates, prep readiness,
+ *                          the watchlist and every automated reminder. Nothing on
+ *                          screen goes red; the student simply stops being
+ *                          counted. A visiting teacher must not be able to do it.
+ *
+ * One route still serves both. It asserts whichever capability the request body
+ * actually needs, after parsing and before touching the database.
  */
 const MANAGER_EXTRA: readonly Capability[] = [
   'structure.classroom.create',
@@ -162,7 +173,7 @@ const MANAGER_EXTRA: readonly Capability[] = [
   'structure.enrollment.remove',
   'structure.plan.delete',
   'teach.timetable.schedule',
-  'coord.student.classify',
+  'coord.student.dormancy',
   'coord.photo_ms_push',
   'impersonate.any',
 ];
@@ -307,7 +318,8 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   'moderate.gallery',
   'moderate.recall',
   'coord.student.view',
-  'coord.student.classify',
+  'coord.student.stage',
+  'coord.student.dormancy',
   'coord.attendance.view',
   'coord.nudge',
   'coord.watchlist',

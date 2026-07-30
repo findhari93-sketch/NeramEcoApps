@@ -52,6 +52,7 @@
     "test:run": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test --project=smoke",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "db:generate": "pnpm --filter @neram/database generate",
@@ -72,7 +73,7 @@
     "firebase:login": "firebase login",
     "firebase:init": "firebase init",
     "firebase:deploy": "firebase deploy",
-    "postinstall": "turbo run clean:build",
+    "postinstall": "node scripts/ensure-search-index.mjs && turbo run clean:build",
     "prepare": "husky install",
     "seo:schema": "cd scripts && npx tsx seo/generate-schema.ts",
     "seo:indexnow": "cd scripts && npx tsx seo/indexnow-submit.ts",
@@ -96,7 +97,8 @@
     "dns:status": "C:/PROGRA~1/Git/bin/bash.exe scripts/dns-migration/migrate.sh status"
   },
   "devDependencies": {
-    "@playwright/test": "^1.42.0",
+    "@playwright/test": "^1.51.0",
+    "@supabase/supabase-js": "^2.39.0",
     "@testing-library/jest-dom": "^6.4.0",
     "@testing-library/react": "^14.2.0",
     "@types/node": "^20.10.0",

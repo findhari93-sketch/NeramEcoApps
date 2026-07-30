@@ -18,8 +18,10 @@ import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import ParentAccessCard from '@/components/parent/ParentAccessCard';
 import ClassifyDrawer, { type ClassifyMode } from '@/components/students/ClassifyDrawer';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
+import ExamYearChip from '@/components/students/ExamYearChip';
 import { DormantChip, StudentStageChip } from '@/components/students/StudentStageChip';
 import { stageKeyOf, type StageKey } from '@/lib/student-stage';
+import { expectedYearForStage } from '@neram/database';
 
 interface StudentDetail {
   id: string;
@@ -31,6 +33,8 @@ interface StudentDetail {
   participation_status: 'active' | 'dormant';
   dormant_since: string | null;
   dormant_reason: string | null;
+  academic_year: string | null;
+  pair_status: string | null;
   attendance: {
     attended: number;
     total: number;
@@ -58,8 +62,33 @@ export default function StudentDetailPage() {
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const canClassify = can('coord.student.classify');
+  const [currentBatch, setCurrentBatch] = useState<string | null>(null);
+  const [examYears, setExamYears] = useState<string[]>([]);
+
+  // Any teaching staff may set a class or exam year; only a manager or admin may
+  // mark someone dormant. See staff-capabilities.ts for why the two differ.
+  const canSetStage = can('coord.student.stage');
+  const canSetDormancy = can('coord.student.dormancy');
   const studentId = params.id as string;
+
+  // The selectable exam-year cohorts, from the same read-only registry the
+  // students list uses, so both editors offer identical options.
+  useEffect(() => {
+    async function loadExamYears() {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch('/api/batches', { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const data = await res.json();
+        setExamYears(((data.batches || []) as { code: string }[]).map((b) => b.code));
+        if (data.current?.code) setCurrentBatch(data.current.code);
+      } catch {
+        /* non-fatal: the drawer just offers no years */
+      }
+    }
+    loadExamYears();
+  }, [getToken]);
 
   useEffect(() => {
     if (!activeClassroom || !studentId) return;
@@ -81,6 +110,7 @@ export default function StudentDetailPage() {
           const att = data.attendanceSummary || {};
           const cl = data.checklistProgress || {};
           const tp = data.topicProgress || {};
+          if (data.currentBatch) setCurrentBatch(data.currentBatch);
           setStudent({
             id: s.id,
             name: s.name,
@@ -91,6 +121,8 @@ export default function StudentDetailPage() {
             participation_status: s.participation_status ?? 'active',
             dormant_since: s.dormant_since ?? null,
             dormant_reason: s.dormant_reason ?? null,
+            academic_year: s.academic_year ?? null,
+            pair_status: s.pair_status ?? null,
             attendance: {
               attended: att.attended || 0,
               total: att.total || 0,
@@ -123,6 +155,7 @@ export default function StudentDetailPage() {
    */
   async function applyClassification(payload: {
     studyStage?: StageKey | null;
+    academicYear?: string | null;
     participationStatus?: 'active' | 'dormant';
     reason?: string;
   }) {
@@ -224,10 +257,19 @@ export default function StudentDetailPage() {
           </Typography>
         )}
 
-        {/* Classification. Two chips, never one: they answer two different
-            questions and a student can legitimately be both. */}
+        {/* Classification. Separate chips, never one: they answer different
+            questions and a student can legitimately be all three. */}
         <Box sx={{ display: 'flex', gap: 0.75, justifyContent: 'center', flexWrap: 'wrap', mt: 1.25 }}>
           <StudentStageChip stage={stageKeyOf(student.study_stage)} density="detailed" />
+          <ExamYearChip
+            academicYear={student.academic_year}
+            pairStatus={student.pair_status}
+            studyStage={student.study_stage}
+            expectedYear={
+              currentBatch ? expectedYearForStage(stageKeyOf(student.study_stage), currentBatch) : null
+            }
+            density="detailed"
+          />
           {student.participation_status === 'dormant' && (
             <DormantChip
               since={student.dormant_since}
@@ -235,7 +277,7 @@ export default function StudentDetailPage() {
               density="detailed"
             />
           )}
-          {canClassify && (
+          {canSetStage && (
             <Button
               size="small"
               startIcon={<EditOutlinedIcon sx={{ fontSize: '0.9rem' }} />}
@@ -246,6 +288,14 @@ export default function StudentDetailPage() {
             </Button>
           )}
         </Box>
+
+        {/* Spell out the missing half rather than leaving a gap where a chip
+            would be. "No exam year" is actionable; an absence is not. */}
+        {!student.academic_year && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+            No exam year set, so this student belongs to no cohort.
+          </Typography>
+        )}
 
         {student.enrollment_date && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
@@ -259,7 +309,7 @@ export default function StudentDetailPage() {
             reason={`Student detail: ${student.name}`}
             variant="contained"
           />
-          {canClassify && (
+          {canSetDormancy && (
             <Button
               variant="outlined"
               color={student.participation_status === 'dormant' ? 'success' : 'warning'}
@@ -341,6 +391,8 @@ export default function StudentDetailPage() {
         mode={drawer ?? 'stage'}
         names={[student.name]}
         busy={saving}
+        examYears={examYears}
+        currentBatch={currentBatch}
         onClose={() => setDrawer(null)}
         onApply={applyClassification}
       />

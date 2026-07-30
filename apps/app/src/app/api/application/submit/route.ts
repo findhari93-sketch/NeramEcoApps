@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient, deriveAcademicYearFromExamYear, currentAcademicYear } from '@neram/database';
+import { createAdminClient, parseExamYearAnswer } from '@neram/database';
 import { createApplication, updateApplication, submitApplication } from '@neram/database/queries';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
@@ -96,15 +96,18 @@ export async function POST(request: NextRequest) {
         .eq('id', userId);
     }
 
-    // Stamp the academic-year cohort (from target exam year, else current year)
-    // only when not already set, so the CRM can segment old vs current batch.
+    // Stamp the academic-year cohort from the applicant's own answer, only when
+    // not already set. NO fallback to the current year: that fallback, plus a
+    // Number('2026-27') that always produced NaN, is what tagged Class 11 students
+    // as sitting the exam this year. NULL is honest and gets surfaced in Nexus.
     try {
-      const examYear = body.target_exam_year ? Number(body.target_exam_year) : null;
-      const cohort = deriveAcademicYearFromExamYear(examYear) || currentAcademicYear();
-      await (supabase.from('users') as any)
-        .update({ academic_year: cohort })
-        .eq('id', userId)
-        .is('academic_year', null);
+      const { academicYear } = parseExamYearAnswer(body.target_exam_year);
+      if (academicYear) {
+        await (supabase.from('users') as any)
+          .update({ academic_year: academicYear })
+          .eq('id', userId)
+          .is('academic_year', null);
+      }
     } catch (cohortErr) {
       console.error('[App submit] academic_year stamp failed:', cohortErr);
     }
@@ -125,7 +128,8 @@ export async function POST(request: NextRequest) {
       detected_location: body.detected_location || undefined,
       applicant_category: body.applicant_category || undefined,
       caste_category: body.caste_category || undefined,
-      target_exam_year: body.target_exam_year || undefined,
+      // An unparsed '2026-27' would be rejected by the INTEGER column.
+      target_exam_year: parseExamYearAnswer(body.target_exam_year).examYear ?? undefined,
       school_type: body.school_type || undefined,
       academic_data: body.academic_data || undefined,
       interest_course: body.interest_course || undefined,

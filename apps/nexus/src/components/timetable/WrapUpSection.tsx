@@ -121,7 +121,6 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
 
   const [needsManual, setNeedsManual] = useState(false);
   const [showManual, setShowManual] = useState(false);
-  const [transcriptText, setTranscriptText] = useState('');
 
   const [newTagLabel, setNewTagLabel] = useState('');
   const [newTagGroup, setNewTagGroup] = useState<'subject' | 'theme'>('subject');
@@ -178,7 +177,10 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
     setGenerating(true);
     try {
       const token = await getToken();
-      const payload = bodyOverride ?? (transcriptText.trim() ? { transcript_text: transcriptText.trim() } : {});
+      // An empty body is the normal case: the server resolves the transcript
+      // itself, from its stored copy or from Graph. A body only appears when the
+      // teacher uploaded a file, which arrives here as bodyOverride.
+      const payload = bodyOverride ?? {};
       const res = await fetch(`/api/timetable/${classId}/summarize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -192,7 +194,7 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
       if (data.needs_manual) {
         setNeedsManual(true);
         setShowManual(true);
-        onNotify(data.message || 'Paste or upload the transcript, then generate', 'error');
+        onNotify(data.message || 'Upload the transcript file, then generate', 'error');
         return;
       }
       const s = data.summary || {};
@@ -491,10 +493,18 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
           onClick={() => setShowManual(true)}
           sx={{ textTransform: 'none', mb: 1.5, minHeight: 32, px: 0 }}
         >
-          Use a transcript file or paste instead
+          Upload a transcript file instead
         </Button>
       )}
 
+      {/*
+        The manual fallback, one button. There used to be a paste box beside it,
+        which is gone on purpose: nobody pastes a 50 KB transcript by hand, it
+        cost three rows of height in a drawer that is tight on mobile, and the
+        automatic fetch now works, so this is the rare path rather than the
+        normal one. The file input still accepts .txt, so a teacher with a plain
+        text transcript is not stranded.
+      */}
       {(showManual || needsManual) && (
         <Box sx={{ mb: 1.5 }}>
           <input
@@ -513,25 +523,16 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
             startIcon={<UploadFileIcon sx={{ fontSize: 16 }} />}
             onClick={() => transcriptInputRef.current?.click()}
             disabled={generating}
-            sx={{ textTransform: 'none', minHeight: 40, mb: 1 }}
+            fullWidth
+            sx={{ textTransform: 'none', minHeight: 44 }}
           >
             Upload transcript file (.vtt)
           </Button>
-          <TextField
-            label="Or paste the transcript"
-            value={transcriptText}
-            onChange={(e) => setTranscriptText(e.target.value)}
-            fullWidth
-            size="small"
-            multiline
-            minRows={3}
-            placeholder="Paste the class transcript text here, then press Generate."
-            helperText={
-              needsManual
-                ? 'Could not fetch the transcript from Teams. Upload the .vtt, paste it, or attach a class drawing, then Generate.'
-                : 'Upload or paste the class transcript, then Generate.'
-            }
-          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+            {needsManual
+              ? 'Could not fetch the transcript from Teams. Download the .vtt from the meeting and upload it, or attach a class drawing, then Generate.'
+              : 'Only needed when Teams has not published the transcript yet.'}
+          </Typography>
         </Box>
       )}
 

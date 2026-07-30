@@ -29,31 +29,20 @@ import type {
 // ============================================
 
 /**
- * Academic year runs April -> March in India. Returns the cohort string
- * 'YYYY-YY' for a given date (defaults to now). April 2026 -> '2026-27',
- * March 2026 -> '2025-26'.
+ * The arithmetic now lives in `utils/academic-year.ts` so that Nexus, the admin
+ * app and the intake forms cannot drift apart again. Re-exported here because
+ * several callers and tests import these names from this module.
  */
-export function currentAcademicYear(date: Date = new Date()): string {
-  const month = date.getMonth(); // 0 = Jan
-  const year = date.getFullYear();
-  const startYear = month >= 3 ? year : year - 1; // April (index 3) starts the year
-  return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
-}
+export {
+  currentAcademicYear,
+  deriveAcademicYearFromExamYear,
+  examYearFromAcademicYear,
+} from '../utils/academic-year';
 
-/**
- * Map a target exam year (e.g. 2026, the year the exam is written) to the
- * academic-year cohort that prepares for it. Exam in 2026 -> '2025-26'.
- * Returns null for invalid input.
- */
-export function deriveAcademicYearFromExamYear(examYear?: number | null): string | null {
-  if (!examYear || !Number.isInteger(examYear) || examYear < 2000 || examYear > 2100) {
-    return null;
-  }
-  const startYear = examYear - 1;
-  return `${startYear}-${String(examYear % 100).padStart(2, '0')}`;
-}
-
-const ACADEMIC_YEAR_REGEX = /^[0-9]{4}-[0-9]{2}$/;
+import {
+  ACADEMIC_YEAR_REGEX,
+  currentAcademicYear,
+} from '../utils/academic-year';
 
 // ============================================
 // LIST USER JOURNEYS (CRM main table)

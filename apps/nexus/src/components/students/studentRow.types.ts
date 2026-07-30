@@ -21,6 +21,7 @@ export interface EnrolledStudent {
 
   batch: StudentBatch | null; // classroom section (nexus_batches)
   exam_batch: string | null; // exam-year cohort (users.academic_year)
+  academic_year?: string | null; // same value, named after the column
 
   // Classification, two orthogonal axes. See lib/student-stage.ts.
   study_stage: string | null; // nexus_enrollments.current_standard
@@ -29,12 +30,21 @@ export interface EnrolledStudent {
   dormant_since: string | null;
   dormant_reason: string | null;
 
+  /**
+   * Whether the class and the exam year agree, computed server-side from the
+   * current batch so the row chip, the banner count and the drawer's warning can
+   * never disagree about the same student. See pairStatus in @neram/database.
+   */
+  pair_status?: 'ok' | 'mismatch' | 'no_stage' | 'no_year' | 'unknown';
+
   attendance: { attended: number; total: number; percentage: number };
   checklist: { completed: number; total: number };
 }
 
 export interface StudentRowProps {
   student: EnrolledStudent;
+  /** Current exam-year cohort, so a mismatch tooltip can name the expected year. */
+  currentBatch?: string | null;
   checklistPct: number;
   attColor: string;
   doneColor: string;

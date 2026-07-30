@@ -193,6 +193,67 @@ export const DEFAULT_SEGMENT: StudentSegment = 'exam_this_year';
 
 export const SEGMENT_STORAGE_KEY = 'nexus:students:segment';
 
+// ── Exam year (users.academic_year) ─────────────────────────────────────────
+
+/**
+ * The class and the exam year are two INDEPENDENT fields. Nothing derives one
+ * from the other, because a repeater or an early attempt is legitimate. What the
+ * app does instead is name the expected pairing and flag a disagreement, which is
+ * what `pairStatus` in @neram/database computes and the API returns per student.
+ *
+ * The reason this matters: the public apply form's "Planning to Write Exam In"
+ * answer never reached the database (Number('2026-27') is NaN), so a fallback
+ * stamped every applicant with the CURRENT cohort regardless of their class. Three
+ * Class 11 students were tagged as sitting the exam this year.
+ */
+export const EXAM_YEAR_LABEL = 'Exam year';
+
+export const EXAM_YEAR_HELP =
+  'Which cohort sits the exam. 2027-28 means the exam is written in 2028.';
+
+/**
+ * Setting this writes users.academic_year, which is per-user rather than
+ * per-enrolment. Staff have to be told that, or a change made on a teacher screen
+ * silently reappears in the admin CRM.
+ */
+export const EXAM_YEAR_SCOPE_WARNING =
+  'Exam year applies everywhere, including the admin CRM, not just this classroom.';
+
+/** Amber, matching the "needs a look" register rather than a hard error. */
+export const PAIR_MISMATCH_COLOR = '#B45309';
+export const PAIR_MISMATCH_COLOR_DARK = '#FBBF24';
+
+export function pairMismatchColor(mode: 'light' | 'dark'): string {
+  return mode === 'dark' ? PAIR_MISMATCH_COLOR_DARK : PAIR_MISMATCH_COLOR;
+}
+
+/** '2027-28' -> 2028, the calendar year the cohort sits the exam. */
+export function examYearOf(academicYear: string | null | undefined): number | null {
+  const match = /^([0-9]{4})-[0-9]{2}$/.exec(academicYear || '');
+  return match ? Number(match[1]) + 1 : null;
+}
+
+/** Accessible, self-explanatory text for a bare 'YYYY-YY' code. */
+export function examYearDescription(academicYear: string | null | undefined): string {
+  const year = examYearOf(academicYear);
+  return year === null
+    ? 'No exam year set'
+    : `Exam year ${academicYear}, writes the exam in ${year}`;
+}
+
+/**
+ * What the amber year pill says when the pair disagrees. `expected` comes from
+ * expectedYearForStage on the server, so the copy always names a real fix.
+ */
+export function pairMismatchTooltip(
+  stageLabel: string,
+  stored: string | null | undefined,
+  expected: string | null | undefined,
+): string {
+  if (!expected) return `${stageLabel} does not usually sit the exam in ${stored}.`;
+  return `${stageLabel} normally sits the exam in ${expected}, not ${stored}. Check with the student, then correct whichever field is wrong.`;
+}
+
 // ── Functions ───────────────────────────────────────────────────────────────
 
 export interface StageFacts {

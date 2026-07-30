@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { notifyRecordingAvailable } from '@/lib/timetable-notifications';
-import { resolveOnlineMeeting, resolveOrganizerOid } from '@/lib/teams-online-meeting';
+import { resolveOrganizerOid } from '@/lib/teams-online-meeting';
 import { findRecordingForClass } from '@/lib/recording-locator';
+import { resolveTranscript } from '@/lib/transcript-resolver';
 
 /**
  * GET /api/timetable/recording?class_id={id}
@@ -77,7 +78,9 @@ export async function POST(request: NextRequest) {
     const { data: cls } = await supabase
       .from('nexus_scheduled_classes')
       .select(
-        'teams_meeting_id, teams_meeting_join_url, teams_meeting_url, title, teacher_id, organizer_email, classroom_id, scheduled_date, start_time',
+        // One string literal, not a concatenation: the typed client reads this at
+        // the type level and gives up on anything it cannot see as a literal.
+        'teams_meeting_id, teams_meeting_join_url, teams_meeting_url, online_meeting_id, organizer_ms_oid, organizer_email, transcript_url, title, teacher_id, classroom_id, scheduled_date, start_time',
       )
       .eq('id', class_id)
       .single();
@@ -103,39 +106,22 @@ export async function POST(request: NextRequest) {
 
     // ── The transcript ──
     //
-    // Still read from Graph. Unlike the recording, transcript_url is only ever
-    // fetched server-side with a token (see lib/transcript-resolver), so a Graph
-    // content URL is the right thing to store.
-    let transcriptUrl: string | null = null;
-
-    const resolved = await resolveOnlineMeeting({
-      delegatedToken: token!,
-      teamsMeetingId: cls.teams_meeting_id,
-      joinUrl: cls.teams_meeting_join_url || cls.teams_meeting_url || null,
-      organizerOid,
+    // Through the shared ladder, which fetches the text, proves it parses and
+    // stores it in nexus_class_transcripts. This route used to list transcripts
+    // itself and save the first content URL without ever reading it, so what it
+    // stored was never known to work. It did not: Graph answers
+    // `400 Invalid format '*/*'` unless the request names a format.
+    const { entries: transcriptEntries } = await resolveTranscript({
+      cls: { ...cls, id: class_id, recording_url: recordingUrl },
+      msToken: token,
+      supabase,
     });
-
-    if (resolved) {
-      const transcriptsRes = await fetch(
-        `https://graph.microsoft.com/v1.0/${resolved.artifactBase}/transcripts`,
-        { headers: { Authorization: `Bearer ${resolved.token}` } }
-      );
-
-      if (transcriptsRes.ok) {
-        const transcriptsData = await transcriptsRes.json();
-        const transcripts = transcriptsData.value || [];
-        if (transcripts.length > 0) {
-          transcriptUrl = transcripts[0].transcriptContentUrl || transcripts[0].content || null;
-        }
-      }
-    }
 
     // Update the class record
     const updateData: Record<string, unknown> = {
       recording_fetched_at: new Date().toISOString(),
     };
     if (recordingUrl) updateData.recording_url = recordingUrl;
-    if (transcriptUrl) updateData.transcript_url = transcriptUrl;
 
     const { data: updated, error } = await supabase
       .from('nexus_scheduled_classes')
@@ -158,6 +144,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       recording: updated,
       found: !!recordingUrl,
+      transcript: { found: transcriptEntries.length > 0, segments: transcriptEntries.length },
       message: recordingUrl
         ? 'Recording synced successfully'
         : 'No recording found yet. It may still be processing.',

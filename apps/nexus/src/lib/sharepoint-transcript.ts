@@ -2,8 +2,22 @@
  * Fetch a Teams/SharePoint recording transcript (VTT) via Microsoft Graph.
  *
  * Extracted from api/modules/.../auto-generate so the class-recap generator can
- * reuse the exact resolution chain: sharing URL -> driveItem -> media/transcripts
- * (beta), with a sibling ".vtt" file fallback.
+ * reuse the exact resolution chain: sharing URL -> driveItem -> a sibling ".vtt"
+ * file in the same folder.
+ *
+ * It used to try the beta `media/transcripts` endpoint on the recording's
+ * driveItem first. That endpoint is gone: probed against production on
+ * 2026-07-30 it answers `400 invalidRequest: Unsupported segment type.
+ * ODataQuery: transcripts` in BOTH URL shapes, the /sites/{siteId}/drives form
+ * and the plain /drives form. Removed rather than left in, because a step that
+ * always 400s made this function always throw NO_TRANSCRIPT, and that sentinel
+ * became the message every teacher saw ("Teams has not published a transcript
+ * for this class yet") while the transcript sat readable on the Teams artifact
+ * API the whole time. Do not add it back without a fresh probe.
+ *
+ * What remains is a genuine long shot: Teams does not export a .vtt next to the
+ * .mp4, so this only finds a transcript somebody put there by hand. It stays
+ * because it is a single call and lib/transcript-resolver runs it last.
  *
  * Throws one of: NO_ACCESS | VIDEO_NOT_FOUND | NO_TRANSCRIPT (callers map these
  * to friendly messages), or a generic Error for unexpected Graph failures.
@@ -65,36 +79,12 @@ export async function fetchTranscriptFromSharePoint(
   const driveItem = await driveItemRes.json();
   const { id: itemId, parentReference } = driveItem;
   const driveId = parentReference?.driveId;
-  const siteId = parentReference?.siteId;
 
   if (!driveId || !itemId) {
     throw new Error('Could not resolve drive item from sharing URL');
   }
 
-  // Step 2: Try the media/transcripts endpoint (beta).
-  try {
-    const transcriptsUrl = siteId
-      ? `https://graph.microsoft.com/beta/sites/${siteId}/drives/${driveId}/items/${itemId}/media/transcripts`
-      : `https://graph.microsoft.com/beta/drives/${driveId}/items/${itemId}/media/transcripts`;
-
-    const transcriptsRes = await fetch(transcriptsUrl, { headers });
-    if (transcriptsRes.ok) {
-      const transcriptsData = await transcriptsRes.json();
-      const transcripts = transcriptsData.value;
-      if (transcripts && transcripts.length > 0) {
-        const transcriptId = transcripts[0].id;
-        const contentUrl = siteId
-          ? `https://graph.microsoft.com/beta/sites/${siteId}/drives/${driveId}/items/${itemId}/media/transcripts/${transcriptId}/content`
-          : `https://graph.microsoft.com/beta/drives/${driveId}/items/${itemId}/media/transcripts/${transcriptId}/content`;
-        const contentRes = await fetch(contentUrl, { headers });
-        if (contentRes.ok) return await contentRes.text();
-      }
-    }
-  } catch {
-    // Fall through to the sibling-file fallback.
-  }
-
-  // Step 3: Fallback — a ".vtt" sibling file in the same folder.
+  // Step 2: a ".vtt" sibling file in the same folder.
   try {
     const parentId = parentReference?.id;
     if (parentId) {

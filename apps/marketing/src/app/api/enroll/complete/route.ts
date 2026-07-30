@@ -12,6 +12,7 @@ import {
   notifyNewApplication,
   initializeStudentOnboarding,
   enrollUserInDefaultClassroom,
+  parseExamYearAnswer,
 } from '@neram/database';
 import { verifyFirebaseToken } from '../../_lib/auth';
 import { normalisePhone } from '@/lib/phone';
@@ -209,7 +210,9 @@ export async function POST(request: NextRequest) {
         applicant_category: applicantCategory || null,
         academic_data: academicData || null,
         caste_category: casteCategory || null,
-        target_exam_year: targetExamYear ? Number(targetExamYear) : null,
+        // Number('2026-27') is NaN, which is how the direct-enrolment path lost
+        // every applicant's exam-year answer. parseExamYearAnswer takes either shape.
+        target_exam_year: parseExamYearAnswer(targetExamYear).examYear,
         school_type: schoolType || null,
         // Course (pre-filled from link)
         interest_course: link.interest_course,

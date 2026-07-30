@@ -5,8 +5,7 @@ import {
   createAdminClient,
   sendTemplateEmail,
   notifyNewApplication,
-  deriveAcademicYearFromExamYear,
-  currentAcademicYear,
+  parseExamYearAnswer,
 } from '@neram/database';
 import {
   createApplication,
@@ -195,7 +194,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       applicant_category: sanitizedCategory,
       academic_data: body.academic_data,
       caste_category: body.caste_category || undefined,
-      target_exam_year: body.target_exam_year ? Number(body.target_exam_year) : undefined,
+      // The form's dropdown emits '2026-27', so Number() here produced NaN and
+      // this column silently landed NULL for every public applicant.
+      target_exam_year: parseExamYearAnswer(body.target_exam_year).examYear ?? undefined,
       interest_course: sanitizedCourse,
       selected_course_id: body.selected_course_id || undefined,
       selected_center_id: body.selected_center_id || undefined,
@@ -364,16 +365,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       await (supabase.from('users') as any).update({ first_name: body.first_name }).eq('id', auth.userId);
     }
 
-    // Stamp the academic-year cohort from the target exam year (fallback to the
-    // current academic year). Only set when not already populated so an admin
-    // override is never clobbered. Used by the CRM to segment old vs current batch.
+    // Stamp the academic-year cohort from the applicant's own answer. Only set
+    // when not already populated so an admin override is never clobbered.
+    //
+    // NO FALLBACK TO THE CURRENT YEAR. That fallback is what broke this: combined
+    // with the NaN above it fired for everyone, so a Class 11 applicant was tagged
+    // as sitting the exam this year. A NULL cohort is honest, the Nexus students
+    // screen surfaces it as "no exam year set", and staff fix it in one tap.
     try {
-      const examYear = body.target_exam_year ? Number(body.target_exam_year) : null;
-      const cohort = deriveAcademicYearFromExamYear(examYear) || currentAcademicYear();
-      await (supabase.from('users') as any)
-        .update({ academic_year: cohort })
-        .eq('id', auth.userId)
-        .is('academic_year', null);
+      const { academicYear } = parseExamYearAnswer(body.target_exam_year);
+      if (academicYear) {
+        await (supabase.from('users') as any)
+          .update({ academic_year: academicYear })
+          .eq('id', auth.userId)
+          .is('academic_year', null);
+      }
     } catch (cohortErr) {
       console.error('[Application API] academic_year stamp failed:', cohortErr);
     }

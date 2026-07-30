@@ -5404,6 +5404,38 @@ export interface NexusScheduledClass extends Timestamps {
   allowed_presenters: string | null;
 }
 
+/** Where the stored transcript came from. */
+export type NexusTranscriptSource = 'graph_live' | 'cached_url' | 'sharepoint' | 'vtt' | 'pasted';
+
+/**
+ * How far the hunt for a class transcript got.
+ *
+ * `unavailable` is terminal: attempts ran out, so nothing calls Graph for this
+ * class again. That cap is the point of writing a row on failure at all.
+ */
+export type NexusTranscriptStatus = 'ok' | 'pending' | 'unavailable';
+
+/**
+ * A class transcript, stored once so no consumer re-fetches it from Graph.
+ *
+ * Deliberately its own table rather than columns on NexusScheduledClass: the
+ * WEBVTT runs to tens of kilobytes and the timetable views select whole class
+ * rows.
+ */
+export interface NexusClassTranscript extends Timestamps {
+  class_id: string;
+  /** Raw WEBVTT as supplied. NULL unless status is 'ok'. */
+  vtt: string | null;
+  /** Cue count at store time, so callers can judge usefulness without the text. */
+  segments: number;
+  source: NexusTranscriptSource | null;
+  status: NexusTranscriptStatus;
+  /** Why the last attempt came up empty, for operators. */
+  detail: string | null;
+  attempts: number;
+  fetched_at: string | null;
+}
+
 export interface NexusAttendance {
   id: string;
   scheduled_class_id: string;

@@ -6,7 +6,8 @@ import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { notifyRecordingAvailable, notifyClassCancelled } from '@/lib/timetable-notifications';
 import { syncClassroomMeetings } from '@/lib/teams-meeting-sync';
 import { announceCancellationToTeams } from '@/lib/teams-class-announcements';
-import { extractOidFromJoinUrl, resolveOrganizerOid } from '@/lib/teams-online-meeting';
+import { resolveOrganizerOid } from '@/lib/teams-online-meeting';
+import { resolveTranscript } from '@/lib/transcript-resolver';
 import {
   fetchChannelRecordings,
   fetchOrganizerRecordings,
@@ -140,7 +141,9 @@ export async function POST(request: NextRequest) {
 
     const { data: recentClasses } = await supabase
       .from('nexus_scheduled_classes')
-      .select('id, classroom_id, title, teams_meeting_join_url, teacher_id, organizer_email, scheduled_date, start_time, end_time')
+      // One string literal, not a concatenation: the typed client reads this at
+      // the type level and gives up on anything it cannot see as a literal.
+      .select('id, classroom_id, title, teams_meeting_join_url, teams_meeting_url, teams_meeting_id, online_meeting_id, organizer_ms_oid, organizer_email, transcript_url, teacher_id, scheduled_date, start_time, end_time')
       .in('classroom_id', classroomIds)
       .is('recording_url', null)
       .is('recording_fetched_at', null)
@@ -221,30 +224,31 @@ export async function POST(request: NextRequest) {
         }
 
         if (matched) {
-          // Best-effort transcript fetch (feeds the class-recap generator). Unlike
-          // the recording, transcript_url is only ever read server-side with a
-          // token, so a Graph content URL is fine here.
-          let transcriptUrl: string | null = null;
+          await supabase
+            .from('nexus_scheduled_classes')
+            .update({
+              // The driveItem webUrl, never a Graph content URL: this value is
+              // handed to a browser and to getSharePointStreamUrl.
+              recording_url: matched.webUrl,
+              recording_fetched_at: now.toISOString(),
+            })
+            .eq('id', cls.id);
+
+          // Then the transcript, through the shared ladder, which stores the TEXT
+          // in nexus_class_transcripts so nothing fetches it again. This route
+          // used to carry its own copy that returned a content URL it never
+          // actually read, so the URL it saved had never been proven to work, and
+          // in production it did not: Graph 400s a transcript content request
+          // that does not name a format. Written after the recording update on
+          // purpose, so the ladder's SharePoint rung can see recording_url.
           try {
-            const oid = extractOidFromJoinUrl(cls.teams_meeting_join_url!);
-            transcriptUrl = await fetchTranscriptByJoinUrl(
-              supabase, appToken, cls.teams_meeting_join_url!, cls.teacher_id, oid,
-            );
+            await resolveTranscript({
+              cls: { ...cls, recording_url: matched.webUrl },
+              supabase,
+            });
           } catch (tErr) {
             console.error(`[sync-now] Transcript fetch failed for class ${cls.id}:`, tErr);
           }
-
-          const recordingUpdate: Record<string, unknown> = {
-            // The driveItem webUrl, never a Graph content URL: this value is
-            // handed to a browser and to getSharePointStreamUrl.
-            recording_url: matched.webUrl,
-            recording_fetched_at: now.toISOString(),
-          };
-          if (transcriptUrl) recordingUpdate.transcript_url = transcriptUrl;
-          await supabase
-            .from('nexus_scheduled_classes')
-            .update(recordingUpdate)
-            .eq('id', cls.id);
 
           await notifyRecordingAvailable(cls.classroom_id, cls.title, cls.id).catch(() => {});
           recordingsFound++;
@@ -280,69 +284,19 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── OnlineMeetings transcript fetch helper ─────────────────────────────────
+// ─── Why there is no transcript or recording helper in this file ─────────────
 //
-// There is deliberately no recording equivalent here. The old
-// fetchRecordingByJoinUrl returned `recordingContentUrl`, a Graph endpoint that
-// only resolves with a bearer token, and that value was written to
-// recording_url and rendered as a plain href. Every teacher and student who
-// clicked it got `InvalidAuthenticationToken: Access token is empty`. Recordings
-// are now found as driveItems, which have a real webUrl. See channel-recordings.
-
-/**
- * Look up a Teams online meeting by its join URL, then fetch the first transcript.
- *
- * Requires the Azure app registration to have:
- *   OnlineMeetingTranscript.Read.All  (Application permission, admin consent)
- *
- * Returns the transcript content URL (a Graph endpoint yielding VTT). Callers
- * store it on nexus_scheduled_classes.transcript_url; the recap generator then
- * fetches it, falling back to resolving the transcript from the recording file.
- */
-async function fetchTranscriptByJoinUrl(
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
-  appToken: string,
-  joinUrl: string,
-  teacherId: string | null,
-  organizerOid: string | null,
-): Promise<string | null> {
-  let userOid = organizerOid;
-
-  if (!userOid && teacherId) {
-    const { data: teacher } = await supabase
-      .from('users')
-      .select('ms_oid')
-      .eq('id', teacherId)
-      .single();
-    userOid = teacher?.ms_oid || null;
-  }
-
-  if (!userOid) return null;
-
-  const filterQuery = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
-  const meetingRes = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${userOid}/onlineMeetings?$filter=${encodeURIComponent(filterQuery)}`,
-    { headers: { Authorization: `Bearer ${appToken}` } }
-  );
-
-  if (!meetingRes.ok) return null;
-
-  const meetingData = await meetingRes.json();
-  const meetings = meetingData.value || [];
-  if (meetings.length === 0) return null;
-
-  const meetingId = meetings[0].id as string;
-
-  const transcriptsRes = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${userOid}/onlineMeetings/${meetingId}/transcripts`,
-    { headers: { Authorization: `Bearer ${appToken}` } }
-  );
-
-  if (!transcriptsRes.ok) return null;
-
-  const transcriptsData = await transcriptsRes.json();
-  const transcripts = transcriptsData.value || [];
-  if (transcripts.length === 0) return null;
-
-  return transcripts[0].transcriptContentUrl || transcripts[0].content || null;
-}
+// Both used to live here and both were wrong in the same way: they returned a
+// Graph content URL that nothing had ever fetched.
+//
+// The old fetchRecordingByJoinUrl returned `recordingContentUrl`, which only
+// resolves with a bearer token, and that value was written to recording_url and
+// rendered as a plain href. Every teacher and student who clicked it got
+// `InvalidAuthenticationToken: Access token is empty`. Recordings are now found
+// as driveItems, which have a real webUrl. See channel-recordings.
+//
+// The old fetchTranscriptByJoinUrl returned `transcriptContentUrl` and saved it
+// to transcript_url without reading it once. Production held such URLs for
+// months; every attempt to read one answered `400 Invalid format '*/*'`. The
+// transcript now goes through lib/transcript-resolver, which fetches the text,
+// proves it parses, and stores it.

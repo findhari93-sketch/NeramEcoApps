@@ -129,6 +129,9 @@ async function main() {
         apikey: supabaseKey,
         Authorization: `Bearer ${supabaseKey}`,
       },
+      // Without a deadline a hung connection stalls `next build` indefinitely.
+      // The catch below already degrades to an empty index, so bounding this is free.
+      signal: AbortSignal.timeout(20_000),
     });
     if (!resp.ok) {
       const body = await resp.text();

@@ -148,3 +148,20 @@ export function tagSx(theme: Theme, tone: TagTone) {
       };
   }
 }
+
+/**
+ * Icon-only circular variant of a tag, same tone palette but no label text.
+ * For rows stacking several status badges (Draft / Teams / Assignment)
+ * vertically in a tight column, where spelling each one out would crowd out
+ * the title next to it.
+ */
+export function iconTagSx(theme: Theme, tone: TagTone) {
+  const { px, py, gap, fontSize, whiteSpace, ...base } = tagSx(theme, tone);
+  return {
+    ...base,
+    width: 22,
+    height: 22,
+    justifyContent: 'center',
+    borderRadius: '50%',
+  };
+}

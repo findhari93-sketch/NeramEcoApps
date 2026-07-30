@@ -36,7 +36,11 @@ describe('getEnrollmentPrefillData', () => {
 
     expect(result).not.toBeNull();
     expect(result!.currentStandard).toBe('12th');
-    expect(result!.academicYear).toBe('2025-26');
+    // A 'YYYY-YY' target_exam_year IS the cohort. The apply form's "Planning to
+    // Write Exam In" dropdown is generated in academic-year format, and the batch
+    // registry labels '2026-27' as 'NATA/JEE 2027'. This used to assert '2025-26',
+    // which contradicted examYearFromAcademicYear everywhere else in the repo.
+    expect(result!.academicYear).toBe('2026-27');
     expect(result!.examInterest).toBe('nata');
   });
 
@@ -65,11 +69,11 @@ describe('getEnrollmentPrefillData', () => {
     const result = await getEnrollmentPrefillData('user-1', mock as any);
 
     expect(result!.currentStandard).toBe('10th');
-    expect(result!.academicYear).toBe('2026-27');
+    expect(result!.academicYear).toBe('2027-28');
     expect(result!.examInterest).toBe('jee_paper2');
   });
 
-  test('should return gap_year for professional applicants', async () => {
+  test('should return gap_year for the legacy "professional" category value', async () => {
     const mock = createMockSupabase({
       academic_data: {},
       target_exam_year: '2026',
@@ -81,6 +85,59 @@ describe('getEnrollmentPrefillData', () => {
 
     expect(result!.currentStandard).toBe('gap_year');
     expect(result!.academicYear).toBe('2025-26');
+  });
+
+  test('should return gap_year for working_professional, the real enum value', async () => {
+    // The category enum is 'working_professional'; this function only tested
+    // 'professional', so every working professional fell through to the
+    // current_class branch, found nothing, and came back null.
+    const mock = createMockSupabase({
+      academic_data: {},
+      target_exam_year: null,
+      interest_course: 'nata',
+      applicant_category: 'working_professional',
+    });
+
+    const result = await getEnrollmentPrefillData('user-1', mock as any);
+    expect(result!.currentStandard).toBe('gap_year');
+  });
+
+  test('should return an integer target_exam_year as its preparing cohort', async () => {
+    // The column is INTEGER, so this is the path that actually fires in prod.
+    const mock = createMockSupabase({
+      academic_data: { current_class: '12' },
+      target_exam_year: 2027,
+      interest_course: 'nata',
+      applicant_category: 'school_student',
+    });
+
+    const result = await getEnrollmentPrefillData('user-1', mock as any);
+    expect(result!.academicYear).toBe('2026-27');
+  });
+
+  test('should return null for classes below 10, which Nexus does not model', async () => {
+    for (const currentClass of ['8', '9']) {
+      const mock = createMockSupabase({
+        academic_data: { current_class: currentClass },
+        target_exam_year: null,
+        interest_course: 'nata',
+        applicant_category: 'school_student',
+      });
+      const result = await getEnrollmentPrefillData('user-1', mock as any);
+      expect(result!.currentStandard).toBeNull();
+    }
+  });
+
+  test('should map "12th Completed" to gap_year', async () => {
+    const mock = createMockSupabase({
+      academic_data: { current_class: '12_completed' },
+      target_exam_year: null,
+      interest_course: 'nata',
+      applicant_category: 'school_student',
+    });
+
+    const result = await getEnrollmentPrefillData('user-1', mock as any);
+    expect(result!.currentStandard).toBe('gap_year');
   });
 
   test('should return gap_year for diploma students', async () => {

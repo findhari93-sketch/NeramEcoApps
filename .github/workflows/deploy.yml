@@ -47,6 +47,7 @@ jobs:
   detect-changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       marketing: ${{ steps.filter.outputs.marketing }}
       app: ${{ steps.filter.outputs.app }}
@@ -83,6 +84,7 @@ jobs:
   deploy-db-staging:
     name: DB Migrations (Staging)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
     steps:
       - name: Checkout
@@ -120,6 +122,7 @@ jobs:
   deploy-db-production:
     name: DB Migrations (Production)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
     steps:
       - name: Checkout
@@ -158,6 +161,7 @@ jobs:
   deploy-marketing:
     name: Deploy Marketing
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [detect-changes]
     if: |
       always() &&
@@ -238,6 +242,7 @@ jobs:
   deploy-app:
     name: Deploy App
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [detect-changes]
     if: |
       always() &&
@@ -318,6 +323,7 @@ jobs:
   deploy-nexus:
     name: Deploy Nexus
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [detect-changes]
     if: |
       always() &&
@@ -398,6 +404,7 @@ jobs:
   deploy-admin:
     name: Deploy Admin
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [detect-changes]
     if: |
       always() &&
@@ -478,6 +485,7 @@ jobs:
   summary:
     name: Deployment Summary
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [detect-changes, deploy-marketing, deploy-app, deploy-nexus, deploy-admin]
     if: always()
     steps:

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, getCurrentBatch, pairStatus } from '@neram/database';
 
 /**
  * GET /api/students/[id]?classroom={id}
@@ -32,7 +32,7 @@ export async function GET(
     const [userResult, enrollmentResult] = await Promise.all([
       supabase
         .from('users')
-        .select('id, name, email, avatar_url, phone')
+        .select('id, name, email, avatar_url, phone, academic_year')
         .eq('id', studentId)
         .single(),
 
@@ -126,10 +126,12 @@ export async function GET(
     const completedChecklist = checklistItems.filter((i) => i.is_completed).length;
 
     const enrollment = enrollmentResult.data as any;
+    const user = userResult.data as any;
+    const currentCode = (await getCurrentBatch())?.code ?? null;
 
     return NextResponse.json({
       student: {
-        ...userResult.data,
+        ...user,
         enrolled_at: enrollment.enrolled_at,
         // Two orthogonal axes: where they are in their studies, and whether they
         // are still participating. See migration 20260802090000.
@@ -139,7 +141,16 @@ export async function GET(
         participation_status: enrollment.participation_status ?? 'active',
         dormant_since: enrollment.dormant_since ?? null,
         dormant_reason: enrollment.dormant_reason ?? null,
+        // Exam-year cohort, and whether it agrees with the class above. Set from
+        // the same sheet, but stored on users, so it is global.
+        academic_year: user.academic_year ?? null,
+        pair_status: pairStatus(
+          enrollment.current_standard ?? null,
+          user.academic_year ?? null,
+          currentCode ?? '',
+        ),
       },
+      currentBatch: currentCode,
       attendanceSummary: {
         total: totalClasses,
         attended: attendedCount,

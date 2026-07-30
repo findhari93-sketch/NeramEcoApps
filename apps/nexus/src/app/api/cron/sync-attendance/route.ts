@@ -8,23 +8,34 @@ import {
   type AttendanceSyncFailure,
   type ClassMeetingRow,
 } from '@/lib/attendance-sync';
+import { syncClassTranscripts, type TranscriptSyncSummary } from '@/lib/transcript-sync';
 
 /**
  * GET /api/cron/sync-attendance
  *
- * Pull Teams attendance for recently finished classes, unattended.
+ * Pull Teams attendance AND class transcripts for recently finished classes,
+ * unattended.
  *
  * This is the piece that was previously declared impossible: the old sync read
  * attendance off the DELEGATED `/me/onlineMeetings`, so it needed a signed-in
  * teacher and a cron could never run it. Attendance now resolves app-only on
  * behalf of the meeting's real organizer, so no user is involved at all.
  *
+ * Transcripts ride along here rather than in a cron of their own, deliberately.
+ * They need exactly what attendance already worked out, the organizer oid and the
+ * resolved onlineMeeting id, they want the same end-time grace, and a second
+ * schedule would mean a second set of Vercel invocations for no gain. Running
+ * second in the same request also means the transcript step sees the
+ * `online_meeting_id` the attendance step just cached.
+ *
  * Scheduled twice daily (see apps/nexus/vercel.json). The 8:50 pm IST pass runs
  * ten minutes BEFORE class-followups, which computes absences from whatever
  * attendance is already recorded; that ordering is the whole point. The late pass
  * picks up reports Graph had not published yet and classes that ended after 9 pm.
  *
- * Doubles as the backfill tool: `?days=60&limit=40`, repeat until pending is 0.
+ * Doubles as the backfill tool: `?days=400&limit=100`, repeat until both
+ * `due` counts are 0. Every class it cannot resolve settles to `unavailable`
+ * after MAX attempts, so repeated runs converge instead of retrying forever.
  */
 
 /** Minutes after a class ends before Teams can be expected to have a report. */
@@ -70,40 +81,50 @@ export async function GET(request: NextRequest) {
       return endMs < cutoff;
     });
 
-    if (due.length === 0) {
-      return NextResponse.json({ candidates: candidates?.length ?? 0, due: 0, results: {} });
-    }
-
     const tally: Record<string, number> = {};
     let syncedRows = 0;
     let absencesRecomputed = 0;
 
-    // Concurrency of 3: Graph's cloud-communications endpoints throttle hard, and
-    // a batch of 40 classes is 2 to 3 calls each.
-    const queue = [...due];
-    const workers = Array.from({ length: Math.min(3, queue.length) }, async () => {
-      while (queue.length > 0) {
-        const cls = queue.shift();
-        if (!cls) break;
-        try {
-          const result = await syncClassAttendance(supabase, cls as ClassMeetingRow);
-          const key = result.ok ? 'ok' : (result.code as AttendanceSyncFailure);
-          tally[key] = (tally[key] ?? 0) + 1;
+    if (due.length > 0) {
+      // Concurrency of 3: Graph's cloud-communications endpoints throttle hard, and
+      // a batch of 40 classes is 2 to 3 calls each.
+      const queue = [...due];
+      const workers = Array.from({ length: Math.min(3, queue.length) }, async () => {
+        while (queue.length > 0) {
+          const cls = queue.shift();
+          if (!cls) break;
+          try {
+            const result = await syncClassAttendance(supabase, cls as ClassMeetingRow);
+            const key = result.ok ? 'ok' : (result.code as AttendanceSyncFailure);
+            tally[key] = (tally[key] ?? 0) + 1;
 
-          if (result.ok) {
-            syncedRows += result.synced;
-            // Absences derive from attendance, so recompute now that it is fresh.
-            await computeAbsencesForClass(supabase, cls).catch(() => {});
-            absencesRecomputed++;
+            if (result.ok) {
+              syncedRows += result.synced;
+              // Absences derive from attendance, so recompute now that it is fresh.
+              await computeAbsencesForClass(supabase, cls).catch(() => {});
+              absencesRecomputed++;
+            }
+          } catch (err) {
+            tally.exception = (tally.exception ?? 0) + 1;
+            console.error(`[cron sync-attendance] class ${cls.id} failed:`, err);
           }
-        } catch (err) {
-          tally.exception = (tally.exception ?? 0) + 1;
-          console.error(`[cron sync-attendance] class ${cls.id} failed:`, err);
         }
-      }
-    });
+      });
 
-    await Promise.all(workers);
+      await Promise.all(workers);
+    }
+
+    // Transcripts, second, so they can use the online_meeting_id the attendance
+    // pass just resolved and cached. Its own candidate scan, because a class can
+    // need a transcript long after its attendance settled. Never allowed to fail
+    // the request: attendance is the schedule-critical half of this cron.
+    let transcripts: TranscriptSyncSummary | { error: string };
+    try {
+      transcripts = await syncClassTranscripts(supabase, { days, limit, graceMinutes: REPORT_GRACE_MINUTES });
+    } catch (err) {
+      console.error('[cron sync-attendance] transcript sync failed:', err);
+      transcripts = { error: err instanceof Error ? err.message : 'transcript sync failed' };
+    }
 
     return NextResponse.json({
       candidates: candidates?.length ?? 0,
@@ -111,6 +132,7 @@ export async function GET(request: NextRequest) {
       syncedRows,
       absencesRecomputed,
       results: tally,
+      transcripts,
     });
   } catch (err) {
     console.error('[cron sync-attendance] failed:', err);

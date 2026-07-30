@@ -132,7 +132,53 @@ test.describe('Students screen on a phone', () => {
     const optionBox = await breakYear.boundingBox();
     expect(optionBox).toBeTruthy();
 
+    // The exam-year select was added below the four class options, so the sheet
+    // got taller. It must still be reachable inside the 88dvh cap rather than
+    // sitting below the fold with no hint that it exists.
+    //
+    // Scoped to the drawer: the page behind it has its own "Exam year" control,
+    // which FILTERS rather than sets. Both labels are right in their own context,
+    // so the query is what has to be specific.
+    const sheet = page.getByRole('presentation').filter({ hasText: /Set class and exam year/i });
+    const yearField = sheet.getByRole('combobox', { name: 'Exam year' });
+    await expect(yearField).toBeVisible();
+    const yearBox = await yearField.boundingBox();
+    expect(yearBox).toBeTruthy();
+    // Inside the 88dvh cap, not pushed below the fold by the four class options.
+    expect(yearBox!.y + yearBox!.height).toBeLessThanOrEqual(812);
+    expect(yearBox!.height).toBeGreaterThanOrEqual(44);
+
     await page.keyboard.press('Escape');
+  });
+
+  test('the issues banner stacks its rows without pushing the page sideways', async ({ page }) => {
+    // Wait for the roster to land FIRST. The banner only renders once counts have
+    // arrived, and `count()` does not auto-wait, so checking it straight after
+    // navigation reads 0 while the fetch is still in flight and skips a test that
+    // should have run.
+    await expect(studentRows(page).first()).toBeVisible({ timeout: 15000 });
+
+    // Each row is message-above-button at 375px. Side by side would either clip
+    // the button or force the document to scroll.
+    const banner = page.getByRole('alert').filter({ hasText: /no class set|disagree|no exam year/i });
+    if ((await banner.count()) === 0) {
+      test.skip(true, 'This classroom has no classification problems to report');
+    }
+
+    await expect(banner.first()).toBeVisible();
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(overflow).toBe(false);
+
+    // Every action in the banner stays a real touch target.
+    const actions = banner.first().getByRole('button');
+    for (let i = 0; i < (await actions.count()); i++) {
+      const box = await actions.nth(i).boundingBox();
+      expect(box, `banner action ${i} has no box`).toBeTruthy();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
   });
 
   test('a compact row keeps the student name visible alongside the chips', async ({ page }) => {

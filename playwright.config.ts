@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import type { ReporterDescription } from '@playwright/test';
 import path from 'path';
 import dotenv from 'dotenv';
 
@@ -39,6 +40,52 @@ const TEACHER_AUTH_FILE = path.join(__dirname, 'tests/.auth/teacher.json');
  */
 const NEXUS_URL = process.env.E2E_NEXUS_URL || 'http://localhost:3012';
 
+/**
+ * Apps that Playwright starts itself. See the `webServer` block at the bottom.
+ */
+const WEB_SERVER_APPS: ReadonlyArray<{
+  name: string;
+  dir: string;
+  port: number;
+  env?: Record<string, string>;
+}> = [
+  { name: 'marketing', dir: 'apps/marketing', port: 3010 },
+  {
+    name: 'app',
+    dir: 'apps/app',
+    port: 3011,
+    // Enables the phone-auth E2E bypass (disables reCAPTCHA for registered test
+    // numbers); see packages/auth/src/firebase.ts.
+    // NOTE: NEXT_PUBLIC_* is inlined at BUILD time. If this app is ever moved to
+    // E2E_PROD_SERVERS, this must be set on the `next build` step instead, because
+    // it has no effect on an already-built server.
+    env: { NEXT_PUBLIC_E2E_TEST_MODE: process.env.NEXT_PUBLIC_E2E_TEST_MODE || 'true' },
+  },
+  { name: 'nexus', dir: 'apps/nexus', port: 3012 },
+  { name: 'admin', dir: 'apps/admin', port: 3013 },
+];
+
+/**
+ * Comma-separated app names to serve from a production build (`next start`)
+ * instead of `next dev`. Set by CI, for example E2E_PROD_SERVERS=marketing.
+ *
+ * Only `marketing` is safe today. `next start` forces NODE_ENV=production, which
+ * Next inlines at build time, and that:
+ *   - 404s the nexus test-login routes (apps/nexus/src/app/api/auth/test-login/route.ts
+ *     and .../auth/parent/test-login/route.ts) and makes ms-verify.ts reject
+ *     `test_` tokens, which every authenticated project depends on; and
+ *   - activates the next-pwa service worker in nexus/app/admin, which would cache
+ *     responses across tests.
+ * Marketing has no auth guard and no PWA, so it can run as a production build.
+ */
+const PROD_SERVERS = new Set(
+  (process.env.E2E_PROD_SERVERS || '').split(',').map((s) => s.trim()).filter(Boolean)
+);
+
+const REPORTERS: ReporterDescription[] = process.env.PW_BLOB
+  ? [['blob'], ['list']]
+  : [['html', { outputFolder: 'playwright-report' }], ['list']];
+
 export default defineConfig({
   testDir: './tests/e2e',
 
@@ -54,11 +101,9 @@ export default defineConfig({
   /* Opt out of parallel tests on CI */
   workers: process.env.CI ? 1 : undefined,
 
-  /* Reporter to use */
-  reporter: [
-    ['html', { outputFolder: 'playwright-report' }],
-    ['list'],
-  ],
+  /* Reporter to use. Sharded CI runs emit blob reports that a downstream
+   * job merges into a single HTML report (see .github/workflows/e2e-full.yml). */
+  reporter: REPORTERS,
 
   /* Shared settings for all the projects below */
   use: {
@@ -83,6 +128,39 @@ export default defineConfig({
     {
       name: 'setup',
       testMatch: /.*\.setup\.ts/,
+      // Setup is the first thing to touch each app, so it pays the whole
+      // dev-server cold-compile bill. The student sign-in alone crosses two apps
+      // (3011/login -> 3010/sso -> 3011/login?sso=none): measured 54s on a warm
+      // machine and over 120s when the servers are compiling under load, with
+      // /sso taking 31s by itself. Matches the 180s the webServer entries below
+      // already allow a dev server to start, for the same reason.
+      timeout: 180 * 1000,
+    },
+
+    // =====================================================
+    // SMOKE - the PR gate. No auth, no seeded data, no
+    // dependencies, so it can never skip its way to green.
+    // Asserts every app boots and serves pages, which is
+    // exactly the failure that kept CI red for months:
+    // a missing generated module made marketing 500 on every
+    // request and Playwright reported only a webServer timeout.
+    // =====================================================
+    {
+      name: 'smoke',
+      testMatch: /smoke\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+      // Every request in this suite allows 60s, which the 30s default test budget
+      // made unreachable: the test died first and reported "Test timeout of
+      // 30000ms exceeded" instead of the assertion written to explain the
+      // failure.
+      //
+      // 120s, not 90s. The ci.yml smoke job does not set E2E_PROD_SERVERS, so all
+      // four apps run `next dev` there and the first hit on each pays a cold
+      // compile on a 2-core runner. Locally, under four dev servers compiling at
+      // once, the marketing homepage took ~90s and sat right on a 90s budget.
+      // CI runs workers: 1, so it sees less contention, but the margin belongs
+      // here rather than in a flaky PR gate.
+      timeout: 120 * 1000,
     },
 
     // =====================================================
@@ -188,41 +266,35 @@ export default defineConfig({
     },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: [
-    {
-      command: 'pnpm dev:marketing',
-      url: 'http://localhost:3010',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120 * 1000, // 2 minutes for Next.js to start
-    },
-    {
-      command: 'pnpm dev:app',
-      url: 'http://localhost:3011',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120 * 1000,
-      // Enable the phone-auth E2E bypass (disables reCAPTCHA for registered test
-      // numbers). Only affects non-production builds; see packages/auth/firebase.ts.
-      // Playwright merges this over process.env. NOTE: if a dev:app server is already
-      // running, Playwright reuses it and this env is NOT applied; start that server
-      // with the flag or stop it first.
-      env: {
-        NEXT_PUBLIC_E2E_TEST_MODE: process.env.NEXT_PUBLIC_E2E_TEST_MODE || 'true',
-      },
-    },
-    {
-      command: 'pnpm dev:nexus',
-      url: 'http://localhost:3012',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120 * 1000,
-    },
-    {
-      command: 'pnpm dev:admin',
-      url: 'http://localhost:3013',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120 * 1000,
-    },
-  ],
+  /*
+   * One entry per app.
+   *
+   * `cwd` + `pnpm run <script>` deliberately bypasses `pnpm dev:marketing`,
+   * which expands to `turbo run dev --filter=...`. Turbo put a third process
+   * between Playwright and Next, re-framed the child's output through its own
+   * writer, and did not forward SIGTERM cleanly (orphaned listeners that then
+   * get silently reused locally, because reuseExistingServer is true off CI).
+   * Turbo buys nothing here: turbo.json's `dev` task has no dependsOn, and
+   * every packages/* is source-only, consumed via transpilePackages.
+   *
+   * `stdout`/`stderr: 'pipe'` is the important part. Playwright's url probe
+   * treats 2xx/3xx/4xx as ready and keeps polling on 5xx, so an app that 500s
+   * on every request is indistinguishable from a slow one. Without piping, the
+   * only output was `Timed out waiting 120000ms from config.webServer`. That is
+   * what hid a missing generated module for three months. With piping, the real
+   * Next.js error lands in the CI log within seconds.
+   */
+  webServer: WEB_SERVER_APPS.map((app) => ({
+    command: `pnpm run ${PROD_SERVERS.has(app.name) ? 'start' : 'dev'}`,
+    cwd: path.resolve(__dirname, app.dir),
+    url: `http://localhost:${app.port}`,
+    reuseExistingServer: !process.env.CI,
+    timeout: PROD_SERVERS.has(app.name) ? 90 * 1000 : 180 * 1000,
+    stdout: 'pipe' as const,
+    stderr: 'pipe' as const,
+    gracefulShutdown: { signal: 'SIGTERM' as const, timeout: 10_000 },
+    ...(app.env ? { env: app.env } : {}),
+  })),
 
   /* Output folder for test artifacts */
   outputDir: 'test-results',
