@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTeacher } from '@/lib/verify-teacher';
-import { getRecapById, setRecapStatus, refreshRecapMedia, setRecapVideoSource } from '@neram/database';
+import {
+  getRecapById,
+  setRecapStatus,
+  refreshRecapMedia,
+  setRecapVideoSource,
+  buildClassTestFromRecap,
+} from '@neram/database';
 
 /**
  * GET /api/class-recaps/[recapId]
@@ -57,7 +63,34 @@ export async function PATCH(
     if (!next) return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
 
     const recap = await setRecapStatus(recapId, next);
-    return NextResponse.json({ recap });
+
+    // Publishing is the moment a class becomes catchable, so it is also the
+    // moment it needs the test that proves someone watched it. Building it here
+    // rather than behind a second button is the difference between one click per
+    // class and two, and the second one was never being pressed.
+    //
+    // Best effort on purpose. A recap with too few checkpoint questions throws
+    // NO_CHECKPOINT_QUESTIONS, and refusing to publish over that would leave the
+    // recording unreachable as well as unquizzed. The warning rides back on the
+    // response so the editor can say what is missing.
+    let classTest: unknown = null;
+    let classTestWarning: string | null = null;
+    if (next === 'published') {
+      try {
+        classTest = await buildClassTestFromRecap(recapId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'unknown error';
+        classTestWarning =
+          message === 'NO_CHECKPOINT_QUESTIONS'
+            ? 'Published, but there is no class test yet. Add checkpoint questions and publish again.'
+            : message === 'RECAP_HAS_NO_CLASS'
+              ? 'Published. This recap is not linked to a scheduled class, so it has no class test.'
+              : `Published, but the class test could not be built: ${message}`;
+        console.warn(`[recap ${recapId}] class test build failed:`, message);
+      }
+    }
+
+    return NextResponse.json({ recap, classTest, classTestWarning });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update recap';
     const status = message === 'Not authorized' ? 403 : 500;

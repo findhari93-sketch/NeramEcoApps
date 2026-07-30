@@ -5,6 +5,8 @@ import { errorResponse } from '@/lib/api-errors';
 import { summarise, describeAttendance } from '@/lib/parent-attendance';
 import { buildParentAssignmentViews, summariseAssignments } from '@/lib/parent-assignments';
 import { loadChildAttendance, loadUpcomingClasses, istDaysAgo } from '@/lib/parent-data';
+import { loadEnrollmentContext } from '@/lib/parent-enrollment';
+import { loadChildCatchup } from '@/lib/parent-catchup';
 import { resolveExamCountdown } from '@/lib/exam-countdown-server';
 import { getSupabaseAdminClient } from '@neram/database';
 
@@ -41,10 +43,22 @@ export async function GET(request: NextRequest) {
       Math.max(7, Number(request.nextUrl.searchParams.get('days')) || DEFAULT_WINDOW_DAYS)
     );
 
-    const [attendanceWindow, assignmentItems, upcoming, examCountdown] = await Promise.all([
-      loadChildAttendance(child.id, classroomId, istDaysAgo(days)),
+    // Sequential on purpose: `scope.batchId` decides which classes the two class
+    // reads below are even allowed to see, so it has to land first. One extra
+    // round trip buys the guarantee that a parent can never be shown a draft
+    // class or another batch's class.
+    const { enrollment, notice } = await loadEnrollmentContext(
+      child.id,
+      classroomId,
+      child.name
+    );
+    const scope = { batchId: enrollment?.batch_id ?? null };
+
+    const [attendanceWindow, assignmentItems, upcoming, examCountdown, catchup] =
+      await Promise.all([
+      loadChildAttendance(child.id, classroomId, istDaysAgo(days), scope),
       listAssignmentsForStudent(child.id, classroomId).catch(() => []),
-      loadUpcomingClasses(classroomId, 3),
+      loadUpcomingClasses(classroomId, scope, 3),
       // Days left until the child's exam. resolveChildContext has already proved
       // this parent is linked to this student, so passing the child id here is
       // safe; it is what lets the child's own booked slot outrank the cohort date.
@@ -52,6 +66,12 @@ export async function GET(request: NextRequest) {
         classroomId,
         studentId: child.id,
       }),
+      /**
+       * How much of what they missed they have made up. Read only: this must
+       * never call getCatchupBacklog, which UPDATEs while it reads. A parent
+       * opening a dashboard cannot be allowed to mutate their child's records.
+       */
+      loadChildCatchup(child.id, classroomId),
     ]);
 
     const attendance = summarise(attendanceWindow.views);
@@ -66,13 +86,21 @@ export async function GET(request: NextRequest) {
         classroom_id: classroomId,
         classroom_name: child.classroom_name,
       },
+      /**
+       * Why the numbers below may be empty: paused, ended, or joined late. Null
+       * when the child is simply active. Carried on every parent response so the
+       * pages cannot disagree about the child's standing.
+       */
+      notice,
       windowDays: days,
       attendance,
       // The sentence the UI shows under the headline, built here so no client
       // has to decide how to phrase "we have not measured anything".
       attendanceSentence: describeAttendance(attendance),
       assignments,
-      verdict: buildVerdict(attendance, assignments, child.name),
+      /** Missed classes made up, which is the trend a parent actually acts on. */
+      catchup,
+      verdict: buildVerdict(attendance, assignments, child.name, catchup.open),
       /**
        * The exam this child is preparing for, or null. Only the date crosses the
        * wire: the client words it, so a page left open overnight self-corrects
@@ -106,7 +134,8 @@ export async function GET(request: NextRequest) {
 function buildVerdict(
   attendance: ReturnType<typeof summarise>,
   assignments: ReturnType<typeof summariseAssignments>,
-  childName: string | null
+  childName: string | null,
+  catchupOpen = 0
 ): { band: VerdictBand; headline: string; detail: string } {
   const name = childName?.split(' ')[0] || 'Your child';
   const reasons: string[] = [];
@@ -137,8 +166,14 @@ function buildVerdict(
   if (attendance.droppedMidClass >= 2) {
     reasons.push(`left ${attendance.droppedMidClass} classes part way through`);
   }
+  // A backlog of un-caught-up classes compounds: each one makes the next class
+  // harder to follow, so it belongs in the verdict rather than only on its own
+  // tile. Two, not one, so a single class missed last week is not an alarm.
+  if (catchupOpen >= 2) {
+    reasons.push(`has ${catchupOpen} classes still to catch up on`);
+  }
 
-  const serious = missedRecently >= 3 || assignments.overdue >= 3;
+  const serious = missedRecently >= 3 || assignments.overdue >= 3 || catchupOpen >= 4;
 
   if (reasons.length === 0) {
     return {

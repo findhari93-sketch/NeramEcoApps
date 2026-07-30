@@ -5105,6 +5105,43 @@ export interface NexusClassAbsence {
   updated_at: string;
 }
 
+/**
+ * What a piece of class reference material actually is. `study_file` points into
+ * the study-materials library so PDFs get the secure reader; the other three
+ * carry their own url.
+ */
+export type NexusClassResourceKind = 'youtube' | 'link' | 'image' | 'study_file';
+
+/**
+ * Optional teacher-curated reference material for one scheduled class.
+ *
+ * The teacher's own "look at this to understand the topic" list: an explainer
+ * video, a worked-example PDF, a reference image, a web link. Never a gate and
+ * never graded, and visible to every enrolled student the moment it is added,
+ * which is the point: the student who needs it most is the one catching up on a
+ * class they missed.
+ */
+export interface NexusClassResource {
+  id: string;
+  scheduled_class_id: string;
+  kind: NexusClassResourceKind;
+  title: string;
+  /** Why the teacher shared it, shown under the title to students. */
+  note: string | null;
+  /** Null only for `study_file` rows, where study_file_id carries the content. */
+  url: string | null;
+  /** Supabase object path for uploaded images, so a delete can clean up. */
+  storage_path: string | null;
+  study_file_id: string | null;
+  thumb_url: string | null;
+  /** Set when copied from another class via the reuse picker. */
+  source_resource_id: string | null;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface NexusPlanAuditLog {
   id: string;
   plan_id: string;

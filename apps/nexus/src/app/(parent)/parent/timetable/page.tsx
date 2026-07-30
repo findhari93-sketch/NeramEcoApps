@@ -1,21 +1,26 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Skeleton,
-  Alert,
-  Stack,
-  Chip,
-} from '@neram/ui';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { Box, Typography, Skeleton, Alert, Stack, Button } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import AttendanceStrip from '@/components/parent/AttendanceStrip';
+import EnrollmentNotice from '@/components/parent/EnrollmentNotice';
+import ParentCalendarShell, {
+  type ParentCalendarView,
+} from '@/components/parent/ParentCalendarShell';
+import ParentAgenda from '@/components/parent/ParentAgenda';
+import ParentMonthGrid from '@/components/parent/ParentMonthGrid';
+import ParentClassSheet from '@/components/parent/ParentClassSheet';
+import {
+  getMonthGrid,
+  formatMonthYear,
+  addMonths,
+  startOfMonth,
+} from '@/components/timetable/date-utils';
+import type { ParentClass, ParentTimetableResponse } from '@/lib/parent-view-types';
 
 /**
- * The parent's Classes tab: what is coming up, and what happened.
+ * The parent's Classes tab.
  *
  * Reads /api/parent/timetable, NOT the shared /api/timetable. That matters for
  * more than tidiness: the shared route takes its scope from a `?classroom=`
@@ -23,188 +28,247 @@ import AttendanceStrip from '@/components/parent/AttendanceStrip';
  * The parent route resolves the classroom from the parent-child link server
  * side, so a parent cannot ask for a classroom that is not their child's.
  *
- * Every past class renders through AttendanceStrip, which draws "not recorded"
- * for a class that was never synced instead of showing it as an absence.
+ * Two views, list and month, because a parent reviews rather than schedules.
+ * State lives in the URL (`?view=`, `?month=`, `?class=`) so the Android back
+ * button closes the class sheet instead of leaving the app, and so a parent can
+ * bookmark or share a month.
+ *
+ * Every class here carries STATUS ONLY. There is no recording url and no
+ * resource link anywhere in this payload, by construction: see the contract and
+ * its enforcing test in lib/parent-classes.ts.
  */
 
-type StripProps = React.ComponentProps<typeof AttendanceStrip>;
-
-interface TimetableResponse {
-  child: { id: string; name: string | null; classroom_name: string | null };
-  windowDays: number;
-  upcoming: Array<{
-    id: string;
-    title: string;
-    scheduled_date: string;
-    start_time: string;
-    end_time: string;
-  }>;
-  recent: Array<StripProps & { classId: string }>;
-  summary: {
-    measuredClasses: number;
-    notMeasuredClasses: number;
-    attended: number;
-    missed: number;
-    late: number;
-    droppedMidClass: number;
-    attendanceRate: number | null;
-  };
-}
-
-function friendlyDate(ymd: string): string {
-  const ms = Date.parse(`${ymd}T00:00:00+05:30`);
-  if (!Number.isFinite(ms)) return ymd;
-  return new Intl.DateTimeFormat('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'Asia/Kolkata',
-  }).format(ms);
-}
-
-function clock(time: string, date: string): string {
-  const ms = Date.parse(`${date}T${time}+05:30`);
-  if (!Number.isFinite(ms)) return time;
-  return new Intl.DateTimeFormat('en-IN', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: 'Asia/Kolkata',
-  }).format(ms);
-}
-
-export default function ParentTimetablePage() {
+function ParentTimetableInner() {
   const { getToken } = useNexusAuthContext();
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
 
-  const [data, setData] = useState<TimetableResponse | null>(null);
+  const view = (params.get('view') === 'month' ? 'month' : 'agenda') as ParentCalendarView;
+  const monthParam = params.get('month');
+  const openClassId = params.get('class');
+
+  const anchor = useMemo(() => {
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      const [y, m] = monthParam.split('-').map(Number);
+      return new Date(y, m - 1, 1);
+    }
+    return startOfMonth(new Date());
+  }, [monthParam]);
+
+  const [data, setData] = useState<ParentTimetableResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  /** Replace, not push, for view and month: the back button is for the sheet. */
+  const setParam = useCallback(
+    (patch: Record<string, string | null>, mode: 'push' | 'replace' = 'replace') => {
+      const next = new URLSearchParams(params.toString());
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === null) next.delete(key);
+        else next.set(key, value);
+      }
+      const url = `${pathname}?${next.toString()}`;
+      if (mode === 'push') router.push(url, { scroll: false });
+      else router.replace(url, { scroll: false });
+    },
+    [params, pathname, router]
+  );
+
+  // Fetch the whole month grid, spill days included, so the list and the month
+  // view are always looking at the same set and switching between them costs
+  // nothing.
+  const range = useMemo(() => {
+    const grid = getMonthGrid(anchor);
+    return { start: grid.start, end: grid.end };
+  }, [anchor]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const token = await getToken();
-      const res = await fetch('/api/parent/timetable', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `/api/parent/timetable?start=${range.start}&end=${range.end}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || 'Could not load the timetable.');
+      if (!res.ok) throw new Error(json.error || 'Could not load the classes.');
       setData(json);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the timetable.');
+      setError(err instanceof Error ? err.message : 'Could not load the classes.');
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, [getToken, range.start, range.end]);
 
+  // Refetch when the month changes. Deliberately no polling: a page left open on
+  // a phone would otherwise generate serverless invocations all day for data
+  // that changes a few times a week.
   useEffect(() => {
     load();
   }, [load]);
 
-  if (loading) {
+  const openClass = useMemo(
+    () => data?.classes.find((c) => c.id === openClassId) ?? null,
+    [data, openClassId]
+  );
+
+  const handleClassClick = useCallback(
+    (cls: ParentClass) => setParam({ class: cls.id }, 'push'),
+    [setParam]
+  );
+
+  const handleDayClick = useCallback(
+    (dateISO: string) => {
+      // Tapping a day in the month view drops into the list rather than opening
+      // a day column: on a phone there is nothing a day column shows that the
+      // list does not, and the list keeps the surrounding days in reach.
+      setParam({ view: 'agenda', focus: dateISO });
+      requestAnimationFrame(() => {
+        document
+          .getElementById(`parent-day-${dateISO}`)
+          ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      });
+    },
+    [setParam]
+  );
+
+  if (error) {
     return (
-      <Stack spacing={2}>
-        <Skeleton variant="rounded" height={120} />
-        <Skeleton variant="rounded" height={110} />
-        <Skeleton variant="rounded" height={110} />
-      </Stack>
+      <Box sx={{ p: 2 }}>
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={load}>
+              Try again
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      </Box>
     );
   }
 
-  if (error) return <Alert severity="error">{error}</Alert>;
-  if (!data) return null;
-
-  const { summary } = data;
-
   return (
-    <Stack spacing={2.5}>
-      <Typography sx={{ fontWeight: 700, fontSize: 20 }}>Classes</Typography>
-
-      {/* Coming up */}
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent sx={{ p: 2.5 }}>
-          <Typography sx={{ fontWeight: 700, fontSize: 16, mb: 1.5 }}>
-            Coming up
-          </Typography>
-          {data.upcoming.length === 0 ? (
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: 15 }}>
-              No classes scheduled yet.
-            </Typography>
-          ) : (
-            <Stack spacing={1.5}>
-              {data.upcoming.map((c) => (
-                <Box
-                  key={c.id}
-                  sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}
-                >
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 15, fontWeight: 500 }} noWrap>
-                      {c.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: 14 }}>
-                      {clock(c.start_time, c.scheduled_date)} to{' '}
-                      {clock(c.end_time, c.scheduled_date)}
-                    </Typography>
-                  </Box>
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    label={friendlyDate(c.scheduled_date)}
-                    sx={{ flexShrink: 0, alignSelf: 'flex-start' }}
-                  />
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Past classes */}
-      <Box>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'baseline',
-            justifyContent: 'space-between',
-            gap: 1,
-            mb: 1.5,
-          }}
-        >
-          <Typography sx={{ fontWeight: 700, fontSize: 16 }}>
-            Past {data.windowDays} days
-          </Typography>
-          {summary.measuredClasses > 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: 14 }}>
-              Attended {summary.attended} of {summary.measuredClasses}
-            </Typography>
-          )}
-        </Box>
-
-        {summary.notMeasuredClasses > 0 && (
-          <Alert severity="info" sx={{ mb: 1.5, fontSize: 14 }}>
-            {summary.notMeasuredClasses}{' '}
-            {summary.notMeasuredClasses === 1 ? 'class has' : 'classes have'} no
-            attendance recorded. Those are not counted above.
-          </Alert>
-        )}
-
-        {data.recent.length === 0 ? (
-          <Card sx={{ borderRadius: 3 }}>
-            <CardContent sx={{ p: 2.5 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: 15 }}>
-                No classes have happened in this period yet.
-              </Typography>
-            </CardContent>
-          </Card>
+    <>
+      <ParentCalendarShell
+        view={view}
+        onViewChange={(next) => setParam({ view: next })}
+        periodLabel={formatMonthYear(anchor)}
+        onPrev={() => setParam({ month: monthKey(addMonths(anchor, -1)) })}
+        onNext={() => setParam({ month: monthKey(addMonths(anchor, 1)) })}
+        onToday={() => setParam({ month: monthKey(new Date()) })}
+        banner={<EnrollmentNotice notice={data?.notice} />}
+      >
+        {loading ? (
+          <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {/* Sized to the rows they replace, so nothing jumps when data lands. */}
+            <Skeleton variant="rounded" height={18} width={120} />
+            <Skeleton variant="rounded" height={104} />
+            <Skeleton variant="rounded" height={104} />
+            <Skeleton variant="rounded" height={18} width={120} />
+            <Skeleton variant="rounded" height={104} />
+          </Box>
+        ) : !data || data.classes.length === 0 ? (
+          <EmptyMonth />
+        ) : view === 'month' ? (
+          <ParentMonthGrid
+            anchor={anchor}
+            classes={data.classes}
+            holidays={data.holidays}
+            onDayClick={handleDayClick}
+          />
         ) : (
-          <Stack spacing={1.5}>
-            {data.recent.map((c) => (
-              <AttendanceStrip key={c.classId} {...c} />
-            ))}
-          </Stack>
+          <>
+            <AttendanceSummaryStrip sentence={data.attendanceSentence} />
+            <ParentAgenda
+              classes={data.classes}
+              holidays={data.holidays}
+              onClassClick={handleClassClick}
+            />
+          </>
         )}
-      </Box>
-    </Stack>
+      </ParentCalendarShell>
+
+      <ParentClassSheet
+        cls={openClass}
+        open={!!openClass}
+        onClose={() => router.back()}
+      />
+    </>
+  );
+}
+
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * The data-quality line, distinct from the enrolment notice above it.
+ *
+ * That banner is about the child's standing. This is about OUR records: it only
+ * has anything to say when a class was never synced. Merging the two would make
+ * an admin's missed sync look like something the child did.
+ */
+function AttendanceSummaryStrip({ sentence }: { sentence: string }) {
+  return (
+    <Box
+      sx={{
+        px: { xs: 2, md: 2.5 },
+        py: 1.25,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        flexShrink: 0,
+      }}
+    >
+      <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{sentence}</Typography>
+    </Box>
+  );
+}
+
+function EmptyMonth() {
+  return (
+    <Box
+      sx={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1,
+        p: 4,
+        textAlign: 'center',
+      }}
+    >
+      <Typography sx={{ fontWeight: 600, fontSize: 16 }}>
+        No classes this month
+      </Typography>
+      <Typography sx={{ fontSize: 14, color: 'text.secondary', maxWidth: 320 }}>
+        Nothing was scheduled in this period. Use the arrows above to look at
+        another month.
+      </Typography>
+    </Box>
+  );
+}
+
+/**
+ * useSearchParams needs a Suspense boundary in the App Router, or the whole
+ * route opts into client-side rendering at build time.
+ */
+export default function ParentTimetablePage() {
+  return (
+    <Suspense
+      fallback={
+        <Stack spacing={2} sx={{ p: 2 }}>
+          <Skeleton variant="rounded" height={44} />
+          <Skeleton variant="rounded" height={104} />
+          <Skeleton variant="rounded" height={104} />
+        </Stack>
+      }
+    >
+      <ParentTimetableInner />
+    </Suspense>
   );
 }

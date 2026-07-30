@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import { isFullBleedRoute } from '@/lib/full-bleed-routes';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -19,12 +21,22 @@ import { useSidebarContext } from '@/components/SidebarProvider';
  * by a query against a `users.linked_student_ids` column that exists in no
  * migration, so it could only ever render "No linked child found".
  *
- * Assignments and Help arrive in Phase 2 and Phase 3; their tabs land with the
- * pages, never before them.
+ * A tab lands in the same change that ships its page, never before it. Help is
+ * still to come and so is its tab.
+ *
+ * "Work" rather than "Assignments": at four tabs each gets about 93px on a
+ * 375px screen, and the longer word crowds its neighbours at the 0.6875rem
+ * BottomNav size. The page heading is still "Assignments", which is what a
+ * parent will have heard from the school.
+ *
+ * Four fits without an overflow sheet. A fifth would push "More" into the bar
+ * and bury one of these behind a tap.
  */
 const parentNavItems = [
   { label: 'Home', path: '/parent/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Classes', path: '/parent/timetable', icon: <CalendarTodayOutlinedIcon /> },
+  { label: 'Work', path: '/parent/assignments', icon: <AssignmentOutlinedIcon /> },
+  { label: 'Tests', path: '/parent/tests', icon: <FactCheckOutlinedIcon /> },
 ];
 
 export default function ParentLayout({ children }: { children: React.ReactNode }) {

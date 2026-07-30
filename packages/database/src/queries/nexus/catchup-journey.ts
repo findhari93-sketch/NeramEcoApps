@@ -9,8 +9,11 @@ import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import {
   classifyCatchupCandidate,
   isCatchupItemComplete,
+  isOverdue,
+  missedClassDueOn,
   resolveCatchupBacklog,
   summariseCatchupBacklog,
+  summariseMissedClasses,
 } from '../../utils/catchup';
 
 const JOURNEYS = 'nexus_catchup_journeys';
@@ -252,8 +255,15 @@ export interface CatchupBacklogItem {
   kind: string;
   status: string;
   step: string;
+  /** False for a class they were enrolled for and missed. */
+  chained: boolean;
+  /** The day this must be cleared by. Null when nothing is owed. */
+  due_on: string | null;
+  overdue: boolean;
   position: number | null;
   countsTowardPace: boolean;
+  /** Why they missed it, when they have said. Null for a late joiner. */
+  reason_code: string | null;
   watched: boolean;
   assignments_outstanding: number;
   assignments_total: number;
@@ -274,14 +284,28 @@ export interface CatchupBacklogItem {
 }
 
 export interface CatchupBacklog {
-  journey: any;
+  /** Null for a student who joined at the start: they never needed one. */
+  journey: any | null;
+  /** Everything, chronological. Both kinds, for callers that just want a list. */
   items: CatchupBacklogItem[];
+  /** Classes they were enrolled for and missed. Always open, timetable deadline. */
+  missed: CatchupBacklogItem[];
+  /** Classes taught before they joined. Sequentially unlocked, weekly quota. */
+  backlog: CatchupBacklogItem[];
+  /** Late-joiner totals ONLY. This feeds the weekly quota, so a missed class must never enter it. */
   totals: { total: number; completed: number; blocked: number; pendingTeacher: number };
+  missedTotals: { total: number; completed: number; open: number; overdue: number };
 }
 
 /**
- * A student's whole backlog, resolved: what is done, what is open, what is
- * locked, and what they cannot do anything about.
+ * A student's whole catch-up state in one classroom: what is done, what is open,
+ * what is locked, and what they cannot do anything about.
+ *
+ * Keyed on (student, classroom), NOT on the journey. That is the whole fix. A
+ * journey only ever exists for a late joiner, so keying reads on it made an
+ * ordinary absence invisible to every screen here even though its row was
+ * sitting in the same table with the same columns. The journey is still read,
+ * because the weekly quota belongs to it, but it is now optional.
  *
  * Every read is batched with `.in()` rather than looped per class, because this
  * runs on a student's first paint and again for every student in the weekly
@@ -295,22 +319,21 @@ export async function getCatchupBacklog(
   const supabase = (client || getSupabaseAdminClient()) as any;
 
   const journey = await getCatchupJourney(studentId, classroomId, supabase);
-  if (!journey) return null;
 
   const { data: rows } = await supabase
     .from(ITEMS)
     .select(
       'id, scheduled_class_id, kind, recording_watched_at, caught_up_at, test_unlocked_at, ' +
-        'test_passed_at, excused_at, class:nexus_scheduled_classes(id, title, scheduled_date, ' +
+        'test_passed_at, excused_at, reason_code, class:nexus_scheduled_classes(id, title, scheduled_date, ' +
         'start_time, status, recording_url, youtube_url)',
     )
     .eq('student_id', studentId)
-    .eq('journey_id', journey.id);
+    .eq('classroom_id', classroomId);
 
   const items = (rows || []).filter((r: any) => r.class);
-  if (items.length === 0) {
-    return { journey, items: [], totals: { total: 0, completed: 0, blocked: 0, pendingTeacher: 0 } };
-  }
+  // Null still means "nothing to catch up on", which is what every caller's
+  // `if (!backlog)` guard already assumes.
+  if (items.length === 0) return null;
 
   // Chronological. The unlock order is the order the material was taught, so it
   // is derived from the class, never from a stored position that would need
@@ -323,11 +346,25 @@ export async function getCatchupBacklog(
   });
 
   const classIds = items.map((i: any) => i.scheduled_class_id);
-  const facts = await loadClassFacts(supabase, studentId, classIds);
+  const [facts, nextClassDates] = await Promise.all([
+    loadClassFacts(supabase, studentId, classIds),
+    loadNextClassDates(supabase, studentId, classroomId),
+  ]);
 
-  const resolved = resolveCatchupBacklog(
-    items.map((i: any) => toFacts(i, facts)),
+  const resolved = resolveCatchupBacklog(items.map((i: any) => toFacts(i, facts)));
+
+  // A deadline only belongs on work the student can actually start. `open` is
+  // the only unchained status that qualifies: done and excused are finished,
+  // blocked has no recording, and pending_teacher is waiting on us, so putting
+  // "due before Thursday" on any of them would be a deadline for our own
+  // homework dressed up as theirs.
+  const today = istTodayYmd();
+  const dueOn = items.map((i: any, idx: number) =>
+    resolved[idx].status === 'open'
+      ? missedClassDueOn(i.class.scheduled_date, nextClassDates.after(i.class.scheduled_date))
+      : null,
   );
+  const overdueFlags = dueOn.map((d: string | null) => isOverdue(d, today));
 
   // Reconcile the stored caught_up_at against what the facts now say.
   //
@@ -344,12 +381,23 @@ export async function getCatchupBacklog(
   // assignment submission paths, a teacher un-submitting, a recording appearing
   // later) keeps one definition of "done". Both directions, so a teacher
   // restoring an excused item or resetting a test takes the stamp away again.
+  //
+  // Clearing is narrower than stamping, and deliberately so. On a class with a
+  // published recap every gate is machine checkable, so a stamp we made is a
+  // stamp we can take back. On a legacy absence whose class has nothing but a
+  // raw link, `watched` is the student's own tick and `caught_up_at` is their
+  // own statement that they are done. That is not ours to withdraw.
   const toStamp: string[] = [];
   const toClear: string[] = [];
   items.forEach((i: any, idx: number) => {
     const done = resolved[idx].status === 'done';
-    if (done && !i.caught_up_at) toStamp.push(i.id);
-    else if (!done && i.caught_up_at) toClear.push(i.id);
+    if (done && !i.caught_up_at) {
+      toStamp.push(i.id);
+      return;
+    }
+    if (done || !i.caught_up_at) return;
+    const machineChecked = resolved[idx].chained || facts.recapByClass.has(i.scheduled_class_id);
+    if (machineChecked) toClear.push(i.id);
   });
   if (toStamp.length) {
     const stampedAt = new Date().toISOString();
@@ -365,9 +413,7 @@ export async function getCatchupBacklog(
     });
   }
 
-  return {
-    journey,
-    items: items.map((i: any, idx: number) => {
+  const shaped: CatchupBacklogItem[] = items.map((i: any, idx: number) => {
       const r = resolved[idx];
       const recap = facts.recapByClass.get(i.scheduled_class_id) || null;
       const work = facts.assignmentsByClass.get(i.scheduled_class_id) || [];
@@ -377,8 +423,12 @@ export async function getCatchupBacklog(
         kind: i.kind,
         status: r.status,
         step: r.step,
+        chained: r.chained,
+        due_on: dueOn[idx],
+        overdue: overdueFlags[idx],
         position: r.position,
         countsTowardPace: r.countsTowardPace,
+        reason_code: i.reason_code ?? null,
         watched: isWatched(i, facts),
         assignments_outstanding: work.filter((a: any) => !facts.submitted.has(a.id)).length,
         assignments_total: work.length,
@@ -397,8 +447,60 @@ export async function getCatchupBacklog(
           has_recording: !!(i.class.recording_url || i.class.youtube_url),
         },
       };
-    }),
+  });
+
+  return {
+    journey,
+    items: shaped,
+    missed: shaped.filter((i) => !i.chained),
+    backlog: shaped.filter((i) => i.chained),
     totals: summariseCatchupBacklog(resolved),
+    missedTotals: summariseMissedClasses(resolved, overdueFlags),
+  };
+}
+
+/**
+ * When the course next ran, for every date a student might have missed.
+ *
+ * One read of the classroom's timetable rather than a lookup per item, and the
+ * batch filter matters: a class scoped to another batch is not this student's
+ * course moving on, so it cannot be their deadline.
+ */
+export async function loadNextClassDates(
+  supabase: any,
+  studentId: string,
+  classroomId: string,
+): Promise<{ after: (ymd: string) => string | null }> {
+  const { data: enrollment } = await supabase
+    .from('nexus_enrollments')
+    .select('batch_id')
+    .eq('user_id', studentId)
+    .eq('classroom_id', classroomId)
+    .eq('role', 'student')
+    .eq('is_active', true)
+    .maybeSingle();
+
+  const { data: classes } = await supabase
+    .from('nexus_scheduled_classes')
+    .select('scheduled_date, batch_id')
+    .eq('classroom_id', classroomId)
+    .eq('publish_state', 'published')
+    .neq('status', 'cancelled')
+    .order('scheduled_date', { ascending: true });
+
+  const batchId = enrollment?.batch_id ?? null;
+  const dates: string[] = [];
+  for (const c of classes || []) {
+    if (c.batch_id && c.batch_id !== batchId) continue;
+    const ymd = String(c.scheduled_date).slice(0, 10);
+    if (dates[dates.length - 1] !== ymd) dates.push(ymd);
+  }
+
+  return {
+    after(ymd: string): string | null {
+      const target = String(ymd).slice(0, 10);
+      return dates.find((d) => d > target) ?? null;
+    },
   };
 }
 
@@ -530,6 +632,11 @@ export function toFacts(item: any, facts: ClassFacts) {
   );
   const work = facts.assignmentsByClass.get(item.scheduled_class_id) || [];
   return {
+    // Only a late joiner's backlog waits its turn. A class this student was
+    // enrolled for and missed is always open: there is no teaching order to keep
+    // between two scattered absences, and chaining one behind a late joiner's
+    // whole backlog would bury the most urgent item in the list.
+    chained: item.kind === 'late_joiner',
     excluded: verdict === 'no_recording',
     notReady: verdict === 'not_ready',
     excused: !!item.excused_at,
@@ -692,12 +799,20 @@ export async function recomputeCatchupItemCompletion(
       .from(ITEMS)
       .update({ caught_up_at: new Date().toISOString() })
       .eq('id', item.id);
-  } else if (!complete && item.caught_up_at && item.journey_id) {
+  } else if (!complete && item.caught_up_at) {
     // It went backwards. A teacher restoring an item they had excused, or
-    // resetting a passed test, un-does the class. Only for journey items: on a
-    // classic absence caught_up_at is the student's own declaration and is not
-    // ours to withdraw.
-    await supabase.from(ITEMS).update({ caught_up_at: null }).eq('id', item.id);
+    // resetting a passed test, un-does the class.
+    //
+    // Only where completion was machine checked in the first place: a late
+    // joiner's item, or any class with a published recap. On a legacy absence
+    // whose class has nothing but a raw link, caught_up_at is the student's own
+    // declaration, and that is not ours to withdraw. Same rule as
+    // getCatchupBacklog's reconciliation, deliberately.
+    const machineChecked =
+      item.kind === 'late_joiner' || facts.recapByClass.has(classId);
+    if (machineChecked) {
+      await supabase.from(ITEMS).update({ caught_up_at: null }).eq('id', item.id);
+    }
   }
   return complete;
 }

@@ -44,6 +44,28 @@ const CATEGORIES: LibraryCategory[] = [
 /** Roughly 12k tokens. Comfortably inside any chatbot's paste limit. */
 export const MAX_PROMPT_TRANSCRIPT_CHARS = 48000;
 
+/**
+ * Transcript entries to the "[mm:ss] text" form buildVideoMetaPrompt asks for.
+ *
+ * Lives beside the prompt builder rather than in either caller because there are
+ * now two: the teacher pressing Copy prompt, and the server generating the same
+ * metadata itself. The timestamps are the load-bearing part, since they are the
+ * only thing the model can derive chapter marks from, so a second copy of this
+ * that formatted them differently would silently produce chapterless
+ * descriptions on one path and not the other.
+ */
+export function formatTranscriptForPrompt(
+  entries: { start: number; text: string }[],
+): string {
+  return entries
+    .map((e) => {
+      const mm = Math.floor(e.start / 60);
+      const ss = Math.floor(e.start % 60);
+      return `[${mm}:${ss.toString().padStart(2, '0')}] ${e.text}`;
+    })
+    .join('\n');
+}
+
 /** A tag the model is allowed to pick, as shown in the prompt. */
 export interface AllowedTag {
   slug: string;

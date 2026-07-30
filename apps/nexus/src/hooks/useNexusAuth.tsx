@@ -189,6 +189,31 @@ interface NexusAuthState {
   };
   /** Sign in with an admin-issued parent login ID and password. Throws on failure. */
   parentLogin: (loginId: string, password: string) => Promise<StoredParentSession>;
+
+  /**
+   * The children linked to the signed-in parent, and which one the UI is showing.
+   *
+   * /api/auth/me has always returned these; this context used to drop them on the
+   * floor, so every parent page had to make its own request just to learn the
+   * child's name. Empty for every non-parent role.
+   *
+   * An array from the start even though Phase 1 links exactly one child, matching
+   * the shape listParentChildren already returns, so adding a sibling switcher
+   * later is purely additive.
+   */
+  children: ParentChildRef[];
+  activeChildId: string | null;
+}
+
+/** A child linked to the signed-in parent, as /api/auth/me reports them. */
+export interface ParentChildRef {
+  id: string;
+  name: string | null;
+  avatar_url: string | null;
+  relationship: string;
+  is_primary: boolean;
+  classroom_id: string | null;
+  classroom_name: string | null;
 }
 
 const ACTIVE_CLASSROOM_KEY = 'nexus_active_classroom_id';
@@ -237,6 +262,9 @@ export function useNexusAuth(): NexusAuthState {
   // Default never blocks: a gate that defaults to "blocked" would flash the
   // blocker on every page load for every compliant student.
   const [photoGate, setPhotoGate] = useState<PhotoGateState>(DEFAULT_PHOTO_GATE);
+  // Parent portal: which children this login covers. Empty for every other role.
+  const [children, setChildren] = useState<ParentChildRef[]>([]);
+  const [activeChildId, setActiveChildId] = useState<string | null>(null);
 
   // "View as Student" (impersonation) state, persisted in sessionStorage so it
   // survives reloads within the tab but auto-clears when the tab closes.
@@ -422,6 +450,8 @@ export function useNexusAuth(): NexusAuthState {
               setCanTeach(true);
               setCapabilities(capabilityMap(null));
               setPhotoGate(DEFAULT_PHOTO_GATE);
+              setChildren([]);
+              setActiveChildId(null);
             }
             return;
           }
@@ -447,6 +477,14 @@ export function useNexusAuth(): NexusAuthState {
         // Missing field (older server, or a response-shape drift) must never
         // block: fall back to the never-blocking default.
         setPhotoGate(data.photoGate || DEFAULT_PHOTO_GATE);
+
+        // The parent branch of /api/auth/me sends these; every other role sends
+        // nothing, so both settle to empty. Keeping them here rather than in each
+        // page means a parent page can name the child on first paint with no
+        // extra request.
+        const linkedChildren: ParentChildRef[] = data.children || [];
+        setChildren(linkedChildren);
+        setActiveChildId(data.activeChildId ?? linkedChildren[0]?.id ?? null);
 
         // Restore active classroom from localStorage or use first one. /api/auth/me
         // returns non-archived classrooms with the current academic-year one first,
@@ -494,6 +532,8 @@ export function useNexusAuth(): NexusAuthState {
       setCanTeach(true);
       setCapabilities(capabilityMap(null));
       setPhotoGate(DEFAULT_PHOTO_GATE);
+      setChildren([]);
+      setActiveChildId(null);
       // Only clear dbLoading if MS auth is definitively done (not loading)
       // so we don't briefly show loading=false with user=null
       if (!msLoading) setDbLoading(false);
@@ -637,6 +677,8 @@ export function useNexusAuth(): NexusAuthState {
     setCanTeach(true);
     setCapabilities(capabilityMap(null));
     setPhotoGate(DEFAULT_PHOTO_GATE);
+    setChildren([]);
+    setActiveChildId(null);
     localStorage.removeItem(ACTIVE_CLASSROOM_KEY);
     clearImpersonation();
 
@@ -741,6 +783,8 @@ export function useNexusAuth(): NexusAuthState {
       expiresAt: parentToken ? parentSession!.expiresAt : null,
     },
     parentLogin,
+    children,
+    activeChildId,
   };
 }
 

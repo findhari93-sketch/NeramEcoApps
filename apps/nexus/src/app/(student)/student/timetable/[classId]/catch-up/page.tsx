@@ -39,7 +39,10 @@ import { RSVP_REASONS } from '@/lib/rsvp-reasons';
 import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
 import { formatTime } from '@/components/timetable/date-utils';
 import ClassCoverThumb from '@/components/timetable/ClassCoverThumb';
+import ClassResourcesSection from '@/components/timetable/ClassResourcesSection';
+import { SECTION_LABEL_SX } from '@/components/timetable/timetable-theme';
 import type { ClassImageRef } from '@/lib/class-cover';
+import type { ClassResource } from '@/lib/class-resources';
 
 interface CatchUpData {
   class: {
@@ -53,6 +56,8 @@ interface CatchUpData {
     youtube_url: string | null;
     cover_image_id?: string | null;
     class_images?: ClassImageRef[] | null;
+    /** Embedded by the catch-up route, so this screen costs no extra request. */
+    class_resources?: ClassResource[] | null;
   };
   absence: { reason_code: string | null; reason_note: string | null; kind?: string } | null;
   assignments: Array<{ id: string; title: string; assignment_type: string; submitted: boolean }>;
@@ -69,6 +74,9 @@ interface CatchUpData {
   /** False for someone who joined after the class ran: nothing to explain. */
   reasonRequired: boolean;
   hasRecording: boolean;
+  /** The day this must be cleared by, which is the day the course next runs. */
+  due_on: string | null;
+  overdue: boolean;
 }
 
 function formatDay(ymd: string): string {
@@ -261,6 +269,29 @@ export default function CatchUpPage() {
         </Box>
       </Box>
 
+      {/* The deadline, and what it actually means. Stated plainly rather than as
+          a colour, because "overdue" without a consequence reads as a threat and
+          there is no consequence here beyond your teacher seeing it. */}
+      {data.due_on && !data.steps.caughtUp && (
+        <Alert
+          severity={data.overdue ? 'error' : 'info'}
+          sx={{ mb: 2, borderRadius: RADIUS.control }}
+        >
+          {data.overdue ? (
+            <>
+              <strong>This one is overdue.</strong> It was due before the class on{' '}
+              {formatDay(data.due_on)}. Finishing it puts you back on track, and your teacher stops
+              seeing you on the chase list.
+            </>
+          ) : (
+            <>
+              Finish this before the next class on <strong>{formatDay(data.due_on)}</strong>, so you
+              are not behind when it starts.
+            </>
+          )}
+        </Alert>
+      )}
+
       {cls.description && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           {cls.description}
@@ -391,6 +422,23 @@ export default function CatchUpPage() {
             </Stack>
           ),
         )}
+
+        {/* The teacher's extra help, right where someone stuck on the recording
+            would look for it. Deliberately not a numbered step: it is offered,
+            never owed, so it must not read as one more thing to finish. Renders
+            nothing when the class has none. */}
+        <ClassResourcesSection
+          cls={data.class as any}
+          getToken={getToken}
+          editable={false}
+          resources={data.class.class_resources || []}
+          hideWhenEmpty
+          header={
+            <Typography sx={{ ...SECTION_LABEL_SX, mb: 1.25 }}>
+              Reference material from your teacher
+            </Typography>
+          }
+        />
 
         {/* The work. Locked until the recording is watched: doing the
               assignment without the class is not catching up. */}

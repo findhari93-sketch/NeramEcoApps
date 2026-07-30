@@ -18,12 +18,20 @@ import {
   checkContentOverflow,
 } from './nexus-mobile-utils';
 
-// All static parent pages
+/**
+ * Every parent page that actually exists.
+ *
+ * This list used to carry /parent/tickets and /parent/foundation, which were
+ * taken from the original Nexus plan document and never built. Both silently
+ * redirected, so authAndNavigate returned false and every case for them skipped:
+ * the suite reported green while testing nothing. If you add a page here, add
+ * the route first.
+ */
 const PARENT_PAGES = [
   '/parent/dashboard',
   '/parent/timetable',
-  '/parent/tickets',
-  '/parent/foundation',
+  '/parent/assignments',
+  '/parent/tests',
 ];
 
 test.use({ baseURL: 'http://localhost:3012' });

@@ -27,6 +27,9 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import RecapPlayer from '@/components/class-recap/RecapPlayer';
 import QuizModal from '@/components/foundation/QuizModal';
+import ClassResourcesSection from '@/components/timetable/ClassResourcesSection';
+import { SECTION_LABEL_SX } from '@/components/timetable/timetable-theme';
+import type { ClassResource } from '@/lib/class-resources';
 
 interface RecapSection {
   id: string;
@@ -84,6 +87,7 @@ export default function StudentClassRecapPage() {
   const [recap, setRecap] = useState<Recap | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [resources, setResources] = useState<ClassResource[]>([]);
   const [passedIds, setPassedIds] = useState<Set<string>>(new Set());
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<StrippedQuestion[]>([]);
@@ -96,6 +100,7 @@ export default function StudentClassRecapPage() {
       const res = await authFetch(`/api/student/class-recaps/${recapId}`);
       const r = res.recap as Recap;
       setRecap(r);
+      setResources((res.resources || []) as ClassResource[]);
       setPassedIds(new Set(r.sections.filter((s) => s.passed).map((s) => s.id)));
       setCompleted(r.progress_status === 'completed');
     } catch (err) {
@@ -402,6 +407,26 @@ export default function StudentClassRecapPage() {
             );
           })}
         </Stack>
+      )}
+
+      {/* The teacher's reference material for this class, below the
+          checkpoints. Ungated on purpose: the video is what the quiz locks, and
+          a student who just failed a checkpoint needs somewhere to go and read
+          rather than another closed door. */}
+      {recap.scheduled_class_id && resources.length > 0 && (
+        <Box sx={{ mt: 3 }}>
+          <ClassResourcesSection
+            cls={{ id: recap.scheduled_class_id, title: recap.title } as any}
+            getToken={getToken}
+            editable={false}
+            resources={resources}
+            header={
+              <Typography sx={{ ...SECTION_LABEL_SX, mb: 1.25 }}>
+                {rewatching ? 'Revise this first' : 'Reference material from your teacher'}
+              </Typography>
+            }
+          />
+        </Box>
       )}
 
       {/* Mandatory checkpoint quiz */}

@@ -226,8 +226,17 @@ function rankTranscriptsForClass(
   return scored.map((s) => s.item);
 }
 
-/** Read the stored copy. Free: one primary-key lookup, no token, no network. */
-async function readStoredTranscript(
+/**
+ * Read the stored copy. Free: one primary-key lookup, no token, no network.
+ *
+ * Exported because the YouTube metadata generator wants the transcript WITHOUT
+ * running the ladder. Every other rung costs a Graph call and, worse, counts
+ * against this class's transcript attempt cap, so a metadata run on a class the
+ * transcript sweep has already given up on would burn attempts on a hunt that
+ * has provably failed six times. Nothing but the ladder itself should call
+ * resolveTranscript.
+ */
+export async function readStoredTranscript(
   supabase: any,
   classId: string,
 ): Promise<TranscriptEntry[] | null> {

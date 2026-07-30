@@ -50,6 +50,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ journey: null, pace: null, items: [], excluded: [], totals: null });
     }
 
+    const empty = {
+      journey: null,
+      pace: null,
+      items: [],
+      missed: [],
+      excluded: [],
+      totals: null,
+      missedTotals: { total: 0, completed: 0, open: 0, overdue: 0 },
+    };
+
     // Self-heal, same reasoning as the per-class route: a student enrolled a
     // minute ago should not be told to come back after the weekly sweep.
     let backlog = await getCatchupBacklog(user.id, classroomId, supabase);
@@ -57,38 +67,48 @@ export async function GET(request: NextRequest) {
       await ensureCatchupJourney(user.id, classroomId, {}, supabase);
       backlog = await getCatchupBacklog(user.id, classroomId, supabase);
     }
-    if (!backlog) {
-      return NextResponse.json({ journey: null, pace: null, items: [], excluded: [], totals: null });
-    }
+    if (!backlog) return NextResponse.json(empty);
 
-    const { journey, items, totals } = backlog;
-    const quota = journey.weekly_quota ?? 2;
-    const pace = computeCatchupPace({
-      started_on: journey.started_on,
-      weekly_quota: quota,
-      total_items: totals.total,
-      completed_items: totals.completed,
-    });
+    const { journey, missed, totals, missedTotals } = backlog;
+
+    // Pace belongs to the journey, and only a late joiner has one. A student who
+    // has simply missed a class is not "behind on a quota"; their deadline comes
+    // from the timetable, one class at a time.
+    const quota = journey?.weekly_quota ?? 2;
+    const pace = journey
+      ? computeCatchupPace({
+          started_on: journey.started_on,
+          weekly_quota: quota,
+          total_items: totals.total,
+          completed_items: totals.completed,
+        })
+      : null;
 
     // Classes nobody can do anything about are listed separately rather than
-    // padding the backlog with rows that have no action on them.
-    const blocked = items.filter((i) => i.status === 'blocked');
-    const actionable = items.filter((i) => i.status !== 'blocked');
+    // padding either list with rows that have no action on them.
+    const blocked = backlog.items.filter((i) => i.status === 'blocked');
+    const paced = backlog.backlog.filter((i) => i.status !== 'blocked');
 
     return NextResponse.json({
-      journey: {
-        id: journey.id,
-        started_on: journey.started_on,
-        weekly_quota: quota,
-        status: journey.status,
-      },
-      pace: { ...pace, message: describeCatchupPace(pace, quota) },
+      journey: journey
+        ? {
+            id: journey.id,
+            started_on: journey.started_on,
+            weekly_quota: quota,
+            status: journey.status,
+          }
+        : null,
+      pace: pace ? { ...pace, message: describeCatchupPace(pace, quota) } : null,
       totals,
-      items: actionable.map((i) => ({
+      missedTotals,
+      // Missed classes first in the payload as well as on the screen: they carry
+      // a real deadline, and the backlog does not.
+      missed: missed.filter((i) => i.status !== 'blocked'),
+      items: paced.map((i) => ({
         ...i,
-        // Only paced items have a deadline. A class awaiting its recap has no
-        // due date, because the student cannot start it.
-        due_on: i.position ? itemDueOn(journey.started_on, quota, i.position) : null,
+        // The quota deadline. A class awaiting its recap has no due date,
+        // because the student cannot start it.
+        due_on: i.position && journey ? itemDueOn(journey.started_on, quota, i.position) : null,
       })),
       excluded: blocked.map((i) => ({
         id: i.id,

@@ -14,9 +14,13 @@ import {
   alpha,
 } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useRouter } from 'next/navigation';
 import AttendanceStrip from '@/components/parent/AttendanceStrip';
+import EnrollmentNotice from '@/components/parent/EnrollmentNotice';
+import ParentMetricGrid from '@/components/parent/ParentMetricGrid';
 import ExamCountdown from '@/components/ExamCountdown';
 import type { ExamCountdownTarget } from '@/lib/exam-countdown';
+import type { EnrollmentNotice as Notice } from '@/lib/parent-enrollment';
 
 /**
  * The parent home screen.
@@ -41,6 +45,8 @@ interface OverviewResponse {
     avatar_url: string | null;
     classroom_name: string | null;
   };
+  /** Why the numbers may be empty: paused, ended, or joined late. */
+  notice: Notice | null;
   windowDays: number;
   attendance: {
     measuredClasses: number;
@@ -59,6 +65,13 @@ interface OverviewResponse {
     marked: number;
     averagePercent: number | null;
   };
+  /** Missed classes made up. Null-safe: older responses may not carry it. */
+  catchup?: {
+    total: number;
+    done: number;
+    open: number;
+    sentence: string;
+  } | null;
   verdict: { band: string; headline: string; detail: string };
   /** The exam this child is preparing for, or null when none is set. */
   examCountdown: ExamCountdownTarget | null;
@@ -80,6 +93,7 @@ const BAND_COLOUR: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
 
 export default function ParentDashboardPage() {
   const { getToken } = useNexusAuthContext();
+  const router = useRouter();
 
   const [data, setData] = useState<OverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,6 +165,13 @@ export default function ParentDashboardPage() {
         </Box>
       </Box>
 
+      {/*
+        Above the verdict on purpose. When a child is paused the verdict below is
+        computed from suppressed numbers, so the parent has to read why before
+        they read the conclusion, not after.
+      */}
+      <EnrollmentNotice notice={data.notice} />
+
       {/* The one answer */}
       <Card
         sx={{
@@ -198,67 +219,102 @@ export default function ParentDashboardPage() {
         </Card>
       )}
 
-      {/* Three numbers, as counts */}
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent sx={{ p: 2.5 }}>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(3, 1fr)' },
-              gap: 2.5,
-            }}
-          >
-            <Metric
-              label="Attended"
-              value={
-                data.attendance.measuredClasses > 0
-                  ? `${data.attendance.attended} of ${data.attendance.measuredClasses}`
-                  : 'Not recorded'
-              }
-              caption={`last ${data.windowDays} days`}
-              muted={data.attendance.measuredClasses === 0}
-            />
-            <Metric
-              label="Assignments"
-              value={
-                data.assignments.total > 0
-                  ? `${data.assignments.needsDoing} pending`
-                  : 'None yet'
-              }
-              caption={
-                data.assignments.overdue > 0
-                  ? `${data.assignments.overdue} overdue`
-                  : data.assignments.waitingOnTeacher > 0
-                    ? `${data.assignments.waitingOnTeacher} with the teacher`
-                    : 'nothing overdue'
-              }
-              muted={data.assignments.total === 0}
-            />
-            <Metric
-              label="Average"
-              value={
-                data.assignments.averagePercent !== null
-                  ? `${data.assignments.averagePercent}%`
-                  : 'Not marked yet'
-              }
-              caption={
-                data.assignments.marked > 0
-                  ? `${data.assignments.marked} marked`
-                  : 'no marks yet'
-              }
-              muted={data.assignments.averagePercent === null}
-            />
-          </Box>
+      {/*
+        Four numbers, as counts rather than percentages, and every one of them
+        taps through to the tab that explains it. A number a parent cannot drill
+        into is a number they have to take on trust.
 
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ mt: 2, fontSize: 14, lineHeight: 1.5 }}
-          >
-            {data.attendanceSentence}
+        Anything unmeasured renders a sentence, never a zero. ParentMetricGrid
+        enforces that by requiring an emptyLabel alongside a nullable value.
+      */}
+      <ParentMetricGrid
+        metrics={[
+          {
+            label: 'Attended',
+            value:
+              data.attendance.measuredClasses > 0
+                ? `${data.attendance.attended} of ${data.attendance.measuredClasses}`
+                : null,
+            emptyLabel: 'Not recorded yet',
+            hint: `last ${data.windowDays} days`,
+            tone:
+              data.attendance.measuredClasses === 0
+                ? 'neutral'
+                : data.attendance.attended === data.attendance.measuredClasses
+                  ? 'success'
+                  : 'warning',
+            onClick: () => router.push('/parent/timetable'),
+          },
+          {
+            label: 'Work to do',
+            value: data.assignments.total > 0 ? data.assignments.needsDoing : null,
+            emptyLabel: 'None set yet',
+            hint:
+              data.assignments.overdue > 0
+                ? `${data.assignments.overdue} overdue`
+                : 'nothing overdue',
+            tone:
+              data.assignments.overdue > 0
+                ? 'error'
+                : data.assignments.needsDoing > 0
+                  ? 'warning'
+                  : 'success',
+            onClick: () => router.push('/parent/assignments'),
+          },
+          {
+            label: 'Average',
+            // null, never 0. An average of no marks is not zero, and a 0% on a
+            // parent's home screen reads as a failing child.
+            value:
+              data.assignments.averagePercent !== null
+                ? `${data.assignments.averagePercent}%`
+                : null,
+            emptyLabel: 'Nothing marked yet',
+            hint: data.assignments.marked > 0 ? `${data.assignments.marked} marked` : undefined,
+            tone:
+              data.assignments.averagePercent === null
+                ? 'neutral'
+                : data.assignments.averagePercent >= 60
+                  ? 'success'
+                  : 'warning',
+            onClick: () => router.push('/parent/assignments'),
+          },
+          {
+            // The question the parent actually asked: how many of the classes he
+            // missed has he made up.
+            label: 'Catch-up',
+            value: data.catchup && data.catchup.total > 0
+              ? `${data.catchup.done} of ${data.catchup.total}`
+              : null,
+            emptyLabel: 'Nothing to catch up',
+            hint: data.catchup && data.catchup.open > 0 ? `${data.catchup.open} still open` : undefined,
+            tone:
+              !data.catchup || data.catchup.total === 0
+                ? 'success'
+                : data.catchup.open > 0
+                  ? 'warning'
+                  : 'success',
+            onClick: () => router.push('/parent/timetable'),
+          },
+        ]}
+      />
+
+      {/*
+        Two honesty lines, kept apart on purpose. The enrolment notice above is
+        about the child's standing; these are about OUR records and OUR backlog.
+        Merging them would make an unsynced class look like something the child
+        did.
+      */}
+      <Stack spacing={0.5}>
+        <Typography sx={{ fontSize: 14, color: 'text.secondary', lineHeight: 1.5 }}>
+          {data.attendanceSentence}
+        </Typography>
+        {data.catchup && data.catchup.total > 0 && (
+          <Typography sx={{ fontSize: 14, color: 'text.secondary', lineHeight: 1.5 }}>
+            {data.catchup.sentence}
           </Typography>
-        </CardContent>
-      </Card>
+        )}
+      </Stack>
 
       {/* Next up */}
       {data.upcomingClasses.length > 0 && (

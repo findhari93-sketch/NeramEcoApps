@@ -38,3 +38,30 @@ describe('assertCronRequest', () => {
     expect(assertCronRequest(req('Bearer s3cret'))).toBeNull();
   });
 });
+
+describe('assertCronRequest with { required: true }', () => {
+  it('refuses to run at all when no secret is configured', () => {
+    // The permissive default is merely untidy for a route that sends reminders.
+    // For the YouTube backup it is a public button that spends 1600 of a 10,000
+    // unit daily quota per press, so that route opts into failing closed.
+    delete process.env.CRON_SECRET;
+    const res = assertCronRequest(req(), { required: true });
+    expect(res?.status).toBe(503);
+  });
+
+  it('still rejects a wrong secret', () => {
+    process.env.CRON_SECRET = 's3cret';
+    expect(assertCronRequest(req('Bearer wrong'), { required: true })?.status).toBe(401);
+  });
+
+  it('allows the matching secret through', () => {
+    process.env.CRON_SECRET = 's3cret';
+    expect(assertCronRequest(req('Bearer s3cret'), { required: true })).toBeNull();
+  });
+
+  it('changes nothing for callers that do not opt in', () => {
+    delete process.env.CRON_SECRET;
+    expect(assertCronRequest(req())).toBeNull();
+    expect(assertCronRequest(req(), { required: false })).toBeNull();
+  });
+});

@@ -40,8 +40,28 @@
       "schedule": "30 3 * * 1"
     },
     {
+      "path": "/api/cron/recap-autodraft",
+      "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/catchup-overdue",
+      "schedule": "30 4 * * *"
+    },
+    {
       "path": "/api/cron/prework-sweep",
       "schedule": "30 10 * * 1-5"
+    },
+    {
+      "path": "/api/cron/youtube-backup",
+      "schedule": "10 19 * * *"
+    },
+    {
+      "path": "/api/cron/youtube-backup",
+      "schedule": "50 19 * * *"
+    },
+    {
+      "path": "/api/cron/youtube-backup",
+      "schedule": "30 20 * * *"
     }
   ],
   "headers": [

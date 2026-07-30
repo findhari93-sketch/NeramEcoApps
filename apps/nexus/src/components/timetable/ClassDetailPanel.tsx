@@ -54,6 +54,8 @@ import ClassAssignmentsSection from './ClassAssignmentsSection';
 import PrepGateCard, { type ClassPrepSummaryClient } from './PrepGateCard';
 import ClassPrepRoster from './ClassPrepRoster';
 import ClassCaptureView from './ClassCaptureView';
+import ClassResourcesSection from './ClassResourcesSection';
+import { SECTION_LABEL_SX } from './timetable-theme';
 import RecordingPlayerDialog from './RecordingPlayerDialog';
 import { buildClassWhatsAppMessage } from '@/lib/class-share-message';
 import { preworkDueLabel } from '@/lib/prework';
@@ -1032,6 +1034,20 @@ export default function ClassDetailPanel({
             </Box>
           </Box>
         )}
+
+        {/* The teacher's extra help for this topic. Deliberately NOT gated on
+            isPast like the capture below: a student who wants to read ahead
+            should be able to, and the one catching up weeks later is exactly who
+            this list exists for. Renders nothing when the class has none. */}
+        <Box sx={{ px: 2, pt: 1 }}>
+          <ClassResourcesSection
+            cls={cls}
+            getToken={getToken}
+            editable={false}
+            hideWhenEmpty
+            header={<Typography sx={SECTION_LABEL_SX}>Reference material</Typography>}
+          />
+        </Box>
 
         {/* What the class turned out to be: bullets, tags, and the drawings. */}
         {isPast && (

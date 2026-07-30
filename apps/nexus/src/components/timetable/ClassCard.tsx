@@ -7,8 +7,10 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import { formatTimeCompact } from './time-utils';
 import type { ClassImageRef } from '@/lib/class-cover';
+import { resourceCount } from '@/lib/class-resources';
 
 export { formatTimeCompact };
 
@@ -53,6 +55,12 @@ export interface ClassCardData {
    */
   cover_image_id?: string | null;
   class_images?: ClassImageRef[] | null;
+  /**
+   * Reference-material count, as PostgREST returns an aggregate embed. Only the
+   * week/month read asks for it, so it is absent everywhere else. Read it with
+   * resourceCount() rather than reaching into the array.
+   */
+  class_resources?: Array<{ count: number }> | null;
 }
 
 interface ClassCardProps {
@@ -95,6 +103,7 @@ export default function ClassCard({
   const isLive = cls.status === 'live';
   const hasRecording = !!cls.recording_url;
   const hasMeeting = !!cls.teams_meeting_id;
+  const materialCount = resourceCount(cls);
 
   // Build metadata parts: teacher + topic
   const metaParts: string[] = [];
@@ -212,6 +221,14 @@ export default function ClassCard({
                 REC
               </Typography>
             </Box>
+          )}
+          {/* "There is extra help on this class." A count, not a list: the week
+              payload deliberately carries only the number. */}
+          {materialCount > 0 && (
+            <MenuBookOutlinedIcon
+              sx={{ fontSize: 14, color: 'text.disabled' }}
+              titleAccess={`${materialCount} piece${materialCount === 1 ? '' : 's'} of reference material`}
+            />
           )}
         </Box>
       </Box>

@@ -45,6 +45,7 @@ import AddIcon from '@mui/icons-material/Add';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import {
   parseVideoMeta,
   parseChapterTime,
@@ -163,6 +164,8 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
   const [promptLoading, setPromptLoading] = useState(false);
   const [transcriptInfo, setTranscriptInfo] = useState<{ found: boolean; segments: number } | null>(null);
   const transcriptFileRef = useRef<HTMLInputElement>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generateNote, setGenerateNote] = useState<{ severity: 'error' | 'info'; text: string } | null>(null);
 
   // Step 2
   const [pasteText, setPasteText] = useState('');
@@ -280,6 +283,64 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
     }
     const isVtt = /\.vtt$/i.test(file.name) || text.trimStart().toUpperCase().startsWith('WEBVTT');
     await buildPrompt(isVtt ? { vtt_content: text } : { transcript_text: text });
+  };
+
+  /**
+   * Let the server run the prompt instead of the teacher carrying it to a
+   * chatbot. Same prompt, same builders, same validation: the only difference is
+   * who presses the button.
+   *
+   * `force` is what the Regenerate button sends. The server refuses to overwrite
+   * a listing a teacher has already saved unless it is set, because that row has
+   * no undo.
+   */
+  const generateWithAI = async (force = false) => {
+    setGenerating(true);
+    setGenerateNote(null);
+    try {
+      const res = await authed(`/api/timetable/${classId}/video-meta/generate`, {
+        method: 'POST',
+        body: JSON.stringify({ force }),
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        // 429 is the shared key being busy, not a broken feature. The message
+        // already points at Copy prompt, which is sitting right below.
+        setGenerateNote({ severity: 'error', text: json.error || 'Could not generate the listing' });
+        return;
+      }
+
+      if (!json.generated) {
+        setGenerateNote({ severity: 'info', text: json.message || 'Nothing to generate' });
+        return;
+      }
+
+      const meta = json.meta;
+      if (meta) {
+        setStatus(meta.status || 'draft');
+        setYtTitle(meta.yt_title || '');
+        setYtDescription(meta.yt_description || '');
+        setYtTags(meta.yt_tags || []);
+        setChapters(Array.isArray(meta.chapters) ? meta.chapters : []);
+        setSearchTerms(meta.search_terms || []);
+        setCategory(meta.category || '');
+        setExam(meta.exam || '');
+        setLanguage(meta.language || '');
+        setDifficulty(meta.difficulty || '');
+      }
+      setParseWarnings(json.warnings || []);
+      setParseErrors([]);
+      // Straight to review. The teacher never sees the prompt or the JSON.
+      setActiveStep(2);
+    } catch (err) {
+      setGenerateNote({
+        severity: 'error',
+        text: err instanceof Error ? err.message : 'Could not generate the listing',
+      });
+    } finally {
+      setGenerating(false);
+    }
   };
 
   /** Turn the pasted JSON into the three fields that go to YouTube. */
@@ -423,15 +484,18 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
           ) : (
             <Stepper activeStep={activeStep} orientation="vertical" nonLinear>
               {/* ---------------------------------------------------------- */}
-              <Step completed={Boolean(prompt)}>
+              {/* Complete once there is a listing, however it got written: the
+                  AI path never builds a prompt, so keying this on `prompt` alone
+                  would leave the step permanently unticked. */}
+              <Step completed={Boolean(prompt) || Boolean(ytTitle)}>
                 <StepLabel onClick={() => setActiveStep(0)} sx={{ cursor: 'pointer' }}>
-                  Copy the prompt
+                  Write the listing
                 </StepLabel>
                 <StepContent>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                    This builds one block with the class details, the Teams transcript and the
-                    list of topics you are allowed to pick from. Paste it into ChatGPT, Gemini or
-                    Claude.
+                    This writes the title, description, tags and chapters from the class details
+                    and the Teams transcript. You get to review and edit everything before it
+                    goes anywhere.
                   </Typography>
 
                   {transcriptInfo && (
@@ -476,9 +540,54 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
                     </Box>
                   )}
 
+                  {/*
+                    One contained button in this step, so there is never a
+                    question about which one to press. The manual route below is
+                    not hidden behind a disclosure on purpose: it is the fallback
+                    for a rate-limited key, which is a real and regular event on
+                    one shared GEMINI_API_KEY, and a teacher hitting that needs
+                    to see the way out without hunting for it.
+                  */}
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    onClick={() => void generateWithAI(Boolean(ytTitle))}
+                    disabled={generating}
+                    startIcon={
+                      generating
+                        ? <CircularProgress size={16} color="inherit" />
+                        : <AutoAwesomeIcon sx={{ fontSize: 18 }} />
+                    }
+                    sx={{ textTransform: 'none', minHeight: 48, borderRadius: RADIUS.control }}
+                  >
+                    {generating
+                      ? 'Writing the listing...'
+                      : ytTitle
+                        ? 'Regenerate with AI'
+                        : 'Generate with AI'}
+                  </Button>
+
+                  {generateNote && (
+                    <Alert severity={generateNote.severity} sx={{ mt: 1.5 }}>
+                      {generateNote.text}
+                    </Alert>
+                  )}
+
+                  <Divider sx={{ my: 2 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      or run it yourself
+                    </Typography>
+                  </Divider>
+
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    Builds the same prompt to paste into ChatGPT, Gemini or Claude. Use this when
+                    the button above says the key is busy.
+                  </Typography>
+
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
                     <Button
-                      variant="contained"
+                      variant="outlined"
+                      size="small"
                       onClick={() => void buildPrompt()}
                       disabled={promptLoading}
                       sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
@@ -491,6 +600,7 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
                   {prompt && (
                     <Button
                       onClick={() => setActiveStep(1)}
+                      size="small"
                       sx={{ mt: 1, textTransform: 'none', minHeight: 44 }}
                     >
                       Next, paste the result

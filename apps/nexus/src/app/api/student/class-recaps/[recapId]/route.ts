@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, getRecapForStudent, upsertRecapProgress } from '@neram/database';
+import { RESOURCE_COLS } from '@/lib/class-resources';
 
 /**
  * GET /api/student/class-recaps/[recapId]
@@ -37,7 +38,19 @@ export async function GET(
       });
     }
 
-    return NextResponse.json({ recap });
+    // The teacher's reference material for the class this recap covers, so a
+    // student who fails a checkpoint has something to revise from without
+    // leaving the page. An extra query inside this same invocation rather than a
+    // second request from the browser, and rather than widening the shared
+    // getRecapForStudent query that four other callers depend on.
+    const { data: resources } = await supabase
+      .from('nexus_class_resources')
+      .select(RESOURCE_COLS)
+      .eq('scheduled_class_id', recap.scheduled_class_id)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    return NextResponse.json({ recap, resources: resources || [] });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load recap';
     return NextResponse.json({ error: message }, { status: 401 });

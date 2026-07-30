@@ -13,11 +13,7 @@
  */
 
 import type { TranscriptEntry } from '@neram/database';
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-// Same fallback order drawing-ai uses; the first that answers wins.
-const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+import { generateGeminiText } from './gemini-client';
 
 // Keep the prompt within a comfortable window even for a long class.
 const MAX_TRANSCRIPT_CHARS = 48000;
@@ -194,10 +190,6 @@ export async function generateClassSummary(input: {
   /** The registry the model must pick tag_slugs from. */
   tags?: AllowedTag[];
 }): Promise<ClassSummary> {
-  if (!GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY environment variable is not set');
-  }
-
   const images = input.images || [];
   const prompt = buildPrompt(
     input.transcript,
@@ -206,52 +198,17 @@ export async function generateClassSummary(input: {
     input.tags || [],
   );
 
-  const parts: Array<Record<string, unknown>> = [
+  const parts = [
     ...images.map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.base64 } })),
     { text: prompt },
   ];
 
-  for (let i = 0; i < MODELS.length; i++) {
-    const model = MODELS[i];
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+  const text = await generateGeminiText({
+    parts,
+    systemInstruction: SYSTEM_INSTRUCTION,
+    temperature: 0.4,
+    maxOutputTokens: 4096,
+  });
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.4,
-          maxOutputTokens: 4096,
-        },
-      }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      if (!text) throw new Error('AI returned an empty response');
-      return extractJson(text);
-    }
-
-    const errBody = await res.json().catch(() => ({}));
-
-    if (res.status === 400 || res.status === 403) {
-      console.error(`Gemini summary auth error (${res.status}):`, JSON.stringify(errBody));
-      throw new Error(`Gemini API key invalid or unauthorized (${res.status}). Check GEMINI_API_KEY.`);
-    }
-
-    // 404 (model gone) or 429 (rate limited): try the next model, then give up.
-    if (res.status === 404 || res.status === 429) {
-      if (i < MODELS.length - 1) continue;
-      if (res.status === 429) throw new Error('Gemini API 429: rate limit reached on all models');
-    }
-
-    console.error(`Gemini summary error (${res.status}) on ${model}:`, JSON.stringify(errBody));
-    throw new Error(`Gemini API error: ${res.status}`);
-  }
-
-  throw new Error('Gemini API: all models exhausted');
+  return extractJson(text);
 }

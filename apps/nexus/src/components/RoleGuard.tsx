@@ -6,6 +6,7 @@ import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import NoClassroomWelcome from '@/components/NoClassroomWelcome';
 import ParentNoChildLinked from '@/components/ParentNoChildLinked';
+import { getRoleDashboard } from '@/lib/role-home';
 
 interface RoleGuardProps {
   children: React.ReactNode;
@@ -88,22 +89,4 @@ export default function RoleGuard({
   }
 
   return <>{children}</>;
-}
-
-function getRoleDashboard(role: string): string {
-  // Return canonical landing routes that actually exist (matching the root
-  // page.tsx redirects). The bare /teacher, /student, /parent paths have no
-  // index page and would 404 — this surfaced when impersonation flips the role
-  // mid-session and the guard redirects.
-  switch (role) {
-    case 'admin':
-    case 'teacher':
-      return '/teacher/dashboard';
-    case 'student':
-      return '/student/dashboard';
-    case 'parent':
-      return '/parent/dashboard';
-    default:
-      return '/login';
-  }
 }

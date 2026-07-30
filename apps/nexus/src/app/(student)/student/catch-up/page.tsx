@@ -3,19 +3,23 @@
 /**
  * Your catch-up list.
  *
- * A student who joins in month four owes seventeen classes. The screen is built
- * around one idea: however long the list is, there is exactly one thing to do
- * next, and it is at the top in a card you cannot miss.
+ * Two different debts land on this page and they are not the same conversation:
  *
- * Everything below that hero is context, not instruction. The backlog is shown
- * in full (hiding it would feel like being managed) but only one row is ever
- * open, so the list reads as a path rather than a pile.
+ *   Classes you missed. You were enrolled, the class ran, you were not there.
+ *   There is a reason to give, a deadline set by the timetable, and usually only
+ *   one or two of them. These come first, always.
  *
- * Built at 375px first. On a phone the hero, the pace strip and the list stack
- * in one column; from md up the hero and pace pin to a left rail so the backlog
- * can be read alongside them.
+ *   Classes taught before you joined. No reason to give, no fault, and possibly
+ *   seventeen of them. Paced at a couple a week so the list reads as a path
+ *   rather than a pile.
+ *
+ * Whatever the mix, exactly one thing is named as the next thing to do, in a
+ * card at the top you cannot miss.
+ *
+ * Built at 375px first. On a phone everything stacks in one column; from md up
+ * the hero and pace pin to a left rail so the lists can be read alongside them.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Alert,
@@ -35,6 +39,7 @@ import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import VideocamOffOutlinedIcon from '@mui/icons-material/VideocamOffOutlined';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import CatchupTrack, { TrackStep, TrackStepStatus } from '@/components/course-plan/CatchupTrack';
@@ -43,11 +48,16 @@ import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
 interface BacklogItem {
   id: string;
   scheduled_class_id: string;
-  status: 'done' | 'current' | 'locked' | 'excused' | 'pending_teacher';
+  status: 'done' | 'current' | 'locked' | 'open' | 'excused' | 'pending_teacher';
   step: 'watch' | 'assignment' | 'test' | 'done';
+  chained: boolean;
   position: number | null;
   due_on: string | null;
+  overdue: boolean;
+  reason_code: string | null;
+  watched: boolean;
   assignments_outstanding: number;
+  assignments_total: number;
   has_test: boolean;
   test_passed: boolean;
   recap_id: string | null;
@@ -64,15 +74,27 @@ interface Payload {
     message: string;
   } | null;
   totals: { total: number; completed: number; blocked: number; pendingTeacher: number } | null;
+  missedTotals: { total: number; completed: number; open: number; overdue: number };
+  missed: BacklogItem[];
   items: BacklogItem[];
   excluded: Array<{ id: string; class: { title: string | null; scheduled_date: string } }>;
 }
 
-const STEP_COPY: Record<BacklogItem['step'], { label: string; cta: string; icon: typeof SmartDisplayOutlinedIcon }> = {
+const STEP_COPY: Record<
+  BacklogItem['step'],
+  { label: string; cta: string; icon: typeof SmartDisplayOutlinedIcon }
+> = {
   watch: { label: 'Watch the class', cta: 'Watch the class', icon: SmartDisplayOutlinedIcon },
   assignment: { label: 'Submit the assignment', cta: 'Open the assignment', icon: AssignmentOutlinedIcon },
-  test: { label: 'Pass the class test', cta: 'Take the class test', icon: QuizOutlinedIcon },
+  test: { label: 'Pass the class quiz', cta: 'Take the class quiz', icon: QuizOutlinedIcon },
   done: { label: 'Done', cta: 'Review', icon: CheckCircleIcon },
+};
+
+const REASON_LABEL: Record<string, string> = {
+  unwell: 'Unwell',
+  family: 'Family reasons',
+  clash: 'Clashed with something',
+  other: 'Other',
 };
 
 function formatDay(ymd: string): string {
@@ -88,13 +110,61 @@ function shortDay(ymd: string | null): string | null {
   return d.toLocaleDateString('en-IN', { weekday: 'short' });
 }
 
+/** The deadline, said the way a person would say it. */
+function dueLabel(item: BacklogItem): string | null {
+  if (!item.due_on || item.status === 'done') return null;
+  if (item.overdue) return `Was due ${formatDay(item.due_on)}`;
+  return `Due before ${formatDay(item.due_on)}`;
+}
+
 const TRACK_STATUS: Record<BacklogItem['status'], TrackStepStatus> = {
   done: 'done',
   current: 'current',
+  open: 'current',
   locked: 'locked',
   excused: 'excused',
   pending_teacher: 'pending',
 };
+
+/**
+ * The three gates as three bars.
+ *
+ * The same shape appears on the teacher's screen, so "where is she stuck" reads
+ * identically on both sides of the conversation.
+ */
+function Gates({ item }: { item: BacklogItem }) {
+  const theme = useTheme();
+  const gates = [
+    { on: item.watched, now: item.step === 'watch', title: 'Watch the recording' },
+    {
+      on: item.assignments_total === 0 || item.assignments_outstanding === 0,
+      now: item.step === 'assignment',
+      title: 'Submit the assignment',
+    },
+    { on: !item.has_test || item.test_passed, now: item.step === 'test', title: 'Pass the class quiz' },
+  ];
+
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center">
+      {gates.map((g, i) => (
+        <Box
+          key={i}
+          title={g.title}
+          sx={{
+            width: 26,
+            height: 5,
+            borderRadius: 99,
+            bgcolor: g.on
+              ? theme.palette.success.main
+              : g.now
+                ? theme.palette.primary.main
+                : alpha(theme.palette.text.disabled, 0.35),
+          }}
+        />
+      ))}
+    </Stack>
+  );
+}
 
 export default function StudentCatchUpPage() {
   const router = useRouter();
@@ -117,7 +187,15 @@ export default function StudentCatchUpPage() {
       } else {
         setSnack({ msg: err instanceof Error ? err.message : 'Could not load your list', sev: 'error' });
       }
-      setData({ journey: null, pace: null, totals: null, items: [], excluded: [] });
+      setData({
+        journey: null,
+        pace: null,
+        totals: null,
+        missedTotals: { total: 0, completed: 0, open: 0, overdue: 0 },
+        missed: [],
+        items: [],
+        excluded: [],
+      });
     }
   }, [authFetch]);
 
@@ -125,7 +203,7 @@ export default function StudentCatchUpPage() {
     if (!authLoading) load();
   }, [authLoading, load]);
 
-  /** Where the CTA for an item goes, which is always its per-class screen. */
+  /** Where an item's CTA goes. Straight to the step, not to a landing page. */
   const openItem = useCallback(
     (item: BacklogItem) => {
       if (item.step === 'test' && item.has_test) {
@@ -141,6 +219,12 @@ export default function StudentCatchUpPage() {
     [router],
   );
 
+  const missedOpen = useMemo(
+    () => (data?.missed || []).filter((i) => i.status !== 'done' && i.status !== 'excused'),
+    [data],
+  );
+  const overdue = useMemo(() => missedOpen.filter((i) => i.overdue), [missedOpen]);
+
   if (data === null) {
     return (
       <Box sx={{ maxWidth: 1100, mx: 'auto' }}>
@@ -155,11 +239,17 @@ export default function StudentCatchUpPage() {
     );
   }
 
-  const { items, pace, totals, excluded, journey } = data;
-  const current = items.find((i) => i.status === 'current') || null;
-  const behind = pace?.state === 'behind';
+  const { items, missed, pace, totals, excluded } = data;
+  const backlogCurrent = items.find((i) => i.status === 'current') || null;
 
-  if (!journey || (items.length === 0 && excluded.length === 0)) {
+  // The one thing to do next. A missed class outranks the backlog: it has a real
+  // deadline and the course is about to move past it. Overdue outranks the rest.
+  const current = overdue[0] || missedOpen[0] || backlogCurrent;
+  const behind = pace?.state === 'behind';
+  const nothingAtAll =
+    missed.length === 0 && items.length === 0 && excluded.length === 0;
+
+  if (nothingAtAll) {
     return (
       <Box sx={{ maxWidth: 720, mx: 'auto', textAlign: 'center', py: 8, px: 2 }}>
         <CheckCircleIcon sx={{ fontSize: 44, color: 'success.main', mb: 1.5 }} />
@@ -169,7 +259,7 @@ export default function StudentCatchUpPage() {
         <Typography variant="body2" color="text.secondary">
           {offline
             ? 'You appear to be offline. Your list will load when you reconnect.'
-            : 'You are level with the class. Anything you miss from here will show up on this page.'}
+            : 'You have not missed anything. Anything you do miss will show up here on its own.'}
         </Typography>
       </Box>
     );
@@ -191,13 +281,107 @@ export default function StudentCatchUpPage() {
 
   const CurrentIcon = current ? STEP_COPY[current.step].icon : SmartDisplayOutlinedIcon;
 
+  /** One missed class, as a tappable card. */
+  const missedCard = (item: BacklogItem) => {
+    const tone = item.status === 'done' ? 'success' : item.overdue ? 'error' : 'warning';
+    const due = dueLabel(item);
+
+    return (
+      <Box
+        key={item.id}
+        component="button"
+        type="button"
+        onClick={() => openItem(item)}
+        sx={{
+          position: 'relative',
+          display: 'block',
+          width: '100%',
+          textAlign: 'left',
+          font: 'inherit',
+          color: 'inherit',
+          cursor: 'pointer',
+          p: 1.75,
+          pl: 2.25,
+          minHeight: 48,
+          borderRadius: RADIUS.card,
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          boxShadow: SHADOW.card,
+          transition: 'border-color .16s ease, box-shadow .16s ease',
+          '&:hover': { borderColor: 'primary.light', boxShadow: SHADOW.lift },
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            left: 0,
+            top: 12,
+            bottom: 12,
+            width: 4,
+            borderRadius: '0 4px 4px 0',
+            bgcolor: `${tone}.main`,
+          },
+        }}
+      >
+        <Stack direction="row" spacing={1} alignItems="flex-start">
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '.04em' }}
+            >
+              {formatDay(item.class.scheduled_date)}
+            </Typography>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1.35, mt: 0.25 }}>
+              {item.class.title || 'Class'}
+            </Typography>
+            {item.status === 'pending_teacher' ? (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Your teacher is still preparing this one.
+              </Typography>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                {item.status === 'done'
+                  ? 'All three steps cleared.'
+                  : item.reason_code
+                    ? `You told us: ${(REASON_LABEL[item.reason_code] || item.reason_code).toLowerCase()}.`
+                    : 'Tell us why, then watch it and finish the work.'}
+              </Typography>
+            )}
+          </Box>
+          <ChevronRightIcon sx={{ color: 'text.disabled' }} />
+        </Stack>
+
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{ mt: 1.5, flexWrap: 'wrap', gap: 1 }}
+          useFlexGap
+        >
+          <Gates item={item} />
+          {item.status === 'done' ? (
+            <Chip size="small" color="success" label="Caught up" sx={{ fontWeight: 700 }} />
+          ) : due ? (
+            <Chip
+              size="small"
+              color={item.overdue ? 'error' : 'warning'}
+              variant={item.overdue ? 'filled' : 'outlined'}
+              label={due}
+              sx={{ fontWeight: 700 }}
+            />
+          ) : null}
+        </Stack>
+      </Box>
+    );
+  };
+
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', pb: 4 }}>
       <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.25, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
         Catch-up
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Classes taught before you joined. Work through them in order, at your own pace.
+        Classes you were not in. Watch, finish the work, pass the quiz, and you are level again.
       </Typography>
 
       {offline && (
@@ -222,8 +406,11 @@ export default function StudentCatchUpPage() {
                 p: 2.25,
                 borderRadius: RADIUS.card,
                 border: '1.5px solid',
-                borderColor: 'primary.main',
-                bgcolor: alpha(theme.palette.primary.main, 0.04),
+                borderColor: current.overdue ? 'error.main' : 'primary.main',
+                bgcolor: alpha(
+                  current.overdue ? theme.palette.error.main : theme.palette.primary.main,
+                  0.04,
+                ),
                 boxShadow: SHADOW.card,
               }}
             >
@@ -233,18 +420,22 @@ export default function StudentCatchUpPage() {
                   fontWeight: 800,
                   letterSpacing: '.1em',
                   textTransform: 'uppercase',
-                  color: 'primary.main',
+                  color: current.overdue ? 'error.main' : 'primary.main',
                   mb: 0.75,
                 }}
               >
-                Do this next
+                {current.overdue ? 'Overdue, do this first' : 'Do this next'}
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.25, mb: 0.25 }}>
                 {current.class.title || 'Class'}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {formatDay(current.class.scheduled_date)}
-                {totals ? ` · class ${current.position} of ${totals.total}` : ''}
+                {current.chained && totals
+                  ? ` · class ${current.position} of ${totals.total}`
+                  : dueLabel(current)
+                    ? ` · ${dueLabel(current)?.toLowerCase()}`
+                    : ''}
               </Typography>
 
               {/* Three steps, always in this order, so the shape of the work is
@@ -268,11 +459,7 @@ export default function StudentCatchUpPage() {
                           : isNow
                             ? alpha(theme.palette.primary.main, 0.12)
                             : alpha('#1A2027', 0.06),
-                        color: isDone
-                          ? 'success.dark'
-                          : isNow
-                            ? 'primary.dark'
-                            : 'text.secondary',
+                        color: isDone ? 'success.dark' : isNow ? 'primary.dark' : 'text.secondary',
                       }}
                     />
                   );
@@ -282,6 +469,7 @@ export default function StudentCatchUpPage() {
               <Button
                 fullWidth
                 variant="contained"
+                color={current.overdue ? 'error' : 'primary'}
                 startIcon={<CurrentIcon />}
                 onClick={() => openItem(current)}
                 sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, borderRadius: RADIUS.control }}
@@ -329,47 +517,92 @@ export default function StudentCatchUpPage() {
           )}
         </Stack>
 
-        {/* The backlog. Shown in full: hiding it would feel like being managed. */}
         <Box>
-          <Typography
-            sx={{
-              fontSize: '0.6875rem',
-              fontWeight: 800,
-              letterSpacing: '.1em',
-              textTransform: 'uppercase',
-              color: 'text.secondary',
-              mb: 1,
-            }}
-          >
-            Your backlog
-          </Typography>
-
-          <CatchupTrack
-            steps={steps}
-            lockFuture
-            onStepClick={(_s, i) => openItem(items[i])}
-            currentAction={() => (
-              <Button
-                size="small"
-                variant="contained"
-                onClick={() => current && openItem(current)}
-                sx={{ minHeight: 40, textTransform: 'none', borderRadius: RADIUS.control }}
+          {/* Missed classes first. They carry a deadline; the backlog does not. */}
+          {overdue.length > 0 && (
+            <>
+              <Typography
+                sx={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 800,
+                  letterSpacing: '.1em',
+                  textTransform: 'uppercase',
+                  color: 'error.main',
+                  mb: 1,
+                }}
               >
-                Start
-              </Button>
-            )}
-            trailing={(_s, i) => {
-              const item = items[i];
-              if (item.status === 'locked' && item.due_on) {
-                return (
-                  <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
-                    due {shortDay(item.due_on)}
-                  </Typography>
-                );
-              }
-              return null;
-            }}
-          />
+                Overdue
+              </Typography>
+              <Stack spacing={1} sx={{ mb: 3 }}>
+                {overdue.map(missedCard)}
+              </Stack>
+            </>
+          )}
+
+          {missed.filter((i) => !i.overdue || i.status === 'done').length > 0 && (
+            <>
+              <Typography
+                sx={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 800,
+                  letterSpacing: '.1em',
+                  textTransform: 'uppercase',
+                  color: 'text.secondary',
+                  mb: 1,
+                }}
+              >
+                Classes you missed
+              </Typography>
+              <Stack spacing={1} sx={{ mb: 3 }}>
+                {missed.filter((i) => !i.overdue || i.status === 'done').map(missedCard)}
+              </Stack>
+            </>
+          )}
+
+          {/* The backlog. Shown in full: hiding it would feel like being managed. */}
+          {items.length > 0 && (
+            <>
+              <Typography
+                sx={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 800,
+                  letterSpacing: '.1em',
+                  textTransform: 'uppercase',
+                  color: 'text.secondary',
+                  mb: 1,
+                }}
+              >
+                Before you joined
+              </Typography>
+
+              <CatchupTrack
+                steps={steps}
+                lockFuture
+                onStepClick={(_s, i) => openItem(items[i])}
+                currentAction={() => (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={() => backlogCurrent && openItem(backlogCurrent)}
+                    sx={{ minHeight: 40, textTransform: 'none', borderRadius: RADIUS.control }}
+                  >
+                    Start
+                  </Button>
+                )}
+                trailing={(_s, i) => {
+                  const item = items[i];
+                  if (item.status === 'locked' && item.due_on) {
+                    return (
+                      <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
+                        due {shortDay(item.due_on)}
+                      </Typography>
+                    );
+                  }
+                  return null;
+                }}
+              />
+            </>
+          )}
 
           {excluded.length > 0 && (
             <Box

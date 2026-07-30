@@ -32,8 +32,12 @@ const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:n
  * A SEPARATE constant from CLASS_SELECT on purpose: that one is also the
  * `.select()` on the POST and PATCH below, where a gallery join would be pure
  * waste on every class create and every class edit.
+ *
+ * Reference material rides along as a COUNT, never as rows. This is the most
+ * requested response in the app, so a card gets enough to say "there is material
+ * here" and the list itself is fetched only when a class is actually opened.
  */
-const CLASS_SELECT_WITH_IMAGES = `${CLASS_SELECT}, ${CLASS_IMAGES_EMBED}`;
+const CLASS_SELECT_WITH_IMAGES = `${CLASS_SELECT}, ${CLASS_IMAGES_EMBED}, class_resources:nexus_class_resources(count)`;
 
 /**
  * GET /api/timetable?classroom={id}&start={date}&end={date}

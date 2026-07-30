@@ -127,6 +127,11 @@ export {
   isCatchupItemComplete,
   resolveCatchupBacklog,
   summariseCatchupBacklog,
+  summariseMissedClasses,
+  missedClassDueOn,
+  isOverdue,
+  addDaysYmd,
+  MISSED_CLASS_FALLBACK_DAYS,
 } from './utils/catchup';
 export { computeAssignmentClock, isSubmissionOnTime, istTodayStr } from './utils/assignment-clock';
 export type {

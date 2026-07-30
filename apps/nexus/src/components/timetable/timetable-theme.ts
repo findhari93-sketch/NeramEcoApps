@@ -156,11 +156,31 @@ export function classSubjectKey(cls: {
   return cls.course_topic?.title || cls.topic?.category || cls.topic?.title || cls.title || '';
 }
 
-export type TagTone = 'success' | 'error' | 'primary' | 'neutral';
+/**
+ * The small uppercase heading above each section of the class panel.
+ *
+ * Lives here rather than inside ClassEditPanel because the sections are separate
+ * components that receive it as a `header` prop, and a second hand-rolled copy
+ * would drift the moment either side is touched.
+ */
+export const SECTION_LABEL_SX = {
+  fontSize: '0.625rem',
+  fontWeight: 700,
+  letterSpacing: '.06em',
+  textTransform: 'uppercase' as const,
+  color: 'text.disabled',
+  mb: 1,
+  display: 'block',
+} as const;
+
+export type TagTone = 'success' | 'error' | 'warning' | 'primary' | 'neutral';
 
 /**
  * Pill tag styling. The design used three tones (green, rose, outline); this
- * adds a primary tone for "Assignment"-style informational tags.
+ * adds a primary tone for "Assignment"-style informational tags, and a warning
+ * tone for the parent portal's "needs attention" states, which sit genuinely
+ * between "done" and "missed" (partly attended, work still outstanding) and
+ * would be misreported by either.
  */
 export function tagSx(theme: Theme, tone: TagTone) {
   const base = {
@@ -188,6 +208,12 @@ export function tagSx(theme: Theme, tone: TagTone) {
         ...base,
         bgcolor: alpha(theme.palette.error.main, 0.1),
         color: theme.palette.error.dark,
+      };
+    case 'warning':
+      return {
+        ...base,
+        bgcolor: alpha(theme.palette.warning.main, 0.16),
+        color: theme.palette.warning.dark,
       };
     case 'primary':
       return {

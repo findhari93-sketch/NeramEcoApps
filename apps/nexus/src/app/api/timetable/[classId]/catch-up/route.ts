@@ -6,11 +6,16 @@ import {
   getCatchupJourney,
   getCatchupBacklog,
   loadClassFacts,
+  loadNextClassDates,
   toFacts,
   catchupItemStep,
   isCatchupItemComplete,
+  isOverdue,
+  missedClassDueOn,
+  istTodayYmd,
 } from '@neram/database';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
+import { CLASS_RESOURCES_EMBED } from '@/lib/class-resources';
 import { isRsvpReasonCode } from '@/lib/rsvp-reasons';
 
 /**
@@ -47,7 +52,7 @@ async function resolveStudent(supabase: any, msOid: string, classId: string) {
   const { data: cls } = await supabase
     .from('nexus_scheduled_classes')
     .select(
-      `id, classroom_id, title, description, scheduled_date, start_time, end_time, status, recording_url, youtube_url, cover_image_id, ${CLASS_IMAGES_EMBED}`,
+      `id, classroom_id, title, description, scheduled_date, start_time, end_time, status, recording_url, youtube_url, cover_image_id, ${CLASS_IMAGES_EMBED}, ${CLASS_RESOURCES_EMBED}`,
     )
     .eq('id', classId)
     .single();
@@ -125,6 +130,35 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       ? await getCatchupJourney(access.userId, access.cls.classroom_id, supabase)
       : null;
 
+    // The deadline for a missed class comes from the timetable: it is due before
+    // the course moves on. Derived here rather than stored, so a rescheduled
+    // class carries its deadline with it.
+    //
+    // Only for work the student can actually start. A class with no recording,
+    // one whose recap is not published yet, and one a teacher excused are all
+    // either our homework or nobody's, and a deadline on any of them would be a
+    // deadline for something they cannot do.
+    const deadlineApplies =
+      !!item &&
+      item.kind !== 'late_joiner' &&
+      !item.caught_up_at &&
+      !itemFacts.excused &&
+      !itemFacts.excluded &&
+      !itemFacts.notReady;
+
+    let dueOn: string | null = null;
+    if (deadlineApplies) {
+      const nextDates = await loadNextClassDates(
+        supabase,
+        access.userId,
+        access.cls.classroom_id,
+      );
+      dueOn = missedClassDueOn(
+        access.cls.scheduled_date,
+        nextDates.after(access.cls.scheduled_date),
+      );
+    }
+
     // loadClassFacts already knows which of these are submitted (it derives that
     // from both nexus_assignment_submissions and drawing_submissions); this only
     // fetches the fields the screen needs to render them.
@@ -166,6 +200,8 @@ export async function GET(request: NextRequest, { params }: Ctx) {
         caughtUp: !!item?.caught_up_at,
       },
       step: catchupItemStep(itemFacts),
+      due_on: dueOn,
+      overdue: isOverdue(dueOn, istTodayYmd()),
       // A late joiner was not enrolled when this ran, so there is nothing to
       // explain. Asking them why they missed it is a nonsense question.
       reasonRequired: (item?.kind ?? 'no_show') !== 'late_joiner',
@@ -191,7 +227,10 @@ async function assertItemUnlocked(
   classroomId: string,
   item: any,
 ): Promise<NextResponse | null> {
-  if (!item?.journey_id) return null;
+  // Keyed on the kind, not on journey_id. Those meant the same thing while only
+  // a late joiner had a journey; now that an ordinary absence is read by the
+  // same code, the kind is the honest test. A missed class is never gated.
+  if (item?.kind !== 'late_joiner') return null;
   const backlog = await getCatchupBacklog(userId, classroomId, supabase);
   const row = backlog?.items.find((i: any) => i.id === item.id);
   if (row && row.status === 'locked') {

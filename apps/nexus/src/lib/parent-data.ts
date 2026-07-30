@@ -1,12 +1,24 @@
 /**
  * Server-side data loading for the parent portal.
  *
- * The one thing to understand before changing anything here: `measuredClassIds`
- * is computed from attendance rows belonging to the WHOLE roster, not to this
- * child. That is the entire point. A class nobody synced has no rows at all, and
- * without checking the roster we cannot tell "your child was absent" apart from
- * "nobody recorded this class". See lib/parent-attendance.ts for the rule and
- * lib/inactivity-score.ts for why the gap exists.
+ * Two rules govern this file.
+ *
+ * ONE: `measuredClassIds` is computed from attendance rows belonging to the
+ * WHOLE roster, not to this child. That is the entire point. A class nobody
+ * synced has no rows at all, and without checking the roster we cannot tell
+ * "your child was absent" apart from "nobody recorded this class". See
+ * lib/parent-attendance.ts for the rule and lib/inactivity-score.ts for why the
+ * gap exists.
+ *
+ * TWO: a parent sees exactly the classes their child sees, no more. That means
+ * published only, and the child's batch only. The student path already does this
+ * (api/timetable/my-schedule/route.ts), and for a long time this file did not,
+ * so a parent could be shown a draft class or another batch's class. Both then
+ * rendered as an unexplained absence for a class the child was never in, which
+ * is the same class of bug as the dormant-student report that prompted the
+ * parent portal rebuild. `ClassScope` is a required argument rather than an
+ * optional one so that adding a new parent class query without deciding the
+ * scope is a type error, not a silent leak.
  */
 
 import { getSupabaseAdminClient } from '@neram/database';
@@ -20,6 +32,33 @@ import {
 
 /** Classes a parent should never see in an attendance list. */
 const HIDDEN_CLASS_STATUSES = ['cancelled', 'rescheduled'];
+
+/**
+ * Which classes in a classroom belong to this child.
+ *
+ * `batchId` comes from lib/parent-enrollment.ts and nowhere else. A null batch
+ * means the child is not in a batch, which restricts them to classroom-wide
+ * classes: it does NOT mean "no filter". Getting that backwards would show one
+ * batch's parents another batch's timetable.
+ */
+export interface ClassScope {
+  batchId: string | null;
+}
+
+/**
+ * Narrow a nexus_scheduled_classes query to what the child can actually see.
+ *
+ * Ported from the student branch of api/timetable/my-schedule/route.ts so the
+ * two can never disagree about which classes exist for a given child.
+ */
+function applyClassScope<T>(query: T, scope: ClassScope): T {
+  let q = query as any;
+  q = q.eq('publish_state', 'published');
+  q = scope.batchId
+    ? q.or(`batch_id.is.null,batch_id.eq.${scope.batchId}`)
+    : q.is('batch_id', null);
+  return q as T;
+}
 
 /** Today in IST as YYYY-MM-DD. */
 export function istToday(): string {
@@ -49,16 +88,20 @@ export async function loadChildAttendance(
   studentId: string,
   classroomId: string,
   from: string,
+  scope: ClassScope,
   to: string = istToday()
 ): Promise<ChildAttendanceWindow> {
   const supabase = getSupabaseAdminClient();
 
-  const { data: classRows } = await supabase
-    .from('nexus_scheduled_classes')
-    .select('id, title, scheduled_date, start_time, end_time, status')
-    .eq('classroom_id', classroomId)
-    .gte('scheduled_date', from)
-    .lte('scheduled_date', to)
+  const { data: classRows } = await applyClassScope(
+    supabase
+      .from('nexus_scheduled_classes')
+      .select('id, title, scheduled_date, start_time, end_time, status')
+      .eq('classroom_id', classroomId)
+      .gte('scheduled_date', from)
+      .lte('scheduled_date', to),
+    scope
+  )
     .order('scheduled_date', { ascending: false })
     .order('start_time', { ascending: false });
 
@@ -141,16 +184,20 @@ export interface UpcomingClass {
  */
 export async function loadUpcomingClasses(
   classroomId: string,
+  scope: ClassScope,
   limit = 5
 ): Promise<UpcomingClass[]> {
   const supabase = getSupabaseAdminClient();
   const today = istToday();
 
-  const { data } = await supabase
-    .from('nexus_scheduled_classes')
-    .select('id, title, scheduled_date, start_time, end_time, status')
-    .eq('classroom_id', classroomId)
-    .gte('scheduled_date', today)
+  const { data } = await applyClassScope(
+    supabase
+      .from('nexus_scheduled_classes')
+      .select('id, title, scheduled_date, start_time, end_time, status')
+      .eq('classroom_id', classroomId)
+      .gte('scheduled_date', today),
+    scope
+  )
     .order('scheduled_date', { ascending: true })
     .order('start_time', { ascending: true })
     // Over-fetch, then apply the same status filter as the past-class list, so

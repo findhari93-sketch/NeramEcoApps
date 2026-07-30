@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { resolveTranscript } from '@/lib/transcript-resolver';
-import { buildVideoMetaPrompt, type AllowedTag } from '@/lib/class-video-meta-schema';
+import {
+  buildVideoMetaPrompt,
+  formatTranscriptForPrompt,
+  type AllowedTag,
+} from '@/lib/class-video-meta-schema';
 import { resolveClassStaffAccess } from '@/lib/class-staff-access';
 import { VIDEO_META_CLASS_COLS, type VideoMetaClass } from '@/lib/class-video-meta-cols';
-import type { TranscriptEntry } from '@neram/database';
 
 /**
  * POST /api/timetable/[classId]/video-meta/prompt  (staff)
@@ -27,17 +30,6 @@ import type { TranscriptEntry } from '@neram/database';
 
 interface Ctx {
   params: { classId: string };
-}
-
-/** Transcript entries to the "[mm:ss] text" form the prompt asks for. */
-function formatTranscript(entries: TranscriptEntry[]): string {
-  return entries
-    .map((e) => {
-      const mm = Math.floor(e.start / 60);
-      const ss = Math.floor(e.start % 60);
-      return `[${mm}:${ss.toString().padStart(2, '0')}] ${e.text}`;
-    })
-    .join('\n');
 }
 
 const TRANSCRIPT_NOTES: Record<string, string> = {
@@ -97,7 +89,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     const prompt = buildVideoMetaPrompt({
       cls,
       tutorName: tutorRes?.data?.name || null,
-      transcript: entries.length ? formatTranscript(entries) : null,
+      transcript: entries.length ? formatTranscriptForPrompt(entries) : null,
       transcriptNote: sharepointError ? TRANSCRIPT_NOTES[sharepointError] : null,
       tags,
       currentTagSlugs,

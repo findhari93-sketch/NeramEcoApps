@@ -52,7 +52,7 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.timetable', label: 'Timetable', surface: 'student', group: 'Live Class', paths: ['/student/timetable'], defaultEnabled: false },
   { id: 'student.course-plan', label: 'Course Plan', surface: 'student', group: 'Live Class', paths: ['/student/course-plan'], defaultEnabled: false },
   { id: 'student.assignments', label: 'Assignments', surface: 'student', group: 'Live Class', paths: ['/student/assignments'], defaultEnabled: false },
-  { id: 'student.catchup', label: 'Catch-up', surface: 'student', group: 'Live Class', paths: ['/student/catch-up'], defaultEnabled: false },
+  { id: 'student.catchup', label: 'Catch-up', surface: 'student', group: 'Live Class', paths: ['/student/catch-up'], defaultEnabled: true },
 
   { id: 'student.library', label: 'Library', surface: 'student', group: 'Learn', paths: ['/student/library'], defaultEnabled: false },
   { id: 'student.question-bank', label: 'Question Bank', surface: 'student', group: 'Learn', paths: ['/student/question-bank'], defaultEnabled: false },
@@ -72,6 +72,7 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.study-materials-starred', label: 'Starred', surface: 'student', group: 'Study Zone', paths: ['/student/study-materials/starred'], defaultEnabled: false },
   { id: 'student.self-learning', label: 'Self-learning', surface: 'student', group: 'Study Zone', paths: ['/student/self-learning'], defaultEnabled: false },
   { id: 'student.class-recaps', label: 'Class Recaps', surface: 'student', group: 'Study Zone', paths: ['/student/class-recaps', '/student/class-recap'], defaultEnabled: false },
+  { id: 'student.resources', label: 'Reference Material', surface: 'student', group: 'Study Zone', paths: ['/student/resources'], defaultEnabled: false },
 
   // Access rules. Not a page: `paths: []` can never match in featureForPath, so
   // this is a pure on/off switch with no page-gating side effect. It arms the
@@ -129,12 +130,25 @@ export const FEATURES: FeatureDef[] = [
   // /teacher/admin/features without hiding the wrap-up itself. Defaults ON per
   // the registry invariant for staff features.
   { id: 'staff.class-video-meta', label: 'Publish to YouTube', surface: 'staff', group: 'Management', paths: [], defaultEnabled: true },
+  // The one staff flag that defaults OFF, deliberately breaking the convention
+  // above. It gates the nightly job that uploads class recordings to YouTube, and
+  // each upload spends 1600 of a 10,000-unit daily quota at the moment the
+  // session opens. A switch guarding a metered spend has to fail closed: turning
+  // it on is a decision somebody makes once the OAuth grant is verified, not
+  // something a deploy does on their behalf.
+  { id: 'staff.youtube-auto-backup', label: 'Automatic YouTube backup', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   // Not a page (`paths: []`). Shows the Test section in the timetable planning
   // rail, so a teacher can attach a short prep test to a class. Separate from
   // student.class-prep-gate on purpose: a teacher can set the tests and see who
   // is ready long before anyone's Join button is withheld. Defaults ON per the
   // registry invariant for staff features.
   { id: 'staff.class-prep-test', label: 'Attach a prep test to a class', surface: 'staff', group: 'Teaching', paths: [], defaultEnabled: true },
+  // Not a page (`paths: []`). Shows the Reference material section in the
+  // timetable planning rail. Switching it off hides the editor but leaves what
+  // was already added visible to students, which is the right failure mode for
+  // material a teacher has already promised them. Defaults ON per the registry
+  // invariant for staff features.
+  { id: 'staff.class-resources', label: 'Attach reference material to a class', surface: 'staff', group: 'Teaching', paths: [], defaultEnabled: true },
   { id: 'staff.library-engagement', label: 'Engagement', surface: 'staff', group: 'Management', paths: ['/teacher/library/engagement'], defaultEnabled: true },
   { id: 'staff.devices', label: 'Devices', surface: 'staff', group: 'Management', paths: ['/teacher/devices'], defaultEnabled: true },
   { id: 'staff.issues', label: 'Issues', surface: 'staff', group: 'Management', paths: ['/teacher/issues'], defaultEnabled: true },

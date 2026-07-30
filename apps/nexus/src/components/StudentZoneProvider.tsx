@@ -16,6 +16,7 @@ import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
@@ -39,6 +40,7 @@ const CATCHUP_PATH = '/student/catch-up';
 // Covers both the list (/student/class-recaps) and the player (/student/class-recap/[id]).
 const CLASS_RECAP_PATH = '/student/class-recap';
 const CLASS_RECAPS_PATH = '/student/class-recaps';
+const RESOURCES_PATH = '/student/resources';
 
 interface NavItem {
   label: string;
@@ -143,6 +145,7 @@ const STUDY: ZoneConfig = {
         { label: 'Starred', path: STARRED_PATH, icon: <StarBorderOutlinedIcon /> },
         { label: 'Self-learning', path: SELF_LEARNING_PATH, icon: <AutoStoriesOutlinedIcon /> },
         { label: 'Class Recaps', path: CLASS_RECAPS_PATH, icon: <VideoLibraryOutlinedIcon /> },
+        { label: 'Reference', path: RESOURCES_PATH, icon: <MenuBookOutlinedIcon /> },
         { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
       ],
     },

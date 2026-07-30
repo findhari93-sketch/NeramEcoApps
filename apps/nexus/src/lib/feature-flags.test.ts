@@ -23,11 +23,66 @@ describe('feature-flags registry', () => {
     expect(core.has('student.dashboard')).toBe(true);
   });
 
+  /**
+   * Staff flags default ON so the people testing keep their tools. The one
+   * exception is listed rather than the rule weakened, so a future flag cannot
+   * quietly default OFF and disappear from a teacher's menu with nobody noticing.
+   */
+  const STAFF_DEFAULT_OFF = new Set([
+    // Gates the nightly job that uploads class recordings to YouTube. Each
+    // upload spends 1600 of a 10,000-unit daily quota the moment the session
+    // opens, and a switch guarding a metered spend has to fail closed: turning
+    // it on is a decision somebody makes once the OAuth grant is verified, not
+    // something a deploy does on their behalf.
+    'staff.youtube-auto-backup',
+  ]);
+
+  /**
+   * Student flags default OFF so a deploy never puts a half-built screen in
+   * front of a teenager. Exceptions are listed rather than the rule weakened,
+   * for the same reason the staff list above is.
+   */
+  const STUDENT_DEFAULT_ON = new Set([
+    // Catch-up is not a capability a teacher opts into, it is the safety net for
+    // a student who was not in class. It has to be on for two reasons that both
+    // fail silently otherwise: the overdue nudge we send links straight to this
+    // page, so a student who cannot open it gets a message about work they
+    // cannot find; and it is the only surface that tells them they owe anything
+    // at all, so with it off a missed class stays exactly as invisible as it was
+    // before any of this was built.
+    'student.catchup',
+  ]);
+
   it('defaults student features off and staff features on', () => {
-    const student = FEATURES.filter((f) => f.surface === 'student' && !f.core);
-    const staff = FEATURES.filter((f) => f.surface === 'staff' && !f.core);
+    const student = FEATURES.filter(
+      (f) => f.surface === 'student' && !f.core && !STUDENT_DEFAULT_ON.has(f.id),
+    );
+    const staff = FEATURES.filter(
+      (f) => f.surface === 'staff' && !f.core && !STAFF_DEFAULT_OFF.has(f.id),
+    );
     expect(student.every((f) => f.defaultEnabled === false)).toBe(true);
     expect(staff.every((f) => f.defaultEnabled === true)).toBe(true);
+  });
+
+  it('keeps every documented student exception actually defaulting on', () => {
+    // Guards the other direction, exactly as the staff list does: if one of
+    // these is later flipped OFF, this list is now a lie and this fails.
+    for (const id of STUDENT_DEFAULT_ON) {
+      const f = FEATURES.find((x) => x.id === id);
+      expect(f, `${id} is in the exception list but not in the registry`).toBeDefined();
+      expect(f!.defaultEnabled).toBe(true);
+    }
+  });
+
+  it('keeps every documented staff exception actually defaulting off', () => {
+    // Guards the other direction: if one of these is later flipped to default
+    // ON, the exception list is now a lie and this fails.
+    for (const id of STAFF_DEFAULT_OFF) {
+      const f = FEATURES.find((x) => x.id === id);
+      expect(f, `${id} is in the exception list but not in the registry`).toBeDefined();
+      expect(f!.defaultEnabled).toBe(false);
+      expect(f!.core).toBeFalsy();
+    }
   });
 });
 

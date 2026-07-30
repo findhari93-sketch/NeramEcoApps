@@ -38,6 +38,7 @@ import { useSidebarContext } from '@/components/SidebarProvider';
 import { usePanelContext } from '@/components/PanelProvider';
 import { useStudentZoneContext } from '@/components/StudentZoneProvider';
 import { IMPERSONATION_BANNER_HEIGHT } from '@/components/ImpersonationBanner';
+import { getRoleDashboard, hasProfilePages } from '@/lib/role-home';
 
 /* Role → color mapping for the ring & badge */
 const ROLE_COLORS: Record<string, string> = {
@@ -65,6 +66,8 @@ export default function TopBar() {
     signOut,
     getToken,
     impersonation,
+    children: linkedChildren,
+    activeChildId,
   } = useNexusAuthContext();
 
   const { sidebarState, expand } = useSidebarContext();
@@ -82,9 +85,21 @@ export default function TopBar() {
 
   // Show classroom selector for students (always) and teachers only on the Teaching panel,
   // except on drawing-review routes for teachers.
+  // Never for a parent. `classrooms` holds the CHILD's classroom, and this chip
+  // labels it with the viewer's own enrolment role, so a parent saw
+  // "E2E Test Classroom / Nata - Student" as though they were the student. The
+  // parent's own chip below names the child instead. Without the explicit
+  // exclusion this slipped through on the `activePanel === 'teaching'` arm,
+  // which is the default panel and has nothing to do with being a teacher.
   const showClassroomSelector =
+    nexusRole !== 'parent' &&
     !!activeClassroom &&
     (nexusRole === 'student' || (activePanel === 'teaching' && !isDrawingReviewRoute));
+
+  // The child a parent is currently looking at. Falls back to the first link so
+  // the chip still names someone if activeChildId ever arrives empty.
+  const activeChild =
+    linkedChildren.find((c) => c.id === activeChildId) || linkedChildren[0] || null;
 
   const handleLogout = async () => {
     setProfileAnchor(null);
@@ -131,7 +146,7 @@ export default function TopBar() {
         <Typography
           variant="h6"
           component="button"
-          onClick={() => router.push(nexusRole === 'student' ? '/student/dashboard' : '/teacher/dashboard')}
+          onClick={() => router.push(getRoleDashboard(nexusRole))}
           aria-label="Go to dashboard"
           sx={{
             display: { xs: 'block', md: 'none' },
@@ -220,10 +235,76 @@ export default function TopBar() {
           </Box>
         )}
 
+        {/*
+          Who a parent is looking at.
+
+          Occupies the same slot as the classroom chip, but is deliberately NOT
+          the classroom chip: `classrooms` holds the CHILD's classroom for a
+          parent, so labelling it as theirs would read as "you are enrolled in
+          JEE B.Arch Session 1". Static in Phase 1 because a parent has exactly
+          one linked child; when siblings arrive this becomes the switcher.
+        */}
+        {nexusRole === 'parent' && activeChild && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              px: 1.25,
+              py: 0.5,
+              borderRadius: 1.5,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
+              bgcolor: alpha(theme.palette.primary.main, 0.06),
+              maxWidth: { xs: 160, sm: 260 },
+              minWidth: 0,
+            }}
+          >
+            <SchoolOutlinedIcon
+              sx={{ fontSize: '0.95rem', color: theme.palette.primary.main, flexShrink: 0 }}
+            />
+            <Box sx={{ minWidth: 0, textAlign: 'left' }}>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{
+                  display: 'block',
+                  fontWeight: 600,
+                  fontSize: '0.7rem',
+                  lineHeight: 1.2,
+                  color: 'text.primary',
+                }}
+              >
+                {activeChild.name || 'Your child'}
+              </Typography>
+              {activeChild.classroom_name && (
+                <Typography
+                  variant="caption"
+                  noWrap
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.6rem',
+                    lineHeight: 1.2,
+                    color: 'text.secondary',
+                  }}
+                >
+                  {activeChild.classroom_name}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        )}
+
         <Box sx={{ flexGrow: 1 }} />
 
         {/* Notification Bell */}
-        <NotificationBell />
+        {/*
+          Not for parents. /api/notifications authenticates with verifyMsToken
+          and no allowParent option, so it rejects a par_ token by design, and
+          the bell fired a 500 into the console on EVERY parent page load. There
+          is no parent notification feed to show yet, so the honest fix is to not
+          render the control rather than to widen the route's gate.
+        */}
+        {nexusRole !== 'parent' && <NotificationBell />}
 
         {/* ── Unified Profile Button ── */}
         <Box
@@ -559,59 +640,69 @@ export default function TopBar() {
             </>
           )}
 
-          {/* Profile Link */}
-          <MenuItem
-            onClick={() => {
-              setProfileAnchor(null);
-              router.push(`/${nexusRole}/profile`);
-            }}
-            sx={{
-              py: 1,
-              px: 2.5,
-              mx: 1,
-              borderRadius: 2,
-              gap: 1.5,
-              minHeight: 42,
-              '&:hover': {
-                bgcolor: alpha(theme.palette.action.hover, 0.06),
-              },
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 0, color: 'text.secondary' }}>
-              <PersonOutlinedIcon sx={{ fontSize: '1.2rem' }} />
-            </ListItemIcon>
-            <ListItemText
-              primary="My Profile"
-              primaryTypographyProps={{ variant: 'body2' }}
-            />
-          </MenuItem>
+          {/*
+            Profile and Guide build their paths from the role string, and there
+            is no /parent/profile or /parent/guide page, so for a parent both
+            items were a guaranteed 404. Hidden until those pages exist: a
+            missing menu item is better than one that breaks.
+          */}
+          {hasProfilePages(nexusRole) && (
+            <>
+              {/* Profile Link */}
+              <MenuItem
+                onClick={() => {
+                  setProfileAnchor(null);
+                  router.push(`/${nexusRole}/profile`);
+                }}
+                sx={{
+                  py: 1,
+                  px: 2.5,
+                  mx: 1,
+                  borderRadius: 2,
+                  gap: 1.5,
+                  minHeight: 42,
+                  '&:hover': {
+                    bgcolor: alpha(theme.palette.action.hover, 0.06),
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 0, color: 'text.secondary' }}>
+                  <PersonOutlinedIcon sx={{ fontSize: '1.2rem' }} />
+                </ListItemIcon>
+                <ListItemText
+                  primary="My Profile"
+                  primaryTypographyProps={{ variant: 'body2' }}
+                />
+              </MenuItem>
 
-          {/* Guide */}
-          <MenuItem
-            onClick={() => {
-              setProfileAnchor(null);
-              router.push(`/${nexusRole}/guide`);
-            }}
-            sx={{
-              py: 1,
-              px: 2.5,
-              mx: 1,
-              borderRadius: 2,
-              gap: 1.5,
-              minHeight: 42,
-              '&:hover': {
-                bgcolor: alpha(theme.palette.action.hover, 0.06),
-              },
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 0, color: 'text.secondary' }}>
-              <HelpOutlineIcon sx={{ fontSize: '1.2rem' }} />
-            </ListItemIcon>
-            <ListItemText
-              primary="Guide"
-              primaryTypographyProps={{ variant: 'body2' }}
-            />
-          </MenuItem>
+              {/* Guide */}
+              <MenuItem
+                onClick={() => {
+                  setProfileAnchor(null);
+                  router.push(`/${nexusRole}/guide`);
+                }}
+                sx={{
+                  py: 1,
+                  px: 2.5,
+                  mx: 1,
+                  borderRadius: 2,
+                  gap: 1.5,
+                  minHeight: 42,
+                  '&:hover': {
+                    bgcolor: alpha(theme.palette.action.hover, 0.06),
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 0, color: 'text.secondary' }}>
+                  <HelpOutlineIcon sx={{ fontSize: '1.2rem' }} />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Guide"
+                  primaryTypographyProps={{ variant: 'body2' }}
+                />
+              </MenuItem>
+            </>
+          )}
 
           {/* View as student — teachers/admins only, not while already impersonating */}
           {isTeacher && !impersonation.active && (

@@ -15,10 +15,11 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import type { ClassCardData } from './ClassCard';
 import { formatTime, hasClassEnded } from './date-utils';
-import { RADIUS, tagSx } from './timetable-theme';
+import { RADIUS, SECTION_LABEL_SX, tagSx } from './timetable-theme';
 import WrapUpSection from './WrapUpSection';
 import ClassAssignmentsSection from './ClassAssignmentsSection';
 import ClassPrepTestSection from './ClassPrepTestSection';
+import ClassResourcesSection from './ClassResourcesSection';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface LinkedAssignment {
@@ -70,6 +71,10 @@ export default function ClassEditPanel({
   // Staff flag, so it defaults on per the registry invariant. Switch it off from
   // /teacher/admin/features to hide the section without a deploy.
   const prepTestEnabled = featureFlags?.['staff.class-prep-test'] !== false;
+  // Same staff-flag rule. Switching this off hides the editor but leaves what a
+  // teacher already shared visible to students, which is the right way round for
+  // material they have been pointed at.
+  const resourcesEnabled = featureFlags?.['staff.class-resources'] !== false;
   const [assignments, setAssignments] = useState<LinkedAssignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
@@ -264,6 +269,22 @@ export default function ClassEditPanel({
         </Box>
       )}
 
+      {/* Reference material. After the two things a student owes and before the
+          recording, because it is the third thing this class hands them: help
+          understanding the topic, offered rather than required. */}
+      {resourcesEnabled && (
+        <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+          <ClassResourcesSection
+            cls={cls}
+            getToken={getToken}
+            editable
+            refreshKey={refreshKey}
+            onNotify={onNotify}
+            header={<SectionLabel>Reference material</SectionLabel>}
+          />
+        </Box>
+      )}
+
       {/* Recording */}
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
         <Box>
@@ -302,19 +323,5 @@ export default function ClassEditPanel({
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <Typography
-      sx={{
-        fontSize: '0.625rem',
-        fontWeight: 700,
-        letterSpacing: '.06em',
-        textTransform: 'uppercase',
-        color: 'text.disabled',
-        mb: 1,
-        display: 'block',
-      }}
-    >
-      {children}
-    </Typography>
-  );
+  return <Typography sx={SECTION_LABEL_SX}>{children}</Typography>;
 }
