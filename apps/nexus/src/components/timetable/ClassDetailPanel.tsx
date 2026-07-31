@@ -48,6 +48,7 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
+import IosShareIcon from '@mui/icons-material/IosShare';
 import { type ClassCardData } from './ClassCard';
 import MeetingRecap from './MeetingRecap';
 import ClassAssignmentsSection from './ClassAssignmentsSection';
@@ -57,7 +58,7 @@ import ClassCaptureView from './ClassCaptureView';
 import ClassResourcesSection from './ClassResourcesSection';
 import { SECTION_LABEL_SX } from './timetable-theme';
 import RecordingPlayerDialog from './RecordingPlayerDialog';
-import { buildClassWhatsAppMessage } from '@/lib/class-share-message';
+import ShareClassDialog from './ShareClassDialog';
 import { preworkDueLabel } from '@/lib/prework';
 import { preworkReasonShortLabel } from '@/lib/prework-reasons';
 import { reactionEmoji } from '@/lib/assignment-reactions';
@@ -254,10 +255,13 @@ export default function ClassDetailPanel({
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [waCopied, setWaCopied] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'cancel' | 'delete' | null>(null);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
   const [recordingOpen, setRecordingOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareToast, setShareToast] = useState<{ message: string; severity: 'success' | 'error' | 'warning' } | null>(
+    null,
+  );
 
   if (!cls) return null;
 
@@ -328,28 +332,14 @@ export default function ClassDetailPanel({
   const timeIndicator = getTimeIndicator();
 
   const handleCopyLink = () => {
-    if (meetingUrl) {
-      navigator.clipboard.writeText(meetingUrl).then(() => setCopied(true));
-    }
-  };
-
-  const handleCopyWhatsApp = () => {
-    // The RSVP link is a deep link into the student app; origin is this Nexus host.
-    const rsvpUrl =
-      typeof window !== 'undefined' ? `${window.location.origin}/student/rsvp/${cls.id}` : undefined;
-    const message = buildClassWhatsAppMessage({
-      title: cls.title,
-      scheduled_date: cls.scheduled_date,
-      start_time: cls.start_time,
-      end_time: cls.end_time,
-      joinUrl: meetingUrl,
-      description: cls.description,
-      // The class row already carries the tutor; organizer_name covers meetings
-      // imported from Teams, where teacher_id was never resolved.
-      tutorName: cls.teacher?.name ?? cls.organizer_name ?? undefined,
-      rsvpUrl,
-    });
-    navigator.clipboard.writeText(message).then(() => setWaCopied(true));
+    if (!meetingUrl) return;
+    // The .catch matters: iOS Safari rejects writeText outside a tightly bound
+    // gesture, and clipboard is undefined altogether on an insecure origin. Both
+    // used to fail here in total silence, leaving the teacher to paste nothing.
+    navigator.clipboard
+      ?.writeText(meetingUrl)
+      .then(() => setCopied(true))
+      .catch(() => setShareToast({ message: 'Your browser blocked the clipboard.', severity: 'error' }));
   };
 
   const drawerContent = (
@@ -710,19 +700,6 @@ export default function ClassDetailPanel({
             </Box>
           )}
 
-          {/* Copy a ready-to-paste announcement for the WhatsApp group (teacher) */}
-          {role === 'teacher' && isUpcoming && !isCancelled && (
-            <Button
-              variant="outlined"
-              fullWidth
-              onClick={handleCopyWhatsApp}
-              startIcon={<ChatBubbleOutlineIcon />}
-              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
-            >
-              Copy for WhatsApp
-            </Button>
-          )}
-
           {/* Watch recording.
               Opens the in-app player rather than linking out to Microsoft: a
               recording that lives in the organizer's OneDrive is shared only
@@ -744,6 +721,28 @@ export default function ClassDetailPanel({
             <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', display: 'block', py: 0.5 }}>
               Recording not yet available
             </Typography>
+          )}
+
+          {/* Share this class (teacher).
+              Sits directly under whichever primary action this class has: Join
+              for an upcoming one, Watch Recording for a finished one.
+
+              Replaces the old "Copy for WhatsApp" button, which only ever covered
+              an upcoming class and carried no recording, no work and no test. The
+              text this copies still suits WhatsApp, so nothing was lost.
+
+              A cancelled class is excluded on purpose: announceCancellationToTeams
+              has already said the only thing there is to say about it. */}
+          {role === 'teacher' && !isCancelled && (
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={() => setShareOpen(true)}
+              startIcon={<IosShareIcon />}
+              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+            >
+              Share this class
+            </Button>
           )}
 
           {/* Rate class (student) */}
@@ -1279,57 +1278,25 @@ export default function ClassDetailPanel({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
       <Snackbar
-        open={waCopied}
-        autoHideDuration={2500}
-        onClose={() => setWaCopied(false)}
-        message="Announcement copied. Paste it in the WhatsApp group."
+        open={!!shareToast}
+        autoHideDuration={shareToast?.severity === 'success' ? 3000 : 6000}
+        onClose={() => setShareToast(null)}
+        message={shareToast?.message}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
     </>
   );
 
-  if (isMobile) {
-    return (
-      <>
-        <SwipeableDrawer
-          anchor="bottom"
-          open={open}
-          onClose={onClose}
-          onOpen={() => {}}
-          disableSwipeToOpen
-          PaperProps={{
-            sx: {
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
-              maxHeight: '85vh',
-            },
-          }}
-        >
-          {/* Drag handle */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-            <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
-          </Box>
-          {drawerContent}
-        </SwipeableDrawer>
-        {snackbarElement}
-      </>
-    );
-  }
-
-  return (
+  /**
+   * Every dialog this panel owns, in one fragment.
+   *
+   * These used to live only in the desktop return, so on a phone the confirm
+   * dialog and the recording player were never mounted at all: tapping "Cancel
+   * Class" set state and nothing appeared. Mobile is the primary surface for
+   * this panel, so both branches render this.
+   */
+  const dialogs = (
     <>
-      <Drawer
-        anchor="right"
-        open={open}
-        onClose={onClose}
-        PaperProps={{
-          sx: { width: 380 },
-        }}
-      >
-        {drawerContent}
-      </Drawer>
-      {snackbarElement}
-
       {/* Confirmation dialog for cancel/delete */}
       <Dialog open={!!confirmAction} onClose={() => setConfirmAction(null)} maxWidth="xs" fullWidth>
         <DialogTitle>
@@ -1377,6 +1344,64 @@ export default function ClassDetailPanel({
           showFallbackLink={role === 'teacher'}
         />
       )}
+
+      {/* One pasteable message carrying the recording, the work and the test.
+          Mounted only for staff: the payload behind it is a staff-only route. */}
+      {role === 'teacher' && (
+        <ShareClassDialog
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          classId={cls.id}
+          getToken={getToken}
+          onNotify={(message, severity = 'success') => setShareToast({ message, severity })}
+        />
+      )}
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <>
+        <SwipeableDrawer
+          anchor="bottom"
+          open={open}
+          onClose={onClose}
+          onOpen={() => {}}
+          disableSwipeToOpen
+          PaperProps={{
+            sx: {
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              maxHeight: '85vh',
+            },
+          }}
+        >
+          {/* Drag handle */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+            <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
+          </Box>
+          {drawerContent}
+        </SwipeableDrawer>
+        {snackbarElement}
+        {dialogs}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Drawer
+        anchor="right"
+        open={open}
+        onClose={onClose}
+        PaperProps={{
+          sx: { width: 380 },
+        }}
+      >
+        {drawerContent}
+      </Drawer>
+      {snackbarElement}
+      {dialogs}
     </>
   );
 }

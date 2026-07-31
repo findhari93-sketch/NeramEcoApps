@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Alert,
   Box,
@@ -159,6 +160,49 @@ export default function StudentTimetable() {
     message: '',
     severity: 'success',
   });
+
+  /**
+   * Open the class named by `?class=<id>`.
+   *
+   * The Teams wrap-up card has been posting this link since it shipped and
+   * nothing read the parameter, so every student who tapped "Full notes, images
+   * and recording in Nexus" landed on the generic timetable showing this week
+   * and had to find the class themselves.
+   *
+   * Handled once, guarded by a ref: without it, closing the panel would reopen
+   * it on the next render, and the student could never dismiss it.
+   */
+  const searchParams = useSearchParams();
+  const deepLinkClassId = searchParams?.get('class') ?? null;
+  const deepLinkHandled = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!deepLinkClassId || loading) return;
+    if (deepLinkHandled.current === deepLinkClassId) return;
+
+    // Searched in allClasses, not the filtered `classes`: a shared class may sit
+    // in a classroom the student has filtered out, and a link they were sent
+    // should still open.
+    const target = allClasses.find((c) => c.id === deepLinkClassId);
+    deepLinkHandled.current = deepLinkClassId;
+
+    if (!target) {
+      // Only the loaded month is in memory, so an older class is a normal miss
+      // rather than an error. Say so instead of appearing to ignore the tap.
+      setSnackbar({
+        open: true,
+        message: 'That class is outside the dates loaded here. Use the arrows to reach its week.',
+        severity: 'error',
+      });
+      return;
+    }
+
+    // Jump the calendar to its week first, so closing the panel leaves the
+    // student looking at the class rather than back at today.
+    const day = new Date(`${target.scheduled_date}T00:00:00`);
+    if (!Number.isNaN(day.getTime())) setAnchorDate(day);
+    setSelectedClass(target);
+  }, [deepLinkClassId, loading, allClasses, setAnchorDate]);
 
   // Selected on teams_meeting_id, NOT on the join URL.
   //

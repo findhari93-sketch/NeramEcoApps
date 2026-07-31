@@ -5,6 +5,7 @@ import { canRunSession, isInternalStaff, resolveStaffRole } from '@/lib/staff-ca
 import { buildClassLinkPatch } from '@/lib/class-links';
 import { syncClassToLibrary } from '@/lib/class-library-bridge';
 import { refreshClassAnnouncement } from '@/lib/teams-class-announcements';
+import { classShareLinks, shareBaseUrl } from '@/lib/class-share-links';
 
 /**
  * Wrap up a class after it has happened.
@@ -268,13 +269,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     const isGraphToken = !!graphToken && !/^(test_|imp_|par_)/.test(graphToken);
 
     if (topicMoved && isGraphToken) {
-      const base = process.env.NEXT_PUBLIC_NEXUS_URL || request.nextUrl.origin;
       try {
         await refreshClassAnnouncement(
           graphToken!,
           supabase,
           params.classId,
-          `${base}/student/timetable?class=${params.classId}`,
+          classShareLinks(shareBaseUrl(request.nextUrl.origin)).classInTimetable(params.classId),
         );
       } catch (teamsErr) {
         console.error('Teams wrap-up card refresh failed (non-blocking):', teamsErr);

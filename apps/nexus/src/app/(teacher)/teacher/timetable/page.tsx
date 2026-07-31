@@ -1336,6 +1336,7 @@ export default function TeacherTimetable() {
                 getTeacherToken={getTeacherToken}
                 refreshKey={assignmentRefreshKey}
                 onCreateMeeting={handleCreateMeeting}
+                onEdit={handleEdit}
                 onCreateAssignment={setNewAssignmentClass}
                 onLinkExisting={setLinkDialogClass}
                 onSetPrepTest={setPrepTestClass}

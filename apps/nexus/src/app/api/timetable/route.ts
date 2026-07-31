@@ -465,7 +465,7 @@ export async function PATCH(request: NextRequest) {
     const { data: before } = (await (supabase as any)
       .from('nexus_scheduled_classes')
       .select(
-        'title, description, notes, scheduled_date, start_time, end_time, teams_meeting_id, teams_meeting_scope, teams_calendar_event_id, teams_meeting_join_url, teams_meeting_url, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, publish_state',
+        'title, description, notes, scheduled_date, start_time, end_time, teams_meeting_id, teams_meeting_scope, teams_calendar_event_id, teams_meeting_join_url, teams_meeting_url, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, teams_share_message_id, teams_share_chat_message_id, publish_state',
       )
       .eq('id', id)
       .eq('classroom_id', classroom_id)
@@ -485,6 +485,10 @@ export async function PATCH(request: NextRequest) {
         teams_channel_id: string | null;
         teams_channel_message_id: string | null;
         teams_group_chat_message_id: string | null;
+        // Read so cancelling or moving a class also takes down the card a
+        // teacher shared, rather than leaving it advertising the old time.
+        teams_share_message_id: string | null;
+        teams_share_chat_message_id: string | null;
         publish_state: string | null;
       } | null;
     };
@@ -544,6 +548,32 @@ export async function PATCH(request: NextRequest) {
           },
           { status: 502 },
         );
+      }
+    }
+
+    // Renaming an upcoming class has to reach Teams too, or the invite sitting in
+    // everyone's calendar keeps advertising a topic nobody is teaching. Only the
+    // subject travels: PATCH is a partial update, so the event body, and with it
+    // the Join button Teams wrote into it, is left exactly as it was.
+    //
+    // Never for a class that has already ended. Editing a finished meeting mails
+    // every attendee about a class they have already sat through, and Graph offers
+    // no way to suppress that. What happened in a finished class belongs in the
+    // wrap-up, which reaches students without touching a single inbox.
+    //
+    // A refusal here is a warning, not a failure, which is the opposite of how a
+    // move is treated. A move Teams rejects springs back the moment the reconciler
+    // runs, so saving it locally would be a lie. A title does not spring back:
+    // content_edited_at makes Nexus its owner. The worst a refusal costs is a stale
+    // subject in Outlook, and throwing away the teacher's words over that is worse.
+    let teamsWarning: string | undefined;
+    const renamed =
+      !!before && 'title' in safeUpdates && (safeUpdates.title as string) !== before.title;
+    if (renamed && !moved && before?.teams_meeting_id && token && when && !slotHasEnded(when.date, when.end)) {
+      const result = await updateTeamsEvent(token, supabase, classroom_id, before, when);
+      if (!result.success) {
+        teamsWarning =
+          'The class was saved, but the Teams meeting kept its old title. Sign out of Nexus and back in, then save again to send it across.';
       }
     }
 
@@ -624,7 +654,7 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ class: data, moved });
+    return NextResponse.json({ class: data, moved, ...(teamsWarning && { teamsWarning }) });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update class';
     const status =
@@ -662,7 +692,7 @@ export async function DELETE(request: NextRequest) {
     const { data: classToDelete } = (await (supabase as any)
       .from('nexus_scheduled_classes')
       .select(
-        'teams_meeting_id, teams_meeting_scope, teams_meeting_join_url, teams_meeting_url, teams_calendar_event_id, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id',
+        'teams_meeting_id, teams_meeting_scope, teams_meeting_join_url, teams_meeting_url, teams_calendar_event_id, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, teams_share_message_id, teams_share_chat_message_id',
       )
       .eq('id', id)
       .eq('classroom_id', classroom_id)
@@ -676,6 +706,8 @@ export async function DELETE(request: NextRequest) {
         teams_channel_id: string | null;
         teams_channel_message_id: string | null;
         teams_group_chat_message_id: string | null;
+        teams_share_message_id: string | null;
+        teams_share_chat_message_id: string | null;
       } | null;
     };
 
@@ -764,6 +796,18 @@ export async function DELETE(request: NextRequest) {
     const status = message.includes('archived') ? 409 : message.includes('Only teachers') ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
+}
+
+/**
+ * Has this slot already finished?
+ *
+ * Built in IST explicitly. The server runs in UTC, so a 7 PM to 8:30 PM class
+ * read without the offset looks like it ends in the small hours of the next day,
+ * and every class of the evening would count as still to come.
+ */
+function slotHasEnded(date: string, endTime: string, now: Date = new Date()): boolean {
+  const end = new Date(`${date}T${endTime.slice(0, 8).padEnd(8, ':00')}+05:30`).getTime();
+  return Number.isFinite(end) && end < now.getTime();
 }
 
 /** "Wed 22 Jul at 7:00 PM", built in IST so a 9 PM class is not shifted a day. */

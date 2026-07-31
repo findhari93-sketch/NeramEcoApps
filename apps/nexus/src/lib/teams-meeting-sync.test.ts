@@ -100,6 +100,8 @@ const channelClass = (over: Partial<any> = {}) => ({
   teams_channel_id: null,
   teams_channel_message_id: null,
   teams_group_chat_message_id: null,
+  teams_share_message_id: null,
+  teams_share_chat_message_id: null,
   ...over,
 });
 

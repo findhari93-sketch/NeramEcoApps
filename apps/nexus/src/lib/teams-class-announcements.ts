@@ -14,6 +14,7 @@
 
 import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { classifyMeetingArtifacts } from '@/lib/teams-online-meeting';
+import { escapeHtml } from '@/lib/html-escape';
 import { getSupabaseAdminClient } from '@neram/database';
 
 type AdminClient = ReturnType<typeof getSupabaseAdminClient>;
@@ -26,6 +27,13 @@ export interface TeamsAnnouncementRefs {
   teams_channel_id: string | null;
   teams_channel_message_id: string | null;
   teams_group_chat_message_id: string | null;
+  /**
+   * The teacher-shared class card, when one was posted. Optional so the older
+   * select lists that predate it keep compiling; a caller that omits them simply
+   * leaves the share card in place, which is the previous behaviour.
+   */
+  teams_share_message_id?: string | null;
+  teams_share_chat_message_id?: string | null;
 }
 
 /**
@@ -34,13 +42,11 @@ export interface TeamsAnnouncementRefs {
  * Every builder here interpolates a teacher-typed title straight into HTML. A
  * class called "Angles < 90 & > 45" produced a card Teams rendered as garbage,
  * silently, because Graph accepts the malformed markup and does its best.
+ *
+ * Now a thin alias over the shared escaper, so the share renderer and these
+ * cards cannot disagree about what is safe.
  */
-function esc(s: string): string {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+const esc = escapeHtml;
 
 /** Card shown in the channel/chat once a class is cancelled. Carries no join link. */
 export function buildCancelledHtml(cls: {
@@ -109,6 +115,57 @@ export function buildWrapUpHtml(
   }${classUrl ? `\n<p><a href="${classUrl}">📖 Full notes, images and recording in Nexus</a></p>` : ''}`;
 }
 
+/**
+ * Outcome of a Graph post. `error` carries whatever Graph said, truncated.
+ *
+ * The swallow-to-null helpers below are right for the automatic callers (a
+ * cancellation must not fail because a card would not post), but they make an
+ * unconsented ChannelMessage.Send indistinguishable from a network blip. A
+ * teacher who taps a button deserves to be told which one it was.
+ */
+export type PostResult = { id: string | null } | { error: string };
+
+export function isPostError(r: PostResult): r is { error: string } {
+  return 'error' in r;
+}
+
+async function postGraphMessage(url: string, token: string, html: string): Promise<PostResult> {
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: { contentType: 'html', content: html } }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      return { error: `Graph ${res.status}: ${text.slice(0, 300)}` };
+    }
+    const posted = await res.json().catch(() => null);
+    return { id: (posted?.id as string) || null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Network error posting to Teams' };
+  }
+}
+
+/** Post to a Teams channel, reporting WHY it failed. */
+export function postChannelMessageDetailed(
+  token: string,
+  teamId: string,
+  channelId: string,
+  html: string,
+): Promise<PostResult> {
+  return postGraphMessage(
+    `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages`,
+    token,
+    html,
+  );
+}
+
+/** Post to a Teams group chat, reporting WHY it failed. */
+export function postChatMessageDetailed(token: string, chatId: string, html: string): Promise<PostResult> {
+  return postGraphMessage(`https://graph.microsoft.com/v1.0/chats/${chatId}/messages`, token, html);
+}
+
 /** Post an HTML message to a Teams channel; returns the new message ID or null. */
 export async function postChannelMessage(
   token: string,
@@ -116,37 +173,14 @@ export async function postChannelMessage(
   channelId: string,
   html: string,
 ): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: { contentType: 'html', content: html } }),
-      },
-    );
-    if (!res.ok) return null;
-    const posted = await res.json().catch(() => null);
-    return (posted?.id as string) || null;
-  } catch {
-    return null;
-  }
+  const res = await postChannelMessageDetailed(token, teamId, channelId, html);
+  return isPostError(res) ? null : res.id;
 }
 
 /** Post an HTML message to a Teams group chat; returns the new message ID or null. */
 export async function postChatMessage(token: string, chatId: string, html: string): Promise<string | null> {
-  try {
-    const res = await fetch(`https://graph.microsoft.com/v1.0/chats/${chatId}/messages`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: { contentType: 'html', content: html } }),
-    });
-    if (!res.ok) return null;
-    const posted = await res.json().catch(() => null);
-    return (posted?.id as string) || null;
-  } catch {
-    return null;
-  }
+  const res = await postChatMessageDetailed(token, chatId, html);
+  return isPostError(res) ? null : res.id;
 }
 
 /**
@@ -154,7 +188,7 @@ export async function postChatMessage(token: string, chatId: string, html: strin
  * channel by display name, falling back to General. Returns the channel id or null.
  * Used when a class has no stored channel id but we still want to post a notice.
  */
-async function resolveMeetingChannelId(token: string, teamId: string): Promise<string | null> {
+export async function resolveMeetingChannelId(token: string, teamId: string): Promise<string | null> {
   const findChannel = async (name: string): Promise<string | null> => {
     try {
       const res = await fetch(
@@ -339,7 +373,12 @@ export async function removeTeamsAnnouncements(
   if (!cls) return;
   const needsChannel = !!(cls.teams_channel_id && cls.teams_channel_message_id);
   const needsChat = !!cls.teams_group_chat_message_id;
-  if (!needsChannel && !needsChat) return;
+  // A teacher-shared card advertises the class the same way the join card does,
+  // so a cancellation has to take it down too. Older callers whose select list
+  // predates these columns pass undefined and skip this, unchanged.
+  const needsShareChannel = !!(cls.teams_channel_id && cls.teams_share_message_id);
+  const needsShareChat = !!cls.teams_share_chat_message_id;
+  if (!needsChannel && !needsChat && !needsShareChannel && !needsShareChat) return;
 
   const { data: classroom } = await supabase
     .from('nexus_classrooms')
@@ -370,6 +409,20 @@ export async function removeTeamsAnnouncements(
     await softDelete(
       `https://graph.microsoft.com/v1.0/chats/${classroom.ms_group_chat_id}/messages/${cls.teams_group_chat_message_id}/softDelete`,
       'group chat post',
+    );
+  }
+
+  if (needsShareChannel && classroom?.ms_team_id) {
+    await softDelete(
+      `https://graph.microsoft.com/v1.0/teams/${classroom.ms_team_id}/channels/${cls.teams_channel_id}/messages/${cls.teams_share_message_id}/softDelete`,
+      'shared class card (channel)',
+    );
+  }
+
+  if (needsShareChat && classroom?.ms_group_chat_id) {
+    await softDelete(
+      `https://graph.microsoft.com/v1.0/chats/${classroom.ms_group_chat_id}/messages/${cls.teams_share_chat_message_id}/softDelete`,
+      'shared class card (chat)',
     );
   }
 }

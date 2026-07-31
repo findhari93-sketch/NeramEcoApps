@@ -12,6 +12,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import VideocamIcon from '@mui/icons-material/Videocam';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import type { ClassCardData } from './ClassCard';
 import { formatTime, hasClassEnded } from './date-utils';
@@ -36,6 +37,14 @@ interface ClassEditPanelProps {
   /** Teacher-scoped token, needed to create a Teams meeting. */
   getTeacherToken: () => Promise<string | null>;
   onCreateMeeting: (cls: ClassCardData) => void;
+  /**
+   * Opens the class dialog on this class, the only editor for its topic and
+   * description. Plan view had no route to it at all: the Edit button lives in
+   * ClassDetailPanel, which opens from Day, Week and Month, so a teacher planning
+   * in the view named "Plan" could set up everything about a class except what it
+   * is about.
+   */
+  onEdit?: (cls: ClassCardData) => void;
   onCreateAssignment: (cls: ClassCardData) => void;
   /** Opens the shared link picker. The page owns it, so the planner card menu
    *  and this panel reach the same dialog. */
@@ -60,6 +69,7 @@ export default function ClassEditPanel({
   getToken,
   getTeacherToken,
   onCreateMeeting,
+  onEdit,
   onCreateAssignment,
   onLinkExisting,
   onSetPrepTest,
@@ -164,6 +174,10 @@ export default function ClassEditPanel({
   // read as "ended" to a browser in another timezone, nor stay open past
   // midnight here.
   const hasEnded = hasClassEnded(cls);
+  // Same gate as the Edit button in ClassDetailPanel. Once a class is over, the
+  // Wrap Up section below is where its record is written, and editing the class
+  // dialog would push a rename to a Teams meeting everyone has already attended.
+  const canEditDetails = !!onEdit && !hasEnded && cls.status !== 'cancelled';
 
   return (
     <Box
@@ -194,14 +208,56 @@ export default function ClassEditPanel({
             </Box>
           )}
         </Box>
-        <Typography sx={{ fontWeight: 800, fontSize: '1rem', lineHeight: 1.25 }}>
-          {cls.title}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {[cls.teacher?.name, `${formatTime(cls.start_time)} to ${formatTime(cls.end_time)}`]
-            .filter(Boolean)
-            .join(' · ')}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: '1rem', lineHeight: 1.25 }}>
+              {cls.title}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {[cls.teacher?.name, `${formatTime(cls.start_time)} to ${formatTime(cls.end_time)}`]
+                .filter(Boolean)
+                .join(' · ')}
+            </Typography>
+          </Box>
+          {canEditDetails && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<EditOutlinedIcon />}
+              onClick={() => onEdit!(cls)}
+              sx={{
+                textTransform: 'none',
+                minHeight: 44,
+                flexShrink: 0,
+                borderRadius: RADIUS.control,
+              }}
+            >
+              Edit details
+            </Button>
+          )}
+        </Box>
+
+        {/* What this class is about, in the teacher's own words. The rail put the
+            word "Editing" over a bare title, so the description already written
+            was invisible from the one screen offering to change it. Clamped: this
+            is a reminder of what is there, not the place to read it. */}
+        {cls.description && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              mt: 1,
+              whiteSpace: 'pre-line',
+              overflowWrap: 'anywhere',
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: 4,
+              overflow: 'hidden',
+            }}
+          >
+            {cls.description}
+          </Typography>
+        )}
       </Box>
 
       {/* Teams meeting */}

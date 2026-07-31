@@ -555,6 +555,10 @@ export default function ClassCreateDialog({
 
       const data = await res.json();
 
+      // The class saved and only the Teams subject did not. Say so, rather than
+      // holding the dialog open over something the teacher cannot fix from here.
+      if (data.teamsWarning && onMeetingError) onMeetingError(data.teamsWarning);
+
       // Close dialog and refresh list immediately — don't wait for Teams meeting
       const wantsMeeting = !editingClass && formData.create_meeting;
       const meetingScope = formData.meeting_scope;

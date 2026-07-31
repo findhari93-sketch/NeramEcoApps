@@ -53,6 +53,9 @@ export interface CancelledClass {
   teams_channel_id: string | null;
   teams_channel_message_id: string | null;
   teams_group_chat_message_id: string | null;
+  /** The teacher-shared card, so cancellation cleanup can take that down too. */
+  teams_share_message_id: string | null;
+  teams_share_chat_message_id: string | null;
 }
 
 export interface SyncClassroomResult {
@@ -182,7 +185,7 @@ export async function syncClassroomMeetings(
   const { data: nexusClasses } = await (supabase as any)
     .from('nexus_scheduled_classes')
     .select(
-      'id, classroom_id, teams_meeting_id, teams_meeting_url, teams_meeting_join_url, teams_meeting_scope, title, scheduled_date, start_time, end_time, status, created_at, content_edited_at, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, organizer_name, organizer_email',
+      'id, classroom_id, teams_meeting_id, teams_meeting_url, teams_meeting_join_url, teams_meeting_scope, title, scheduled_date, start_time, end_time, status, created_at, content_edited_at, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, teams_share_message_id, teams_share_chat_message_id, organizer_name, organizer_email',
     )
     .eq('classroom_id', classroom.id)
     .not('teams_meeting_id', 'is', null)
@@ -206,6 +209,10 @@ export async function syncClassroomMeetings(
           teams_channel_id: string | null;
           teams_channel_message_id: string | null;
           teams_group_chat_message_id: string | null;
+          // Carried so a class the reconciler finds cancelled in Teams also has
+          // its teacher-shared card taken down, not just its join card.
+          teams_share_message_id: string | null;
+          teams_share_chat_message_id: string | null;
           organizer_name: string | null;
           organizer_email: string | null;
         }>
@@ -319,6 +326,8 @@ export async function syncClassroomMeetings(
           teams_channel_id: cls.teams_channel_id,
           teams_channel_message_id: cls.teams_channel_message_id,
           teams_group_chat_message_id: cls.teams_group_chat_message_id,
+          teams_share_message_id: cls.teams_share_message_id,
+          teams_share_chat_message_id: cls.teams_share_chat_message_id,
         });
       }
       continue;

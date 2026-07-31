@@ -46,6 +46,12 @@ function formatDate(dateStr: string): string {
   });
 }
 
+/**
+ * @deprecated Superseded by class-share-model.ts + class-share-render.ts, which
+ * cover a finished class too (recording, wrap-up, homework, test) and render the
+ * same sections as both plain text and a Teams card. This one only ever
+ * described an upcoming class. Kept until nothing imports it.
+ */
 export function buildClassWhatsAppMessage(input: ClassShareInput): string {
   const lines: string[] = [];
   lines.push(`📢 Class scheduled: ${input.title.trim()}`);
