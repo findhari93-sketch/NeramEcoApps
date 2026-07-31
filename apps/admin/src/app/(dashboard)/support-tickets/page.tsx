@@ -91,9 +91,46 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
+// Where the ticket was filed. Worth showing: an "app" ticket carries the
+// auto-captured screenshot and console logs, a "marketing" one comes from a
+// visitor who may not be enrolled at all.
+const SOURCE_LABELS: Record<string, string> = {
+  app: 'Student App',
+  nexus: 'Nexus',
+  marketing: 'Website',
+};
+
 // ============================================
 // HELPERS
 // ============================================
+
+/**
+ * Flatten the reporter's device_info blob into short chips.
+ * Mirrors the DeviceInfo shape written by apps/app `collectDeviceInfo()`.
+ */
+function describeDevice(info: unknown): string[] {
+  if (!info || typeof info !== 'object') return [];
+  const d = info as Record<string, unknown>;
+  const bits: string[] = [];
+  const join = (name: unknown, version: unknown) =>
+    typeof name === 'string' && name && name !== 'Unknown'
+      ? `${name}${typeof version === 'string' && version ? ` ${version}` : ''}`
+      : null;
+
+  if (typeof d.device_type === 'string') bits.push(d.device_type);
+  const browser = join(d.browser, d.browser_version);
+  if (browser) bits.push(browser);
+  const os = join(d.os, d.os_version);
+  if (os) bits.push(os);
+  if (typeof d.screen_width === 'number' && typeof d.screen_height === 'number') {
+    bits.push(`${d.screen_width}x${d.screen_height}`);
+  }
+  if (typeof d.connection_type === 'string' && d.connection_type) bits.push(d.connection_type);
+  if (typeof d.timezone === 'string' && d.timezone) bits.push(d.timezone);
+  if (d.is_pwa) bits.push('PWA');
+  if (bits.length === 0 && typeof d.user_agent === 'string') bits.push(d.user_agent);
+  return bits;
+}
 
 function getStatusColor(status: SupportTicketStatus): 'success' | 'info' | 'warning' | 'error' | 'default' {
   switch (status) {
@@ -489,6 +526,17 @@ function TicketDetailDialog({ open, onClose, ticketId, adminName, onTicketUpdate
                     <Typography variant="caption" color="text.secondary">Created</Typography>
                     <Typography variant="body2">{formatDateTime(ticket.created_at)}</Typography>
                   </Box>
+                  <Box sx={{ flex: 1, minWidth: 150 }}>
+                    <Typography variant="caption" color="text.secondary">Reported from</Typography>
+                    <Typography variant="body2">
+                      <Chip
+                        label={SOURCE_LABELS[ticket.source_app || ''] || ticket.source_app || 'Unknown'}
+                        size="small"
+                        variant="outlined"
+                        sx={{ fontSize: '0.75rem' }}
+                      />
+                    </Typography>
+                  </Box>
                 </Box>
 
                 {/* Subject & Description */}
@@ -539,6 +587,52 @@ function TicketDetailDialog({ open, onClose, ticketId, adminName, onTicketUpdate
                         </Box>
                       ))}
                     </Box>
+                  </Box>
+                )}
+
+                {/* Technical details, auto-captured by the student app reporter */}
+                {(ticket.device_info || (ticket.console_logs && ticket.console_logs.length > 0)) && (
+                  <Box component="details" sx={{ mt: 1.5 }}>
+                    <Box
+                      component="summary"
+                      sx={{ cursor: 'pointer', fontSize: '0.75rem', color: 'text.secondary', userSelect: 'none' }}
+                    >
+                      Technical details
+                      {ticket.console_logs && ticket.console_logs.length > 0
+                        ? ` · ${ticket.console_logs.length} log${ticket.console_logs.length > 1 ? 's' : ''}`
+                        : ''}
+                    </Box>
+                    {ticket.page_url && (
+                      <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
+                        Page: {ticket.page_url}
+                      </Typography>
+                    )}
+                    {ticket.device_info && (
+                      <Box sx={{ mt: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {describeDevice(ticket.device_info).map((bit, idx) => (
+                          <Chip key={idx} size="small" variant="outlined" label={bit} sx={{ fontSize: '0.7rem' }} />
+                        ))}
+                      </Box>
+                    )}
+                    {ticket.console_logs && ticket.console_logs.length > 0 && (
+                      <Box
+                        component="pre"
+                        sx={{
+                          mt: 1,
+                          p: 1,
+                          maxHeight: 200,
+                          overflow: 'auto',
+                          bgcolor: 'grey.900',
+                          color: 'grey.100',
+                          borderRadius: 1,
+                          fontSize: '0.7rem',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {JSON.stringify(ticket.console_logs, null, 2)}
+                      </Box>
+                    )}
                   </Box>
                 )}
 
@@ -1075,6 +1169,7 @@ export default function SupportTicketsPage() {
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Ticket #</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Student Name</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Category</TableCell>
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Source</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Subject</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Status</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Priority</TableCell>
@@ -1110,6 +1205,11 @@ export default function SupportTicketsPage() {
                           variant="outlined"
                           sx={{ fontWeight: 500, fontSize: '0.75rem' }}
                         />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" color="text.secondary" noWrap>
+                          {SOURCE_LABELS[ticket.source_app || ''] || ticket.source_app || '-'}
+                        </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" noWrap sx={{ maxWidth: 250 }}>

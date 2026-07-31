@@ -3,14 +3,17 @@ export const dynamic = 'force-dynamic';
 /**
  * Error-report screenshot upload (student PWA, Firebase auth).
  *
- * POST /api/error-reports/upload  — FormData { file }
- * Uploads to the SHARED `issue-screenshots` bucket (same as Nexus) so staff
- * review every student report in the one Nexus inbox. Returns { path }.
+ * POST /api/error-reports/upload  - FormData { file }
+ * Uploads to the shared `issue-screenshots` bucket and returns { path }.
+ * The report itself goes to the Admin support queue, and POST
+ * /api/error-reports absolutises this path before storing it.
+ * Enrolled students only, same rule as the report route.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
 import { getUserByFirebaseUid, getSupabaseAdminClient } from '@neram/database';
+import { isEnrolledStudent } from '@/lib/enrollment';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -28,6 +31,11 @@ async function requireAuth(req: NextRequest): Promise<{ userId: string } | NextR
     const dbUser = await getUserByFirebaseUid(decoded.uid, adminClient);
     if (!dbUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+    // Same gate as POST /api/error-reports. Without it a non-enrolled user
+    // could still push files into the shared bucket with the button hidden.
+    if (!(await isEnrolledStudent(dbUser.id, adminClient))) {
+      return NextResponse.json({ error: 'not_enrolled' }, { status: 403 });
     }
     return { userId: dbUser.id };
   } catch {

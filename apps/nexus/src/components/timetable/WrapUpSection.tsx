@@ -90,11 +90,25 @@ interface YtResult {
 interface WrapUpSectionProps {
   cls: ClassCardData;
   getToken: () => Promise<string | null>;
+  /**
+   * Teacher-scoped token. Used by save() ONLY, because the server refreshes the
+   * class card in the Teams channel from that request's token and the base nexus
+   * scopes carry no messaging permission. Deliberately not used by load(),
+   * generate or image upload: acquiring it can bounce the teacher through an
+   * interactive consent redirect, and merely opening a panel must never do that.
+   */
+  getTeacherToken?: () => Promise<string | null>;
   onSaved: () => void;
   onNotify: (message: string, severity?: 'success' | 'error') => void;
 }
 
-export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: WrapUpSectionProps) {
+export default function WrapUpSection({
+  cls,
+  getToken,
+  getTeacherToken,
+  onSaved,
+  onNotify,
+}: WrapUpSectionProps) {
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -427,7 +441,11 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
   const save = async () => {
     setSaving(true);
     try {
-      const token = await getToken();
+      // Teacher token when we can get one, plain token otherwise. Falling back
+      // rather than failing is deliberate: the wrap-up itself saves fine on the
+      // base token, only the Teams card refresh needs the wider scopes, and that
+      // is best-effort on the server. Same pattern as ClassCreateDialog.
+      const token = (getTeacherToken ? await getTeacherToken().catch(() => null) : null) || (await getToken());
       const res = await fetch(`/api/timetable/${classId}/wrap-up`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -598,6 +616,10 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
           Add a longer description
         </Button>
       ) : (
+        // Says who reads it, in the label. This field used to be described as the
+        // teacher's private notes, and it is stored in a column called `notes`, but
+        // students and parents catching up read it in full. Anyone typing a private
+        // observation here should be told before they do, not after.
         <TextField
           label="Detailed description (optional)"
           value={detailed}
@@ -607,6 +629,7 @@ export default function WrapUpSection({ cls, getToken, onSaved, onNotify }: Wrap
           multiline
           minRows={3}
           placeholder="A fuller paragraph for students who want more."
+          helperText="Students and parents catching up read this in full."
           sx={{ mb: 1.25 }}
         />
       )}

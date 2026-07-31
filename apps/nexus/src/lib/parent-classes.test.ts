@@ -88,6 +88,22 @@ describe('PARENT_CLASS_COLS', () => {
     expect(PARENT_CLASS_COLS).not.toContain(col);
   });
 
+  it('withholds notes from the WINDOW read for size, not for secrecy', () => {
+    // `notes` was once excluded here as "the teacher's private notes". It is not
+    // that any more: the Wrap Up panel writes the class's detailed description
+    // into that column and tells the teacher, in the field's helper text, that
+    // students and parents read it in full. The detail read (PARENT_DETAIL_COLS)
+    // therefore DOES select it and surfaces it as whatHappened.note.
+    //
+    // It stays out of THIS list for one reason only: a thirty-class month would
+    // carry thirty paragraphs nobody has opened. Same rule as summary_bullets,
+    // which is likewise detail-only. Deleting this test to "restore" the old
+    // exclusion would silently take the class recap away from the parents who
+    // are the point of the parent portal.
+    expect(PARENT_CLASS_COLS).not.toContain('notes');
+    expect(PARENT_CLASS_COLS).not.toContain('summary_bullets');
+  });
+
   it('does not join the resources table at all', () => {
     // Counting happens in a separate ids-only read (loadResourceCounts) rather
     // than an embed. An embed is one careless edit away from

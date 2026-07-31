@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { Box, Container } from '@neram/ui';
 import { usePathname } from 'next/navigation';
-import { isFullBleedRoute } from '@/lib/full-bleed-routes';
+import { isFullBleedRoute, isChromelessRoute } from '@/lib/full-bleed-routes';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -26,13 +26,26 @@ function StudentShell({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
   const { currentNavGroups, currentBottomNavItems, currentOverflowItems, currentHomePath } =
     useStudentZoneContext();
-  const fullBleed = isFullBleedRoute(usePathname());
+  const pathname = usePathname();
+  const fullBleed = isFullBleedRoute(pathname);
+  const chromeless = isChromelessRoute(pathname);
 
   // Start passively capturing console/network errors so a later "Report a
   // problem" ticket can include what actually went wrong (staff-only).
   useEffect(() => {
     installErrorCapture();
   }, []);
+
+  // Focus Mode renders bare. A nested layout could not do this: layouts compose
+  // in Next.js, so a child cannot remove chrome a parent added. Still inside
+  // RoleGuard, still feature-gated; only the navigation is gone.
+  if (chromeless) {
+    return (
+      <DeviceRegistrationProvider>
+        <FeatureGate surface="student">{children}</FeatureGate>
+      </DeviceRegistrationProvider>
+    );
+  }
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>

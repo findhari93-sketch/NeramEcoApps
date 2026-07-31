@@ -1,17 +1,23 @@
 'use client';
 
 /**
- * Read-only view of what a class turned out to be: the point-by-point record,
- * the tags, and the images from the class. Shown to students (and anyone) on a
- * completed class, so "what we did today" lives in the app next to the class
- * instead of only in the Teams chat.
+ * Read-only view of what a class turned out to be: the teacher's full note, the
+ * point-by-point record, the tags, and the images from the class. Shown to
+ * students (and anyone) on a completed class, so "what we did today" lives in the
+ * app next to the class instead of only in the Teams chat.
+ *
+ * The note comes first and the bullets after: someone catching up three weeks
+ * later wants the prose account, and the points are the summary of it. Until now
+ * the note was written on every wrapped-up class and rendered on none of them,
+ * which made the longest and most useful thing a teacher writes invisible to
+ * exactly the student it was written for.
  *
  * Both endpoints it reads are open to enrolled students: the wrap-up GET returns
  * the class fields and tags to any enrolled user, and the images GET returns the
  * gallery to enrolled users.
  */
 import { useEffect, useState } from 'react';
-import { Box, Chip, CircularProgress, Typography } from '@neram/ui';
+import { Box, Button, Chip, CircularProgress, Typography } from '@neram/ui';
 import { sortClassImages, type ClassImageRef } from '@/lib/class-cover';
 import ClassImagesViewer from './ClassImagesViewer';
 
@@ -28,8 +34,17 @@ interface Tag {
   group_type: string;
 }
 
+/**
+ * Longer than this and the note is clamped behind a toggle. Roughly six lines on
+ * a 375px screen, enough to tell whether it is worth opening without burying the
+ * bullets and images under a wall of text.
+ */
+const CLAMP_OVER_CHARS = 320;
+
 export default function ClassCaptureView({ classId, getToken }: Props) {
   const [loading, setLoading] = useState(true);
+  const [notes, setNotes] = useState('');
+  const [notesOpen, setNotesOpen] = useState(false);
   const [bullets, setBullets] = useState<string[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [images, setImages] = useState<Img[]>([]);
@@ -47,6 +62,7 @@ export default function ClassCaptureView({ classId, getToken }: Props) {
         ]);
         if (active && w.ok) {
           const d = await w.json();
+          setNotes(typeof d.class?.notes === 'string' ? d.class.notes.trim() : '');
           setBullets(Array.isArray(d.class?.summary_bullets) ? d.class.summary_bullets : []);
           setTags(d.tags || []);
         }
@@ -73,12 +89,52 @@ export default function ClassCaptureView({ classId, getToken }: Props) {
     );
   }
 
-  if (bullets.length === 0 && tags.length === 0 && images.length === 0) return null;
+  if (!notes && bullets.length === 0 && tags.length === 0 && images.length === 0) return null;
+
+  const clamped = notes.length > CLAMP_OVER_CHARS && !notesOpen;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      {notes && (
+        <Box data-testid="class-wrapup-notes">
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+            The full note
+          </Typography>
+          <Typography
+            variant="body1"
+            sx={{
+              mt: 0.5,
+              // Long-form reading, not metadata: 16px, generous line height, and
+              // any pasted URL wraps instead of widening the drawer at 375px.
+              lineHeight: 1.6,
+              whiteSpace: 'pre-line',
+              overflowWrap: 'anywhere',
+              ...(clamped
+                ? {
+                    display: '-webkit-box',
+                    WebkitLineClamp: 6,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }
+                : {}),
+            }}
+          >
+            {notes}
+          </Typography>
+          {notes.length > CLAMP_OVER_CHARS && (
+            <Button
+              size="small"
+              onClick={() => setNotesOpen((v) => !v)}
+              sx={{ textTransform: 'none', minHeight: 44, px: 0 }}
+            >
+              {notesOpen ? 'Show less' : 'Read the full note'}
+            </Button>
+          )}
+        </Box>
+      )}
+
       {bullets.length > 0 && (
-        <Box>
+        <Box data-testid="class-wrapup-bullets">
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
             What we did
           </Typography>
@@ -93,7 +149,7 @@ export default function ClassCaptureView({ classId, getToken }: Props) {
       )}
 
       {tags.length > 0 && (
-        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+        <Box data-testid="class-wrapup-tags" sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
           {tags.map((t) => (
             <Chip key={t.id} label={t.label} size="small" variant="outlined" />
           ))}
@@ -101,7 +157,7 @@ export default function ClassCaptureView({ classId, getToken }: Props) {
       )}
 
       {images.length > 0 && (
-        <Box>
+        <Box data-testid="class-wrapup-images">
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
             Class images
           </Typography>

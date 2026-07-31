@@ -27,6 +27,20 @@ export interface TeamsAnnouncementRefs {
   teams_group_chat_message_id: string | null;
 }
 
+/**
+ * Escape text going into a card.
+ *
+ * Every builder here interpolates a teacher-typed title straight into HTML. A
+ * class called "Angles < 90 & > 45" produced a card Teams rendered as garbage,
+ * silently, because Graph accepts the malformed markup and does its best.
+ */
+function esc(s: string): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 /** Card shown in the channel/chat once a class is cancelled. Carries no join link. */
 export function buildCancelledHtml(cls: {
   title: string;
@@ -34,7 +48,7 @@ export function buildCancelledHtml(cls: {
   start_time: string;
   end_time: string;
 }): string {
-  return `<h3>❌ Cancelled: ${cls.title}</h3>
+  return `<h3>❌ Cancelled: ${esc(cls.title)}</h3>
 <p><strong>Was:</strong> ${cls.scheduled_date}, ${cls.start_time} to ${cls.end_time} (IST)</p>
 <p>This class has been cancelled, you do not need to join. We will let you know if it is rescheduled.</p>`;
 }
@@ -53,7 +67,7 @@ export function buildRescheduledHtml(
   joinUrl?: string | null,
   rsvpUrl?: string | null,
 ): string {
-  return `<h3>🔁 Moved: ${cls.title}</h3>
+  return `<h3>🔁 Moved: ${esc(cls.title)}</h3>
 <p><strong>Now:</strong> ${cls.scheduled_date}, ${cls.start_time} to ${cls.end_time} (IST)<br/>
 <strong>Was:</strong> ${was.scheduled_date}, ${was.start_time}</p>${
     joinUrl ? `\n<p><a href="${joinUrl}">🔗 Join Meeting</a></p>` : ''
@@ -62,6 +76,36 @@ export function buildRescheduledHtml(
       ? `\n<p>✋ Can't make the new time? <a href="${rsvpUrl}">Tap to RSVP</a> (you're marked attending by default).</p>`
       : ''
   }`;
+}
+
+/**
+ * The "what we actually covered" card, shown once a class has been wrapped up.
+ *
+ * States what happened, never what was planned. A student reading this three
+ * weeks later wants the topic and the points, not a diff against an intention.
+ * Deliberately short: the full note, the images and the recording live in Nexus,
+ * which the trailing link points at.
+ */
+export function buildWrapUpHtml(
+  cls: {
+    title: string;
+    scheduled_date: string;
+    description?: string | null;
+    summary_bullets?: string[] | null;
+  },
+  classUrl?: string | null,
+): string {
+  const bullets = (cls.summary_bullets || []).filter(Boolean).slice(0, 6);
+  return `<h3>✅ ${esc(cls.title)}</h3>
+<p><strong>Class on:</strong> ${esc(cls.scheduled_date)} (IST)</p>${
+    cls.description ? `\n<p>${esc(cls.description)}</p>` : ''
+  }${
+    bullets.length
+      ? `\n<p><strong>What we did</strong></p>\n<ul>${bullets
+          .map((b) => `<li>${esc(b)}</li>`)
+          .join('')}</ul>`
+      : ''
+  }${classUrl ? `\n<p><a href="${classUrl}">📖 Full notes, images and recording in Nexus</a></p>` : ''}`;
 }
 
 /** Post an HTML message to a Teams channel; returns the new message ID or null. */
@@ -124,6 +168,159 @@ async function resolveMeetingChannelId(token: string, teamId: string): Promise<s
     }
   };
   return (await findChannel(MEETING_CHANNEL_NAME)) || (await findChannel('General'));
+}
+
+/** Short, stable fingerprint of a rendered card, so an unchanged save posts nothing. */
+function cardHash(html: string): string {
+  let h = 0;
+  for (let i = 0; i < html.length; i++) {
+    h = (Math.imul(31, h) + html.charCodeAt(i)) | 0;
+  }
+  return `${html.length.toString(36)}.${(h >>> 0).toString(36)}`;
+}
+
+/**
+ * Bring the Teams card for a class up to date with its wrap-up (best-effort).
+ *
+ * THE CALENDAR MEETING IS NEVER TOUCHED. Microsoft cannot suppress the "meeting
+ * updated" mail on a subject or body change (no flag exists; it is an open
+ * feature request), and resolveClassAttendees puts every enrolled student on the
+ * invite. So a typo fixed at 11pm would mail the whole cohort about a class that
+ * finished hours ago. Editing a chatMessage sends no mail at all, which is why
+ * the record goes to the channel card instead.
+ *
+ * PATCH first, reply second. Graph does allow a body edit on a chatMessage, but
+ * only under DELEGATED permissions and only for a message the caller themselves
+ * sent. When teacher B wraps up a class teacher A announced, the PATCH 403s and
+ * the fallback posts a reply under the original card, which B is always allowed
+ * to do. That is also the path taken until ChannelMessage.ReadWrite and
+ * Chat.ReadWrite have been consented in Azure.
+ *
+ * Never throws. The class is wrapped up in Nexus the moment it is saved; a Graph
+ * hiccup must not undo that or fail the teacher's save.
+ */
+export async function refreshClassAnnouncement(
+  token: string,
+  supabase: AdminClient,
+  classId: string,
+  classUrl?: string | null,
+): Promise<void> {
+  try {
+    const sb = supabase as any;
+    const { data: cls } = await sb
+      .from('nexus_scheduled_classes')
+      .select(
+        'id, classroom_id, title, description, summary_bullets, scheduled_date, publish_state, meeting_group_id, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, teams_wrapup_message_id, teams_wrapup_chat_message_id, teams_wrapup_hash',
+      )
+      .eq('id', classId)
+      .single();
+    if (!cls) return;
+
+    // A draft class has never been announced, so there is nothing to bring up to
+    // date. Same rule the reschedule repost uses.
+    if (cls.publish_state === 'draft') return;
+
+    const html = buildWrapUpHtml(cls, classUrl);
+    const hash = cardHash(html);
+    // Five saves must not become five cards. This is the whole reason the hash
+    // is stored rather than recomputed and discarded.
+    if (cls.teams_wrapup_hash === hash) return;
+
+    const { data: classroom } = await sb
+      .from('nexus_classrooms')
+      .select('ms_team_id, ms_group_chat_id')
+      .eq('id', cls.classroom_id)
+      .single();
+
+    const authed = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const bodyPayload = JSON.stringify({ body: { contentType: 'html', content: html } });
+
+    /** PATCH a posted message's body. True only on a real 2xx. */
+    const tryEdit = async (url: string): Promise<boolean> => {
+      try {
+        const res = await fetch(url, { method: 'PATCH', headers: authed, body: bodyPayload });
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          console.error('Wrap-up card edit refused (falling back to a reply):', res.status, errText);
+        }
+        return res.ok;
+      } catch (err) {
+        console.error('Wrap-up card edit errored (falling back to a reply):', err);
+        return false;
+      }
+    };
+
+    /** Post a reply under an existing channel message; returns the new id or null. */
+    const postReply = async (teamId: string, channelId: string, rootId: string): Promise<string | null> => {
+      try {
+        const res = await fetch(
+          `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${rootId}/replies`,
+          { method: 'POST', headers: authed, body: bodyPayload },
+        );
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          console.error('Wrap-up reply failed (non-blocking):', res.status, errText);
+          return null;
+        }
+        const posted = await res.json().catch(() => null);
+        return (posted?.id as string) || null;
+      } catch (err) {
+        console.error('Wrap-up reply errored (non-blocking):', err);
+        return null;
+      }
+    };
+
+    const patch: Record<string, unknown> = {};
+
+    // ─── Channel ───
+    const teamId = classroom?.ms_team_id;
+    const channelId = cls.teams_channel_id;
+    if (teamId && channelId) {
+      const existingWrapUp = cls.teams_wrapup_message_id;
+      const base = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages`;
+
+      if (existingWrapUp && (await tryEdit(`${base}/${existingWrapUp}`))) {
+        // Edited in place, id unchanged.
+      } else if (cls.teams_channel_message_id) {
+        const newId = await postReply(teamId, channelId, cls.teams_channel_message_id);
+        if (newId) patch.teams_wrapup_message_id = newId;
+      } else {
+        // The class never got a join card (link-only, or posted before the ids
+        // were tracked), so there is no thread to reply under. Post at top level.
+        const resolved = await resolveMeetingChannelId(token, teamId);
+        if (resolved) {
+          const newId = await postChannelMessage(token, teamId, resolved, html);
+          if (newId) patch.teams_wrapup_message_id = newId;
+        }
+      }
+    }
+
+    // ─── Group chat ───
+    // Chats have no replies, so an edit that fails leaves only "post a new one".
+    const chatId = classroom?.ms_group_chat_id;
+    if (chatId) {
+      const existingChat = cls.teams_wrapup_chat_message_id;
+      const edited =
+        existingChat && (await tryEdit(`https://graph.microsoft.com/v1.0/chats/${chatId}/messages/${existingChat}`));
+      if (!edited) {
+        const newId = await postChatMessage(token, chatId, html);
+        if (newId) patch.teams_wrapup_chat_message_id = newId;
+      }
+    }
+
+    // Stamp the hash whenever anything reached Teams, including a successful
+    // in-place edit that produced no new id. Without the `||` on ids, an edit-only
+    // pass would leave the hash stale and re-post on the next save.
+    const reachedTeams =
+      Object.keys(patch).length > 0 || !!cls.teams_wrapup_message_id || !!cls.teams_wrapup_chat_message_id;
+    if (reachedTeams) {
+      patch.teams_wrapup_hash = hash;
+      patch.teams_wrapup_posted_at = new Date().toISOString();
+      await sb.from('nexus_scheduled_classes').update(patch).eq('id', classId);
+    }
+  } catch (err) {
+    console.error('refreshClassAnnouncement failed (non-blocking):', err);
+  }
 }
 
 /**

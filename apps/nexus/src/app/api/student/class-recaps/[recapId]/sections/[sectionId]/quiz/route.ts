@@ -12,7 +12,19 @@ import {
   upsertRecapProgress,
   markRecapCompletedIfAllPassed,
   unlockCatchupTestForRecap,
+  getRecapDraw,
+  createRecapDraw,
+  consumeRecapDraw,
 } from '@neram/database';
+import {
+  pickDraw,
+  buildOptionMaps,
+  applyOptionMap,
+  displayedToOriginal,
+  originalToDisplayed,
+  drawSeed,
+  type OptionLetter,
+} from '@/lib/recap-draw';
 
 async function resolveStudent(request: NextRequest) {
   const msUser = await verifyMsToken(request.headers.get('Authorization'));
@@ -44,6 +56,33 @@ async function assertUnlocked(sectionId: string, studentId: string): Promise<str
 }
 
 /**
+ * Resolve (or create) the paper for the student's current attempt.
+ *
+ * Shared by GET and POST so the two can never disagree about what was asked.
+ * Serving every question in sort_order, as this route used to, meant a failed
+ * attempt could be beaten by remembering positions rather than by rewatching.
+ */
+async function resolveDraw(studentId: string, sectionId: string, questionIds: string[]) {
+  const section = await getRecapSection(sectionId);
+  const attemptNumber = (await countRecapAttempts(studentId, sectionId)) + 1;
+
+  const existing = await getRecapDraw(studentId, sectionId, attemptNumber);
+  if (existing) return { draw: existing, attemptNumber, section };
+
+  const seed = drawSeed(studentId, sectionId);
+  const serve = section?.questions_to_serve ?? questionIds.length;
+  const chosen = pickDraw(questionIds, serve, attemptNumber, seed);
+  const draw = await createRecapDraw({
+    student_id: studentId,
+    section_id: sectionId,
+    attempt_number: attemptNumber,
+    question_ids: chosen,
+    option_maps: buildOptionMaps(chosen, attemptNumber, seed),
+  });
+  return { draw, attemptNumber, section };
+}
+
+/**
  * GET .../sections/[sectionId]/quiz
  * Checkpoint questions (answers stripped). Locked until prior checkpoints pass.
  */
@@ -57,7 +96,23 @@ export async function GET(
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     await assertUnlocked(sectionId, user.id);
-    const questions = await getRecapSectionQuestionsForStudent(sectionId);
+    const pool = await getRecapSectionQuestionsForStudent(sectionId);
+    if (!pool.length) return NextResponse.json({ questions: [] });
+
+    const { draw } = await resolveDraw(
+      user.id,
+      sectionId,
+      pool.map((q) => q.id),
+    );
+
+    const byId = new Map(pool.map((q) => [q.id, q]));
+    const questions = draw.question_ids
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((q) =>
+        applyOptionMap(q as any, draw.option_maps?.[(q as any).id] as OptionLetter[] | undefined),
+      );
+
     return NextResponse.json({ questions });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load quiz';
@@ -96,37 +151,54 @@ export async function POST(
 
     const recapId = await assertUnlocked(sectionId, user.id);
 
-    const section = await getRecapSection(sectionId);
-    const questions = await getRecapSectionQuestionsWithAnswers(sectionId);
-    if (!questions.length) {
+    const all = await getRecapSectionQuestionsWithAnswers(sectionId);
+    if (!all.length) {
       return NextResponse.json({ error: 'No questions for this checkpoint' }, { status: 404 });
     }
 
+    const { draw, attemptNumber, section } = await resolveDraw(
+      user.id,
+      sectionId,
+      all.map((q) => q.id),
+    );
+
+    // Grade ONLY the questions this attempt actually served. Grading the whole
+    // pool would mark a student wrong on questions they were never shown.
+    const byId = new Map(all.map((q) => [q.id, q]));
+    const served = draw.question_ids.map((id) => byId.get(id)).filter(Boolean) as typeof all;
+
     let correctCount = 0;
-    const totalCount = questions.length;
-    const questionsWithExplanations = questions.map((q) => {
-      const studentAnswer = body.answers[q.id] || null;
-      const isCorrect = studentAnswer === q.correct_option;
+    const totalCount = served.length;
+    const questionsWithExplanations = served.map((q) => {
+      const map = draw.option_maps?.[q.id] as OptionLetter[] | undefined;
+      // The student clicked a DISPLAYED letter. Translate it back through this
+      // attempt's permutation before comparing, or every answer grades wrong.
+      const displayedAnswer = body.answers[q.id] || null;
+      const originalAnswer = displayedToOriginal(displayedAnswer, map);
+      const isCorrect = !!originalAnswer && originalAnswer === q.correct_option;
       if (isCorrect) correctCount++;
+
+      const shown = applyOptionMap(q as any, map);
       return {
         id: q.id,
         question_text: q.question_text,
-        option_a: q.option_a,
-        option_b: q.option_b,
-        option_c: q.option_c,
-        option_d: q.option_d,
-        correct_option: q.correct_option,
+        option_a: shown.option_a,
+        option_b: shown.option_b,
+        option_c: shown.option_c,
+        option_d: shown.option_d,
+        // Reported in the SAME lettering the student saw, so the review screen
+        // highlights the option they are looking at.
+        correct_option: originalToDisplayed(q.correct_option, map) ?? q.correct_option,
         explanation: q.explanation,
-        student_answer: studentAnswer,
+        student_answer: displayedAnswer,
         is_correct: isCorrect,
       };
     });
 
-    const minToPass = section?.min_questions_to_pass ?? totalCount; // null = all correct
+    const minToPass = Math.min(section?.min_questions_to_pass ?? totalCount, totalCount);
     const scorePct = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
     const passed = correctCount >= minToPass;
 
-    const attemptNumber = (await countRecapAttempts(user.id, sectionId)) + 1;
     const attempt = await insertRecapAttempt({
       student_id: user.id,
       section_id: sectionId,
@@ -135,6 +207,10 @@ export async function POST(
       passed,
       attempt_number: attemptNumber,
     });
+
+    // Spent, whatever the outcome. The next attempt draws a fresh window, which
+    // is what stops a failed attempt being beaten by memory rather than rewatching.
+    await consumeRecapDraw(draw.id).catch(() => {});
 
     let recapCompleted = false;
     let catchupTestUnlocked = false;

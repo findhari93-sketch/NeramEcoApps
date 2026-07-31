@@ -58,6 +58,7 @@ interface ClassEditPanelProps {
 export default function ClassEditPanel({
   cls,
   getToken,
+  getTeacherToken,
   onCreateMeeting,
   onCreateAssignment,
   onLinkExisting,
@@ -310,6 +311,7 @@ export default function ClassEditPanel({
             <WrapUpSection
               cls={cls}
               getToken={getToken}
+              getTeacherToken={getTeacherToken}
               onSaved={onChanged}
               onNotify={onNotify}
             />

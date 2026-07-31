@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 
+/** How recently a reason has to have arrived to still count as news. */
+const CATCHUP_BADGE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
 /**
  * GET /api/nav-badges
  * Returns lightweight badge counts for sidebar navigation items.
@@ -53,6 +56,27 @@ export async function GET(request: NextRequest) {
       const { data: photoCount } = await supabase.rpc('count_pending_photo_reviews');
 
       badges.photo_review = typeof photoCount === 'number' ? photoCount : 0;
+
+      // Catch-up: freshly explained absences, plus anything still open from a
+      // class that has already been taught again.
+      //
+      // Deliberately a ROLLING WINDOW, not an unread inbox. There is no per-staff
+      // seen_at column and there should not be one: this badge answers "is there
+      // something new to look at", and a reason from three days ago is no longer
+      // news whether or not anyone opened the page. Anyone tempted to make it
+      // dismissible should add a real notification instead, which the daily
+      // digest already is.
+      const since = new Date(Date.now() - CATCHUP_BADGE_WINDOW_MS).toISOString();
+      // Cast because nexus_class_absences is absent from database.generated.ts,
+      // the same reason catchup-journey.ts carries @ts-nocheck. Regenerating the
+      // types is the real fix and is out of scope here.
+      const { count: freshReasons } = await (supabase as any)
+        .from('nexus_class_absences')
+        .select('id', { count: 'exact', head: true })
+        .is('caught_up_at', null)
+        .gte('reason_submitted_at', since);
+
+      badges.catchup = freshReasons ?? 0;
     } else {
       // Student: count their own open + in_progress issues
       const { count } = await supabase

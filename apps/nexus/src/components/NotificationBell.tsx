@@ -41,6 +41,7 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   assignment_nudge: '#7c3aed',
   assignment_reviewed: '#2E7D32',
   study_material_nudge: '#0ea5e9',
+  catchup_digest: '#7c3aed',
 };
 
 function getNavigationUrl(
@@ -88,6 +89,10 @@ function getNavigationUrl(
         ? `/${nexusRole || 'student'}/assignments/${assignmentId}`
         : `/${nexusRole || 'student'}/assignments`;
     }
+    // The daily staff roll-up. Straight to the reasons feed, because "4 students
+    // explained why they missed a class" is only useful next to what they said.
+    case 'catchup_digest':
+      return '/teacher/catch-up?tab=reasons';
     default:
       return null;
   }

@@ -13,6 +13,7 @@ import {
 } from '@neram/database';
 import { canUser } from '@/lib/staff-capabilities';
 import { computeCatchupPace } from '@/lib/catchup-pace';
+import { tallyReasons } from '@/lib/rsvp-reasons';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,36 @@ export const dynamic = 'force-dynamic';
 
 /** A classroom's whole term, capped so one runaway query cannot stall the page. */
 const MAX_ITEMS = 4000;
+
+/** How many past classes the Classes and recaps tab covers. */
+const RECENT_CLASSES = 60;
+
+/** How far back the Caught up tab looks. Older wins are history, not a work list. */
+const COMPLETED_WINDOW_DAYS = 60;
+
+/** Cap on the Reasons feed, which is read newest first. */
+const MAX_REASONS = 200;
+
+/** Plain date arithmetic on a YYYY-MM-DD, no timezone reinterpretation. */
+function ymdDaysAgo(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * What a teacher still owes a class, from the class's own point of view.
+ * `recording_ready` is the one that matters: there is something to watch but
+ * nothing gated to watch it with, so every absent student is stuck on us.
+ */
+function recapStateFor(
+  cls: { recording_url?: string | null; youtube_url?: string | null },
+  recap: { status: string } | undefined,
+): 'no_recording' | 'recording_ready' | 'draft' | 'published' {
+  if (recap?.status === 'published') return 'published';
+  if (recap) return 'draft';
+  return cls.recording_url || cls.youtube_url ? 'recording_ready' : 'no_recording';
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -63,23 +94,35 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
       classroomId = classroom?.id || null;
     }
-    const emptyPayload = {
-      classroomId,
-      students: [],
-      classes: [],
-      classStats: [],
-      noRecording: [],
-      pendingRecap: [],
-      totals: { studentsBehind: 0, studentsCatchingUp: 0, outstanding: 0, clearedThisMonth: 0 },
-    };
-    if (!classroomId) return NextResponse.json(emptyPayload);
+    if (!classroomId) {
+      return NextResponse.json({
+        classroomId,
+        students: [],
+        classes: [],
+        classStats: [],
+        reasons: [],
+        reasonTally: { unwell: 0, family: 0, clash: 0, other: 0 },
+        completed: [],
+        noRecording: [],
+        pendingRecap: [],
+        totals: {
+          studentsBehind: 0,
+          studentsCatchingUp: 0,
+          outstanding: 0,
+          clearedThisMonth: 0,
+          explained: 0,
+          unexplained: 0,
+        },
+      });
+    }
 
     // ── One read of the whole classroom's catch-up state ────────────────────
     const { data: rows } = await supabase
       .from('nexus_class_absences')
       .select(
         'id, student_id, scheduled_class_id, kind, recording_watched_at, caught_up_at, ' +
-          'test_unlocked_at, test_passed_at, excused_at, reason_code, ' +
+          'test_unlocked_at, test_passed_at, excused_at, excuse_note, detected_at, ' +
+          'followup_sent_at, reason_code, reason_note, reason_submitted_at, reason_source, ' +
           'class:nexus_scheduled_classes(id, title, scheduled_date, start_time, status, ' +
           'recording_url, youtube_url)',
       )
@@ -87,30 +130,65 @@ export async function GET(request: NextRequest) {
       .limit(MAX_ITEMS);
 
     const items = (rows || []).filter((r: any) => r.class);
-    if (items.length === 0) return NextResponse.json(emptyPayload);
 
+    // Deliberately no early return on an empty absence list. A classroom where
+    // nobody has missed anything can still owe recaps, and that is exactly what
+    // the Classes and recaps tab exists to show.
     const studentIds = [...new Set(items.map((i: any) => i.student_id))] as string[];
     const classIds = [...new Set(items.map((i: any) => i.scheduled_class_id))] as string[];
 
-    const [{ data: users }, { data: journeys }, { data: classDates }, { data: attendance }] =
-      await Promise.all([
-        supabase.from('users').select('id, name, email, avatar_url, phone').in('id', studentIds),
-        supabase
-          .from('nexus_catchup_journeys')
-          .select('id, student_id, started_on, weekly_quota, status')
-          .eq('classroom_id', classroomId),
-        supabase
-          .from('nexus_scheduled_classes')
-          .select('scheduled_date')
-          .eq('classroom_id', classroomId)
-          .eq('publish_state', 'published')
-          .neq('status', 'cancelled')
-          .order('scheduled_date', { ascending: true }),
-        supabase
-          .from('nexus_attendance')
-          .select('scheduled_class_id, attended')
-          .in('scheduled_class_id', classIds),
-      ]);
+    const [{ data: users }, { data: journeys }, { data: termClasses }] = await Promise.all([
+      studentIds.length
+        ? supabase.from('users').select('id, name, email, avatar_url, phone').in('id', studentIds)
+        : Promise.resolve({ data: [] as any[] }),
+      supabase
+        .from('nexus_catchup_journeys')
+        .select('id, student_id, started_on, weekly_quota, status')
+        .eq('classroom_id', classroomId),
+      // Widened from `scheduled_date` alone: the same rows now also feed the
+      // Classes and recaps tab, which has to list a class that everybody
+      // attended (it may still owe a recap) and not only the ones someone
+      // missed.
+      supabase
+        .from('nexus_scheduled_classes')
+        .select('id, title, scheduled_date, start_time, recording_url, youtube_url, transcript_url')
+        .eq('classroom_id', classroomId)
+        .eq('publish_state', 'published')
+        .neq('status', 'cancelled')
+        .order('scheduled_date', { ascending: true }),
+    ]);
+
+    const today = istTodayYmd();
+    // Most recent first, capped: a teacher chasing recaps is looking at this
+    // term, and an unbounded list would pull a year of attendance rows with it.
+    const recentPast = (termClasses || [])
+      .filter((c: any) => String(c.scheduled_date).slice(0, 10) <= today)
+      .sort((a: any, b: any) => String(b.scheduled_date).localeCompare(String(a.scheduled_date)))
+      .slice(0, RECENT_CLASSES);
+    const recentPastIds = recentPast.map((c: any) => c.id as string);
+    const attendanceIds = [...new Set([...classIds, ...recentPastIds])] as string[];
+
+    const [{ data: attendance }, { data: recapRows }] = await Promise.all([
+      attendanceIds.length
+        ? supabase
+            .from('nexus_attendance')
+            .select('scheduled_class_id, attended')
+            .in('scheduled_class_id', attendanceIds)
+        : Promise.resolve({ data: [] as any[] }),
+      recentPastIds.length
+        ? supabase
+            .from('nexus_class_recaps')
+            .select('id, scheduled_class_id, status')
+            .in('scheduled_class_id', recentPastIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+
+    const recapByClass = new Map<string, { id: string; status: string }>();
+    for (const r of recapRows || []) {
+      if (r.scheduled_class_id) {
+        recapByClass.set(r.scheduled_class_id, { id: r.id, status: r.status });
+      }
+    }
 
     const userById = new Map<string, any>((users || []).map((u: any) => [u.id, u]));
     const journeyByStudent = new Map<string, any>(
@@ -120,7 +198,7 @@ export async function GET(request: NextRequest) {
     // The classroom timetable, deduped, so "when did the course next run" is one
     // in-memory lookup rather than a query per missed class.
     const termDates: string[] = [];
-    for (const c of classDates || []) {
+    for (const c of termClasses || []) {
       const ymd = String(c.scheduled_date).slice(0, 10);
       if (termDates[termDates.length - 1] !== ymd) termDates.push(ymd);
     }
@@ -133,8 +211,8 @@ export async function GET(request: NextRequest) {
       presentByClass.set(a.scheduled_class_id, (presentByClass.get(a.scheduled_class_id) || 0) + 1);
     }
 
-    const today = istTodayYmd();
     const monthStart = `${today.slice(0, 7)}-01`;
+    const completedSince = ymdDaysAgo(today, COMPLETED_WINDOW_DAYS);
 
     // ── Per student ─────────────────────────────────────────────────────────
     const byStudent = new Map<string, any[]>();
@@ -147,11 +225,18 @@ export async function GET(request: NextRequest) {
     const classColumns = new Map<string, any>();
     const noRecording = new Map<string, any>();
     const pendingRecap = new Map<string, any>();
-    const classStat = new Map<string, { missed: number; caughtUp: number; outstanding: number }>();
+    const classStat = new Map<
+      string,
+      { missed: number; caughtUp: number; outstanding: number; blocked: number }
+    >();
 
     const students: any[] = [];
+    const completed: any[] = [];
+    const reasons: any[] = [];
     let outstandingTotal = 0;
     let clearedThisMonth = 0;
+    let explainedTotal = 0;
+    let unexplainedTotal = 0;
 
     for (const [studentId, studentItems] of byStudent) {
       studentItems.sort((a: any, b: any) => {
@@ -204,10 +289,15 @@ export async function GET(request: NextRequest) {
           missed: 0,
           caughtUp: 0,
           outstanding: 0,
+          blocked: 0,
         };
         stat.missed += 1;
         if (r.status === 'done' || r.status === 'excused') stat.caughtUp += 1;
         else if (r.status !== 'blocked') stat.outstanding += 1;
+        // Waiting on us, not on them: no recording at all, or a recap still
+        // unpublished. Counted separately so the Classes tab can say how many
+        // people one missing recap is holding up.
+        if (r.status === 'blocked' || r.status === 'pending_teacher') stat.blocked += 1;
         classStat.set(i.scheduled_class_id, stat);
 
         if (r.status === 'blocked') {
@@ -230,6 +320,13 @@ export async function GET(request: NextRequest) {
         }
         if (i.caught_up_at && String(i.caught_up_at).slice(0, 10) >= monthStart) clearedThisMonth += 1;
 
+        // A late joiner has nothing to explain, so they are neither explained
+        // nor unexplained. Counting them either way would misreport the cohort.
+        if (i.kind !== 'late_joiner') {
+          if (i.reason_code) explainedTotal += 1;
+          else unexplainedTotal += 1;
+        }
+
         return {
           id: i.id,
           scheduled_class_id: i.scheduled_class_id,
@@ -240,6 +337,14 @@ export async function GET(request: NextRequest) {
           due_on: dueOn[idx],
           overdue: overdueFlags[idx],
           reason_code: i.reason_code ?? null,
+          // The words the student actually typed. Selected but never returned
+          // before, which is why no screen has ever been able to show them.
+          reason_note: i.reason_note ?? null,
+          reason_submitted_at: i.reason_submitted_at ?? null,
+          reason_source: i.reason_source ?? null,
+          followup_sent_at: i.followup_sent_at ?? null,
+          caught_up_at: i.caught_up_at ?? null,
+          excuse_note: i.excuse_note ?? null,
           watched: !!facts.recapByClass.get(i.scheduled_class_id)
             ? facts.completedRecaps.has(facts.recapByClass.get(i.scheduled_class_id)!.id)
             : !!i.recording_watched_at,
@@ -255,23 +360,41 @@ export async function GET(request: NextRequest) {
         };
       });
 
+      const user = userById.get(studentId);
+      const studentCard = {
+        id: studentId,
+        name: user?.name ?? null,
+        email: user?.email ?? null,
+        phone: user?.phone ?? null,
+        avatar_url: user?.avatar_url ?? null,
+      };
+
+      // ── The two feeds that read across students ──────────────────────────
+      // Built here rather than in a second pass so the resolved status a
+      // student's row already carries travels with the reason, and the Reasons
+      // tab can say "explained, and still has not started" in one row.
+      for (const item of shaped) {
+        if (item.reason_submitted_at) {
+          reasons.push({ student: studentCard, ...item });
+        }
+        if (item.caught_up_at && String(item.caught_up_at).slice(0, 10) >= completedSince) {
+          completed.push({ student: studentCard, ...item });
+        }
+      }
+
       const openCount = missedTotals.open + (totals.total - totals.completed);
       outstandingTotal += openCount;
 
-      // A student with nothing left is not a work item. They stay out of the
-      // list entirely rather than padding it with rows that read as green noise.
+      // A student with nothing left is not a work item, so they stay out of the
+      // chase list rather than padding it with rows that read as green noise.
+      // They are NOT dropped from the payload any more: their finished items are
+      // already in `completed`, which is how the Caught up tab can answer "who
+      // actually made it up" instead of showing an empty screen.
       if (openCount === 0) continue;
 
-      const user = userById.get(studentId);
       students.push({
         journey_id: journey?.id ?? null,
-        student: {
-          id: studentId,
-          name: user?.name ?? null,
-          email: user?.email ?? null,
-          phone: user?.phone ?? null,
-          avatar_url: user?.avatar_url ?? null,
-        },
+        student: studentCard,
         started_on: journey?.started_on ?? null,
         weekly_quota: journey?.weekly_quota ?? null,
         totals,
@@ -294,18 +417,44 @@ export async function GET(request: NextRequest) {
       String(a.scheduled_date).localeCompare(String(b.scheduled_date)),
     );
 
-    const classStats = classes
-      .map((c) => {
-        const s = classStat.get(c.id) || { missed: 0, caughtUp: 0, outstanding: 0 };
-        return { ...c, ...s, present: presentByClass.get(c.id) || 0 };
+    // Every recent past class, not only the ones somebody missed. A class with
+    // full attendance can still owe a recap, and the teacher who has to publish
+    // it should not have to visit a second screen to find that out. This is the
+    // list that replaced /teacher/class-recaps.
+    const classStats = recentPast
+      .map((c: any) => {
+        const s = classStat.get(c.id) || { missed: 0, caughtUp: 0, outstanding: 0, blocked: 0 };
+        const recap = recapByClass.get(c.id);
+        return {
+          id: c.id,
+          title: c.title,
+          scheduled_date: c.scheduled_date,
+          ...s,
+          present: presentByClass.get(c.id) || 0,
+          recap_state: recapStateFor(c, recap),
+          recap_id: recap?.id ?? null,
+          has_transcript: !!c.transcript_url,
+        };
       })
-      .sort((a, b) => b.outstanding - a.outstanding || String(b.scheduled_date).localeCompare(String(a.scheduled_date)));
+      .sort(
+        (a: any, b: any) =>
+          b.blocked - a.blocked ||
+          b.outstanding - a.outstanding ||
+          String(b.scheduled_date).localeCompare(String(a.scheduled_date)),
+      );
+
+    // Newest first: both feeds are read as "what happened lately".
+    reasons.sort((a, b) => String(b.reason_submitted_at).localeCompare(String(a.reason_submitted_at)));
+    completed.sort((a, b) => String(b.caught_up_at).localeCompare(String(a.caught_up_at)));
 
     return NextResponse.json({
       classroomId,
       students,
       classes,
       classStats,
+      reasons: reasons.slice(0, MAX_REASONS),
+      reasonTally: tallyReasons(reasons),
+      completed,
       noRecording: [...noRecording.values()].sort((a, b) =>
         String(a.scheduled_date).localeCompare(String(b.scheduled_date)),
       ),
@@ -318,6 +467,8 @@ export async function GET(request: NextRequest) {
         studentsCatchingUp: students.length,
         outstanding: outstandingTotal,
         clearedThisMonth,
+        explained: explainedTotal,
+        unexplained: unexplainedTotal,
       },
     });
   } catch (err) {

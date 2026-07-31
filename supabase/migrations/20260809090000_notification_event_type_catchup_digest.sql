@@ -1,0 +1,21 @@
+-- ============================================
+-- ONE DAILY ROLL-UP OF CATCH-UP ACTIVITY, FOR STAFF
+--
+-- Students explain missed classes and finish catch-ups all day. Notifying a
+-- teacher per event would fire a dozen times a morning, which is exactly the
+-- noise that trains people to ignore a bell. So this is one notification per
+-- teacher per day: "4 students explained why they missed a class, 2 finished
+-- their catch-up", linking straight to the reasons feed.
+--
+-- It goes on `user_notifications` (the enum this widens) rather than on
+-- `nexus_timetable_notifications`, deliberately. The timetable table is only
+-- ever rendered by TimetableNotificationBell, on the timetable page, for one
+-- selected classroom, which is why every cron-written teacher alert so far has
+-- been effectively invisible. user_notifications is the TopBar bell and shows up
+-- on every page.
+--
+-- Its own file because ALTER TYPE ... ADD VALUE cannot be used in the same
+-- transaction that added it.
+-- ============================================
+
+ALTER TYPE notification_event_type ADD VALUE IF NOT EXISTS 'catchup_digest';

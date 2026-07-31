@@ -26,6 +26,12 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import RecapPlayer from '@/components/class-recap/RecapPlayer';
+import { useWatchHeartbeat } from '@/components/class-recap/useWatchHeartbeat';
+import {
+  openFocusWindow,
+  onFocusWindowClosed,
+  focusChannelName,
+} from '@/components/class-recap/openFocusWindow';
 import QuizModal from '@/components/foundation/QuizModal';
 import ClassResourcesSection from '@/components/timetable/ClassResourcesSection';
 import { SECTION_LABEL_SX } from '@/components/timetable/timetable-theme';
@@ -122,10 +128,48 @@ export default function StudentClassRecapPage() {
     [recap, passedIds],
   );
 
+  // Persists the resume point and how much genuinely played. Without this the
+  // stored position stays 0, which is what stopped the post-fail test re-arm
+  // from ever unlocking.
+  const { onTick, flushNow } = useWatchHeartbeat({ recapId, token });
+
+  /**
+   * Desktop opens a chromeless popup; anything narrow navigates in place, since
+   * a popup on a phone is a worse version of a new tab.
+   *
+   * window.open has to be called synchronously inside this handler or the popup
+   * blocker kills it, which is why nothing is awaited here.
+   */
+  const openFocus = useCallback(() => {
+    const wide = typeof window !== 'undefined' && window.innerWidth >= 900;
+    if (!wide) {
+      router.push(`/student/focus/recap/${recapId}`);
+      return;
+    }
+    const { win } = openFocusWindow(recapId);
+    if (!win) {
+      // Blocked. Navigating is better than a dead button with no explanation.
+      router.push(`/student/focus/recap/${recapId}`);
+      return;
+    }
+    onFocusWindowClosed(win, load);
+  }, [load, recapId, router]);
+
+  // The popup announces a passed checkpoint so this list is not stale behind it.
+  useEffect(() => {
+    if (!recapId || typeof BroadcastChannel === 'undefined') return;
+    const ch = new BroadcastChannel(focusChannelName(recapId));
+    ch.onmessage = () => load();
+    return () => ch.close();
+  }, [recapId, load]);
+
   const openQuiz = useCallback(
     async (index: number) => {
       const section = recap?.sections[index];
       if (!section) return;
+      // The player has just auto-paused at the checkpoint, so this is a natural
+      // moment to bank progress rather than waiting out the interval.
+      flushNow();
       // Already passed → just resume (guard against a late trigger).
       if (passedIds.has(section.id)) {
         (window as any).__recapPlayer?.play();
@@ -141,7 +185,7 @@ export default function StudentClassRecapPage() {
         setErrorMsg(err instanceof Error ? err.message : 'Failed to load the checkpoint quiz');
       }
     },
-    [authFetch, recap, recapId, passedIds],
+    [authFetch, recap, recapId, passedIds, flushNow],
   );
 
   const submitQuiz = useCallback(
@@ -156,6 +200,7 @@ export default function StudentClassRecapPage() {
       if (a.passed) {
         setPassedIds((prev) => new Set(prev).add(section.id));
         if (res.recap_completed) setCompleted(true);
+        flushNow();
       }
       return {
         passed: a.passed,
@@ -166,7 +211,7 @@ export default function StudentClassRecapPage() {
         questions: a.questions_with_explanations,
       };
     },
-    [authFetch, recap, recapId, activeIdx],
+    [authFetch, recap, recapId, activeIdx, flushNow],
   );
 
   // Passed → resume playback into the next segment.
@@ -290,6 +335,22 @@ export default function StudentClassRecapPage() {
         </Button>
       )}
 
+      {/* Focus Mode is the intended way to watch: no app chrome, a watermark,
+          and a scrub track that will not run past an unpassed checkpoint. The
+          inline player below stays for a quick look and for anyone whose popup
+          is blocked. */}
+      {!completed && (
+        <Button
+          fullWidth
+          variant="contained"
+          onClick={openFocus}
+          startIcon={<PlayCircleOutlineIcon />}
+          sx={{ mb: 2, minHeight: 56, textTransform: 'none', fontWeight: 800, borderRadius: 99 }}
+        >
+          {passedCount > 0 ? 'Continue in Focus Mode' : 'Watch in Focus Mode'}
+        </Button>
+      )}
+
       {/* Player */}
       <Box
         sx={{
@@ -302,7 +363,13 @@ export default function StudentClassRecapPage() {
           mb: 2,
         }}
       >
-        <RecapPlayer recapId={recap.id} token={token} sections={playerSections} onSectionEnd={openQuiz} />
+        <RecapPlayer
+          recapId={recap.id}
+          token={token}
+          sections={playerSections}
+          onSectionEnd={openQuiz}
+          onTimeUpdate={onTick}
+        />
       </Box>
 
       {/* Progress */}

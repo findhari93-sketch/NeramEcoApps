@@ -1,0 +1,24 @@
+-- ============================================
+-- A RECAP GENERATED BUT COULD NOT BE PUBLISHED
+--
+-- Class recaps are now generated and published automatically minutes after each
+-- session. Anything the quality bar is not confident about is HELD instead, and
+-- a held recap is a class some student cannot catch up on.
+--
+-- Without this notification "held" would mean "silently stuck": the review queue
+-- would fill up and nobody would have any reason to open it, so the student
+-- would wait on a class no one knew was blocked. Auto-publishing is only safe
+-- because the failures are noisy.
+--
+-- Goes on `user_notifications` (this enum) rather than
+-- `nexus_timetable_notifications`, for the reason recorded in the catchup_digest
+-- migration: the timetable table is only rendered by TimetableNotificationBell,
+-- on the timetable page, for one selected classroom, which has made every
+-- cron-written teacher alert so far effectively invisible. user_notifications is
+-- the TopBar bell and shows on every page.
+--
+-- Its own file because ALTER TYPE ... ADD VALUE cannot be used in the same
+-- transaction that added it.
+-- ============================================
+
+ALTER TYPE notification_event_type ADD VALUE IF NOT EXISTS 'recap_needs_review';

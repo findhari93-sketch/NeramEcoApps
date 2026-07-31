@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -51,7 +51,9 @@ export default function StudentIssuesPage() {
   const { getToken } = useNexusAuthContext();
   const [issues, setIssues] = useState<NexusFoundationIssueWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
+  // Tabs: 0 = Open (priority), 1 = Awaiting, 2 = Closed, 3 = All
   const [tab, setTab] = useState(0);
+  const tabTouchedRef = useRef(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   const [reopenIssueId, setReopenIssueId] = useState<string | null>(null);
@@ -63,10 +65,10 @@ export default function StudentIssuesPage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchIssues();
+    fetchIssues({ initial: true });
   }, []);
 
-  async function fetchIssues() {
+  async function fetchIssues(options?: { initial?: boolean }) {
     setLoading(true);
     try {
       const token = await getToken();
@@ -76,7 +78,15 @@ export default function StudentIssuesPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setIssues(data.issues || []);
+        const list: NexusFoundationIssueWithDetails[] = data.issues || [];
+        setIssues(list);
+        // Open issues are what the student needs to act on, so Open is the
+        // default tab. If nothing is open on first load, fall back to All so
+        // they do not land on an empty page.
+        if (options?.initial && !tabTouchedRef.current) {
+          const hasOpen = list.some((i) => i.status === 'open' || i.status === 'in_progress');
+          if (!hasOpen) setTab(3);
+        }
       }
     } catch (err) {
       console.error('Failed to load issues:', err);
@@ -86,10 +96,10 @@ export default function StudentIssuesPage() {
   }
 
   const filteredIssues = issues.filter((issue) => {
-    if (tab === 1) return issue.status === 'open' || issue.status === 'in_progress';
-    if (tab === 2) return issue.status === 'awaiting_confirmation';
-    if (tab === 3) return issue.status === 'resolved' || issue.status === 'closed';
-    return true;
+    if (tab === 0) return issue.status === 'open' || issue.status === 'in_progress';
+    if (tab === 1) return issue.status === 'awaiting_confirmation';
+    if (tab === 2) return issue.status === 'resolved' || issue.status === 'closed';
+    return true; // tab === 3: All
   });
 
   const openCount = issues.filter((i) => i.status === 'open' || i.status === 'in_progress').length;
@@ -212,17 +222,22 @@ export default function StudentIssuesPage() {
 
       <Tabs
         value={tab}
-        onChange={(_, v) => setTab(v)}
+        onChange={(_, v) => {
+          tabTouchedRef.current = true;
+          setTab(v);
+        }}
+        variant="scrollable"
+        scrollButtons={false}
         sx={{
           mb: 2, mt: 1.5,
           minHeight: 36,
           '& .MuiTab-root': { minHeight: 36, textTransform: 'none', fontSize: '0.85rem', py: 0.5 },
         }}
       >
-        <Tab label={`All (${issues.length})`} />
         <Tab label={`Open (${openCount})`} />
         <Tab label={`Awaiting (${awaitingCount})`} />
         <Tab label={`Closed (${closedCount})`} />
+        <Tab label={`All (${issues.length})`} />
       </Tabs>
 
       {loading ? (
@@ -235,10 +250,26 @@ export default function StudentIssuesPage() {
         <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
           <ReportProblemOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
           <Typography variant="body2" color="text.secondary">
-            {tab === 0
+            {issues.length === 0
               ? 'No issues reported yet. Use "Create Ticket" to report your first issue.'
-              : 'No issues in this category.'}
+              : tab === 0
+                ? 'No open issues right now. Everything you reported has been handled.'
+                : tab === 1
+                  ? 'Nothing is waiting for your confirmation.'
+                  : 'No issues in this category.'}
           </Typography>
+          {issues.length > 0 && tab !== 3 && (
+            <Button
+              size="small"
+              onClick={() => {
+                tabTouchedRef.current = true;
+                setTab(3);
+              }}
+              sx={{ textTransform: 'none', mt: 1, minHeight: 36 }}
+            >
+              View all {issues.length} issue{issues.length !== 1 ? 's' : ''}
+            </Button>
+          )}
         </Paper>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>

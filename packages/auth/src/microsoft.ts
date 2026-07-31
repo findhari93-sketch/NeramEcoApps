@@ -82,6 +82,15 @@ export const loginScopes = {
     'Group.ReadWrite.All',
     'ChannelMessage.Send',
     'ChatMessage.Send',
+    // Editing a class card already posted to the channel/chat, so wrapping up a
+    // class updates its Teams post in place instead of leaving the planned topic
+    // there forever. PATCH on a chatMessage only accepts a body edit under
+    // DELEGATED permissions (application permissions may change policyViolation
+    // and nothing else), and .Send alone cannot edit, only create. Like
+    // Group.ReadWrite.All above, admin consent is required in Azure first and
+    // teachers must sign in again once before it takes effect.
+    'ChannelMessage.ReadWrite',
+    'Chat.ReadWrite',
     'Team.ReadBasic.All',
     'Channel.ReadBasic.All',
     'TeamMember.ReadWrite.All',

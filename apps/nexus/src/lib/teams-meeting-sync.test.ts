@@ -96,6 +96,7 @@ const channelClass = (over: Partial<any> = {}) => ({
   end_time: '20:30:00',
   status: 'scheduled',
   created_at: OLD_CREATED,
+  content_edited_at: null,
   teams_channel_id: null,
   teams_channel_message_id: null,
   teams_group_chat_message_id: null,
@@ -184,10 +185,12 @@ describe('syncClassroomMeetings organizer backfill', () => {
     const sb = makeSupabase([channelClass({ organizer_name: null, organizer_email: null })]);
     const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
     expect(r.updated).toBe(1);
+    // No `title` key: the fixture title already matches the event subject, and the
+    // payload now carries only what actually changed (plus date/time, which Teams
+    // owns outright).
     expect(sb.__updates).toContainEqual({
       table: 'nexus_scheduled_classes',
       vals: {
-        title: 'Class',
         scheduled_date: '2020-01-15',
         start_time: '19:00',
         end_time: '20:30',
@@ -204,5 +207,103 @@ describe('syncClassroomMeetings organizer backfill', () => {
     const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
     expect(r.updated).toBe(0);
     expect(sb.__updates).toHaveLength(0);
+  });
+});
+
+/**
+ * Nexus owns what a class WAS once a human has said so; Teams owns WHEN it is.
+ *
+ * Before content_edited_at, the reconciler rewrote `title` from the Teams meeting
+ * subject on every cycle. Teachers wrapped up a class as "Isometric Subtractive
+ * Cubes" and watched it revert to "Class by Ar.Hari Babu"; on 2026-07-30 a single
+ * cron pass retitled four classes that still carried the brief and bullets proving
+ * a human had written them.
+ */
+describe('syncClassroomMeetings human-edit lock', () => {
+  const WRAPPED_UP = { content_edited_at: '2020-01-14T10:00:00.000Z' };
+
+  it('keeps a wrapped-up title when the Teams subject still says something else', async () => {
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, subject: 'Class by Ar.Hari Babu' }]);
+    const sb = makeSupabase([channelClass({ ...WRAPPED_UP, title: 'Isometric Subtractive Cubes' })]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(sb.__updates.some((u: any) => 'title' in u.vals)).toBe(false);
+    expect(r.lockedTitleSkips).toBe(1);
+  });
+
+  it('fires NO update at all when a locked class differs from Teams only by title', async () => {
+    // The regression that makes the guard correct rather than merely present. If
+    // `title` were dropped from the payload but left in the `changed` OR, this
+    // class would fire an UPDATE writing nothing but its own values, every cycle,
+    // forever.
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, subject: 'Class by Ar.Hari Babu' }]);
+    const sb = makeSupabase([
+      channelClass({ ...WRAPPED_UP, title: 'Isometric Subtractive Cubes', organizer_name: 'T', organizer_email: 't@x.com' }),
+    ]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.updated).toBe(0);
+    expect(sb.__updates).toHaveLength(0);
+    expect(r.lockedTitleSkips).toBe(1);
+  });
+
+  it('is idempotent: syncing a locked, drifted class twice still writes nothing', async () => {
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, subject: 'Class by Ar.Hari Babu' }]);
+    const cls = channelClass({ ...WRAPPED_UP, title: 'Isometric Subtractive Cubes', organizer_name: 'T', organizer_email: 't@x.com' });
+    const sb = makeSupabase([cls]);
+    await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(sb.__updates).toHaveLength(0);
+  });
+
+  it('still moves a locked class when Teams changes the time, without touching the title', async () => {
+    // The lock protects content, not the clock. A class rescheduled in Outlook must
+    // still move in Nexus, or students turn up on the wrong evening.
+    mockCalendarView([
+      {
+        id: 'x',
+        joinUrl: JOIN_URL,
+        subject: 'Class by Ar.Hari Babu',
+        start: '2020-01-15T20:00:00',
+        end: '2020-01-15T21:30:00',
+      },
+    ]);
+    const sb = makeSupabase([
+      channelClass({ ...WRAPPED_UP, title: 'Isometric Subtractive Cubes', organizer_name: 'T', organizer_email: 't@x.com' }),
+    ]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.updated).toBe(1);
+    const patch = sb.__updates[0].vals;
+    expect(patch).toMatchObject({ start_time: '20:00', end_time: '21:30' });
+    expect('title' in patch).toBe(false);
+  });
+
+  it('still takes the Teams title for a class nobody has wrapped up', async () => {
+    // The guard must not disable normal reconciliation: an untouched class renamed
+    // in Outlook should still follow.
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, subject: 'Renamed in Outlook' }]);
+    const sb = makeSupabase([channelClass({ content_edited_at: null, organizer_name: 'T', organizer_email: 't@x.com' })]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.updated).toBe(1);
+    expect(sb.__updates[0].vals.title).toBe('Renamed in Outlook');
+    expect(r.lockedTitleSkips).toBe(0);
+  });
+
+  it('still cancels a locked class when Teams cancels it', async () => {
+    // The lock protects what a class was, not whether it happens.
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, subject: 'Class by Ar.Hari Babu', isCancelled: true }]);
+    const sb = makeSupabase([channelClass({ ...WRAPPED_UP, title: 'Isometric Subtractive Cubes' })]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.cancelled).toBe(1);
+  });
+
+  it('still backfills organizer on a locked class without touching the title', async () => {
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, subject: 'Class by Ar.Hari Babu' }]);
+    const sb = makeSupabase([
+      channelClass({ ...WRAPPED_UP, title: 'Isometric Subtractive Cubes', organizer_name: null, organizer_email: null }),
+    ]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.updated).toBe(1);
+    const patch = sb.__updates[0].vals;
+    expect(patch).toMatchObject({ organizer_name: 'T', organizer_email: 't@x.com' });
+    expect('title' in patch).toBe(false);
   });
 });

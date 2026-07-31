@@ -17,6 +17,9 @@
  *                 entry in Outlook must not retroactively erase a class, its recording and
  *                 its attendance from every student's timeline.)
  *   3. UPDATE   - a matched Teams event whose time/title changed -> update the Nexus row.
+ *                 (Except the title of a class a human has wrapped up in Nexus. Teams
+ *                 owns WHEN a class is; Nexus owns what it turned out to BE. See the
+ *                 contentLocked comment in the UPDATE branch.)
  *
  * Uses an app-only (client-credentials) Graph token supplied by the caller.
  */
@@ -62,6 +65,12 @@ export interface SyncClassroomResult {
    * than hidden, so "why is this old class still on the timetable?" has an answer.
    */
   skippedPastCancels: number;
+  /**
+   * Classes whose Teams subject drifted from a title a human wrote in Nexus, and
+   * whose title was therefore deliberately left alone. Counted so "is the guard
+   * actually firing?" is one log line rather than a database dig.
+   */
+  lockedTitleSkips: number;
   errors: string[];
 }
 
@@ -154,6 +163,7 @@ export async function syncClassroomMeetings(
     cancelled: 0,
     cancelledClasses: [],
     skippedPastCancels: 0,
+    lockedTitleSkips: 0,
     errors: [],
   };
 
@@ -167,10 +177,12 @@ export async function syncClassroomMeetings(
 
   // Existing Nexus classes in the window (all statuses, so completed classes are not
   // re-imported and dedup works on both id and url).
-  const { data: nexusClasses } = await supabase
+  // Untyped client: content_edited_at is newer than the generated Database type,
+  // like the other recent Nexus columns (see api/timetable/route.ts).
+  const { data: nexusClasses } = await (supabase as any)
     .from('nexus_scheduled_classes')
     .select(
-      'id, classroom_id, teams_meeting_id, teams_meeting_url, teams_meeting_join_url, teams_meeting_scope, title, scheduled_date, start_time, end_time, status, created_at, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, organizer_name, organizer_email',
+      'id, classroom_id, teams_meeting_id, teams_meeting_url, teams_meeting_join_url, teams_meeting_scope, title, scheduled_date, start_time, end_time, status, created_at, content_edited_at, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, organizer_name, organizer_email',
     )
     .eq('classroom_id', classroom.id)
     .not('teams_meeting_id', 'is', null)
@@ -190,6 +202,7 @@ export async function syncClassroomMeetings(
           end_time: string;
           status: string | null;
           created_at: string | null;
+          content_edited_at: string | null;
           teams_channel_id: string | null;
           teams_channel_message_id: string | null;
           teams_group_chat_message_id: string | null;
@@ -309,31 +322,53 @@ export async function syncClassroomMeetings(
       const teamsDate = matched.start.substring(0, 10);
       const teamsStart = matched.start.substring(11, 16);
       const teamsEnd = matched.end.substring(11, 16);
+      // Nexus owns the CONTENT of a class once a human has edited it; Teams owns
+      // WHEN it is. A teacher naming a class in the Wrap Up panel is stating what
+      // the class turned out to be, which a meeting subject written days earlier
+      // ("Class by Ar.Hari Babu") cannot know. Overwriting it from Teams is how a
+      // wrap-up silently reverted: on 2026-07-30 one cron pass retitled four
+      // classes that still carried the brief and bullets proving a human wrote them.
+      const contentLocked = !!cls.content_edited_at;
+
+      // Excluded from `changed` as well as from the payload, deliberately. Dropping
+      // the title from the payload alone would leave `changed` true forever on a
+      // locked, drifted class, so every cycle would fire an UPDATE that wrote
+      // nothing but the values already there.
+      const titleChanged = !contentLocked && cls.title !== matched.subject;
+      if (contentLocked && cls.title !== matched.subject) result.lockedTitleSkips++;
+
+      const timingChanged =
+        cls.scheduled_date !== teamsDate ||
+        cls.start_time.substring(0, 5) !== teamsStart ||
+        cls.end_time.substring(0, 5) !== teamsEnd;
+
       // Organizer fields are compared separately from title/date/time so a class
       // whose organizer was never captured (e.g. created via Nexus's own Add Class
       // flow, not imported from the calendar) gets it backfilled here on every
       // sync cycle, not just at import time.
       const organizerChanged =
-        (matched.organizerName && cls.organizer_name !== matched.organizerName) ||
-        (matched.organizerEmail && cls.organizer_email !== matched.organizerEmail);
-      const changed =
-        cls.title !== matched.subject ||
-        cls.scheduled_date !== teamsDate ||
-        cls.start_time.substring(0, 5) !== teamsStart ||
-        cls.end_time.substring(0, 5) !== teamsEnd ||
-        organizerChanged;
+        (!!matched.organizerName && cls.organizer_name !== matched.organizerName) ||
+        (!!matched.organizerEmail && cls.organizer_email !== matched.organizerEmail);
+
+      const changed = titleChanged || timingChanged || organizerChanged;
 
       if (changed) {
-        const { error } = await supabase
+        // Date and time always ride along: they are Teams' to own, and rewriting the
+        // current value when only the organizer moved is a harmless no-op. `title`
+        // and `description` are not: description is written on import only, and a
+        // locked class's title is Nexus's.
+        const patch: Record<string, unknown> = {
+          scheduled_date: teamsDate,
+          start_time: teamsStart,
+          end_time: teamsEnd,
+        };
+        if (titleChanged) patch.title = matched.subject;
+        if (matched.organizerName) patch.organizer_name = matched.organizerName;
+        if (matched.organizerEmail) patch.organizer_email = matched.organizerEmail;
+
+        const { error } = await (supabase as any)
           .from('nexus_scheduled_classes')
-          .update({
-            title: matched.subject,
-            scheduled_date: teamsDate,
-            start_time: teamsStart,
-            end_time: teamsEnd,
-            ...(matched.organizerName ? { organizer_name: matched.organizerName } : {}),
-            ...(matched.organizerEmail ? { organizer_email: matched.organizerEmail } : {}),
-          } as never)
+          .update(patch)
           .eq('id', cls.id);
         if (error) {
           result.errors.push(`Update ${cls.title}: ${error.message}`);

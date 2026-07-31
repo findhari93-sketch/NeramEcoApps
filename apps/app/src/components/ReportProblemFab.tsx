@@ -7,15 +7,19 @@ import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import { getCurrentUser } from '@neram/auth';
 import { captureScreenshot } from '@/lib/capture-screenshot';
 import ReportProblemDialog from './ReportProblemDialog';
+import { useCanReportProblem } from './ReporterAccessContext';
 
 /**
- * Persistent "Report a problem" floating button on every authenticated page.
- * Captures a screenshot before opening the dialog, which also attaches device
- * info + recent console/network errors automatically. Hidden on /support (that
- * page has its own support entry point).
+ * "Report a problem" floating button, shown to students who are part of a
+ * class. Captures a screenshot before opening the dialog, which also attaches
+ * device info + recent console/network errors automatically.
+ *
+ * Hidden for everyone else, who reach us through /support instead, and hidden
+ * on /support itself (that page has its own support entry point).
  */
 export default function ReportProblemFab() {
   const pathname = usePathname();
+  const canReport = useCanReportProblem();
   const [open, setOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [autoShot, setAutoShot] = useState<File | null>(null);
@@ -25,6 +29,7 @@ export default function ReportProblemFab() {
     return u ? await u.getIdToken() : null;
   };
 
+  if (!canReport) return null;
   if (pathname?.startsWith('/support')) return null;
 
   const handleClick = async () => {

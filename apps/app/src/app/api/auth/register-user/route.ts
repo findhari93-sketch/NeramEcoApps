@@ -12,6 +12,7 @@ import { verifyIdToken } from '@/lib/firebase-admin';
 import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage, schedulePhoneDrip, insertFunnelEvent, linkAnonymousEvents } from '@neram/database';
 
 import { getCorsHeaders } from '@/lib/cors';
+import { isEnrolledStudent } from '@/lib/enrollment';
 
 export async function OPTIONS(req: NextRequest) {
   const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
@@ -182,6 +183,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Drives whether the "Report a problem" reporter is offered. The layout
+    // already awaits this response, so answering it here costs no extra
+    // round trip per page. The API routes re-check server side regardless.
+    const isEnrolled = await isEnrolledStudent(user.id, adminClient);
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -195,6 +201,7 @@ export async function POST(req: NextRequest) {
         status: user.status,
         onboarding_completed: onboardingCompleted,
         account_tier: accountTier,
+        is_enrolled_student: isEnrolled,
       },
       isNewUser,
     }, { headers: corsHeaders });

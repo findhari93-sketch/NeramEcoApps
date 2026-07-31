@@ -61,10 +61,30 @@ function resolve(
 }
 
 describe('picking the plan', () => {
-  it('ignores plans that are not active', () => {
-    expect(resolve([plan({ status: 'draft' })])).toBeNull();
+  it('ignores plans whose season is over', () => {
     expect(resolve([plan({ status: 'completed' })])).toBeNull();
     expect(resolve([plan({ status: 'archived' })])).toBeNull();
+  });
+
+  // The bug this test was written for: production's only teaching plan is a
+  // draft, so requiring 'active' hid the countdown from the whole cohort.
+  // plan-shape-query.ts already draws the timetable from draft plans.
+  it('counts down from a draft plan when nothing is published yet', () => {
+    const t = resolve([plan({ status: 'draft' })])!;
+    expect(t.exam_date).toBe('2027-01-20');
+    expect(t.source).toBe('exam_registry');
+  });
+
+  it('prefers a published plan over a draft even when the draft looks current', () => {
+    const draft = plan({ id: 'draft', status: 'draft' }); // window contains today
+    const live = plan({
+      id: 'live',
+      status: 'active',
+      start_date: '2020-01-01',
+      expected_end_date: '2020-06-01',
+    });
+    expect(resolve([draft, live])!.plan!.id).toBe('live');
+    expect(resolve([live, draft])!.plan!.id).toBe('live');
   });
 
   it('returns null when there is no plan at all', () => {

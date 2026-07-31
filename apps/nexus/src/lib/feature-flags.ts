@@ -71,7 +71,20 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.study-materials', label: 'Study Materials', surface: 'student', group: 'Study Zone', paths: ['/student/study-materials'], defaultEnabled: false },
   { id: 'student.study-materials-starred', label: 'Starred', surface: 'student', group: 'Study Zone', paths: ['/student/study-materials/starred'], defaultEnabled: false },
   { id: 'student.self-learning', label: 'Self-learning', surface: 'student', group: 'Study Zone', paths: ['/student/self-learning'], defaultEnabled: false },
-  { id: 'student.class-recaps', label: 'Class Recaps', surface: 'student', group: 'Study Zone', paths: ['/student/class-recaps', '/student/class-recap'], defaultEnabled: false },
+  // '/student/focus' is listed here on purpose: Focus Mode is the player for a
+  // recap, so it must live and die with the same switch. Left out, the
+  // chromeless route would stay reachable after Class Recaps was turned off.
+  { id: 'student.class-recaps', label: 'Class Recaps', surface: 'student', group: 'Study Zone', paths: ['/student/class-recaps', '/student/class-recap', '/student/focus'], defaultEnabled: false },
+  // A behaviour switch, not a menu item, hence no paths: it controls HOW a
+  // student receives a recording, not whether a page exists.
+  //
+  // Defaults ON, unlike every other student flag, because this one is a kill
+  // switch rather than a rollout gate. ON is the safe state: bytes are proxied
+  // through Nexus and no Microsoft URL reaches the browser. OFF restores the old
+  // behaviour of handing out a pre-authenticated Microsoft URL, which plays for
+  // anyone it is forwarded to. Shipping that as the default would mean the leak
+  // this was built to close stays open until somebody remembers a switch.
+  { id: 'student.protected-video', label: 'Protected video delivery', surface: 'student', group: 'Study Zone', paths: [], defaultEnabled: true },
   { id: 'student.resources', label: 'Reference Material', surface: 'student', group: 'Study Zone', paths: ['/student/resources'], defaultEnabled: false },
 
   // Access rules. Not a page: `paths: []` can never match in featureForPath, so
@@ -116,7 +129,10 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.modules', label: 'Modules', surface: 'staff', group: 'Management', paths: ['/teacher/modules'], defaultEnabled: true },
   { id: 'staff.study-materials', label: 'Study Materials', surface: 'staff', group: 'Management', paths: ['/teacher/study-materials'], defaultEnabled: true },
   { id: 'staff.study-materials-feedback', label: 'Materials Feedback', surface: 'staff', group: 'Management', paths: ['/teacher/study-materials/feedback'], defaultEnabled: true },
-  { id: 'staff.class-recaps', label: 'Class Recaps', surface: 'staff', group: 'Management', paths: ['/teacher/class-recaps'], defaultEnabled: true },
+  // No longer a nav item: the list moved into Catch-up. The flag stays because
+  // the recap EDITOR still answers to this path, so turning it off still shuts
+  // recap authoring down. Relabelled so the admin flags screen says what it does.
+  { id: 'staff.class-recaps', label: 'Class recap editor', surface: 'staff', group: 'Management', paths: ['/teacher/class-recaps'], defaultEnabled: true },
   { id: 'staff.catchup', label: 'Catch-up', surface: 'staff', group: 'Management', paths: ['/teacher/catch-up'], defaultEnabled: true },
   { id: 'staff.checklists', label: 'Checklists', surface: 'staff', group: 'Management', paths: ['/teacher/checklists'], defaultEnabled: true },
   { id: 'staff.documents', label: 'Documents', surface: 'staff', group: 'Management', paths: ['/teacher/documents'], defaultEnabled: true },

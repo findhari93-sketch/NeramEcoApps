@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
     let totalSkipped = 0;
     let totalCancelled = 0;
     let totalUpdated = 0;
+    let totalLockedTitleSkips = 0;
     const errors: string[] = [];
 
     for (const classroom of classrooms) {
@@ -64,6 +65,7 @@ export async function GET(request: NextRequest) {
         totalImported += result.imported;
         totalCancelled += result.cancelled;
         totalUpdated += result.updated;
+        totalLockedTitleSkips += result.lockedTitleSkips;
 
         // A class cancelled from within Teams: post a "Cancelled" card (best-effort,
         // app-only) and notify students in-app.
@@ -93,6 +95,9 @@ export async function GET(request: NextRequest) {
       skipped: totalSkipped,
       cancelled: totalCancelled,
       updated: totalUpdated,
+      // Wrapped-up classes whose Teams subject drifted and was left alone. This
+      // rising while `updated` falls is the guard doing its job.
+      lockedTitleSkips: totalLockedTitleSkips,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (err) {

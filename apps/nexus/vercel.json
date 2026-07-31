@@ -44,6 +44,10 @@
       "schedule": "30 0 * * *"
     },
     {
+      "path": "/api/cron/catchup-digest",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/catchup-overdue",
       "schedule": "30 4 * * *"
     },

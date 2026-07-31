@@ -4,6 +4,8 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { getSharePointStreamUrl } from '@/lib/sharepoint';
 import { resolveClassStaffAccess } from '@/lib/class-staff-access';
 import { isGraphApiUrl } from '@/lib/class-links';
+import { isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
+import { grantVideoAccess, isProtectedVideoEnabled } from '@/lib/video-grant';
 
 /**
  * GET /api/timetable/[classId]/recording-stream
@@ -20,11 +22,17 @@ import { isGraphApiUrl } from '@/lib/class-links';
  *
  * Nexus already knows who belongs in a class, so it decides here instead:
  * resolveClassStaffAccess admits internal staff anywhere and everyone else on an
- * active enrollment, and the bytes are then fetched with the app-only token. The
- * URL returned points straight at Microsoft, so the video streams from there and
- * never through this function.
+ * active enrollment.
  *
- * Returns: { streamUrl }
+ * The URL handed back now depends on who asked, because the two audiences need
+ * opposite things. Staff get the Microsoft URL directly: it is fastest, they can
+ * scrub freely, and they are already trusted with the file. A STUDENT gets a
+ * proxied path instead, because a pre-authenticated Microsoft URL is copyable and
+ * works for anyone who receives it, which is the leak this work exists to close.
+ *
+ * Returns: { streamUrl, protected }
+ * `streamUrl` deliberately keeps its name in both branches so the player needs
+ * no new code path, only the protection wrapper when `protected` is true.
  */
 interface Ctx {
   params: { classId: string };
@@ -68,13 +76,29 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       );
     }
 
-    const streamUrl = await getSharePointStreamUrl(recordingUrl);
+    const staff = isInternalStaff(resolveStaffRole(access.user)) || access.canEdit;
+    if (staff || !(await isProtectedVideoEnabled())) {
+      const streamUrl = await getSharePointStreamUrl(recordingUrl);
+      return NextResponse.json(
+        { streamUrl, protected: false },
+        // Matches the ~1h life of a Microsoft pre-authenticated URL with room to
+        // spare, and keeps staff re-opening the same class off Graph entirely.
+        { headers: { 'Cache-Control': 'private, max-age=900' } },
+      );
+    }
+
+    const grant = await grantVideoAccess({
+      scope: 'class',
+      refId: params.classId,
+      userId: access.userId,
+      scheduledClassId: params.classId,
+      request,
+    });
 
     return NextResponse.json(
-      { streamUrl },
-      // Matches the ~1h life of a Microsoft pre-authenticated URL with room to
-      // spare, and keeps a student re-opening the same class off Graph entirely.
-      { headers: { 'Cache-Control': 'private, max-age=900' } },
+      { streamUrl: grant.src, protected: true, expires_at: grant.expiresAt },
+      // Never cached: the grant is short-lived and identifies one viewer.
+      { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to resolve the recording';

@@ -4,58 +4,87 @@ Turns on the nightly job that copies each class recording from Teams to YouTube.
 
 Teams deletes a class recording after about six months, so the YouTube copy is the durable one. Until this is connected, the code is inert: the feature flag defaults off and the cron returns `{"skipped":"feature disabled"}`.
 
-Budget about 30 minutes. Steps 1 to 4 are Google Cloud Console. Steps 5 to 7 are ours.
+Budget about 30 minutes. Steps 1 to 5 are Google Cloud Console. Steps 6 to 8 are ours.
 
 ---
+
+> **Console note.** Google replaced the single "OAuth consent screen" page with the **Google Auth Platform**, where the same settings live under Branding, Audience, Data Access and Clients. The steps below use the new names. If you land on a page called "OAuth consent screen", you are on the old UI and it maps one to one.
 
 ## 1. Pick the Google Cloud project
 
 Quota is **per project**, and `videos.insert` costs 1600 of a 10,000-unit daily allowance, so this decides how many videos a day can ever go up.
 
-There is already a Google OAuth client in this monorepo, `GOOGLE_YOUTUBE_CLIENT_ID`, used by [apps/app](apps/app/src/app/api/youtube/oauth-callback/route.ts) for the student subscription reward. Check which project it lives in.
+**Decided: the `neramclasses` project** (number `362970587122`), where YouTube Data API v3 is already enabled.
 
-- If you reuse that project, the student subscription checks and these uploads share one 10,000-unit budget.
-- A separate project gets its own 10,000. Prefer this.
+It gets the full 10,000 units. The student subscription reward's `GOOGLE_YOUTUBE_CLIENT_ID`, used by [apps/app](apps/app/src/app/api/youtube/oauth-callback/route.ts) and [apps/marketing](apps/marketing/src/app/api/youtube/oauth-callback/route.ts), belongs to a **different** project (number `253536076108`), so the two never compete.
 
-Enable **YouTube Data API v3** on whichever project you choose.
+The one client already in `neramclasses`, "Nexus server", is a **Desktop** credential for a local script (`scripts/google-oauth-credentials.json`, gitignored, redirect `http://localhost`). Leave it alone. Desktop clients cannot hold an https redirect URI, so it cannot serve this feature.
 
-## 2. Create a NEW OAuth client
+## 2. Publish the app, and ignore the verification wall
 
-Do not extend the existing one. It is consented by students on a different redirect URI, and adding the upload scope to it would show every student a "upload videos to your YouTube account" prompt.
+**Google Auth Platform, Audience, press "Publish app"** so publishing status reads **In production**.
 
-**APIs & Services, Credentials, Create credentials, OAuth client ID, Web application.**
+That is the whole step. One click.
 
-Authorised redirect URIs, add both:
+**As of 2026-07-31 this is already done**: `neramclasses` reads "In production", User type "External", 3 of 100 user cap used. The button on that page now reads **"Back to testing"**, which is the inverse action. Do not press it. If you ever see "Publish app" there again, someone reverted it and the 7-day token expiry is back.
 
-```
-https://nexus.neramclasses.com/api/admin/youtube-oauth/callback
-http://localhost:3012/api/admin/youtube-oauth/callback
-```
+The yellow "Your app requires verification" banner stays on this page and on Data Access **permanently**, for any unverified app using sensitive scopes. It is not a to-do item. See the table below.
 
-They must match character for character. A trailing slash is a different URI.
+### Why not leave it in Testing
 
-Keep the client ID and secret for step 5.
+Testing-mode refresh tokens **expire after 7 days**. The backup would work for a week, then stop silently on a 1am schedule, and nobody would notice until a term of recordings had aged out of Teams. Published tokens do not expire.
 
-## 3. Publish the consent screen (the one that bites)
+### Why you do not need verification, despite what the console says
 
-**APIs & Services, OAuth consent screen, Publishing status: set to "In production".**
+The Data Access page shows "Your app requires verification" and asks for a scope justification and a demo video. **Skip all of it.** Do not press "Go to verification center", do not record a video.
 
-A consent screen left in **Testing** issues refresh tokens that **expire after 7 days**. The backup would work for a week, then stop silently on a 1am schedule, and nobody would notice until a term of recordings had aged out of Teams.
+Two separate reviews get confused here, and neither blocks you:
 
-`youtube.upload` is a sensitive scope, so an unverified production app shows a "Google hasn't verified this app, Advanced, Go to (unsafe)" screen. For one internal account clicking through once, that is fine, and the refresh token then does not expire.
+| Review | What it buys | Needed? |
+|---|---|---|
+| **Google OAuth app verification** (Verification Center, demo video) | Removes the "Google hasn't verified this app" warning, and lifts the 100-user cap | **No.** This app has exactly one user, the account that owns the channel. |
+| **YouTube API compliance audit** (step 5, a different form) | Lets uploads be `unlisted` instead of forced `private` | Not to start. Uploads work now and land private. |
 
-Scopes to add:
+An unverified published app still works. At consent time, once, you get an interstitial: press **Advanced**, then **Go to nexus.neramclasses.com (unsafe)**. After that the grant is permanent.
+
+**Internal is not an option here.** It requires a Google Workspace org, and `neramclasses` sits under a consumer Google account. `@neramclasses.com` mail is Microsoft 365, which does not give Google an org to scope to.
+
+**Write down today's date.** If `invalid_grant` shows up about 7 days later, the app never actually published and is still in Testing.
+
+## 3. Add the scopes
+
+**Google Auth Platform, Data Access, Add or remove scopes.** Paste both:
 
 ```
 https://www.googleapis.com/auth/youtube.upload
 https://www.googleapis.com/auth/youtube.readonly
 ```
 
-`youtube.readonly` is what lets the job check, for 1 quota unit per 50 videos, whether you have flipped a video off private yet.
+`youtube.readonly` is what lets the job check, for 1 quota unit per 50 videos, whether you have flipped a video off private yet. Without it, uploaded videos stay stuck at private in the Library forever.
 
-**Write down today's date.** If `invalid_grant` shows up about 7 days later, the screen is still in Testing.
+## 4. Create a NEW OAuth client
 
-## 4. Submit the compliance audit
+**Google Auth Platform, Clients, Create client, Application type: Web application.** Name it something like "Nexus YouTube backup".
+
+It must be **Web application**. The existing "Nexus server" client is type Desktop, which only accepts `http://localhost` loopback redirects and cannot be pointed at `https://nexus.neramclasses.com`.
+
+Do not extend the student client either. It is consented by students on a different redirect URI, and adding the upload scope to it would show every student a "upload videos to your YouTube account" prompt.
+
+Authorised redirect URIs, add all three:
+
+```
+https://nexus.neramclasses.com/api/admin/youtube-oauth/callback
+https://staging-nexus.neramclasses.com/api/admin/youtube-oauth/callback
+http://localhost:3012/api/admin/youtube-oauth/callback
+```
+
+They must match character for character. A trailing slash is a different URI, and the failure is `redirect_uri_mismatch` at consent time.
+
+The staging one is needed because Vercel Preview serves the `staging` branch, and its `YOUTUBE_UPLOAD_REDIRECT_URI` points there. Per-deployment `*.vercel.app` URLs cannot be registered (they change every push), so **OAuth can only be connected from production, staging or localhost**, never from a raw preview URL.
+
+**Done 2026-07-31.** Client `362970587122-dpe07...` in `neramclasses`, type Web application.
+
+## 5. Submit the compliance audit
 
 **YouTube API Services, Audit and Quota Extension form.**
 
@@ -63,46 +92,50 @@ Until this passes, YouTube forces every video uploaded through the API to `priva
 
 When it passes, change `UPLOAD_PRIVACY_STATUS` in [apps/nexus/src/lib/youtube-upload.ts](apps/nexus/src/lib/youtube-upload.ts) from `'private'` to `'unlisted'`. A unit test asserts that constant is the only thing that changes.
 
-## 5. Set the environment variables
+## 6. Set the environment variables
+
+**Done 2026-07-31.** All four are set on `neram-nexus-new` for both Production and Preview, and in `apps/nexus/.env.local` for local dev. Verify any time with `cd apps/nexus && vercel env ls`.
+
+`YOUTUBE_UPLOAD_REDIRECT_URI` differs per environment and must match a URI registered in step 4:
+
+| Environment | Value |
+|---|---|
+| Production | `https://nexus.neramclasses.com/api/admin/youtube-oauth/callback` |
+| Preview (the `staging` branch) | `https://staging-nexus.neramclasses.com/api/admin/youtube-oauth/callback` |
+| `.env.local` | `http://localhost:3012/api/admin/youtube-oauth/callback` |
+
+To re-key later, for each environment:
 
 ```bash
 cd apps/nexus
-
-echo "<client-id>"     | vercel env add YOUTUBE_UPLOAD_CLIENT_ID production
-echo "<client-secret>" | vercel env add YOUTUBE_UPLOAD_CLIENT_SECRET production
-echo "https://nexus.neramclasses.com/api/admin/youtube-oauth/callback" | vercel env add YOUTUBE_UPLOAD_REDIRECT_URI production
+vercel env rm YOUTUBE_UPLOAD_CLIENT_SECRET production      # remove the old first
+printf '%s' "<new-secret>" | vercel env add YOUTUBE_UPLOAD_CLIENT_SECRET production
 ```
 
-Repeat each with `preview` in place of `production`, using the preview URL for the redirect.
+Env changes only take effect on the **next deploy**. Adding them does not redeploy anything by itself.
 
-### `CRON_SECRET` is currently unset, and it matters more here than anywhere else
-
-```bash
-openssl rand -hex 32   # or any 32+ random chars
-cd apps/nexus && echo "<value>" | vercel env add CRON_SECRET production
-```
+### Why `CRON_SECRET` matters more here than anywhere else
 
 [assertCronRequest](apps/nexus/src/lib/cron-auth.ts) normally waves calls through when this is missing, which is merely untidy for a route that sends reminders. The backup route opts into `{ required: true }` and returns **503** instead, because an open endpoint there is six requests away from spending a day of upload quota.
 
-Setting this also closes the other nine nexus crons, which are currently public.
+Setting it also closed the other nine nexus crons, which were previously callable by anyone. That takes effect on the next deploy.
 
-For local testing, add the same four to `apps/nexus/.env.local`.
+## 7. Apply the migrations
 
-## 6. Apply the migrations
-
-Two tables, both inert until the flag is on:
+**Already done, 2026-07-31.** Both tables were applied to staging and production and verified identical. Nothing to do unless you are setting up a fresh environment.
 
 - `nexus_class_video_uploads`, the per-class job with the resumable session and confirmed byte offset
 - `nexus_youtube_credentials`, the OAuth grant
 
-They ship with the deploy. Verify they actually landed rather than assuming, because `supabase db push` in CI has silently no-opped before:
+Both are inert until the feature flag is on. To re-verify in any environment:
 
 ```sql
 SELECT table_name FROM information_schema.tables
-WHERE table_name IN ('nexus_class_video_uploads','nexus_youtube_credentials');
+WHERE table_schema = 'public'
+  AND table_name IN ('nexus_class_video_uploads','nexus_youtube_credentials');
 ```
 
-## 7. Connect the account
+## 8. Connect the account
 
 Sign in to Nexus as an admin, then visit:
 
@@ -111,6 +144,8 @@ https://nexus.neramclasses.com/api/admin/youtube-oauth/start
 ```
 
 Consent **with the Google account that owns the Neram channel**. Authorising a personal account is the likeliest mistake here and it fails silently: recordings would upload to the wrong channel and nothing would look broken.
+
+If the channel has multiple managers, Google shows a channel picker. Pick the Neram channel, not the "personal channel" entry that appears above it.
 
 Confirm what was actually connected:
 
@@ -167,17 +202,21 @@ A 300 MB recording may not finish inside one 300s invocation. That is expected a
 | `partial` | ran out of clock. Normal. Resumes next run. |
 | `promoted` | videos you flipped off private, now published to the Library. |
 | `quotaBlocked` | the day's quota is gone. Stops cleanly and counts against no class. |
-| `reasons.oauth_revoked` | the grant is dead. Reconnect at step 7. |
+| `reasons.oauth_revoked` | the grant is dead. Reconnect at step 8. |
 
 ## When something goes wrong
 
 | Symptom | Cause |
 |---|---|
-| `503` from the cron | `CRON_SECRET` is not set. Step 5. |
+| `503` from the cron | `CRON_SECRET` is not set. Step 6. |
 | `{"skipped":"feature disabled"}` | Normal until you turn the flag on. |
-| `reasons.oauth_revoked`, roughly 7 days after setup | The consent screen is still in **Testing**. Step 3. |
-| `reasons.oauth_revoked` at any other time | Consent withdrawn or password changed. Reconnect at step 7. |
-| Videos upload but stay private | Expected until the audit passes. Step 4. |
+| `reasons.oauth_revoked`, roughly 7 days after setup | An External app still in **Testing**. Step 2. |
+| `reasons.oauth_revoked` at any other time | Consent withdrawn or password changed. Reconnect at step 8. |
+| `redirect_uri_mismatch` at consent | The URI in step 4 does not match `YOUTUBE_UPLOAD_REDIRECT_URI` byte for byte. |
+| `access_denied` for an `@neramclasses.com` account | Audience is External but the app is unpublished, or the account is not a test user. Step 2. |
+| `access_denied` for a Gmail account | Audience is Internal, which only admits the Workspace org. Step 2. |
+| `insufficient scopes` on the promotion pass | `youtube.readonly` was not added. Step 3, then reconnect. |
+| Videos upload but stay private | Expected until the audit passes. Step 5. |
 | `quotaExceeded` | 5 uploads already today. It resets at midnight **Pacific**. |
 | `RANGE_NOT_SUPPORTED` | SharePoint stopped honouring Range. Re-run the probe; the chunked design depends on it. |
 | A class stuck at `status='unavailable'` | Four failed attempts. Read its `detail` column; the cap exists so a broken class cannot burn 1600 units a night forever. |

@@ -17,7 +17,8 @@ interface RecapYouTubePlayerProps {
   youtubeId: string;
   sections: RecapPlayerSection[];
   onSectionEnd: (sectionIndex: number) => void;
-  onTimeUpdate?: (seconds: number) => void;
+  /** Fires on every poll tick. `duration` is 0 until the player reports one. */
+  onTimeUpdate?: (seconds: number, duration: number) => void;
 }
 
 let apiReadyPromise: Promise<void> | null = null;
@@ -74,7 +75,7 @@ export default function RecapYouTubePlayer({
       if (!player || typeof player.getCurrentTime !== 'function') return;
       const time = player.getCurrentTime() || 0;
       const duration = typeof player.getDuration === 'function' ? player.getDuration() || 0 : 0;
-      onTimeUpdateRef.current?.(time);
+      onTimeUpdateRef.current?.(time, duration);
 
       const allSections = sectionsRef.current;
       for (let i = 0; i < allSections.length; i++) {

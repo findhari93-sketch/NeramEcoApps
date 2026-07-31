@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTeacher } from '@/lib/verify-teacher';
-import { replaceRecapSections, getRecapById } from '@neram/database';
+import { saveRecapSections, getRecapById } from '@neram/database';
 import type { GeneratedRecapSection } from '@neram/database';
 
 /**
  * PUT /api/class-recaps/[recapId]/sections
- * Replace all checkpoints + questions (from the reviewed AI preview or an edit).
+ * Save all checkpoints + questions (from the reviewed AI preview or an edit).
  * Body: { sections: GeneratedRecapSection[] }
+ *
+ * saveRecapSections, not replaceRecapSections. Once a recap is published or any
+ * student has attempted a checkpoint, a blanket replace would cascade their
+ * passed attempts away and silently re-lock them. Send each existing checkpoint
+ * back with its `id` so it is updated in place; anything without an id is
+ * treated as new, and anything omitted is archived rather than deleted.
  */
 export async function PUT(
   request: NextRequest,
@@ -33,7 +39,7 @@ export async function PUT(
       }
     }
 
-    await replaceRecapSections(recapId, sections);
+    await saveRecapSections(recapId, sections);
     const recap = await getRecapById(recapId);
     return NextResponse.json({ recap });
   } catch (err) {

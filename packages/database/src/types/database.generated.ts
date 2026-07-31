@@ -14572,8 +14572,10 @@ export type Database = {
           assigned_at: string | null
           assigned_to: string | null
           category: Database["public"]["Enums"]["support_ticket_category"]
+          console_logs: Json | null
           created_at: string
           description: string
+          device_info: Json | null
           enrollment_link_id: string | null
           id: string
           page_url: string | null
@@ -14596,8 +14598,10 @@ export type Database = {
           assigned_at?: string | null
           assigned_to?: string | null
           category?: Database["public"]["Enums"]["support_ticket_category"]
+          console_logs?: Json | null
           created_at?: string
           description: string
+          device_info?: Json | null
           enrollment_link_id?: string | null
           id?: string
           page_url?: string | null
@@ -14620,8 +14624,10 @@ export type Database = {
           assigned_at?: string | null
           assigned_to?: string | null
           category?: Database["public"]["Enums"]["support_ticket_category"]
+          console_logs?: Json | null
           created_at?: string
           description?: string
+          device_info?: Json | null
           enrollment_link_id?: string | null
           id?: string
           page_url?: string | null

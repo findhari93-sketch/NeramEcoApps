@@ -142,7 +142,10 @@ const PANELS: PanelConfig[] = [
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
       { label: 'Study Materials', path: '/teacher/study-materials', icon: <FolderOutlinedIcon /> },
       { label: 'Materials Feedback', path: '/teacher/study-materials/feedback', icon: <RateReviewOutlinedIcon /> },
-      { label: 'Class Recaps', path: '/teacher/class-recaps', icon: <VideoLibraryOutlinedIcon /> },
+      // Class Recaps used to sit here as its own item. It was half of this one:
+      // a list of recorded classes with a Create recap button, next to a screen
+      // that knew which of those missing recaps were blocking real students.
+      // Both live under Catch-up now, in the Classes and recaps tab.
       { label: 'Catch-up', path: '/teacher/catch-up', icon: <HistoryToggleOffOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },

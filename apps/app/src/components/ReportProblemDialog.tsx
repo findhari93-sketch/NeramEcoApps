@@ -21,18 +21,24 @@ import {
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
-import type { FoundationIssueCategory } from '@neram/database/types';
+import type { SupportTicketCategory } from '@neram/database/types';
 import { collectDeviceInfo } from '@/lib/device-collector';
 import { getRecentErrors } from '@/lib/error-buffer';
 import { compressImage } from '@/lib/image-compress';
 
-const CATEGORIES: { value: FoundationIssueCategory; label: string }[] = [
-  { value: 'bug', label: 'Bug / Something Broken' },
-  { value: 'content_issue', label: 'Content Issue' },
-  { value: 'ui_ux', label: 'UI/UX Problem' },
-  { value: 'feature_request', label: 'Feature Request' },
+// These are the support_tickets categories, used here verbatim rather than
+// mapped from a second set. A report from this dialog lands in the Admin
+// support queue, so the reporter picks from the same list staff filter on.
+const CATEGORIES: { value: SupportTicketCategory; label: string }[] = [
+  { value: 'technical_issue', label: 'Something Broken' },
+  { value: 'course_question', label: 'Course or Content Question' },
+  { value: 'account_issue', label: 'Account Problem' },
+  { value: 'payment_issue', label: 'Payment Problem' },
+  { value: 'enrollment_issue', label: 'Enrollment Problem' },
   { value: 'other', label: 'Other' },
 ];
+
+const DEFAULT_CATEGORY: SupportTicketCategory = 'technical_issue';
 
 const BUCKET_PREFIX = 'issue-screenshots/';
 function pathToUrl(path: string): string {
@@ -49,7 +55,7 @@ interface ReportProblemDialogProps {
   getToken: () => Promise<string | null>;
   pageUrl?: string;
   initialScreenshotFile?: File | null;
-  prefill?: { title?: string; description?: string; category?: FoundationIssueCategory };
+  prefill?: { title?: string; description?: string; category?: SupportTicketCategory };
 }
 
 export default function ReportProblemDialog({
@@ -63,7 +69,7 @@ export default function ReportProblemDialog({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const [category, setCategory] = useState<FoundationIssueCategory>('bug');
+  const [category, setCategory] = useState<SupportTicketCategory>(DEFAULT_CATEGORY);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [screenshots, setScreenshots] = useState<string[]>([]); // storage paths
@@ -77,7 +83,7 @@ export default function ReportProblemDialog({
   });
 
   const resetForm = () => {
-    setCategory('bug');
+    setCategory(DEFAULT_CATEGORY);
     setTitle('');
     setDescription('');
     setScreenshots([]);
@@ -170,13 +176,22 @@ export default function ReportProblemDialog({
           console_logs: consoleLogs.length > 0 ? consoleLogs : undefined,
         }),
       });
-      if (!res.ok) throw new Error('Failed to submit');
+      if (!res.ok) {
+        // A client that was open before enrolment changed, or one calling the
+        // route directly, gets told what to do instead of a generic failure.
+        if (res.status === 403) {
+          throw new Error('Problem reports are for enrolled students. Please use Support to reach us.');
+        }
+        throw new Error('Could not send the report. Please try again.');
+      }
       const data = await res.json();
       resetForm();
       onClose();
       setSnackbar({ open: true, message: `Report ${data.ticket_number} sent. Thank you!`, severity: 'success' });
-    } catch {
-      setSnackbar({ open: true, message: 'Could not send the report. Please try again.', severity: 'error' });
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message ? err.message : 'Could not send the report. Please try again.';
+      setSnackbar({ open: true, message, severity: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -195,7 +210,7 @@ export default function ReportProblemDialog({
         select
         label="Category"
         value={category}
-        onChange={(e) => setCategory(e.target.value as FoundationIssueCategory)}
+        onChange={(e) => setCategory(e.target.value as SupportTicketCategory)}
         size="small"
         fullWidth
       >

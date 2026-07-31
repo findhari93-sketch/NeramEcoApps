@@ -5,44 +5,49 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
 
-// Mock window.matchMedia for components that use media queries
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => {},
-  }),
-});
+// Browser-only shims. Skipped for files that opt into the node environment
+// with `// @vitest-environment node`, such as API route tests, where there is
+// no window to define these on.
+if (typeof window !== 'undefined') {
+  // Mock window.matchMedia for components that use media queries
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => {},
+    }),
+  });
 
-// Mock IntersectionObserver
-class MockIntersectionObserver {
-  observe = () => {};
-  unobserve = () => {};
-  disconnect = () => {};
+  // Mock IntersectionObserver
+  class MockIntersectionObserver {
+    observe = () => {};
+    unobserve = () => {};
+    disconnect = () => {};
+  }
+
+  Object.defineProperty(window, 'IntersectionObserver', {
+    writable: true,
+    value: MockIntersectionObserver,
+  });
+
+  // Mock ResizeObserver
+  class MockResizeObserver {
+    observe = () => {};
+    unobserve = () => {};
+    disconnect = () => {};
+  }
+
+  Object.defineProperty(window, 'ResizeObserver', {
+    writable: true,
+    value: MockResizeObserver,
+  });
 }
-
-Object.defineProperty(window, 'IntersectionObserver', {
-  writable: true,
-  value: MockIntersectionObserver,
-});
-
-// Mock ResizeObserver
-class MockResizeObserver {
-  observe = () => {};
-  unobserve = () => {};
-  disconnect = () => {};
-}
-
-Object.defineProperty(window, 'ResizeObserver', {
-  writable: true,
-  value: MockResizeObserver,
-});
 
 // Suppress console errors during tests (optional, can be configured)
 const originalError = console.error;

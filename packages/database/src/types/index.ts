@@ -2847,6 +2847,10 @@ export interface SupportTicket extends Timestamps {
   source_app: string | null;
   enrollment_link_id: string | null;
   screenshot_urls: string[];
+  /** Auto-captured by the student app reporter. Null for form-filed tickets. */
+  console_logs: Record<string, unknown>[] | null;
+  /** Auto-captured by the student app reporter. Null for form-filed tickets. */
+  device_info: Record<string, unknown> | null;
   status: SupportTicketStatus;
   priority: SupportTicketPriority;
   assigned_to: string | null;
@@ -2878,6 +2882,8 @@ export interface CreateSupportTicketInput {
   source_app?: string;
   enrollment_link_id?: string;
   screenshot_urls?: string[];
+  console_logs?: Record<string, unknown>[];
+  device_info?: Record<string, unknown>;
 }
 
 export interface UpdateSupportTicketInput {

@@ -9,6 +9,7 @@ import {
   type ClassMeetingRow,
 } from '@/lib/attendance-sync';
 import { syncClassTranscripts, type TranscriptSyncSummary } from '@/lib/transcript-sync';
+import { runRecapAutodraft } from '@/lib/recap-autodraft';
 
 /**
  * GET /api/cron/sync-attendance
@@ -126,6 +127,35 @@ export async function GET(request: NextRequest) {
       transcripts = { error: err instanceof Error ? err.message : 'transcript sync failed' };
     }
 
+    // Recaps, third. A transcript landing is the nearest thing this stack has to
+    // a "class ended" event: Teams has finished processing a session that ran
+    // about twenty minutes ago, which is exactly when its catch-up material can
+    // be built. Generating here rather than waiting for the nightly sweep is the
+    // difference between a student who missed tonight being able to catch up
+    // tonight, and being told to come back tomorrow.
+    //
+    // Scoped to the classes whose transcripts arrived in THIS pass, so it never
+    // re-scans, and never allowed to fail the request: attendance is the
+    // schedule-critical half of this cron and recaps must not jeopardise it.
+    let recaps: unknown = { skipped: 'no transcripts stored' };
+    const storedClassIds = (transcripts as TranscriptSyncSummary)?.storedClassIds;
+    if (Array.isArray(storedClassIds) && storedClassIds.length > 0) {
+      try {
+        const run = await runRecapAutodraft(supabase, { classIds: storedClassIds });
+        recaps = {
+          scanned: run.scanned,
+          generated: run.drafted,
+          skipped: run.skipped,
+          rateLimited: run.rateLimited,
+          published: run.outcomes.filter((o) => o.ok && o.published).length,
+          held: run.outcomes.filter((o) => o.ok && o.held).length,
+        };
+      } catch (err) {
+        console.error('[cron sync-attendance] recap pipeline failed:', err);
+        recaps = { error: err instanceof Error ? err.message : 'recap pipeline failed' };
+      }
+    }
+
     return NextResponse.json({
       candidates: candidates?.length ?? 0,
       due: due.length,
@@ -133,6 +163,7 @@ export async function GET(request: NextRequest) {
       absencesRecomputed,
       results: tally,
       transcripts,
+      recaps,
     });
   } catch (err) {
     console.error('[cron sync-attendance] failed:', err);

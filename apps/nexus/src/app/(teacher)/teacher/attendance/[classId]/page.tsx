@@ -364,6 +364,24 @@ export default function ClassReconciliationPage() {
                         ? `Answered, ${reasonLabel(s.absence!.reason_code).toLowerCase()}`
                         : 'No reason given'}
                 </Typography>
+                {/* What they actually wrote. The API has always returned this
+                    and the screen has never shown it, so "Answered, other" was
+                    as far as a teacher could get. */}
+                {!s.present && s.absence?.reason_note && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      display: 'block',
+                      mt: 0.25,
+                      fontStyle: 'italic',
+                      color: 'text.primary',
+                      borderLeft: `2px solid ${alpha(theme.palette.primary.main, 0.35)}`,
+                      pl: 0.875,
+                    }}
+                  >
+                    &ldquo;{s.absence.reason_note}&rdquo;
+                  </Typography>
+                )}
               </Box>
 
               <Stack direction="row" spacing={0.625} alignItems="center" flexWrap="wrap">
@@ -382,10 +400,19 @@ export default function ClassReconciliationPage() {
                     {reasonLabel(s.absence!.reason_code)}
                   </Box>
                 )}
-                {s.absence?.caught_up_at && (
+                {s.absence?.caught_up_at ? (
                   <Box component="span" sx={tagSx(theme, 'success')}>
                     Caught up
                   </Box>
+                ) : (
+                  // Started but not finished. Worth its own tag: chasing someone
+                  // who has already watched the recording is a different call
+                  // from chasing someone who has not opened it.
+                  s.absence?.recording_watched_at && (
+                    <Box component="span" sx={tagSx(theme, 'neutral')}>
+                      Watched
+                    </Box>
+                  )
                 )}
                 {isNoShow && !s.absence?.caught_up_at && (
                   s.absence?.followup_sent_at ? (

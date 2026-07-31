@@ -57,6 +57,23 @@ interface ClassroomOption {
   academic_year?: string | null;
 }
 
+/**
+ * What /api/timetable/attendance-report returns as `summary`.
+ *
+ * The follow-up counts ride along with the register counts because they come
+ * from the same request: the detail panel can then say "3 missed, 2 explained,
+ * 1 caught up" without a second round trip per class, and the per-class fan-out
+ * here is already the most expensive thing on the page.
+ */
+interface AttendanceSummary {
+  present: number;
+  absent: number;
+  total: number;
+  missed: number;
+  explained: number;
+  caughtUp: number;
+}
+
 /** "Mon, 20 Jul". Built in IST so a late-evening class does not shift a day. */
 function formatDayLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00+05:30`);
@@ -137,7 +154,7 @@ export default function TeacherTimetable() {
   // RSVP data
   const [rsvpData, setRsvpData] = useState<Record<string, { attending: number; total: number }>>({});
   // Real Teams/manual attendance, for past classes only (cheap DB-only read, no Graph call).
-  const [attendanceData, setAttendanceData] = useState<Record<string, { present: number; total: number }>>({});
+  const [attendanceData, setAttendanceData] = useState<Record<string, AttendanceSummary>>({});
   // Rating data
   const [averageRatings, setAverageRatings] = useState<Record<string, number>>({});
 
@@ -322,7 +339,7 @@ export default function TeacherTimetable() {
 
     const rsvpMap: Record<string, { attending: number; total: number }> = {};
     const ratingMap: Record<string, number> = {};
-    const attendanceMap: Record<string, { present: number; total: number }> = {};
+    const attendanceMap: Record<string, AttendanceSummary> = {};
 
     classIds.forEach((id, i) => {
       if (rsvpResults[i]?.summary) {

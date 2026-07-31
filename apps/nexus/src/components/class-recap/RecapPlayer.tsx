@@ -4,6 +4,13 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress } from '@neram/ui';
 import RecapYouTubePlayer from './RecapYouTubePlayer';
 
+/**
+ * Grant renewals are routine on a long class, so this has to allow several.
+ * It bounds genuine failure, not expiry: the counter resets as soon as playback
+ * actually advances.
+ */
+const MAX_RETRIES = 4;
+
 export interface RecapPlayerSection {
   id: string;
   end_timestamp_seconds: number;
@@ -15,7 +22,8 @@ interface RecapPlayerProps {
   token?: string | null;
   sections: RecapPlayerSection[];
   onSectionEnd: (sectionIndex: number) => void;
-  onTimeUpdate?: (seconds: number) => void;
+  /** Fires on every playback tick. `duration` is 0 until metadata has loaded. */
+  onTimeUpdate?: (seconds: number, duration: number) => void;
 }
 
 /**
@@ -40,6 +48,9 @@ export default function RecapPlayer({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const retryCountRef = useRef(0);
+  /** Playhead to restore after a silent grant renewal. */
+  const resumeAtRef = useRef(0);
+  const wasPlayingRef = useRef(false);
 
   const hasTriggeredQuizRef = useRef<Set<number>>(new Set());
   const isRewatchingRef = useRef(false);
@@ -48,6 +59,10 @@ export default function RecapPlayer({
   sectionsRef.current = sections;
   const onSectionEndRef = useRef(onSectionEnd);
   onSectionEndRef.current = onSectionEnd;
+  // Held in a ref, not read from the closure, so an inline arrow from the page
+  // does not re-register the timeupdate listener on every render.
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  onTimeUpdateRef.current = onTimeUpdate;
 
   const fetchStreamUrl = useCallback(async () => {
     setLoading(true);
@@ -66,7 +81,10 @@ export default function RecapPlayer({
           setStreamUrl(data.streamUrl);
           setYoutubeId(null);
         }
-        retryCountRef.current = 0;
+        // Deliberately NOT resetting the retry counter here. A successful mint
+        // says nothing about whether the video then plays, and resetting on the
+        // fetch turns "fails instantly, every time" into an endless refetch loop.
+        // It resets on real playback progress instead, in the timeupdate handler.
       } else {
         const errData = await res.json().catch(() => ({ error: 'Failed to load recording' }));
         setError(errData.error || 'Failed to load recording');
@@ -116,10 +134,16 @@ export default function RecapPlayer({
 
     const handler = () => {
       const time = video.currentTime;
-      onTimeUpdate?.(time);
-
       const allSections = sectionsRef.current;
-      const videoDuration = video.duration || 0;
+      const videoDuration = Number.isFinite(video.duration) ? video.duration : 0;
+      onTimeUpdateRef.current?.(time, videoDuration);
+
+      // Playback is genuinely progressing, so whatever went wrong before is
+      // behind us and the retry budget is refilled. Anchored here rather than on
+      // a successful fetch so a video that mints fine but never plays still
+      // gives up instead of refetching forever.
+      if (time > 0) retryCountRef.current = 0;
+
       if (allSections && onSectionEndRef.current) {
         for (let i = 0; i < allSections.length; i++) {
           const section = allSections[i];
@@ -173,16 +197,39 @@ export default function RecapPlayer({
       video.removeEventListener('timeupdate', handler);
       video.removeEventListener('ended', endedHandler);
     };
-  }, [streamUrl, onTimeUpdate]);
+  }, [streamUrl]);
 
+  /**
+   * A streaming grant lasts ten minutes, so a class longer than that WILL fail
+   * mid-playback: the browser asks for the next byte range with an expired token
+   * and gets a 401. That is expected, not exceptional, so recover silently.
+   * Remember where they were, mint a fresh grant, and seek back on reload, which
+   * makes an expiry invisible apart from a moment of buffering.
+   */
   const handleVideoError = useCallback(() => {
-    if (retryCountRef.current < 2) {
-      retryCountRef.current++;
-      fetchStreamUrl();
-    } else {
-      setError('The recording failed to load. Its secure link may have expired, please refresh.');
+    if (retryCountRef.current >= MAX_RETRIES) {
+      setError('The recording failed to load. Please refresh the page.');
+      return;
     }
+    retryCountRef.current++;
+    resumeAtRef.current = videoRef.current?.currentTime ?? 0;
+    wasPlayingRef.current = !(videoRef.current?.paused ?? true);
+    fetchStreamUrl();
   }, [fetchStreamUrl]);
+
+  /** Restore the playhead after a silent re-mint. */
+  const handleLoadedMetadata = useCallback(() => {
+    const video = videoRef.current;
+    const resumeAt = resumeAtRef.current;
+    if (!video || resumeAt <= 0) return;
+    resumeAtRef.current = 0;
+    try {
+      video.currentTime = resumeAt;
+    } catch {
+      // Seeking before the browser is ready is harmless; playback starts at 0.
+    }
+    if (wasPlayingRef.current) video.play().catch(() => {});
+  }, []);
 
   if (loading) {
     return (
@@ -219,6 +266,7 @@ export default function RecapPlayer({
         controls
         playsInline
         onError={handleVideoError}
+        onLoadedMetadata={handleLoadedMetadata}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain' }}
       />
     </Box>

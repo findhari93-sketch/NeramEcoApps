@@ -193,8 +193,13 @@ export default function CatchUpPage() {
   // A guided recap is the better way to watch when one exists: it checkpoints
   // and quizzes. Otherwise the raw recording, YouTube first since Teams copies
   // expire.
+  //
+  // The player route is SINGULAR: /student/class-recap/[recapId]. The plural
+  // /student/class-recaps is the list page and has no [recapId] child, so
+  // linking there 404s and every student silently falls through to the raw
+  // YouTube tab. Every other caller in the app uses the singular form.
   const watchHref = recap
-    ? `/student/class-recaps/${recap.id}`
+    ? `/student/class-recap/${recap.id}`
     : cls.youtube_url || cls.recording_url;
 
   const stepBox = (

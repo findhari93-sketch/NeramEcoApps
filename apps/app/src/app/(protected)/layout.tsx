@@ -10,6 +10,7 @@ import AppShell from '@/components/shell/AppShell';
 import { SidebarProvider } from '@/contexts/SidebarContext';
 import { GlobalErrorLogger } from '@/components/ErrorBoundary';
 import ReportProblemFab from '@/components/ReportProblemFab';
+import { ReporterAccessProvider } from '@/components/ReporterAccessContext';
 import { installErrorCapture } from '@/lib/error-buffer';
 import InstallPromptBanner from '@/components/InstallPromptBanner';
 import { collectDeviceInfo, collectLocation } from '@/lib/device-collector';
@@ -39,6 +40,8 @@ interface SupabaseUser {
   status: string;
   onboarding_completed: boolean;
   account_tier: AccountTier;
+  /** Set by /api/auth/register-user. Gates the "Report a problem" reporter. */
+  is_enrolled_student?: boolean;
 }
 
 function ProtectedLayoutInner({
@@ -395,11 +398,11 @@ function ProtectedLayoutInner({
   }
 
   return (
-    <>
+    <ReporterAccessProvider canReport={supabaseUser?.is_enrolled_student === true}>
       {/* Global error/crash logger */}
       <GlobalErrorLogger idToken={idToken} sessionId={diagnosticSessionId} />
 
-      {/* Persistent "Report a problem" button on every authenticated page */}
+      {/* "Report a problem" button, enrolled students only */}
       <ReportProblemFab />
 
       <AppShell
@@ -458,7 +461,7 @@ function ProtectedLayoutInner({
           onSkip={() => setOnboardingCompleted(true)}
         />
       )}
-    </>
+    </ReporterAccessProvider>
   );
 }
 

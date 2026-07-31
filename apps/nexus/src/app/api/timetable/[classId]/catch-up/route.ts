@@ -304,6 +304,12 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         patch.reason_code = body.reason_code;
         patch.reason_note = note || null;
         patch.reason_submitted_at = new Date().toISOString();
+        // Who said it. The columns were added so a teacher could tell "he says
+        // he was unwell" from "his mother says he was unwell", and until now
+        // nothing wrote them, so every reason read as unattributed. This route
+        // is the student's own, hence 'student'.
+        patch.reason_source = 'student';
+        patch.reason_submitted_by = access.userId;
         break;
       }
 

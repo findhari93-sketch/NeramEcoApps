@@ -15,6 +15,8 @@ vi.mock('@neram/database', () => ({
     title: 'Generated title',
   })),
   replaceRecapSections: vi.fn(async () => undefined),
+  setRecapReadiness: vi.fn(async () => undefined),
+  createUserNotification: vi.fn(async () => ({ id: 'notif-1' })),
 }));
 
 vi.mock('./ai-generate', () => ({
@@ -28,6 +30,24 @@ vi.mock('./transcript-resolver', () => ({
 import { createRecapForClass, replaceRecapSections } from '@neram/database';
 import { generateSectionsAndQuestions } from './ai-generate';
 import { readStoredTranscript } from './transcript-resolver';
+
+/**
+ * A transcript substantial enough to be worth generating from.
+ *
+ * The sweep now runs a pre-flight before it will spend a Gemini call, because a
+ * three minute clip cannot produce a real checkpoint quiz and the API key is
+ * shared across all four apps. A one-line fixture is below that bar, so tests
+ * that want to exercise generation have to look like an actual class.
+ */
+function richTranscript(durationSeconds = 1800) {
+  const lines = 90;
+  const step = durationSeconds / lines;
+  return Array.from({ length: lines }, (_, i) => ({
+    start: Math.round(i * step),
+    end: Math.round((i + 1) * step),
+    text: `In this part of the class we look at how the vanishing point placement changes the perceived height of the elevation, and why that matters for a NATA drawing question number ${i}.`,
+  }));
+}
 
 const goodSection = {
   title: 'Setting up the two-point grid',
@@ -268,7 +288,7 @@ describe('autodraftRecapForClass', () => {
   };
 
   it('drafts checkpoints from the stored transcript', async () => {
-    vi.mocked(readStoredTranscript).mockResolvedValue([{ start: 0, end: 5, text: 'hello' }] as any);
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
     vi.mocked(generateSectionsAndQuestions).mockResolvedValue({
       sections: [goodSection, { ...goodSection, start_timestamp_seconds: 420, end_timestamp_seconds: 900 }],
     } as any);
@@ -281,7 +301,7 @@ describe('autodraftRecapForClass', () => {
   });
 
   it('drops an unusable checkpoint rather than saving it', async () => {
-    vi.mocked(readStoredTranscript).mockResolvedValue([{ start: 0, end: 5, text: 'hello' }] as any);
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
     vi.mocked(generateSectionsAndQuestions).mockResolvedValue({
       sections: [goodSection, { ...goodSection, questions: [] }],
     } as any);
@@ -299,8 +319,20 @@ describe('autodraftRecapForClass', () => {
     expect(createRecapForClass).not.toHaveBeenCalled();
   });
 
+  it('holds a class too thin to quiz, without spending a Gemini call', async () => {
+    // A three minute clip, or a session that was mostly "can everyone hear me".
+    // There is no checkpoint quiz to be had, and the key is shared across apps.
+    vi.mocked(readStoredTranscript).mockResolvedValue([
+      { start: 0, end: 5, text: 'hello can you hear me' },
+    ] as any);
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+    expect(out).toMatchObject({ ok: false, reason: 'no_transcript' });
+    expect(generateSectionsAndQuestions).not.toHaveBeenCalled();
+  });
+
   it('saves nothing when every checkpoint is unusable', async () => {
-    vi.mocked(readStoredTranscript).mockResolvedValue([{ start: 0, end: 5, text: 'hello' }] as any);
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
     vi.mocked(generateSectionsAndQuestions).mockResolvedValue({
       sections: [{ ...goodSection, questions: [] }],
     } as any);
@@ -311,7 +343,7 @@ describe('autodraftRecapForClass', () => {
   });
 
   it('reports a refusal as rate_limited, not as an ordinary error', async () => {
-    vi.mocked(readStoredTranscript).mockResolvedValue([{ start: 0, end: 5, text: 'hello' }] as any);
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
     vi.mocked(generateSectionsAndQuestions).mockRejectedValue(new Error('429 Too Many Requests'));
 
     const out = await autodraftRecapForClass({} as any, candidate);
@@ -338,7 +370,7 @@ describe('runRecapAutodraft', () => {
   }
 
   it('counts each classroom so the teachers get one notification, not three', async () => {
-    vi.mocked(readStoredTranscript).mockResolvedValue([{ start: 0, end: 5, text: 'hi' }] as any);
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
     vi.mocked(generateSectionsAndQuestions).mockResolvedValue({ sections: [goodSection] } as any);
 
     const run = await runRecapAutodraft(threeCandidates());
@@ -348,7 +380,7 @@ describe('runRecapAutodraft', () => {
   });
 
   it('stops the whole run on a refusal instead of burning the rest of the key', async () => {
-    vi.mocked(readStoredTranscript).mockResolvedValue([{ start: 0, end: 5, text: 'hi' }] as any);
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
     vi.mocked(generateSectionsAndQuestions)
       .mockResolvedValueOnce({ sections: [goodSection] } as any)
       .mockRejectedValueOnce(new Error('RESOURCE_EXHAUSTED'))
@@ -362,7 +394,7 @@ describe('runRecapAutodraft', () => {
   });
 
   it('keeps going past an ordinary failure', async () => {
-    vi.mocked(readStoredTranscript).mockResolvedValue([{ start: 0, end: 5, text: 'hi' }] as any);
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
     vi.mocked(generateSectionsAndQuestions)
       .mockResolvedValueOnce({ sections: [goodSection] } as any)
       .mockRejectedValueOnce(new Error('malformed JSON from the model'))

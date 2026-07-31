@@ -40,6 +40,8 @@ export async function createSupportTicket(
       source_app: input.source_app || null,
       enrollment_link_id: input.enrollment_link_id || null,
       screenshot_urls: input.screenshot_urls || [],
+      console_logs: input.console_logs || null,
+      device_info: input.device_info || null,
     })
     .select()
     .single();

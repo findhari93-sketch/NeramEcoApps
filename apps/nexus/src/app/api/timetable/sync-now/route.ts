@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
     let totalImported = 0;
     let totalUpdated = 0;
     let totalCancelled = 0;
+    let totalLockedTitleSkips = 0;
     let syncedCount = 0;
 
     // ─── 1. MEETING SYNC ─────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
         totalImported += result.imported;
         totalUpdated += result.updated;
         totalCancelled += result.cancelled;
+        totalLockedTitleSkips += result.lockedTitleSkips;
         syncedCount++;
 
         // A class the reconciler cancelled was cancelled from within Teams, so the
@@ -269,7 +271,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       synced: syncedCount,
-      meetings: { imported: totalImported, updated: totalUpdated, cancelled: totalCancelled },
+      meetings: {
+        imported: totalImported,
+        updated: totalUpdated,
+        cancelled: totalCancelled,
+        lockedTitleSkips: totalLockedTitleSkips,
+      },
       recordings: { found: recordingsFound, checked: classesToCheck.length },
     });
   } catch (err) {

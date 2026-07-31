@@ -216,10 +216,24 @@ export default function ParentClassSheet({ cls, open, onClose }: ParentClassShee
             )}
 
             {cls.description && (
-              <Typography sx={{ fontSize: 15, lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+              <Typography
+                sx={{ fontSize: 15, lineHeight: 1.6, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}
+              >
                 {cls.description}
               </Typography>
             )}
+
+            {/* The teacher's full written account, the long form of the bullets
+                below. A parent whose child missed the class is reading this to
+                find out what was actually taught, so it is not truncated. */}
+            {detail?.whatHappened.note ? (
+              <Typography
+                data-testid="parent-class-note"
+                sx={{ fontSize: 15, lineHeight: 1.6, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}
+              >
+                {detail.whatHappened.note}
+              </Typography>
+            ) : null}
 
             {/* The AI brief of what actually happened, as opposed to the plan. */}
             {detail?.whatHappened.bullets.length ? (
@@ -275,6 +289,7 @@ export default function ParentClassSheet({ cls, open, onClose }: ParentClassShee
             ) : null}
 
             {!cls.description &&
+              !detail?.whatHappened.note &&
               !detail?.whatHappened.bullets.length &&
               !loading && (
                 <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>

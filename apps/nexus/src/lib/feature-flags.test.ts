@@ -51,6 +51,13 @@ describe('feature-flags registry', () => {
     // at all, so with it off a missed class stays exactly as invisible as it was
     // before any of this was built.
     'student.catchup',
+    // Not a screen, a delivery mode: it decides whether a student receives a
+    // proxied path or a pre-authenticated Microsoft URL for a recording. It is a
+    // kill switch, and unlike every other flag here its OFF state is the unsafe
+    // one, because OFF hands out a URL that plays for anyone it is forwarded to.
+    // Defaulting it off would ship the leak it was written to close and leave it
+    // open until somebody remembered a switch.
+    'student.protected-video',
   ]);
 
   it('defaults student features off and staff features on', () => {

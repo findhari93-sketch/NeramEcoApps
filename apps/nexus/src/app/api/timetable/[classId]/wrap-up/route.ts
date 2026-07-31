@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { canRunSession, isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
 import { buildClassLinkPatch } from '@/lib/class-links';
 import { syncClassToLibrary } from '@/lib/class-library-bridge';
+import { refreshClassAnnouncement } from '@/lib/teams-class-announcements';
 
 /**
  * Wrap up a class after it has happened.
@@ -28,7 +29,7 @@ interface Ctx {
 }
 
 const CLASS_COLS =
-  'id, classroom_id, teacher_id, title, description, notes, summary_bullets, scheduled_date, start_time, end_time, topic_id, plan_entry_id, recording_url, youtube_url';
+  'id, classroom_id, teacher_id, title, description, notes, summary_bullets, scheduled_date, start_time, end_time, topic_id, plan_entry_id, recording_url, youtube_url, meeting_group_id, content_edited_at, content_edited_by';
 
 async function resolveAccess(supabase: any, msOid: string, classId: string) {
   const { data: user } = await supabase
@@ -176,12 +177,45 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (!links.ok) return NextResponse.json({ error: links.error }, { status: 400 });
     Object.assign(updates, links.patch);
 
+    // Saying what a class turned out to be takes ownership of its content away
+    // from the Teams meeting subject, which was written days earlier and cannot
+    // know. Without this stamp the reconciler puts the old subject back on its
+    // next pass, which is how four July wrap-ups lost their titles in one cron run.
+    //
+    // Recording links deliberately do NOT lock: pasting a YouTube URL a week later
+    // says nothing about the topic.
+    const CONTENT_KEYS = ['title', 'description', 'notes', 'summary_bullets'] as const;
+    const contentEdited = CONTENT_KEYS.some((k) => k in updates);
+    if (contentEdited) {
+      updates.content_edited_at = new Date().toISOString();
+      updates.content_edited_by = access.userId;
+    }
+
     if (Object.keys(updates).length > 0) {
       const { error } = await supabase
         .from('nexus_scheduled_classes')
         .update(updates)
         .eq('id', params.classId);
       if (error) throw error;
+
+      // A class taught to two classrooms at once is two rows sharing one Teams
+      // meeting. Wrapping up either one must carry the account (and the lock) to
+      // its sibling, or the other classroom's students keep reading the meeting
+      // subject and that row keeps being reverted.
+      if (contentEdited && access.cls.meeting_group_id) {
+        const sibling: Record<string, unknown> = {};
+        for (const k of CONTENT_KEYS) if (k in updates) sibling[k] = updates[k];
+        sibling.content_edited_at = updates.content_edited_at;
+        sibling.content_edited_by = updates.content_edited_by;
+
+        const { error: sibErr } = await supabase
+          .from('nexus_scheduled_classes')
+          .update(sibling)
+          .eq('meeting_group_id', access.cls.meeting_group_id)
+          .neq('id', params.classId);
+        // Best-effort: this class is wrapped up either way.
+        if (sibErr) console.error('Sibling wrap-up propagation failed:', sibErr);
+      }
     }
 
     // Tags are replaced wholesale when supplied: the picker sends the complete
@@ -210,6 +244,41 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       await syncClassToLibrary(supabase, params.classId);
     } catch (bridgeErr) {
       console.error('Class -> Library sync failed:', bridgeErr);
+    }
+
+    // Bring the Teams channel card up to date, so the group stops reading the
+    // topic we planned and starts reading the one we taught.
+    //
+    // Only when the account itself moved: pasting a recording link a week later is
+    // not news, and this costs Graph round trips. The Teams CALENDAR meeting is
+    // never touched here, see refreshClassAnnouncement for why.
+    //
+    // Only this class, not its meeting_group_id siblings: a sibling lives in a
+    // different classroom with its own team and its own card, and the join card to
+    // reply under generally exists on one of them only. Their Nexus rows are
+    // already correct via the propagation above.
+    const topicMoved =
+      ('title' in updates && updates.title !== access.cls.title) ||
+      ('description' in updates && (updates.description ?? null) !== (access.cls.description ?? null)) ||
+      'summary_bullets' in updates;
+
+    const graphToken = extractBearerToken(request.headers.get('Authorization'));
+    // Impersonation, parent and E2E tokens are Nexus's own, not Microsoft's.
+    // Sending one to Graph just earns a 401 and a confusing log line.
+    const isGraphToken = !!graphToken && !/^(test_|imp_|par_)/.test(graphToken);
+
+    if (topicMoved && isGraphToken) {
+      const base = process.env.NEXT_PUBLIC_NEXUS_URL || request.nextUrl.origin;
+      try {
+        await refreshClassAnnouncement(
+          graphToken!,
+          supabase,
+          params.classId,
+          `${base}/student/timetable?class=${params.classId}`,
+        );
+      } catch (teamsErr) {
+        console.error('Teams wrap-up card refresh failed (non-blocking):', teamsErr);
+      }
     }
 
     const { data: updated } = await supabase

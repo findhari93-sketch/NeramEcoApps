@@ -310,7 +310,8 @@ export default function TeacherClassRecapEditor() {
         />
       </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Generate checkpoint quizzes from the class transcript, review them, then publish for late joiners.
+        Generate checkpoint quizzes from the class transcript, review them, then publish. Anyone who
+        missed this class watches it here, not only students who joined late.
       </Typography>
 
       {/* Video source: which copy students watch */}

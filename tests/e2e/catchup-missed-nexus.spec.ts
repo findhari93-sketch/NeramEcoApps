@@ -188,7 +188,17 @@ test.describe('Nexus — catching up on a missed class', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
 
-    for (const key of ['students', 'classes', 'classStats', 'noRecording', 'pendingRecap', 'totals']) {
+    for (const key of [
+      'students',
+      'classes',
+      'classStats',
+      'reasons',
+      'reasonTally',
+      'completed',
+      'noRecording',
+      'pendingRecap',
+      'totals',
+    ]) {
       expect(body).toHaveProperty(key);
     }
     expect(body.totals).toMatchObject({
@@ -196,12 +206,158 @@ test.describe('Nexus — catching up on a missed class', () => {
       studentsCatchingUp: expect.any(Number),
       outstanding: expect.any(Number),
       clearedThisMonth: expect.any(Number),
+      explained: expect.any(Number),
+      unexplained: expect.any(Number),
     });
 
     // The chase list is a work queue, so the most overdue name is first.
     const overdueCounts = (body.students || []).map((s: any) => s.missedTotals.overdue);
     const sorted = [...overdueCounts].sort((a: number, b: number) => b - a);
     expect(overdueCounts).toEqual(sorted);
+  });
+
+  test('every item carries the words the student typed, not just the category', async ({
+    request,
+  }) => {
+    // The regression this feature exists to prevent. reason_note was selected by
+    // nothing, so a teacher could see that someone had "answered" and never what
+    // they said. The key must be present on every item even when it is null,
+    // because a screen reading an optional key shows nothing and looks fine.
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+
+    const res = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
+      Authorization: `Bearer ${auth.testToken}`,
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    const items = (body.students || []).flatMap((s: any) => s.items || []);
+    if (items.length === 0) {
+      test.skip(true, 'No outstanding catch-up items in this environment');
+      return;
+    }
+    for (const item of items) {
+      expect(item).toHaveProperty('reason_note');
+      expect(item).toHaveProperty('reason_submitted_at');
+      expect(item).toHaveProperty('reason_source');
+      expect(item).toHaveProperty('caught_up_at');
+    }
+  });
+
+  test('the reasons feed is newest first and every row has a student on it', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+
+    const res = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
+      Authorization: `Bearer ${auth.testToken}`,
+    });
+    const body = await res.json();
+    const reasons = body.reasons || [];
+    if (reasons.length === 0) {
+      test.skip(true, 'Nobody has explained a missed class in this environment');
+      return;
+    }
+
+    for (const row of reasons) {
+      expect(row.student).toBeTruthy();
+      expect(row.reason_submitted_at).toBeTruthy();
+    }
+    const stamps = reasons.map((r: any) => r.reason_submitted_at);
+    expect(stamps).toEqual([...stamps].sort().reverse());
+  });
+
+  test('finishing a catch-up no longer erases the student from the payload', async ({ request }) => {
+    // The overview used to `continue` past anyone with nothing outstanding, so
+    // "did they actually do it" had no answer anywhere. Completed items now
+    // travel in their own list.
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+
+    const res = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
+      Authorization: `Bearer ${auth.testToken}`,
+    });
+    const body = await res.json();
+    expect(Array.isArray(body.completed)).toBe(true);
+    for (const row of body.completed || []) {
+      expect(row.caught_up_at).toBeTruthy();
+      expect(row.student).toBeTruthy();
+    }
+  });
+
+  test('each recent class reports its recap state, so one screen can act on it', async ({
+    request,
+  }) => {
+    // This is what absorbed /teacher/class-recaps. Without recap_state the merged
+    // tab would have to fetch the old candidates endpoint as well.
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+
+    const res = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
+      Authorization: `Bearer ${auth.testToken}`,
+    });
+    const body = await res.json();
+    const stats = body.classStats || [];
+    if (stats.length === 0) {
+      test.skip(true, 'No past classes in this environment');
+      return;
+    }
+    for (const c of stats) {
+      expect(['no_recording', 'recording_ready', 'draft', 'published']).toContain(c.recap_state);
+      expect(typeof c.blocked).toBe('number');
+      expect(c).toHaveProperty('recap_id');
+    }
+  });
+
+  test('the per-class register carries why each absent student was away', async ({ request }) => {
+    // Feeds the Attendance dialog on the timetable, which used to show a toggle
+    // and a join time and nothing about the follow-up.
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+
+    const overview = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
+      Authorization: `Bearer ${auth.testToken}`,
+    });
+    const body = await overview.json();
+    const cls = (body.classStats || [])[0];
+    if (!cls || !body.classroomId) {
+      test.skip(true, 'No past classes in this environment');
+      return;
+    }
+
+    const res = await getWarm(
+      request,
+      `${NEXUS}/api/timetable/attendance-report?class_id=${cls.id}&classroom_id=${body.classroomId}`,
+      { Authorization: `Bearer ${auth.testToken}` },
+    );
+    expect(res.status()).toBe(200);
+    const report = await res.json();
+
+    expect(report.summary).toMatchObject({
+      present: expect.any(Number),
+      total: expect.any(Number),
+      missed: expect.any(Number),
+      explained: expect.any(Number),
+      caughtUp: expect.any(Number),
+    });
+    for (const row of report.attendance || []) {
+      expect(row).toHaveProperty('absence');
+    }
   });
 
   test('a student cannot excuse their own missed class', async ({ request }) => {
@@ -231,5 +387,31 @@ test.describe('Nexus — catching up on a missed class', () => {
     // must refuse rather than wave an unauthenticated caller through.
     const res = await request.get(`${NEXUS}/api/cron/recap-autodraft`);
     expect([401, 503]).toContain(res.status());
+  });
+
+  test('the digest cron refuses to run without its secret', async ({ request }) => {
+    // It sends email to parents. An unauthenticated caller must never be able to
+    // use it as a mailing gun, so unlike most nexus crons it is required: true
+    // and answers 503 until CRON_SECRET is set.
+    const res = await request.get(`${NEXUS}/api/cron/catchup-digest`);
+    expect([401, 503]).toContain(res.status());
+  });
+
+  test('the old Class Recaps list redirects into the workspace', async ({ request }) => {
+    // The URL is bookmarked and linked from older notifications, so it must move
+    // rather than 404.
+    const res = await request.get(`${NEXUS}/teacher/class-recaps`, { maxRedirects: 0 });
+    expect([307, 308, 302]).toContain(res.status());
+    expect(res.headers()['location']).toContain('/teacher/catch-up');
+  });
+
+  test('the recap editor is NOT caught by that redirect', async ({ request }) => {
+    // The directory still exists for the editor, and another session is working
+    // inside it. A redirect that swallowed /teacher/class-recaps/[id] would take
+    // recap authoring offline.
+    const res = await request.get(`${NEXUS}/teacher/class-recaps/${MISSING}`, {
+      maxRedirects: 0,
+    });
+    expect([307, 308, 302]).not.toContain(res.status());
   });
 });

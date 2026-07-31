@@ -96,7 +96,14 @@ interface ClassDetailPanelProps {
   // RSVP data
   rsvpSummary?: { attending: number; total: number } | null;
   /** Real (Teams/manual) attendance for a past class, DB-only so cheap to fetch. */
-  attendanceSummary?: { present: number; total: number } | null;
+  attendanceSummary?: {
+    present: number;
+    total: number;
+    /** Follow-up state, from the same request. Absent on older cached shapes. */
+    missed?: number;
+    explained?: number;
+    caughtUp?: number;
+  } | null;
   myRsvp?: 'attending' | 'not_attending' | null;
   averageRating?: number | null;
   myAttended?: boolean | null;
@@ -426,7 +433,10 @@ export default function ClassDetailPanel({
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
               Description
             </Typography>
-            <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+            {/* overflowWrap: a brief imported from a Teams meeting body often
+                carries a bare join URL, which otherwise forces the whole drawer
+                to scroll sideways at 375px. */}
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
               {cls.description}
             </Typography>
           </Box>
@@ -551,6 +561,22 @@ export default function ClassDetailPanel({
                 )}
               </Box>
             </Box>
+
+            {/* Attendance says who was here. This says what happened to everyone
+                who was not, which is the half the panel never showed. */}
+            {(attendanceSummary?.missed ?? 0) > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                {attendanceSummary?.missed} missed · {attendanceSummary?.explained ?? 0} explained ·{' '}
+                {attendanceSummary?.caughtUp ?? 0} caught up ·{' '}
+                <Box
+                  component="a"
+                  href="/teacher/catch-up?tab=reasons"
+                  sx={{ color: 'primary.main', fontWeight: 700, textDecoration: 'none' }}
+                >
+                  see why
+                </Box>
+              </Typography>
+            )}
           </Box>
         )}
 
@@ -1039,7 +1065,9 @@ export default function ClassDetailPanel({
             isPast like the capture below: a student who wants to read ahead
             should be able to, and the one catching up weeks later is exactly who
             this list exists for. Renders nothing when the class has none. */}
-        <Box sx={{ px: 2, pt: 1 }}>
+        {/* No px here: the parent already pads by 2, and doubling it made this
+            block visibly narrower than everything around it. */}
+        <Box sx={{ pt: 1 }}>
           <ClassResourcesSection
             cls={cls}
             getToken={getToken}

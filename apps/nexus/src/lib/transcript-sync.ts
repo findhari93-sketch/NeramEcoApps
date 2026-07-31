@@ -57,6 +57,16 @@ export interface TranscriptSyncSummary {
   due: number;
   /** Transcripts found and stored this run. */
   stored: number;
+  /**
+   * The classes those transcripts belong to.
+   *
+   * This is the closest thing this stack has to a "class ended" event. There is
+   * no webhook and no queue, but a transcript landing means Teams has finished
+   * processing a session that ran minutes ago, which is exactly the moment the
+   * recap for it can be generated. The recap pipeline reads this instead of
+   * waiting for the nightly sweep.
+   */
+  storedClassIds: string[];
   /** Classes that produced nothing and had an attempt counted. */
   missed: number;
   /** Of those, how many hit the attempt cap and are now terminal. */
@@ -95,6 +105,7 @@ export async function syncClassTranscripts(
     candidates: 0,
     due: 0,
     stored: 0,
+    storedClassIds: [],
     missed: 0,
     exhausted: 0,
     reasons: {},
@@ -161,6 +172,7 @@ export async function syncClassTranscripts(
         if (result.entries.length > 0) {
           // resolveTranscript already stored it.
           summary.stored++;
+          summary.storedClassIds.push(cls.id);
           continue;
         }
         const reason = missReason(result);

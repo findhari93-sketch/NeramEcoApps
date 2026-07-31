@@ -53,7 +53,9 @@ export async function resolveExamCountdown(
         .from('nexus_teaching_plans')
         .select(PLAN_SELECT)
         .eq('classroom_id', opts.classroomId)
-        .eq('status', 'active'),
+        // Draft plans count too, and are ranked below active ones by pickPlan.
+        // Keep this in step with PLAN_STATUS_TIERS in exam-countdown.ts.
+        .in('status', ['active', 'draft']),
 
       opts.studentId
         ? db

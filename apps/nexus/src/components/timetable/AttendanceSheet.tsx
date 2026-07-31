@@ -23,6 +23,7 @@ import DiagnosticsStepList, { type DiagnosticStep } from './DiagnosticsStepList'
 import TeamsCsvImportDialog from './TeamsCsvImportDialog';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import { stageKeyOf } from '@/lib/student-stage';
+import { reasonShortLabel } from '@/lib/rsvp-reasons';
 import type { RosterCandidate } from '@/lib/teams-attendance-csv';
 
 interface AttendanceRecord {
@@ -43,6 +44,21 @@ interface AttendanceRecord {
     email: string;
     avatar_url: string | null;
   };
+  /**
+   * Why they were away and how far they have got with making it up.
+   * Null when there is no absence row, which is the normal case for anyone who
+   * turned up.
+   */
+  absence?: {
+    kind: string;
+    reason_code: string | null;
+    reason_note: string | null;
+    reason_source: string | null;
+    reason_submitted_at: string | null;
+    recording_watched_at: string | null;
+    caught_up_at: string | null;
+    excused_at: string | null;
+  } | null;
 }
 
 /** Why the last Teams sync did or did not produce anything. */
@@ -81,7 +97,14 @@ export default function AttendanceSheet({
   getToken,
 }: AttendanceSheetProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [summary, setSummary] = useState({ present: 0, absent: 0, total: 0 });
+  const [summary, setSummary] = useState({
+    present: 0,
+    absent: 0,
+    total: 0,
+    missed: 0,
+    explained: 0,
+    caughtUp: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [savingAll, setSavingAll] = useState(false);
@@ -108,7 +131,15 @@ export default function AttendanceSheet({
       if (res.ok) {
         const data = await res.json();
         setRecords(data.attendance || []);
-        setSummary(data.summary || { present: 0, absent: 0, total: 0 });
+        setSummary({
+          present: 0,
+          absent: 0,
+          total: 0,
+          missed: 0,
+          explained: 0,
+          caughtUp: 0,
+          ...(data.summary || {}),
+        });
         setSync(data.sync ?? null);
         // The Teams report writes bare wall-clock times with no offset, so the
         // importer needs this class's start to anchor them against.
@@ -345,11 +376,28 @@ export default function AttendanceSheet({
         )}
 
         {/* Summary */}
-        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, mb: summary.missed > 0 ? 0.75 : 2 }}>
           <Chip label={`Present: ${summary.present}`} color="success" size="small" />
           <Chip label={`Absent: ${summary.absent}`} color="error" size="small" />
           <Chip label={`Total: ${summary.total}`} size="small" />
         </Box>
+
+        {/* The follow-up state of this class in one line, and the way out to the
+            screen that can act on it. Without this the dialog was a dead end:
+            it could tell you someone was away and nothing at all about what
+            happened next. */}
+        {summary.missed > 0 && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+            {summary.missed} missed · {summary.explained} explained · {summary.caughtUp} caught up ·{' '}
+            <Box
+              component="a"
+              href="/teacher/catch-up?tab=reasons"
+              sx={{ color: 'primary.main', fontWeight: 700, textDecoration: 'none' }}
+            >
+              open catch-up
+            </Box>
+          </Typography>
+        )}
 
         {/* Actions: pull from Teams if we can, and always allow marking by hand.
             For imported/channel classes Teams often can't report attendance, so
@@ -474,6 +522,36 @@ export default function AttendanceSheet({
                     {record.left_at && `, left ${formatTime(record.left_at)}`}
                     {record.duration_minutes ? ` · ${formatDuration(record.duration_minutes)}` : ''}
                   </Typography>
+                  {/* Why they were away, on the screen where the teacher is
+                      already looking at them. Until now this dialog knew only
+                      whether a toggle was on, so someone who had explained
+                      themselves and watched the recording looked identical to
+                      someone who had gone silent. */}
+                  {!record.attended && record.absence && (
+                    <Typography
+                      variant="caption"
+                      sx={{ display: 'block', color: 'text.secondary', mt: 0.25 }}
+                    >
+                      {record.absence.reason_code
+                        ? reasonShortLabel(record.absence.reason_code)
+                        : 'No reason given'}
+                      {record.absence.reason_source === 'parent' && ', said by a parent'}
+                      {record.absence.reason_note && (
+                        <Box
+                          component="span"
+                          sx={{ fontStyle: 'italic', color: 'text.primary' }}
+                        >
+                          {' '}
+                          &ldquo;{record.absence.reason_note}&rdquo;
+                        </Box>
+                      )}
+                      {record.absence.caught_up_at
+                        ? ' · caught up'
+                        : record.absence.recording_watched_at
+                          ? ' · watched the recording'
+                          : ''}
+                    </Typography>
+                  )}
                 </Box>
                 {/* Full-size switch, not small: this is the main repeated tap on a
                     phone and needs to clear the 44px touch-target floor. */}

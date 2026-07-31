@@ -66,7 +66,13 @@ import type {
  *   teams_calendar_event_id, teams_meeting_scope, online_meeting_id
  *                               a live door into a class full of children
  *   transcript_url              the full text of the lesson
- *   notes                       the teacher's private notes on the session
+ *
+ * `notes` used to be on that list as "the teacher's private notes". It is not
+ * that any more: the Wrap Up panel writes the class's detailed description there
+ * and labels it as student-visible, so every value in the column is a lesson
+ * recap written to be read. It is still absent from the WINDOW read below (a
+ * 30-class month does not need eight paragraphs per class) and present only in
+ * PARENT_DETAIL_COLS, next to summary_bullets, which it is the long form of.
  *
  * Reference material is NOT embedded here. It is counted by a separate query
  * (loadResourceCounts) for two reasons. First, an embed makes the whole calendar
@@ -600,12 +606,15 @@ async function loadClassBadges(
 const PARENT_DETAIL_COLS = [
   PARENT_CLASS_COLS,
   'summary_bullets',
+  'notes',
   CLASS_IMAGES_EMBED,
 ].join(', ');
 
 export interface ParentClassDetailData {
   cls: ParentClass;
   whatHappened: {
+    /** The teacher's full written account of the class. Empty when unwritten. */
+    note: string;
     bullets: string[];
     tags: { id: string; label: string }[];
     imageCount: number;
@@ -771,6 +780,7 @@ export async function loadParentClassDetail(
   return {
     cls,
     whatHappened: {
+      note: typeof (row as any).notes === 'string' ? (row as any).notes.trim() : '',
       bullets,
       tags: tagRows,
       imageCount: images.length,

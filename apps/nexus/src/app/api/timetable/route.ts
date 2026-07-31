@@ -436,7 +436,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Missing id and classroom_id' }, { status: 400 });
     }
 
-    await verifyTeacherRole(msUser.oid, classroom_id);
+    const editorUserId = await verifyTeacherRole(msUser.oid, classroom_id);
     const supabase = getSupabaseAdminClient();
 
     // Only allow updating specific fields
@@ -464,13 +464,15 @@ export async function PATCH(request: NextRequest) {
     const { data: before } = (await (supabase as any)
       .from('nexus_scheduled_classes')
       .select(
-        'title, scheduled_date, start_time, end_time, teams_meeting_id, teams_meeting_scope, teams_calendar_event_id, teams_meeting_join_url, teams_meeting_url, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, publish_state',
+        'title, description, notes, scheduled_date, start_time, end_time, teams_meeting_id, teams_meeting_scope, teams_calendar_event_id, teams_meeting_join_url, teams_meeting_url, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, publish_state',
       )
       .eq('id', id)
       .eq('classroom_id', classroom_id)
       .single()) as {
       data: {
         title: string;
+        description: string | null;
+        notes: string | null;
         scheduled_date: string;
         start_time: string;
         end_time: string;
@@ -493,6 +495,26 @@ export async function PATCH(request: NextRequest) {
       (('scheduled_date' in safeUpdates && safeUpdates.scheduled_date !== before.scheduled_date) ||
         ('start_time' in safeUpdates && safeUpdates.start_time !== before.start_time) ||
         ('end_time' in safeUpdates && safeUpdates.end_time !== before.end_time));
+
+    // Renaming a class here is as much a human account of it as the Wrap Up panel,
+    // so it takes ownership of the title away from the Teams meeting subject.
+    //
+    // Compared by VALUE, not by presence: ClassCreateDialog always sends title and
+    // description, so a presence check would lock every class the moment anyone
+    // opened Edit and pressed Save without changing anything, and a class locked at
+    // its Teams subject would then never follow a genuine rename in Outlook.
+    const CONTENT_KEYS = ['title', 'description', 'notes'] as const;
+    const contentEdited =
+      !!before &&
+      CONTENT_KEYS.some(
+        (k) =>
+          k in safeUpdates &&
+          (safeUpdates[k] ?? null) !== ((before as unknown as Record<string, unknown>)[k] ?? null),
+      );
+    if (contentEdited) {
+      safeUpdates.content_edited_at = new Date().toISOString();
+      safeUpdates.content_edited_by = editorUserId;
+    }
 
     const when = before && {
       date: (safeUpdates.scheduled_date as string) ?? before.scheduled_date,
@@ -532,7 +554,9 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const { data, error } = await supabase
+    // Untyped: content_edited_at/by are newer than the generated Database type,
+    // like publish_state above.
+    const { data, error } = await (supabase as any)
       .from('nexus_scheduled_classes')
       .update(safeUpdates)
       .eq('id', id)

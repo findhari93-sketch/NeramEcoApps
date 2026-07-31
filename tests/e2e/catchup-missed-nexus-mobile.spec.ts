@@ -167,14 +167,44 @@ test.describe('Catch-up (mobile)', () => {
     await page.goto(`${NEXUS}/teacher/catch-up`, { waitUntil: 'domcontentloaded' });
     await waitForScreen(page, /catch-up/i);
 
-    for (const label of [/^classes$/i, /cannot be caught up/i, /^students$/i]) {
-      const tab = page.getByRole('tab', { name: label });
-      if ((await tab.count()) === 0) continue;
-      await tab.first().click();
+    // Asserted present, not skipped when missing. The previous version of this
+    // loop named the old tabs and `continue`d past every one it could not find,
+    // so it stayed green through a rename that removed all of them.
+    for (const label of [/reasons/i, /caught up/i, /classes and recaps/i, /needs action/i]) {
+      const tab = page.getByRole('tab', { name: label }).first();
+      await expect(tab, `the ${label} tab must exist`).toBeVisible();
+      await tab.click();
       await page.waitForTimeout(700);
       await assertNoHorizontalOverflow(page);
     }
 
+    await context.close();
+  });
+
+  test('375px: a reason shows the words the student typed, not just a category', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ viewport: PHONE });
+    const page = await context.newPage();
+
+    const injected = await injectAuthForPage(page, 'teacher');
+    test.skip(!injected, 'Nexus test-login unavailable');
+
+    await page.goto(`${NEXUS}/teacher/catch-up?tab=reasons`, { waitUntil: 'domcontentloaded' });
+    await waitForScreen(page, /catch-up/i);
+
+    const empty = page.getByText(/nobody has explained a missed class yet/i);
+    if (await empty.isVisible().catch(() => false)) {
+      test.skip(true, 'Nobody has explained a missed class in this environment');
+    }
+
+    // Either a quote is rendered or the feed says there is nothing. A feed that
+    // lists people and shows no reason is the bug this tab was built to fix.
+    const quoted = page.locator('text=/[""].+[""]/');
+    const chips = page.locator('.MuiChip-root');
+    expect((await quoted.count()) + (await chips.count())).toBeGreaterThan(0);
+
+    await assertNoHorizontalOverflow(page);
     await context.close();
   });
 
@@ -195,8 +225,19 @@ test.describe('Catch-up (mobile)', () => {
 
     // Network noise from an unavailable dev dependency is not this feature's
     // fault; a React or rendering error is.
+    //
+    // "Failed to fetch RSC payload for /" is filtered because it belongs to the
+    // app shell, not to catch-up. `/` is a client redirect page that something in
+    // the layout prefetches, and the prefetch aborts. Verified by running this
+    // exact assertion against /student/assignments, a page this work never
+    // touched, which produces the identical single error. Worth chasing on its
+    // own (a failed prefetch means Next falls back to a full page load), but
+    // failing the catch-up suite for it only hides catch-up regressions behind
+    // someone else's bug.
     const real = errors.filter(
-      (e) => !/favicon|net::ERR|Failed to load resource|401|403/i.test(e),
+      (e) =>
+        !/favicon|net::ERR|Failed to load resource|401|403/i.test(e) &&
+        !/Failed to fetch RSC payload/i.test(e),
     );
     expect(real, real.join('\n')).toHaveLength(0);
 

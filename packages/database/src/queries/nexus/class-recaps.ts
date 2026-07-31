@@ -7,8 +7,16 @@ const SECTIONS = 'nexus_class_recap_sections';
 const QUESTIONS = 'nexus_class_recap_questions';
 const ATTEMPTS = 'nexus_class_recap_attempts';
 const PROGRESS = 'nexus_class_recap_progress';
+const DRAWS = 'nexus_class_recap_draws';
 
 export type RecapStatus = 'draft' | 'published' | 'archived';
+
+/**
+ * Why a recap is not servable yet. Separate from `status`, which is the
+ * teacher-facing lifecycle. A student never sees the difference between these:
+ * anything other than 'ready' reads as "your tutor is preparing this recording".
+ */
+export type RecapReadiness = 'pending' | 'ready' | 'held' | 'failed';
 
 export interface NexusClassRecap {
   id: string;
@@ -20,6 +28,19 @@ export interface NexusClassRecap {
   video_source: string;
   video_duration_seconds: number | null;
   status: RecapStatus;
+  readiness: RecapReadiness;
+  hold_reason: string | null;
+  hold_detail: string | null;
+  quality_score: number | null;
+  quality_report: Record<string, unknown> | null;
+  generation_attempts: number;
+  auto_published_at: string | null;
+  target_segment_seconds: number;
+  question_pool_per_segment: number;
+  questions_per_segment: number;
+  questions_to_pass: number;
+  /** 'proxied' streams through Nexus; 'embedded' is the YouTube fallback. */
+  protection_level: 'proxied' | 'embedded';
   generated_at: string | null;
   published_at: string | null;
   created_by: string | null;
@@ -49,15 +70,27 @@ export interface NexusClassRecapSection {
   end_timestamp_seconds: number;
   sort_order: number;
   min_questions_to_pass: number | null;
+  /** NULL serves every active question, which is the historical behaviour. */
+  questions_to_serve: number | null;
+  /** Set instead of deleting, so student attempts on this checkpoint survive. */
+  archived_at: string | null;
   questions?: NexusClassRecapQuestion[];
 }
 
 export interface GeneratedRecapSection {
+  /**
+   * Present when the teacher is editing a checkpoint that already exists. Its
+   * presence is what lets updateRecapSections update in place rather than
+   * recreate, which is what keeps students' passes alive. Absent for anything
+   * the AI just generated or the teacher just added.
+   */
+  id?: string;
   title: string;
   description?: string;
   start_timestamp_seconds: number;
   end_timestamp_seconds: number;
   min_questions_to_pass?: number | null;
+  questions_to_serve?: number | null;
   questions: {
     question_text: string;
     option_a: string;
@@ -71,11 +104,23 @@ export interface GeneratedRecapSection {
 
 const SECTION_SELECT = `*, questions:${QUESTIONS}(*)`;
 
+/**
+ * Order sections and their questions, dropping anything soft-deleted.
+ *
+ * Filtering here rather than in each query's select is deliberate: every reader
+ * of SECTION_SELECT funnels through this one function, so an archived checkpoint
+ * cannot leak back into a student's gating path via a query someone forgot to
+ * update. The `!= null` / `!== false` forms keep this correct against rows read
+ * before the columns existed, where both come back undefined.
+ */
 function sortSections(sections: NexusClassRecapSection[]): NexusClassRecapSection[] {
   return (sections || [])
+    .filter((s) => s.archived_at == null)
     .map((s) => ({
       ...s,
-      questions: (s.questions || []).sort((a, b) => a.sort_order - b.sort_order),
+      questions: (s.questions || [])
+        .filter((q) => (q as any).is_active !== false)
+        .sort((a, b) => a.sort_order - b.sort_order),
     }))
     .sort((a, b) => a.sort_order - b.sort_order);
 }
@@ -237,12 +282,35 @@ export async function refreshRecapMedia(
  * Replace all sections + questions for a recap (from AI generation or an edit).
  * Sets generated_at. Cascade deletes drop old questions/attempts.
  */
+/**
+ * How many checkpoint attempts students have recorded against this recap.
+ * Cheap: one id read plus a head count.
+ */
+async function countRecapAttemptRows(supabase: any, recapId: string): Promise<number> {
+  const { data: sectionRows } = await supabase.from(SECTIONS).select('id').eq('recap_id', recapId);
+  const ids = (sectionRows || []).map((r: any) => r.id);
+  if (!ids.length) return 0;
+  const { count } = await supabase
+    .from(ATTEMPTS)
+    .select('id', { count: 'exact', head: true })
+    .in('section_id', ids);
+  return count || 0;
+}
+
 export async function replaceRecapSections(
   recapId: string,
   sections: GeneratedRecapSection[],
   client?: TypedSupabaseClient,
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
+
+  // FIRST GENERATION ONLY. This function deletes the recap's sections, and
+  // nexus_class_recap_attempts.section_id is ON DELETE CASCADE, so every delete
+  // takes students' passed checkpoints with it and markRecapCompletedIfAllPassed
+  // then re-locks them. Refuse rather than destroy: once anyone has attempted a
+  // checkpoint, edits must go through updateRecapSections, which diffs.
+  const priorAttempts = await countRecapAttemptRows(supabase, recapId);
+  if (priorAttempts > 0) throw new Error('RECAP_HAS_ATTEMPTS');
 
   // Tear down the bank mirror for this recap's existing sections before replacing them.
   try {
@@ -315,6 +383,186 @@ export async function replaceRecapSections(
     .update({ generated_at: new Date().toISOString() })
     .eq('id', recapId);
   if (uErr) throw uErr;
+}
+
+/**
+ * Rewrite one checkpoint's questions and re-mirror it into the question bank.
+ *
+ * Safe to run on a checkpoint students have already passed, because attempts
+ * reference section_id and never question ids. Old questions are deactivated
+ * rather than deleted so a stored answer set from an earlier attempt still
+ * resolves to readable question text.
+ */
+async function rewriteSectionQuestions(
+  supabase: any,
+  sectionId: string,
+  section: GeneratedRecapSection,
+  sortIndex: number,
+): Promise<void> {
+  const questions = (section.questions || []).filter((q) => q.question_text);
+
+  const { error: deacErr } = await supabase
+    .from(QUESTIONS)
+    .update({ is_active: false })
+    .eq('section_id', sectionId)
+    .eq('is_active', true);
+  if (deacErr) throw deacErr;
+
+  if (!questions.length) return;
+
+  const { error: qErr } = await supabase.from(QUESTIONS).insert(
+    questions.map((q, qi) => ({
+      section_id: sectionId,
+      question_text: q.question_text,
+      option_a: q.option_a,
+      option_b: q.option_b,
+      option_c: q.option_c,
+      option_d: q.option_d,
+      correct_option: ['a', 'b', 'c', 'd'].includes(q.correct_option) ? q.correct_option : 'a',
+      explanation: q.explanation ?? null,
+      sort_order: qi,
+      is_active: true,
+    })),
+  );
+  if (qErr) throw qErr;
+
+  // Re-mirror. The teardown must run first: uq_placement_single_test allows only
+  // ONE active placement per (context_type, context_id) for a recap checkpoint,
+  // so inserting a second one for the same section would 23505.
+  try {
+    await removeRecapSectionMirror(supabase, sectionId);
+    await composeAndPlaceRecapSection(supabase, {
+      sectionId,
+      title: section.title,
+      sortOrder: sortIndex,
+      minQuestionsToPass: section.min_questions_to_pass ?? null,
+      questions,
+    });
+  } catch (err) {
+    console.error('[recap] bank mirror refresh failed (non-fatal):', err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Save checkpoints over a recap students are already working through.
+ *
+ * Diffs by section id instead of tearing down: a supplied id updates in place,
+ * a missing id inserts, and anything the teacher dropped is archived rather than
+ * deleted. The net effect is the rule the UI promises, which is that editing a
+ * question, fixing a wrong answer, adding or removing questions, and nudging a
+ * boundary all leave existing passes intact. Only an explicit "reset this
+ * checkpoint for everyone" clears passes, and that is a separate deliberate act.
+ */
+export async function updateRecapSections(
+  recapId: string,
+  sections: GeneratedRecapSection[],
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Deliberately reads ARCHIVED sections too. They are two different questions:
+  // "can this id be updated in place" has to consider archived rows, or sending
+  // back a checkpoint that was removed earlier would insert a duplicate and
+  // strand the original's attempts on an invisible row. "What should now be
+  // archived" only concerns the ones currently live.
+  const { data: existingRows, error: exErr } = await supabase
+    .from(SECTIONS)
+    .select('id, archived_at')
+    .eq('recap_id', recapId);
+  if (exErr) throw exErr;
+  const knownIds = new Set<string>((existingRows || []).map((r: any) => r.id));
+  const liveIds = new Set<string>(
+    (existingRows || []).filter((r: any) => r.archived_at == null).map((r: any) => r.id),
+  );
+
+  const ordered = [...sections].sort(
+    (a, b) => a.start_timestamp_seconds - b.start_timestamp_seconds,
+  );
+  const keptIds = new Set<string>();
+
+  for (let i = 0; i < ordered.length; i++) {
+    const s = ordered[i];
+    const patch = {
+      title: s.title,
+      description: s.description ?? null,
+      start_timestamp_seconds: Math.max(0, Math.round(s.start_timestamp_seconds)),
+      end_timestamp_seconds: Math.round(s.end_timestamp_seconds),
+      sort_order: i,
+      min_questions_to_pass: s.min_questions_to_pass ?? null,
+      questions_to_serve: s.questions_to_serve ?? null,
+    };
+
+    let sectionId: string;
+    if (s.id && knownIds.has(s.id)) {
+      const { error } = await supabase
+        .from(SECTIONS)
+        // archived_at cleared so re-adding a checkpoint the teacher removed
+        // earlier in the same session revives it, passes and all.
+        .update({ ...patch, archived_at: null })
+        .eq('id', s.id);
+      if (error) throw error;
+      sectionId = s.id;
+    } else {
+      const { data, error } = await supabase
+        .from(SECTIONS)
+        .insert({ recap_id: recapId, ...patch })
+        .select('id')
+        .single();
+      if (error) throw error;
+      sectionId = data.id;
+    }
+    keptIds.add(sectionId);
+
+    await rewriteSectionQuestions(supabase, sectionId, s, i);
+  }
+
+  const removed = [...liveIds].filter((id) => !keptIds.has(id));
+  if (removed.length) {
+    const { error } = await supabase
+      .from(SECTIONS)
+      .update({ archived_at: new Date().toISOString() })
+      .in('id', removed);
+    if (error) throw error;
+    for (const id of removed) {
+      try {
+        await removeRecapSectionMirror(supabase, id);
+      } catch (err) {
+        console.error('[recap] mirror teardown failed (non-fatal):', err instanceof Error ? err.message : err);
+      }
+    }
+  }
+
+  const { error: uErr } = await supabase
+    .from(RECAPS)
+    .update({ generated_at: new Date().toISOString() })
+    .eq('id', recapId);
+  if (uErr) throw uErr;
+}
+
+/**
+ * The entry point every caller should use. Picks the destructive rewrite only
+ * while it is still safe, which is before publication and before anyone has
+ * attempted a checkpoint. The choice lives here rather than in a route so a
+ * future caller cannot reintroduce the data loss by picking the wrong one.
+ */
+export async function saveRecapSections(
+  recapId: string,
+  sections: GeneratedRecapSection[],
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: recap } = await supabase
+    .from(RECAPS)
+    .select('id, status')
+    .eq('id', recapId)
+    .single();
+  const attempts = await countRecapAttemptRows(supabase, recapId);
+
+  if (recap?.status === 'published' || attempts > 0) {
+    return updateRecapSections(recapId, sections, supabase);
+  }
+  return replaceRecapSections(recapId, sections, supabase);
 }
 
 /** Delete the composed/placed bank test for a recap section + any exclusively-owned bank questions. */
@@ -542,6 +790,7 @@ export async function getRecapSectionQuestionsForStudent(
     .from(QUESTIONS)
     .select('id, section_id, question_text, option_a, option_b, option_c, option_d, sort_order')
     .eq('section_id', sectionId)
+    .eq('is_active', true)
     .order('sort_order', { ascending: true });
   if (error) throw error;
   return data || [];
@@ -556,6 +805,9 @@ export async function getRecapSection(
     .from(SECTIONS)
     .select('*')
     .eq('id', sectionId)
+    // An archived checkpoint must not open a quiz. Reads as "not found", which
+    // is what the caller already handles.
+    .is('archived_at', null)
     .maybeSingle();
   if (error) throw error;
   return (data as NexusClassRecapSection) || null;
@@ -570,12 +822,156 @@ export async function getRecapSectionQuestionsWithAnswers(
     .from(QUESTIONS)
     .select('*')
     .eq('section_id', sectionId)
+    .eq('is_active', true)
     .order('sort_order', { ascending: true });
   if (error) throw error;
   return (data as NexusClassRecapQuestion[]) || [];
 }
 
 /** Ordered section ids for a recap (for sequential-unlock checks). */
+/**
+ * Record what the pipeline decided about a recap.
+ *
+ * Publishing sets BOTH status and readiness. Holding leaves status at 'draft',
+ * which is what keeps the student side unchanged: loadClassFacts and
+ * listPublishedRecapsForStudent already ignore drafts, so a held recap needs no
+ * new branch anywhere a student can see.
+ */
+export async function setRecapReadiness(
+  recapId: string,
+  input: {
+    readiness: RecapReadiness;
+    publish?: boolean;
+    hold_reason?: string | null;
+    hold_detail?: string | null;
+    quality_score?: number | null;
+    quality_report?: unknown;
+    bumpAttempts?: boolean;
+    currentAttempts?: number;
+  },
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const patch: Record<string, unknown> = {
+    readiness: input.readiness,
+    hold_reason: input.hold_reason ?? null,
+    hold_detail: input.hold_detail ? String(input.hold_detail).slice(0, 500) : null,
+  };
+  if (input.quality_score != null) patch.quality_score = input.quality_score;
+  if (input.quality_report !== undefined) patch.quality_report = input.quality_report;
+  if (input.bumpAttempts) patch.generation_attempts = (input.currentAttempts ?? 0) + 1;
+
+  if (input.publish) {
+    const now = new Date().toISOString();
+    patch.status = 'published';
+    patch.published_at = now;
+    patch.auto_published_at = now;
+  }
+
+  const { error } = await supabase.from(RECAPS).update(patch).eq('id', recapId);
+  if (error) throw error;
+}
+
+/** Recaps a tutor needs to look at: generated but not servable. */
+export async function listRecapsNeedingReview(
+  classroomIds: string[],
+  client?: TypedSupabaseClient,
+): Promise<NexusClassRecap[]> {
+  if (!classroomIds.length) return [];
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(RECAPS)
+    .select('*')
+    .in('classroom_id', classroomIds)
+    .neq('readiness', 'ready')
+    .order('updated_at', { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  return (data as NexusClassRecap[]) || [];
+}
+
+export interface RecapDraw {
+  id: string;
+  student_id: string;
+  section_id: string;
+  attempt_number: number;
+  question_ids: string[];
+  option_maps: Record<string, string[]>;
+  consumed_at: string | null;
+}
+
+/**
+ * The exact paper a student was served for one attempt.
+ *
+ * Persisted rather than recomputed so grading can never disagree with what was
+ * displayed. A student who reloads mid-quiz, or whose submit arrives after a
+ * deploy changed the shuffle, is still graded against the questions they
+ * actually saw.
+ */
+export async function getRecapDraw(
+  studentId: string,
+  sectionId: string,
+  attemptNumber: number,
+  client?: TypedSupabaseClient,
+): Promise<RecapDraw | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(DRAWS)
+    .select('*')
+    .eq('student_id', studentId)
+    .eq('section_id', sectionId)
+    .eq('attempt_number', attemptNumber)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as RecapDraw) || null;
+}
+
+/**
+ * Record the paper for an attempt, tolerating a duplicate.
+ *
+ * Two GETs racing (a double tap, or a reload while the first is in flight) both
+ * try to create the same attempt's draw. The unique key makes the loser fail;
+ * re-reading rather than throwing means both requests serve the same paper,
+ * which is the correct outcome.
+ */
+export async function createRecapDraw(
+  input: {
+    student_id: string;
+    section_id: string;
+    attempt_number: number;
+    question_ids: string[];
+    option_maps: Record<string, string[]>;
+  },
+  client?: TypedSupabaseClient,
+): Promise<RecapDraw> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase.from(DRAWS).insert(input).select('*').single();
+  if (error) {
+    const existing = await getRecapDraw(
+      input.student_id,
+      input.section_id,
+      input.attempt_number,
+      supabase,
+    );
+    if (existing) return existing;
+    throw error;
+  }
+  return data as RecapDraw;
+}
+
+/** Mark a draw as spent once its attempt has been graded. */
+export async function consumeRecapDraw(
+  drawId: string,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  await supabase
+    .from(DRAWS)
+    .update({ consumed_at: new Date().toISOString() })
+    .eq('id', drawId)
+    .is('consumed_at', null);
+}
+
 export async function listRecapSectionOrder(
   recapId: string,
   client?: TypedSupabaseClient,
@@ -585,6 +981,10 @@ export async function listRecapSectionOrder(
     .from(SECTIONS)
     .select('id, sort_order')
     .eq('recap_id', recapId)
+    // Drives sequential unlock AND completion. An archived checkpoint left in
+    // here would gate a student on a checkpoint the teacher deleted, and would
+    // stop the recap ever counting as complete.
+    .is('archived_at', null)
     .order('sort_order', { ascending: true });
   if (error) throw error;
   return data || [];

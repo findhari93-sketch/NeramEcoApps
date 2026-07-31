@@ -27,10 +27,13 @@
 import {
   createRecapForClass,
   replaceRecapSections,
+  setRecapReadiness,
+  createUserNotification,
   type GeneratedRecapSection,
 } from '@neram/database';
 import { generateSectionsAndQuestions } from './ai-generate';
 import { readStoredTranscript } from './transcript-resolver';
+import { preflight, scoreRecapGeneration } from './recap-quality';
 
 /**
  * Classes drafted per run.
@@ -63,8 +66,25 @@ export interface AutodraftCandidate {
 }
 
 export type AutodraftOutcome =
-  | { ok: true; classId: string; recapId: string; sections: number; questions: number }
-  | { ok: false; classId: string; reason: 'no_transcript' | 'no_sections' | 'error'; detail?: string }
+  | {
+      ok: true;
+      classId: string;
+      recapId: string;
+      sections: number;
+      questions: number;
+      /** Cleared the quality bar and went straight to students. */
+      published?: boolean;
+      /** Generated but waiting on a tutor. Students see "being prepared". */
+      held?: boolean;
+      holdReason?: string;
+      score?: number;
+    }
+  | {
+      ok: false;
+      classId: string;
+      reason: 'no_transcript' | 'no_sections' | 'has_attempts' | 'error';
+      detail?: string;
+    }
   /** Gemini refused. The caller must stop the whole run, not just this class. */
   | { ok: false; classId: string; reason: 'rate_limited'; detail?: string };
 
@@ -116,7 +136,14 @@ export function isUsableSection(s: GeneratedRecapSection): boolean {
 export async function findAutodraftCandidates(
   supabase: any,
   limit: number = MAX_DRAFTS_PER_RUN,
+  opts: { classIds?: string[] } = {},
 ): Promise<AutodraftCandidate[]> {
+  // Event path: a transcript just landed for these classes, so generate for
+  // exactly them rather than sweeping. An explicitly empty list means there is
+  // nothing to do, which is different from "no filter".
+  const only = opts.classIds;
+  if (only && only.length === 0) return [];
+
   const { data: classrooms } = await supabase
     .from('nexus_classrooms')
     .select('id')
@@ -127,14 +154,24 @@ export async function findAutodraftCandidates(
   if (classroomIds.length === 0) return [];
 
   // A draft class was never visible to a student, so nobody can have missed it.
-  const { data: classes, error } = await supabase
+  let query = supabase
     .from('nexus_scheduled_classes')
     .select(CLASS_COLUMNS)
     .in('classroom_id', classroomIds)
     .eq('publish_state', 'published')
     .neq('status', 'cancelled')
-    .lt('scheduled_date', istToday())
-    .or('recording_url.not.is.null,youtube_url.not.is.null')
+    .or('recording_url.not.is.null,youtube_url.not.is.null');
+
+  if (only) {
+    // No date floor on the event path: the class whose transcript just arrived
+    // is TODAY's, and the sweep's "before today" rule would exclude the very
+    // thing we were told about.
+    query = query.in('id', only);
+  } else {
+    query = query.lt('scheduled_date', istToday());
+  }
+
+  const { data: classes, error } = await query
     .order('scheduled_date', { ascending: false })
     .limit(SCAN_LIMIT);
   if (error) throw error;
@@ -189,6 +226,73 @@ export async function findAutodraftCandidates(
 }
 
 /**
+ * Park a recap for the tutor. Best-effort: failing to WRITE the hold is not a
+ * reason to throw out of a sweep, and the recap stays a draft either way, which
+ * is already invisible to students.
+ */
+async function holdRecap(
+  supabase: any,
+  recap: { id: string; generation_attempts?: number | null },
+  reason: string | null,
+  detail: string,
+): Promise<void> {
+  try {
+    await setRecapReadiness(
+      recap.id,
+      {
+        readiness: 'held',
+        hold_reason: reason,
+        hold_detail: detail,
+        bumpAttempts: true,
+        currentAttempts: recap.generation_attempts ?? 0,
+      },
+      supabase,
+    );
+  } catch (err) {
+    console.error('[recap] could not record hold:', err instanceof Error ? err.message : err);
+  }
+  await notifyHeld(supabase, recap.id, detail);
+}
+
+/**
+ * Tell the teaching staff a recap is stuck.
+ *
+ * A hold blocks a real student from catching up, so it cannot be silent. Written
+ * to user_notifications, which is the TopBar bell on every page, rather than the
+ * timetable table that only renders on one screen for one classroom.
+ *
+ * Best-effort throughout: a missing notification is worse than none at all only
+ * if it takes the generation down with it, and it must not.
+ */
+async function notifyHeld(supabase: any, recapId: string, detail: string): Promise<void> {
+  try {
+    const { data: staff } = await supabase
+      .from('users')
+      .select('id')
+      .eq('user_type', 'teacher')
+      .eq('is_active', true)
+      .limit(25);
+
+    for (const s of staff || []) {
+      await createUserNotification(
+        {
+          user_id: s.id,
+          event_type: 'recap_needs_review' as any,
+          title: 'A class recap needs a look',
+          message: detail
+            ? `It generated but did not clear the automatic checks. ${detail}`
+            : 'It generated but did not clear the automatic checks.',
+          metadata: { recap_id: recapId, href: '/teacher/catch-up?tab=classes' },
+        },
+        supabase,
+      );
+    }
+  } catch (err) {
+    console.error('[recap] hold notification failed:', err instanceof Error ? err.message : err);
+  }
+}
+
+/**
  * Draft one class. Never throws: the caller is a sweep, and one bad transcript
  * must not cost the other classes their turn.
  */
@@ -206,17 +310,63 @@ export async function autodraftRecapForClass(
     // rerun after a mid-loop failure picks up where it stopped.
     const recap = await createRecapForClass(cls.id, null, supabase);
 
+    const targetSegmentSeconds = recap.target_segment_seconds ?? 300;
+    const poolPerSegment = recap.question_pool_per_segment ?? 15;
+    const questionsToServe = recap.questions_per_segment ?? 10;
+    const durationSeconds =
+      recap.video_duration_seconds ?? transcript[transcript.length - 1]?.end ?? 0;
+
+    // Before spending a single Gemini call. A three-minute clip or a transcript
+    // that is mostly "can everyone hear me" cannot produce a real checkpoint
+    // quiz, and the shared key is metered.
+    const pre = preflight(transcript, durationSeconds);
+    if (!pre.ok) {
+      await holdRecap(supabase, recap, pre.reason, pre.detail);
+      return { ok: false, classId: cls.id, reason: 'no_transcript', detail: pre.detail };
+    }
+
     const generated = await generateSectionsAndQuestions(
       transcript,
       recap.title || cls.title || 'Class recap',
+      { targetSegmentSeconds, poolPerSegment, durationSeconds },
     );
 
     const sections = (generated.sections || []).filter(isUsableSection);
     if (sections.length === 0) {
+      await holdRecap(supabase, recap, 'generation_failed', 'The model returned no usable segments.');
       return { ok: false, classId: cls.id, reason: 'no_sections' };
     }
 
     await replaceRecapSections(recap.id, sections, supabase);
+
+    // Nobody reads these before a student does, so the bar is what stands
+    // between a bad generation and a teenager being asked to pass it.
+    const verdict = scoreRecapGeneration({
+      sections,
+      transcript,
+      durationSeconds,
+      targetSegmentSeconds,
+      questionsToServe,
+    });
+
+    await setRecapReadiness(
+      recap.id,
+      {
+        readiness: verdict.publish ? 'ready' : 'held',
+        publish: verdict.publish,
+        hold_reason: verdict.holdReason,
+        hold_detail: verdict.summary,
+        quality_score: Number(verdict.score.toFixed(2)),
+        quality_report: { checks: verdict.checks, summary: verdict.summary },
+        bumpAttempts: true,
+        currentAttempts: recap.generation_attempts ?? 0,
+      },
+      supabase,
+    );
+
+    // Held by the quality bar rather than by a pre-flight failure, but it blocks
+    // a student just the same, so it gets the same alert.
+    if (!verdict.publish) await notifyHeld(supabase, recap.id, verdict.summary);
 
     return {
       ok: true,
@@ -224,11 +374,22 @@ export async function autodraftRecapForClass(
       recapId: recap.id,
       sections: sections.length,
       questions: sections.reduce((n, s) => n + (s.questions || []).length, 0),
+      published: verdict.publish,
+      held: !verdict.publish,
+      holdReason: verdict.holdReason ?? undefined,
+      score: verdict.score,
     };
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown error';
     if (isRateLimited(detail)) {
       return { ok: false, classId: cls.id, reason: 'rate_limited', detail };
+    }
+    // Students have already worked through this recap's checkpoints, so the
+    // sweep refused to overwrite it. Correct behaviour, not a failure: a stalled
+    // draft that students have since started belongs to them now, and any change
+    // has to go through the teacher's diffing editor.
+    if (detail === 'RECAP_HAS_ATTEMPTS') {
+      return { ok: false, classId: cls.id, reason: 'has_attempts', detail };
     }
     return { ok: false, classId: cls.id, reason: 'error', detail };
   }
@@ -254,9 +415,11 @@ export interface AutodraftRunResult {
  */
 export async function runRecapAutodraft(
   supabase: any,
-  opts: { limit?: number } = {},
+  opts: { limit?: number; classIds?: string[] } = {},
 ): Promise<AutodraftRunResult> {
-  const candidates = await findAutodraftCandidates(supabase, opts.limit ?? MAX_DRAFTS_PER_RUN);
+  const candidates = await findAutodraftCandidates(supabase, opts.limit ?? MAX_DRAFTS_PER_RUN, {
+    classIds: opts.classIds,
+  });
 
   const result: AutodraftRunResult = {
     scanned: candidates.length,

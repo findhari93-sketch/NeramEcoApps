@@ -143,20 +143,35 @@ export async function GET(request: NextRequest) {
     //
     // Dormant students are excluded: an unmarked register row defaults to
     // "absent", so leaving them in would manufacture an absence every class.
-    const [{ members: roster }, { data: attRows, error: attErr }] = await Promise.all([
-      loadClassroomRoster(classroomId, {
-        userColumns: 'linked_classroom_email, personal_email',
-        client: supabase,
-      }),
-      supabase
-        .from('nexus_attendance')
-        .select('*, student:users!nexus_attendance_student_id_fkey(id, name, email, avatar_url)')
-        .eq('scheduled_class_id', classId),
-    ]);
+    const [{ members: roster }, { data: attRows, error: attErr }, { data: absenceRows }] =
+      await Promise.all([
+        loadClassroomRoster(classroomId, {
+          userColumns: 'linked_classroom_email, personal_email',
+          client: supabase,
+        }),
+        supabase
+          .from('nexus_attendance')
+          .select('*, student:users!nexus_attendance_student_id_fkey(id, name, email, avatar_url)')
+          .eq('scheduled_class_id', classId),
+        // Why each absent student says they were away, and how far they have got
+        // with making it up. The sheet used to show a toggle and a join time and
+        // nothing else, so a teacher marking the register could not see that the
+        // student had already explained themselves and watched the recording.
+        supabase
+          .from('nexus_class_absences')
+          .select(
+            'student_id, kind, reason_code, reason_note, reason_source, reason_submitted_at, ' +
+              'recording_watched_at, caught_up_at, excused_at',
+          )
+          .eq('scheduled_class_id', classId),
+      ]);
 
     if (attErr) throw attErr;
 
     const attByStudent = new Map<string, any>((attRows || []).map((a: any) => [a.student_id, a]));
+    const absenceByStudent = new Map<string, any>(
+      (absenceRows || []).map((a: any) => [a.student_id, a]),
+    );
     // One row per enrolled student, carrying their attendance state (unmarked =
     // treated as absent) so the sheet can render a switch for everyone.
     const merged = roster.map((r: any) => {
@@ -183,16 +198,29 @@ export async function GET(request: NextRequest) {
         // Carried so the register can show who is a break-year or Class 12
         // student without a second request. It never affects the toggle.
         study_stage: r.current_standard ?? null,
+        absence: absenceByStudent.get(r.user_id) ?? null,
       };
     });
 
     const present = merged.filter((a: { attended: boolean }) => a.attended).length;
     const total = merged.length;
+    // Only meaningful for people who were away, so it is counted over the
+    // absence rows rather than over "not present": an unmarked register would
+    // otherwise report the whole class as unexplained.
+    const explained = (absenceRows || []).filter((a: any) => a.reason_code).length;
+    const caughtUp = (absenceRows || []).filter((a: any) => a.caught_up_at).length;
     const status = cls.attendance_sync_status as AttendanceSyncFailure | 'ok' | null;
 
     return NextResponse.json({
       attendance: merged,
-      summary: { present, absent: total - present, total },
+      summary: {
+        present,
+        absent: total - present,
+        total,
+        missed: (absenceRows || []).length,
+        explained,
+        caughtUp,
+      },
       sync: {
         synced_at: cls.attendance_synced_at,
         status,

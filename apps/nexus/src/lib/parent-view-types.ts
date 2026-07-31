@@ -237,6 +237,8 @@ export interface ParentClassDetailResponse {
   notice: EnrollmentNotice | null;
   cls: ParentClass;
   whatHappened: {
+    /** The teacher's full written account of the class. Empty when unwritten. */
+    note: string;
     bullets: string[];
     tags: { id: string; label: string }[];
     imageCount: number;

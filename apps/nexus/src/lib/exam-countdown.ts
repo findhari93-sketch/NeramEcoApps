@@ -209,25 +209,43 @@ export function istDayOf(date: Date): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * Statuses a countdown may resolve from, most authoritative first.
+ *
+ * A published plan always wins. A `draft` still counts, because publishing a
+ * teaching plan releases a *schedule*; it says nothing about when the exam is.
+ * plan-shape-query.ts already draws the student timetable from draft plans for
+ * exactly this reason, so treating draft as dead here was the outlier.
+ *
+ * It was also a live bug: the only plan in production is a draft, so requiring
+ * 'active' hid the countdown from the whole cohort, which is the group that most
+ * needs the clock. `completed` and `archived` stay excluded: a finished season
+ * must not keep counting down to an exam that has already been written.
+ */
+const PLAN_STATUS_TIERS = ['active', 'draft'] as const;
+
+/**
  * Choose the one plan whose countdown we show.
  *
  * Overlapping active plans are legal (20260723130000_plan_owns_season allows it
  * during a changeover week), so this is a real case and not defensive coding.
- * Prefer the plan whose window contains today, then the latest start, then the
- * most recently created.
+ * Within a tier: prefer the plan whose window contains today, then the latest
+ * start, then the most recently created.
  */
 function pickPlan(plans: CountdownPlanRow[], today: string): CountdownPlanRow | null {
-  const active = plans.filter((p) => p.status === 'active');
-  if (active.length === 0) return null;
-  if (active.length === 1) return active[0];
+  for (const status of PLAN_STATUS_TIERS) {
+    const tier = plans.filter((p) => p.status === status);
+    if (tier.length === 0) continue;
+    if (tier.length === 1) return tier[0];
 
-  const current = active.filter((p) => p.start_date <= today && today <= p.expected_end_date);
-  const pool = current.length > 0 ? current : active;
+    const current = tier.filter((p) => p.start_date <= today && today <= p.expected_end_date);
+    const pool = current.length > 0 ? current : tier;
 
-  return [...pool].sort((a, b) => {
-    if (a.start_date !== b.start_date) return b.start_date.localeCompare(a.start_date);
-    return (b.created_at || '').localeCompare(a.created_at || '');
-  })[0];
+    return [...pool].sort((a, b) => {
+      if (a.start_date !== b.start_date) return b.start_date.localeCompare(a.start_date);
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    })[0];
+  }
+  return null;
 }
 
 function normaliseConfidence(raw: string | null | undefined): ExamCountdownConfidence {
