@@ -91,6 +91,12 @@ export interface ExamCountdownTarget {
   plan: { id: string; title: string } | null;
   /** True when this is the viewer's OWN slot rather than the cohort's. */
   is_personal: boolean;
+  /**
+   * The plan's start_date, so the hero can show how much of the preparation
+   * window has already gone. Null when there is no plan window to measure
+   * against, which simply hides the bar rather than guessing a start.
+   */
+  prep_started_on: string | null;
 }
 
 export type ExamCountdownBand =
@@ -315,6 +321,7 @@ export function pickCountdownTarget(
         note: null,
         plan: planRef,
         is_personal: true,
+        prep_started_on: plan.start_date ?? null,
       };
     }
   }
@@ -332,6 +339,7 @@ export function pickCountdownTarget(
       note: registry.date_note ?? null,
       plan: planRef,
       is_personal: false,
+      prep_started_on: plan.start_date ?? null,
     };
   }
 
@@ -350,6 +358,7 @@ export function pickCountdownTarget(
       note: null,
       plan: planRef,
       is_personal: false,
+      prep_started_on: plan.start_date ?? null,
     };
   }
 
@@ -553,5 +562,105 @@ export function describeExamCountdown(
     headline: `${d} days to go`,
     detail: formatIstDate(target.exam_date, false),
     chip: `${d}d`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The hero timer
+// ---------------------------------------------------------------------------
+
+/**
+ * The student dashboard's headline countdown, layered on top of the shared view
+ * rather than replacing it, so every other surface keeps the same vocabulary.
+ *
+ * It differs from `value` in one deliberate way: it shows an exact day count
+ * even for an unannounced date, where `value` rounds to "About 6 months". That
+ * is not a retreat from the hedging rule, it relocates it. "173" is precise
+ * *given* the assumed date, and the assumption is what the Expected chip, the
+ * caption and the note all state plainly. A number is what makes a countdown
+ * motivating; hiding it behind "about 6 months" is what made students ignore it.
+ *
+ * The one place a number is still refused is `unconfirmed_near`, where the guess
+ * is close enough that a day count would read as a real deadline.
+ */
+export interface ExamHeroView {
+  /** The shared view, for tone, label, detail, note and visibility. */
+  view: ExamCountdownView;
+  /** The large figure: "173", or a word when a number would mislead. */
+  big: string;
+  /** What the figure means: "days to go". */
+  unit: string;
+  /** True when `big` is a numeral, so the type scale can be set accordingly. */
+  showNumber: boolean;
+  /** One line tying the clock to the thing that moves it: turning up. */
+  motivation: string;
+  /** How much of the preparation window has gone, 0..100. Null if unknowable. */
+  elapsed_pct: number | null;
+}
+
+/**
+ * The nudge under the number. Tied to attending class, because that is the
+ * behaviour a countdown on a course dashboard can actually change, and phrased
+ * as encouragement rather than threat. Deadline pressure alone raises anxiety
+ * without raising effort; pressure plus a concrete next action is what moves.
+ */
+const MOTIVATION: Record<ExamCountdownBand, string> = {
+  far: 'Every class you sit in now is a mark you keep on exam day.',
+  weeks: 'Steady work now beats cramming later.',
+  days: 'This is the stretch that decides your score.',
+  final_week: 'Revision time. Turn up and stay sharp.',
+  tomorrow: 'Rest well tonight. You have put in the work.',
+  today: 'All the best. Go and show them.',
+  unconfirmed_near: 'Ask your teacher to confirm the exact date.',
+  past: '',
+};
+
+/** How much of the plan's preparation window has already gone. */
+function prepElapsedPct(target: ExamCountdownTarget, todayIst: string): number | null {
+  if (!target.prep_started_on) return null;
+  const total = daysUntil(target.exam_date, target.prep_started_on);
+  if (total <= 0) return null;
+  const remaining = daysUntil(target.exam_date, todayIst);
+  const done = total - remaining;
+  return Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+}
+
+export function describeExamHero(
+  target: ExamCountdownTarget | null,
+  todayIst: string = istToday(),
+): ExamHeroView | null {
+  const view = describeExamCountdown(target, todayIst);
+  if (!target || !view || !view.visible) return null;
+
+  const d = view.days_left;
+  let big: string;
+  let unit: string;
+  let showNumber = false;
+
+  if (view.band === 'unconfirmed_near') {
+    big = 'Soon';
+    unit = 'date not confirmed';
+  } else if (view.band === 'past') {
+    big = 'Done';
+    unit = 'exam written';
+  } else if (view.band === 'today') {
+    big = 'Today';
+    unit = 'is exam day';
+  } else if (view.band === 'tomorrow') {
+    big = 'Tomorrow';
+    unit = 'is the day';
+  } else {
+    big = String(d);
+    unit = 'days to go';
+    showNumber = true;
+  }
+
+  return {
+    view,
+    big,
+    unit,
+    showNumber,
+    motivation: MOTIVATION[view.band],
+    elapsed_pct: prepElapsedPct(target, todayIst),
   };
 }

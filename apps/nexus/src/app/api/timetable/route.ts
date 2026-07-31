@@ -12,6 +12,7 @@ import {
   removeTeamsAnnouncements,
   cancelTeamsEvent,
 } from '@/lib/teams-class-announcements';
+import { classifyMeetingArtifacts } from '@/lib/teams-online-meeting';
 import { assertCanTutor } from '@/lib/staff-scope';
 import {
   canTutor,
@@ -533,15 +534,7 @@ export async function PATCH(request: NextRequest) {
     // move locally when Teams refused leaves the two in agreement, which is the
     // only state the reconciler cannot damage.
     if (moved && before?.teams_meeting_id && token && when) {
-      const result = await updateTeamsEvent(
-        token,
-        supabase,
-        classroom_id,
-        before.teams_meeting_id,
-        before.teams_meeting_scope,
-        before.teams_calendar_event_id,
-        when,
-      );
+      const result = await updateTeamsEvent(token, supabase, classroom_id, before, when);
       if (!result.success) {
         return NextResponse.json(
           {
@@ -668,13 +661,18 @@ export async function DELETE(request: NextRequest) {
     // type, so read through an untyped client like the other recent columns.
     const { data: classToDelete } = (await (supabase as any)
       .from('nexus_scheduled_classes')
-      .select('teams_meeting_id, teams_meeting_scope, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id')
+      .select(
+        'teams_meeting_id, teams_meeting_scope, teams_meeting_join_url, teams_meeting_url, teams_calendar_event_id, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id',
+      )
       .eq('id', id)
       .eq('classroom_id', classroom_id)
       .single()) as {
       data: {
         teams_meeting_id: string | null;
         teams_meeting_scope: string | null;
+        teams_meeting_join_url: string | null;
+        teams_meeting_url: string | null;
+        teams_calendar_event_id: string | null;
         teams_channel_id: string | null;
         teams_channel_message_id: string | null;
         teams_group_chat_message_id: string | null;
@@ -686,7 +684,7 @@ export async function DELETE(request: NextRequest) {
     if (permanent) {
       // Cancel Teams event before deleting from DB
       if (classToDelete?.teams_meeting_id && token) {
-        const result = await cancelTeamsEvent(token, supabase, classroom_id, classToDelete.teams_meeting_id, classToDelete.teams_meeting_scope);
+        const result = await cancelTeamsEvent(token, supabase, classroom_id, classToDelete);
         if (!result.success) teamsWarning = result.error;
       }
 
@@ -720,7 +718,7 @@ export async function DELETE(request: NextRequest) {
 
     // Cancel Teams event (best-effort)
     if (classToDelete?.teams_meeting_id && token) {
-      const result = await cancelTeamsEvent(token, supabase, classroom_id, classToDelete.teams_meeting_id, classToDelete.teams_meeting_scope);
+      const result = await cancelTeamsEvent(token, supabase, classroom_id, classToDelete);
       if (!result.success) teamsWarning = result.error;
     }
 
@@ -803,9 +801,12 @@ async function updateTeamsEvent(
   token: string,
   supabase: ReturnType<typeof getSupabaseAdminClient>,
   classroomId: string,
-  meetingId: string,
-  scope: string | null,
-  calendarEventId: string | null,
+  refs: {
+    teams_meeting_id: string | null;
+    teams_meeting_join_url: string | null;
+    teams_meeting_url: string | null;
+    teams_calendar_event_id: string | null;
+  },
   when: { date: string; start: string; end: string; title: string },
 ): Promise<{ success: boolean; error?: string }> {
   // Graph wants a local time plus a named zone, not an offset.
@@ -813,8 +814,47 @@ async function updateTeamsEvent(
   const endDateTime = `${when.date}T${when.end.slice(0, 8).padEnd(8, ':00')}`;
   const TZ = 'India Standard Time';
 
+  const meetingId = refs.teams_meeting_id;
+  if (!meetingId) return { success: true };
+  const joinUrl = refs.teams_meeting_join_url || refs.teams_meeting_url || null;
+  const calendarEventId = refs.teams_calendar_event_id;
+
+  /**
+   * Move the Outlook event that carries the invitations.
+   *
+   * This is the part everyone actually sees. Moving the meeting alone changes the
+   * join link's schedule and leaves every invitee looking at the original slot,
+   * which is worse than not moving at all, so a failure here fails the whole move.
+   * Skipped when the event id IS the meeting id, which is how the group-calendar
+   * path stores it: there is only one artifact and it has already been patched.
+   */
+  const moveCalendarEvent = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!calendarEventId || calendarEventId === meetingId) return { success: true };
+    const eventRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${calendarEventId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: when.title,
+        start: { dateTime: startDateTime, timeZone: TZ },
+        end: { dateTime: endDateTime, timeZone: TZ },
+      }),
+    });
+    if (!eventRes.ok) {
+      const errText = await eventRes.text().catch(() => '');
+      console.error('Failed to move personal calendar event:', eventRes.status, errText);
+      return {
+        success: false,
+        error: `The Teams meeting moved but the calendar invite did not (${eventRes.status}), so the class was left where it was`,
+      };
+    }
+    return { success: true };
+  };
+
   try {
-    if (scope === 'channel_meeting') {
+    // Classified from the ids, not from teams_meeting_scope. See the comment on
+    // classifyMeetingArtifacts: the scope column records what was asked for, and
+    // that has never matched what Graph actually created.
+    if (classifyMeetingArtifacts({ teamsMeetingId: meetingId, joinUrl }) === 'group_event') {
       const { data: classroom } = await supabase
         .from('nexus_classrooms')
         .select('ms_team_id')
@@ -848,10 +888,12 @@ async function updateTeamsEvent(
               : `Teams would not move the meeting (${res.status}), so the class was left where it was`,
         };
       }
-      return { success: true };
+      // A repaired class can have a separate invite in the teacher's own mailbox
+      // alongside the group event, and it has to move too.
+      return moveCalendarEvent();
     }
 
-    // Standalone online meeting: ISO instants, no timezone object.
+    // Channel meeting or standalone meeting: ISO instants, no timezone object.
     const res = await fetch(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -867,29 +909,7 @@ async function updateTeamsEvent(
       return { success: false, error: `Teams would not move the meeting (${res.status}), so the class was left where it was` };
     }
 
-    // The calendar event is the part everyone actually sees. Moving the online
-    // meeting alone changes the join link's schedule and leaves every invitee
-    // looking at the original slot, which is worse than not moving at all.
-    if (calendarEventId) {
-      const eventRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${calendarEventId}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subject: when.title,
-          start: { dateTime: startDateTime, timeZone: TZ },
-          end: { dateTime: endDateTime, timeZone: TZ },
-        }),
-      });
-      if (!eventRes.ok) {
-        const errText = await eventRes.text().catch(() => '');
-        console.error('Failed to move personal calendar event:', eventRes.status, errText);
-        return {
-          success: false,
-          error: `The Teams meeting moved but the calendar invite did not (${eventRes.status}), so the class was left where it was`,
-        };
-      }
-    }
-    return { success: true };
+    return moveCalendarEvent();
   } catch (err) {
     console.error('Error moving Teams meeting:', err);
     return { success: false, error: 'The class moved here, but Teams could not be updated' };

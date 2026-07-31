@@ -33,6 +33,15 @@ export interface ClassCardData {
    * invites" with an empty attendee list.
    */
   teams_calendar_event_id?: string | null;
+  /**
+   * The event id in the SCHEDULING TEACHER'S OWN mailbox, which is a different
+   * question from the one above. A channel meeting's event sits on the M365
+   * group's calendar, and that is nobody's personal calendar: it does not show
+   * in Outlook or Teams desktop, and the organizer is absent from the attendee
+   * list because they are the organizer. So this is NULL for a class that
+   * invited every student and is still missing from the tutor's own calendar.
+   */
+  teams_organizer_event_id?: string | null;
   teams_meeting_degraded?: boolean | null;
   recording_url: string | null;
   batch_id: string | null;

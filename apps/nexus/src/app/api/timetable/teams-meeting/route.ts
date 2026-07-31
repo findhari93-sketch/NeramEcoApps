@@ -135,6 +135,13 @@ export async function POST(request: NextRequest) {
     let joinUrl = '';
     // The Outlook / group event id, empty when no calendar entry was created.
     let calendarEventId = '';
+    // The subset of the above that is in the CALLER'S OWN mailbox. A group
+    // calendar event is not: it lives in the M365 group's mailbox, which neither
+    // Outlook nor Teams desktop renders in the personal calendar view, and the
+    // organizer is not on its attendee list because they are the organizer. So
+    // this stays empty on the group path, which is exactly what tells the class
+    // panel to offer "Add to my calendar".
+    let organizerEventId = '';
     let degraded = false;
 
     // Resolve the tutor (who takes the class) and the scheduler (the caller) so the
@@ -225,6 +232,9 @@ export async function POST(request: NextRequest) {
           meetingId = fallback.meetingId;
           joinUrl = fallback.joinUrl;
           calendarEventId = fallback.calendarEventId;
+          // This one IS in the caller's mailbox: createMeetingWithInvites writes
+          // to /me/events, not to the group calendar.
+          organizerEventId = fallback.calendarEventId;
           extras.invitedCount = fallback.invitedCount;
           if (fallback.skipped.length) extras.notInvited = fallback.skipped;
           // The stored scope reflects what was actually created.
@@ -272,6 +282,7 @@ export async function POST(request: NextRequest) {
       meetingId = created.meetingId;
       joinUrl = created.joinUrl;
       calendarEventId = created.calendarEventId;
+      organizerEventId = created.calendarEventId;
       extras.invitedCount = created.invitedCount;
       if (created.skipped.length) extras.notInvited = created.skipped;
     } else {
@@ -305,6 +316,10 @@ export async function POST(request: NextRequest) {
       // The fact, not the intent. NULL here means the class has a join link and
       // nobody was invited, which is what the repair action looks for.
       teams_calendar_event_id: calendarEventId || null,
+      // NULL here means the class is not on the scheduling teacher's own
+      // calendar, even when it is on the team's, which is what the class panel's
+      // "Add to my calendar" action looks for.
+      teams_organizer_event_id: organizerEventId || null,
       teams_meeting_degraded: degraded,
     };
     if (extras.teams_channel_id) meetingUpdate.teams_channel_id = extras.teams_channel_id;

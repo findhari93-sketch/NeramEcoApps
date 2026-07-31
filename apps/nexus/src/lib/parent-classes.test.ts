@@ -80,6 +80,7 @@ describe('PARENT_CLASS_COLS', () => {
     'teams_meeting_join_url',
     'teams_meeting_id',
     'teams_calendar_event_id',
+    'teams_organizer_event_id',
     'teams_meeting_scope',
     'online_meeting_id',
     'transcript_url',

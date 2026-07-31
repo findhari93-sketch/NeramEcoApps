@@ -19,6 +19,13 @@ import { resolveClassAttendees, createCalendarEventForJoinUrl } from '@/lib/clas
  * meeting, so the links already sent to the channel, the group chat and WhatsApp
  * keep working. That is also why it is a separate endpoint from meeting creation:
  * creating would mint a new link and orphan the old one.
+ *
+ * The "already done" check reads teams_organizer_event_id, NOT
+ * teams_calendar_event_id. A channel meeting stores the GROUP calendar event id
+ * in the latter, and a group calendar is not any person's calendar: it is not in
+ * the tutor's mailbox and neither Outlook nor Teams desktop shows it in the
+ * personal calendar view. Gating on it meant this endpoint answered "already on
+ * the calendar, nothing to fix" for exactly the classes that needed fixing.
  */
 
 interface Ctx {
@@ -47,7 +54,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     const { data: cls } = await supabase
       .from('nexus_scheduled_classes')
       .select(
-        'id, classroom_id, batch_id, teacher_id, title, description, scheduled_date, start_time, end_time, status, teams_meeting_id, teams_meeting_join_url, teams_meeting_url, teams_calendar_event_id',
+        'id, classroom_id, batch_id, teacher_id, title, description, scheduled_date, start_time, end_time, status, teams_meeting_id, teams_meeting_join_url, teams_meeting_url, teams_calendar_event_id, teams_organizer_event_id',
       )
       .eq('id', params.classId)
       .single();
@@ -79,9 +86,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         { status: 400 },
       );
     }
-    if (cls.teams_calendar_event_id) {
+    if (cls.teams_organizer_event_id) {
       return NextResponse.json(
-        { error: 'This class is already on the calendar. Nothing to fix.' },
+        { error: 'This class is already on your calendar. Nothing to fix.' },
         { status: 409 },
       );
     }
@@ -137,9 +144,17 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       );
     }
 
+    // teams_organizer_event_id always: this event is in the caller's own mailbox,
+    // which is the whole point. teams_calendar_event_id only when it was empty,
+    // so a repaired channel meeting keeps pointing at its group event and the
+    // cancel/move paths still find it.
     await supabase
       .from('nexus_scheduled_classes')
-      .update({ teams_calendar_event_id: eventId, teams_meeting_degraded: false })
+      .update({
+        teams_organizer_event_id: eventId,
+        ...(cls.teams_calendar_event_id ? {} : { teams_calendar_event_id: eventId }),
+        teams_meeting_degraded: false,
+      })
       .eq('id', cls.id);
 
     return NextResponse.json({

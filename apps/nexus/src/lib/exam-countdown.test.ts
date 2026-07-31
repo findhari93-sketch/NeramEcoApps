@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   daysUntil,
   describeExamCountdown,
+  describeExamHero,
   examShortLabel,
   type ExamCountdownTarget,
   type ExamCountdownConfidence,
@@ -21,6 +22,7 @@ function target(overrides: Partial<ExamCountdownTarget> = {}): ExamCountdownTarg
     note: 'NTA has not announced Session 1 yet.',
     plan: { id: 'plan-1', title: 'JEE 2027 Batch' },
     is_personal: false,
+    prep_started_on: '2026-07-01',
     ...overrides,
   };
 }
@@ -237,5 +239,75 @@ describe('content rules', () => {
         expect(v.detail.length).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('the hero timer', () => {
+  const heroAt = (d: number, confidence: ExamCountdownConfidence, over = {}) =>
+    describeExamHero({ ...atDistance(d, confidence), ...over }, TODAY)!;
+
+  it('shows an exact day count even for an unannounced date', () => {
+    // The deliberate divergence from `value`, which rounds to "About 6 months".
+    // The hedging moves to the Expected chip and the caption, and the number
+    // survives, because a number is what makes a countdown motivating.
+    const h = heroAt(173, 'expected');
+    expect(h.big).toBe('173');
+    expect(h.unit).toBe('days to go');
+    expect(h.showNumber).toBe(true);
+    expect(h.view.is_estimate).toBe(true);
+    expect(h.view.value).toBe('About 6 months');
+  });
+
+  it('refuses a number when an unconfirmed date is close', () => {
+    // A day count on a guess this near reads as a real deadline.
+    const h = heroAt(5, 'expected');
+    expect(h.showNumber).toBe(false);
+    expect(h.big).toBe('Soon');
+    expect(h.big).not.toMatch(/\d/);
+  });
+
+  it('uses words on the days that are not a count', () => {
+    expect(heroAt(1, 'confirmed').big).toBe('Tomorrow');
+    expect(heroAt(0, 'confirmed').big).toBe('Today');
+    expect(heroAt(-2, 'confirmed').big).toBe('Done');
+    for (const d of [1, 0, -2]) expect(heroAt(d, 'confirmed').showNumber).toBe(false);
+  });
+
+  it('disappears once the exam is well past', () => {
+    expect(describeExamHero(atDistance(-8, 'confirmed'), TODAY)).toBeNull();
+    expect(describeExamHero(null, TODAY)).toBeNull();
+  });
+
+  it('measures preparation time used against the plan window', () => {
+    // Season 2026-07-01 to 2027-01-20 is 203 days; TODAY is day 29.
+    const h = heroAt(173, 'expected');
+    expect(h.elapsed_pct).toBe(14);
+  });
+
+  it('clamps the bar instead of reporting past 100 or below 0', () => {
+    // Exam already written: the window is spent, not 108% spent.
+    expect(heroAt(-2, 'confirmed', { prep_started_on: '2026-07-01' }).elapsed_pct).toBe(100);
+    // A season that has not started yet reads as nothing used, not a negative bar.
+    expect(heroAt(173, 'expected', { prep_started_on: '2027-01-01' }).elapsed_pct).toBe(0);
+  });
+
+  it('hides the bar rather than inventing a start date', () => {
+    expect(heroAt(173, 'expected', { prep_started_on: null }).elapsed_pct).toBeNull();
+  });
+
+  it('carries a motivation line at every visible distance, with no dashes', () => {
+    for (const d of [173, 80, 40, 20, 5, 1, 0]) {
+      for (const confidence of ['expected', 'confirmed'] as ExamCountdownConfidence[]) {
+        const h = heroAt(d, confidence);
+        expect(h.motivation.length, `d=${d} ${confidence}`).toBeGreaterThan(0);
+        expect(h.motivation).not.toMatch(/[—–]|--/);
+        expect(h.big).not.toMatch(/[—–]|--/);
+        expect(h.unit).not.toMatch(/[—–]|--/);
+      }
+    }
+  });
+
+  it('points a far-out student at the behaviour that actually moves the number', () => {
+    expect(heroAt(173, 'expected').motivation).toMatch(/class/i);
   });
 });

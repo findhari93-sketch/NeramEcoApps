@@ -35,7 +35,7 @@ test.describe('Nexus, exam countdown on mobile', () => {
     await assertNoHorizontalOverflow(page);
   });
 
-  test('the greeting chip is a 44px touch target when present', async ({ page }) => {
+  test('the hero timer is keyboard reachable and a large touch target', async ({ page }) => {
     const ok = await injectAuthForPage(page, 'student');
     if (!ok) {
       test.skip(true, 'Nexus dev server / test-login unavailable');
@@ -45,19 +45,23 @@ test.describe('Nexus, exam countdown on mobile', () => {
     await page.goto(`${NEXUS}/student/dashboard`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByText(/Welcome,/)).toBeVisible({ timeout: 30_000 });
 
-    const chip = page.locator('.MuiChip-root', { hasText: /in about|in \d|JEE|NATA/ });
-    if ((await chip.count()) === 0) {
-      test.skip(true, 'No exam linked to this classroom, so no countdown chip');
+    const hero = page.getByRole('button', { name: /days to go|is exam day|is the day|not confirmed/i });
+    if ((await hero.count()) === 0) {
+      test.skip(true, 'No exam linked to this classroom, so no countdown');
       return;
     }
-    // The chip itself is small by MUI default; its wrapper Box carries the 48px
-    // minHeight, so the tappable ancestor is what must satisfy the guideline.
-    const wrapperBox = await chip.first().locator('xpath=..').boundingBox();
-    expect(wrapperBox).toBeTruthy();
-    expect(wrapperBox!.height).toBeGreaterThanOrEqual(44);
+    // It is a whole card, so the 44px floor is a formality; the real assertion
+    // is that it exposes a button role at all, since it is a div under the hood.
+    const box = await hero.first().boundingBox();
+    expect(box).toBeTruthy();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    await hero.first().focus();
+    await expect(hero.first()).toBeFocused();
   });
 
-  test('a far-off exam shows a chip and not the full-width strip', async ({ page }) => {
+  test('a far-off unannounced exam shows the day count next to an Expected chip', async ({
+    page,
+  }) => {
     const ok = await injectAuthForPage(page, 'student');
     if (!ok) {
       test.skip(true, 'Nexus dev server / test-login unavailable');
@@ -67,15 +71,17 @@ test.describe('Nexus, exam countdown on mobile', () => {
     await page.goto(`${NEXUS}/student/dashboard`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByText(/Welcome,/)).toBeVisible({ timeout: 30_000 });
 
-    // "months to go" or "weeks to go" as a headline means the strip rendered.
-    // Beyond 30 days it must not: that copy belongs to the strip variant only.
-    const stripHeadline = page.getByText(/^(About )?\d+ months to go$/);
-    const chipLabel = page.locator('.MuiChip-root', { hasText: /in about \d+ months/ });
+    const unit = page.getByText('days to go', { exact: true });
+    if ((await unit.count()) === 0) {
+      test.skip(true, 'No counting exam linked, nothing to assert about hedging');
+      return;
+    }
 
-    if ((await chipLabel.count()) > 0) {
-      await expect(stripHeadline).toHaveCount(0);
-    } else {
-      test.skip(true, 'No far-off exam linked, nothing to assert about promotion');
+    // The hedge moved from the number to the label, so the label has to be there
+    // whenever the date is a guess. This is the honesty contract of the redesign.
+    const expectedChip = page.getByText('Expected date', { exact: true });
+    if ((await expectedChip.count()) > 0) {
+      await expect(page.getByText(/not announced yet/i).first()).toBeVisible();
     }
   });
 

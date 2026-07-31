@@ -287,8 +287,29 @@ export default function ClassDetailPanel({
   // id, never from teams_meeting_scope: the scope is written on the failure path
   // too, so a class could claim "Calendar invites" having invited nobody.
   const hasCalendarEntry = !!cls.teams_calendar_event_id;
+  // Whether it reached the TUTOR'S OWN calendar, which is a different question.
+  // A channel meeting's event lives on the M365 group's calendar, and a group
+  // calendar is nobody's personal calendar: neither Outlook nor Teams desktop
+  // shows it in the personal view, and the organizer is not on the invite list
+  // because they are the organizer. So a class can have invited every student
+  // and still be missing from the calendar of the person teaching it.
+  const onTutorCalendar = !!cls.teams_organizer_event_id;
+  // Whether this is genuinely a Teams CHANNEL meeting, read off the join URL's
+  // thread type rather than teams_meeting_scope. Those are different questions:
+  // the scope column records where the calendar event lives, and asking for a
+  // channel meeting writes a group calendar event whose meeting is an ordinary
+  // one, so the column labelled plain meetings "Channel Meeting". `@thread.tacv2`
+  // is a channel thread, `@thread.v2` is a standalone meeting thread. Falls back
+  // to the column for students, whose join URL the server strips.
+  const isRealChannelMeeting = meetingUrl
+    ? meetingUrl.includes('thread.tacv2')
+    : cls.teams_meeting_scope === 'channel_meeting';
+  // Only offered for classes still ahead of us. Adding a calendar entry for a
+  // class that already happened mails everyone about a meeting in the past, and
+  // without this gate every historical class would sprout a repair button the
+  // day teams_organizer_event_id ships.
   const needsCalendarRepair =
-    role === 'teacher' && !!cls.teams_meeting_id && !hasCalendarEntry && !isCancelled;
+    role === 'teacher' && !!cls.teams_meeting_id && !onTutorCalendar && !isCancelled && isUpcoming;
 
   // Compute time-until-class indicator
   const getTimeIndicator = () => {
@@ -452,8 +473,8 @@ export default function ClassDetailPanel({
             <Chip
               icon={<VideocamIcon sx={{ fontSize: '16px !important' }} />}
               label={
-                cls.teams_meeting_scope === 'channel_meeting' ? 'Channel Meeting'
-                : cls.teams_meeting_scope === 'calendar_event' ? 'Calendar Event'
+                isRealChannelMeeting ? 'Channel Meeting'
+                : hasCalendarEntry ? 'Calendar Event'
                 : 'Teams Link'
               }
               size="small"
@@ -1189,7 +1210,7 @@ export default function ClassDetailPanel({
                     >
                       {!cls.teams_meeting_id ? 'No meeting'
                        : !hasCalendarEntry ? 'Link only, no invite sent'
-                       : cls.teams_meeting_scope === 'channel_meeting' ? 'Channel meeting'
+                       : isRealChannelMeeting ? 'Channel meeting'
                        : 'Calendar invites'}
                     </Typography>
                   </Box>
@@ -1202,10 +1223,13 @@ export default function ClassDetailPanel({
                 )}
               </Box>
 
-              {/* A class with a join link but no calendar entry reached nobody:
-                  not the tutor, not one student. Say so plainly and offer the one
-                  action that fixes it, which reuses the existing join link so
-                  every link already posted to Teams and WhatsApp keeps working. */}
+              {/* Two different holes, one repair. Either the class has a join
+                  link and no calendar entry at all, so it reached nobody, or it
+                  has one on the team calendar and still is not on the tutor's own
+                  calendar. Name whichever it is instead of always claiming the
+                  worse one, then offer the action, which reuses the existing join
+                  link so every link already posted to Teams and WhatsApp keeps
+                  working. */}
               {needsCalendarRepair && onRepairMeeting && (
                 <Box
                   sx={{
@@ -1218,10 +1242,12 @@ export default function ClassDetailPanel({
                   }}
                 >
                   <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: 'warning.dark' }}>
-                    Nobody was invited to this class
+                    {hasCalendarEntry ? 'Not on your calendar' : 'Nobody was invited to this class'}
                   </Typography>
                   <Typography variant="caption" sx={{ display: 'block', color: 'text.primary', mb: 1 }}>
-                    It has a Teams link but no calendar entry, so it will not appear on your calendar or on any student&apos;s.
+                    {hasCalendarEntry
+                      ? 'The invite went out from the class team calendar, which does not show in your own Teams or Outlook calendar. Add a copy so you see it alongside everything else.'
+                      : 'It has a Teams link but no calendar entry, so it will not appear on your calendar or on any student’s.'}
                   </Typography>
                   <Button
                     variant="contained"
@@ -1231,7 +1257,7 @@ export default function ClassDetailPanel({
                     onClick={() => onRepairMeeting(cls)}
                     sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
                   >
-                    Fix calendar invites
+                    {hasCalendarEntry ? 'Add to my calendar' : 'Fix calendar invites'}
                   </Button>
                 </Box>
               )}

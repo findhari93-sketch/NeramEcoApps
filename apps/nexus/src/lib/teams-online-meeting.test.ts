@@ -6,6 +6,8 @@ import {
   extractOidFromJoinUrl,
   escapeIlike,
   isChannelMeeting,
+  classifyMeetingArtifacts,
+  isOutlookEventId,
   failureRank,
 } from './teams-online-meeting';
 
@@ -367,6 +369,52 @@ describe('isChannelMeeting', () => {
     expect(isChannelMeeting('AQMkAGExNjgzOGVhLTYz', null)).toBe(true);
     expect(isChannelMeeting(ONLINE_MEETING_ID, null)).toBe(false);
     expect(isChannelMeeting(null, null)).toBe(false);
+  });
+});
+
+describe('classifyMeetingArtifacts', () => {
+  const CHANNEL_URL =
+    'https://teams.microsoft.com/l/meetup-join/19%3aEMRG-7AiVM6ZpFfIf2rBGeFbPMeMC-BZHE8m8EUeaaU1%40thread.tacv2/1784707344096';
+  const STANDALONE_URL = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_MDg3ZTli%40thread.v2/0';
+
+  // THE load-bearing case. Every class imported from Teams carries an Outlook
+  // event id AND a channel join URL. Reading the join URL first would call these
+  // channel_online_meeting and send their deletes and moves to
+  // /me/onlineMeetings/{AAMk...}, which Graph rejects with
+  // `InvalidArgument: Invalid meeting id`. The thing being addressed is the id,
+  // so the id decides.
+  it('calls an Outlook event id a group event even when the join URL is a channel thread', () => {
+    expect(classifyMeetingArtifacts({ teamsMeetingId: AAMK_EVENT_ID, joinUrl: CHANNEL_URL })).toBe('group_event');
+    expect(classifyMeetingArtifacts({ teamsMeetingId: 'AQMkAGExNjgzOGVhLTYz', joinUrl: CHANNEL_URL })).toBe(
+      'group_event',
+    );
+  });
+
+  // What Nexus creates today: asking for a channel meeting writes a group
+  // calendar event whose meeting is an ordinary @thread.v2 one.
+  it('calls the group-calendar path a group event', () => {
+    expect(classifyMeetingArtifacts({ teamsMeetingId: AAMK_EVENT_ID, joinUrl: STANDALONE_URL })).toBe('group_event');
+  });
+
+  it('calls an online-meeting id on a channel thread a channel meeting', () => {
+    expect(classifyMeetingArtifacts({ teamsMeetingId: ONLINE_MEETING_ID, joinUrl: CHANNEL_URL })).toBe(
+      'channel_online_meeting',
+    );
+  });
+
+  it('calls anything else a standalone meeting', () => {
+    expect(classifyMeetingArtifacts({ teamsMeetingId: ONLINE_MEETING_ID, joinUrl: STANDALONE_URL })).toBe(
+      'standalone_meeting',
+    );
+    expect(classifyMeetingArtifacts({ teamsMeetingId: ONLINE_MEETING_ID, joinUrl: null })).toBe('standalone_meeting');
+    expect(classifyMeetingArtifacts({ teamsMeetingId: null, joinUrl: null })).toBe('standalone_meeting');
+  });
+
+  it('recognises both Outlook event id prefixes and nothing else', () => {
+    expect(isOutlookEventId(AAMK_EVENT_ID)).toBe(true);
+    expect(isOutlookEventId('AQMkAGExNjgzOGVhLTYz')).toBe(true);
+    expect(isOutlookEventId(ONLINE_MEETING_ID)).toBe(false);
+    expect(isOutlookEventId(null)).toBe(false);
   });
 });
 

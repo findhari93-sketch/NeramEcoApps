@@ -63,8 +63,8 @@ import type {
  * DELIBERATELY ABSENT, and each for a reason:
  *   recording_url, youtube_url  the recording itself
  *   teams_meeting_url, teams_meeting_join_url, teams_meeting_id,
- *   teams_calendar_event_id, teams_meeting_scope, online_meeting_id
- *                               a live door into a class full of children
+ *   teams_calendar_event_id, teams_organizer_event_id, teams_meeting_scope,
+ *   online_meeting_id           a live door into a class full of children
  *   transcript_url              the full text of the lesson
  *
  * `notes` used to be on that list as "the teacher's private notes". It is not

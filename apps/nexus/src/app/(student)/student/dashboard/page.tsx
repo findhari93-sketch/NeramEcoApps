@@ -31,7 +31,7 @@ import RecordingPlayerDialog from '@/components/timetable/RecordingPlayerDialog'
 import ClassCoverThumb from '@/components/timetable/ClassCoverThumb';
 import type { ClassImageRef } from '@/lib/class-cover';
 import ExamCountdown from '@/components/ExamCountdown';
-import { describeExamCountdown, type ExamCountdownTarget } from '@/lib/exam-countdown';
+import type { ExamCountdownTarget } from '@/lib/exam-countdown';
 import type { NexusFoundationChapterWithProgress } from '@neram/database/types';
 
 interface UpcomingClass {
@@ -230,17 +230,6 @@ export default function StudentDashboard() {
   const nextClass = data?.upcomingClasses?.[0];
   const hasUpcomingClassSoon = !!nextClass;
 
-  /**
-   * Whether the exam has earned the full-width strip rather than a chip on the
-   * greeting line. Inside a month it is worth interrupting for; before that a
-   * permanent coloured banner is just months of low-grade anxiety. An
-   * unconfirmed date this close is also promoted, because that is a problem the
-   * student should be able to raise with their teacher.
-   */
-  const examView = describeExamCountdown(data?.examCountdown ?? null);
-  const examIsClose =
-    !!examView && examView.visible && (examView.days_left <= 30 || examView.band === 'unconfirmed_near');
-
   return (
     <Box>
       {/* ── Compact Greeting ── */}
@@ -261,29 +250,21 @@ export default function StudentDashboard() {
             {activeClassroom?.name || 'No classroom selected'}
           </Typography>
         </Box>
-        {/*
-          While the exam is far out the countdown is ambient context, not an
-          action, so it rides on the greeting line as a chip and leaves the
-          "Next Up" hero as the page's single call to action. It earns the
-          full-width strip below only once it is close.
-        */}
-        {!examIsClose && (
-          <ExamCountdown
-            target={data?.examCountdown ?? null}
-            variant="inline"
-            onClick={() => router.push('/student/course-plan')}
-          />
-        )}
       </Box>
 
-      {/* ── Exam countdown, promoted once it is close enough to earn the space ── */}
-      {examIsClose && (
-        <ExamCountdown
-          target={data?.examCountdown ?? null}
-          variant="strip"
-          onClick={() => router.push('/student/course-plan')}
-        />
-      )}
+      {/*
+        ── Exam countdown ──
+        Shown at every distance rather than hiding as a chip until the last
+        month. The point of the timer is to be seen on an ordinary Tuesday in
+        July, which is when turning up to class still changes the outcome. It
+        sits above "Next Up" so the clock frames the class, and the Join button
+        stays the only filled call to action on the page.
+      */}
+      <ExamCountdown
+        target={data?.examCountdown ?? null}
+        variant="hero"
+        onClick={() => router.push('/student/course-plan')}
+      />
 
       {/* ── Complete Profile Banner ── */}
       {profileIncomplete && (

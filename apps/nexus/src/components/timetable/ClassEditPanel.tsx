@@ -221,7 +221,13 @@ export default function ClassEditPanel({
           >
             <VideocamIcon sx={{ fontSize: 18, color: 'success.dark' }} />
             <Typography variant="body2" sx={{ fontWeight: 700, color: 'success.dark', flex: 1 }}>
-              {cls.teams_meeting_scope === 'channel_meeting' ? 'Synced from Teams' : 'Meeting ready'}
+              {/* Was "Synced from Teams" whenever the scope read channel_meeting.
+                  That column is written by the CREATE route, so it says
+                  channel_meeting for classes Nexus scheduled itself, which were
+                  never synced from anywhere. The distinction it was drawing does
+                  not exist, and the fact worth stating here is the same either
+                  way: there is a meeting. */}
+              Meeting ready
             </Typography>
           </Box>
         ) : (

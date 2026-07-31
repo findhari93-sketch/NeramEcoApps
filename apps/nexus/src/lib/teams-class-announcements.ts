@@ -13,6 +13,7 @@
  */
 
 import { getAppOnlyToken } from '@/lib/graph-app-token';
+import { classifyMeetingArtifacts } from '@/lib/teams-online-meeting';
 import { getSupabaseAdminClient } from '@neram/database';
 
 type AdminClient = ReturnType<typeof getSupabaseAdminClient>;
@@ -485,13 +486,33 @@ export function isDeleteSettled(status: number): boolean {
   return status === 204 || status === 200 || status === 404 || status === 410;
 }
 
+/** Everything cancelTeamsEvent needs to find the artifacts a class actually owns. */
+export interface ClassMeetingRefs {
+  teams_meeting_id: string | null;
+  teams_meeting_join_url?: string | null;
+  teams_meeting_url?: string | null;
+  /** The Outlook event that carries the invitations. Deleting it is what tells the students. */
+  teams_calendar_event_id?: string | null;
+}
+
 /**
  * Cancel/delete a Teams meeting event (best-effort, non-blocking).
  *
- * For channel_meeting (group calendar events): DELETE /groups/{teamId}/calendar/events/{eventId},
- *   retried with the app-only token (Group.ReadWrite.All) when the teacher's delegated
- *   token lacks group-calendar access, then a standalone-meeting delete as a legacy fallback.
- * For standalone meetings: DELETE /me/onlineMeetings/{meetingId}.
+ * Which Graph collection holds the thing is decided by classifyMeetingArtifacts,
+ * NOT by teams_meeting_scope. The column records the scope that was requested and
+ * has never matched what Graph created, so trusting it sent deletes to the wrong
+ * collection. See the comment on classifyMeetingArtifacts.
+ *
+ *   group_event             DELETE /groups/{teamId}/calendar/events/{id}, retried
+ *                           app-only (Group.ReadWrite.All) when the teacher is
+ *                           owner-but-not-member, then a legacy standalone try.
+ *   channel_online_meeting  DELETE /me/onlineMeetings/{id}
+ *   standalone_meeting      DELETE /me/onlineMeetings/{id}
+ *
+ * In every case the linked calendar event is deleted too when we know of one.
+ * That is the step that actually withdraws the invitation from each student's
+ * calendar; skipping it, as this function used to, left a ghost entry sitting in
+ * everyone's calendar for a class that had been called off.
  *
  * A 404/410 at any step means the meeting is already gone, so it resolves as success.
  */
@@ -499,8 +520,7 @@ export async function cancelTeamsEvent(
   token: string,
   supabase: AdminClient,
   classroomId: string,
-  meetingId: string,
-  scope: string | null,
+  refs: ClassMeetingRefs,
 ): Promise<{ success: boolean; error?: string }> {
   const deleteAt = async (url: string, bearer: string): Promise<number> => {
     const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${bearer}` } });
@@ -511,8 +531,29 @@ export async function cancelTeamsEvent(
     return res.status;
   };
 
+  const meetingId = refs.teams_meeting_id;
+  if (!meetingId) return { success: true };
+  const joinUrl = refs.teams_meeting_join_url || refs.teams_meeting_url || null;
+
+  /**
+   * Withdraw the invitations. Best-effort and deliberately not part of the
+   * success verdict: the meeting itself being gone is what "cancelled" means,
+   * and a stale invite is a lesser problem than a class that still looks live.
+   */
+  const deleteCalendarEvent = async () => {
+    const eventId = refs.teams_calendar_event_id;
+    if (!eventId || eventId === meetingId) return;
+    try {
+      await deleteAt(`https://graph.microsoft.com/v1.0/me/events/${eventId}`, token);
+    } catch (err) {
+      console.error('Calendar event delete failed (non-blocking):', err);
+    }
+  };
+
   try {
-    if (scope === 'channel_meeting') {
+    const kind = classifyMeetingArtifacts({ teamsMeetingId: meetingId, joinUrl });
+
+    if (kind === 'group_event') {
       const { data: classroom } = await supabase
         .from('nexus_classrooms')
         .select('ms_team_id')
@@ -524,31 +565,44 @@ export async function cancelTeamsEvent(
 
       // 1) Delegated teacher token.
       let status = await deleteAt(eventUrl, token);
-      if (isDeleteSettled(status)) return { success: true };
+      if (isDeleteSettled(status)) {
+        await deleteCalendarEvent();
+        return { success: true };
+      }
 
       // 2) App-only token (reliably has group-calendar write even when the teacher
       //    is owner-but-not-member of the team).
       try {
         const appToken = await getAppOnlyToken();
         status = await deleteAt(eventUrl, appToken);
-        if (isDeleteSettled(status)) return { success: true };
+        if (isDeleteSettled(status)) {
+          await deleteCalendarEvent();
+          return { success: true };
+        }
       } catch (appErr) {
         console.error('App-only group calendar delete failed:', appErr);
       }
 
-      // 3) Legacy fallback: the record may hold a standalone online-meeting ID.
+      // 3) Legacy fallback: some old rows hold a standalone online-meeting ID
+      //    under a scope that claimed otherwise.
       const fallbackStatus = await deleteAt(
         `https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`,
         token,
       );
-      if (isDeleteSettled(fallbackStatus)) return { success: true };
+      if (isDeleteSettled(fallbackStatus)) {
+        await deleteCalendarEvent();
+        return { success: true };
+      }
 
       return { success: false, error: `Could not remove meeting from Teams (${status})` };
     }
 
-    // Standalone online meeting or personal calendar event.
+    // Channel meeting or standalone meeting: both are addressed as online meetings.
     const status = await deleteAt(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`, token);
-    if (isDeleteSettled(status)) return { success: true };
+    if (isDeleteSettled(status)) {
+      await deleteCalendarEvent();
+      return { success: true };
+    }
     return { success: false, error: `Could not remove meeting from Teams (${status})` };
   } catch (err) {
     console.error('Failed to cancel Teams event:', err);

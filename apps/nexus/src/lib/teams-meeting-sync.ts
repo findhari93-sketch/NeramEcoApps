@@ -274,6 +274,13 @@ export async function syncClassroomMeetings(
   for (const cls of nexusClasses || []) {
     // Only channel meetings live in the group calendar; other scopes must never be
     // auto-cancelled here.
+    //
+    // Unlike cancelTeamsEvent and updateTeamsEvent, this is NOT a place that has
+    // to distrust teams_meeting_scope. Those two pick a Graph URL from the column
+    // and so must classify from the ids instead. Here the real gate is the
+    // eventByJoinUrl match below: an event present in the group calendarView is a
+    // group calendar event by definition, so a class that owns an online meeting
+    // living elsewhere simply never matches and stays inert.
     if (cls.teams_meeting_scope !== 'channel_meeting') continue;
     if (cls.status !== 'scheduled') continue;
     if (cls.created_at && new Date(cls.created_at).getTime() > graceCutoff) continue;

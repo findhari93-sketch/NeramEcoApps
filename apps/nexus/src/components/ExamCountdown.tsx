@@ -3,12 +3,11 @@
 /**
  * The one component that renders "how long until the exam".
  *
- * It takes the resolved target and calls describeExamCountdown itself, so no
- * caller can word the same fact differently. Three surfaces, four densities, one
+ * It takes the resolved target and calls the formatter itself, so no caller can
+ * word the same fact differently. Three surfaces, three densities, one
  * vocabulary.
  *
- *   inline  student greeting row, while the exam is far out
- *   strip   student dashboard, once it is close enough to earn the space
+ *   hero    student dashboard, the motivating timer
  *   stat    teacher dashboard, inside the existing StatCard grid
  *   metric  parent dashboard, matching that page's label/value/caption shape
  *
@@ -18,16 +17,27 @@
  * are the only viewer who can fix it, so they get told (see emptyAction).
  */
 
-import { Box, Typography, Paper, Chip, alpha, useTheme, type Theme } from '@neram/ui';
+import {
+  Box,
+  Typography,
+  Paper,
+  Chip,
+  LinearProgress,
+  alpha,
+  useTheme,
+  type Theme,
+} from '@neram/ui';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import { useNow } from '@/hooks/useNow';
 import StatCard from '@/components/StatCard';
 import {
   describeExamCountdown,
+  describeExamHero,
   istDayOf,
   type ExamCountdownTarget,
   type ExamCountdownTone,
   type ExamCountdownView,
+  type ExamHeroView,
 } from '@/lib/exam-countdown';
 
 /**
@@ -41,7 +51,7 @@ const TICK_MS = 15 * 60_000;
 
 interface ExamCountdownProps {
   target: ExamCountdownTarget | null;
-  variant: 'inline' | 'strip' | 'stat' | 'metric';
+  variant: 'hero' | 'stat' | 'metric';
   /** Tapping through to the plan. Omit for a non-interactive render. */
   onClick?: () => void;
   /**
@@ -73,7 +83,8 @@ export default function ExamCountdown({
 }: ExamCountdownProps) {
   const theme = useTheme();
   const now = useNow(TICK_MS, true);
-  const view = describeExamCountdown(target, istDayOf(now));
+  const today = istDayOf(now);
+  const view = describeExamCountdown(target, today);
 
   if (!view || !view.visible) {
     // Teachers are the only viewer who can link a plan to an exam date, so they
@@ -118,86 +129,156 @@ export default function ExamCountdown({
     return <ExamCountdownMetric view={view} />;
   }
 
-  if (variant === 'inline') {
-    return (
-      <Box
-        onClick={onClick}
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          minHeight: 48,
-          flexShrink: 0,
-          maxWidth: { xs: '55%', sm: 'none' },
-          cursor: onClick ? 'pointer' : 'default',
-        }}
-      >
-        <Chip
-          size="small"
-          variant="outlined"
-          icon={<EventAvailableOutlinedIcon sx={{ fontSize: '0.95rem !important' }} />}
-          label={inlineLabel(view)}
-          sx={{
-            borderColor: alpha(color, 0.4),
-            color,
-            fontWeight: 600,
-            maxWidth: '100%',
-            '& .MuiChip-label': {
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            },
-          }}
-        />
-      </Box>
-    );
-  }
+  const hero = describeExamHero(target, today);
+  if (!hero) return null;
+  return <ExamCountdownHero hero={hero} color={color} onClick={onClick} />;
+}
 
-  // strip
+/**
+ * The student's timer. Deliberately NOT a filled gradient block: the "Next Up"
+ * Join card below it is the page's single call to action, and two saturated
+ * panels stacked would compete for the same eye. A tinted surface carrying one
+ * large figure reads as emphasis without stealing the click.
+ */
+function ExamCountdownHero({
+  hero,
+  color,
+  onClick,
+}: {
+  hero: ExamHeroView;
+  color: string;
+  onClick?: () => void;
+}) {
+  const { view } = hero;
+  const interactive = Boolean(onClick);
+
   return (
     <Paper
       elevation={0}
       onClick={onClick}
+      {...(interactive
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            'aria-label': `${view.short_label}, ${hero.big} ${hero.unit}. ${view.detail}`,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick?.();
+              }
+            },
+          }
+        : {})}
       sx={{
-        p: { xs: 1.75, sm: 2 },
+        p: { xs: 2, sm: 2.5 },
         mb: 2,
-        borderRadius: 2,
-        border: `1px solid ${alpha(color, 0.3)}`,
-        bgcolor: alpha(color, 0.07),
-        cursor: onClick ? 'pointer' : 'default',
+        borderRadius: 3,
+        border: `1px solid ${alpha(color, 0.28)}`,
+        bgcolor: alpha(color, 0.06),
+        cursor: interactive ? 'pointer' : 'default',
+        transition: 'background-color 200ms ease-out, border-color 200ms ease-out',
+        '&:hover': interactive
+          ? { bgcolor: alpha(color, 0.1), borderColor: alpha(color, 0.45) }
+          : undefined,
+        '&:focus-visible': { outline: `2px solid ${color}`, outlineOffset: 2 },
+        // Motion preference is an accessibility rule, not a nicety.
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
+      {/* Which exam, and how sure we are of the date */}
       <Box
         sx={{
           display: 'flex',
-          alignItems: 'baseline',
+          alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 1.5,
+          gap: 1,
+          mb: 1,
         }}
       >
-        <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color }}>
-          {view.headline}
-        </Typography>
-        <Typography
-          sx={{ fontWeight: 800, fontSize: '1rem', color, flexShrink: 0, whiteSpace: 'nowrap' }}
-        >
-          {view.value}
-        </Typography>
-      </Box>
-      <Box
-        sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}
-      >
-        <Typography variant="caption" color="text.secondary">
-          {view.detail}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+          <EventAvailableOutlinedIcon sx={{ fontSize: '1rem', color, flexShrink: 0 }} />
+          <Typography
+            noWrap
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color,
+            }}
+          >
+            {view.short_label}
+          </Typography>
+        </Box>
         {view.is_estimate && (
           <Chip
             label="Expected date"
             size="small"
             variant="outlined"
             color="warning"
-            sx={{ height: 20, fontSize: '0.62rem' }}
+            sx={{ height: 20, fontSize: '0.62rem', flexShrink: 0 }}
           />
         )}
       </Box>
+
+      {/* The figure */}
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
+        <Typography
+          component="span"
+          sx={{
+            fontSize: hero.showNumber
+              ? { xs: '2.75rem', sm: '3.25rem' }
+              : { xs: '1.6rem', sm: '2rem' },
+            fontWeight: 800,
+            lineHeight: 1,
+            color,
+            // Stops the figure jittering sideways as it ticks down.
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {hero.big}
+        </Typography>
+        <Typography
+          component="span"
+          sx={{ fontWeight: 700, fontSize: '0.95rem', color: alpha(color, 0.85) }}
+        >
+          {hero.unit}
+        </Typography>
+      </Box>
+
+      {/* Time draining is more visceral than time remaining */}
+      {hero.elapsed_pct !== null && (
+        <Box sx={{ mt: 1.75 }}>
+          <LinearProgress
+            variant="determinate"
+            value={hero.elapsed_pct}
+            aria-label="Preparation time used"
+            sx={{
+              height: 6,
+              borderRadius: 3,
+              bgcolor: alpha(color, 0.15),
+              '& .MuiLinearProgress-bar': { bgcolor: color, borderRadius: 3 },
+              '@media (prefers-reduced-motion: reduce)': {
+                '& .MuiLinearProgress-bar': { transition: 'none' },
+              },
+            }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            {hero.elapsed_pct}% of your preparation time is used
+          </Typography>
+        </Box>
+      )}
+
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+        {view.detail}
+      </Typography>
+
+      {hero.motivation && (
+        <Typography sx={{ mt: 0.75, fontWeight: 600, fontSize: '0.82rem', lineHeight: 1.5 }}>
+          {hero.motivation}
+        </Typography>
+      )}
+
       {view.note && (
         <Typography
           variant="caption"
@@ -243,22 +324,4 @@ function ExamCountdownMetric({ view }: { view: ExamCountdownView }) {
       )}
     </Box>
   );
-}
-
-/**
- * The chip text. Bands whose value is a duration ("6 months") read naturally
- * after "in"; the rest are already complete phrases ("Tomorrow", "Not
- * confirmed") and would read as "in Tomorrow", so they get a colon instead.
- *
- * Decided from the band rather than from where the component is used, so the
- * chip cannot be made ungrammatical by mounting it at the wrong distance.
- */
-function inlineLabel(view: ExamCountdownView): string {
-  const isDuration =
-    view.band === 'far' || view.band === 'weeks' || view.band === 'days' || view.band === 'final_week';
-  if (!isDuration) return `${view.short_label}: ${view.value}`;
-  const value = view.value.startsWith('About ')
-    ? `about ${view.value.slice('About '.length)}`
-    : view.value;
-  return `${view.short_label} in ${value}`;
 }

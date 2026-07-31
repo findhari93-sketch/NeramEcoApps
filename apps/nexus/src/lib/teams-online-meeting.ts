@@ -176,6 +176,39 @@ export function isChannelMeeting(teamsMeetingId: string | null, joinUrl: string 
   return /^(AAMk|AQMk)/i.test(teamsMeetingId ?? '');
 }
 
+/** An Outlook event id, as opposed to an onlineMeeting id. Prod holds both prefixes. */
+export function isOutlookEventId(id: string | null): boolean {
+  return /^(AAMk|AQMk)/i.test(id ?? '');
+}
+
+/**
+ * What kind of thing does `teams_meeting_id` actually point at?
+ *
+ * This answers the question `teams_meeting_scope` was being asked and kept
+ * getting wrong. The column records the scope that was *requested*, and the
+ * requested scope has never matched what Graph created: asking for
+ * `channel_meeting` writes a group calendar event whose meeting is an ordinary
+ * `@thread.v2` one, so the column says `channel_meeting` while isChannelMeeting()
+ * says false. Anything that has to pick a Graph URL must classify from the ids
+ * instead, because the id is the thing being addressed.
+ *
+ * ORDER IS LOAD BEARING. The Outlook event id check comes FIRST, because the
+ * classes imported from Teams carry an `AAMk…` group event id *and* a
+ * `@thread.tacv2` join URL. Testing the join URL first would call those
+ * `channel_online_meeting` and send their deletes to /me/onlineMeetings/{AAMk…},
+ * which Graph rejects with `InvalidArgument: Invalid meeting id`.
+ */
+export type MeetingArtifactKind = 'channel_online_meeting' | 'group_event' | 'standalone_meeting';
+
+export function classifyMeetingArtifacts(refs: {
+  teamsMeetingId: string | null;
+  joinUrl: string | null;
+}): MeetingArtifactKind {
+  if (isOutlookEventId(refs.teamsMeetingId)) return 'group_event';
+  if (refs.joinUrl?.includes('thread.tacv2')) return 'channel_online_meeting';
+  return 'standalone_meeting';
+}
+
 async function lookupByJoinUrl(
   base: string,
   token: string,
@@ -273,6 +306,19 @@ export async function resolveOnlineMeetingDetailed(opts: {
     }
   }
 
+  // Same shortcut for the organizer themselves. Their own /me collection holds
+  // the meeting, so a known id needs no lookup and, unlike the app-only base
+  // above, no Teams application access policy either.
+  if (knownOnlineMeetingId && preferDelegated && delegatedToken) {
+    return {
+      meeting: {
+        meetingId: knownOnlineMeetingId,
+        artifactBase: `me/onlineMeetings/${knownOnlineMeetingId}`,
+        token: delegatedToken,
+      },
+    };
+  }
+
   // A channel/group meeting can never be resolved by the delegated /me
   // collection, so going app-only first saves a guaranteed-useless Graph round
   // trip on every single sync.
@@ -337,7 +383,14 @@ export async function resolveOnlineMeetingDetailed(opts: {
   }
 
   // Stored id is already an onlineMeeting id (link_only). Use it via delegated.
-  if (teamsMeetingId && !channelMeeting && delegatedToken) {
+  //
+  // The isOutlookEventId guard is not optional. A class created by the
+  // group-calendar path stores an `AAMk…` Outlook event id next to a
+  // `@thread.v2` join URL, so `channelMeeting` is false and this branch used to
+  // hand back `me/onlineMeetings/AAMk…`, which Graph answers with
+  // `InvalidArgument: Invalid meeting id`. That bogus base then became the
+  // stored diagnosis, hiding the real reason the meeting could not be resolved.
+  if (teamsMeetingId && !channelMeeting && !isOutlookEventId(teamsMeetingId) && delegatedToken) {
     return {
       meeting: {
         meetingId: teamsMeetingId,
