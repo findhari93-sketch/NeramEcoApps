@@ -1,7 +1,7 @@
 // @ts-nocheck — nexus_study_folders / nexus_study_files not yet in generated Supabase types;
 // regenerate with pnpm supabase:gen:types after the migration is applied.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
-import { hasTestForFiles } from './study-tests';
+import { hasPlacedTestForFiles } from './study-tests';
 import type {
   NexusStudyFolder,
   NexusStudyFile,
@@ -853,7 +853,7 @@ export async function listFavorites(
   const grants = await listActiveGrantsForStudent(userId, supabase);
   const favFileIds = favRows.map((f) => f.file_id);
   const progress = await getFileProgressMap(userId, favFileIds, supabase);
-  const testSet = await hasTestForFiles(favFileIds, supabase);
+  const testSet = await hasPlacedTestForFiles(favFileIds, supabase);
   const now = Date.now();
   const out: (NexusStudyFileDTO & { breadcrumb: { id: string; name: string }[] })[] = [];
   // Preserve favorite order (favRows is newest-first).

@@ -3,14 +3,18 @@ import {
   getFileById,
   getFolderById,
   isFolderVisibleToStudent,
-  gradeAndRecordAttempt,
+  gradePlacedChapterAttempt,
 } from '@neram/database';
 import { getRequestUser, isStaff, getStudentExamSet } from '@/lib/study-materials';
 
 /**
  * POST /api/study-materials/files/[id]/test/attempt
- * Student submits { answers: { [questionId]: 'a'|'b'|'c'|'d' } }. Grades server-side, records the
- * attempt, and marks the file completed if score >= passing_pct. Returns score + per-question review.
+ * Student submits { answers: { [questionId]: 'a'|'b'|'c'|'d' } }.
+ *
+ * Grades through the unified engine, which records a nexus_test_attempts row and
+ * fires the study_file side-effect (nexus_study_mark_completed) on a pass, so
+ * chapter completion and the teacher dashboard behave exactly as before while
+ * the attempt now lands in the same table as every other test in the app.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -32,10 +36,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const body = await request.json().catch(() => ({}));
     const answers = (body?.answers && typeof body.answers === 'object' ? body.answers : {}) as Record<string, string>;
 
-    const result = await gradeAndRecordAttempt(params.id, user.id, answers);
+    const result = await gradePlacedChapterAttempt(params.id, user.id, answers);
     return NextResponse.json({ result });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to submit test';
+    if (message === 'NO_TEST_LINKED') {
+      return NextResponse.json({ error: 'No test is linked to this chapter yet.' }, { status: 404 });
+    }
     const status = message === 'Not authorized' ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }

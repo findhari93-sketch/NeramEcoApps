@@ -10,8 +10,16 @@ import {
   Chip,
   Paper,
   Collapse,
+  Tabs,
+  Tab,
+  Menu,
+  MenuItem,
 } from '@neram/ui';
 import AddTaskOutlinedIcon from '@mui/icons-material/AddTaskOutlined';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
+import TestLibraryView from '@/components/tests/TestLibraryView';
+import StudentTestsView from '@/components/tests/StudentTestsView';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
@@ -215,11 +223,15 @@ function GroupSection({
   );
 }
 
+type HubTab = 'library' | 'location' | 'students';
+
 export default function TeacherTestsHubPage() {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
+  const [tab, setTab] = useState<HubTab>('library');
   const [groups, setGroups] = useState<NexusTestOverviewGroup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [newMenu, setNewMenu] = useState<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -241,36 +253,81 @@ export default function TeacherTestsHubPage() {
     }
   }, [getToken]);
 
+  // Only fetched for the "By location" tab, which is the expensive query.
+  // The Library tab loads its own paged data.
   useEffect(() => {
-    load();
-  }, [load]);
+    if (tab === 'location' && groups === null) load();
+  }, [tab, groups, load]);
 
   const totalTests = (groups || []).reduce((n, g) => n + g.count, 0);
 
   return (
-    <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 900, mx: 'auto' }}>
+    <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 1100, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.5 }}>
-        <Box sx={{ flex: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
             Tests
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Every test, grouped by where it is used
-            {groups ? ` · ${totalTests} total` : ''}
+            Build a test once, then link it wherever it is needed
           </Typography>
         </Box>
         <Button
           variant="contained"
           size="small"
           startIcon={<AddTaskOutlinedIcon />}
-          onClick={() => router.push('/teacher/tests/new')}
-          sx={{ textTransform: 'none', flexShrink: 0, minHeight: 40 }}
+          onClick={(e) => setNewMenu(e.currentTarget)}
+          sx={{ textTransform: 'none', flexShrink: 0, minHeight: 44 }}
         >
-          Build a test
+          New test
         </Button>
+        <Menu open={Boolean(newMenu)} anchorEl={newMenu} onClose={() => setNewMenu(null)}>
+          <MenuItem
+            onClick={() => {
+              setNewMenu(null);
+              router.push('/teacher/tests/new/import');
+            }}
+            sx={{ minHeight: 44 }}
+          >
+            <AutoAwesomeOutlinedIcon sx={{ fontSize: 18, mr: 1 }} />
+            Import from AI
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              setNewMenu(null);
+              router.push('/teacher/tests/new');
+            }}
+            sx={{ minHeight: 44 }}
+          >
+            <TuneOutlinedIcon sx={{ fontSize: 18, mr: 1 }} />
+            Pick from the question bank
+          </MenuItem>
+        </Menu>
       </Box>
 
-      <Box sx={{ mt: 2 }}>
+      <Tabs
+        value={tab}
+        onChange={(_, v) => setTab(v as HubTab)}
+        sx={{ mt: 1, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { textTransform: 'none', minHeight: 48 } }}
+      >
+        <Tab value="library" label="Library" />
+        <Tab value="location" label={`By location${groups ? ` (${totalTests})` : ''}`} />
+        <Tab value="students" label="Student tests" />
+      </Tabs>
+
+      {tab === 'library' && (
+        <Box sx={{ mt: 2 }}>
+          <TestLibraryView getToken={getToken} onOpenTest={(id) => router.push(`/teacher/tests/${id}`)} />
+        </Box>
+      )}
+
+      {tab === 'students' && (
+        <Box sx={{ mt: 2 }}>
+          <StudentTestsView getToken={getToken} onOpenTest={(id) => router.push(`/teacher/tests/${id}`)} />
+        </Box>
+      )}
+
+      <Box sx={{ mt: 2, display: tab === 'location' ? 'block' : 'none' }}>
         {groups === null ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {[1, 2, 3].map((i) => (
@@ -290,16 +347,16 @@ export default function TeacherTestsHubPage() {
           <Box sx={{ py: 8, textAlign: 'center' }}>
             <FactCheckOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
             <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-              No tests yet. Build one from the question bank, or attach a test to a study-material chapter.
+              No test is linked to anything yet. Once you link a test to a chapter or a class, it shows up here.
             </Typography>
             <Button
               variant="contained"
               size="small"
-              startIcon={<AddTaskOutlinedIcon />}
-              onClick={() => router.push('/teacher/tests/new')}
-              sx={{ textTransform: 'none' }}
+              startIcon={<AutoAwesomeOutlinedIcon />}
+              onClick={() => router.push('/teacher/tests/new/import')}
+              sx={{ textTransform: 'none', minHeight: 44 }}
             >
-              Build a test
+              Import from AI
             </Button>
           </Box>
         ) : (

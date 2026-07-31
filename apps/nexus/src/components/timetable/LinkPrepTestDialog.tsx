@@ -19,17 +19,18 @@ import {
   useTheme,
 } from '@neram/ui';
 import QuestionPickerList from '@/components/question-bank/QuestionPickerList';
+import TestBrowser, { type PickableTest } from '@/components/tests/TestBrowser';
 import type { NexusQBQuestionListItem } from '@neram/database';
 import type { ClassCardData } from './ClassCard';
 
 /** A prep test is meant to be short. Beyond this it stops being pre-class work. */
 const MAX_QUESTIONS = 15;
 
-interface LinkableTest {
-  id: string;
-  title: string;
-  total_marks: number | null;
-}
+/**
+ * Which library tests may gate a class. A content gate belongs to its chapter and
+ * a catch-up paper belongs to the class it clears, so neither is offered here.
+ */
+const REUSABLE_KINDS = ['classroom_assigned', 'practice_pool', 'class_prep', 'weekly', 'mock'];
 
 interface LinkPrepTestDialogProps {
   open: boolean;
@@ -61,11 +62,9 @@ export default function LinkPrepTestDialog({
 
   const [tab, setTab] = useState<'build' | 'reuse'>('build');
   const [selected, setSelected] = useState<Map<string, NexusQBQuestionListItem>>(new Map());
-  const [linkable, setLinkable] = useState<LinkableTest[]>([]);
-  const [reuseId, setReuseId] = useState<string | null>(null);
+  const [reusePick, setReusePick] = useState<PickableTest | null>(null);
   const [passingPct, setPassingPct] = useState(70);
   const [title, setTitle] = useState('');
-  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // The class topic is the best search seed we have. There is no join from a
@@ -80,13 +79,12 @@ export default function LinkPrepTestDialog({
     if (!open || !cls?.id) return;
     setTab('build');
     setSelected(new Map());
-    setReuseId(null);
+    setReusePick(null);
     setPassingPct(70);
     setTitle(`${cls.title || 'Class'}: before you join`);
 
     let cancelled = false;
     (async () => {
-      setLoading(true);
       try {
         const token = await getToken();
         if (!token) return;
@@ -95,11 +93,10 @@ export default function LinkPrepTestDialog({
         });
         if (res.ok && !cancelled) {
           const d = await res.json();
-          setLinkable(d.linkable || []);
           if (d.default_passing_pct) setPassingPct(d.default_passing_pct);
         }
-      } finally {
-        if (!cancelled) setLoading(false);
+      } catch {
+        // Only the default pass mark comes from here; the browser loads its own list.
       }
     })();
     return () => {
@@ -107,9 +104,12 @@ export default function LinkPrepTestDialog({
     };
   }, [open, cls?.id, cls?.title, getToken]);
 
-  const questionCount = tab === 'build' ? selected.size : (linkable.find((t) => t.id === reuseId)?.total_marks ?? 0);
+  // The library reports a real question count. The old reuse list used
+  // total_marks as a stand-in, which silently lied about "5 of 6" whenever a
+  // question was worth more than one mark.
+  const questionCount = tab === 'build' ? selected.size : (reusePick?.question_count ?? 0);
   const mustGetRight = questionCount > 0 ? Math.ceil((passingPct / 100) * questionCount) : 0;
-  const canSave = tab === 'build' ? selected.size > 0 : !!reuseId;
+  const canSave = tab === 'build' ? selected.size > 0 : !!reusePick;
 
   const save = async () => {
     if (!cls?.id || !canSave) return;
@@ -122,7 +122,7 @@ export default function LinkPrepTestDialog({
         body: JSON.stringify(
           tab === 'build'
             ? { question_ids: [...selected.keys()], title: title.trim(), passing_pct: passingPct }
-            : { test_id: reuseId, passing_pct: passingPct },
+            : { test_id: reusePick?.id, passing_pct: passingPct },
         ),
       });
       const d = await res.json().catch(() => ({}));
@@ -176,44 +176,18 @@ export default function LinkPrepTestDialog({
               maxSelected={MAX_QUESTIONS}
             />
           </>
-        ) : loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress size={22} />
-          </Box>
-        ) : linkable.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
-            You have not built any reusable tests yet. Pick questions instead.
-          </Typography>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            {linkable.map((t) => (
-              <Box
-                key={t.id}
-                onClick={() => setReuseId(t.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setReuseId(t.id);
-                  }
-                }}
-                sx={{
-                  p: 1.5,
-                  minHeight: 48,
-                  cursor: 'pointer',
-                  borderRadius: 1.5,
-                  border: `1px solid ${reuseId === t.id ? theme.palette.primary.main : theme.palette.divider}`,
-                  bgcolor: reuseId === t.id ? 'action.hover' : 'transparent',
-                }}
-              >
-                <Typography sx={{ fontWeight: 700, fontSize: '0.8438rem' }}>{t.title}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {t.total_marks ?? 0} question{t.total_marks === 1 ? '' : 's'}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
+          // Browses the same folder tree as the Tests library, so a paper filed
+          // under "Foundation > History of Architecture" is found the same way
+          // here as it is there.
+          <TestBrowser
+            getToken={getToken}
+            value={reusePick}
+            onChange={setReusePick}
+            kinds={REUSABLE_KINDS}
+            resetToken={open ? cls?.id : null}
+            maxListHeight={280}
+          />
         )}
 
         {/* The pass mark, stated twice. Teachers set 80% meaning "most of it" and

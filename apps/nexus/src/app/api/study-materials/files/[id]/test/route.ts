@@ -3,20 +3,24 @@ import {
   getFileById,
   getFolderById,
   isFolderVisibleToStudent,
-  getTestWithQuestionsForStaff,
-  getTestForStudent,
-  upsertTestWithQuestions,
-  deleteTestForFile,
+  getPlacedChapterTest,
+  getPlacedTestForStudent,
+  linkTestToStudyFile,
+  unlinkTestFromStudyFile,
 } from '@neram/database';
 import { getRequestUser, isStaff, assertStaff, getStudentExamSet } from '@/lib/study-materials';
-import type { NexusStudyTestQuestionInput } from '@neram/database/types';
 
 /**
- * Per-file test.
- *   GET    -> staff: full test + questions (with answers) for authoring/preview;
- *             student: student-safe test (no answers) for taking. 404 when none.
- *   POST   -> staff: create/replace the test. Body { title?, passingPct, questions[] }.
- *   DELETE -> staff: remove the test.
+ * The test linked to a study chapter.
+ *
+ *   GET    -> staff: which test is linked, if any.
+ *             student: the paper to take, answers stripped. null when none.
+ *   POST   -> staff: LINK a library test. Body { test_id, passing_pct? }.
+ *   DELETE -> staff: unlink. The test and its attempts survive.
+ *
+ * Authoring moved to the Tests module. A chapter test is now an ordinary
+ * repository test placed here, which is what lets one paper serve a chapter, a
+ * class and a practice pool without being written three times.
  */
 
 async function assertStudentCanSee(userId: string, studentProgram: string | null, fileId: string) {
@@ -32,11 +36,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const user = await getRequestUser(request.headers.get('Authorization'));
     if (isStaff(user)) {
-      const test = await getTestWithQuestionsForStaff(params.id);
+      const test = await getPlacedChapterTest(params.id);
       return NextResponse.json({ test });
     }
     await assertStudentCanSee(user.id, user.student_program, params.id);
-    const test = await getTestForStudent(params.id);
+    const test = await getPlacedTestForStudent(params.id);
     return NextResponse.json({ test });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load test';
@@ -51,48 +55,29 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     assertStaff(user);
 
     const body = await request.json();
-    const rawQuestions = Array.isArray(body?.questions) ? body.questions : [];
-    // Validate + normalise each question (needs a stem, 2+ options, and a correct option present).
-    const questions: NexusStudyTestQuestionInput[] = [];
-    for (const q of rawQuestions) {
-      const correct = String(q?.correct_option || '').toLowerCase();
-      const opt = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
-      const a = opt(q?.option_a);
-      const b = opt(q?.option_b);
-      const c = opt(q?.option_c);
-      const d = opt(q?.option_d);
-      const text = opt(q?.question_text);
-      if (!text || !a || !b || !['a', 'b', 'c', 'd'].includes(correct)) continue;
-      if (correct === 'c' && !c) continue;
-      if (correct === 'd' && !d) continue;
-      // Questions picked from the central bank carry their id so the mirror links (not duplicates).
-      const qbId = typeof q?.qb_question_id === 'string' && q.qb_question_id.trim() ? q.qb_question_id.trim() : null;
-      questions.push({
-        question_text: text,
-        option_a: a,
-        option_b: b,
-        option_c: c,
-        option_d: d,
-        correct_option: correct as 'a' | 'b' | 'c' | 'd',
-        explanation: opt(q?.explanation),
-        qb_question_id: qbId,
-      });
-    }
-    if (questions.length === 0) {
-      return NextResponse.json({ error: 'Add at least one valid question.' }, { status: 400 });
+    const testId = typeof body?.test_id === 'string' ? body.test_id.trim() : '';
+    if (!testId) {
+      return NextResponse.json(
+        { error: 'Pick a test from the library. Build one in Tests first if you have none.' },
+        { status: 400 },
+      );
     }
 
-    const passingPct = Number(body?.passingPct);
-    const result = await upsertTestWithQuestions({
+    const test = await linkTestToStudyFile({
       fileId: params.id,
-      title: typeof body?.title === 'string' ? body.title.trim() || null : null,
-      passingPct: Number.isFinite(passingPct) ? passingPct : 70,
-      questions,
+      testId,
+      passingPct: body?.passing_pct,
       createdBy: user.id,
     });
-    return NextResponse.json({ test: { id: result.id, question_count: questions.length } });
+    return NextResponse.json({ test });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to save test';
+    const message = err instanceof Error ? err.message : 'Failed to link the test';
+    if (message === 'TEST_NOT_FOUND') {
+      return NextResponse.json({ error: 'That test no longer exists.' }, { status: 400 });
+    }
+    if (message === 'TEST_HAS_NO_QUESTIONS') {
+      return NextResponse.json({ error: 'That test has no questions yet.' }, { status: 400 });
+    }
     const status = message === 'Not authorized' ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
@@ -102,10 +87,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   try {
     const user = await getRequestUser(request.headers.get('Authorization'));
     assertStaff(user);
-    await deleteTestForFile(params.id);
+    await unlinkTestFromStudyFile(params.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to delete test';
+    const message = err instanceof Error ? err.message : 'Failed to unlink the test';
     const status = message === 'Not authorized' ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }

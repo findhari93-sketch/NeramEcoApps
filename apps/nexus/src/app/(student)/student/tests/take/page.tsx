@@ -76,6 +76,28 @@ const SIDE_PANEL_W = 280;
 // Component
 // ---------------------------------------------------------------------------
 
+/** The graded result the submit response returns, review included. */
+interface GradedReviewItem {
+  question_id: string;
+  question_text: string | null;
+  options: Array<{ id: string; text: string }> | null;
+  correct_answer: string | null;
+  selected: string | null;
+  is_correct: boolean;
+  is_gradable: boolean;
+  explanation: string | null;
+}
+interface GradedResult {
+  attempt_id: string;
+  attempt_number: number;
+  score: number;
+  total_marks: number;
+  percentage: number;
+  passed: boolean;
+  passing_pct: number | null;
+  review: GradedReviewItem[];
+}
+
 export default function TakeTestPage() {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
@@ -95,6 +117,11 @@ export default function TakeTestPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  /** The graded result, including the per-question review with explanations. */
+  const [result, setResult] = useState<GradedResult | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  /** Which go this is. Shown so an unlimited retake reads as progress. */
+  const [attemptNumber, setAttemptNumber] = useState<number | null>(null);
 
   // UI state
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -145,6 +172,7 @@ export default function TakeTestPage() {
 
       const data = await res.json();
       setTest(data.test);
+      setAttemptNumber(data.attempt_number ?? null);
       setQuestions((data.questions || []).filter((q: any) => q.question != null));
       setAttempt(data.attempt);
       setAnswers(data.attempt?.answers || {});
@@ -284,10 +312,10 @@ export default function TakeTestPage() {
 
   const saveAnswers = useCallback(
     async (currentAnswers: Record<string, string>, action: 'save' | 'submit') => {
-      if (!attempt) return false;
+      if (!attempt) return null;
       try {
         const token = await getToken();
-        if (!token) return false;
+        if (!token) return null;
 
         const res = await fetch('/api/tests/attempt', {
           method: 'POST',
@@ -301,10 +329,13 @@ export default function TakeTestPage() {
             action,
           }),
         });
-        return res.ok;
+        if (!res.ok) return null;
+        // The submit response carries the graded result and the per-question
+        // review, which is what the result screen renders.
+        return (await res.json().catch(() => ({}))) as Record<string, any>;
       } catch (err) {
         console.error('Failed to save answers:', err);
-        return false;
+        return null;
       }
     },
     [attempt, getToken],
@@ -324,8 +355,9 @@ export default function TakeTestPage() {
     setSubmitting(true);
     setSubmitSheetOpen(false);
 
-    const success = await saveAnswers(answersRef.current, 'submit');
-    if (success) {
+    const payload = await saveAnswers(answersRef.current, 'submit');
+    if (payload) {
+      setResult(payload.result || null);
       setSubmitted(true);
       if (timerRef.current) clearInterval(timerRef.current);
       if (questionTimerRef.current) clearInterval(questionTimerRef.current);
@@ -387,10 +419,16 @@ export default function TakeTestPage() {
   // =========================================================================
 
   if (submitted) {
-    const scoreFromAttempt = (attempt as any)?.score;
-    const totalFromAttempt = (attempt as any)?.total_marks;
-    const percentFromAttempt = (attempt as any)?.percentage;
-    const timeSpent = (attempt as any)?.time_spent_seconds;
+    const score = result?.score ?? 0;
+    const outOf = result?.total_marks ?? 0;
+    const pct = result?.percentage ?? 0;
+    const passed = result?.passed ?? null;
+    const bar = result?.passing_pct ?? null;
+    const review = result?.review || [];
+    const correctCount = review.filter((r: GradedReviewItem) => r.is_correct).length;
+    const gradableCount = review.filter((r: GradedReviewItem) => r.is_gradable).length;
+    const timeSpent = (attempt as any)?.time_spent_seconds as number | undefined;
+    const thisAttempt = attemptNumber ?? (attempt as any)?.attempt_number ?? 1;
 
     return (
       <Box
@@ -401,87 +439,225 @@ export default function TakeTestPage() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
           p: 3,
           bgcolor: 'background.default',
-          overflow: 'auto',
+          overflowY: 'auto',
         }}
       >
-        <CheckCircleOutlinedIcon sx={{ fontSize: 72, color: 'success.main', mb: 2 }} />
-        <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5, textAlign: 'center' }}>
-          Test Submitted!
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3, textAlign: 'center' }}>
-          {test?.title}
-        </Typography>
+        <Box sx={{ width: '100%', maxWidth: 560, pb: 6 }}>
+          <Box sx={{ textAlign: 'center', pt: 2 }}>
+            <CheckCircleOutlinedIcon
+              sx={{ fontSize: 64, color: passed === false ? 'warning.main' : 'success.main', mb: 1 }}
+            />
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
+              {/* The headline states the outcome, not the mechanics. "Submitted"
+                  tells a student nothing they did not already know. */}
+              {passed === null ? 'All done' : passed ? 'Passed' : 'Not quite yet'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {test?.title} · Attempt {thisAttempt}
+            </Typography>
+          </Box>
 
-        <Paper
-          elevation={0}
-          sx={{
-            width: '100%',
-            maxWidth: 360,
-            borderRadius: 3,
-            border: `1px solid ${theme.palette.divider}`,
-            overflow: 'hidden',
-            mb: 3,
-          }}
-        >
-          {scoreFromAttempt !== undefined && totalFromAttempt !== undefined && (
+          <Paper
+            elevation={0}
+            sx={{
+              width: '100%',
+              borderRadius: 3,
+              border: `1px solid ${theme.palette.divider}`,
+              overflow: 'hidden',
+              mb: 2,
+            }}
+          >
             <Box
               sx={{
-                bgcolor: alpha(theme.palette.primary.main, 0.06),
+                bgcolor: alpha(
+                  passed === false ? theme.palette.warning.main : theme.palette.success.main,
+                  0.08,
+                ),
                 px: 2.5,
-                py: 2,
+                py: 2.5,
                 textAlign: 'center',
                 borderBottom: `1px solid ${theme.palette.divider}`,
               }}
             >
-              <Typography variant="h4" sx={{ fontWeight: 800, color: 'primary.main' }}>
-                {scoreFromAttempt}/{totalFromAttempt}
+              <Typography variant="h3" sx={{ fontWeight: 800 }}>
+                {Math.round(pct)}%
               </Typography>
-              {percentFromAttempt !== undefined && (
-                <Typography variant="body2" color="text.secondary">
-                  {percentFromAttempt}%
-                </Typography>
-              )}
+              <Typography variant="body2" color="text.secondary">
+                {score} of {outOf} marks
+                {bar != null ? ` · pass mark ${bar}%` : ''}
+              </Typography>
             </Box>
-          )}
 
-          <Box sx={{ px: 2.5, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="body2" color="text.secondary">Answered</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
-                {answeredCount}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="body2" color="text.secondary">Unanswered</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600, color: unansweredCount > 0 ? 'warning.main' : 'text.secondary' }}>
-                {unansweredCount}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="body2" color="text.secondary">Total Questions</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>{questions.length}</Typography>
-            </Box>
-            {timeSpent && (
+            <Box sx={{ px: 2.5, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="body2" color="text.secondary">Time Spent</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {formatTime(timeSpent)}
+                <Typography variant="body2" color="text.secondary">
+                  Correct
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
+                  {correctCount} of {gradableCount}
                 </Typography>
               </Box>
-            )}
-          </Box>
-        </Paper>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Unanswered
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ fontWeight: 600, color: unansweredCount > 0 ? 'warning.main' : 'text.secondary' }}
+                >
+                  {unansweredCount}
+                </Typography>
+              </Box>
+              {timeSpent ? (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Time spent
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {formatTime(timeSpent)}
+                    {gradableCount > 0 ? ` · ${formatTime(Math.round(timeSpent / gradableCount))} a question` : ''}
+                  </Typography>
+                </Box>
+              ) : null}
+            </Box>
+          </Paper>
 
-        <Button
-          variant="contained"
-          onClick={() => router.push('/student/tests')}
-          sx={{ textTransform: 'none', minHeight: 48, px: 4, borderRadius: 2 }}
-        >
-          Back to Tests
-        </Button>
+          {/* The review is the point of a practice test. Without it a student
+              learns their score and nothing else. */}
+          {review.length > 0 && (
+            <>
+              <Button
+                fullWidth
+                variant={reviewOpen ? 'text' : 'outlined'}
+                onClick={() => setReviewOpen((o) => !o)}
+                sx={{ textTransform: 'none', minHeight: 48, mb: 1.5 }}
+              >
+                {reviewOpen ? 'Hide the answers' : 'See what you got wrong'}
+              </Button>
+
+              {reviewOpen && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
+                  {review.map((r: GradedReviewItem, i: number) => {
+                    const options = Array.isArray(r.options) ? r.options : [];
+                    return (
+                      <Paper
+                        key={r.question_id}
+                        variant="outlined"
+                        sx={{
+                          p: 1.75,
+                          borderRadius: 2,
+                          borderColor: !r.is_gradable
+                            ? 'divider'
+                            : r.is_correct
+                              ? 'success.light'
+                              : 'error.light',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                            {i + 1}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
+                            {r.question_text || 'Question'}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label={!r.is_gradable ? 'Not marked' : r.is_correct ? 'Correct' : 'Wrong'}
+                            color={!r.is_gradable ? 'default' : r.is_correct ? 'success' : 'error'}
+                            sx={{ height: 22, fontSize: '0.68rem', flexShrink: 0 }}
+                          />
+                        </Box>
+
+                        {options.length > 0 ? (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, mb: 1 }}>
+                            {options.map((o: any) => {
+                              const isCorrect = o.id === r.correct_answer;
+                              const isChosen = o.id === r.selected;
+                              return (
+                                <Box
+                                  key={o.id}
+                                  sx={{
+                                    display: 'flex',
+                                    gap: 1,
+                                    px: 1,
+                                    py: 0.5,
+                                    borderRadius: 1,
+                                    bgcolor: isCorrect
+                                      ? alpha(theme.palette.success.main, 0.12)
+                                      : isChosen
+                                        ? alpha(theme.palette.error.main, 0.1)
+                                        : 'transparent',
+                                  }}
+                                >
+                                  <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
+                                    {o.id}
+                                  </Typography>
+                                  <Typography variant="body2" sx={{ flex: 1 }}>
+                                    {o.text}
+                                  </Typography>
+                                  {isCorrect && (
+                                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'success.dark' }}>
+                                      Correct
+                                    </Typography>
+                                  )}
+                                  {isChosen && !isCorrect && (
+                                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'error.dark' }}>
+                                      You
+                                    </Typography>
+                                  )}
+                                </Box>
+                              );
+                            })}
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" sx={{ mb: 1 }}>
+                            Answer: <strong>{r.correct_answer || '-'}</strong>
+                            {r.selected ? ` · you wrote ${r.selected}` : ' · you left this blank'}
+                          </Typography>
+                        )}
+
+                        {r.explanation && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            {r.explanation}
+                          </Typography>
+                        )}
+                      </Paper>
+                    );
+                  })}
+                </Box>
+              )}
+            </>
+          )}
+
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              fullWidth={false}
+              sx={{ textTransform: 'none', minHeight: 48, flex: 1 }}
+              onClick={() => {
+                // A fresh attempt, not a resumed one: the previous attempt is
+                // submitted, so the engine simply issues the next number.
+                setSubmitted(false);
+                setResult(null);
+                setReviewOpen(false);
+                setAnswers({});
+                setCurrentIndex(0);
+                fetchTestData();
+              }}
+            >
+              Try again
+            </Button>
+            <Button
+              variant="outlined"
+              sx={{ textTransform: 'none', minHeight: 48, flex: 1 }}
+              onClick={() => router.push('/student/tests')}
+            >
+              Back to tests
+            </Button>
+          </Box>
+        </Box>
       </Box>
     );
   }

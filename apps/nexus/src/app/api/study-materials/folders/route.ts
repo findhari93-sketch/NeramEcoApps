@@ -18,7 +18,7 @@ import {
   isNewFile,
   getFileProgressMap,
   deriveFileStatus,
-  hasTestForFiles,
+  hasPlacedTestForFiles,
   listFavoriteFileIds,
   getCommentCounts,
   type FileProgress,
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
         staff ? Promise.resolve(new Set<string>()) : listFavoriteFileIds(user.id, fileIds),
         getCommentCounts(fileIds),
         staff ? Promise.resolve([]) : listActiveGrantsForStudent(user.id),
-        hasTestForFiles(fileIds),
+        hasPlacedTestForFiles(fileIds),
       ]);
       const now = Date.now();
       files = rawFiles.map((file) => {

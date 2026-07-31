@@ -12,6 +12,8 @@ import type {
   NexusOverviewTest,
   NexusTestOverviewGroup,
   NexusTestOverviewGroupKey,
+  NexusLibraryTest,
+  NexusTestFolderScope,
 } from '../../types';
 
 const TESTS = 'nexus_tests';
@@ -56,6 +58,8 @@ export interface ComposeTestInput {
   createdBy?: string | null;
   createdByStudent?: string | null;
   classroomId?: string | null;
+  /** Where this test is filed in the library. null means Unfiled. */
+  folderId?: string | null;
 }
 
 /**
@@ -108,6 +112,7 @@ export async function composeTest(
       is_custom: !input.isRepository,
       created_by: input.createdBy ?? null,
       created_by_student: input.createdByStudent ?? null,
+      folder_id: input.folderId ?? null,
     })
     .select('id')
     .single();
@@ -174,6 +179,215 @@ export async function listRepositoryTests(
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
+}
+
+export interface NexusPlacementLabel {
+  label: string;
+  /** study_file only: the file id, for the deep link back into Study Materials. */
+  file_id?: string | null;
+}
+
+/**
+ * Human labels for a batch of placements, keyed `${context_type}:${context_id}`.
+ *
+ * context_id is polymorphic with no FK, so every context type needs its own
+ * lookup. Batched per type rather than per row: a library page showing 50 tests
+ * would otherwise fire 50 round trips to render one column.
+ *
+ * NOTE: listTestsGroupedByContext below resolves the same labels inline, because
+ * it additionally needs each study file's folder to build its sub-groups. If you
+ * change a label's wording, change it in both places.
+ */
+export async function resolvePlacementLabels(
+  placements: Array<{ context_type: string; context_id: string }>,
+  client?: TypedSupabaseClient,
+): Promise<Map<string, NexusPlacementLabel>> {
+  const supabase = client || getSupabaseAdminClient();
+  const out = new Map<string, NexusPlacementLabel>();
+  if (placements.length === 0) return out;
+
+  const idsFor = (ctx: string) => [
+    ...new Set(placements.filter((p) => p.context_type === ctx).map((p) => p.context_id)),
+  ];
+  const set = (ctx: string, id: string, value: NexusPlacementLabel) => out.set(`${ctx}:${id}`, value);
+
+  const fileIds = idsFor('study_file');
+  if (fileIds.length > 0) {
+    const { data } = await supabase.from('nexus_study_files').select('id, title').in('id', fileIds);
+    for (const f of data || []) set('study_file', f.id, { label: f.title || 'Chapter', file_id: f.id });
+  }
+
+  const classroomIds = [...new Set([...idsFor('classroom_assignment'), ...idsFor('student_practice')])];
+  if (classroomIds.length > 0) {
+    const { data } = await supabase.from('nexus_classrooms').select('id, name').in('id', classroomIds);
+    for (const c of data || []) {
+      set('classroom_assignment', c.id, { label: c.name || 'Classroom' });
+      set('student_practice', c.id, { label: c.name || 'Classroom' });
+    }
+  }
+
+  // Both of these point context_id at a scheduled class, so they share a lookup.
+  const classIds = [...new Set([...idsFor('class_prep_test'), ...idsFor('catchup_class')])];
+  if (classIds.length > 0) {
+    const { data } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('id, title, scheduled_date')
+      .in('id', classIds);
+    for (const c of data || []) {
+      const day = c.scheduled_date
+        ? new Date(`${String(c.scheduled_date).slice(0, 10)}T00:00:00+05:30`).toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            timeZone: 'Asia/Kolkata',
+          })
+        : null;
+      const label = [c.title || 'Class', day].filter(Boolean).join(', ');
+      set('class_prep_test', c.id, { label });
+      set('catchup_class', c.id, { label });
+    }
+  }
+
+  // The three section contexts all read "{parent} · {section}".
+  const sectionSources: Array<{ ctx: string; table: string; parentCol: string; parentTable: string }> = [
+    { ctx: 'foundation_section', table: 'nexus_foundation_sections', parentCol: 'chapter_id', parentTable: 'nexus_foundation_chapters' },
+    { ctx: 'module_item', table: 'nexus_module_item_sections', parentCol: 'module_item_id', parentTable: 'nexus_module_items' },
+    { ctx: 'class_recap_section', table: 'nexus_class_recap_sections', parentCol: 'recap_id', parentTable: 'nexus_class_recaps' },
+  ];
+  for (const src of sectionSources) {
+    const ids = idsFor(src.ctx);
+    if (ids.length === 0) continue;
+    const { data: secs } = await supabase
+      .from(src.table)
+      .select(`id, title, ${src.parentCol}`)
+      .in('id', ids);
+    const parentIds = [...new Set((secs || []).map((s: any) => s[src.parentCol]).filter(Boolean))];
+    const parentMap = new Map<string, string>();
+    if (parentIds.length > 0) {
+      const { data: parents } = await supabase.from(src.parentTable).select('id, title').in('id', parentIds);
+      for (const p of parents || []) parentMap.set(p.id, p.title);
+    }
+    for (const s of secs || []) {
+      const parent = (s as any)[src.parentCol] ? parentMap.get((s as any)[src.parentCol]) : null;
+      set(src.ctx, s.id, { label: parent ? `${parent} · ${s.title}` : s.title });
+    }
+  }
+
+  return out;
+}
+
+export interface LibraryTestFilter {
+  scope: NexusTestFolderScope;
+  /** Required when scope is 'student'. */
+  ownerId?: string | null;
+  /**
+   * undefined = every folder, null = Unfiled only, a string = that folder.
+   * Independent of `search`: a picker searching the whole library simply omits it.
+   */
+  folderId?: string | null;
+  search?: string;
+  kinds?: NexusTestKind[];
+  /** Teachers see their own drafts; a picker for students should not. */
+  includeUnpublished?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * The test library listing: what the hub's Library tab and every picker read.
+ *
+ * Scope splits staff work from a student's own papers on created_by_student,
+ * which composeTest already stamps, so a teacher browsing the shared library
+ * never trips over 200 student practice sets.
+ */
+export async function listLibraryTests(
+  filter: LibraryTestFilter,
+  client?: TypedSupabaseClient,
+): Promise<{ tests: NexusLibraryTest[]; total: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  if (filter.scope === 'student' && !filter.ownerId) throw new Error('A student library needs an ownerId');
+
+  const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200);
+  const offset = Math.max(filter.offset ?? 0, 0);
+
+  let query = supabase
+    .from(TESTS)
+    .select(
+      'id, title, description, folder_id, test_kind, test_type, total_marks, passing_marks, is_published, created_by, created_by_student, created_at, classroom_id',
+      { count: 'exact' },
+    )
+    .eq('is_active', true);
+
+  query =
+    filter.scope === 'student'
+      ? query.eq('created_by_student', filter.ownerId)
+      : query.is('created_by_student', null);
+
+  if (filter.folderId !== undefined) {
+    query = filter.folderId === null ? query.is('folder_id', null) : query.eq('folder_id', filter.folderId);
+  }
+  if (filter.search && filter.search.trim()) {
+    // Escape the PostgREST wildcards so a title search for "50%" does not
+    // quietly become "match anything".
+    const term = filter.search.trim().replace(/[%_]/g, (m) => `\\${m}`);
+    query = query.ilike('title', `%${term}%`);
+  }
+  if (filter.kinds && filter.kinds.length > 0) query = query.in('test_kind', filter.kinds);
+  if (!filter.includeUnpublished) query = query.eq('is_published', true);
+
+  const { data, error, count } = await query
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw error;
+
+  const rows = data || [];
+  if (rows.length === 0) return { tests: [], total: count || 0 };
+  const testIds = rows.map((t: any) => t.id);
+
+  const [{ data: tqRows }, { data: atRows }, { data: placementRows }] = await Promise.all([
+    supabase.from(TEST_QUESTIONS).select('test_id').in('test_id', testIds).range(0, 100000),
+    supabase.from(ATTEMPTS).select('test_id').in('test_id', testIds).range(0, 100000),
+    supabase
+      .from(PLACEMENTS)
+      .select('test_id, context_type, context_id, sort_order')
+      .in('test_id', testIds)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true }),
+  ]);
+
+  const qCount = new Map<string, number>();
+  for (const r of tqRows || []) qCount.set(r.test_id, (qCount.get(r.test_id) || 0) + 1);
+  const aCount = new Map<string, number>();
+  for (const r of atRows || []) aCount.set(r.test_id, (aCount.get(r.test_id) || 0) + 1);
+
+  const labels = await resolvePlacementLabels(placementRows || [], supabase);
+  const placementsByTest = new Map<string, NexusLibraryTest['placements']>();
+  for (const p of placementRows || []) {
+    const entry = {
+      context_type: p.context_type as NexusPlacementContext,
+      context_label: labels.get(`${p.context_type}:${p.context_id}`)?.label ?? null,
+    };
+    placementsByTest.set(p.test_id, [...(placementsByTest.get(p.test_id) || []), entry]);
+  }
+
+  const tests: NexusLibraryTest[] = rows.map((t: any) => ({
+    id: t.id,
+    title: t.title || 'Untitled test',
+    description: t.description ?? null,
+    folder_id: t.folder_id ?? null,
+    test_kind: (t.test_kind as NexusTestKind) ?? 'classroom_assigned',
+    test_type: t.test_type || 'untimed',
+    total_marks: t.total_marks ?? null,
+    passing_marks: t.passing_marks ?? null,
+    is_published: !!t.is_published,
+    created_by: t.created_by ?? null,
+    created_by_student: t.created_by_student ?? null,
+    created_at: t.created_at,
+    question_count: qCount.get(t.id) || 0,
+    attempt_count: aCount.get(t.id) || 0,
+    placements: placementsByTest.get(t.id) || [],
+  }));
+
+  return { tests, total: count || 0 };
 }
 
 /**
@@ -710,11 +924,391 @@ export function resolvePassingPct(
   return null;
 }
 
+// ============================================
+// ATTEMPT LIFECYCLE + GRADING
+// ============================================
+//
+// One grading core, one attempt lifecycle, for every surface.
+//
+// This used to be split in the worst possible way: the correct grader
+// (numerical tolerance, non-gradable questions excluded from the denominator,
+// placement side-effects) could only grade in one shot, while the route that
+// owned the real attempt lifecycle (resume, autosave, timers) carried its own
+// naive string-equality grader and refused a second submission outright. So the
+// engine students actually used was the one that graded wrong, and "attempt a
+// test as many times as you like" was impossible by construction.
+//
+// Everything below shares gradeComposedAnswers and dispatchPlacementSideEffect.
+
+/** How long after the clock runs out an attempt is still resumable. */
+const TIMED_GRACE_MS = 30 * 1000;
+const PER_QUESTION_GRACE_MS = 60 * 1000;
+
+export interface NexusAttemptRow {
+  id: string;
+  test_id: string;
+  student_id: string;
+  placement_id: string | null;
+  attempt_number: number;
+  status: string;
+  answers: Record<string, string>;
+  started_at: string | null;
+  submitted_at: string | null;
+  time_spent_seconds: number | null;
+  score: number | null;
+  total_marks: number | null;
+  percentage: number | null;
+}
+
 /**
- * Grade a submitted attempt for any placed/repository test in one shot:
- * grades against the bank, records a nexus_test_attempts row, and dispatches
- * the placement's context side-effect (study completion, recap gating, ...).
- * `answers` is keyed by the underlying question id.
+ * Grade answers against a composed paper. Pure: no reads, no writes.
+ *
+ * A question the machine cannot mark (a drawing prompt that slipped into a
+ * paper) is excluded from the denominator rather than marked wrong, so one
+ * stray prompt cannot make a paper unpassable, and it is never awarded marks.
+ */
+export function gradeComposedAnswers(
+  questions: Array<NexusComposedQuestion & { correct_answer?: string | null }>,
+  answers: Record<string, string>,
+  passingPct: number | null,
+): Omit<NexusTestGradeResult, 'attempt_id'> {
+  let score = 0;
+  let totalMarks = 0;
+
+  const review = questions.map((q) => {
+    const marks = Number(q.marks) || 1;
+    const selected = answers?.[q.question_id] ?? null;
+    const verdict = gradeQBAnswerStrict(
+      q.question_format,
+      selected,
+      q.correct_answer,
+      (q as any).answer_tolerance,
+    );
+    const gradable = verdict !== null;
+    if (gradable) totalMarks += marks;
+
+    const isCorrect = verdict === true;
+    if (isCorrect) score += marks;
+    return {
+      question_id: q.question_id,
+      correct_answer: q.correct_answer ?? null,
+      selected,
+      is_correct: isCorrect,
+      is_gradable: gradable,
+      marks_awarded: isCorrect ? marks : 0,
+    };
+  });
+
+  const percentage = totalMarks > 0 ? Math.round((score / totalMarks) * 10000) / 100 : 0;
+  return {
+    score,
+    total_marks: totalMarks,
+    percentage: Math.max(0, percentage),
+    passed: passingPct == null ? true : percentage >= passingPct,
+    passing_pct: passingPct,
+    review,
+  };
+}
+
+/**
+ * Fire the side-effect that belongs to the placement's context.
+ *
+ * Deliberately NOT nested inside a passed check. A catch-up class test has a
+ * side-effect on failure too (it re-locks itself until the student goes back
+ * through the recording), and class prep has to move test_attempts and
+ * test_best_pct on a fail, because the rule there is retry until you pass.
+ */
+async function dispatchPlacementSideEffect(
+  placement: NexusTestPlacement | null,
+  args: { studentId: string; attemptId: string; percentage: number; passed: boolean },
+  supabase: TypedSupabaseClient,
+): Promise<void> {
+  if (!placement) return;
+
+  if (placement.context_type === 'study_file' && args.passed) {
+    // Re-fires the EXISTING study-material completion (best-score upsert on
+    // nexus_study_file_reads). best_attempt_id has no FK, so a
+    // nexus_test_attempts id is accepted.
+    await supabase.rpc('nexus_study_mark_completed', {
+      p_user: args.studentId,
+      p_file: placement.context_id,
+      p_score: args.percentage,
+      p_attempt: args.attemptId,
+    });
+  } else if (placement.context_type === 'catchup_class') {
+    await recordCatchupTestAttempt(
+      {
+        studentId: args.studentId,
+        scheduledClassId: placement.context_id,
+        passed: args.passed,
+        percentage: args.percentage,
+      },
+      supabase,
+    );
+  } else if (placement.context_type === 'class_prep_test') {
+    // Imported lazily: class-prep imports composeTest/createPlacement from this
+    // module, so a top-level import here would close the cycle.
+    const { recomputeClassPrep } = await import('./class-prep');
+    await recomputeClassPrep(args.studentId, placement.context_id, supabase);
+  }
+}
+
+/** Whether an in-progress attempt has run past its clock and should be retired. */
+function attemptIsStale(
+  attempt: { started_at: string | null },
+  test: { test_type?: string; duration_minutes?: number | null; per_question_seconds?: number | null },
+  questionCount: number,
+): boolean {
+  if (!attempt.started_at) return false;
+  const startedAt = new Date(attempt.started_at).getTime();
+  if (Number.isNaN(startedAt)) return false;
+
+  if (test.test_type === 'timed' && test.duration_minutes) {
+    return Date.now() > startedAt + test.duration_minutes * 60 * 1000 + TIMED_GRACE_MS;
+  }
+  if (test.test_type === 'per_question_timer' && test.per_question_seconds) {
+    const allowed = test.per_question_seconds * questionCount * 1000;
+    return Date.now() > startedAt + allowed + PER_QUESTION_GRACE_MS;
+  }
+  return false;
+}
+
+/** How many attempts this student has already SUBMITTED for a test. */
+export async function countStudentAttempts(
+  testId: string,
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<number> {
+  const supabase = client || getSupabaseAdminClient();
+  const { count, error } = await supabase
+    .from(ATTEMPTS)
+    .select('id', { count: 'exact', head: true })
+    .eq('test_id', testId)
+    .eq('student_id', studentId)
+    .eq('status', 'submitted');
+  if (error) throw error;
+  return count || 0;
+}
+
+export interface StartAttemptResult {
+  attempt: NexusAttemptRow;
+  resumed: boolean;
+  /** Submitted attempts before this one. */
+  previous_attempts: number;
+  best_percentage: number | null;
+}
+
+/**
+ * Start a new attempt, or resume the one already open.
+ *
+ * A previously SUBMITTED attempt no longer blocks anything: it simply raises
+ * attempt_number. Unlimited retakes are the default everywhere, and a placement
+ * that wants a one-shot assessment sets gating.attempt_limit.
+ */
+export async function startOrResumeAttempt(
+  input: { testId: string; studentId: string; placementId?: string | null },
+  client?: TypedSupabaseClient,
+): Promise<StartAttemptResult> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const [meta, questions, placement] = await Promise.all([
+    getTestMeta(input.testId, supabase),
+    getComposedTestQuestions(input.testId, false, supabase),
+    input.placementId ? getPlacementById(input.placementId, supabase) : Promise.resolve(null),
+  ]);
+  if (!meta) throw new Error('TEST_NOT_FOUND');
+  if (questions.length === 0) throw new Error('TEST_HAS_NO_QUESTIONS');
+  if (placement && placement.test_id !== input.testId) throw new Error('PLACEMENT_TEST_MISMATCH');
+
+  const { data: history, error: histErr } = await supabase
+    .from(ATTEMPTS)
+    .select(
+      'id, test_id, student_id, placement_id, attempt_number, status, answers, started_at, submitted_at, time_spent_seconds, score, total_marks, percentage',
+    )
+    .eq('test_id', input.testId)
+    .eq('student_id', input.studentId)
+    .order('attempt_number', { ascending: false });
+  if (histErr) throw histErr;
+  const rows = (history || []) as NexusAttemptRow[];
+
+  const submitted = rows.filter((r) => r.status === 'submitted');
+  const best = submitted.reduce<number | null>(
+    (acc, r) =>
+      r.percentage == null ? acc : acc == null ? Number(r.percentage) : Math.max(acc, Number(r.percentage)),
+    null,
+  );
+
+  const limit = Number((placement?.gating as any)?.attempt_limit);
+  if (Number.isFinite(limit) && limit > 0 && submitted.length >= limit) {
+    throw new Error('ATTEMPT_LIMIT_REACHED');
+  }
+
+  const open = rows.find((r) => r.status === 'in_progress');
+  if (open) {
+    if (!attemptIsStale(open, meta, questions.length)) {
+      return { attempt: open, resumed: true, previous_attempts: submitted.length, best_percentage: best };
+    }
+    // The clock ran out while they were away. Retire it so a fresh attempt can
+    // start; before the CHECK was widened this write failed and the dead attempt
+    // blocked every retry.
+    await supabase
+      .from(ATTEMPTS)
+      .update({ status: 'abandoned', submitted_at: new Date().toISOString() })
+      .eq('id', open.id);
+  }
+
+  const nextNumber = rows.reduce((max, r) => Math.max(max, Number(r.attempt_number) || 0), 0) + 1;
+
+  const { data: created, error } = await supabase
+    .from(ATTEMPTS)
+    .insert({
+      test_id: input.testId,
+      student_id: input.studentId,
+      placement_id: placement?.id ?? null,
+      attempt_number: nextNumber,
+      status: 'in_progress',
+      answers: {},
+      started_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    // Two tabs opened the same paper at once. The partial unique index picked a
+    // winner; adopt it rather than handing back an error the student cannot act on.
+    if ((error as any).code === '23505') {
+      const { data: raced } = await supabase
+        .from(ATTEMPTS)
+        .select('*')
+        .eq('test_id', input.testId)
+        .eq('student_id', input.studentId)
+        .eq('status', 'in_progress')
+        .maybeSingle();
+      if (raced) {
+        return {
+          attempt: raced as NexusAttemptRow,
+          resumed: true,
+          previous_attempts: submitted.length,
+          best_percentage: best,
+        };
+      }
+    }
+    throw error;
+  }
+
+  return {
+    attempt: created as NexusAttemptRow,
+    resumed: false,
+    previous_attempts: submitted.length,
+    best_percentage: best,
+  };
+}
+
+/** Autosave. Ownership is enforced in the filter, so a stray id updates nothing. */
+export async function saveAttemptAnswers(
+  attemptId: string,
+  studentId: string,
+  answers: Record<string, string>,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(ATTEMPTS)
+    .update({ answers: answers || {} })
+    .eq('id', attemptId)
+    .eq('student_id', studentId)
+    .eq('status', 'in_progress')
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('ATTEMPT_NOT_OPEN');
+}
+
+/**
+ * Submit an open attempt: grade it, record the result, fire the placement's
+ * side-effect. The single write path for every surface.
+ */
+export async function submitAttempt(
+  input: { attemptId: string; studentId: string; answers?: Record<string, string> },
+  client?: TypedSupabaseClient,
+): Promise<NexusTestGradeResult & { test_id: string; attempt_number: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: attempt, error: aErr } = await supabase
+    .from(ATTEMPTS)
+    .select('*')
+    .eq('id', input.attemptId)
+    .eq('student_id', input.studentId)
+    .maybeSingle();
+  if (aErr) throw aErr;
+  if (!attempt) throw new Error('ATTEMPT_NOT_FOUND');
+  if (attempt.status !== 'in_progress') throw new Error('ATTEMPT_ALREADY_SUBMITTED');
+
+  const [meta, questions, placement] = await Promise.all([
+    getTestMeta(attempt.test_id, supabase),
+    getComposedTestQuestions(attempt.test_id, true, supabase),
+    attempt.placement_id ? getPlacementById(attempt.placement_id, supabase) : Promise.resolve(null),
+  ]);
+  if (!meta) throw new Error('TEST_NOT_FOUND');
+  if (questions.length === 0) throw new Error('TEST_HAS_NO_QUESTIONS');
+
+  const answers = input.answers || (attempt.answers as Record<string, string>) || {};
+  const totalPossible = questions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
+  const graded = gradeComposedAnswers(questions, answers, resolvePassingPct(placement, meta, totalPossible));
+
+  const startedAt = new Date(attempt.started_at || Date.now()).getTime();
+  const timeSpent = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+
+  const { error: uErr } = await supabase
+    .from(ATTEMPTS)
+    .update({
+      answers,
+      status: 'submitted',
+      submitted_at: new Date().toISOString(),
+      time_spent_seconds: timeSpent,
+      score: graded.score,
+      total_marks: graded.total_marks,
+      percentage: graded.percentage,
+    })
+    .eq('id', attempt.id)
+    .eq('status', 'in_progress');
+  if (uErr) throw uErr;
+
+  await dispatchPlacementSideEffect(
+    placement,
+    { studentId: input.studentId, attemptId: attempt.id, percentage: graded.percentage, passed: graded.passed },
+    supabase,
+  );
+
+  return {
+    attempt_id: attempt.id,
+    test_id: attempt.test_id,
+    attempt_number: Number(attempt.attempt_number) || 1,
+    ...graded,
+  };
+}
+
+/** Mark an open attempt abandoned. Called on page unload via sendBeacon. */
+export async function abandonAttempt(
+  attemptId: string,
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase
+    .from(ATTEMPTS)
+    .update({ status: 'abandoned', submitted_at: new Date().toISOString() })
+    .eq('id', attemptId)
+    .eq('student_id', studentId)
+    .eq('status', 'in_progress');
+  if (error) throw error;
+}
+
+/**
+ * Grade a whole paper in one call, for surfaces that submit everything at once
+ * (class prep, catch-up, a study chapter quiz) rather than running a timed
+ * session. A thin wrapper over start plus submit, so those callers get the same
+ * grading, the same attempt numbering and the same side-effects as the timed
+ * take page. answers is keyed by the underlying question id.
  */
 export async function gradeTestOneShot(
   input: {
@@ -726,124 +1320,12 @@ export async function gradeTestOneShot(
   client?: TypedSupabaseClient,
 ): Promise<NexusTestGradeResult> {
   const supabase = client || getSupabaseAdminClient();
-
-  const [meta, questions, placement] = await Promise.all([
-    getTestMeta(input.testId, supabase),
-    getComposedTestQuestions(input.testId, true, supabase),
-    input.placementId ? getPlacementById(input.placementId, supabase) : Promise.resolve(null),
-  ]);
-  if (!meta) throw new Error('Test not found');
-  if (questions.length === 0) throw new Error('Test has no questions');
-
-  // A placement belonging to a DIFFERENT test would dispatch that placement's
-  // side-effect off the back of this test's score: pass a trivial one-question
-  // test with a catch-up placement id and the class clears itself. The side-effect
-  // dispatch below is the only reason placementId is accepted at all, so this
-  // assertion has to sit in front of it.
-  if (placement && placement.test_id !== input.testId) {
-    throw new Error('PLACEMENT_TEST_MISMATCH');
-  }
-
-  let score = 0;
-  let totalMarks = 0;
-  const review = questions.map((q) => {
-    const marks = Number(q.marks) || 1;
-    const selected = input.answers?.[q.question_id] ?? null;
-    // null means "no machine can mark this" (a drawing prompt that slipped into
-    // a paper). Such a question is excluded from the denominator rather than
-    // marked wrong, so one stray prompt cannot make a paper unpassable, and it
-    // is never awarded marks, which is what reusing checkQBAnswer would have done.
-    const verdict = gradeQBAnswerStrict(
-      q.question_format,
-      selected,
-      q.correct_answer,
-      (q as any).answer_tolerance,
-    );
-    const gradable = verdict !== null;
-    if (gradable) totalMarks += marks;
-
-    const isCorrect = verdict === true;
-    const awarded = isCorrect ? marks : 0;
-    if (isCorrect) score += marks;
-    return {
-      question_id: q.question_id,
-      correct_answer: q.correct_answer ?? null,
-      selected,
-      is_correct: isCorrect,
-      is_gradable: gradable,
-      marks_awarded: awarded,
-    };
-  });
-
-  const percentage = totalMarks > 0 ? Math.round((score / totalMarks) * 10000) / 100 : 0;
-  const passingPct = resolvePassingPct(placement, meta, totalMarks);
-  const passed = passingPct == null ? true : percentage >= passingPct;
-
-  const { data: attempt, error } = await supabase
-    .from(ATTEMPTS)
-    .insert({
-      test_id: input.testId,
-      student_id: input.studentId,
-      answers: input.answers || {},
-      status: 'submitted',
-      submitted_at: new Date().toISOString(),
-      score,
-      total_marks: totalMarks,
-      percentage: Math.max(0, percentage),
-    })
-    .select('id')
-    .single();
-  if (error) throw error;
-
-  // Dispatch the context side-effect keyed by the placement's context.
-  // student_practice + classroom_assignment have none. Foundation/module land later.
-  //
-  // Note the shape: this is NOT nested inside `if (passed)`. A catch-up class
-  // test has a side-effect on failure too (it re-locks itself until the student
-  // goes back through the recording), and putting that anywhere other than here
-  // would let a different caller grade an attempt and skip the rule.
-  if (placement) {
-    if (placement.context_type === 'study_file' && passed) {
-      // Re-fire the EXISTING study-material completion (best-score upsert on nexus_study_file_reads).
-      // best_attempt_id has no FK, so a nexus_test_attempts id is accepted.
-      await supabase.rpc('nexus_study_mark_completed', {
-        p_user: input.studentId,
-        p_file: placement.context_id,
-        p_score: Math.max(0, percentage),
-        p_attempt: attempt.id,
-      });
-    } else if (placement.context_type === 'catchup_class') {
-      // context_id is the scheduled class. Passing clears the class on the
-      // student's backlog; failing takes the test away again.
-      await recordCatchupTestAttempt(
-        {
-          studentId: input.studentId,
-          scheduledClassId: placement.context_id,
-          passed,
-          percentage: Math.max(0, percentage),
-        },
-        supabase,
-      );
-    } else if (placement.context_type === 'class_prep_test') {
-      // context_id is the scheduled class. Recomputed on a FAIL too: the rule is
-      // retry until you pass, so a failed attempt still has to move
-      // test_attempts and test_best_pct, which is what the student sees on the
-      // result screen and what the teacher reads as effort.
-      //
-      // Imported lazily. class-prep imports composeTest/createPlacement from
-      // this module, so a top-level import here would close the cycle.
-      const { recomputeClassPrep } = await import('./class-prep');
-      await recomputeClassPrep(input.studentId, placement.context_id, supabase);
-    }
-  }
-
-  return {
-    attempt_id: attempt.id,
-    score,
-    total_marks: totalMarks,
-    percentage: Math.max(0, percentage),
-    passed,
-    passing_pct: passingPct,
-    review,
-  };
+  const { attempt } = await startOrResumeAttempt(
+    { testId: input.testId, studentId: input.studentId, placementId: input.placementId },
+    supabase,
+  );
+  return submitAttempt(
+    { attemptId: attempt.id, studentId: input.studentId, answers: input.answers || {} },
+    supabase,
+  );
 }

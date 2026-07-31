@@ -1,512 +1,492 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+/**
+ * A student's tests.
+ *
+ * Built around what a student actually opens the app to do, in that order:
+ * finish what is due, practise the chapter they are on, run their own drills,
+ * and see how they did. The old page was a flat list of everything, next to a
+ * question bank of 1121 loose questions, which is not something anyone works
+ * through.
+ *
+ * Class prep and catch-up papers are deliberately not here. They are opened from
+ * the class they gate, which is where their unlock rules live.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
+  Button,
   Paper,
   Chip,
   Skeleton,
-  Button,
+  Alert,
+  Snackbar,
+  Divider,
   LinearProgress,
+  CircularProgress,
 } from '@neram/ui';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
-import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
-import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
-import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
-import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
-import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import FitnessCenterOutlinedIcon from '@mui/icons-material/FitnessCenterOutlined';
+import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
+import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { useRouter } from 'next/navigation';
 
-interface TestAttempt {
-  id: string;
-  status: 'in_progress' | 'submitted' | 'graded';
-  score: number | null;
-  total_marks: number | null;
-  percentage: number | null;
-  started_at?: string | null;
-  submitted_at?: string | null;
-}
-
-interface TestAssignment {
-  placement_id: string;
-  context_type: 'classroom_assignment' | 'student_practice';
-  available_from: string | null;
-  available_until: string | null;
-  passing_pct: number | null;
-}
-
-interface Test {
+interface StudentTest {
   id: string;
   title: string;
+  description: string | null;
+  folder_label: string | null;
+  question_count: number;
   test_type: string;
   duration_minutes: number | null;
-  question_count: number;
-  total_marks: number;
-  published_at: string | null;
-  is_custom?: boolean;
-  /**
-   * What this test is, stored on nexus_tests rather than inferred here. Optional
-   * because rows written before the column existed carry the default.
-   */
-  test_kind?: string | null;
-  assignment?: TestAssignment | null;
-  myAttempt: TestAttempt | null;
-}
-
-/**
- * A short test gating entry to a class. Kept in its own shape rather than folded
- * into Test, because it is opened by CLASS id and not by test id: the server has
- * to re-derive the gate, so the generic take page is the wrong destination.
- */
-interface ClassPrepTest {
-  class_id: string;
-  class_title: string;
-  scheduled_date: string;
-  start_time: string | null;
-  test_id: string;
-  title: string;
-  question_count: number;
-  passing_pct: number;
-  must_get_right: number;
-  best_pct: number | null;
+  placement_id: string | null;
+  passing_pct: number | null;
+  available_from: string | null;
+  available_until: string | null;
+  attempt_limit: number | null;
   attempts: number;
-  passed: boolean;
+  best_percentage: number | null;
+  last_submitted_at: string | null;
 }
 
-type WindowState = 'open' | 'not_yet' | 'closed';
+interface Overview {
+  due: StudentTest[];
+  practice_groups: Array<{ key: string; label: string; tests: StudentTest[] }>;
+  mine: StudentTest[];
+  recent: Array<{
+    attempt_id: string;
+    test_id: string;
+    test_title: string;
+    attempt_number: number;
+    percentage: number | null;
+    passed: boolean | null;
+    submitted_at: string | null;
+  }>;
+}
 
-function windowState(test: Test): WindowState {
-  const a = test.assignment;
-  if (!a) return 'open';
+function formatWhen(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
+/** The one line that tells a student what to do with this card. */
+function windowChip(t: StudentTest): { label: string; color: 'error' | 'warning' | 'default' | 'success' } | null {
   const now = Date.now();
-  if (a.available_from && new Date(a.available_from).getTime() > now) return 'not_yet';
-  if (a.available_until && new Date(a.available_until).getTime() < now) return 'closed';
-  return 'open';
+  if (t.available_from && new Date(t.available_from).getTime() > now) {
+    return { label: `Opens ${formatWhen(t.available_from)}`, color: 'default' };
+  }
+  if (t.available_until) {
+    const until = new Date(t.available_until).getTime();
+    if (until < now) return { label: 'Closed', color: 'default' };
+    const hoursLeft = (until - now) / 3600000;
+    return {
+      label: `Due ${formatWhen(t.available_until)}`,
+      color: hoursLeft < 24 ? 'error' : hoursLeft < 72 ? 'warning' : 'default',
+    };
+  }
+  return null;
 }
 
-function fmtWhen(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
-  } catch {
-    return iso;
-  }
-}
+function TestCard({
+  test,
+  onStart,
+  emphasis,
+}: {
+  test: StudentTest;
+  onStart: (t: StudentTest) => void;
+  emphasis?: boolean;
+}) {
+  const chip = windowChip(test);
+  const notOpenYet = Boolean(test.available_from && new Date(test.available_from).getTime() > Date.now());
+  const closed = Boolean(test.available_until && new Date(test.available_until).getTime() < Date.now());
+  const outOfAttempts = Boolean(test.attempt_limit && test.attempts >= test.attempt_limit);
+  const disabled = notOpenYet || closed || outOfAttempts;
 
-export default function StudentTestsPage() {
-  const { activeClassroom, getToken } = useNexusAuthContext();
-  const router = useRouter();
-  const [tests, setTests] = useState<Test[]>([]);
-  /** Returned separately by /api/tests: gated, so never merged into `tests`. */
-  const [classPrep, setClassPrep] = useState<ClassPrepTest[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!activeClassroom) return;
-    fetchTests();
-  }, [activeClassroom]);
-
-  async function fetchTests() {
-    setLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-
-      const res = await fetch(
-        `/api/tests?classroom=${activeClassroom!.id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setTests(data.tests || []);
-        setClassPrep(data.classPrep || []);
-      }
-    } catch (err) {
-      console.error('Failed to load tests:', err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function getStatus(test: Test): 'not_started' | 'in_progress' | 'submitted' | 'graded' {
-    if (!test.myAttempt) return 'not_started';
-    return test.myAttempt.status;
-  }
-
-  function isAbandoned(test: Test): boolean {
-    if (!test.myAttempt) return false;
-    if (test.myAttempt.status !== 'in_progress') return false;
-    if (!test.myAttempt.started_at) return false;
-    const started = new Date(test.myAttempt.started_at).getTime();
-    const now = Date.now();
-    const hoursDiff = (now - started) / (1000 * 60 * 60);
-    return hoursDiff > 48;
-  }
-
-  function getStatusChip(test: Test) {
-    if (isAbandoned(test)) {
-      return <Chip label="Abandoned" size="small" color="error" />;
-    }
-    const status = getStatus(test);
-    switch (status) {
-      case 'not_started':
-        return <Chip label="Not Started" size="small" color="default" />;
-      case 'in_progress':
-        return <Chip label="In Progress" size="small" color="warning" />;
-      case 'submitted':
-        return <Chip label="Submitted" size="small" color="info" />;
-      case 'graded':
-        return <Chip label="Graded" size="small" color="success" />;
-    }
-  }
-
-  /** Due / opens / closed chip for assigned tests. */
-  function getWindowChip(test: Test) {
-    const a = test.assignment;
-    if (!a) return null;
-    const state = windowState(test);
-    if (state === 'not_yet' && a.available_from) {
-      return (
-        <Chip
-          icon={<EventOutlinedIcon sx={{ fontSize: 14 }} />}
-          label={`Opens ${fmtWhen(a.available_from)}`}
-          size="small"
-          variant="outlined"
-          sx={{ fontSize: '0.7rem' }}
-        />
-      );
-    }
-    if (state === 'closed') {
-      return <Chip label="Closed" size="small" color="error" variant="outlined" sx={{ fontSize: '0.7rem' }} />;
-    }
-    if (a.available_until) {
-      const soon = new Date(a.available_until).getTime() - Date.now() < 24 * 60 * 60 * 1000;
-      return (
-        <Chip
-          icon={<EventOutlinedIcon sx={{ fontSize: 14 }} />}
-          label={`Due ${fmtWhen(a.available_until)}`}
-          size="small"
-          color={soon ? 'warning' : 'default'}
-          variant="outlined"
-          sx={{ fontSize: '0.7rem' }}
-        />
-      );
-    }
-    return null;
-  }
-
-  function takeUrl(test: Test): string {
-    const base = `/student/tests/take?test_id=${test.id}`;
-    return test.assignment ? `${base}&placement_id=${test.assignment.placement_id}` : base;
-  }
-
-  function getActionButton(test: Test) {
-    const status = getStatus(test);
-    const state = windowState(test);
-    switch (status) {
-      case 'not_started':
-        return (
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<PlayArrowOutlinedIcon />}
-            disabled={state !== 'open'}
-            onClick={() => router.push(takeUrl(test))}
-            sx={{ textTransform: 'none', minHeight: 44, minWidth: 120 }}
-          >
-            {state === 'not_yet' ? 'Not open yet' : state === 'closed' ? 'Closed' : 'Start Test'}
-          </Button>
-        );
-      case 'in_progress':
-        return (
-          <Button
-            variant="contained"
-            color="warning"
-            size="small"
-            startIcon={<PlayArrowOutlinedIcon />}
-            disabled={state === 'not_yet'}
-            onClick={() => router.push(takeUrl(test))}
-            sx={{ textTransform: 'none', minHeight: 44, minWidth: 120 }}
-          >
-            Resume Test
-          </Button>
-        );
-      case 'submitted':
-      case 'graded':
-        return (
-          <Box sx={{ textAlign: 'right' }}>
-            {test.myAttempt?.score != null && test.myAttempt?.total_marks != null && (
-              <>
-                <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main', lineHeight: 1.2 }}>
-                  {test.myAttempt.score}/{test.myAttempt.total_marks}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {test.myAttempt.percentage != null ? `${Math.round(test.myAttempt.percentage)}%` : ''}
-                </Typography>
-              </>
-            )}
-            {test.myAttempt?.score == null && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-                <CheckCircleOutlinedIcon fontSize="small" />
-                <Typography variant="caption">Awaiting score</Typography>
-              </Box>
-            )}
-          </Box>
-        );
-    }
-  }
-
-  function formatTestType(type: string) {
-    return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-
-  function formatDuration(minutes: number | null) {
-    if (!minutes) return 'Untimed';
-    if (minutes >= 60) {
-      const h = Math.floor(minutes / 60);
-      const m = minutes % 60;
-      return m > 0 ? `${h}h ${m}m` : `${h}h`;
-    }
-    return `${minutes} min`;
-  }
-
-  function renderTestCard(test: Test) {
-    return (
-      <Paper
-        key={test.id}
-        variant="outlined"
-        sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}
-      >
-        {/* Header row: title + status chip */}
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body1" sx={{ fontWeight: 600 }}>
-              {test.title}
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        p: emphasis ? 2 : 1.5,
+        borderRadius: 2,
+        borderColor: emphasis ? 'primary.main' : 'divider',
+        borderWidth: emphasis ? 2 : 1,
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant={emphasis ? 'subtitle1' : 'body2'} sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+            {test.title}
+          </Typography>
+          {test.folder_label && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+              <FolderOutlinedIcon sx={{ fontSize: 13 }} />
+              {test.folder_label}
             </Typography>
-            <Box
-              sx={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                gap: 1,
-                mt: 0.5,
-              }}
-            >
-              <Chip
-                label={formatTestType(test.test_type)}
-                size="small"
-                variant="outlined"
-                sx={{ textTransform: 'capitalize', fontSize: '0.7rem' }}
-              />
-              {test.is_custom && (
-                <Chip label="Custom" size="small" color="secondary" variant="outlined" sx={{ fontSize: '0.7rem' }} />
-              )}
-              {getWindowChip(test)}
-              {getStatusChip(test)}
-            </Box>
-          </Box>
+          )}
         </Box>
+        {chip && <Chip size="small" label={chip.label} color={chip.color} sx={{ height: 24, flexShrink: 0 }} />}
+      </Box>
 
-        {/* Info row: duration, questions, marks */}
-        <Box
-          sx={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: { xs: 1.5, sm: 3 },
-            color: 'text.secondary',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <TimerOutlinedIcon sx={{ fontSize: 16 }} />
-            <Typography variant="caption">{formatDuration(test.duration_minutes)}</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <AssignmentOutlinedIcon sx={{ fontSize: 16 }} />
-            <Typography variant="caption">{test.question_count} questions</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography variant="caption" sx={{ fontWeight: 600 }}>
-              {test.total_marks} marks
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* Score progress bar for graded tests */}
-        {getStatus(test) === 'graded' && test.myAttempt?.percentage != null && (
-          <LinearProgress
-            variant="determinate"
-            value={test.myAttempt.percentage}
-            color={test.myAttempt.percentage >= 60 ? 'success' : test.myAttempt.percentage >= 40 ? 'warning' : 'error'}
-            sx={{ height: 6, borderRadius: 3 }}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', mb: 1.5 }}>
+        <Chip size="small" variant="outlined" label={`${test.question_count} questions`} sx={{ height: 22, fontSize: '0.7rem' }} />
+        {test.duration_minutes && (
+          <Chip size="small" variant="outlined" label={`${test.duration_minutes} min`} sx={{ height: 22, fontSize: '0.7rem' }} />
+        )}
+        {test.passing_pct != null && (
+          <Chip size="small" variant="outlined" label={`Pass ${test.passing_pct}%`} sx={{ height: 22, fontSize: '0.7rem' }} />
+        )}
+        {test.attempts > 0 && (
+          <Chip
+            size="small"
+            label={`${test.attempts} attempt${test.attempts !== 1 ? 's' : ''}`}
+            sx={{ height: 22, fontSize: '0.7rem' }}
           />
         )}
+      </Box>
 
-        {/* Action row */}
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-          {getActionButton(test)}
+      {test.best_percentage != null && (
+        <Box sx={{ mb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <EmojiEventsOutlinedIcon sx={{ fontSize: 15, color: 'success.main' }} />
+            <Typography variant="caption" sx={{ fontWeight: 700 }}>
+              Best {Math.round(test.best_percentage)}%
+            </Typography>
+          </Box>
+          <LinearProgress
+            variant="determinate"
+            value={Math.min(100, test.best_percentage)}
+            color={
+              test.passing_pct != null && test.best_percentage >= test.passing_pct ? 'success' : 'primary'
+            }
+            sx={{ height: 6, borderRadius: 3 }}
+          />
         </Box>
-      </Paper>
-    );
-  }
+      )}
 
-  function renderSection(
-    title: string,
-    subtitle: string,
-    icon: React.ReactNode,
-    sectionTests: Test[],
-  ) {
-    if (sectionTests.length === 0) return null;
-    return (
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
-          {icon}
+      <Button
+        fullWidth
+        variant={emphasis ? 'contained' : 'outlined'}
+        disabled={disabled}
+        onClick={() => onStart(test)}
+        sx={{ textTransform: 'none', minHeight: 44 }}
+      >
+        {outOfAttempts
+          ? 'No attempts left'
+          : notOpenYet
+            ? 'Not open yet'
+            : closed
+              ? 'Closed'
+              : test.attempts > 0
+                ? 'Try again'
+                : 'Start'}
+      </Button>
+    </Paper>
+  );
+}
+
+function Section({
+  icon,
+  title,
+  subtitle,
+  action,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Box sx={{ mb: 4 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+        <Box sx={{ color: 'primary.main', display: 'flex' }}>{icon}</Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
             {title}
           </Typography>
-          <Chip label={sectionTests.length} size="small" sx={{ height: 20, fontWeight: 600 }} />
+          {subtitle && (
+            <Typography variant="caption" color="text.secondary">
+              {subtitle}
+            </Typography>
+          )}
         </Box>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-          {subtitle}
-        </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {sectionTests.map((test) => renderTestCard(test))}
+        {action}
+      </Box>
+      {children}
+    </Box>
+  );
+}
+
+export default function StudentTestsPage() {
+  const router = useRouter();
+  const { getToken, activeClassroom, loading: authLoading } = useNexusAuthContext() as any;
+
+  const [data, setData] = useState<Overview | null>(null);
+  const [mistakeCount, setMistakeCount] = useState(0);
+  const [buildingMistakes, setBuildingMistakes] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const authFetch = useCallback(
+    async (url: string, init?: RequestInit) => {
+      const token = await getToken();
+      if (!token) throw new Error('Not signed in');
+      const res = await fetch(url, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(init?.headers || {}),
+        },
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || 'Request failed');
+      }
+      return res.json();
+    },
+    [getToken],
+  );
+
+  const classroomParam = activeClassroom?.id ? `?classroom=${activeClassroom.id}` : '';
+
+  const load = useCallback(async () => {
+    try {
+      const json = await authFetch(`/api/student/tests/overview${classroomParam}`);
+      setData(json.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load your tests');
+      setData({ due: [], practice_groups: [], mine: [], recent: [] });
+    }
+    try {
+      const m = await authFetch(`/api/student/tests/mistakes${classroomParam}`);
+      setMistakeCount(m.data?.count || 0);
+    } catch {
+      // A missing mistakes count is not worth an error banner.
+    }
+  }, [authFetch, classroomParam]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    load();
+  }, [authLoading, load]);
+
+  const start = useCallback(
+    (t: StudentTest) => {
+      const params = new URLSearchParams({ test_id: t.id });
+      if (t.placement_id) params.set('placement_id', t.placement_id);
+      router.push(`/student/tests/take?${params.toString()}`);
+    },
+    [router],
+  );
+
+  async function practiseMistakes() {
+    setBuildingMistakes(true);
+    try {
+      const json = await authFetch('/api/student/tests/mistakes', {
+        method: 'POST',
+        body: JSON.stringify({ classroom_id: activeClassroom?.id ?? null }),
+      });
+      router.push(`/student/tests/take?test_id=${json.data.test_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not build your practice test');
+      setBuildingMistakes(false);
+    }
+  }
+
+  const totalPractice = useMemo(
+    () => (data?.practice_groups || []).reduce((n, g) => n + g.tests.length, 0),
+    [data],
+  );
+
+  if (authLoading || data === null) {
+    return (
+      <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 800, mx: 'auto' }}>
+        <Skeleton variant="text" width={140} height={38} />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 2 }}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} variant="rectangular" height={150} sx={{ borderRadius: 2 }} />
+          ))}
         </Box>
       </Box>
     );
   }
 
-  // Grouped on the STORED test_kind now, not inferred from is_custom plus the
-  // placement context. The old inference is what let every catch-up class test
-  // land in "Assigned by your teacher" for the whole classroom: those rows have a
-  // classroom_id and no placement, so `t.assignment ? ... : true` swept them in.
-  //
-  // The two gated kinds no longer reach this page at all: /api/tests excludes
-  // them, because a gated test must only ever be opened from the class it belongs
-  // to, where the server can re-derive the gate. The fallbacks below are kept for
-  // rows written before test_kind existed.
-  const kindOf = (t: Test): string =>
-    t.test_kind || (t.is_custom ? 'student_custom' : 'classroom_assigned');
-
-  const assigned = tests.filter((t) => kindOf(t) === 'classroom_assigned');
-  const practice = tests.filter(
-    (t) => kindOf(t) === 'practice_pool' || t.assignment?.context_type === 'student_practice',
-  );
-  const custom = tests.filter((t) => kindOf(t) === 'student_custom');
+  const nothingAtAll =
+    data.due.length === 0 && totalPractice === 0 && data.mine.length === 0 && data.recent.length === 0;
 
   return (
-    <Box>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
-          Tests
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {activeClassroom?.name || 'No classroom selected'}
-        </Typography>
-      </Box>
+    <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 800, mx: 'auto', pb: 8 }}>
+      <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 0.25 }}>
+        Tests
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Take a test as many times as you like. Your best score is the one that counts.
+      </Typography>
 
-      {loading ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={100} sx={{ borderRadius: 1 }} />
-          ))}
-        </Box>
-      ) : tests.length === 0 && classPrep.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-          <Typography variant="body2" color="text.secondary">
-            No tests yet. Tests your teacher assigns will appear here.
+      {nothingAtAll && (
+        <Paper variant="outlined" sx={{ py: 6, px: 3, textAlign: 'center', borderRadius: 2 }}>
+          <AssignmentOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+            No tests yet. When your teacher sets one it appears here.
           </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<AddOutlinedIcon />}
+            onClick={() => router.push('/student/tests/new')}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Build your own practice test
+          </Button>
         </Paper>
-      ) : (
-        <>
-          {/* Before your classes.
-              First, because it is the only group with a deadline attached to
-              something the student has to show up to, and it is the only one that
-              does NOT route to the generic take page: a gated test must be opened
-              from its class so the server can re-derive the gate. */}
-          {classPrep.length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <EventOutlinedIcon sx={{ fontSize: 20, color: 'warning.main' }} />
-                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                  Before your classes
-                </Typography>
-              </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                Pass these to join the class. You can try as many times as you need.
+      )}
+
+      {data.due.length > 0 && (
+        <Section
+          icon={<AssignmentOutlinedIcon />}
+          title="Due now"
+          subtitle="Set by your teacher, soonest first"
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {data.due.map((t) => (
+              <TestCard key={t.id} test={t} onStart={start} emphasis />
+            ))}
+          </Box>
+        </Section>
+      )}
+
+      {mistakeCount > 0 && (
+        <Paper
+          variant="outlined"
+          sx={{ p: 2, mb: 4, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}
+        >
+          <AutoFixHighOutlinedIcon sx={{ color: 'warning.main' }} />
+          <Box sx={{ flex: 1, minWidth: 160 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              Fix what you got wrong
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {mistakeCount} question{mistakeCount !== 1 ? 's' : ''} you missed and have not got right since
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            onClick={practiseMistakes}
+            disabled={buildingMistakes}
+            startIcon={buildingMistakes ? <CircularProgress size={15} color="inherit" /> : undefined}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Practise these
+          </Button>
+        </Paper>
+      )}
+
+      {totalPractice > 0 && (
+        <Section
+          icon={<FitnessCenterOutlinedIcon />}
+          title="Practice"
+          subtitle="Grouped by chapter, take them whenever you like"
+        >
+          {data.practice_groups.map((g) => (
+            <Box key={g.key} sx={{ mb: 2 }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.75 }}>
+                {g.label}
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {classPrep.map((p) => (
-                  <Paper
-                    key={p.class_id}
-                    onClick={() => router.push(`/student/class-prep/${p.class_id}/test`)}
-                    sx={{
-                      p: 1.75,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1.5,
-                      minHeight: 64,
-                      cursor: 'pointer',
-                      borderLeft: (t) =>
-                        `4px solid ${p.passed ? t.palette.success.main : t.palette.warning.main}`,
-                    }}
-                  >
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontWeight: 700, fontSize: '0.875rem' }} noWrap>
-                        {p.class_title}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {/* The count, not the percentage. "70%" of 7 questions is
-                            not a number a student can hold in their head. */}
-                        {p.question_count} questions, get {p.must_get_right} right
-                        {p.attempts > 0 && p.best_pct != null
-                          ? ` · best ${Math.round(p.best_pct)}%`
-                          : ''}
-                      </Typography>
-                    </Box>
-                    {p.passed ? (
-                      <Chip
-                        size="small"
-                        color="success"
-                        icon={<CheckCircleOutlinedIcon />}
-                        label="Passed"
-                      />
-                    ) : (
-                      <Chip
-                        size="small"
-                        color="warning"
-                        label={p.attempts > 0 ? 'Try again' : 'Start'}
-                      />
-                    )}
-                  </Paper>
+                {g.tests.map((t) => (
+                  <TestCard key={t.id} test={t} onStart={start} />
                 ))}
               </Box>
             </Box>
-          )}
-
-          {renderSection(
-            'Assigned by your teacher',
-            'Complete these tests, they count for your class.',
-            <SchoolOutlinedIcon sx={{ fontSize: 20, color: 'primary.main' }} />,
-            assigned,
-          )}
-          {renderSection(
-            'Practice',
-            'Optional practice from your teacher, attempt any time.',
-            <FitnessCenterOutlinedIcon sx={{ fontSize: 20, color: 'success.main' }} />,
-            practice,
-          )}
-          {renderSection(
-            'My custom tests',
-            'Tests you built for yourself from the question bank.',
-            <QuizOutlinedIcon sx={{ fontSize: 20, color: 'secondary.main' }} />,
-            custom,
-          )}
-        </>
+          ))}
+        </Section>
       )}
+
+      <Section
+        icon={<PersonOutlineOutlinedIcon />}
+        title="My tests"
+        subtitle="Papers you built yourself"
+        action={
+          <Button
+            size="small"
+            startIcon={<AddOutlinedIcon />}
+            onClick={() => router.push('/student/tests/new')}
+            sx={{ textTransform: 'none', minHeight: 40 }}
+          >
+            New
+          </Button>
+        }
+      >
+        {data.mine.length === 0 ? (
+          <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              Build a test from the question bank to drill exactly what you want.
+            </Typography>
+          </Paper>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {data.mine.map((t) => (
+              <TestCard key={t.id} test={t} onStart={start} />
+            ))}
+          </Box>
+        )}
+      </Section>
+
+      {data.recent.length > 0 && (
+        <Section icon={<HistoryOutlinedIcon />} title="Recent results">
+          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+            {data.recent.map((r, i) => (
+              <Box key={r.attempt_id}>
+                {i > 0 && <Divider />}
+                <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                      {r.test_title}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Attempt {r.attempt_number} · {formatWhen(r.submitted_at)}
+                    </Typography>
+                  </Box>
+                  <Chip
+                    size="small"
+                    label={r.percentage == null ? '-' : `${Math.round(r.percentage)}%`}
+                    color={r.passed === true ? 'success' : r.passed === false ? 'default' : 'primary'}
+                    sx={{ height: 24, fontWeight: 700 }}
+                  />
+                </Box>
+              </Box>
+            ))}
+          </Paper>
+          <Button
+            size="small"
+            onClick={() => router.push('/student/tests/history')}
+            sx={{ textTransform: 'none', mt: 1, minHeight: 40 }}
+          >
+            See all results
+          </Button>
+        </Section>
+      )}
+
+      <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
+        <Alert severity="error" variant="filled" onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

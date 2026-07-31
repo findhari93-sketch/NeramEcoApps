@@ -438,3 +438,267 @@ export async function gradeAndRecordAttempt(
     review,
   };
 }
+
+// ============================================
+// PLACED CHAPTER TESTS (the engine study files now use)
+// ============================================
+//
+// A chapter test is a repository test placed at context_type 'study_file'.
+// Authoring lives in the Tests module; Study Materials only links and unlinks.
+//
+// Everything above this line (nexus_study_tests and its private grader) is the
+// pre-cutover system. It is left in place, unread by these paths, for one
+// release so a rollback does not need a data restore. The cutover migration
+// 20260814090000 guarantees every legacy chapter test has a placement and that
+// its attempt history was copied into nexus_test_attempts.
+
+import {
+  createPlacement,
+  getComposedTestQuestions,
+  getPlacementsByContext,
+  getTestMeta,
+  gradeTestOneShot,
+} from './test-repository';
+
+export interface NexusPlacedChapterTest {
+  placement_id: string;
+  test_id: string;
+  title: string;
+  passing_pct: number;
+  question_count: number;
+  is_published: boolean;
+}
+
+/** The active chapter test for a file, or null. Shared by staff and student reads. */
+export async function getPlacedChapterTest(
+  fileId: string,
+  client?: TypedSupabaseClient,
+): Promise<NexusPlacedChapterTest | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const placements = await getPlacementsByContext('study_file', fileId, supabase);
+  const placement = placements[0];
+  if (!placement) return null;
+
+  const meta = await getTestMeta(placement.test_id, supabase);
+  if (!meta || !meta.is_active) return null;
+
+  const questions = await getComposedTestQuestions(placement.test_id, false, supabase);
+  const totalMarks = questions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
+
+  return {
+    placement_id: placement.id,
+    test_id: placement.test_id,
+    title: meta.title || 'Chapter test',
+    // The placement wins, exactly as resolvePassingPct decides it at grade time,
+    // so the number shown here is the number that will be applied.
+    passing_pct:
+      placement.passing_pct != null
+        ? Number(placement.passing_pct)
+        : meta.passing_marks != null && totalMarks > 0
+          ? Math.round((Number(meta.passing_marks) / totalMarks) * 100)
+          : 70,
+    question_count: questions.length,
+    is_published: !!meta.is_published,
+  };
+}
+
+/**
+ * The student-facing paper, in the shape the chapter dialog already renders.
+ * Answers are never included. Returns null when nothing is linked or the linked
+ * test is unpublished.
+ */
+export async function getPlacedTestForStudent(
+  fileId: string,
+  client?: TypedSupabaseClient,
+): Promise<(NexusStudyTestForStudent & { placement_id: string; test_id: string }) | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const placed = await getPlacedChapterTest(fileId, supabase);
+  if (!placed || !placed.is_published) return null;
+
+  const questions = await getComposedTestQuestions(placed.test_id, false, supabase);
+  return {
+    id: placed.test_id,
+    test_id: placed.test_id,
+    placement_id: placed.placement_id,
+    file_id: fileId,
+    title: placed.title,
+    passing_pct: placed.passing_pct,
+    questions: questions.map((q) => ({
+      id: q.question_id,
+      question_text: q.question_text || '',
+      options: Array.isArray(q.options)
+        ? (q.options as Array<{ id?: string; text?: string }>).map((o) => ({
+            key: String(o?.id ?? '') as 'a' | 'b' | 'c' | 'd',
+            text: String(o?.text ?? ''),
+          }))
+        : [],
+    })),
+  } as NexusStudyTestForStudent & { placement_id: string; test_id: string };
+}
+
+/**
+ * Grade a chapter attempt through the unified engine.
+ *
+ * The study_file side-effect inside gradeTestOneShot fires
+ * nexus_study_mark_completed on a pass, so completion, best_score_pct and the
+ * teacher completion dashboard keep working untouched.
+ */
+export async function gradePlacedChapterAttempt(
+  fileId: string,
+  studentId: string,
+  answers: Record<string, string>,
+  client?: TypedSupabaseClient,
+): Promise<NexusStudyTestAttemptResult> {
+  const supabase = client || getSupabaseAdminClient();
+  const placed = await getPlacedChapterTest(fileId, supabase);
+  if (!placed) throw new Error('NO_TEST_LINKED');
+
+  const graded = await gradeTestOneShot(
+    {
+      testId: placed.test_id,
+      studentId,
+      answers,
+      placementId: placed.placement_id,
+    },
+    supabase,
+  );
+
+  // Explanations come from the bank so the review screen can teach rather than
+  // just score. The take flow deliberately does not fetch them earlier.
+  const withAnswers = await getComposedTestQuestions(placed.test_id, true, supabase);
+  const explanationById = new Map<string, string | null>();
+  for (const q of withAnswers) {
+    explanationById.set(q.question_id, (q as any).explanation_brief ?? null);
+  }
+
+  const correctCount = graded.review.filter((r) => r.is_correct).length;
+  return {
+    attempt_id: graded.attempt_id,
+    correct_count: correctCount,
+    total_count: graded.review.filter((r) => r.is_gradable).length,
+    score_pct: graded.percentage,
+    passed: graded.passed,
+    passing_pct: graded.passing_pct ?? placed.passing_pct,
+    completed: graded.passed,
+    review: graded.review.map((r) => ({
+      question_id: r.question_id,
+      correct_option: (r.correct_answer || '') as 'a' | 'b' | 'c' | 'd',
+      selected: r.selected,
+      is_correct: r.is_correct,
+      explanation: explanationById.get(r.question_id) ?? null,
+    })),
+  };
+}
+
+/**
+ * Link a library test to a chapter, idempotently.
+ *
+ * nexus_test_placements carries TWO uniqueness rules and only one is partial:
+ * uq_placement_test_context has no predicate, so a deactivated row still owns
+ * its (context_type, context_id, test_id) triple forever. Deactivate-then-insert
+ * therefore throws 23505 the moment a teacher re-links a test they previously
+ * removed, which is an ordinary thing to do. Revive the row instead.
+ */
+export async function linkTestToStudyFile(
+  input: { fileId: string; testId: string; passingPct?: number | null; createdBy?: string | null },
+  client?: TypedSupabaseClient,
+): Promise<NexusPlacedChapterTest> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const meta = await getTestMeta(input.testId, supabase);
+  if (!meta || !meta.is_active) throw new Error('TEST_NOT_FOUND');
+  const questions = await getComposedTestQuestions(input.testId, false, supabase);
+  if (questions.length === 0) throw new Error('TEST_HAS_NO_QUESTIONS');
+
+  const passingPct =
+    input.passingPct != null && Number.isFinite(Number(input.passingPct))
+      ? Math.min(Math.max(Math.round(Number(input.passingPct)), 1), 100)
+      : 70;
+
+  // A study file holds at most one active test (uq_placement_single_test), so
+  // any other placement here has to stand down before this one can stand up.
+  await supabase
+    .from('nexus_test_placements')
+    .update({ is_active: false })
+    .eq('context_type', 'study_file')
+    .eq('context_id', input.fileId)
+    .eq('is_active', true)
+    .neq('test_id', input.testId);
+
+  const { data: existing } = await supabase
+    .from('nexus_test_placements')
+    .select('id')
+    .eq('context_type', 'study_file')
+    .eq('context_id', input.fileId)
+    .eq('test_id', input.testId)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from('nexus_test_placements')
+      .update({ is_active: true, is_visible: true, passing_pct: passingPct })
+      .eq('id', existing.id);
+  } else {
+    await createPlacement(
+      {
+        testId: input.testId,
+        contextType: 'study_file',
+        contextId: input.fileId,
+        passingPct,
+        createdBy: input.createdBy ?? null,
+      },
+      supabase,
+    );
+  }
+
+  const placed = await getPlacedChapterTest(input.fileId, supabase);
+  if (!placed) throw new Error('LINK_FAILED');
+  return placed;
+}
+
+/** Unlink whatever is on this chapter. Soft: attempts and the test itself survive. */
+export async function unlinkTestFromStudyFile(
+  fileId: string,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase
+    .from('nexus_test_placements')
+    .update({ is_active: false })
+    .eq('context_type', 'study_file')
+    .eq('context_id', fileId)
+    .eq('is_active', true);
+  if (error) throw error;
+}
+
+/**
+ * Which of these files have a published chapter test, for the "Test"/"No test"
+ * chip. Replaces the nexus_study_tests lookup of the same name.
+ */
+export async function hasPlacedTestForFiles(
+  fileIds: string[],
+  client?: TypedSupabaseClient,
+): Promise<Set<string>> {
+  const supabase = client || getSupabaseAdminClient();
+  const ids = [...new Set(fileIds)].filter(Boolean);
+  if (ids.length === 0) return new Set();
+
+  const { data: placements } = await supabase
+    .from('nexus_test_placements')
+    .select('context_id, test_id')
+    .eq('context_type', 'study_file')
+    .in('context_id', ids)
+    .eq('is_active', true);
+  if (!placements || placements.length === 0) return new Set();
+
+  const testIds = [...new Set(placements.map((p: any) => p.test_id))];
+  const { data: tests } = await supabase
+    .from('nexus_tests')
+    .select('id')
+    .in('id', testIds)
+    .eq('is_active', true)
+    .eq('is_published', true);
+  const live = new Set((tests || []).map((t: any) => t.id));
+
+  return new Set(placements.filter((p: any) => live.has(p.test_id)).map((p: any) => p.context_id));
+}

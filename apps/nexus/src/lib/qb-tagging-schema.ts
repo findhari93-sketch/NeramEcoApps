@@ -83,8 +83,12 @@ export function buildTaggingPrompt(questions: TaggingExportQuestion[], registry:
   ].join('\n');
 }
 
-/** Strip markdown fences and grab the outermost JSON object/array from an AI reply. */
-function extractJSON(raw: string): string {
+/**
+ * Strip markdown fences and grab the outermost JSON object/array from an AI reply.
+ * Exported because qb-import-schema.ts parses the same class of reply, and two
+ * copies of a fence stripper drift the moment one model starts prefixing prose.
+ */
+export function extractJSON(raw: string): string {
   let text = raw.trim();
   text = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
   if (text.startsWith('{') || text.startsWith('[')) return text;

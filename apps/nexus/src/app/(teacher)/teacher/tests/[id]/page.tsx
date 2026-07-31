@@ -23,11 +23,15 @@ import {
   Snackbar,
   CircularProgress,
   Divider,
+  Tabs,
+  Tab,
 } from '@neram/ui';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import TestResultsPanel from '@/components/tests/TestResultsPanel';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
@@ -131,6 +135,8 @@ export default function TestDetailPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [tab, setTab] = useState<'overview' | 'results'>('overview');
+  const [duplicating, setDuplicating] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignFrom, setAssignFrom] = useState('');
   const [assignUntil, setAssignUntil] = useState('');
@@ -210,6 +216,22 @@ export default function TestDetailPage() {
       setError(err instanceof Error ? err.message : 'Failed to rename');
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * Copy the paper so it can be revised without moving the ground under scores
+   * students already earned. The copy lands unpublished and unplaced.
+   */
+  async function duplicateForEdit() {
+    if (!test) return;
+    setDuplicating(true);
+    try {
+      const json = await authFetch(`/api/question-bank/tests/${test.id}/duplicate`, { method: 'POST' });
+      router.push(`/teacher/tests/${json.data.test_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not duplicate the test');
+      setDuplicating(false);
     }
   }
 
@@ -372,6 +394,18 @@ export default function TestDetailPage() {
         >
           Assign
         </Button>
+        {attemptsCount > 0 && (
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={duplicating ? <CircularProgress size={14} /> : <ContentCopyOutlinedIcon />}
+            onClick={duplicateForEdit}
+            disabled={busy || duplicating}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Duplicate to edit
+          </Button>
+        )}
         <Box sx={{ flex: 1 }} />
         <Button
           variant="text"
@@ -385,6 +419,28 @@ export default function TestDetailPage() {
           Delete
         </Button>
       </Stack>
+
+      {/* Once anyone has sat the paper, changing its questions silently changes
+          what past scores mean. Say so, and offer the safe move instead. */}
+      {attemptsCount > 0 && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {attemptsCount} attempt{attemptsCount !== 1 ? 's' : ''} recorded. Changing the questions now would
+          change what those scores mean, so edit a duplicate instead and swap it in when you are ready.
+        </Alert>
+      )}
+
+      <Tabs
+        value={tab}
+        onChange={(_, v) => setTab(v as 'overview' | 'results')}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { textTransform: 'none', minHeight: 48 } }}
+      >
+        <Tab value="overview" label="Overview" />
+        <Tab value="results" label={attemptsCount > 0 ? `Results (${attemptsCount})` : 'Results'} />
+      </Tabs>
+
+      {tab === 'results' && <TestResultsPanel testId={test.id} authFetch={authFetch} />}
+
+      <Box sx={{ display: tab === 'overview' ? 'block' : 'none' }}>
 
       {/* Placements */}
       <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
@@ -515,6 +571,8 @@ export default function TestDetailPage() {
           ))}
         </Box>
       )}
+
+      </Box>
 
       {/* Rename dialog */}
       <Dialog open={renameOpen} onClose={() => !busy && setRenameOpen(false)} fullWidth maxWidth="xs">

@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { abandonAttempt, getSupabaseAdminClient } from '@neram/database';
 
 /**
  * POST /api/tests/attempt/abandon
- * Called via navigator.sendBeacon when user leaves the test page.
+ * Called via navigator.sendBeacon when the student leaves the test page.
  * Marks an in_progress attempt as 'abandoned'.
  * Body: JSON { attempt_id }
+ *
+ * Until the status CHECK was widened, this write violated the constraint and
+ * the attempt silently stayed in_progress, which then blocked the next one.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -29,19 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Only abandon if still in_progress and owned by this user
-    const { error } = await supabase
-      .from('nexus_test_attempts')
-      .update({
-        status: 'abandoned',
-        submitted_at: new Date().toISOString(),
-      })
-      .eq('id', attempt_id)
-      .eq('student_id', user.id)
-      .eq('status', 'in_progress');
-
-    if (error) throw error;
-
+    await abandonAttempt(attempt_id, user.id);
     return NextResponse.json({ action: 'abandoned' });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to abandon attempt';

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFileById, getStudyFileCompletion, hasTestForFiles } from '@neram/database';
+import { getFileById, getStudyFileCompletion, hasPlacedTestForFiles } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 
 /**
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const [students, testSet] = await Promise.all([
       getStudyFileCompletion(params.id, classroomId),
-      hasTestForFiles([params.id]),
+      hasPlacedTestForFiles([params.id]),
     ]);
 
     const completed = students.filter((s) => s.status === 'completed');

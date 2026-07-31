@@ -6794,6 +6794,66 @@ export interface NexusTestOverviewGroup {
   tests: NexusOverviewTest[];              // flat list for non-nested groups
 }
 
+// ---- Test library folders ----
+
+/**
+ * Which tree a folder belongs to. One table, two trees: the shared staff
+ * library and one private tree per student. A DB check keeps 'staff' folders
+ * ownerless and 'student' folders owned, so a student folder can never leak
+ * into the shared library by having a null owner.
+ */
+export type NexusTestFolderScope = 'staff' | 'student';
+
+export interface NexusTestFolder {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  description: string | null;
+  owner_scope: NexusTestFolderScope;
+  owner_id: string | null;
+  sort_order: number;
+  is_deleted: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A folder plus its children, for the tree UI. `test_count` is direct, not rolled up. */
+export interface NexusTestFolderNode extends NexusTestFolder {
+  children: NexusTestFolderNode[];
+  test_count: number;
+}
+
+/** One hop of a folder path, oldest ancestor first. */
+export interface NexusTestFolderCrumb {
+  id: string;
+  name: string;
+}
+
+/**
+ * A test row as the library lists it. Deliberately not the full nexus_tests
+ * row: the hub and every picker need the same handful of fields, and typing
+ * them once stops each surface inventing its own `any`.
+ */
+export interface NexusLibraryTest {
+  id: string;
+  title: string;
+  description: string | null;
+  folder_id: string | null;
+  test_kind: NexusTestKind;
+  test_type: string;
+  total_marks: number | null;
+  passing_marks: number | null;
+  is_published: boolean;
+  created_by: string | null;
+  created_by_student: string | null;
+  created_at: string;
+  question_count: number;
+  attempt_count: number;
+  /** Where this test is currently in use, for the "linked to" column. */
+  placements: Array<{ context_type: NexusPlacementContext; context_label: string | null }>;
+}
+
 // ---- Class prep gate ----
 
 /** What opened the door. 'not_required' means nothing was ever asked of them. */
@@ -7002,6 +7062,8 @@ export interface NexusQBQuestionInsert {
   display_order?: number | null;
   status?: QBQuestionStatus;
   nta_question_id?: string | null;
+  /** Where the question came from. Defaults to 'authored' at the DB level. */
+  origin?: NexusQBOrigin;
   created_by?: string | null;
   // Recalled paper fields
   confidence_tier?: QBConfidenceTier | null;

@@ -14,6 +14,8 @@ export * from './question-bank';
 export * from './qb-tags';
 export * from './qb-category-proposals';
 export * from './test-repository';
+export * from './test-folders';
+export * from './test-analytics';
 export * from './classroom-access';
 export * from './settings';
 export * from './modules';
