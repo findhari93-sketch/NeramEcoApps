@@ -13,6 +13,7 @@
  *
  * Skips gracefully when test auth is unavailable or the student has no drawing
  * assignment (data-dependent). Serial: each step builds on the previous.
+ * Idempotent: afterAll deletes the two attempts this run creates.
  *
  * Run: pnpm test:e2e tests/e2e/assignment-redo-history-nexus.spec.ts --project=nexus-chrome
  */
@@ -36,8 +37,31 @@ test.describe('Assignment redo history', () => {
 
   let assignmentId: string | null = null;
   let studentUserId: string | null = null;
+  let firstSubmissionId: string | null = null;
   let latestSubmissionId: string | null = null;
   let attemptCount = 0;
+
+  // Delete only the rows this run created. Without this the shared E2E drawing
+  // assignment grows by two attempts per run, and the history timeline it seeds
+  // eventually stops resembling anything a teacher would see.
+  test.afterAll(async ({ playwright }) => {
+    const ids = [firstSubmissionId, latestSubmissionId].filter(Boolean) as string[];
+    if (!ids.length) return;
+    const api = await playwright.request.newContext();
+    try {
+      const teacher = await getTestAuthToken(api, 'teacher');
+      if (!teacher) return;
+      for (const id of ids) {
+        await api
+          .delete(`${APP_URLS.nexus}/api/drawing/submissions/${id}`, {
+            headers: { Authorization: `Bearer ${teacher.testToken}` },
+          })
+          .catch(() => {});
+      }
+    } finally {
+      await api.dispose();
+    }
+  });
 
   test('setup: submit, redo, resubmit a drawing assignment', async ({ request }) => {
     const teacher = await getTestAuthToken(request, 'teacher');
@@ -66,11 +90,11 @@ test.describe('Assignment redo history', () => {
       data: { assignment_id: assignmentId, source_type: 'assignment', original_image_url: PLACEHOLDER_IMG },
     });
     test.skip(!s1.ok(), 'Could not create first submission');
-    const firstId = (await s1.json()).submission?.id;
-    expect(firstId).toBeTruthy();
+    firstSubmissionId = (await s1.json()).submission?.id ?? null;
+    expect(firstSubmissionId).toBeTruthy();
 
     // Teacher requests a redo on that submission.
-    const redo = await request.patch(`${APP_URLS.nexus}/api/drawing/submissions/${firstId}/review`, {
+    const redo = await request.patch(`${APP_URLS.nexus}/api/drawing/submissions/${firstSubmissionId}/review`, {
       headers: { Authorization: `Bearer ${teacher!.testToken}`, 'Content-Type': 'application/json' },
       data: { tutor_feedback: 'Fix the perspective on the arch and darken the shadows.', action: 'redo' },
     });

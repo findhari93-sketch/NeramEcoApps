@@ -25,7 +25,11 @@ import AIFeedbackWorkspace, { type WorkspaceData } from '@/components/drawings/A
 import CommentSection from '@/components/drawings/CommentSection';
 import TagEditor from '@/components/drawings/TagEditor';
 import SubmissionHistoryTimeline from '@/components/assignments/SubmissionHistoryTimeline';
-import { drawingAttemptsToViews } from '@/lib/submission-history';
+import {
+  drawingAttemptsToViews,
+  attemptStatusLabel,
+  drawingRoundOpensForGrading,
+} from '@/lib/submission-history';
 import { useNavBadges } from '@/components/NavBadgeProvider';
 import type { DrawingSubmission, DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
@@ -173,15 +177,21 @@ export default function DrawingReviewDetailPage() {
       setRegionAnnotations(saved as RegionAnnotation[]);
     }
 
-    const isReviewed = ['reviewed', 'redo', 'completed'].includes(submission.status);
-    setIsEditMode(!isReviewed);
+    // Which rounds open ready to grade (see drawingRoundOpensForGrading). A round
+    // that opens locked is never a dead end: the bottom bar's "Evaluate" reopens it.
+    const newerAttemptExists = attempts.some(
+      (a) => a.id !== submission.id && a.submitted_at > submission.submitted_at,
+    );
+    setIsEditMode(drawingRoundOpensForGrading(submission.status, newerAttemptExists));
 
-    // Visibility toggle reflects the server state for reviewed submissions.
+    // Visibility toggle reflects the server state for any round that has already
+    // been through a review action (that is where is_gallery_visible is written).
     // For pending ones: standalone practice drawings default to shown, but
     // assignment submissions (from the roster link or their own assignment_id)
     // default to hidden so classwork isn't published without an explicit opt-in.
+    const hasBeenReviewed = ['reviewed', 'redo', 'completed'].includes(submission.status);
     const isFromAssignment = !!(fromAssignmentId || (submission as any).assignment_id);
-    setShowInGallery(isReviewed ? !!(submission as any).is_gallery_visible : !isFromAssignment);
+    setShowInGallery(hasBeenReviewed ? !!(submission as any).is_gallery_visible : !isFromAssignment);
 
     // Hydrate tag labels from the loaded submission.
     const existingTags = ((submission as any).tags as DrawingTag[] | undefined) || [];
@@ -240,6 +250,21 @@ export default function DrawingReviewDetailPage() {
     });
   }, [attempts, submission]);
 
+  // The newest round in the thread. Anything older is history: the teacher can
+  // still reopen it, but the banner points them at the round that matters.
+  const latestAttempt = attempts.length > 1 ? attempts[attempts.length - 1] : null;
+  const isSuperseded = !!(latestAttempt && submission && latestAttempt.id !== submission.id);
+
+  // Jump to another round's own review screen, keeping the assignment context so
+  // "Back" still returns where the teacher came from.
+  const openAttempt = useCallback(
+    (attemptId: string) => {
+      const qs = fromAssignmentId ? `?assignment=${fromAssignmentId}` : '';
+      router.push(`/teacher/drawing-reviews/${attemptId}${qs}`);
+    },
+    [router, fromAssignmentId],
+  );
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', gap: 2, p: 2, height: '80vh' }}>
@@ -255,6 +280,14 @@ export default function DrawingReviewDetailPage() {
 
   const timeAgo = getTimeAgo(submission.submitted_at);
   const sub = submission as any;
+
+  // Which round of the thread is on screen. The header used to label every round
+  // with the thread total, so an older attempt still read as the newest one.
+  const attemptIndex = attempts.findIndex((a) => a.id === submission.id) + 1;
+  const statusChipColor: 'warning' | 'success' | 'info' =
+    submission.status === 'redo' ? 'warning'
+      : ['reviewed', 'completed'].includes(submission.status) ? 'success'
+      : 'info';
 
   // This drawing belongs to a class assignment when it was opened from one
   // (?assignment=) or the submission itself carries an assignment_id. A breadcrumb
@@ -318,27 +351,65 @@ export default function DrawingReviewDetailPage() {
     </Box>
   );
 
+  // Shared shell for both bar states so the locked bar sits exactly where the
+  // grading bar does (fixed above BottomNav on mobile, inline on desktop).
+  const barShellSx = {
+    display: 'flex', alignItems: 'center',
+    gap: { xs: 0.5, md: 0.75 },
+    px: { xs: 1, md: 1 },
+    py: 0.75,
+    borderTop: '1px solid', borderColor: 'divider',
+    bgcolor: 'background.paper',
+    ...(!isMobile && { flexShrink: 0 }),
+    ...(isMobile && {
+      position: 'fixed' as const,
+      bottom: 64, // BottomNav height
+      left: 0,
+      right: 0,
+      zIndex: 10,
+      boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
+    }),
+  };
+
+  // Locked rounds (finished, or superseded by a newer attempt) used to render no
+  // bar at all, which left the teacher on a screen with no visible way to grade.
+  // They now get an explicit way back into grading.
+  const lockedBar = (
+    <Box sx={barShellSx}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ flex: 1, minWidth: 0, fontWeight: 600, lineHeight: 1.3 }}
+      >
+        {isSuperseded
+          ? `Attempt ${attemptIndex} of ${attempts.length}, a newer attempt exists`
+          : `${attemptStatusLabel(submission.status)}, review is locked`}
+      </Typography>
+      {isSuperseded && latestAttempt && (
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => openAttempt(latestAttempt.id)}
+          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, minWidth: 0, px: 1.5 }}
+        >
+          Latest
+        </Button>
+      )}
+      <Button
+        variant="contained"
+        size="small"
+        startIcon={<EditOutlinedIcon />}
+        onClick={() => setIsEditMode(true)}
+        sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.78rem', minHeight: 36, px: 2 }}
+      >
+        Evaluate
+      </Button>
+    </Box>
+  );
+
   // Action bar: fixed on mobile (above BottomNav), inline on desktop
   const actionBar = isEditMode ? (
-    <Box sx={{
-      display: 'flex', alignItems: 'center',
-      gap: { xs: 0.5, md: 0.75 },
-      px: { xs: 1, md: 1 },
-      py: 0.75,
-      borderTop: '1px solid', borderColor: 'divider',
-      bgcolor: 'background.paper',
-      // Desktop: inline at bottom of panel
-      ...(!isMobile && { flexShrink: 0 }),
-      // Mobile: fixed above BottomNav
-      ...(isMobile && {
-        position: 'fixed',
-        bottom: 64, // BottomNav height
-        left: 0,
-        right: 0,
-        zIndex: 10,
-        boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-      }),
-    }}>
+    <Box sx={barShellSx}>
       {/* Draft: icon-only on mobile, icon+text on desktop */}
       <IconButton
         onClick={handleSaveDraft}
@@ -391,7 +462,9 @@ export default function DrawingReviewDetailPage() {
         {...(isMobile ? {} : { startIcon: <CheckCircleOutlineIcon /> })}
         sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, flex: 1, px: { xs: 1.5, md: 2 } }}
       >
-        {saving && action === 'complete' ? '...' : ['reviewed', 'redo', 'completed'].includes(submission.status) ? 'Save' : 'Complete'}
+        {/* 'Save' only where it is honest: updating an already-finished review.
+            A redo round is still open, and this button completes it. */}
+        {saving && action === 'complete' ? '...' : ['reviewed', 'completed'].includes(submission.status) ? 'Save' : 'Complete'}
       </Button>
 
       {/* Gallery visibility toggle: on by default once a rating + feedback are present */}
@@ -407,7 +480,7 @@ export default function DrawingReviewDetailPage() {
         </Typography>
       )}
     </Box>
-  ) : null;
+  ) : lockedBar;
 
   // Question text (for prompt context)
   const questionText = submission.question?.question_text || '';
@@ -447,10 +520,48 @@ export default function DrawingReviewDetailPage() {
     </Box>
   ) : null;
 
-  // Previous attempts of this redo, shown while grading the latest one.
+  // Previous attempts of this redo, shown while grading the latest one. Each
+  // round links to its own review screen so a teacher can grade an earlier
+  // attempt that was never closed out, not just preview it.
   const previousAttemptsPanel = attemptViews.length > 1 ? (
     <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 2 }, mt: 2, borderRadius: 2 }}>
-      <SubmissionHistoryTimeline attempts={attemptViews} title="Submission history" />
+      <SubmissionHistoryTimeline
+        attempts={attemptViews}
+        title="Submission history"
+        currentKey={submission.id}
+        onOpenAttempt={(a) => openAttempt(a.key)}
+      />
+    </Paper>
+  ) : null;
+
+  // Re-grading a round that already carries a review action. A redo is still open
+  // work, so it gets its own wording rather than "already reviewed". Suppressed on
+  // superseded rounds, where supersededBanner already carries the warning.
+  const reReviewNotice = ['reviewed', 'redo', 'completed'].includes(submission.status) && isEditMode && !isSuperseded ? (
+    <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#fff8e1' }}>
+      <Typography variant="body2" color="warning.dark" fontWeight={600}>
+        {submission.status === 'redo'
+          ? 'Sent back for a redo. Grade it here to close it out, or send it back again. The student is notified either way.'
+          : 'Editing a reviewed submission. Changes will notify the student.'}
+      </Typography>
+    </Paper>
+  ) : null;
+
+  // Viewing an older round: say so, and offer the jump to the newest one.
+  const supersededBanner = isSuperseded && latestAttempt ? (
+    <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#fff8e1' }}>
+      <Typography variant="body2" color="warning.dark" fontWeight={600}>
+        This is an earlier attempt. The student has submitted a newer one since.
+      </Typography>
+      <Button
+        size="small"
+        variant="outlined"
+        color="warning"
+        onClick={() => openAttempt(latestAttempt.id)}
+        sx={{ mt: 1, textTransform: 'none', fontWeight: 700, minHeight: 36 }}
+      >
+        Go to latest attempt
+      </Button>
     </Paper>
   ) : null;
 
@@ -473,13 +584,8 @@ export default function DrawingReviewDetailPage() {
           '&:hover': { background: 'rgba(0,0,0,0.25)' },
         },
       }}>
-        {['reviewed', 'redo', 'completed'].includes(submission.status) && isEditMode && (
-          <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#fff8e1' }}>
-            <Typography variant="body2" color="warning.dark" fontWeight={600}>
-              Editing a reviewed submission. Changes will notify the student.
-            </Typography>
-          </Paper>
-        )}
+        {supersededBanner}
+        {reReviewNotice}
 
         {submission.self_note && (
           <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#f0f7ff' }}>
@@ -552,9 +658,15 @@ export default function DrawingReviewDetailPage() {
                 </Typography>
               )}
             </Box>
-            {attempts.length > 1 && (
-              <Chip label={`Attempt ${attempts.length}`} size="small" color="warning" variant="outlined" sx={{ height: 22, fontWeight: 700 }} />
+            {attempts.length > 1 && attemptIndex > 0 && (
+              <Chip label={`Attempt ${attemptIndex}/${attempts.length}`} size="small" color="warning" variant="outlined" sx={{ height: 22, fontWeight: 700 }} />
             )}
+            <Chip
+              label={attemptStatusLabel(submission.status)}
+              size="small"
+              color={statusChipColor}
+              sx={{ height: 22, fontWeight: 700, fontSize: '0.65rem' }}
+            />
             {submission.question && <CategoryBadge category={submission.question.category} />}
             <IconButton size="small" onClick={(e) => setMenuAnchor(e.currentTarget)} sx={{ p: 0.5 }}>
               <MoreVertIcon fontSize="small" />
@@ -596,13 +708,8 @@ export default function DrawingReviewDetailPage() {
             </Box>
 
             <Box sx={{ p: 1.5 }}>
-              {['reviewed', 'redo', 'completed'].includes(submission.status) && isEditMode && (
-                <Paper variant="outlined" sx={{ p: 1, mb: 1.5, bgcolor: '#fff8e1' }}>
-                  <Typography variant="caption" color="warning.dark" fontWeight={600}>
-                    Editing reviewed submission. Changes will notify student.
-                  </Typography>
-                </Paper>
-              )}
+              {supersededBanner}
+              {reReviewNotice}
 
               {submission.self_note && (
                 <Paper variant="outlined" sx={{ p: 1, mb: 1.5, bgcolor: '#f0f7ff' }}>
@@ -638,8 +745,10 @@ export default function DrawingReviewDetailPage() {
               </Box>
             </Box>
 
-            {/* Bottom padding to clear fixed action bar (48px) + BottomNav (64px) */}
-            <Box sx={{ height: isEditMode ? 120 : 72, flexShrink: 0 }} />
+            {/* Bottom padding to clear fixed action bar (48px) + BottomNav (64px).
+                Both the grading bar and the locked bar are fixed, so reserve the
+                same space either way. */}
+            <Box sx={{ height: 120, flexShrink: 0 }} />
           </Box>
         </Box>
 
@@ -724,9 +833,15 @@ export default function DrawingReviewDetailPage() {
             )}
           </Box>
           {submission.question && <CategoryBadge category={submission.question.category} />}
-          {attempts.length > 1 && (
-            <Chip label={`Attempt ${attempts.length}`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 700 }} />
+          {attempts.length > 1 && attemptIndex > 0 && (
+            <Chip label={`Attempt ${attemptIndex}/${attempts.length}`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 700 }} />
           )}
+          <Chip
+            label={attemptStatusLabel(submission.status)}
+            size="small"
+            color={statusChipColor}
+            sx={{ fontWeight: 700 }}
+          />
           <IconButton size="small" onClick={(e) => setMenuAnchor(e.currentTarget)}>
             <MoreVertIcon />
           </IconButton>

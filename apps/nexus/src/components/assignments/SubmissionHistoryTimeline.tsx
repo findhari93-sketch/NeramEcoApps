@@ -9,6 +9,13 @@
  *
  * Fed by AttemptView[] (see lib/submission-history.ts). Purely presentational:
  * the parent decides which attempts to pass and highlights the current one.
+ *
+ * The preview dialog is read-only by default. A teacher screen that can actually
+ * grade a round passes `onOpenAttempt`, which adds "Open full review" to the
+ * dialog so grading is reachable from the history, not just from the queue.
+ * Opening the dialog first is deliberate: it is non-destructive, so a teacher
+ * mid-grading can compare rounds without navigating away and losing their draft.
+ * `currentKey` marks the round already on screen so nobody navigates in a circle.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -19,6 +26,7 @@ import {
   Chip,
   Dialog,
   IconButton,
+  Button,
   ToggleButtonGroup,
   ToggleButton,
   useMediaQuery,
@@ -30,6 +38,7 @@ import ReplayIcon from '@mui/icons-material/Replay';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import GradeDisplay from './GradeDisplay';
 import SubmissionFiles from './SubmissionFiles';
 import { reactionEmoji } from '@/lib/assignment-reactions';
@@ -104,11 +113,20 @@ interface SubmissionHistoryTimelineProps {
   attempts: AttemptView[];
   /** Header label, e.g. "Submission history" or "Your previous attempts". */
   title?: string;
+  /** AttemptView.key of the round already open in the parent screen. */
+  currentKey?: string;
+  /**
+   * Teacher-only: open another round in its own review screen so it can be
+   * graded. Omit on student screens to keep the timeline read-only.
+   */
+  onOpenAttempt?: (attempt: AttemptView) => void;
 }
 
 export default function SubmissionHistoryTimeline({
   attempts,
   title = 'Submission history',
+  currentKey,
+  onOpenAttempt,
 }: SubmissionHistoryTimelineProps) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
@@ -146,6 +164,8 @@ export default function SubmissionHistoryTimeline({
         {attempts.map((a) => {
           const gradeValue = attemptGradeValue(a);
           const emoji = reactionEmoji(a.reaction);
+          const isCurrent = !!currentKey && a.key === currentKey;
+          const canReview = !!onOpenAttempt && !isCurrent;
           return (
             <Box key={a.key} sx={{ position: 'relative', pl: 5, pb: 2 }}>
               {/* Timeline dot */}
@@ -188,8 +208,8 @@ export default function SubmissionHistoryTimeline({
                   p: 1.25,
                   cursor: 'pointer',
                   minHeight: 44,
-                  border: a.isLatest ? '2px solid' : '1px solid',
-                  borderColor: a.isLatest ? 'primary.main' : 'divider',
+                  border: a.isLatest || isCurrent ? '2px solid' : '1px solid',
+                  borderColor: isCurrent ? 'secondary.main' : a.isLatest ? 'primary.main' : 'divider',
                   transition: 'background-color 200ms ease, border-color 200ms ease',
                   '&:hover': { bgcolor: 'action.hover' },
                 }}
@@ -220,6 +240,14 @@ export default function SubmissionHistoryTimeline({
                       {a.isLatest && (
                         <Chip label="Latest" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />
                       )}
+                      {isCurrent && (
+                        <Chip
+                          label="Viewing"
+                          size="small"
+                          color="secondary"
+                          sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700 }}
+                        />
+                      )}
                     </Box>
 
                     <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.25 }}>
@@ -247,6 +275,19 @@ export default function SubmissionHistoryTimeline({
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
                       {formatWhen(a.submitted_at)}
                     </Typography>
+
+                    {/* A hint, not a control. The card is already the button, and
+                        nesting a real <button> inside a role="button" is invalid
+                        markup whose click the card swallowed. Grading lives on
+                        "Open full review" in the dialog the card opens. */}
+                    {canReview && (
+                      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 0.5 }}>
+                        <RateReviewOutlinedIcon sx={{ fontSize: 14, color: 'primary.main' }} />
+                        <Typography variant="caption" color="primary.main" sx={{ fontWeight: 700 }}>
+                          Tap to review this attempt
+                        </Typography>
+                      </Stack>
+                    )}
                   </Box>
                 </Box>
               </Paper>
@@ -259,6 +300,9 @@ export default function SubmissionHistoryTimeline({
         attempt={open}
         onClose={() => setOpen(null)}
         fullScreen={fullScreen}
+        onOpenAttempt={
+          onOpenAttempt && open && open.key !== currentKey ? onOpenAttempt : undefined
+        }
       />
     </Box>
   );
@@ -272,10 +316,13 @@ function AttemptDetailDialog({
   attempt,
   onClose,
   fullScreen,
+  onOpenAttempt,
 }: {
   attempt: AttemptView | null;
   onClose: () => void;
   fullScreen: boolean;
+  /** Present only when the viewer can grade this round (teacher screens). */
+  onOpenAttempt?: (attempt: AttemptView) => void;
 }) {
   const [view, setView] = useState<'original' | 'reviewed' | 'corrected'>('original');
   useEffect(() => {
@@ -387,6 +434,21 @@ function AttemptDetailDialog({
               {attempt.feedback}
             </Typography>
           </Box>
+        )}
+
+        {onOpenAttempt && (
+          <Button
+            fullWidth
+            variant="contained"
+            startIcon={<RateReviewOutlinedIcon />}
+            onClick={() => {
+              onOpenAttempt(attempt);
+              onClose();
+            }}
+            sx={{ mt: 2, textTransform: 'none', fontWeight: 700, minHeight: 44 }}
+          >
+            Open full review
+          </Button>
         )}
       </Box>
       </>

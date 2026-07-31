@@ -68,6 +68,23 @@ export function attemptStatusLabel(status: string): string {
   }
 }
 
+/**
+ * Whether a teacher's review screen should open a drawing round ready to grade
+ * rather than locked behind "Evaluate".
+ *
+ * A round sent back for a redo ('redo') is still OPEN work: the teacher may want
+ * to add feedback they skipped, or grade it after all, so it opens editable. Only
+ * a finished round ('reviewed' / 'completed') or one the student has already
+ * superseded with a newer attempt opens locked.
+ */
+export function drawingRoundOpensForGrading(
+  status: string,
+  hasNewerAttempt: boolean,
+): boolean {
+  if (hasNewerAttempt) return false;
+  return !['reviewed', 'completed'].includes(status);
+}
+
 /** True when the latest attempt is a resubmission still waiting on the teacher. */
 export function isAwaitingReReview(attempts: AttemptView[]): boolean {
   if (attempts.length < 2) return false;
