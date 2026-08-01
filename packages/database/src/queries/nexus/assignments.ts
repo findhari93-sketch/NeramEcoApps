@@ -52,6 +52,10 @@ export async function createAssignment(
     class_date: string;
     title: string;
     instructions?: string | null;
+    /** What a finished piece of work should look like. Its own labelled block. */
+    expected_outcome?: string | null;
+    /** What to concentrate on, one point per line. */
+    focus_points?: string | null;
     assignment_type?: NexusAssignmentType;
     drawing_question_id?: string | null;
     submission_format?: NexusAssignmentFormat;
@@ -81,6 +85,8 @@ export async function createAssignment(
       class_date: input.class_date,
       title: input.title,
       instructions: input.instructions ?? null,
+      expected_outcome: input.expected_outcome ?? null,
+      focus_points: input.focus_points ?? null,
       assignment_type: input.assignment_type ?? 'document',
       drawing_question_id: input.drawing_question_id ?? null,
       submission_format: input.submission_format ?? 'pdf_or_image',
@@ -110,6 +116,9 @@ export async function updateAssignment(
       NexusClassAssignment,
       | 'title'
       | 'instructions'
+      | 'expected_outcome'
+      | 'focus_points'
+      | 'requires_pdf'
       | 'assignment_type'
       | 'drawing_question_id'
       | 'submission_format'
@@ -506,29 +515,87 @@ function diffDaysYmd(from: string, to: string): number {
   return Math.round((dayEpoch(to) - dayEpoch(from)) / DAY_MS);
 }
 
+export interface AssignmentRecording {
+  url: string | null;
+  source: 'youtube' | 'sharepoint' | null;
+  /**
+   * The class the recording came from, when it came from one. Students get told
+   * which lesson they are about to watch rather than just "Class recording",
+   * and it is how they can tell the teacher's own override apart from the
+   * automatic link.
+   */
+  class_title?: string | null;
+}
+
+/** The recording columns on a scheduled class, as far as this decision cares. */
+export interface ClassRecordingLinks {
+  recording_url?: string | null;
+  youtube_url?: string | null;
+}
+
 /**
- * Resolve the class recording to show a late joiner: the assignment's own
- * recording, else the recording on its linked scheduled class (YouTube backup
- * preferred, then the Teams/SharePoint copy).
+ * Which recording a student should be shown for an assignment.
+ *
+ * Order: the assignment's own link, then the linked class's YouTube backup,
+ * then the class's Teams/SharePoint copy. YouTube first because it embeds and
+ * plays in place, while the SharePoint copy has to open in another tab.
+ *
+ * Pure, so the preference order is testable without a database.
+ */
+export function pickAssignmentRecording(
+  own: Pick<NexusClassAssignment, 'recording_url' | 'recording_source'>,
+  cls: ClassRecordingLinks | null | undefined,
+): AssignmentRecording {
+  if (own.recording_url) {
+    return { url: own.recording_url, source: (own.recording_source as any) ?? 'sharepoint' };
+  }
+  if (cls?.youtube_url) return { url: cls.youtube_url, source: 'youtube' };
+  if (cls?.recording_url) return { url: cls.recording_url, source: 'sharepoint' };
+  return { url: null, source: null };
+}
+
+/**
+ * Resolve the class recording to show against an assignment: its own link, else
+ * the recording on the class it was set in.
+ *
+ * The class is found by `scheduled_class_id` FIRST, and this is the whole point
+ * of the function as written. It used to look only at `plan_entry_id`, which
+ * `createAssignment` has never written: every assignment in production had a
+ * NULL there while its linked class sat on a perfectly good recording. The
+ * fallback had never once fired. `plan_entry_id` is still tried second, for
+ * assignments generated from a course plan.
  */
 export async function resolveAssignmentRecording(
-  assignment: Pick<NexusClassAssignment, 'recording_url' | 'recording_source' | 'plan_entry_id'>,
+  assignment: Pick<
+    NexusClassAssignment,
+    'recording_url' | 'recording_source' | 'plan_entry_id' | 'scheduled_class_id'
+  >,
   client?: TypedSupabaseClient,
-): Promise<{ url: string | null; source: 'youtube' | 'sharepoint' | null }> {
-  if (assignment.recording_url) {
-    return { url: assignment.recording_url, source: (assignment.recording_source as any) ?? 'sharepoint' };
+): Promise<AssignmentRecording> {
+  if (assignment.recording_url) return pickAssignmentRecording(assignment, null);
+  if (!assignment.scheduled_class_id && !assignment.plan_entry_id) {
+    return { url: null, source: null };
+  }
+  const supabase = client || getSupabaseAdminClient();
+  if (assignment.scheduled_class_id) {
+    const { data } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('title, recording_url, youtube_url')
+      .eq('id', assignment.scheduled_class_id)
+      .limit(1);
+    const direct = (data || [])[0] as any;
+    const picked = pickAssignmentRecording(assignment, direct);
+    if (picked.url) return { ...picked, class_title: direct?.title ?? null };
   }
   if (!assignment.plan_entry_id) return { url: null, source: null };
-  const supabase = client || getSupabaseAdminClient();
   const { data } = await supabase
     .from('nexus_scheduled_classes')
-    .select('recording_url, youtube_url')
+    .select('title, recording_url, youtube_url')
     .eq('plan_entry_id', assignment.plan_entry_id)
     .limit(1);
-  const row = (data || [])[0];
-  if (row?.youtube_url) return { url: row.youtube_url, source: 'youtube' };
-  if (row?.recording_url) return { url: row.recording_url, source: 'sharepoint' };
-  return { url: null, source: null };
+  const entryClass = (data || [])[0] as any;
+  const picked = pickAssignmentRecording(assignment, entryClass);
+  return picked.url ? { ...picked, class_title: entryClass?.title ?? null } : picked;
 }
 
 export interface StudentAssignmentItem extends NexusClassAssignment {
@@ -629,34 +696,43 @@ export async function listAssignmentsForStudent(
     }
   }
 
-  // Resolve fallback recordings from the linked scheduled classes in one query.
+  // Resolve fallback recordings from the linked scheduled classes.
+  //
+  // Keyed BOTH ways, because the two links are populated by different paths:
+  // scheduled_class_id is what the timetable writes (and is the only one set on
+  // real data today), plan_entry_id is what course-plan generation writes. The
+  // direct id wins, since it names the exact class this work was set in.
+  const classIds = [...new Set(list.map((a) => a.scheduled_class_id).filter(Boolean))] as string[];
   const entryIds = [...new Set(list.map((a) => a.plan_entry_id).filter(Boolean))] as string[];
-  const recByEntry = new Map<string, { recording_url: string | null; youtube_url: string | null }>();
-  if (entryIds.length) {
+  const recByClassId = new Map<string, ClassRecordingLinks>();
+  const recByEntry = new Map<string, ClassRecordingLinks>();
+  if (classIds.length || entryIds.length) {
     const { data: classes } = await supabase
       .from('nexus_scheduled_classes')
-      .select('plan_entry_id, recording_url, youtube_url')
-      .in('plan_entry_id', entryIds);
-    for (const c of classes || []) {
-      if (c.plan_entry_id && !recByEntry.has(c.plan_entry_id)) {
-        recByEntry.set(c.plan_entry_id, { recording_url: c.recording_url, youtube_url: c.youtube_url });
-      }
+      .select('id, plan_entry_id, recording_url, youtube_url')
+      .or(
+        [
+          classIds.length ? `id.in.(${classIds.join(',')})` : '',
+          entryIds.length ? `plan_entry_id.in.(${entryIds.join(',')})` : '',
+        ]
+          .filter(Boolean)
+          .join(','),
+      );
+    for (const c of (classes || []) as any[]) {
+      const links: ClassRecordingLinks = {
+        recording_url: c.recording_url,
+        youtube_url: c.youtube_url,
+      };
+      if (c.id) recByClassId.set(c.id, links);
+      if (c.plan_entry_id && !recByEntry.has(c.plan_entry_id)) recByEntry.set(c.plan_entry_id, links);
     }
   }
 
   return list.map((a) => {
-    let recUrl = a.recording_url;
-    let recSrc = a.recording_source as 'youtube' | 'sharepoint' | null;
-    if (!recUrl && a.plan_entry_id) {
-      const fallback = recByEntry.get(a.plan_entry_id);
-      if (fallback?.youtube_url) {
-        recUrl = fallback.youtube_url;
-        recSrc = 'youtube';
-      } else if (fallback?.recording_url) {
-        recUrl = fallback.recording_url;
-        recSrc = 'sharepoint';
-      }
-    }
+    const fallback =
+      (a.scheduled_class_id ? recByClassId.get(a.scheduled_class_id) : null) ??
+      (a.plan_entry_id ? recByEntry.get(a.plan_entry_id) : null);
+    const { url: recUrl, source: recSrc } = pickAssignmentRecording(a, fallback);
     let submission = subMap.get(a.id) ?? null;
     let drawingRating: number | null = null;
     let drawingMarks: number | null = null;

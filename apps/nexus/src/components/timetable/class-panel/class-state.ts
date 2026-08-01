@@ -146,10 +146,19 @@ export function getTimeIndicator(
   state: ClassState,
   now: Date = new Date(),
 ): TimeIndicator | null {
+  // A class that is over has no time left to describe, and this guard is the
+  // whole reason the function takes `state`. Nothing flips a finished class to
+  // `completed` (that transition depends on a Teams sync that may never run), so
+  // in production every past class is still `scheduled`. Without this line the
+  // start time is in the past, the countdown goes negative, and a class that
+  // finished last Friday sits under a "Done" chip announcing "Starting soon".
+  if (state.isPast || state.isCancelled) return null;
+
   if (state.isLive) return { label: 'Live Now', color: 'error' };
   if (cls.status !== 'scheduled') return null;
 
   const diffMs = classStartDate(cls.scheduled_date, cls.start_time).getTime() - now.getTime();
+  // Started, but not over: the stored status has not caught up with the clock.
   if (diffMs < 0) return { label: 'Starting soon', color: 'warning' };
 
   const diffMin = Math.floor(diffMs / 60000);

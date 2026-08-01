@@ -56,6 +56,14 @@ interface PreviewDraft extends AssignmentDraft {
 function toDraft(r: ReviewAssignment): PreviewDraft {
   return {
     type: r.assignment_type,
+    // The importer reads a brief, not a question paper, so an imported document
+    // assignment starts as upload-only. A teacher can add questions afterwards
+    // from the assignment itself.
+    mode: r.assignment_type === 'drawing' ? 'drawing' : 'upload',
+    // The AI extractor does not split the brief into parts, so these start empty
+    // and the whole brief stays in `instructions` exactly as it was imported.
+    expectedOutcome: '',
+    focusPoints: '',
     // Bulk paste creates standalone assignments with no class attached, so
     // "before the class" has nothing to refer to. Always homework.
     timing: 'homework',

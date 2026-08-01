@@ -108,7 +108,11 @@ export default function StudentAssignmentDetailPage() {
   const [drawingSubmission, setDrawingSubmission] = useState<DrawingSubmissionView | null>(null);
   const [drawingAttempts, setDrawingAttempts] = useState<DrawingSubmission[]>([]);
   const [enrolledAt, setEnrolledAt] = useState<string | null>(null);
-  const [recording, setRecording] = useState<{ url: string | null; source: string | null }>({ url: null, source: null });
+  const [recording, setRecording] = useState<{
+    url: string | null;
+    source: string | null;
+    class_title?: string | null;
+  }>({ url: null, source: null });
   const [error, setError] = useState('');
   const [submitOpen, setSubmitOpen] = useState(false);
   const [attachmentError, setAttachmentError] = useState(false);
@@ -317,9 +321,17 @@ export default function StudentAssignmentDetailPage() {
             {/* Class recording */}
             {recording.url && (
               <Box>
-                <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: recording.class_title ? 0.25 : 1 }}>
                   Class recording
                 </Typography>
+                {/* Which lesson, not just "a recording". Worth saying now that
+                    this resolves from the linked class automatically: the
+                    student can tell what they are about to watch. */}
+                {recording.class_title && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    From {recording.class_title}
+                  </Typography>
+                )}
                 {youtubeId ? (
                   <Box sx={{ position: 'relative', pt: '56.25%', borderRadius: 2, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
                     <Box
@@ -384,7 +396,11 @@ export default function StudentAssignmentDetailPage() {
             )}
 
             {/* The brief: question cards, marks and maths, not a wall of text. */}
-            <AssignmentBrief instructions={detail.instructions} />
+            <AssignmentBrief
+              instructions={detail.instructions}
+              expectedOutcome={(detail as any).expected_outcome}
+              focusPoints={(detail as any).focus_points}
+            />
 
 
             {/* Explainer video + links */}

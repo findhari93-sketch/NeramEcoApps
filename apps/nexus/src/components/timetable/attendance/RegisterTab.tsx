@@ -29,14 +29,14 @@ function formatTime(iso: string | null) {
 /**
  * The register: who was here, and the ways to correct it when Teams is wrong.
  *
- * Everything on this tab is a write or a repair. The read-only analysis of the
- * same data lives one tab over, so a teacher fixing the record and a teacher
- * studying it are never looking at two dialogs that disagree.
+ * Everything on this tab is a write or a repair, which is why it sits last and
+ * why its data is fetched only when it is opened. The two tabs before it read
+ * the register; this is the one that argues with it.
  */
-export default function WhoCameTab({
+export default function RegisterTab({
   classId,
   getToken,
-  loading,
+  recordsLoading,
   busy,
   records,
   summary,
@@ -54,7 +54,7 @@ export default function WhoCameTab({
    *
    * This exists because the endpoint requires a bearer token, so it could not be
    * opened in a browser, which is exactly why it went unused during the outage
-   * it was built for. The dialog already holds a token, so the one place a
+   * it was built for. The panel already holds a token, so the one place a
    * teacher sees the failure is also the place that can explain it.
    */
   const handleDiagnose = async () => {
@@ -80,32 +80,16 @@ export default function WhoCameTab({
 
   return (
     <>
-      <Box sx={{ display: 'flex', gap: 2, mb: summary.missed > 0 ? 0.75 : 2 }}>
+      <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
         <Chip label={`Present: ${summary.present}`} color="success" size="small" />
         <Chip label={`Absent: ${summary.absent}`} color="error" size="small" />
         <Chip label={`Total: ${summary.total}`} size="small" />
       </Box>
 
-      {/* The follow-up state of this class in one line, and the way out to the
-          screen that can act on it. Without this the dialog was a dead end: it
-          could tell you someone was away and nothing about what happened next. */}
-      {summary.missed > 0 && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-          {summary.missed} missed · {summary.explained} explained · {summary.caughtUp} caught up ·{' '}
-          <Box
-            component="a"
-            href="/teacher/catch-up?tab=reasons"
-            sx={{ color: 'primary.main', fontWeight: 700, textDecoration: 'none' }}
-          >
-            open catch-up
-          </Box>
-        </Typography>
-      )}
-
       {/* Marking by hand is always offered: for imported and channel classes
           Teams often cannot report attendance at all, so this is the reliable
           fallback. Sync itself lives in the header, above the tabs, because it
-          refreshes both of them. */}
+          refreshes all three of them. */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
         <Button
           variant="outlined"
@@ -113,7 +97,7 @@ export default function WhoCameTab({
           color="success"
           startIcon={<DoneAllIcon />}
           onClick={onMarkAllPresent}
-          disabled={busy || loading || records.length === 0}
+          disabled={busy || recordsLoading || records.length === 0}
           sx={{ textTransform: 'none', minHeight: 44 }}
         >
           Mark all present
@@ -130,7 +114,7 @@ export default function WhoCameTab({
             size="small"
             startIcon={<UploadFileOutlinedIcon />}
             onClick={onOpenImport}
-            disabled={busy || loading}
+            disabled={busy || recordsLoading}
             sx={{ textTransform: 'none', minHeight: 44 }}
           >
             Upload Teams report
@@ -154,7 +138,7 @@ export default function WhoCameTab({
         Toggle any student to mark them present or absent, changes save instantly.
       </Typography>
 
-      {loading ? (
+      {recordsLoading ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} variant="rectangular" height={48} sx={{ borderRadius: 1 }} />

@@ -81,3 +81,17 @@ export const ATTENDANCE_APP_ROLES = {
   /** Required for attendanceReports and attendanceRecords. */
   artifacts: ['OnlineMeetingArtifact.Read.All'],
 } as const;
+
+/**
+ * Reading a transcript app-only needs its OWN permission, separate from the
+ * artifact one attendance uses.
+ *
+ * This is not a detail. Nexus has never carried it, so every automatic
+ * transcript fetch has come back 403 from the moment the sweep was written, and
+ * the only transcripts in the database arrived through a teacher pressing
+ * Generate, which uses their delegated token and needs no application
+ * permission at all. That made the failure look intermittent ("it works when I
+ * press it") when it was total. Confirmed against production on 2026-08-01:
+ * nexus_class_transcripts held `detail = 'transcripts responded 403'`.
+ */
+export const TRANSCRIPT_APP_ROLES = ['OnlineMeetingTranscript.Read.All'] as const;

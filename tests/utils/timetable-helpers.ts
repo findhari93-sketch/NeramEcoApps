@@ -94,10 +94,14 @@ export async function openAttendanceDialog(page: Page, maxWeeksBack = 8): Promis
       await rows.nth(i).click();
       await page.waitForTimeout(900);
       if (!(await openPanelTab(page, 'After'))) continue;
-      const button = page.getByRole('button', { name: /attendance and insights/i });
+      // Matched loosely on "attendance": the label has changed once already
+      // (Attendance and insights, now Attendance and follow-up) and pinning it
+      // exactly is what made this helper skip every test in silence.
+      const button = page.getByRole('button', { name: /attendance/i });
       if ((await button.count()) === 0) continue;
       await button.first().click();
-      await page.getByRole('tab', { name: 'Who came' }).waitFor({ state: 'visible', timeout: 30_000 });
+      // The panel opens on whoever still owes the class.
+      await page.getByRole('tab', { name: /^Missed/ }).waitFor({ state: 'visible', timeout: 30_000 });
       return true;
     }
     const prev = page.getByTestId('cal-prev');

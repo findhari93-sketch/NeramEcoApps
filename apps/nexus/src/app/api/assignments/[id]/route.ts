@@ -36,6 +36,7 @@ import { notifyAssignmentPublished, notifyAssignmentReviewed } from '@/lib/timet
 import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
 import { classStartIso } from '@/lib/prework';
 import { resolveSubmitMode, lockedReason } from '@/lib/assignment-submit-window';
+import { composeDrawingBriefText } from '@/lib/drawing-brief-text';
 
 /**
  * What the student may do with this assignment right now, resolved server-side
@@ -248,6 +249,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const updates: Record<string, unknown> = {};
         if (body.title !== undefined) updates.title = String(body.title).trim();
         if (body.instructions !== undefined) updates.instructions = body.instructions || null;
+        if (body.expected_outcome !== undefined) {
+          updates.expected_outcome = String(body.expected_outcome || '').trim() || null;
+        }
+        if (body.focus_points !== undefined) {
+          updates.focus_points = String(body.focus_points || '').trim() || null;
+        }
         if (body.submission_format !== undefined) {
           const fmt = ['pdf', 'image', 'pdf_or_image'].includes(body.submission_format)
             ? body.submission_format
@@ -347,7 +354,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         // Review screen shows the current brief + reference image.
         if ((assignment as any).assignment_type === 'drawing' && (assignment as any).drawing_question_id) {
           const qUpdate: { question_text?: string; reference_images?: Array<{ url: string }> } = {};
-          if (body.instructions !== undefined) qUpdate.question_text = (body.instructions || updated.title) as string;
+          // Any part of the brief changing rewrites the whole composed text, so
+          // the reviewer never sees a half-updated version of it.
+          if (
+            body.instructions !== undefined ||
+            body.expected_outcome !== undefined ||
+            body.focus_points !== undefined
+          ) {
+            qUpdate.question_text = composeDrawingBriefText(updated, updated.title);
+          }
           if (refUrls !== null) {
             qUpdate.reference_images = refUrls.map((url) => ({ url }));
           } else if (body.content_image_url !== undefined) {

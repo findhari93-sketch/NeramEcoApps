@@ -151,7 +151,12 @@ export async function GET(request: NextRequest) {
       // missed.
       supabase
         .from('nexus_scheduled_classes')
-        .select('id, title, scheduled_date, start_time, recording_url, youtube_url, transcript_url')
+        // teams_meeting_id rides along so the attendance panel this tab opens
+        // knows whether there is anything to sync from, without a second read
+        // per class the moment a teacher taps a row.
+        .select(
+          'id, title, scheduled_date, start_time, recording_url, youtube_url, transcript_url, teams_meeting_id',
+        )
         .eq('classroom_id', classroomId)
         .eq('publish_state', 'published')
         .neq('status', 'cancelled')
@@ -434,6 +439,7 @@ export async function GET(request: NextRequest) {
           recap_state: recapStateFor(c, recap),
           recap_id: recap?.id ?? null,
           has_transcript: !!c.transcript_url,
+          teams_meeting_id: c.teams_meeting_id ?? null,
         };
       })
       .sort(

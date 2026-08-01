@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import { verifyTeacher } from '@/lib/verify-teacher';
 import { errorResponse } from '@/lib/api-errors';
-import { getAppOnlyToken, decodeAppTokenRoles, ATTENDANCE_APP_ROLES } from '@/lib/graph-app-token';
+import {
+  getAppOnlyToken,
+  decodeAppTokenRoles,
+  ATTENDANCE_APP_ROLES,
+  TRANSCRIPT_APP_ROLES,
+} from '@/lib/graph-app-token';
 import { resolveOrganizerOid, isChannelMeeting, escapeIlike } from '@/lib/teams-online-meeting';
 import { buildAccessPolicyRemedy } from '@/lib/teams-access-policy';
 import { CLASS_SYNC_COLUMNS } from '@/lib/attendance-sync';
@@ -45,7 +50,10 @@ export async function GET(request: NextRequest) {
     // usable with no arguments.
     let query = supabase
       .from('nexus_scheduled_classes')
-      .select(`${CLASS_SYNC_COLUMNS}, title, end_time, attendance_sync_status, attendance_sync_detail`)
+      .select(
+        `${CLASS_SYNC_COLUMNS}, title, end_time, attendance_sync_status, attendance_sync_detail, ` +
+          'recording_url, recording_sync_status, recording_sync_attempts, recording_sync_detail',
+      )
       .not('teams_meeting_id', 'is', null);
 
     query = classId
@@ -261,6 +269,53 @@ export async function GET(request: NextRequest) {
           : 'The meeting may not have taken place, or the report is not published yet. Graph also returns at most the 50 most recent reports per meeting, so older occurrences of a recurring meeting are unreachable.',
     });
 
+    // 8. Transcripts, which are a SEPARATE permission from attendance artifacts
+    // and have their own failure. Checked here rather than left to be guessed
+    // at, because the symptom a teacher sees is "Generate from the class does
+    // nothing automatically" and the cause is one missing Azure grant.
+    const hasTranscriptRole = TRANSCRIPT_APP_ROLES.some((r) => roles.includes(r));
+    steps.push({
+      step: 'transcript_role',
+      ok: hasTranscriptRole,
+      detail: hasTranscriptRole
+        ? `Token carries ${TRANSCRIPT_APP_ROLES[0]}`
+        : `Token does NOT carry ${TRANSCRIPT_APP_ROLES[0]}, so the nightly transcript sweep can never read one. Transcripts only appear when a teacher presses Generate, which uses their own sign-in.`,
+      remedy: hasTranscriptRole
+        ? undefined
+        : `Azure portal, App registrations, the Nexus app, API permissions, Add a permission, Microsoft Graph, Application permissions. Add ${TRANSCRIPT_APP_ROLES[0]}, then Grant admin consent. Afterwards reset the stuck rows so the sweep retries: update nexus_class_transcripts set status='pending', attempts=0 where status <> 'ok'.`,
+    });
+
+    // 9. The call itself. Worth making even without the role, because it proves
+    // the diagnosis rather than inferring it, and because a 403 with the role
+    // present means the access policy does not extend to transcripts.
+    const transcriptsRes = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${organizerOid}/onlineMeetings/${meetingId}/transcripts`,
+      { headers: { Authorization: `Bearer ${appToken}` } },
+    );
+    const transcriptBody = transcriptsRes.ok
+      ? ''
+      : (await transcriptsRes.text().catch(() => '')).slice(0, 300);
+    const transcriptCount = transcriptsRes.ok
+      ? ((await transcriptsRes.json().catch(() => null))?.value ?? []).length
+      : 0;
+
+    steps.push({
+      step: 'transcripts',
+      ok: transcriptsRes.ok,
+      detail: transcriptsRes.ok
+        ? transcriptCount > 0
+          ? `Graph listed ${transcriptCount} transcript(s) for this meeting`
+          : 'Graph allowed the read and listed nothing. Teams did not record a transcript for this session.'
+        : `Graph returned ${transcriptsRes.status} ${transcriptBody}`,
+      remedy: transcriptsRes.ok
+        ? undefined
+        : transcriptsRes.status === 403 && hasTranscriptRole
+          ? 'The permission is granted but Teams still refuses. The application access policy covering this organizer may predate the transcript grant; re-run Grant-CsApplicationAccessPolicy for them.'
+          : transcriptsRes.status === 403
+            ? 'Same fix as the step above: the missing application permission.'
+            : 'Unexpected. Check whether the meeting still exists in Teams.',
+    });
+
     return respond(steps, cls);
   } catch (err) {
     return errorResponse(err, 'Diagnostics failed');
@@ -293,6 +348,16 @@ function respond(steps: Step[], cls: any) {
         : 'online_meeting',
       last_sync_status: cls.attendance_sync_status ?? null,
       last_sync_detail: cls.attendance_sync_detail ?? null,
+      // Reported alongside the class rather than as a step in the chain. The
+      // recording hunt is a separate sweep with its own attempt counter and its
+      // own terminal state, so a class with no recording must not read as the
+      // thing blocking attendance.
+      recording: {
+        has_url: !!cls.recording_url,
+        status: cls.recording_sync_status ?? null,
+        attempts: cls.recording_sync_attempts ?? 0,
+        detail: cls.recording_sync_detail ?? null,
+      },
     },
     steps,
   });

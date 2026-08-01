@@ -15,9 +15,10 @@
  * used by the AI import preview). Mobile bottom-sheet, 48px targets.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box, Button, Typography, TextField, Drawer, IconButton, Stack,
-  Chip, LinearProgress, Divider, Switch, FormControlLabel,
+  Chip, LinearProgress, Divider,
   useMediaQuery, useTheme, alpha,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
@@ -33,11 +34,8 @@ import { istTodayStr } from '@/lib/assignment-clock';
 import type { AssignmentFormat } from '@/lib/assignment-format';
 import StudyFilePicker, { type PickedFile } from './StudyFilePicker';
 import AssignmentFormFields, { type AssignmentDraft, type AssignmentType, blankDraft } from './AssignmentFormFields';
-import QuestionComposer, {
-  type ComposerQuestion,
-  fromApiQuestions,
-  toApiQuestions,
-} from './QuestionComposer';
+import QuestionsSummaryCard, { type QuestionsSummary } from './QuestionsSummaryCard';
+import { resolveAssignmentMode } from '@/lib/assignment-mode';
 
 interface AttachmentRow {
   id: string;
@@ -49,6 +47,8 @@ interface AssignmentDetail {
   title: string;
   assignment_type: AssignmentType;
   instructions: string | null;
+  expected_outcome?: string | null;
+  focus_points?: string | null;
   submission_format: AssignmentFormat;
   evaluation_type: 'marks' | 'stars';
   max_marks: number;
@@ -103,6 +103,7 @@ export default function NewAssignmentDialog({
   headerExtra?: React.ReactNode;
 }) {
   const theme = useTheme();
+  const router = useRouter();
   const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
   const fileRef = useRef<HTMLInputElement>(null);
   const isEdit = !!assignmentId;
@@ -120,17 +121,24 @@ export default function NewAssignmentDialog({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
-  // Questions the students answer in the app. Empty means the assignment is
-  // upload-only, which is how every assignment behaved before this existed.
-  const [questions, setQuestions] = useState<ComposerQuestion[]>([]);
-  const [requiresPdf, setRequiresPdf] = useState(true);
+  // What the paper looks like, for the summary card. The paper itself is edited
+  // on its own screen, so this dialog only ever reads it.
+  const [questionSummary, setQuestionSummary] = useState<QuestionsSummary>({
+    count: 0,
+    totalMarks: 0,
+    autoMarks: 0,
+    manualMarks: 0,
+  });
   const [questionsLockedReason, setQuestionsLockedReason] = useState<string | null>(null);
-
-  const hasAutoQuestion = questions.some((q) => q.format !== 'SUBJECTIVE');
 
   const prefill = useCallback((a: AssignmentDetail) => {
     setDraft({
       type: a.assignment_type,
+      // Filled in properly once the paper is known; a document assignment whose
+      // paper is still loading reads as upload-only, which is the safe guess.
+      mode: resolveAssignmentMode(a.assignment_type, 0),
+      expectedOutcome: a.expected_outcome || '',
+      focusPoints: a.focus_points || '',
       timing: (a as any).timing === 'prework' ? 'prework' : 'homework',
       title: a.title,
       instructions: a.instructions || '',
@@ -157,61 +165,78 @@ export default function NewAssignmentDialog({
     setLinkUrl('');
     setError('');
     // Edit mode: load the assignment and prefill.
-    setQuestions([]);
-    setRequiresPdf(true);
+    setQuestionSummary({ count: 0, totalMarks: 0, autoMarks: 0, manualMarks: 0 });
     setQuestionsLockedReason(null);
     if (assignmentId) {
       authFetch(`/api/assignments/${assignmentId}`)
         .then((res) => {
           prefill(res.assignment as AssignmentDetail);
-          setRequiresPdf((res.assignment as any)?.requires_pdf !== false);
-          if (res.paper?.questions?.length) {
-            setQuestions(fromApiQuestions(res.paper.questions));
-            // Re-keying a paper under students who already answered it would
-            // change marks they have already been shown.
-            const answered = (res.roster || []).filter((r: any) => r.answers).length;
-            if (answered > 0) {
-              setQuestionsLockedReason(
-                `${answered} ${answered === 1 ? 'student has' : 'students have'} already answered these questions, so the paper can no longer be changed.`,
-              );
-            }
-          }
+          applyPaper(res, res.assignment?.assignment_type ?? 'document');
         })
         .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the assignment.'));
     }
+    // applyPaper is stable enough for this effect: it only ever calls setState.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, assignmentId, authFetch, prefill, defaultTiming]);
+
+  /**
+   * Read the paper off an assignment response into the summary card, and settle
+   * the mode from it.
+   *
+   * The mode is derived rather than stored, so this is the only place that can
+   * decide whether an existing document assignment is "Answer questions" or
+   * "Solve and upload": it is whichever the paper says.
+   */
+  const applyPaper = useCallback((res: any, assignmentType: AssignmentType) => {
+    const qs = (res?.paper?.questions ?? []) as { format?: string; marks?: number }[];
+    const totalMarks = qs.reduce((sum, q) => sum + (Number(q.marks) || 0), 0);
+    const autoMarks = qs
+      .filter((q) => String(q.format || '').toUpperCase() !== 'SUBJECTIVE')
+      .reduce((sum, q) => sum + (Number(q.marks) || 0), 0);
+    setQuestionSummary({
+      count: qs.length,
+      totalMarks,
+      autoMarks,
+      manualMarks: totalMarks - autoMarks,
+    });
+    setDraft((d) => ({ ...d, mode: resolveAssignmentMode(assignmentType, qs.length) }));
+
+    // Re-keying a paper under students who already answered it would change
+    // marks they have already been shown.
+    const answered = (res?.roster || []).filter((r: any) => r.answers).length;
+    setQuestionsLockedReason(
+      answered > 0
+        ? `${answered} ${answered === 1 ? 'student has' : 'students have'} already answered these questions, so the paper can no longer be changed.`
+        : null,
+    );
+  }, []);
 
   const reloadDetail = async (id: string) => {
     const res = await authFetch(`/api/assignments/${id}`);
     setCreated(res.assignment as AssignmentDetail);
+    applyPaper(res, (res.assignment as AssignmentDetail).assignment_type);
   };
 
   /**
-   * Persist the question paper for an assignment that already exists.
+   * Hand off to the full-screen question editor.
    *
-   * Kept out of the main update call because the two fail differently: a bad
-   * question should not silently roll back a title change, and a paper the
-   * students have already answered is refused outright. The PDF toggle goes
-   * after the questions, since the server only lets it be turned off once there
-   * is an auto-marked question to hand in instead.
+   * The paper is NOT edited in here any more. Four questions with their options
+   * and explanations never fit in a bottom sheet, and hiding them at the bottom
+   * of one is what made the whole feature undiscoverable. Anything typed into
+   * this dialog is saved on the way out, so nothing is lost by leaving.
    */
-  const saveQuestions = async (id: string) => {
-    if (questionsLockedReason) return;
-    if (questions.length === 0) {
-      await authFetch(`/api/assignments/${id}`, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'clear_questions' }),
-      });
-      return;
+  const openQuestionEditor = async (id: string, isNewDraft: boolean) => {
+    setBusy(true);
+    try {
+      if (isEdit) await persistFields(id);
+      onCreated(id);
+      onClose();
+      router.push(`/teacher/assignments/${id}/questions${isNewDraft ? '?new=1' : ''}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save before opening the questions.');
+    } finally {
+      setBusy(false);
     }
-    await authFetch(`/api/assignments/${id}`, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'save_questions', questions: toApiQuestions(questions) }),
-    });
-    await authFetch(`/api/assignments/${id}`, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'update', requires_pdf: requiresPdf }),
-    });
   };
 
   // Injected uploader for the shared ImageUploadField (drawing reference image).
@@ -282,6 +307,8 @@ export default function NewAssignmentDialog({
           ...(scheduledClassId ? { timing: draft.timing } : {}),
           title: draft.title.trim(),
           instructions: draft.instructions.trim() || null,
+          expected_outcome: draft.expectedOutcome.trim() || null,
+          focus_points: draft.focusPoints.trim() || null,
           class_date: draft.classDate || undefined,
           due_date: draft.dueDate || undefined,
           catchup_window_days: Number(draft.catchupDays) || 7,
@@ -302,6 +329,29 @@ export default function NewAssignmentDialog({
     }
   };
 
+  /** The one update call, shared by Save changes and by leaving for the editor. */
+  const persistFields = async (id: string) => {
+    await authFetch(`/api/assignments/${id}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update',
+        title: draft.title.trim(),
+        instructions: draft.instructions.trim() || null,
+        expected_outcome: draft.expectedOutcome.trim() || null,
+        focus_points: draft.focusPoints.trim() || null,
+        class_date: draft.classDate || undefined,
+        due_at: draft.dueDate ? `${draft.dueDate}T23:59:59+05:30` : null,
+        catchup_window_days: Number(draft.catchupDays) || 7,
+        recording_url: draft.recordingUrl.trim() || null,
+        evaluation_type: draft.evaluationType,
+        max_marks: draft.evaluationType === 'stars' ? 5 : Number(draft.maxMarks) || 10,
+        ...(draft.type === 'drawing'
+          ? { reference_image_urls: draft.refImageUrls }
+          : { submission_format: draft.format }),
+      }),
+    });
+  };
+
   const saveEdit = async () => {
     if (!assignmentId) return;
     if (!draft.title.trim()) {
@@ -311,24 +361,7 @@ export default function NewAssignmentDialog({
     setBusy(true);
     setError('');
     try {
-      await authFetch(`/api/assignments/${assignmentId}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'update',
-          title: draft.title.trim(),
-          instructions: draft.instructions.trim() || null,
-          class_date: draft.classDate || undefined,
-          due_at: draft.dueDate ? `${draft.dueDate}T23:59:59+05:30` : null,
-          catchup_window_days: Number(draft.catchupDays) || 7,
-          recording_url: draft.recordingUrl.trim() || null,
-          evaluation_type: draft.evaluationType,
-          max_marks: draft.evaluationType === 'stars' ? 5 : Number(draft.maxMarks) || 10,
-          ...(draft.type === 'drawing'
-            ? { reference_image_urls: draft.refImageUrls }
-            : { submission_format: draft.format }),
-        }),
-      });
-      if (draft.type === 'document') await saveQuestions(assignmentId);
+      await persistFields(assignmentId);
       onCreated();
       onClose();
     } catch (err) {
@@ -415,9 +448,6 @@ export default function NewAssignmentDialog({
     if (!created) return;
     setBusy(true);
     try {
-      // Questions first: publishing an assignment whose paper failed to save
-      // would show students an empty question list they cannot answer.
-      if (type === 'document') await saveQuestions(created.id);
       await authFetch(`/api/assignments/${created.id}`, {
         method: 'POST',
         body: JSON.stringify({ action: 'publish' }),
@@ -488,60 +518,25 @@ export default function NewAssignmentDialog({
   );
 
   /**
-   * Questions students answer in the app, plus the decision about whether they
-   * still hand in working. Document assignments only: a drawing is judged from
-   * the drawing itself, so a multiple-choice question has nothing to attach to.
+   * The paper's state and the way in to editing it. Document assignments only:
+   * a drawing is judged from the drawing itself, so a multiple-choice question
+   * has nothing to attach to.
+   *
+   * This is a SUMMARY, not the editor. The composer moved to its own screen
+   * because a paper never fitted in a bottom sheet, and because burying it here
+   * is what stopped anyone finding it.
    */
   const questionsSection = type === 'document' && (
-    <Box>
-      <QuestionComposer
-        value={questions}
-        onChange={setQuestions}
-        disabled={!!questionsLockedReason}
-        disabledReason={questionsLockedReason}
-      />
-
-      {questions.length > 0 && (
-        <Box
-          sx={{
-            mt: 1.5,
-            p: 1.5,
-            borderRadius: 2,
-            border: '1px solid',
-            borderColor: 'divider',
-          }}
-        >
-          <FormControlLabel
-            control={
-              <Switch
-                checked={requiresPdf}
-                onChange={(e) => setRequiresPdf(e.target.checked)}
-                disabled={!!questionsLockedReason || !hasAutoQuestion}
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  Students must upload their working
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {requiresPdf
-                    ? 'They upload the PDF first, then the questions open and they see their result.'
-                    : 'They answer and submit straight away, with nothing to upload.'}
-                </Typography>
-              </Box>
-            }
-            sx={{ alignItems: 'flex-start', m: 0, '& .MuiSwitch-root': { mt: 0.25 } }}
-          />
-          {!hasAutoQuestion && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-              Every question here is marked by you, so the upload stays required. Add a multiple
-              choice or numerical question to make it optional.
-            </Typography>
-          )}
-        </Box>
-      )}
-    </Box>
+    <QuestionsSummaryCard
+      summary={questionSummary}
+      lockedReason={questionsLockedReason}
+      disabled={busy || (!isEdit && !created)}
+      uploadOnlyHint={draft.mode === 'upload'}
+      onEdit={() => {
+        const id = assignmentId || created?.id;
+        if (id) openQuestionEditor(id, !isEdit);
+      }}
+    />
   );
 
   const fieldsBlock = (
@@ -552,6 +547,7 @@ export default function NewAssignmentDialog({
       linkReference={linkReference}
       onReferenceChange={onReferenceChange}
       lockType={isEdit}
+      classContextLabel={scheduledClassId ? classContextLabel : undefined}
       showTiming={!!scheduledClassId}
       classStartLabel={classStartLabel}
       showCategory={!isEdit}
@@ -584,7 +580,9 @@ export default function NewAssignmentDialog({
               : created
                 ? type === 'drawing'
                   ? 'Publish drawing task'
-                  : 'Add the paper and publish'
+                  : draft.mode === 'questions'
+                    ? 'Add the questions and publish'
+                    : 'Attach the paper and publish'
                 : 'New assignment'}
           </Typography>
           <IconButton onClick={onClose} sx={{ minWidth: 44, minHeight: 44 }}>
@@ -641,7 +639,13 @@ export default function NewAssignmentDialog({
             {fieldsBlock}
             {error && <Typography color="error" variant="body2">{error}</Typography>}
             <Button variant="contained" disabled={busy} onClick={createDraft} sx={{ minHeight: 48 }}>
-              {busy ? 'Creating...' : type === 'drawing' ? 'Create drawing task' : 'Create and add the paper'}
+              {busy
+                ? 'Creating...'
+                : draft.mode === 'drawing'
+                  ? 'Create drawing task'
+                  : draft.mode === 'questions'
+                    ? 'Next: write the questions'
+                    : 'Next: attach the paper'}
             </Button>
           </Stack>
         ) : (
@@ -657,12 +661,24 @@ export default function NewAssignmentDialog({
               />
             </Box>
 
+            {/* Questions first when that is the mode chosen, so the very next
+                thing on screen is the thing the teacher said they wanted. */}
             {type === 'document' && (
               <>
                 <Divider />
-                {materialsSection}
-                <Divider />
-                {questionsSection}
+                {draft.mode === 'questions' ? (
+                  <>
+                    {questionsSection}
+                    <Divider />
+                    {materialsSection}
+                  </>
+                ) : (
+                  <>
+                    {materialsSection}
+                    <Divider />
+                    {questionsSection}
+                  </>
+                )}
               </>
             )}
 

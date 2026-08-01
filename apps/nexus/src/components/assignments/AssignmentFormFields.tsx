@@ -15,21 +15,47 @@
 import { useState } from 'react';
 import {
   Box, Typography, TextField, Stack, ToggleButtonGroup, ToggleButton, Collapse,
-  MenuItem, Button, Chip, ImageUploadList,
+  MenuItem, Button, Chip, ImageUploadList, alpha, useTheme,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LinkIcon from '@mui/icons-material/Link';
+import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import type { AssignmentFormat } from '@/lib/assignment-format';
+import {
+  ASSIGNMENT_MODES,
+  assignmentTypeForMode,
+  defaultEvaluationForMode,
+  modeSwitchBlockedReason,
+  type AssignmentMode,
+} from '@/lib/assignment-mode';
 
 export type AssignmentType = 'drawing' | 'document';
 export type AssignmentEvaluation = 'marks' | 'stars';
 
 export type AssignmentTiming = 'prework' | 'homework';
 
+const MODE_ICON: Record<AssignmentMode, typeof QuizOutlinedIcon> = {
+  questions: QuizOutlinedIcon,
+  upload: UploadFileOutlinedIcon,
+  drawing: BrushOutlinedIcon,
+};
+
 export interface AssignmentDraft {
   type: AssignmentType;
+  /**
+   * What students will do. Derived from `type` plus whether a paper is attached,
+   * but held on the draft too because the picker needs to distinguish the two
+   * document modes BEFORE any question exists.
+   */
+  mode: AssignmentMode;
+  /** What a finished piece of work looks like (optional, its own block). */
+  expectedOutcome: string;
+  /** What to concentrate on, one point per line (optional, rendered as bullets). */
+  focusPoints: string;
   /**
    * Whether the work is due BEFORE the class it is attached to, or set in it.
    * Only meaningful with a class context, so the control is hidden without one.
@@ -55,17 +81,26 @@ export const DRAWING_CATEGORIES: { value: string; label: string }[] = [
   { value: 'kit_sculpture', label: 'Kit / sculpture' },
 ];
 
-/** A fresh draft with the same defaults the manual create form starts from. */
+/**
+ * A fresh draft with the same defaults the manual create form starts from.
+ *
+ * It opens on "Answer questions" because that is the mode teachers could not
+ * find. The old default was Drawing, which meant the question path was two
+ * decisions away from where the form started.
+ */
 export function blankDraft(classDate: string): AssignmentDraft {
   return {
-    type: 'drawing',
+    type: 'document',
+    mode: 'questions',
+    expectedOutcome: '',
+    focusPoints: '',
     timing: 'homework',
     title: '',
     instructions: '',
     classDate,
     dueDate: '',
     format: 'pdf_or_image',
-    evaluationType: 'stars', // drawings default to a 1-5 star rating
+    evaluationType: 'marks', // written work is marked; drawings switch to stars
     maxMarks: '10',
     category: '3d_composition',
     refImageUrls: [],
@@ -81,8 +116,17 @@ interface AssignmentFormFieldsProps {
   uploadReference: (file: File) => Promise<{ url: string }>;
   /** Injected resolver for a pasted OneDrive/SharePoint image link -> a public url. */
   linkReference: (url: string) => Promise<{ url: string }>;
-  /** Lock the type toggle (true only when editing an existing assignment). */
+  /**
+   * Lock the mode picker (true only when editing an existing assignment).
+   * A locked picker still SHOWS every mode, greyed, with the reason. Hiding the
+   * others is what made the question path invisible in the first place.
+   */
   lockType?: boolean;
+  /**
+   * The class this work is attached to, when there is one. Used to say where the
+   * recording comes from, so a teacher does not paste a link that already exists.
+   */
+  classContextLabel?: string;
   /**
    * Show the Before class / After class control. Only pass this with a class
    * context: outside one, "before the class" has no referent.
@@ -116,6 +160,7 @@ export default function AssignmentFormFields({
   uploadReference,
   linkReference,
   lockType = false,
+  classContextLabel,
   showTiming = false,
   classStartLabel,
   showCategory = true,
@@ -125,7 +170,8 @@ export default function AssignmentFormFields({
   autoFocusTitle = false,
   enableReferencePaste = false,
 }: AssignmentFormFieldsProps) {
-  const { type } = value;
+  const theme = useTheme();
+  const { type, mode } = value;
   const MAX_REFS = 6;
   const handleReference = (urls: string[]) =>
     onReferenceChange ? onReferenceChange(urls) : onChange({ refImageUrls: urls });
@@ -153,32 +199,127 @@ export default function AssignmentFormFields({
 
   return (
     <Stack spacing={2}>
-      {/* Type selector (locked in edit) */}
-      <ToggleButtonGroup
-        value={type}
-        exclusive
-        onChange={(_, v) =>
-          v && !lockType && onChange({ type: v, evaluationType: v === 'drawing' ? 'stars' : 'marks' })
-        }
-        fullWidth
-        size="small"
-        disabled={lockType}
-      >
-        <ToggleButton value="drawing" sx={{ minHeight: 52, textTransform: 'none', gap: 0.75, flexDirection: 'column', py: 1 }}>
-          <BrushOutlinedIcon sx={{ fontSize: 20 }} />
-          <Box>
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>Drawing</Typography>
-            <Typography variant="caption" color="text.secondary">Sketch, smart review</Typography>
-          </Box>
-        </ToggleButton>
-        <ToggleButton value="document" sx={{ minHeight: 52, textTransform: 'none', gap: 0.75, flexDirection: 'column', py: 1 }}>
-          <DescriptionOutlinedIcon sx={{ fontSize: 20 }} />
-          <Box>
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>Document</Typography>
-            <Typography variant="caption" color="text.secondary">Solve a paper</Typography>
-          </Box>
-        </ToggleButton>
-      </ToggleButtonGroup>
+      {/*
+        The first decision, and the one that used to be asked wrongly.
+        "Drawing or Document" is a question about storage; this asks what the
+        student actually does, which is the only framing that puts multiple
+        choice and numerical on the opening screen where they can be found.
+        Stacked at 375px so each card keeps its blurb; a row from `sm`.
+      */}
+      <Box>
+        <Typography component="h3" variant="body2" sx={{ fontWeight: 700, mb: 1 }} id="assignment-mode-label">
+          What will students do?
+        </Typography>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1}
+          role="radiogroup"
+          aria-labelledby="assignment-mode-label"
+        >
+          {ASSIGNMENT_MODES.map((m) => {
+            const Icon = MODE_ICON[m.mode];
+            const selected = mode === m.mode;
+            // Read-only once the assignment exists. Crossing the drawing
+            // boundary is genuinely impossible, and the two written modes are
+            // not a switch at all: the mode is derived from whether a paper is
+            // attached, so it changes by adding or removing questions. A pill
+            // that looked tappable and then snapped back on reload would be a
+            // lie about how this works.
+            const blocked = lockType ? modeSwitchBlockedReason(mode, m.mode) : null;
+            const disabled = lockType && !selected;
+            return (
+              <Box
+                key={m.mode}
+                component="button"
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={`${m.title}. ${m.blurb}`}
+                disabled={disabled}
+                title={blocked ?? undefined}
+                onClick={() =>
+                  !disabled &&
+                  onChange({
+                    mode: m.mode,
+                    type: assignmentTypeForMode(m.mode),
+                    evaluationType: defaultEvaluationForMode(m.mode),
+                  })
+                }
+                sx={{
+                  flex: 1,
+                  minWidth: 0,
+                  minHeight: 72,
+                  display: 'flex',
+                  alignItems: { xs: 'center', sm: 'flex-start' },
+                  flexDirection: { xs: 'row', sm: 'column' },
+                  gap: { xs: 1.25, sm: 0.5 },
+                  textAlign: 'left',
+                  p: 1.5,
+                  borderRadius: 2,
+                  border: '2px solid',
+                  borderColor: selected ? 'primary.main' : 'divider',
+                  bgcolor: selected ? alpha(theme.palette.primary.main, 0.06) : 'background.paper',
+                  color: 'text.primary',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  opacity: disabled ? 0.45 : 1,
+                  position: 'relative',
+                  font: 'inherit',
+                  transition: 'border-color 0.2s, background-color 0.2s',
+                  '&:hover:not(:disabled)': {
+                    borderColor: selected ? 'primary.main' : 'text.disabled',
+                  },
+                  '&:focus-visible': {
+                    outline: `2px solid ${theme.palette.primary.main}`,
+                    outlineOffset: 2,
+                  },
+                }}
+              >
+                <Icon
+                  sx={{ fontSize: 22, flexShrink: 0, color: selected ? 'primary.main' : 'text.secondary' }}
+                />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+                    {m.title}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', lineHeight: 1.35 }}
+                  >
+                    {m.blurb}
+                  </Typography>
+                </Box>
+                {selected && (
+                  <CheckCircleIcon
+                    aria-hidden
+                    sx={{
+                      position: 'absolute',
+                      top: 6,
+                      right: 6,
+                      fontSize: 16,
+                      color: 'primary.main',
+                      display: { xs: 'none', sm: 'block' },
+                    }}
+                  />
+                )}
+              </Box>
+            );
+          })}
+        </Stack>
+        {lockType && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+            {mode === 'drawing'
+              ? 'A drawing task stays a drawing task. Create a new assignment to set written work.'
+              : 'Adding or removing questions below is what moves this between answering and uploading.'}
+          </Typography>
+        )}
+        {!lockType && mode === 'questions' && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+            You write the questions in the next step. You can decide there whether students also
+            upload their working.
+          </Typography>
+        )}
+      </Box>
 
       {/* When the work is due, relative to its class. Hidden without a class
           context, where "before the class" would mean nothing. */}
@@ -210,14 +351,53 @@ export default function AssignmentFormFields({
         error={!value.title.trim()}
         placeholder={type === 'drawing' ? 'e.g. Recreate the India Gate in pencil' : 'e.g. JEE 2024 Maths paper'}
       />
+
+      {/*
+        The brief, in parts.
+
+        One box used to carry the task, what a good result looks like, and what
+        to concentrate on, all at once. Three fields is not more typing: it is
+        the same words with somewhere to put them, and the student gets three
+        labelled blocks instead of a paragraph. Both extra fields are optional
+        and both stay available to a written assignment, because "what does good
+        look like" is a fair thing to say about a maths paper too.
+      */}
       <TextField
-        label={type === 'drawing' ? 'Brief (what to draw)' : 'Instructions (optional)'}
+        label={type === 'drawing' ? 'The task' : 'Instructions (optional)'}
         value={value.instructions}
         onChange={(e) => onChange({ instructions: e.target.value })}
         fullWidth
         multiline
         rows={3}
-        placeholder={type === 'drawing' ? 'Recreate the basic 3D form, focus on proportion and clean lines.' : 'Solve every question and upload your solved paper.'}
+        placeholder={
+          type === 'drawing'
+            ? 'Recreate the India Gate in one-point perspective, on A3.'
+            : 'Solve every question and upload your solved paper.'
+        }
+      />
+      <TextField
+        label="Expected outcome (optional)"
+        value={value.expectedOutcome}
+        onChange={(e) => onChange({ expectedOutcome: e.target.value })}
+        fullWidth
+        multiline
+        rows={2}
+        placeholder={
+          type === 'drawing'
+            ? 'A clean sheet with the arch centred and a single, correct vanishing point.'
+            : 'Every step shown, with the final answer boxed.'
+        }
+        helperText="What a finished, successful piece of work looks like."
+      />
+      <TextField
+        label="What to focus on (optional)"
+        value={value.focusPoints}
+        onChange={(e) => onChange({ focusPoints: e.target.value })}
+        fullWidth
+        multiline
+        rows={3}
+        placeholder={'Proportion of the arch\nOne vanishing point\nLine weight on the near edges'}
+        helperText="One point per line. Students see these as a checklist."
       />
 
       {type === 'drawing' ? (
@@ -368,6 +548,29 @@ export default function AssignmentFormFields({
             inputProps={{ inputMode: 'numeric' }}
             fullWidth
           />
+          {/* Where the recording comes from, so nobody pastes one that already
+              exists. This used to be the ONLY way a student ever saw a
+              recording, because the automatic lookup searched a column that is
+              never written. Now the class link resolves on its own and this
+              field is a genuine override. */}
+          {classContextLabel && (
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="flex-start"
+              sx={{
+                p: 1.25,
+                borderRadius: 2,
+                bgcolor: (t) => alpha(t.palette.primary.main, 0.06),
+              }}
+            >
+              <EventAvailableOutlinedIcon sx={{ fontSize: 18, color: 'primary.dark', mt: '2px' }} />
+              <Typography variant="caption" sx={{ color: 'primary.dark' }}>
+                Students already get the recording from <strong>{classContextLabel}</strong> once it
+                is available. Paste a link below only to point them somewhere else.
+              </Typography>
+            </Stack>
+          )}
           <TextField
             label="Class recording link (optional)"
             value={value.recordingUrl}

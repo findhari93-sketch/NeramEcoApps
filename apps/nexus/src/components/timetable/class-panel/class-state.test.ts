@@ -185,6 +185,26 @@ describe('getTimeIndicator', () => {
   it('says nothing for a class that is not scheduled', () => {
     expect(indicatorFor(makeClass({ status: 'cancelled' }), BEFORE_20MIN)).toBeNull();
   });
+
+  it('says nothing once the class is over, even though its status is still scheduled', () => {
+    // The exact production row behind the bug: nothing ever flips a finished
+    // class to completed, so the start time is in the past and the countdown
+    // used to fall through to "Starting soon" next to the "Done" chip.
+    expect(indicatorFor(makeClass({ status: 'scheduled' }), AFTER)).toBeNull();
+  });
+
+  it('still says Starting soon between the start and the end', () => {
+    // The one case the guard must not swallow: the class has begun, the status
+    // has not caught up, and it genuinely is about to start for anyone late.
+    expect(indicatorFor(makeClass({ status: 'scheduled' }), DURING)).toEqual({
+      label: 'Starting soon',
+      color: 'warning',
+    });
+  });
+
+  it('says nothing for a cancelled class that has already passed', () => {
+    expect(indicatorFor(makeClass({ status: 'cancelled' }), AFTER)).toBeNull();
+  });
 });
 
 describe('visibleTabs', () => {

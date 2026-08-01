@@ -24,6 +24,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -50,6 +51,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import TroubleshootIcon from '@mui/icons-material/Troubleshoot';
 import type { ClassCardData } from './ClassCard';
 import { RADIUS } from './timetable-theme';
 import ClassVideoMetaPanel from './ClassVideoMetaPanel';
@@ -155,6 +157,10 @@ export default function WrapUpSection({
 
   const [needsManual, setNeedsManual] = useState(false);
   const [showManual, setShowManual] = useState(false);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosis, setDiagnosis] = useState<{ ok: boolean; detail: string; remedy?: string } | null>(
+    null,
+  );
 
   const [newTagLabel, setNewTagLabel] = useState('');
   const [newTagGroup, setNewTagGroup] = useState<'subject' | 'theme'>('subject');
@@ -319,6 +325,54 @@ export default function WrapUpSection({
     }
     const isVtt = /\.vtt$/i.test(file.name) || text.trimStart().toUpperCase().startsWith('WEBVTT');
     await runGenerate(isVtt ? { vtt_content: text } : { transcript_text: text });
+  };
+
+  /**
+   * Ask the server why there is no transcript.
+   *
+   * "Teams has not published one yet" is what this panel said in every case,
+   * including the one that was actually happening in production: Teams HAD
+   * published it and Graph was refusing to hand it over, because the app
+   * registration was never granted OnlineMeetingTranscript.Read.All. Those two
+   * situations need completely different actions (wait, versus one Azure grant)
+   * and only the server can tell them apart.
+   *
+   * Reads the transcript steps out of the attendance diagnostics, which already
+   * holds the token, the organizer resolution and the meeting lookup this would
+   * otherwise have to repeat.
+   */
+  const runTranscriptDiagnostics = async () => {
+    setDiagnosing(true);
+    setDiagnosis(null);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/timetable/attendance-diagnostics?class_id=${classId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      const steps: Array<{ step: string; ok: boolean; detail: string; remedy?: string }> =
+        data?.steps ?? [];
+      // The transcript steps if the chain reached them, otherwise whatever
+      // stopped it: a broken app token is the answer to "why is this empty" just
+      // as much as a missing permission is.
+      const relevant =
+        steps.find((s) => s.step.startsWith('transcript') && !s.ok) ||
+        steps.find((s) => !s.ok) ||
+        steps.find((s) => s.step === 'transcripts');
+      setDiagnosis(
+        relevant
+          ? { ok: relevant.ok, detail: relevant.detail, remedy: relevant.remedy }
+          : {
+              ok: true,
+              detail: 'Everything Teams needs is in place, so Teams simply has no transcript for this session.',
+            },
+      );
+    } catch {
+      onNotify('Could not run the check', 'error');
+    } finally {
+      setDiagnosing(false);
+    }
   };
 
   // Explicit, discoverable paste for a class image: read the clipboard image and
@@ -605,6 +659,41 @@ export default function WrapUpSection({
               ? 'Could not fetch the transcript from Teams. Download the .vtt from the meeting and upload it, or attach a class image, then Generate.'
               : 'Only needed when Teams has not published the transcript yet.'}
           </Typography>
+
+          {/* "Teams has not published one yet" is what this used to say in every
+              case, including the one where Teams had published it and refused to
+              hand it over. Those need completely different actions, and only the
+              server can tell them apart, so ask it rather than guessing. */}
+          {needsManual && (
+            <>
+              <Button
+                variant="text"
+                size="small"
+                startIcon={<TroubleshootIcon sx={{ fontSize: 16 }} />}
+                onClick={runTranscriptDiagnostics}
+                disabled={diagnosing}
+                sx={{ textTransform: 'none', minHeight: 44, mt: 0.5 }}
+              >
+                {diagnosing ? 'Checking...' : 'Why is this empty?'}
+              </Button>
+              {diagnosis && (
+                <Alert
+                  severity={diagnosis.ok ? 'info' : 'warning'}
+                  sx={{ mt: 1, borderRadius: 2 }}
+                  onClose={() => setDiagnosis(null)}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {diagnosis.detail}
+                  </Typography>
+                  {diagnosis.remedy && (
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                      {diagnosis.remedy}
+                    </Typography>
+                  )}
+                </Alert>
+              )}
+            </>
+          )}
         </Box>
       )}
 

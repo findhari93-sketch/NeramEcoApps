@@ -391,6 +391,11 @@ test.describe('Teams attendance', () => {
     );
     expect(overflow, 'page must not scroll horizontally at 375px').toBe(true);
 
+    // The switches live on Register now: Missed and Attended are reading
+    // surfaces, and every write moved to the one tab that repairs the record.
+    await page.getByRole('tab', { name: 'Register' }).click();
+    await page.waitForTimeout(900);
+
     // Full-size Switch, not size="small": this is the main repeated tap on mobile.
     const toggles = page.locator('.MuiSwitch-root');
     const count = await toggles.count();

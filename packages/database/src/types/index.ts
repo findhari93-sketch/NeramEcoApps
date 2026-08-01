@@ -5231,6 +5231,19 @@ export interface NexusClassAssignment {
   class_date: string;
   title: string;
   instructions: string | null;
+  /**
+   * What a finished, successful piece of work looks like. Its own field rather
+   * than another paragraph inside `instructions`, so editing round-trips
+   * losslessly and the student sees it as a labelled block.
+   */
+  expected_outcome: string | null;
+  /** What to concentrate on, one point per line. Rendered as a bulleted list. */
+  focus_points: string | null;
+  /**
+   * Whether students must upload their working before the questions open.
+   * Defaults true, so an assignment with no paper behaves as it always has.
+   */
+  requires_pdf: boolean;
   /** Drawing (smart eval) vs document (attach a paper, marks review). */
   assignment_type: NexusAssignmentType;
   /** Backing drawing_questions row for a drawing-type assignment (else null). */

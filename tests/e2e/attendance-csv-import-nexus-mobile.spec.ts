@@ -50,11 +50,14 @@ test.describe('Teams attendance CSV import (mobile)', () => {
     await page.goto(`${NEXUS}/teacher/timetable`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
 
-    // Selects a past class and opens the merged dialog on "Who came", where the
-    // recovery row lives. This used to reach for a button on whatever view the
-    // timetable opened in, so it never ran at all.
+    // Selects a past class and opens the merged panel. This used to reach for a
+    // button on whatever view the timetable opened in, so it never ran at all.
     const opened = await openAttendanceDialog(page);
     test.skip(!opened, 'No past class with an attendance register in this environment');
+
+    // The recovery row moved to Register, which is where every repair now lives.
+    await page.getByRole('tab', { name: 'Register' }).click();
+    await page.waitForTimeout(900);
 
     // The upload entry point only appears once a Teams sync has actually failed,
     // which is the state this environment is in. If Teams is working, there is

@@ -20,8 +20,57 @@ import { Box, Stack, Typography, Chip, alpha, useTheme } from '@neram/ui';
 import MathText from '@/components/common/MathText';
 import { parseAssignmentBrief } from '@/lib/assignment-brief';
 
+/**
+ * A tinted, titled block. The brief has several of these now (expected outcome,
+ * what to focus on, how to submit) and they only read as one family if they are
+ * literally the same component.
+ */
+function LabelledBlock({
+  title,
+  accent,
+  children,
+}: {
+  title: string;
+  accent: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Box
+      sx={{
+        p: { xs: 1.75, sm: 2 },
+        borderRadius: 2,
+        bgcolor: alpha(accent, 0.06),
+        border: `1px solid ${alpha(accent, 0.22)}`,
+      }}
+    >
+      <Typography
+        variant="caption"
+        component="h3"
+        sx={{
+          display: 'block',
+          fontWeight: 800,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: accent,
+          // The tinted backgrounds are light, so the label needs a darker ink
+          // than the accent itself to clear 4.5:1.
+          filter: 'brightness(0.75)',
+          mb: 1,
+        }}
+      >
+        {title}
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
 interface AssignmentBriefProps {
   instructions: string | null | undefined;
+  /** What a finished, successful piece of work looks like. Its own block. */
+  expectedOutcome?: string | null;
+  /** What to concentrate on, one point per line. Rendered as a checklist. */
+  focusPoints?: string | null;
   /**
    * Shown beside the total when the parsed marks disagree with the assignment's
    * configured max. Teacher-facing only: students should never be handed a
@@ -33,17 +82,72 @@ interface AssignmentBriefProps {
 
 export default function AssignmentBrief({
   instructions,
+  expectedOutcome,
+  focusPoints,
   maxMarks,
   showMarksWarning = false,
 }: AssignmentBriefProps) {
   const theme = useTheme();
   const brief = parseAssignmentBrief(instructions);
 
-  if (!instructions || !instructions.trim()) return null;
+  const outcome = (expectedOutcome ?? '').trim();
+  const focusList = (focusPoints ?? '')
+    .split('\n')
+    .map((line) => line.trim().replace(/^[-*•]\s*/, ''))
+    .filter(Boolean);
+  const hasTask = !!instructions && !!instructions.trim();
 
-  // Nothing recognised: render what the teacher wrote, with maths.
+  if (!hasTask && !outcome && !focusList.length) return null;
+
+  /**
+   * The two extra parts of the brief, in the same visual language as the
+   * "How to submit" block below. They render for any assignment that has them,
+   * not just drawings: "what does good look like" is a fair thing to say about
+   * a maths paper too.
+   */
+  const extras = (
+    <>
+      {outcome && (
+        <LabelledBlock title="Expected outcome" accent={theme.palette.success.main}>
+          <MathText text={outcome} variant="body2" sx={{ lineHeight: 1.6 }} />
+        </LabelledBlock>
+      )}
+      {focusList.length > 0 && (
+        <LabelledBlock title="What to focus on" accent={theme.palette.warning.main}>
+          <Stack component="ul" spacing={0.75} sx={{ listStyle: 'none', p: 0, m: 0 }}>
+            {focusList.map((point, i) => (
+              <Stack key={i} component="li" direction="row" spacing={1} alignItems="flex-start">
+                <Box
+                  aria-hidden
+                  sx={{
+                    mt: '7px',
+                    width: 5,
+                    height: 5,
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    bgcolor: theme.palette.warning.dark,
+                  }}
+                />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <MathText text={point} variant="body2" sx={{ lineHeight: 1.55 }} />
+                </Box>
+              </Stack>
+            ))}
+          </Stack>
+        </LabelledBlock>
+      )}
+    </>
+  );
+
+  // Nothing recognised in the task text: render what the teacher wrote, with
+  // maths, and the labelled parts after it.
   if (!brief.structured) {
-    return <MathText text={instructions} variant="body2" sx={{ lineHeight: 1.65 }} />;
+    return (
+      <Stack spacing={2}>
+        {hasTask && <MathText text={instructions!} variant="body2" sx={{ lineHeight: 1.65 }} />}
+        {extras}
+      </Stack>
+    );
   }
 
   const marksMismatch =
@@ -163,29 +267,10 @@ export default function AssignmentBrief({
         </Stack>
       )}
 
+      {extras}
+
       {brief.guidelines.length > 0 && (
-        <Box
-          sx={{
-            p: { xs: 1.75, sm: 2 },
-            borderRadius: 2,
-            bgcolor: alpha(theme.palette.primary.main, 0.05),
-            border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
-          }}
-        >
-          <Typography
-            variant="caption"
-            component="h3"
-            sx={{
-              display: 'block',
-              fontWeight: 800,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              color: 'primary.main',
-              mb: 1,
-            }}
-          >
-            How to submit
-          </Typography>
+        <LabelledBlock title="How to submit" accent={theme.palette.primary.main}>
           <Stack component="ul" spacing={0.75} sx={{ listStyle: 'none', p: 0, m: 0 }}>
             {brief.guidelines.map((g, i) => (
               <Stack key={i} component="li" direction="row" spacing={1} alignItems="flex-start">
@@ -206,7 +291,7 @@ export default function AssignmentBrief({
               </Stack>
             ))}
           </Stack>
-        </Box>
+        </LabelledBlock>
       )}
     </Stack>
   );

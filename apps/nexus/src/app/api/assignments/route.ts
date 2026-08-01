@@ -9,6 +9,7 @@ import { getRequestUser, assertStaff, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { istTodayStr } from '@/lib/assignment-clock';
 import { classStartIso } from '@/lib/prework';
+import { composeDrawingBriefText } from '@/lib/drawing-brief-text';
 
 const FORMATS = ['pdf', 'image', 'pdf_or_image'] as const;
 const DRAWING_CATEGORIES = ['2d_composition', '3d_composition', 'kit_sculpture'] as const;
@@ -117,6 +118,10 @@ export async function POST(request: NextRequest) {
 
     const type = body?.assignment_type === 'drawing' ? 'drawing' : 'document';
     const instructions = body?.instructions ? String(body.instructions).trim() : null;
+    // The brief's other two parts. Optional, and empty stays NULL rather than
+    // becoming an empty labelled block on the student's screen.
+    const expectedOutcome = body?.expected_outcome ? String(body.expected_outcome).trim() || null : null;
+    const focusPoints = body?.focus_points ? String(body.focus_points).trim() || null : null;
 
     // When created from the timetable, the assignment is pinned to the class it
     // was given in and inherits that class's date, so the two can never drift.
@@ -188,7 +193,12 @@ export async function POST(request: NextRequest) {
       // full set lives on the backing question's reference_images array.
       contentImageUrl = refUrls[0] ?? null;
       const question = await createDrawingQuestion({
-        question_text: instructions || title,
+        // The whole brief, not just the task: "focus on" is exactly what the
+        // reviewer should be marking against, and it used to never reach them.
+        question_text: composeDrawingBriefText(
+          { instructions, expected_outcome: expectedOutcome, focus_points: focusPoints },
+          title,
+        ),
         category,
         sub_type: 'assignment',
         reference_images: refUrls.map((url) => ({ url })),
@@ -206,6 +216,8 @@ export async function POST(request: NextRequest) {
       class_date: classDate,
       title,
       instructions,
+      expected_outcome: expectedOutcome,
+      focus_points: focusPoints,
       assignment_type: type,
       drawing_question_id: drawingQuestionId,
       content_image_url: contentImageUrl,

@@ -132,7 +132,7 @@ export default function TeacherTimetable() {
   const [editingClass, setEditingClass] = useState<ClassCardData | null>(null);
   const [attendanceClass, setAttendanceClass] = useState<ClassCardData | null>(null);
   /** Which tab the attendance dialog opens on. Insights was its own dialog. */
-  const [attendanceTab, setAttendanceTab] = useState<AttendanceTabKey>('who');
+  const [attendanceTab, setAttendanceTab] = useState<AttendanceTabKey>('missed');
   const [backfillOpen, setBackfillOpen] = useState(false);
   /**
    * ONE selection, shared by every view.
@@ -1300,7 +1300,7 @@ export default function TeacherTimetable() {
     onDelete: handleDelete,
     onDeletePermanent: handleDeletePermanent,
     onOpenAttendance: (cls: ClassCardData) => {
-      setAttendanceTab('who');
+      setAttendanceTab('missed');
       setAttendanceClass(cls);
     },
     onSyncRecording: handleSyncRecording,

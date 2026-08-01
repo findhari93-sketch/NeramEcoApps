@@ -28,10 +28,16 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient() as any;
 
-    // Verify teacher role
+    // Staff gate on user_type, NOT on a classroom enrollment.
+    //
+    // This route used to require the caller to hold `nexus_enrollments.role =
+    // 'teacher'` in this specific classroom. Production has ~30 staff with an
+    // Entra identity and 6 teacher enrollments, so roughly 24 of them were 403'd
+    // out of a screen they are entitled to. Same gate and same reasoning as
+    // /api/timetable/attendance-report, which documents it at length.
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, user_type')
       .eq('ms_oid', msUser.oid)
       .single();
 
@@ -39,15 +45,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const { data: enrollment } = await supabase
-      .from('nexus_enrollments')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('classroom_id', classroomId)
-      .eq('is_active', true)
-      .single();
-
-    if (!enrollment || enrollment.role !== 'teacher') {
+    if (user.user_type !== 'teacher' && user.user_type !== 'admin') {
       return NextResponse.json({ error: 'Only teachers can view the RSVP dashboard' }, { status: 403 });
     }
 

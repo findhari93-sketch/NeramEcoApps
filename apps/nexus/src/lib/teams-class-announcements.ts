@@ -129,12 +129,74 @@ export function isPostError(r: PostResult): r is { error: string } {
   return 'error' in r;
 }
 
-async function postGraphMessage(url: string, token: string, html: string): Promise<PostResult> {
+/**
+ * Someone to @-mention in a Teams post.
+ *
+ * Graph needs the mention declared twice: an `<at id="0">Name</at>` tag in the
+ * html AND a matching entry in a parallel `mentions` array. The id is the index
+ * into that array, and a tag whose id has no entry makes Graph reject the whole
+ * message, so the two are built together in buildMentions rather than by any
+ * caller assembling html on its own.
+ */
+export interface TeamsMention {
+  /** The AAD object id. A student with none cannot be mentioned. */
+  oid: string;
+  displayName: string;
+}
+
+/**
+ * Turn people into the html fragment and the array that must accompany it.
+ *
+ * Anyone without an oid comes back as bold text rather than a mention. Dropping
+ * them would silently shorten a list a teacher expects to be complete, and
+ * failing the post over one unlinked account would lose the other nine.
+ */
+export function buildMentions(
+  people: Array<{ oid?: string | null; displayName: string }>,
+): { html: string; mentions: unknown[] } {
+  const mentions: unknown[] = [];
+  const parts: string[] = [];
+
+  for (const p of people) {
+    const name = escapeMessageHtml(p.displayName);
+    if (!p.oid) {
+      parts.push(`<b>${name}</b>`);
+      continue;
+    }
+    const id = mentions.length;
+    parts.push(`<at id="${id}">${name}</at>`);
+    mentions.push({
+      id,
+      mentionText: p.displayName,
+      mentioned: { user: { id: p.oid, displayName: p.displayName, userIdentityType: 'aadUser' } },
+    });
+  }
+
+  return { html: parts.join(', '), mentions };
+}
+
+/** Minimal escaping for text going into a Graph html message body. */
+export function escapeMessageHtml(s: string): string {
+  return String(s).replace(
+    /[&<>"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string),
+  );
+}
+
+async function postGraphMessage(
+  url: string,
+  token: string,
+  html: string,
+  mentions?: unknown[],
+): Promise<PostResult> {
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: { contentType: 'html', content: html } }),
+      body: JSON.stringify({
+        body: { contentType: 'html', content: html },
+        ...(mentions && mentions.length ? { mentions } : {}),
+      }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -153,17 +215,29 @@ export function postChannelMessageDetailed(
   teamId: string,
   channelId: string,
   html: string,
+  mentions?: unknown[],
 ): Promise<PostResult> {
   return postGraphMessage(
     `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages`,
     token,
     html,
+    mentions,
   );
 }
 
 /** Post to a Teams group chat, reporting WHY it failed. */
-export function postChatMessageDetailed(token: string, chatId: string, html: string): Promise<PostResult> {
-  return postGraphMessage(`https://graph.microsoft.com/v1.0/chats/${chatId}/messages`, token, html);
+export function postChatMessageDetailed(
+  token: string,
+  chatId: string,
+  html: string,
+  mentions?: unknown[],
+): Promise<PostResult> {
+  return postGraphMessage(
+    `https://graph.microsoft.com/v1.0/chats/${chatId}/messages`,
+    token,
+    html,
+    mentions,
+  );
 }
 
 /** Post an HTML message to a Teams channel; returns the new message ID or null. */

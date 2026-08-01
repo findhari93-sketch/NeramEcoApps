@@ -2,10 +2,10 @@
 
 import { Box, Button, Chip, Divider, Typography } from '@neram/ui';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
-import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import ClassCaptureView from '../ClassCaptureView';
 import WrapUpSection from '../WrapUpSection';
 import ClassFeedbackSection from './ClassFeedbackSection';
+import RecordingSection from './RecordingSection';
 import { SECTION_LABEL_SX } from '../timetable-theme';
 import type { ClassPanelTabProps } from './types';
 
@@ -21,6 +21,7 @@ export default function AfterTab(props: ClassPanelTabProps) {
     cls,
     state,
     role,
+    classroomId,
     rsvpSummary,
     attendanceSummary,
     myAttended,
@@ -30,7 +31,6 @@ export default function AfterTab(props: ClassPanelTabProps) {
     onSyncRecording,
     onRate,
     onOpenRecording,
-    onViewRsvpDashboard,
     onNotify,
     onChanged,
   } = props;
@@ -52,12 +52,17 @@ export default function AfterTab(props: ClassPanelTabProps) {
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
               Attendance
             </Typography>
-            {onViewRsvpDashboard && (
+            {/* Into the attendance panel, not the RSVP dashboard. On a class
+                that has already run, "details" means who actually came and who
+                still owes it; the RSVP dashboard only knows who said in advance
+                that they would be there, which is the least interesting fact
+                available by this point. */}
+            {onOpenAttendance && (
               <Typography
                 variant="caption"
                 color="primary"
-                sx={{ ml: 'auto', cursor: 'pointer' }}
-                onClick={() => onViewRsvpDashboard(cls.id)}
+                sx={{ ml: 'auto', cursor: 'pointer', fontWeight: 700 }}
+                onClick={() => onOpenAttendance(cls)}
               >
                 View details →
               </Typography>
@@ -97,18 +102,14 @@ export default function AfterTab(props: ClassPanelTabProps) {
           </Box>
 
           {/* Attendance says who was here. This says what happened to everyone
-              who was not, which is the half the panel never showed. */}
+              who was not, which is the half the panel never showed. No link of
+              its own: "View details" above opens the same roster, and the
+              cross-class catch-up page this used to jump to lost the class the
+              teacher was looking at. */}
           {(attendanceSummary?.missed ?? 0) > 0 && (
             <Typography variant="caption" color="text.secondary">
               {attendanceSummary?.missed} missed · {attendanceSummary?.explained ?? 0} explained ·{' '}
-              {attendanceSummary?.caughtUp ?? 0} caught up ·{' '}
-              <Box
-                component="a"
-                href="/teacher/catch-up?tab=reasons"
-                sx={{ color: 'primary.main', fontWeight: 700, textDecoration: 'none' }}
-              >
-                see why
-              </Box>
+              {attendanceSummary?.caughtUp ?? 0} caught up
             </Typography>
           )}
         </Box>
@@ -124,8 +125,9 @@ export default function AfterTab(props: ClassPanelTabProps) {
       )}
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {/* One button. Attendance and Insights were two, opening two dialogs
-            over the same roster that went stale against each other. */}
+        {/* One button. Attendance, Insights and the RSVP dashboard were three,
+            opening three surfaces over the same roster that went stale against
+            each other. It opens on whoever still owes this class. */}
         {isTeacher && onOpenAttendance && (
           <Button
             variant="contained"
@@ -134,45 +136,22 @@ export default function AfterTab(props: ClassPanelTabProps) {
             onClick={() => onOpenAttendance(cls)}
             sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
           >
-            Attendance and insights
+            Attendance and follow-up
           </Button>
         )}
 
-        {/* Opens the in-app player rather than linking out to Microsoft: a
-            recording that lives in the organizer's OneDrive is shared only with
-            the meeting invitees, so the outbound link refuses most students and
-            any teacher who was not invited. */}
-        {hasRecording && (
-          <Button
-            variant="contained"
-            color="success"
-            fullWidth
-            onClick={onOpenRecording}
-            startIcon={<PlayCircleOutlineIcon />}
-            sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
-          >
-            Watch Recording
-          </Button>
-        )}
-        {!hasRecording && hasMeeting && (
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ textAlign: 'center', display: 'block', py: 0.5 }}
-          >
-            Recording not yet available
-          </Typography>
-        )}
-        {isTeacher && !hasRecording && hasMeeting && onSyncRecording && (
-          <Button
-            variant="outlined"
-            fullWidth
-            onClick={() => onSyncRecording(cls)}
-            sx={{ minHeight: 48, textTransform: 'none' }}
-          >
-            Sync Recording
-          </Button>
-        )}
+        <RecordingSection
+          cls={cls}
+          isTeacher={isTeacher}
+          hasRecording={hasRecording}
+          hasMeeting={hasMeeting}
+          onOpenRecording={onOpenRecording}
+          onSyncRecording={onSyncRecording}
+          getToken={getToken}
+          classroomId={classroomId}
+          onNotify={onNotify}
+          onChanged={onChanged}
+        />
 
         {!isTeacher && onRate && (
           <Button

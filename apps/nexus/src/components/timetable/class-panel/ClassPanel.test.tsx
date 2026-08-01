@@ -102,8 +102,8 @@ describe('ClassPanel shell', () => {
       cls: makeClass({ scheduled_date: PAST_DAY }),
       onOpenAttendance: () => {},
     });
-    expect(screen.getAllByRole('button', { name: 'Attendance and insights' })).toHaveLength(1);
-    // The button this replaced. Its absence is the merge.
+    expect(screen.getAllByRole('button', { name: 'Attendance and follow-up' })).toHaveLength(1);
+    // The buttons this replaced. Their absence is the merge.
     expect(screen.queryByRole('button', { name: /^insights$/i })).toBeNull();
   });
 

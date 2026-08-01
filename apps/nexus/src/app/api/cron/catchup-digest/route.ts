@@ -8,6 +8,7 @@ import {
 import { sendTeamsActivityNotification } from '@neram/auth';
 import { assertCronRequest } from '@/lib/cron-auth';
 import { plainToHtml } from '@/lib/nudge-delivery';
+import { resolveParentContacts } from '@/lib/parent-notify';
 import {
   buildStaffDigest,
   buildParentNotice,
@@ -256,10 +257,11 @@ export async function GET(request: NextRequest) {
  * Tell each linked parent what happened to their children today.
  *
  * Grouped by parent, not by child, so a guardian with two students here gets one
- * email rather than two. The address is `nexus_parent_credentials.contact_email`
- * and never `users.email`: parent provisioning deliberately moved it off the
- * users row because that column is globally unique and a parent's address is
- * usually already sitting on a lead.
+ * email rather than two. Who a parent IS and how to reach them now lives in
+ * lib/parent-notify, because the per-class catch-up nudge needs exactly the same
+ * two joins and the non-obvious rule inside them (the address is
+ * `nexus_parent_credentials.contact_email`, never `users.email`). What stays
+ * here is what only the digest knows: which events happened and how to word them.
  */
 async function emailParents(
   supabase: any,
@@ -270,41 +272,17 @@ async function emailParents(
   const studentIds = [...eventsByStudent.keys()];
   if (studentIds.length === 0) return 0;
 
-  const { data: links } = await supabase
-    .from('nexus_parent_links')
-    .select('parent_user_id, student_user_id')
-    .in('student_user_id', studentIds);
-
-  if (!links || links.length === 0) return 0;
-
-  const childrenByParent = new Map<string, string[]>();
-  for (const link of links) {
-    const list = childrenByParent.get(link.parent_user_id) || [];
-    if (!list.includes(link.student_user_id)) list.push(link.student_user_id);
-    childrenByParent.set(link.parent_user_id, list);
-  }
-
-  const { data: creds } = await supabase
-    .from('nexus_parent_credentials')
-    .select('parent_user_id, contact_email, is_active')
-    .in('parent_user_id', [...childrenByParent.keys()]);
-
-  const emailByParent = new Map<string, string>();
-  for (const c of creds || []) {
-    if (c.is_active === false) continue;
-    if (c.contact_email) emailByParent.set(c.parent_user_id, c.contact_email);
-  }
+  const contacts = await resolveParentContacts(studentIds, supabase);
+  if (contacts.length === 0) return 0;
 
   let sent = 0;
-  for (const [parentId, childIds] of childrenByParent) {
+  for (const contact of contacts) {
     if (sent >= MAX_PARENT_EMAILS) {
-      errors.push(`parent email cap of ${MAX_PARENT_EMAILS} reached, ${childrenByParent.size - sent} not sent`);
+      errors.push(`parent email cap of ${MAX_PARENT_EMAILS} reached, ${contacts.length - sent} not sent`);
       break;
     }
-    const to = emailByParent.get(parentId);
-    if (!to) continue;
 
-    const children: ParentChildEvents[] = childIds.map((id) => ({
+    const children: ParentChildEvents[] = contact.studentIds.map((id) => ({
       childName: nameById.get(id) ?? null,
       events: eventsByStudent.get(id) || [],
     }));
@@ -314,14 +292,16 @@ async function emailParents(
 
     try {
       const res = await sendEmail({
-        to,
+        to: contact.email,
         subject: notice.subject,
         html: plainToHtml(notice.plain),
       });
       if (res.success) sent += 1;
-      else errors.push(`parent ${parentId}: ${res.error || 'email failed'}`);
+      else errors.push(`parent ${contact.parentUserId}: ${res.error || 'email failed'}`);
     } catch (err) {
-      errors.push(`parent ${parentId}: ${err instanceof Error ? err.message : 'unknown error'}`);
+      errors.push(
+        `parent ${contact.parentUserId}: ${err instanceof Error ? err.message : 'unknown error'}`,
+      );
     }
   }
 

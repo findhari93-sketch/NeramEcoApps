@@ -47,6 +47,7 @@ import AssignmentResultsGrid from '@/components/assignments/AssignmentResultsGri
 import GradeDisplay from '@/components/assignments/GradeDisplay';
 import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
 import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
+import QuestionsSummaryCard from '@/components/assignments/QuestionsSummaryCard';
 import { remindedAgo } from '@/lib/relative-time';
 
 interface AttachmentRow {
@@ -236,6 +237,24 @@ export default function AssignmentReviewPage() {
   );
   const docResubmitCount = useMemo(() => rows.filter((r) => r.bucket === 'submitted' && isDocResubmission(r)).length, [rows]);
   const hasPaper = !!paper && paper.questions.length > 0;
+
+  /** What the Questions card shows: the paper at a glance, and whether it is fixed. */
+  const questionSummary = useMemo(() => {
+    const qs = paper?.questions ?? [];
+    const totalMarks = qs.reduce((sum, q) => sum + (Number(q.marks) || 0), 0);
+    const autoMarks = qs
+      .filter((q) => String(q.format || '').toUpperCase() !== 'SUBJECTIVE')
+      .reduce((sum, q) => sum + (Number(q.marks) || 0), 0);
+    return { count: qs.length, totalMarks, autoMarks, manualMarks: totalMarks - autoMarks };
+  }, [paper]);
+
+  // Re-keying a paper under students who already answered it would change marks
+  // they have already been shown, so the editor opens read-only.
+  const questionsLocked = useMemo(() => {
+    const answered = rows.filter((r) => (r as any).answers).length;
+    if (!answered) return null;
+    return `${answered} ${answered === 1 ? 'student has' : 'students have'} already answered these questions, so the paper can no longer be changed.`;
+  }, [rows]);
   const missingDrawingRecipients = useMemo(
     () => drawingRows.filter((r) => r.bucket === 'missing').map((r) => ({ id: r.student.id, name: r.student.name })),
     [drawingRows],
@@ -399,16 +418,32 @@ export default function AssignmentReviewPage() {
             </Typography>
           )}
 
+          {/* The paper, and the way in to writing it. Above the brief because a
+              teacher arriving here to add questions should not have to read the
+              brief first to find out where they are. Document assignments only:
+              a drawing is judged from the drawing itself. */}
+          {assignment.assignment_type !== 'drawing' && (
+            <Box sx={{ mb: 2.5 }}>
+              <QuestionsSummaryCard
+                summary={questionSummary}
+                lockedReason={questionsLocked}
+                onEdit={() => router.push(`/teacher/assignments/${id}/questions`)}
+              />
+            </Box>
+          )}
+
           {/* What the teacher set up (brief / reference / paper / links) */}
-          {(assignment.instructions || refImages.length > 0 || (assignment.attachments && assignment.attachments.length > 0) || (assignment.links && assignment.links.length > 0)) && (
+          {(assignment.instructions || (assignment as any).expected_outcome || (assignment as any).focus_points || refImages.length > 0 || (assignment.attachments && assignment.attachments.length > 0) || (assignment.links && assignment.links.length > 0)) && (
             <Box sx={{ mb: 2.5, p: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
-              {assignment.instructions && (
+              {(assignment.instructions || (assignment as any).expected_outcome || (assignment as any).focus_points) && (
                 <Box sx={{ mb: refImages.length > 0 ? 1.5 : 0 }}>
                   {/* showMarksWarning: the teacher is the only one who can act on
                       a brief whose stated marks disagree with the assignment's
                       configured total, so only they are told. */}
                   <AssignmentBrief
                     instructions={assignment.instructions}
+                    expectedOutcome={(assignment as any).expected_outcome}
+                    focusPoints={(assignment as any).focus_points}
                     maxMarks={assignment.max_marks}
                     showMarksWarning
                   />

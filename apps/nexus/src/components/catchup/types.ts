@@ -79,6 +79,8 @@ export interface ClassStat {
   recap_state: RecapState;
   recap_id: string | null;
   has_transcript: boolean;
+  /** Null when there is no Teams meeting, so the attendance panel hides Sync. */
+  teams_meeting_id?: string | null;
 }
 
 export interface Payload {

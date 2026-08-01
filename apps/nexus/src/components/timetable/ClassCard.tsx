@@ -44,6 +44,23 @@ export interface ClassCardData {
   teams_organizer_event_id?: string | null;
   teams_meeting_degraded?: boolean | null;
   recording_url: string | null;
+  /**
+   * What the nightly recording sweep has made of this class.
+   *
+   * `null` means it has not looked yet (the class is inside the 60 minute grace,
+   * or the sweep has not run since it ended). `pending` means it looked and
+   * Teams had nothing, with `recording_sync_attempts` counting toward the cap of
+   * four. `unavailable` is terminal: Teams never published one and nothing will
+   * try again. `manual` means a teacher pasted the link by hand.
+   *
+   * The panel reads these rather than showing a bare "Recording not yet
+   * available", which said the same thing whether the sweep was mid-flight or
+   * had given up a week ago. See lib/recording-backfill.
+   */
+  recording_sync_status?: string | null;
+  recording_sync_attempts?: number | null;
+  recording_sync_detail?: string | null;
+  recording_fetched_at?: string | null;
   batch_id: string | null;
   target_scope?: string | null;
   meeting_group_id?: string | null;

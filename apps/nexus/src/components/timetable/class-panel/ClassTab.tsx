@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Button, Chip, Divider, IconButton, Typography, alpha, useTheme } from '@neram/ui';
+import { Box, Button, Chip, Divider, IconButton, Typography, UserAvatar, alpha, useTheme } from '@neram/ui';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -10,6 +10,39 @@ import PrepGateCard from '../PrepGateCard';
 import ClassManageSection from './ClassManageSection';
 import { RADIUS } from '../timetable-theme';
 import type { ClassPanelTabProps } from './types';
+
+/**
+ * Somebody attached to this class, with their face on it.
+ *
+ * A name on its own is a string a student has to read and match; a photo is
+ * recognised before it is read, which is the whole point on a class panel a
+ * student opens twenty times a week. avatar_url is already selected by every
+ * timetable route and is populated from the Microsoft Graph profile photo, so
+ * this costs nothing extra to fetch.
+ */
+function PersonLine({
+  role,
+  name,
+  avatarUrl,
+}: {
+  role: string;
+  name: string;
+  avatarUrl?: string | null;
+}) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+      <UserAvatar name={name} src={avatarUrl} size={36} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block' }}>
+          {role}
+        </Typography>
+        <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+          {name}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
 
 /**
  * What this class is, and how to get into it.
@@ -53,21 +86,14 @@ export default function ClassTab(props: ClassPanelTabProps) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {cls.teacher && (
-        <Box>
-          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-            Teacher
-          </Typography>
-          <Typography variant="body2">{cls.teacher.name}</Typography>
-        </Box>
+        <PersonLine role="Teacher" name={cls.teacher.name} avatarUrl={cls.teacher.avatar_url} />
       )}
 
+      {/* No avatar_url here: organizer_name is a string copied off the Teams
+          meeting, not a joined user row, so there is nobody to look a photo up
+          against. Initials are the honest fallback. */}
       {cls.organizer_name && cls.teacher && cls.organizer_name !== cls.teacher.name && (
-        <Box>
-          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-            Organized by
-          </Typography>
-          <Typography variant="body2">{cls.organizer_name}</Typography>
-        </Box>
+        <PersonLine role="Organized by" name={cls.organizer_name} />
       )}
 
       {cls.description && (

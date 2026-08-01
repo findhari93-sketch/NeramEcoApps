@@ -29,21 +29,27 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Drawer,
+  IconButton,
   Stack,
   TextField,
   Typography,
   alpha,
+  useMediaQuery,
   useTheme,
 } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import VideocamOffOutlinedIcon from '@mui/icons-material/VideocamOffOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { RADIUS } from '@/components/timetable/timetable-theme';
+import ClassAttendancePanel from '@/components/timetable/attendance/ClassAttendancePanel';
 import { SECTION_HEADING_SX, shortDate } from './shared';
 import type { ClassStat, RecapState, TabProps } from './types';
 import RecapReviewQueue from '@/components/class-recap/RecapReviewQueue';
 
-type Filter = 'all' | 'blocking' | 'needs_recap';
+type Filter = 'all' | 'blocking' | 'needs_recap' | 'not_caught_up';
 
 const RECAP_LABEL: Record<RecapState, string> = {
   no_recording: 'No recording',
@@ -59,14 +65,23 @@ function recapTone(state: RecapState): 'error' | 'warning' | 'info' | 'success' 
   return 'error';
 }
 
+/** Students who missed this class and have not finished catching up on it. */
+function notCaughtUp(c: ClassStat): number {
+  return Math.max(0, c.missed - c.caughtUp);
+}
+
 export default function ClassesRecapsTab({ data, onReload }: TabProps) {
   const theme = useTheme();
   const router = useRouter();
   const { getTeacherToken } = useNexusAuthContext();
+  // Below lg the drawer takes the whole screen: 380px of roster beside a class
+  // list on a phone is neither.
+  const fullWidthDrawer = useMediaQuery(theme.breakpoints.down('lg'));
 
   const [filter, setFilter] = useState<Filter>('all');
   const [busyClass, setBusyClass] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openClassId, setOpenClassId] = useState<string | null>(null);
 
   const [manualOpen, setManualOpen] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
@@ -101,8 +116,14 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
     [data.classStats],
   );
 
+  const outstandingCount = useMemo(
+    () => data.classStats.filter((c) => notCaughtUp(c) > 0).length,
+    [data.classStats],
+  );
+
   const rows = useMemo(() => {
     if (filter === 'blocking') return data.classStats.filter((c) => c.blocked > 0);
+    if (filter === 'not_caught_up') return data.classStats.filter((c) => notCaughtUp(c) > 0);
     if (filter === 'needs_recap') {
       return data.classStats.filter(
         (c) => c.recap_state === 'recording_ready' || c.recap_state === 'draft',
@@ -110,6 +131,17 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
     }
     return data.classStats;
   }, [data.classStats, filter]);
+
+  /**
+   * Walking the schedule inside the drawer.
+   *
+   * Indexed against the FILTERED rows, not every class, so "next" follows the
+   * list the teacher is actually reading. Stepping off the end of a filter into
+   * a class that filter excluded would be a different screen from the one they
+   * were moving through.
+   */
+  const openIndex = openClassId ? rows.findIndex((c) => c.id === openClassId) : -1;
+  const openClass = openIndex >= 0 ? rows[openIndex] : null;
 
   /** Open the recap for a class, creating the draft first if there is not one. */
   const openRecap = useCallback(
@@ -196,6 +228,15 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
             sx={{ fontWeight: 700, height: 34 }}
           />
         )}
+        {outstandingCount > 0 && (
+          <Chip
+            label={`Not caught up ${outstandingCount}`}
+            onClick={() => setFilter(filter === 'not_caught_up' ? 'all' : 'not_caught_up')}
+            color={filter === 'not_caught_up' ? 'warning' : 'default'}
+            variant={filter === 'not_caught_up' ? 'filled' : 'outlined'}
+            sx={{ fontWeight: 700, height: 34 }}
+          />
+        )}
         {needsRecapCount > 0 && (
           <Chip
             label={`Needs a recap ${needsRecapCount}`}
@@ -261,6 +302,12 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
                     <Typography variant="caption" color="text.secondary">
                       {c.present} present · {c.missed} missed · {c.caughtUp} caught up
                     </Typography>
+                    {notCaughtUp(c) > 0 && (
+                      <Typography variant="caption" sx={{ color: 'warning.dark', fontWeight: 700 }}>
+                        {notCaughtUp(c)} {notCaughtUp(c) === 1 ? 'student has' : 'students have'} not
+                        caught up
+                      </Typography>
+                    )}
                   </Box>
                   <Stack spacing={0.75} alignItems="flex-end">
                     <Chip
@@ -329,6 +376,19 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
                     </Typography>
                   )}
                   <Box sx={{ flex: 1 }} />
+                  {/* The route into the roster behind these numbers. A teacher
+                      reading "9 missed" wants the nine names and a way to
+                      message them, and until now that meant going back to the
+                      timetable and finding the class again. */}
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<GroupsOutlinedIcon />}
+                    onClick={() => setOpenClassId(c.id)}
+                    sx={{ minHeight: 40, textTransform: 'none' }}
+                  >
+                    {notCaughtUp(c) > 0 ? `Follow up ${notCaughtUp(c)}` : 'Attendance'}
+                  </Button>
                   {c.recap_state === 'no_recording' ? (
                     <Typography variant="caption" color="text.disabled">
                       Nothing to watch yet
@@ -366,6 +426,63 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           </Alert>
         </Box>
       )}
+
+      {/* The same panel the timetable opens in a dialog, in a drawer here, so a
+          teacher reviewing the week meets one attendance surface rather than
+          two that could drift. Prev and next walk the list behind it, which is
+          the point: a class-by-class sweep without shutting anything. */}
+      <Drawer
+        anchor="right"
+        open={!!openClass}
+        onClose={() => setOpenClassId(null)}
+        PaperProps={{
+          sx: {
+            width: fullWidthDrawer ? '100%' : 480,
+            maxWidth: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+          },
+        }}
+      >
+        {openClass && data.classroomId && (
+          <>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 2, pb: 1 }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+                  {openClass.title || 'Class'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {shortDate(openClass.scheduled_date)}
+                </Typography>
+              </Box>
+              <IconButton
+                onClick={() => setOpenClassId(null)}
+                aria-label="Close"
+                sx={{ minWidth: 44, minHeight: 44 }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
+            {/* Keyed on the class so stepping to the next one rebuilds the
+                panel rather than leaving one class's ticks over another's
+                roster. */}
+            <ClassAttendancePanel
+              key={openClass.id}
+              classId={openClass.id}
+              classTitle={openClass.title || 'Class'}
+              classroomId={data.classroomId}
+              teamsMeetingId={openClass.teams_meeting_id ?? null}
+              getToken={getTeacherToken}
+              onChanged={onReload}
+              navLabel={`${openIndex + 1} of ${rows.length}`}
+              onPrev={openIndex > 0 ? () => setOpenClassId(rows[openIndex - 1].id) : undefined}
+              onNext={
+                openIndex < rows.length - 1 ? () => setOpenClassId(rows[openIndex + 1].id) : undefined
+              }
+            />
+          </>
+        )}
+      </Drawer>
 
       <Dialog open={manualOpen} onClose={() => setManualOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle sx={{ fontWeight: 800 }}>Recap from a recording link</DialogTitle>
