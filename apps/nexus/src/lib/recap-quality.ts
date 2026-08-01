@@ -178,12 +178,27 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
   );
 
   // ── Hard 2: boundary sanity ───────────────────────────────────────────────
+  //
+  // Measured against the TYPICAL segment of this recap, not against the
+  // configured target. Boundaries are computed by recap-segments now, so the
+  // real question is "are these segments consistent with each other", and a
+  // fifty minute class with a fifteen minute target has to produce short
+  // segments: there is no other option, and failing it for that would hold a
+  // perfectly good recap. Comparing against the median still catches the thing
+  // this check exists for, a run of sane segments plus one absurd one.
+  const lengths = sorted
+    .map((s) => s.end_timestamp_seconds - s.start_timestamp_seconds)
+    .sort((a, b) => a - b);
+  const typical = lengths.length
+    ? lengths[Math.floor(lengths.length / 2)] || targetSegmentSeconds
+    : targetSegmentSeconds;
+
   const badLengths = sorted.filter((s) => {
     const len = s.end_timestamp_seconds - s.start_timestamp_seconds;
     return (
       len <= 0 ||
-      len < targetSegmentSeconds * THRESHOLDS.minSegmentRatio ||
-      len > targetSegmentSeconds * THRESHOLDS.maxSegmentRatio
+      len < typical * THRESHOLDS.minSegmentRatio ||
+      len > typical * THRESHOLDS.maxSegmentRatio
     );
   }).length;
   const firstOk =
@@ -197,7 +212,7 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
     'boundaries',
     true,
     badLengths === 0 && firstOk && lastOk,
-    `${badLengths} segments outside ${THRESHOLDS.minSegmentRatio}x to ${THRESHOLDS.maxSegmentRatio}x the ${targetSegmentSeconds}s target; starts on time: ${firstOk}; ends on time: ${lastOk}.`,
+    `${badLengths} segments outside ${THRESHOLDS.minSegmentRatio}x to ${THRESHOLDS.maxSegmentRatio}x the typical ${Math.round(typical)}s segment; starts on time: ${firstOk}; ends on time: ${lastOk}.`,
   );
 
   // ── Hard 3: enough questions to actually serve a checkpoint ───────────────

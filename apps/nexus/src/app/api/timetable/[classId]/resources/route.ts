@@ -5,7 +5,12 @@ import {
   createFileRecord,
   getNextSortOrder,
 } from '@neram/database';
-import { uploadToSharePoint } from '@/lib/sharepoint';
+import {
+  uploadToSharePoint,
+  resolveShareUrlToItem,
+  createViewLink,
+  getSharePointThumbnailUrl,
+} from '@/lib/sharepoint';
 import { resolveClassStaffAccess } from '@/lib/class-staff-access';
 import { extractYouTubeId } from '@/lib/youtube';
 import {
@@ -17,6 +22,7 @@ import {
   cleanText,
   detectResourceKind,
   displayHost,
+  isSharePointUrl,
   youtubeThumb,
   youtubeWatchUrl,
 } from '@/lib/class-resources';
@@ -200,9 +206,13 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       row = await buildFromUpload(request, supabase, params.classId, authHeader, base);
     } else {
       const body = await request.json().catch(() => ({}));
-      row = body?.copy_from
-        ? await buildFromCopy(supabase, access.userId, String(body.copy_from), base)
-        : await buildFromUrl(body, base);
+      if (body?.copy_from) {
+        row = await buildFromCopy(supabase, access.userId, String(body.copy_from), base);
+      } else if (body?.sharepoint_item_id || isSharePointUrl(body?.url)) {
+        row = await buildFromSharePoint(body, base);
+      } else {
+        row = await buildFromUrl(body, base);
+      }
     }
 
     const { data: created, error } = await supabase
@@ -255,6 +265,86 @@ async function buildFromUrl(body: any, base: Record<string, unknown>) {
   }
 
   throw new Error('That does not look like a web address. Links must start with http or https.');
+}
+
+/**
+ * A file that already lives in SharePoint: linked, never copied.
+ *
+ * This is how a PowerPoint gets attached. Two ways in, one result:
+ *
+ *   { sharepoint_item_id, name, ... }  picked out of the search dialog
+ *   { url }                            a share link pasted by hand
+ *
+ * It becomes a study_file row, exactly like an uploaded PDF, which is what earns
+ * it the secure reader, the per-student watermark and no download button. A deck
+ * is converted to PDF on the way out (see lib/office-rendition); nothing about
+ * that decision belongs here.
+ *
+ * Deliberately NOT copied into our own library. The teacher keeps editing the
+ * deck in SharePoint and every student sees the current version, which is the
+ * behaviour people expect from a link and the reason not to duplicate the bytes.
+ */
+async function buildFromSharePoint(body: any, base: Record<string, unknown>) {
+  const typed = cleanText(body?.title, MAX_TITLE_LENGTH);
+  const note = cleanText(body?.note, MAX_NOTE_LENGTH);
+
+  let itemId: string | null = body?.sharepoint_item_id ? String(body.sharepoint_item_id) : null;
+  let name: string = typeof body?.name === 'string' ? body.name : '';
+  let mimeType: string | null = typeof body?.mime_type === 'string' ? body.mime_type : null;
+  let size: number | null = typeof body?.size === 'number' ? body.size : null;
+  // Set only for a pasted link, whose file may live on a drive the single-site
+  // item id cannot reach. The content proxy resolves it through /shares instead.
+  let linkUrl: string | null = null;
+  let webUrl: string | null = null;
+
+  if (!itemId) {
+    const pasted = String(body?.url || '').trim();
+    if (!pasted) throw new Error('Paste a link, or choose a file');
+    const resolved = await resolveShareUrlToItem(pasted);
+    itemId = resolved.id;
+    name = resolved.name;
+    mimeType = resolved.mimeType;
+    size = resolved.size;
+    linkUrl = pasted;
+    webUrl = pasted;
+  } else {
+    // Picked from our own library, so a read-only organisation link can be minted
+    // for the "Open in SharePoint" action. view scope is the guarantee that a
+    // student following it cannot edit the deck.
+    webUrl = (await createViewLink(itemId).catch(() => null)) || (body?.web_url ?? null);
+  }
+
+  const fallbackTitle = (name || 'Reference').replace(/\.[^.]+$/, '') || 'Reference';
+
+  // A nicety only: a failure must not lose the attachment the teacher just made.
+  const thumb = itemId ? await getSharePointThumbnailUrl(itemId, 'medium').catch(() => null) : null;
+
+  const record: any = await createFileRecord({
+    folder_id: CLASS_RESOURCE_FOLDER_ID,
+    title: typed || fallbackTitle,
+    file_name: name || 'file',
+    file_type: mimeType || 'application/octet-stream',
+    file_size_bytes: size ?? 0,
+    // An uploaded file carries an item id; a pasted one carries a link. The
+    // content proxy already branches on exactly this pair.
+    sharepoint_item_id: linkUrl ? null : itemId,
+    sharepoint_web_url: webUrl,
+    link_url: linkUrl,
+    // null means "inherit the folder", and the folder is allow_download=false,
+    // so a student reads it in the viewer and cannot save a copy.
+    allow_download: null,
+    sort_order: await getNextSortOrder({ files: CLASS_RESOURCE_FOLDER_ID }),
+    uploaded_by: base.created_by as string,
+  });
+
+  return {
+    ...base,
+    kind: 'study_file',
+    title: typed || fallbackTitle,
+    note,
+    study_file_id: record.id,
+    thumb_url: thumb,
+  };
 }
 
 /** Reuse: duplicate a row this teacher created on another class. */

@@ -30,13 +30,31 @@ async function openPlanView(page: Page): Promise<boolean> {
   if ((await viewButton.getAttribute('aria-label'))?.includes('Plan')) return true;
 
   await viewButton.click();
-  const item = page.getByRole('menuitem', { name: 'Plan' });
+  // menuitemradio, not menuitem. As plain 'menuitem' this never matched, so
+  // openPlanView always returned false and every test in this file silently
+  // skipped rather than failing.
+  const item = page.getByRole('menuitemradio', { name: 'Plan', exact: true });
   if ((await item.count()) === 0) {
     await page.keyboard.press('Escape');
     return false;
   }
   await item.click();
   await page.waitForTimeout(800);
+  return true;
+}
+
+/**
+ * Move the class panel to one of its tabs.
+ *
+ * The panel is tabbed now (Class / Prep / After), so what used to be one long
+ * scroll is behind a named tab. A cancelled class has only one tab and draws no
+ * strip at all, hence the count check rather than a hard wait.
+ */
+async function openPanelTab(page: Page, name: 'Class' | 'Prep' | 'After'): Promise<boolean> {
+  const tab = page.getByRole('tab', { name, exact: true });
+  if ((await tab.count()) === 0) return false;
+  await tab.first().click();
+  await page.waitForTimeout(400);
   return true;
 }
 
@@ -63,6 +81,9 @@ async function findAClass(page: Page, maxWeeksBack = 8) {
  */
 async function openWrapUp(page: Page, row: ReturnType<Page['locator']>): Promise<boolean> {
   await row.click();
+  // A past class opens the panel on After already, but say so explicitly rather
+  // than depending on the default.
+  await openPanelTab(page, 'After');
   const generate = page.getByText('Generate from the class');
   try {
     await generate.waitFor({ state: 'visible', timeout: 60_000 });

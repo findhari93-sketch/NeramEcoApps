@@ -25,11 +25,13 @@ import {
 } from '@neram/ui';
 import AddLinkIcon from '@mui/icons-material/AddLink';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import SlideshowOutlinedIcon from '@mui/icons-material/SlideshowOutlined';
 import type { ClassCardData } from './ClassCard';
 import { RADIUS } from './timetable-theme';
 import ResourceCard from './ResourceCard';
 import ResourceOpener, { openExternalResource } from './ResourceOpener';
 import AddResourceFromClassDialog from './AddResourceFromClassDialog';
+import SharePointPickerDialog from './SharePointPickerDialog';
 import ResourceTextDialog from './ResourceTextDialog';
 import { makeThumbnail } from '@/lib/image-downscale';
 import {
@@ -86,6 +88,7 @@ export default function ClassResourcesSection({
   const [draft, setDraft] = useState('');
   const [opened, setOpened] = useState<ClassResource | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [spOpen, setSpOpen] = useState(false);
   const [editing, setEditing] = useState<{ resource: ClassResource; field: 'title' | 'note' } | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -363,6 +366,16 @@ export default function ClassResourcesSection({
             </Button>
             <Button
               size="small"
+              variant="outlined"
+              startIcon={<SlideshowOutlinedIcon />}
+              disabled={busy || pending || atCapacity}
+              onClick={() => setSpOpen(true)}
+              sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
+            >
+              Choose from SharePoint
+            </Button>
+            <Button
+              size="small"
               startIcon={<AddLinkIcon />}
               disabled={busy || pending || atCapacity}
               onClick={() => setPickerOpen(true)}
@@ -403,6 +416,17 @@ export default function ClassResourcesSection({
           <AddResourceFromClassDialog
             open={pickerOpen}
             onClose={() => setPickerOpen(false)}
+            classId={classId}
+            getToken={getToken}
+            onAdded={(resource) => {
+              setResources((prev) => sortResources([...prev, resource]));
+              onNotify?.('Added to this class');
+            }}
+            onNotify={onNotify}
+          />
+          <SharePointPickerDialog
+            open={spOpen}
+            onClose={() => setSpOpen(false)}
             classId={classId}
             getToken={getToken}
             onAdded={(resource) => {

@@ -169,6 +169,35 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
+    /*
+     * Stand down any OTHER primary link for this student first.
+     *
+     * nexus_parent_links carries TWO unique rules and they do not cover the same
+     * columns:
+     *
+     *   nexus_parent_links_parent_user_id_student_user_id_key
+     *       plain unique on (parent_user_id, student_user_id)
+     *   uq_nexus_parent_links_primary
+     *       PARTIAL unique on (student_user_id)
+     *       WHERE is_active AND is_primary AND revoked_at IS NULL
+     *
+     * The upsert below targets the first. When a previous run left a primary
+     * link owned by a DIFFERENT parent_user_id, the upsert finds no conflict on
+     * its own target, attempts a plain insert, and trips the second rule with
+     * "duplicate key value violates unique constraint
+     * uq_nexus_parent_links_primary". The route then 500s and every parent spec
+     * silently skips, which is how this went unnoticed.
+     *
+     * Demoting rather than deleting keeps the history: the old link stays, it
+     * just stops being the primary one.
+     */
+    await supabase
+      .from('nexus_parent_links')
+      .update({ is_primary: false })
+      .eq('student_user_id', student.id)
+      .eq('is_primary', true)
+      .neq('parent_user_id', parentUserId as string);
+
     const { error: linkError } = await supabase.from('nexus_parent_links').upsert(
       {
         parent_user_id: parentUserId,

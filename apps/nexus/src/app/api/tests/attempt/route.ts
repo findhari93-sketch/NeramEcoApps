@@ -198,7 +198,11 @@ export async function POST(request: NextRequest) {
               ...r,
               question_text: q?.question_text ?? null,
               options: q?.options ?? null,
-              explanation: (q as any)?.explanation_brief ?? null,
+              explanation: q?.explanation_brief ?? null,
+              // Present only once someone has asked for the deeper version.
+              // The take page uses this to decide between showing it and
+              // offering the "explain in more detail" button.
+              explanation_detailed: q?.explanation_detailed ?? null,
             };
           }),
         },

@@ -37,7 +37,8 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import TagPicker from '@/components/question-bank/TagPicker';
-import type { NexusQBQuestionListItem, QBDifficulty } from '@neram/database';
+import type { NexusQBQuestionListItem, QBDifficulty, NexusTestKind } from '@neram/database';
+import { NEXUS_TEACHER_TEST_KINDS } from '@neram/database';
 
 const DIFFICULTIES: QBDifficulty[] = ['EASY', 'MEDIUM', 'HARD'];
 const DIFF_COLOR: Record<string, 'success' | 'warning' | 'error'> = { EASY: 'success', MEDIUM: 'warning', HARD: 'error' };
@@ -69,6 +70,7 @@ export default function TestBuilderPage() {
   // Create/place dialog
   const [dialogPhase, setDialogPhase] = useState<null | 'form' | 'place'>(null);
   const [title, setTitle] = useState('');
+  const [testKind, setTestKind] = useState<NexusTestKind>('classroom_assigned');
   const [timerType, setTimerType] = useState<TimerType>('none');
   const [durationMinutes, setDurationMinutes] = useState<number>(30);
   const [perQuestionSeconds, setPerQuestionSeconds] = useState<number>(60);
@@ -170,6 +172,7 @@ export default function TestBuilderPage() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: title.trim(),
+          test_kind: testKind,
           question_ids: questionIds,
           timer_type: timerType,
           duration_minutes: timerType === 'full' ? durationMinutes : null,
@@ -392,6 +395,21 @@ export default function TestBuilderPage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="test-kind">Test type</InputLabel>
+                  <Select
+                    labelId="test-kind"
+                    label="Test type"
+                    value={testKind}
+                    onChange={(e) => setTestKind(e.target.value as NexusTestKind)}
+                  >
+                    {NEXUS_TEACHER_TEST_KINDS.map((k) => (
+                      <MenuItem key={k.value} value={k.value}>
+                        {k.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
                 <FormControl size="small" fullWidth>
                   <InputLabel id="timer">Timing</InputLabel>
                   <Select labelId="timer" label="Timing" value={timerType} onChange={(e) => setTimerType(e.target.value as TimerType)}>

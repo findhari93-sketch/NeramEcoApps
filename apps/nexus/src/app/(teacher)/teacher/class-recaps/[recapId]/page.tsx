@@ -29,8 +29,10 @@ import AddIcon from '@mui/icons-material/Add';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import PublishIcon from '@mui/icons-material/Publish';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import TuneIcon from '@mui/icons-material/Tune';
 import { ToggleButtonGroup, ToggleButton } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import RecapSettingsSheet, { type RecapSettings } from '@/components/class-recap/RecapSettingsSheet';
 
 interface EditQuestion {
   question_text: string;
@@ -66,7 +68,9 @@ export default function TeacherClassRecapEditor() {
   const recapId = params?.recapId as string;
   const { loading: authLoading, getTeacherToken } = useNexusAuthContext();
 
-  const [recap, setRecap] = useState<{ id: string; title: string; status: string; recording_url: string | null; video_source: string } | null>(null);
+  const [recap, setRecap] = useState<{ id: string; title: string; status: string; recording_url: string | null; video_source: string; video_duration_seconds: number | null } | null>(null);
+  const [settings, setSettings] = useState<RecapSettings | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sections, setSections] = useState<EditSection[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' | 'info' } | null>(null);
@@ -119,7 +123,22 @@ export default function TeacherClassRecapEditor() {
     try {
       const res = await teacherFetch(`/api/class-recaps/${recapId}`);
       const r = res.recap;
-      setRecap({ id: r.id, title: r.title, status: r.status, recording_url: r.recording_url, video_source: r.video_source || 'sharepoint' });
+      setRecap({
+        id: r.id,
+        title: r.title,
+        status: r.status,
+        recording_url: r.recording_url,
+        video_source: r.video_source || 'sharepoint',
+        video_duration_seconds: r.video_duration_seconds ?? null,
+      });
+      // Falls back to the shipped defaults rather than zeros, so opening the
+      // sheet on a recap predating these columns still shows real numbers.
+      setSettings({
+        target_segment_seconds: r.target_segment_seconds ?? 900,
+        question_pool_per_segment: r.question_pool_per_segment ?? 15,
+        questions_per_segment: r.questions_per_segment ?? 10,
+        pass_percentage: r.pass_percentage ?? 70,
+      });
       setSections(toEdit(r.sections));
     } catch (err) {
       setSnack({ msg: err instanceof Error ? err.message : 'Failed to load', sev: 'error' });
@@ -352,6 +371,17 @@ export default function TeacherClassRecapEditor() {
         <Button variant="outlined" startIcon={<UploadFileIcon />} disabled={!!busy} onClick={() => fileRef.current?.click()} sx={{ minHeight: 44, textTransform: 'none' }}>
           Upload .vtt
         </Button>
+        {/* Sits next to Generate on purpose: these numbers decide what Generate
+            produces, so finding them afterwards is finding them too late. */}
+        <Button
+          variant="outlined"
+          startIcon={<TuneIcon />}
+          disabled={!!busy || !settings}
+          onClick={() => setSettingsOpen(true)}
+          sx={{ minHeight: 44, textTransform: 'none' }}
+        >
+          Checkpoint settings
+        </Button>
         <input ref={fileRef} type="file" accept=".vtt,text/vtt" hidden onChange={onUpload} />
         <Box sx={{ flex: 1 }} />
         <Button variant="outlined" startIcon={<SaveOutlinedIcon />} disabled={!!busy || sections.length === 0} onClick={save} sx={{ minHeight: 44, textTransform: 'none' }}>
@@ -522,6 +552,23 @@ export default function TeacherClassRecapEditor() {
         <Button startIcon={<AddIcon />} onClick={addSection} sx={{ mt: 2, textTransform: 'none' }}>
           Add checkpoint
         </Button>
+      )}
+
+      {settings && recap && (
+        <RecapSettingsSheet
+          open={settingsOpen}
+          recapId={recap.id}
+          initial={settings}
+          videoDurationSeconds={recap.video_duration_seconds}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={(s) => {
+            setSettings(s);
+            // The saved pass mark is written onto every existing checkpoint, so
+            // reload rather than trust the local copy.
+            void load();
+            setSnack({ msg: 'Checkpoint settings saved', sev: 'success' });
+          }}
+        />
       )}
 
       <Snackbar open={!!snack} autoHideDuration={4000} onClose={() => setSnack(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

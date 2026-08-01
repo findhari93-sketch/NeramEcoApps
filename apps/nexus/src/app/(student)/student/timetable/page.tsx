@@ -26,7 +26,7 @@ import DayView from '@/components/timetable/views/DayView';
 import MonthView from '@/components/timetable/views/MonthView';
 import CalendarShell from '@/components/timetable/CalendarShell';
 import ClassReviewForm from '@/components/timetable/ClassReviewForm';
-import ClassDetailPanel, { type PanelAssignment } from '@/components/timetable/ClassDetailPanel';
+import { ClassPanel, type PanelAssignment } from '@/components/timetable/class-panel';
 import type { ClassPrepSummaryClient } from '@/components/timetable/PrepGateCard';
 import RsvpReasonDialog, { type RsvpDeclinePayload } from '@/components/timetable/RsvpReasonDialog';
 import PreworkReasonDialog, { type PreworkReasonPayload } from '@/components/timetable/PreworkReasonDialog';
@@ -978,13 +978,17 @@ export default function StudentTimetable() {
         )}
       </CalendarShell>
 
-      <ClassDetailPanel
+      <ClassPanel
         cls={selectedClass}
         open={!!selectedClass}
         onClose={() => setSelectedClass(null)}
+        variant="drawer"
         role="student"
         classroomId={selectedClass?.classroom?.id || activeClassroom?.id || ''}
         getToken={getToken}
+        onNotify={(message, severity = 'success') =>
+          setSnackbar({ open: true, message, severity: severity === 'warning' ? 'error' : severity })
+        }
         myRsvp={selectedClass ? myRsvps[selectedClass.id] : null}
         myAttended={selectedClass ? (myAttendance[selectedClass.id] ?? null) : null}
         assignments={selectedClass ? assignmentsForPanel(selectedClass.id) : undefined}

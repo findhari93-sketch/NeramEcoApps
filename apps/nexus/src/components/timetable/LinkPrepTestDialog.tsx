@@ -30,7 +30,15 @@ const MAX_QUESTIONS = 15;
  * Which library tests may gate a class. A content gate belongs to its chapter and
  * a catch-up paper belongs to the class it clears, so neither is offered here.
  */
-const REUSABLE_KINDS = ['classroom_assigned', 'practice_pool', 'class_prep', 'weekly', 'mock'];
+const REUSABLE_KINDS = [
+  'classroom_assigned',
+  'practice_pool',
+  'class_prep',
+  'weekly',
+  'mock',
+  'full',
+  'chapter',
+];
 
 interface LinkPrepTestDialogProps {
   open: boolean;

@@ -24,7 +24,7 @@ import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PasteAssignmentsDialog from '@/components/assignments/bulk/PasteAssignmentsDialog';
-import NewAssignmentDialog from '@/components/assignments/NewAssignmentDialog';
+import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 
 interface AssignmentRow {
   id: string;
@@ -411,13 +411,16 @@ export default function TeacherAssignmentsHub() {
         </Stack>
       )}
 
-      <NewAssignmentDialog
+      {/* The same component the timetable opens, so the two entry points cannot
+          drift. With no class in context there is nothing to link to, so it
+          opens straight on Create. */}
+      <AssignmentSetupDialog
         open={newOpen}
         onClose={() => setNewOpen(false)}
         classroomId={classroomId}
         authFetch={authFetch}
         getToken={getTeacherToken}
-        onCreated={load}
+        onSaved={load}
       />
 
       <PasteAssignmentsDialog

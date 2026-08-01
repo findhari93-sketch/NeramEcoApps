@@ -17,7 +17,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box, Button, Typography, TextField, Drawer, IconButton, Stack,
-  Chip, LinearProgress, Divider, useMediaQuery, useTheme, alpha,
+  Chip, LinearProgress, Divider, Switch, FormControlLabel,
+  useMediaQuery, useTheme, alpha,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
@@ -32,6 +33,11 @@ import { istTodayStr } from '@/lib/assignment-clock';
 import type { AssignmentFormat } from '@/lib/assignment-format';
 import StudyFilePicker, { type PickedFile } from './StudyFilePicker';
 import AssignmentFormFields, { type AssignmentDraft, type AssignmentType, blankDraft } from './AssignmentFormFields';
+import QuestionComposer, {
+  type ComposerQuestion,
+  fromApiQuestions,
+  toApiQuestions,
+} from './QuestionComposer';
 
 interface AttachmentRow {
   id: string;
@@ -67,6 +73,7 @@ export default function NewAssignmentDialog({
   classContextLabel,
   classStartLabel,
   defaultTiming,
+  headerExtra,
 }: {
   open: boolean;
   onClose: () => void;
@@ -89,6 +96,11 @@ export default function NewAssignmentDialog({
   classStartLabel?: string;
   /** Preselect Before class, e.g. from the "Add pre-class work" snackbar action. */
   defaultTiming?: 'prework' | 'homework';
+  /**
+   * Rendered directly under the title. AssignmentSetupDialog puts its
+   * create-or-link switch here so both branches share one header.
+   */
+  headerExtra?: React.ReactNode;
 }) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
@@ -107,6 +119,14 @@ export default function NewAssignmentDialog({
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+
+  // Questions the students answer in the app. Empty means the assignment is
+  // upload-only, which is how every assignment behaved before this existed.
+  const [questions, setQuestions] = useState<ComposerQuestion[]>([]);
+  const [requiresPdf, setRequiresPdf] = useState(true);
+  const [questionsLockedReason, setQuestionsLockedReason] = useState<string | null>(null);
+
+  const hasAutoQuestion = questions.some((q) => q.format !== 'SUBJECTIVE');
 
   const prefill = useCallback((a: AssignmentDetail) => {
     setDraft({
@@ -137,9 +157,26 @@ export default function NewAssignmentDialog({
     setLinkUrl('');
     setError('');
     // Edit mode: load the assignment and prefill.
+    setQuestions([]);
+    setRequiresPdf(true);
+    setQuestionsLockedReason(null);
     if (assignmentId) {
       authFetch(`/api/assignments/${assignmentId}`)
-        .then((res) => prefill(res.assignment as AssignmentDetail))
+        .then((res) => {
+          prefill(res.assignment as AssignmentDetail);
+          setRequiresPdf((res.assignment as any)?.requires_pdf !== false);
+          if (res.paper?.questions?.length) {
+            setQuestions(fromApiQuestions(res.paper.questions));
+            // Re-keying a paper under students who already answered it would
+            // change marks they have already been shown.
+            const answered = (res.roster || []).filter((r: any) => r.answers).length;
+            if (answered > 0) {
+              setQuestionsLockedReason(
+                `${answered} ${answered === 1 ? 'student has' : 'students have'} already answered these questions, so the paper can no longer be changed.`,
+              );
+            }
+          }
+        })
         .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the assignment.'));
     }
   }, [open, assignmentId, authFetch, prefill, defaultTiming]);
@@ -147,6 +184,34 @@ export default function NewAssignmentDialog({
   const reloadDetail = async (id: string) => {
     const res = await authFetch(`/api/assignments/${id}`);
     setCreated(res.assignment as AssignmentDetail);
+  };
+
+  /**
+   * Persist the question paper for an assignment that already exists.
+   *
+   * Kept out of the main update call because the two fail differently: a bad
+   * question should not silently roll back a title change, and a paper the
+   * students have already answered is refused outright. The PDF toggle goes
+   * after the questions, since the server only lets it be turned off once there
+   * is an auto-marked question to hand in instead.
+   */
+  const saveQuestions = async (id: string) => {
+    if (questionsLockedReason) return;
+    if (questions.length === 0) {
+      await authFetch(`/api/assignments/${id}`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'clear_questions' }),
+      });
+      return;
+    }
+    await authFetch(`/api/assignments/${id}`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'save_questions', questions: toApiQuestions(questions) }),
+    });
+    await authFetch(`/api/assignments/${id}`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'update', requires_pdf: requiresPdf }),
+    });
   };
 
   // Injected uploader for the shared ImageUploadField (drawing reference image).
@@ -263,6 +328,7 @@ export default function NewAssignmentDialog({
             : { submission_format: draft.format }),
         }),
       });
+      if (draft.type === 'document') await saveQuestions(assignmentId);
       onCreated();
       onClose();
     } catch (err) {
@@ -349,6 +415,9 @@ export default function NewAssignmentDialog({
     if (!created) return;
     setBusy(true);
     try {
+      // Questions first: publishing an assignment whose paper failed to save
+      // would show students an empty question list they cannot answer.
+      if (type === 'document') await saveQuestions(created.id);
       await authFetch(`/api/assignments/${created.id}`, {
         method: 'POST',
         body: JSON.stringify({ action: 'publish' }),
@@ -418,6 +487,63 @@ export default function NewAssignmentDialog({
     </Box>
   );
 
+  /**
+   * Questions students answer in the app, plus the decision about whether they
+   * still hand in working. Document assignments only: a drawing is judged from
+   * the drawing itself, so a multiple-choice question has nothing to attach to.
+   */
+  const questionsSection = type === 'document' && (
+    <Box>
+      <QuestionComposer
+        value={questions}
+        onChange={setQuestions}
+        disabled={!!questionsLockedReason}
+        disabledReason={questionsLockedReason}
+      />
+
+      {questions.length > 0 && (
+        <Box
+          sx={{
+            mt: 1.5,
+            p: 1.5,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <FormControlLabel
+            control={
+              <Switch
+                checked={requiresPdf}
+                onChange={(e) => setRequiresPdf(e.target.checked)}
+                disabled={!!questionsLockedReason || !hasAutoQuestion}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Students must upload their working
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {requiresPdf
+                    ? 'They upload the PDF first, then the questions open and they see their result.'
+                    : 'They answer and submit straight away, with nothing to upload.'}
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: 'flex-start', m: 0, '& .MuiSwitch-root': { mt: 0.25 } }}
+          />
+          {!hasAutoQuestion && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              Every question here is marked by you, so the upload stays required. Add a multiple
+              choice or numerical question to make it optional.
+            </Typography>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+
   const fieldsBlock = (
     <AssignmentFormFields
       value={draft}
@@ -466,6 +592,8 @@ export default function NewAssignmentDialog({
           </IconButton>
         </Stack>
 
+        {headerExtra}
+
         {/* Opened from the timetable: say so, because an assignment that belongs
             to a class behaves differently from a standalone one. */}
         {!isEdit && scheduledClassId && classContextLabel && (
@@ -493,7 +621,13 @@ export default function NewAssignmentDialog({
           <Stack spacing={2}>
             {fieldsBlock}
             {materialsSection}
-            {error && <Typography color="error" variant="body2">{error}</Typography>}
+            {questionsSection && (
+              <>
+                <Divider />
+                {questionsSection}
+              </>
+            )}
+            {error && <Typography color="error" variant="body2" role="alert">{error}</Typography>}
             <Stack direction="row" spacing={1.5}>
               <Button variant="outlined" onClick={onClose} sx={{ flex: 1, minHeight: 48 }}>Cancel</Button>
               <Button variant="contained" disabled={busy} onClick={saveEdit} sx={{ flex: 1, minHeight: 48 }}>
@@ -527,6 +661,8 @@ export default function NewAssignmentDialog({
               <>
                 <Divider />
                 {materialsSection}
+                <Divider />
+                {questionsSection}
               </>
             )}
 

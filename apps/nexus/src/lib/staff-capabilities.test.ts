@@ -113,6 +113,7 @@ describe('teacher tier (external, restricted)', () => {
     'structure.plan.delete',
     'teach.timetable.schedule',
     'coord.student.dormancy',
+    'coord.student.finance',
     'coord.photo_ms_push',
     'impersonate.any',
   ];
@@ -159,6 +160,17 @@ describe('teacher tier (external, restricted)', () => {
     expect(can('teacher', 'coord.student.dormancy')).toBe(false);
     expect(can('manager', 'coord.student.dormancy')).toBe(true);
     expect(can('admin', 'coord.student.dormancy')).toBe(true);
+  });
+
+  it('cannot see what a family owes or has paid', () => {
+    // Fees are not a teaching signal. A visiting teacher needs attendance and
+    // submissions; they have no reason to see a family's balance. This is
+    // enforced server side by never selecting the commercial columns for a
+    // teacher, so the capability is the switch, not the styling.
+    expect(can('teacher', 'coord.student.view')).toBe(true);
+    expect(can('teacher', 'coord.student.finance')).toBe(false);
+    expect(can('manager', 'coord.student.finance')).toBe(true);
+    expect(can('admin', 'coord.student.finance')).toBe(true);
   });
 
   it('holds exactly one half of the old coord.student.classify', () => {

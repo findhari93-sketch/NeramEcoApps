@@ -192,6 +192,26 @@ A 300 MB recording may not finish inside one 300s invocation. That is expected a
 
 ---
 
+## What feeds it, and what the teacher sees
+
+**The recording link is now found automatically.** This job selects on `recording_url IS NOT NULL`, and until recently nothing filled that column on a schedule: only a human pressing Sync, Generate or Backfill. So a class nobody opened was never a candidate here, however healthy this job was. [syncClassRecordingLinks](apps/nexus/src/lib/recording-backfill.ts) now runs inside `/api/cron/sync-attendance` (20:50 and 23:30 IST), which is early enough that a class taught tonight is queued for the 00:40 upload the same night.
+
+If a class never gets a link, look there first, not here. Its `recording_sync_status` and `recording_sync_detail` columns say why, and `unavailable` means four attempts were spent and it will not be retried.
+
+**The private-video step is now visible in the app.** The wrap-up panel on `/teacher/timetable` shows a status strip under the YouTube field, reading `nexus_class_video_uploads`:
+
+| State | What the teacher sees |
+|---|---|
+| `uploading` | "Uploading to YouTube, 62%" with a progress bar |
+| `ok` + `private` | "Uploaded to YouTube as private, so students cannot watch it yet", plus an **Open in YouTube Studio** button straight to that video's edit page |
+| `pending`, attempts > 0 | "Backup did not finish last night. It tries again tonight" |
+| `unavailable` | "Automatic backup gave up after 4 tries", with the failure detail |
+| link already filled | nothing, so a class needing no attention stays quiet |
+
+That strip is the whole reason the forced-private rule is survivable. The teacher's one click in Studio is the real publish trigger, and the promotion pass fills `youtube_url` in by itself on the next run.
+
+---
+
 ## What the numbers mean
 
 | Field | |

@@ -27,6 +27,8 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { computeAssignmentClock } from '@/lib/assignment-clock';
 import { extractYouTubeId } from '@/lib/youtube';
 import SubmissionFiles from '@/components/assignments/SubmissionFiles';
+import AssignmentBrief from '@/components/assignments/AssignmentBrief';
+import AssignmentQuestions, { type PaperView } from '@/components/assignments/AssignmentQuestions';
 import AssignmentSubmitSheet from '@/components/assignments/AssignmentSubmitSheet';
 import DrawingAssignmentPanel, { type DrawingSubmissionView } from '@/components/assignments/DrawingAssignmentPanel';
 import GradeDisplay from '@/components/assignments/GradeDisplay';
@@ -34,6 +36,7 @@ import ReactionAppreciation from '@/components/assignments/ReactionAppreciation'
 import SubmissionHistoryTimeline from '@/components/assignments/SubmissionHistoryTimeline';
 import { documentSubmissionToViews, drawingAttemptsToViews } from '@/lib/submission-history';
 import { captureScreenshot } from '@/lib/capture-screenshot';
+import type { SubmitMode } from '@/lib/assignment-submit-window';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
 import type { DrawingSubmission, GalleryReactionType, NexusAssignmentSubmissionHistoryEntry } from '@neram/database/types';
 
@@ -53,6 +56,8 @@ interface Detail {
   max_marks: number;
   due_at: string | null;
   catchup_window_days: number;
+  /** When true, worked solutions must be uploaded before the questions open. */
+  requires_pdf?: boolean;
   content_image_url: string | null;
   reference_images?: string[] | null;
   content_video_url: string | null;
@@ -91,6 +96,15 @@ export default function StudentAssignmentDetailPage() {
 
   const [detail, setDetail] = useState<Detail | null>(null);
   const [submission, setSubmission] = useState<MySubmission | null>(null);
+  // Resolved server-side by resolveSubmitMode so the page cannot disagree with
+  // the API about who may hand work in.
+  const [submitMode, setSubmitMode] = useState<SubmitMode>('first');
+  const [lockedWhy, setLockedWhy] = useState<string | null>(null);
+  const [paper, setPaper] = useState<PaperView | null>(null);
+  const [answersLocked, setAnswersLocked] = useState(false);
+  const [myAnswers, setMyAnswers] = useState<Record<string, string> | null>(null);
+  const [myResult, setMyResult] = useState<{ score: number; total_marks: number; percentage: number } | null>(null);
+  const [answersBusy, setAnswersBusy] = useState(false);
   const [drawingSubmission, setDrawingSubmission] = useState<DrawingSubmissionView | null>(null);
   const [drawingAttempts, setDrawingAttempts] = useState<DrawingSubmission[]>([]);
   const [enrolledAt, setEnrolledAt] = useState<string | null>(null);
@@ -111,6 +125,12 @@ export default function StudentAssignmentDetailPage() {
       setDrawingAttempts((res.drawing_attempts as DrawingSubmission[]) ?? []);
       setEnrolledAt(res.enrolled_at ?? null);
       setRecording(res.recording ?? { url: null, source: null });
+      setSubmitMode((res.submit_mode as SubmitMode) ?? 'first');
+      setLockedWhy(res.submit_locked_reason ?? null);
+      setPaper((res.paper as PaperView) ?? null);
+      setAnswersLocked(!!res.answers_locked);
+      setMyAnswers(res.my_answers ?? null);
+      setMyResult(res.my_result ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load this assignment.');
     }
@@ -152,10 +172,31 @@ export default function StudentAssignmentDetailPage() {
       })
     : null;
 
+  const submitAnswers = useCallback(
+    async (answers: Record<string, string>) => {
+      setAnswersBusy(true);
+      try {
+        await authFetch('/api/student/assignments', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'submit_answers', assignment_id: id, answers }),
+        });
+        await load();
+      } finally {
+        setAnswersBusy(false);
+      }
+    },
+    [authFetch, id, load],
+  );
+
   const isDrawing = detail?.assignment_type === 'drawing';
-  const canSubmit = isDrawing
-    ? !drawingSubmission || drawingSubmission.status === 'redo'
-    : !submission || submission.status === 'redo';
+  // 'replace' counts as being able to submit: it is the same door, it just means
+  // something different on the other side. Only 'locked' closes it.
+  const canSubmit = submitMode !== 'locked';
+  const hasQuestions = !!paper && paper.questions.length > 0;
+  // The gate the server enforces, mirrored here so the questions can show
+  // themselves as waiting rather than simply refusing on submit.
+  const awaitingPdf =
+    hasQuestions && (detail?.requires_pdf ?? true) && !(submission?.files || []).length;
   const youtubeId = recording.url && recording.source === 'youtube' ? extractYouTubeId(recording.url) : null;
   // Reference / expected-output images: prefer the multi-image set, fall back to the
   // single legacy content image so older assignments still render.
@@ -342,12 +383,9 @@ export default function StudentAssignmentDetailPage() {
               </Box>
             )}
 
-            {/* Instructions */}
-            {detail.instructions && (
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                {detail.instructions}
-              </Typography>
-            )}
+            {/* The brief: question cards, marks and maths, not a wall of text. */}
+            <AssignmentBrief instructions={detail.instructions} />
+
 
             {/* Explainer video + links */}
             {(detail.content_video_url || detail.links.length > 0) && (
@@ -414,6 +452,8 @@ export default function StudentAssignmentDetailPage() {
                 submission={drawingSubmission}
                 evaluationType={detail.evaluation_type}
                 maxMarks={detail.max_marks}
+                submitMode={submitMode}
+                lockedReason={lockedWhy}
                 getToken={getToken}
                 onChanged={load}
               />
@@ -433,11 +473,12 @@ export default function StudentAssignmentDetailPage() {
                   </Box>
                 )}
 
-                {/* My submission */}
+                {/* My submission. Titled for what it holds: when there are
+                    questions too, "your submission" alone is ambiguous. */}
                 <Box>
                   <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                     <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>
-                      Your submission
+                      {hasQuestions ? 'Your working' : 'Your submission'}
                     </Typography>
                     {submission?.status === 'redo' && (
                       <Chip label="Redo requested" size="small" sx={{ bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700 }} />
@@ -465,10 +506,58 @@ export default function StudentAssignmentDetailPage() {
                   )}
                 </Box>
 
-                {canSubmit && (
-                  <Button variant="contained" onClick={() => setSubmitOpen(true)} sx={{ minHeight: 48 }}>
-                    {submission?.status === 'redo' ? 'Resubmit' : 'Submit your work'}
-                  </Button>
+                {canSubmit ? (
+                  <Box>
+                    <Button
+                      variant={submitMode === 'replace' ? 'outlined' : 'contained'}
+                      fullWidth
+                      onClick={() => setSubmitOpen(true)}
+                      sx={{ minHeight: 48 }}
+                    >
+                      {submitMode === 'redo'
+                        ? 'Resubmit'
+                        : submitMode === 'replace'
+                          ? 'Replace your file'
+                          : 'Submit your work'}
+                    </Button>
+                    {submitMode === 'replace' && (
+                      // Said before they need it, not after. A student who knows
+                      // this is here does not have to message their teacher to
+                      // find out whether a mistake can be fixed.
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mt: 0.75, textAlign: 'center' }}
+                      >
+                        Spotted a mistake? You can change this until your teacher marks it.
+                      </Typography>
+                    )}
+                  </Box>
+                ) : (
+                  lockedWhy && (
+                    <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {lockedWhy}
+                      </Typography>
+                    </Box>
+                  )
+                )}
+
+                {/* The questions, after the upload, because that is the order
+                    they have to be done in when working is required. */}
+                {hasQuestions && (
+                  <>
+                    <Divider />
+                    <AssignmentQuestions
+                      paper={paper!}
+                      locked={answersLocked}
+                      myAnswers={myAnswers}
+                      myResult={myResult}
+                      awaitingPdf={awaitingPdf}
+                      busy={answersBusy}
+                      onSubmit={submitAnswers}
+                    />
+                  </>
                 )}
               </>
             )}
@@ -488,6 +577,7 @@ export default function StudentAssignmentDetailPage() {
               onClose={() => setSubmitOpen(false)}
               assignmentId={detail.id}
               format={detail.submission_format}
+              submitMode={submitMode}
               redoFeedback={submission?.status === 'redo' ? submission.feedback : null}
               authFetch={authFetch}
               onSubmitted={() => {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
-import { findSimilarQuestions } from '@neram/database';
+import { findSimilarQuestions, getSupabaseAdminClient } from '@neram/database';
 
 /**
  * POST /api/question-bank/import/preview   (teacher/admin)
@@ -95,6 +95,37 @@ export async function POST(request: NextRequest) {
                 : 'similar',
         })),
       });
+    }
+
+    // The similarity RPC returns only the stem and the options, which is enough
+    // to flag a duplicate and not enough to judge which of the two is better.
+    // One batched fetch for the rest, after the scan rather than inside it, so
+    // this stays a single query no matter how many rows were pasted.
+    const candidateIds = [...new Set(results.flatMap((r) => r.candidates.map((c) => c.id)))];
+    if (candidateIds.length > 0) {
+      const { data: details, error: detailError } = await getSupabaseAdminClient()
+        .from('nexus_qb_questions')
+        .select('id, correct_answer, explanation_brief, difficulty, exam_relevance')
+        .in('id', candidateIds);
+
+      // A failure here costs the comparison detail, not the dedupe itself, so
+      // the preview still returns rather than 500ing on an enrichment miss.
+      if (detailError) {
+        console.error('Import candidate enrichment failed:', detailError.message);
+      } else {
+        const byId = new Map((details || []).map((d: any) => [d.id, d]));
+        for (const r of results) {
+          for (const c of r.candidates) {
+            const d = byId.get(c.id);
+            Object.assign(c, {
+              correct_answer: d?.correct_answer ?? null,
+              explanation_brief: d?.explanation_brief ?? null,
+              difficulty: d?.difficulty ?? null,
+              exam_relevance: d?.exam_relevance ?? null,
+            });
+          }
+        }
+      }
     }
 
     const summary = results.reduce(

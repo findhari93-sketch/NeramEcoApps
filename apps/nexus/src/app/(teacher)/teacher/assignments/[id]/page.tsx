@@ -42,9 +42,11 @@ import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { GalleryReactionType } from '@neram/database/types';
 import SubmissionReviewSheet, { type ReviewRow } from '@/components/assignments/SubmissionReviewSheet';
+import AssignmentBrief from '@/components/assignments/AssignmentBrief';
+import AssignmentResultsGrid from '@/components/assignments/AssignmentResultsGrid';
 import GradeDisplay from '@/components/assignments/GradeDisplay';
 import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
-import NewAssignmentDialog from '@/components/assignments/NewAssignmentDialog';
+import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 import { remindedAgo } from '@/lib/relative-time';
 
 interface AttachmentRow {
@@ -70,6 +72,8 @@ interface AssignmentInfo {
 }
 type Bucket = 'submitted' | 'late' | 'missing';
 const BUCKET_LABEL: Record<Bucket, string> = { submitted: 'Submitted', late: 'Late', missing: 'Not submitted' };
+/** The roster tabs plus the results matrix, which is a view of the same roster. */
+type RosterTab = Bucket | 'results';
 
 interface DrawingRosterRow {
   student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
@@ -101,9 +105,13 @@ export default function AssignmentReviewPage() {
 
   const [assignment, setAssignment] = useState<AssignmentInfo | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
+  // The question paper, present only when the teacher attached one.
+  const [paper, setPaper] = useState<{
+    questions: { id: string; question_text: string; format: string; marks: number; correct_answer?: string | null }[];
+  } | null>(null);
   const [drawingRows, setDrawingRows] = useState<DrawingRosterRow[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({ total: 0, submitted: 0, late: 0, missing: 0 });
-  const [tab, setTab] = useState<Bucket>('submitted');
+  const [tab, setTab] = useState<RosterTab>('submitted');
   const [dTab, setDTab] = useState<DBucket>('submitted');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
@@ -170,6 +178,7 @@ export default function AssignmentReviewPage() {
       setDrawingRows((res.drawing_roster as DrawingRosterRow[]) || []);
       setCounts(res.counts || {});
       setReminders((res.reminders as Record<string, ReminderSummary>) || {});
+      setPaper(res.paper ?? null);
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load assignment');
@@ -226,6 +235,7 @@ export default function AssignmentReviewPage() {
     [drawingRows],
   );
   const docResubmitCount = useMemo(() => rows.filter((r) => r.bucket === 'submitted' && isDocResubmission(r)).length, [rows]);
+  const hasPaper = !!paper && paper.questions.length > 0;
   const missingDrawingRecipients = useMemo(
     () => drawingRows.filter((r) => r.bucket === 'missing').map((r) => ({ id: r.student.id, name: r.student.name })),
     [drawingRows],
@@ -393,9 +403,16 @@ export default function AssignmentReviewPage() {
           {(assignment.instructions || refImages.length > 0 || (assignment.attachments && assignment.attachments.length > 0) || (assignment.links && assignment.links.length > 0)) && (
             <Box sx={{ mb: 2.5, p: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
               {assignment.instructions && (
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: refImages.length > 0 ? 1.5 : 0 }}>
-                  {assignment.instructions}
-                </Typography>
+                <Box sx={{ mb: refImages.length > 0 ? 1.5 : 0 }}>
+                  {/* showMarksWarning: the teacher is the only one who can act on
+                      a brief whose stated marks disagree with the assignment's
+                      configured total, so only they are told. */}
+                  <AssignmentBrief
+                    instructions={assignment.instructions}
+                    maxMarks={assignment.max_marks}
+                    showMarksWarning
+                  />
+                </Box>
               )}
               {refImages.length > 0 && (
                 <Box>
@@ -637,8 +654,21 @@ export default function AssignmentReviewPage() {
                     {BUCKET_LABEL[b]} ({counts[b] ?? 0})
                   </ToggleButton>
                 ))}
+                {/* Only offered when there is a paper to have results for. */}
+                {hasPaper && (
+                  <ToggleButton value="results" sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
+                    Results
+                  </ToggleButton>
+                )}
               </ToggleButtonGroup>
 
+              {tab === 'results' ? (
+                <AssignmentResultsGrid
+                  questions={paper!.questions}
+                  rows={rows.map((r) => ({ student: r.student, answers: (r as any).answers ?? null }))}
+                />
+              ) : (
+              <>
               <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
                   {bucketRows.length} {bucketRows.length === 1 ? 'student' : 'students'}
@@ -769,6 +799,8 @@ export default function AssignmentReviewPage() {
                   })}
                 </Stack>
               )}
+              </>
+              )}
             </>
           )}
         </>
@@ -778,6 +810,7 @@ export default function AssignmentReviewPage() {
         open={reviewIndex != null}
         row={reviewIndex != null ? bucketRows[reviewIndex] ?? null : null}
         maxMarks={assignment?.max_marks ?? 0}
+        paper={paper as any}
         evaluationType={assignment?.evaluation_type ?? 'marks'}
         busy={busy}
         onClose={() => setReviewIndex(null)}
@@ -809,14 +842,14 @@ export default function AssignmentReviewPage() {
         />
       )}
 
-      <NewAssignmentDialog
+      <AssignmentSetupDialog
         open={editOpen}
         onClose={() => setEditOpen(false)}
         classroomId=""
         assignmentId={id}
         authFetch={authFetch}
         getToken={getTeacherToken}
-        onCreated={() => {
+        onSaved={() => {
           setEditOpen(false);
           setSnack({ msg: 'Assignment updated.', sev: 'success' });
           load();

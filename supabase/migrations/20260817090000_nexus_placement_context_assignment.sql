@@ -1,0 +1,26 @@
+-- ============================================================
+-- PLACEMENT CONTEXT: an assignment can carry questions
+-- ------------------------------------------------------------
+-- Assignments have only ever held a plain-text brief and a file upload, so a
+-- maths paper stored its questions as prose ("Q3. Find the Area (5 Marks)") and
+-- a teacher marked every answer by hand. Everything needed to do better already
+-- exists in the test engine: the question bank, MCQ and numerical answering,
+-- per-question marks, and a grader with numerical tolerance. It was simply never
+-- reachable from an assignment.
+--
+-- This adds the missing join. An assignment's questions become an ordinary
+-- composed test placed on the assignment, so the questions live in the ONE
+-- repository (nexus_qb_questions) and are reusable like any others.
+--
+-- Not a reuse of 'classroom_assignment': that context points at a CLASSROOM and
+-- means "this test is set for the class", listed on the student's Tests screen.
+-- This one points at a single assignment row and must never appear there, since
+-- it is answered inside the assignment.
+--
+-- Alone in its own migration on purpose. The Supabase CLI wraps a migration file
+-- in a transaction, and a value added by ALTER TYPE cannot be USED in the same
+-- transaction that added it. The next migration references 'assignment', so the
+-- two cannot share a file. Same reasoning as
+-- 20260801092000_nexus_placement_context_class_prep.sql.
+-- ============================================================
+ALTER TYPE nexus_placement_context ADD VALUE IF NOT EXISTS 'assignment';

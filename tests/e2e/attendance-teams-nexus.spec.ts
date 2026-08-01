@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { APP_URLS, getTestAuthToken, injectAuthForPage } from '../utils/credentials';
+import { openAttendanceDialog } from '../utils/timetable-helpers';
 
 /**
  * Teams attendance: access control, error shape, and mobile layout.
@@ -379,11 +380,11 @@ test.describe('Teams attendance', () => {
     await page.goto(`${NEXUS}/teacher/timetable`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
 
-    const attendanceButton = page.getByRole('button', { name: /attendance/i }).first();
-    if (await attendanceButton.count()) {
-      await attendanceButton.click({ trial: false }).catch(() => {});
-      await page.waitForTimeout(1200);
-    }
+    // Deterministic now. This used to reach for the button on whatever view
+    // the timetable happened to open in (Plan), where it has never existed, so
+    // the whole test passed without ever opening the dialog it names.
+    const opened = await openAttendanceDialog(page);
+    test.skip(!opened, 'No past class with an attendance register in this environment');
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,

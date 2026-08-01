@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { APP_URLS, injectAuthForPage } from '../utils/credentials';
+import { openAttendanceDialog } from '../utils/timetable-helpers';
 
 /**
  * The Teams attendance CSV import, in a real browser at a real phone size.
@@ -49,10 +50,11 @@ test.describe('Teams attendance CSV import (mobile)', () => {
     await page.goto(`${NEXUS}/teacher/timetable`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
 
-    const attendanceButton = page.getByRole('button', { name: /attendance/i }).first();
-    test.skip((await attendanceButton.count()) === 0, 'No class with an attendance sheet on screen');
-    await attendanceButton.click().catch(() => {});
-    await page.waitForTimeout(1500);
+    // Selects a past class and opens the merged dialog on "Who came", where the
+    // recovery row lives. This used to reach for a button on whatever view the
+    // timetable opened in, so it never ran at all.
+    const opened = await openAttendanceDialog(page);
+    test.skip(!opened, 'No past class with an attendance register in this environment');
 
     // The upload entry point only appears once a Teams sync has actually failed,
     // which is the state this environment is in. If Teams is working, there is

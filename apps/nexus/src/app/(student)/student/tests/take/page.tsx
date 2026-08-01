@@ -29,6 +29,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useSearchParams, useRouter } from 'next/navigation';
 import MathText from '@/components/common/MathText';
 import AnswerInput from '@/components/tests/AnswerInput';
+import ExplanationPanel from '@/components/tests/ExplanationPanel';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,6 +87,8 @@ interface GradedReviewItem {
   is_correct: boolean;
   is_gradable: boolean;
   explanation: string | null;
+  /** Only present once someone has asked the AI for the worked version. */
+  explanation_detailed?: string | null;
 }
 interface GradedResult {
   attempt_id: string;
@@ -101,7 +104,7 @@ interface GradedResult {
 export default function TakeTestPage() {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
-  const { getToken } = useNexusAuthContext();
+  const { getToken, activeClassroom } = useNexusAuthContext();
   const searchParams = useSearchParams();
   const router = useRouter();
   const testId = searchParams.get('test_id');
@@ -618,11 +621,13 @@ export default function TakeTestPage() {
                           </Typography>
                         )}
 
-                        {r.explanation && (
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                            {r.explanation}
-                          </Typography>
-                        )}
+                        <ExplanationPanel
+                          questionId={r.question_id}
+                          brief={r.explanation}
+                          detailed={r.explanation_detailed}
+                          classroomId={activeClassroom?.id}
+                          getToken={getToken}
+                        />
                       </Paper>
                     );
                   })}

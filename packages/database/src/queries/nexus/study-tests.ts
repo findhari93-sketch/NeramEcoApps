@@ -568,7 +568,7 @@ export async function gradePlacedChapterAttempt(
   const withAnswers = await getComposedTestQuestions(placed.test_id, true, supabase);
   const explanationById = new Map<string, string | null>();
   for (const q of withAnswers) {
-    explanationById.set(q.question_id, (q as any).explanation_brief ?? null);
+    explanationById.set(q.question_id, q.explanation_brief ?? null);
   }
 
   const correctCount = graded.review.filter((r) => r.is_correct).length;

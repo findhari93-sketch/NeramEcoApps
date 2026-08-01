@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 /**
  * PATCH /api/question-bank/tests/[id]   (teacher/admin)
- * Whitelisted edits: { title?, description?, is_published?, passing_marks? }
+ * Whitelisted edits: { title?, description?, is_published?, passing_marks?, test_kind? }
  */
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -62,6 +62,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       description: body?.description !== undefined ? body.description : undefined,
       isPublished: typeof body?.is_published === 'boolean' ? body.is_published : undefined,
       passingMarks: body?.passing_marks !== undefined ? body.passing_marks : undefined,
+      // updateTestMeta ignores anything outside the teacher-choosable list, so
+      // a stray value here relabels nothing rather than 400ing.
+      testKind: body?.test_kind || undefined,
     });
     if (!updated) return NextResponse.json({ error: 'Test not found' }, { status: 404 });
     return NextResponse.json({ data: updated });

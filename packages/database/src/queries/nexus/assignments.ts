@@ -908,15 +908,43 @@ export async function getMySubmissions(
 }
 
 /**
- * Insert or resubmit a student's work. On resubmit (a row already exists) the
- * previous attempt is pushed into history, attempt_number increments, status
- * resets to 'submitted', and the prior marks are cleared (feedback kept for
- * context). submitted_at is refreshed so lateness reflects the latest attempt.
+ * How a write against an existing submission should be treated.
+ *
+ * 'attempt' is a new round: the teacher asked for a redo, so the previous work
+ * is snapshotted into history and the attempt number moves on.
+ *
+ * 'replace' is the same round, corrected. The student caught their own mistake
+ * before anyone marked it, so there is no new attempt to record and nothing to
+ * snapshot: the old file is simply the wrong file. Callers must have checked
+ * the window first (resolveSubmitMode in the nexus app), because this layer
+ * takes the mode on trust.
+ */
+export type SubmissionWriteMode = 'attempt' | 'replace';
+
+/**
+ * Insert, resubmit, or replace a student's work.
+ *
+ * On a resubmit ('attempt') the previous round is pushed into history,
+ * attempt_number increments, status resets to 'submitted', the prior marks are
+ * cleared (feedback kept for context), and submitted_at is refreshed.
+ *
+ * On a 'replace' only `files` changes. submitted_at, attempt_number and history
+ * are all left exactly as they were, for three reasons worth stating because
+ * each one is a bug if you get it wrong:
+ *
+ *  - submitted_at drives the roster's late/on-time split. Refreshing it would
+ *    let a student turn their own on-time work late by fixing a typo.
+ *  - attempt_number > 1 is what the teacher's screen reads as "a redo came
+ *    back, re-review it". Bumping it would raise that flag for work nobody
+ *    asked to be redone.
+ *  - a history entry renders in the attempts timeline as a completed round.
+ *    A file that was live for four minutes is not a round.
  */
 export async function upsertSubmission(
   assignmentId: string,
   studentId: string,
   files: NexusAssignmentSubmissionFile[],
+  mode: SubmissionWriteMode = 'attempt',
   client?: TypedSupabaseClient,
 ): Promise<NexusAssignmentSubmission> {
   const supabase = client || getSupabaseAdminClient();
@@ -934,6 +962,21 @@ export async function upsertSubmission(
         attempt_number: 1,
         submitted_at: now,
       })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as NexusAssignmentSubmission;
+  }
+
+  if (mode === 'replace') {
+    // updated_at moving ahead of submitted_at is what tells the teacher's screen
+    // "the student changed this after handing it in". Only this function and
+    // reviewSubmission ever write this row, so nothing else can move it; if a
+    // third writer is ever added, that signal needs a real column instead.
+    const { data, error } = await supabase
+      .from(SUBMISSIONS)
+      .update({ files, updated_at: now })
+      .eq('id', existing.id)
       .select('*')
       .single();
     if (error) throw error;
@@ -1118,6 +1161,25 @@ export async function createSubmissionUploadUrls(
     out.push({ path, token: data.token, signedUrl: data.signedUrl });
   }
   return out;
+}
+
+/**
+ * Delete submission blobs from the private bucket.
+ *
+ * Used when a student replaces their own unmarked work: the superseded file is
+ * referenced by nothing afterwards (a replace writes no history entry), so
+ * without this every correction would leave an orphan behind forever. Callers
+ * treat failure as non-fatal, since a leftover blob is a smaller problem than a
+ * correction that would not save.
+ */
+export async function removeSubmissionFiles(
+  paths: string[],
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  if (!paths.length) return;
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase.storage.from(ASSIGNMENT_SUBMISSIONS_BUCKET).remove(paths);
+  if (error) throw error;
 }
 
 /** Short-TTL signed read URLs for a submission's files (viewer/download). */

@@ -8,9 +8,18 @@
 import { extractYouTubeId } from './youtube';
 import type { NexusClassResourceKind } from '@neram/database';
 
-/** Columns every read of a resource returns. Keep the API and embeds in step. */
+/**
+ * Columns every read of a resource returns. Keep the API and embeds in step.
+ *
+ * The nested `file` embed carries three things a study_file card cannot render
+ * without: the read-only SharePoint address behind "Open in SharePoint", and the
+ * name and type that decide whether this is a slide deck or a PDF. It is one
+ * join on a foreign key that is already there, and it is null for every other
+ * kind.
+ */
 export const RESOURCE_COLS =
-  'id, kind, title, note, url, thumb_url, study_file_id, sort_order, created_at';
+  'id, kind, title, note, url, thumb_url, study_file_id, sort_order, created_at, ' +
+  'file:nexus_study_files(file_name, file_type, sharepoint_web_url)';
 
 /**
  * PostgREST embed for pulling a class's resources along with the class row.
@@ -42,6 +51,13 @@ export interface ClassResource {
   study_file_id: string | null;
   sort_order: number;
   created_at: string;
+  /** Only on study_file rows. Null on videos, links and images. */
+  file?: {
+    file_name: string | null;
+    file_type: string | null;
+    /** Read-only, organisation-scoped. Safe to hand a student. */
+    sharepoint_web_url: string | null;
+  } | null;
 }
 
 /**
@@ -63,17 +79,44 @@ export function isSafeHttpUrl(input: string | null | undefined): boolean {
 }
 
 /**
+ * Is this a link to a file in our own SharePoint or OneDrive?
+ *
+ * These are not treated as plain links. A pasted SharePoint URL saved as a `link`
+ * sends the student out of the app to a Microsoft sign-in they may not have, and
+ * on a page where the file can often be edited. Routed through the study-file
+ * pipeline instead, the same URL becomes a card that opens in the secure reader,
+ * watermarked and read-only, which is the whole point of attaching it.
+ */
+export function isSharePointUrl(input: string | null | undefined): boolean {
+  if (!isSafeHttpUrl(input)) return false;
+  try {
+    const host = new URL((input as string).trim()).hostname.toLowerCase();
+    return (
+      host.endsWith('.sharepoint.com') ||
+      host === 'onedrive.live.com' ||
+      host === '1drv.ms'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Classify a pasted string.
  *
  * Returns null when it is not something we can attach, which is what the paste
  * box uses to stay quiet while the teacher is still typing. A bare 11-char
  * YouTube id counts as a video (extractYouTubeId accepts it), so a teacher who
  * copies just the id from a share sheet still gets a video card.
+ *
+ * A SharePoint link answers `study_file`: it is resolved and stored as one, so
+ * the card the teacher sees while typing matches the card they get after saving.
  */
 export function detectResourceKind(input: string | null | undefined): NexusClassResourceKind | null {
   const raw = (input || '').trim();
   if (!raw) return null;
   if (extractYouTubeId(raw)) return 'youtube';
+  if (isSharePointUrl(raw)) return 'study_file';
   if (isSafeHttpUrl(raw)) return 'link';
   return null;
 }

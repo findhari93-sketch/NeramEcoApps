@@ -18,6 +18,8 @@ import { useRouter } from 'next/navigation';
 import AttendanceStrip from '@/components/parent/AttendanceStrip';
 import EnrollmentNotice from '@/components/parent/EnrollmentNotice';
 import ParentMetricGrid from '@/components/parent/ParentMetricGrid';
+import ClassStandingCard from '@/components/standing/ClassStandingCard';
+import type { ClassStandingResult } from '@/lib/class-standing';
 import ExamCountdown from '@/components/ExamCountdown';
 import type { ExamCountdownTarget } from '@/lib/exam-countdown';
 import type { EnrollmentNotice as Notice } from '@/lib/parent-enrollment';
@@ -72,6 +74,12 @@ interface OverviewResponse {
     open: number;
     sentence: string;
   } | null;
+  /**
+   * The composite standing, or null while parent.class-standing is off. The
+   * server omits it entirely rather than sending it and hiding it.
+   */
+  classStanding: ClassStandingResult | null;
+  /** DEPRECATED, an adapter over classStanding.band. Removed next release. */
   verdict: { band: string; headline: string; detail: string };
   /** The exam this child is preparing for, or null when none is set. */
   examCountdown: ExamCountdownTarget | null;
@@ -172,35 +180,55 @@ export default function ParentDashboardPage() {
       */}
       <EnrollmentNotice notice={data.notice} />
 
-      {/* The one answer */}
-      <Card
-        sx={{
-          borderRadius: 3,
-          border: '1px solid',
-          borderColor: (t) => alpha(t.palette[bandColour].main, 0.4),
-          bgcolor: (t) => alpha(t.palette[bandColour].main, 0.07),
-        }}
-      >
-        <CardContent sx={{ p: 2.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            <Box
-              sx={{
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                bgcolor: `${bandColour}.main`,
-                flexShrink: 0,
-              }}
-            />
-            <Typography sx={{ fontWeight: 700, fontSize: 17 }}>
-              {data.verdict.headline}
+      {/*
+        The one answer.
+
+        Class Standing when parent.class-standing is switched on, otherwise the
+        older verdict card. The server decides: it omits `classStanding` entirely
+        while the flag is off, so this is not a client-side toggle over data the
+        browser already has.
+
+        The number and band here are byte-identical to what a teacher sees on the
+        student profile, because both come from computeClassStanding over signals
+        built by the same pure builder. A parent and a teacher being told
+        different things about the same child is the failure this replaces.
+      */}
+      {data.classStanding ? (
+        <ClassStandingCard
+          standing={data.classStanding}
+          audience="parent"
+          studentName={data.child.name}
+        />
+      ) : (
+        <Card
+          sx={{
+            borderRadius: 3,
+            border: '1px solid',
+            borderColor: (t) => alpha(t.palette[bandColour].main, 0.4),
+            bgcolor: (t) => alpha(t.palette[bandColour].main, 0.07),
+          }}
+        >
+          <CardContent sx={{ p: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <Box
+                sx={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  bgcolor: `${bandColour}.main`,
+                  flexShrink: 0,
+                }}
+              />
+              <Typography sx={{ fontWeight: 700, fontSize: 17 }}>
+                {data.verdict.headline}
+              </Typography>
+            </Box>
+            <Typography sx={{ fontSize: 16, lineHeight: 1.55 }}>
+              {data.verdict.detail}
             </Typography>
-          </Box>
-          <Typography sx={{ fontSize: 16, lineHeight: 1.55 }}>
-            {data.verdict.detail}
-          </Typography>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/*
         How long until the exam.

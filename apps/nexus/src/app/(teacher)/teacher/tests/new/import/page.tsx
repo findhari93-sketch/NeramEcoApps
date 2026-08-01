@@ -42,9 +42,14 @@ import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import LibraryAddOutlinedIcon from '@mui/icons-material/LibraryAddOutlined';
+import { NEXUS_TEACHER_TEST_KINDS, type NexusTestKind, type NexusQBQuestionListItem } from '@neram/database';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import TagPicker from '@/components/question-bank/TagPicker';
-import ImportReviewCard, { type ReviewRow, type RowAction } from '@/components/tests/ImportReviewCard';
+import QuestionPickerList from '@/components/question-bank/QuestionPickerList';
+import ImportReviewCard, { ROW_ACTIONS, type ReviewRow, type RowAction } from '@/components/tests/ImportReviewCard';
+import CompareQuestionsDialog from '@/components/tests/CompareQuestionsDialog';
 import {
   buildImportPrompt,
   validateImportJSON,
@@ -72,18 +77,27 @@ export default function ImportTestPage() {
   // Step 2
   const [pasted, setPasted] = useState('');
   const [problems, setProblems] = useState<{ errors: string[]; warnings: string[] }>({ errors: [], warnings: [] });
+  const [dragging, setDragging] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   // Step 3
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [proposedTags, setProposedTags] = useState<Array<ProposedTag & { approved: boolean }>>([]);
   const [checking, setChecking] = useState(false);
   const [tagEditFor, setTagEditFor] = useState<number | null>(null);
+  const [compareFor, setCompareFor] = useState<number | null>(null);
 
   // Step 4
   const [title, setTitle] = useState('');
+  const [testKind, setTestKind] = useState<NexusTestKind>('classroom_assigned');
   const [passingPct, setPassingPct] = useState(60);
   const [publish, setPublish] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [bankPickerOpen, setBankPickerOpen] = useState(false);
+  const [extraQuestions, setExtraQuestions] = useState<Map<string, NexusQBQuestionListItem>>(new Map());
+  // Held separately from `extraQuestions` so cancelling the dialog does not
+  // commit a half-made selection.
+  const [bankDraft, setBankDraft] = useState<Map<string, NexusQBQuestionListItem>>(new Map());
 
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -210,8 +224,13 @@ export default function ImportTestPage() {
           return {
             question: q,
             action: suggested,
+            // Remembered so that dropping a row and putting it back restores
+            // the suggestion. Un-skipping used to reset to 'create', which
+            // turned a skipped duplicate into a second copy in the bank.
+            suggestedAction: suggested,
             candidates,
             existingId: candidates[0]?.id ?? null,
+            useInTest: 'new' as const,
           };
         }),
       );
@@ -224,12 +243,32 @@ export default function ImportTestPage() {
   }
 
   const counts = useMemo(() => {
-    const c = { create: 0, reuse: 0, merge: 0, skip: 0 };
+    const c: Record<RowAction, number> = { create: 0, reuse: 0, merge: 0, replace: 0, keep_both: 0, skip: 0 };
     for (const r of rows) c[r.action] += 1;
     return c;
   }, [rows]);
 
-  const keptCount = rows.length - counts.skip;
+  /** Questions the test will actually hold: everything not dropped, plus bank picks. */
+  const keptCount = rows.length - counts.skip + extraQuestions.size;
+  /** Questions the bank gains. keep_both writes a new row even when the test uses the old one. */
+  const bankAdditions = counts.create + counts.keep_both;
+
+  /** Read a dropped or chosen file into the paste box. */
+  const readJsonFile = useCallback((file: File) => {
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.json') && !name.endsWith('.txt')) {
+      setError('That is not a JSON file. Save the AI reply as .json or .txt and try again.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPasted(String(reader.result || ''));
+      setFileName(file.name);
+      setProblems({ errors: [], warnings: [] });
+    };
+    reader.onerror = () => setError('Could not read that file.');
+    reader.readAsText(file);
+  }, []);
 
   async function createTest() {
     setCreating(true);
@@ -239,13 +278,16 @@ export default function ImportTestPage() {
         method: 'POST',
         body: JSON.stringify({
           title: title.trim(),
+          test_kind: testKind,
           folder_path: folderSegments,
           passing_pct: passingPct,
           is_published: publish,
           new_tags: proposedTags.filter((t) => t.approved).map((t) => ({ slug: t.slug, label: t.label })),
+          extra_question_ids: [...extraQuestions.keys()],
           questions: rows.map((r) => ({
             action: r.action,
             existing_question_id: r.existingId,
+            use_in_test: r.useInTest,
             question_text: r.question.question_text,
             question_format: r.question.question_format,
             options: r.question.options,
@@ -263,9 +305,16 @@ export default function ImportTestPage() {
       });
 
       const d = json.data;
+      const parts = [
+        `${d.created} new`,
+        d.reused ? `${d.reused} reused` : '',
+        d.merged ? `${d.merged} topped up` : '',
+        d.replaced ? `${d.replaced} replaced` : '',
+        d.kept_both ? `${d.kept_both} kept alongside` : '',
+      ].filter(Boolean);
       setToast(
         `Test created with ${d.question_count} question${d.question_count !== 1 ? 's' : ''}: ` +
-          `${d.created} new, ${d.reused} reused, ${d.merged} merged, ${d.tags_created} new tag${d.tags_created !== 1 ? 's' : ''}.`,
+          `${parts.join(', ')}, ${d.tags_created} new tag${d.tags_created !== 1 ? 's' : ''}.`,
       );
       router.push(`/teacher/tests/${d.test_id}`);
     } catch (err) {
@@ -394,8 +443,53 @@ export default function ImportTestPage() {
       {step === 1 && (
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-            Paste the AI reply
+            Paste the AI reply, or drop the file
           </Typography>
+
+          <Box
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              const file = e.dataTransfer.files?.[0];
+              if (file) readJsonFile(file);
+            }}
+            sx={{
+              p: 2,
+              mb: 1.5,
+              borderRadius: 2,
+              border: 2,
+              borderStyle: 'dashed',
+              borderColor: dragging ? 'primary.main' : 'divider',
+              bgcolor: dragging ? 'action.hover' : 'transparent',
+              textAlign: 'center',
+              transition: 'border-color 150ms ease, background-color 150ms ease',
+            }}
+          >
+            <UploadFileOutlinedIcon sx={{ fontSize: 26, color: 'text.disabled' }} />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {fileName ? `Loaded ${fileName}` : 'Drop a .json or .txt file here'}
+            </Typography>
+            <Button component="label" size="small" sx={{ textTransform: 'none', mt: 0.5, minHeight: 44 }}>
+              Choose a file
+              <input
+                type="file"
+                accept=".json,.txt,application/json,text/plain"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) readJsonFile(file);
+                  // Cleared so choosing the same file twice still fires onChange.
+                  e.target.value = '';
+                }}
+              />
+            </Button>
+          </Box>
+
           <TextField
             multiline
             minRows={8}
@@ -404,7 +498,10 @@ export default function ImportTestPage() {
             label="AI reply"
             placeholder='{"test":{"title":"..."},"questions":[{"question":"...","options":{"a":"..."},"answer":"b"}]}'
             value={pasted}
-            onChange={(e) => setPasted(e.target.value)}
+            onChange={(e) => {
+              setPasted(e.target.value);
+              if (fileName) setFileName(null);
+            }}
             sx={{ '& textarea': { fontFamily: 'monospace', fontSize: '0.8rem' } }}
           />
 
@@ -445,13 +542,26 @@ export default function ImportTestPage() {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 1 }}>
               <Chip label={`${counts.create} new`} color="primary" size="small" />
               {counts.reuse > 0 && <Chip label={`${counts.reuse} reused`} color="info" size="small" />}
-              {counts.merge > 0 && <Chip label={`${counts.merge} merged`} color="success" size="small" />}
+              {counts.merge > 0 && <Chip label={`${counts.merge} topped up`} color="success" size="small" />}
+              {counts.replace > 0 && <Chip label={`${counts.replace} replaced`} color="warning" size="small" />}
+              {counts.keep_both > 0 && <Chip label={`${counts.keep_both} kept both`} color="secondary" size="small" />}
               {counts.skip > 0 && <Chip label={`${counts.skip} dropped`} size="small" variant="outlined" />}
             </Box>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
               Anything already in the bank is preselected to be reused, so the test still gets the question and
-              the bank does not grow a duplicate.
+              the bank does not grow a duplicate. Open Compare on a match to see both side by side and change
+              that.
             </Typography>
+
+            {/* The vocabulary, once, rather than a caption per card. Every option
+                also repeats its effect in the menu where it is chosen. */}
+            <Box sx={{ mt: 1.25, pt: 1.25, borderTop: 1, borderColor: 'divider' }}>
+              {(['create', 'reuse', 'replace', 'keep_both'] as RowAction[]).map((a) => (
+                <Typography key={a} variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  <strong>{ROW_ACTIONS[a].label}</strong> {ROW_ACTIONS[a].effect}
+                </Typography>
+              ))}
+            </Box>
 
             {problems.warnings.length > 0 && (
               <Alert severity="warning" sx={{ mt: 1.5 }}>
@@ -510,13 +620,10 @@ export default function ImportTestPage() {
                   onActionChange={(action) =>
                     setRows((prev) => prev.map((p, pi) => (pi === i ? { ...p, action } : p)))
                   }
-                  onRemove={() =>
-                    setRows((prev) =>
-                      prev.map((p, pi) =>
-                        pi === i ? { ...p, action: p.action === 'skip' ? 'create' : 'skip' } : p,
-                      ),
-                    )
+                  onUseInTestChange={(which) =>
+                    setRows((prev) => prev.map((p, pi) => (pi === i ? { ...p, useInTest: which } : p)))
                   }
+                  onCompare={() => setCompareFor(i)}
                   onEditTags={() => setTagEditFor(i)}
                 />
               ))}
@@ -558,6 +665,21 @@ export default function ImportTestPage() {
               placeholder="Foundation History of Architecture Book Test"
             />
             <TextField
+              select
+              label="Test type"
+              value={testKind}
+              onChange={(e) => setTestKind(e.target.value as NexusTestKind)}
+              fullWidth
+              size="small"
+              helperText="Students see this on the test, so they know what they are sitting"
+            >
+              {NEXUS_TEACHER_TEST_KINDS.map((k) => (
+                <MenuItem key={k.value} value={k.value}>
+                  {k.label} <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>{k.hint}</Typography>
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
               label="Folder"
               value={folderPath}
               onChange={(e) => setFolderPath(e.target.value)}
@@ -587,9 +709,49 @@ export default function ImportTestPage() {
           </Box>
 
           <Divider sx={{ my: 2 }} />
+
+          {/* Imported questions are rarely the whole paper. The bank already holds
+              1000+, and composeTest takes references, so adding some costs nothing
+              and creates no duplicates. */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+              Add questions from the bank
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              {extraQuestions.size > 0
+                ? `${extraQuestions.size} bank question${extraQuestions.size !== 1 ? 's' : ''} will go in after the imported ones.`
+                : 'Optional. Mix questions already in the bank into this test.'}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<LibraryAddOutlinedIcon />}
+                onClick={() => {
+                  setBankDraft(new Map(extraQuestions));
+                  setBankPickerOpen(true);
+                }}
+                sx={{ textTransform: 'none', minHeight: 44 }}
+              >
+                {extraQuestions.size > 0 ? 'Change the bank questions' : 'Pick from the bank'}
+              </Button>
+              {extraQuestions.size > 0 && (
+                <Button
+                  size="small"
+                  onClick={() => setExtraQuestions(new Map())}
+                  sx={{ textTransform: 'none', minHeight: 44 }}
+                >
+                  Remove all
+                </Button>
+              )}
+            </Box>
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {counts.create} new question{counts.create !== 1 ? 's' : ''} added to the bank,{' '}
-            {counts.reuse + counts.merge} reused from it, {proposedTags.filter((t) => t.approved).length} new tag
+            {bankAdditions} new question{bankAdditions !== 1 ? 's' : ''} added to the bank,{' '}
+            {counts.reuse + counts.merge + counts.replace + extraQuestions.size} taken from it,{' '}
+            {proposedTags.filter((t) => t.approved).length} new tag
             {proposedTags.filter((t) => t.approved).length !== 1 ? 's' : ''} created.
           </Typography>
 
@@ -611,6 +773,56 @@ export default function ImportTestPage() {
           </Box>
         </Paper>
       )}
+
+      {/* Side by side with the bank match, where the decision is actually made. */}
+      <CompareQuestionsDialog
+        open={compareFor !== null}
+        onClose={() => setCompareFor(null)}
+        incoming={compareFor !== null ? rows[compareFor]?.question ?? null : null}
+        candidates={compareFor !== null ? rows[compareFor]?.candidates ?? [] : []}
+        selectedId={compareFor !== null ? rows[compareFor]?.existingId ?? null : null}
+        onSelectCandidate={(id) =>
+          setRows((prev) => prev.map((p, pi) => (pi === compareFor ? { ...p, existingId: id } : p)))
+        }
+        action={compareFor !== null ? rows[compareFor]?.action ?? 'create' : 'create'}
+        onActionChange={(action) =>
+          setRows((prev) => prev.map((p, pi) => (pi === compareFor ? { ...p, action } : p)))
+        }
+        useInTest={compareFor !== null ? rows[compareFor]?.useInTest ?? 'new' : 'new'}
+        onUseInTestChange={(which) =>
+          setRows((prev) => prev.map((p, pi) => (pi === compareFor ? { ...p, useInTest: which } : p)))
+        }
+      />
+
+      {/* Bank questions mixed into the imported ones. */}
+      <Dialog open={bankPickerOpen} onClose={() => setBankPickerOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Add questions from the bank</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <QuestionPickerList
+              getToken={getToken}
+              selected={bankDraft}
+              onChange={setBankDraft}
+              initialSearch={chapter.trim()}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBankPickerOpen(false)} sx={{ textTransform: 'none', minHeight: 44 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setExtraQuestions(bankDraft);
+              setBankPickerOpen(false);
+            }}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Add {bankDraft.size > 0 ? bankDraft.size : ''} question{bankDraft.size !== 1 ? 's' : ''}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Per-question tag editing, so a teacher can fix one bad tag without
           rejecting the whole import. */}

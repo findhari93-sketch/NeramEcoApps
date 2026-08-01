@@ -4,17 +4,23 @@ import {
   getUserEnrollment,
   getSubmission,
   createSubmissionUploadUrls,
+  removeSubmissionFiles,
   upsertSubmission,
   recordGamificationEvent,
   recordPointEvent,
   listActiveEnrolledClassrooms,
   listAssignmentsForStudent,
+  getAssignmentPaper,
+  getAssignmentAttempt,
+  startOrResumeAttempt,
+  submitAttempt,
 } from '@neram/database';
 import type { NexusAssignmentSubmissionFile } from '@neram/database';
 import { getRequestUser } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { validateSubmissionFormat } from '@/lib/assignment-format';
 import { isSubmissionOnTime } from '@/lib/assignment-clock';
+import { resolveSubmitMode, lockedReason, type SubmitMode } from '@/lib/assignment-submit-window';
 
 function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60);
@@ -28,6 +34,35 @@ async function loadStudentAndAssignment(request: NextRequest, assignmentId: stri
   const enrollment = await getUserEnrollment(user.id, assignment.classroom_id);
   if (!enrollment) throw new ApiError('You are not enrolled in this class.', 403);
   return { user, assignment, enrollment };
+}
+
+/**
+ * Whether this student may hand work in right now, and what that hand-in means.
+ *
+ * Called by BOTH actions on purpose. Checking only at 'submit' would hand out
+ * signed upload URLs for work that is then refused, so the student would burn a
+ * slow mobile upload before hearing no. Checking only at 'create_upload_urls'
+ * would leave the write itself unguarded, which is how this route previously
+ * accepted a replayed submit over marked work and cleared the marks with it.
+ */
+async function resolveWindow(
+  assignment: any,
+  enrollment: any,
+  studentId: string,
+): Promise<{ mode: SubmitMode; existing: Awaited<ReturnType<typeof getSubmission>> }> {
+  const existing = await getSubmission(assignment.id, studentId);
+  const mode = resolveSubmitMode(
+    existing,
+    {
+      class_date: assignment.class_date,
+      enrolled_at: enrollment?.enrolled_at ?? null,
+      due_at: assignment.due_at,
+      catchup_window_days: assignment.catchup_window_days ?? 7,
+    },
+    new Date().toISOString(),
+  );
+  if (mode === 'locked') throw new ApiError(lockedReason(existing), 403);
+  return { mode, existing };
 }
 
 /**
@@ -119,12 +154,12 @@ export async function POST(request: NextRequest) {
 
     switch (body.action) {
       case 'create_upload_urls': {
-        const { user, assignment } = await loadStudentAndAssignment(request, body.assignment_id);
+        const { user, assignment, enrollment } = await loadStudentAndAssignment(request, body.assignment_id);
         const files: { name: string; mime: string; size_bytes?: number }[] = body.files || [];
         const formatError = validateSubmissionFormat(assignment.submission_format, files);
         if (formatError) return NextResponse.json({ error: formatError }, { status: 400 });
 
-        const existing = await getSubmission(body.assignment_id, user.id);
+        const { existing } = await resolveWindow(assignment, enrollment, user.id);
         const attempt = existing ? existing.attempt_number + 1 : 1;
         const ts = Date.now();
         const paths = files.map(
@@ -158,7 +193,27 @@ export async function POST(request: NextRequest) {
         if (files.some((f) => !f.path.startsWith(prefix))) {
           return NextResponse.json({ error: 'Invalid file path' }, { status: 400 });
         }
-        const submission = await upsertSubmission(body.assignment_id, user.id, files);
+
+        const { mode, existing } = await resolveWindow(assignment, enrollment, user.id);
+        const supersededPaths =
+          mode === 'replace' ? (existing?.files || []).map((f) => f.path) : [];
+
+        const submission = await upsertSubmission(
+          body.assignment_id,
+          user.id,
+          files,
+          mode === 'replace' ? 'replace' : 'attempt',
+        );
+
+        // Best effort, and after the write on purpose: a correction that saved
+        // but left an orphan blob behind is fine, a correction lost because the
+        // cleanup threw is not.
+        if (supersededPaths.length) {
+          removeSubmissionFiles(supersededPaths).catch((e) =>
+            console.error('removeSubmissionFiles failed:', e),
+          );
+        }
+
         await awardSubmissionPoints(
           assignment,
           user.id,
@@ -167,6 +222,93 @@ export async function POST(request: NextRequest) {
           (enrollment as any)?.enrolled_at ?? null,
         );
         return NextResponse.json({ submission });
+      }
+
+      /**
+       * Answer the assignment's questions. One shot, then results.
+       *
+       * Two gates before anything is graded, and the order they run in is the
+       * design:
+       *
+       *  1. If the assignment wants worked solutions, the PDF must already be
+       *     in. Results are instant, so a student who could answer first would
+       *     see the correct values and then write "working" to match them.
+       *  2. Answers submit once. That is what earns the instant reveal: a second
+       *     go after seeing the key is just copying.
+       */
+      case 'submit_answers': {
+        const { user, assignment, enrollment } = await loadStudentAndAssignment(request, body.assignment_id);
+
+        const paper = await getAssignmentPaper(body.assignment_id, false);
+        if (!paper || paper.questions.length === 0) {
+          return NextResponse.json({ error: 'This assignment has no questions.' }, { status: 400 });
+        }
+
+        // `!== false`, not truthiness: the column defaults to true, and on a
+        // database that has not run the migration it is simply absent. Requiring
+        // the upload is the safe reading of "we do not know".
+        if ((assignment as any).requires_pdf !== false) {
+          const existing = await getSubmission(body.assignment_id, user.id);
+          if (!existing || !(existing.files || []).length) {
+            return NextResponse.json(
+              {
+                error: 'Upload your worked solutions first, then answer the questions.',
+                code: 'PDF_REQUIRED',
+              },
+              { status: 409 },
+            );
+          }
+        }
+
+        const already = await getAssignmentAttempt(paper.test_id, user.id);
+        if (already) {
+          return NextResponse.json(
+            { error: 'Your answers are already in and cannot be changed.', code: 'ANSWERS_LOCKED' },
+            { status: 409 },
+          );
+        }
+
+        // Only answers to questions actually on this paper, as strings. Anything
+        // else is either stale or somebody probing.
+        const allowed = new Set(paper.questions.map((q) => q.id));
+        const answers: Record<string, string> = {};
+        for (const [qid, value] of Object.entries(body.answers || {})) {
+          if (allowed.has(qid) && value != null) answers[qid] = String(value);
+        }
+
+        const { attempt } = await startOrResumeAttempt({
+          testId: paper.test_id,
+          studentId: user.id,
+          placementId: paper.placement_id,
+        });
+        const graded = await submitAttempt({ attemptId: attempt.id, studentId: user.id, answers });
+
+        // A paper with no PDF half still has to leave a submission behind, or
+        // the roster would show the student as missing while their marked
+        // answers sat in an attempt row nobody joins to.
+        if ((assignment as any).requires_pdf === false) {
+          const existing = await getSubmission(body.assignment_id, user.id);
+          if (!existing) {
+            const submission = await upsertSubmission(body.assignment_id, user.id, []);
+            await awardSubmissionPoints(
+              assignment,
+              user.id,
+              (enrollment as any)?.batch_id ?? null,
+              submission.submitted_at,
+              (enrollment as any)?.enrolled_at ?? null,
+            );
+          }
+        }
+
+        return NextResponse.json({
+          result: {
+            score: graded.score,
+            total_marks: graded.total_marks,
+            percentage: graded.percentage,
+            review: graded.review,
+          },
+          manual_marks: paper.manual_marks,
+        });
       }
 
       default:

@@ -24,16 +24,14 @@ import DayView from '@/components/timetable/views/DayView';
 import MonthView from '@/components/timetable/views/MonthView';
 import PlannerWeekList from '@/components/timetable/views/PlannerWeekList';
 import CalendarShell from '@/components/timetable/CalendarShell';
-import ClassEditPanel from '@/components/timetable/ClassEditPanel';
-import LinkAssignmentDialog from '@/components/timetable/LinkAssignmentDialog';
 import LinkPrepTestDialog from '@/components/timetable/LinkPrepTestDialog';
-import NewAssignmentDialog from '@/components/assignments/NewAssignmentDialog';
+import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import ClassCreateDialog from '@/components/timetable/ClassCreateDialog';
-import AttendanceSheet from '@/components/timetable/AttendanceSheet';
 import BackfillFromTeamsDialog from '@/components/timetable/BackfillFromTeamsDialog';
-import ClassAttendanceInsights from '@/components/timetable/ClassAttendanceInsights';
-import ClassDetailPanel from '@/components/timetable/ClassDetailPanel';
+import ClassAttendanceDialog from '@/components/timetable/attendance/ClassAttendanceDialog';
+import type { AttendanceTabKey } from '@/components/timetable/attendance/types';
+import { ClassPanel } from '@/components/timetable/class-panel';
 import RescheduleDialog, { type ReschedulePayload } from '@/components/timetable/RescheduleDialog';
 import HolidayManager from '@/components/timetable/HolidayManager';
 import RsvpDashboard from '@/components/timetable/RsvpDashboard';
@@ -87,6 +85,7 @@ export default function TeacherTimetable() {
   const { activeClassroom, classrooms, getToken, getTeacherToken } = useNexusAuthContext();
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+  const isWide = useMediaQuery(theme.breakpoints.up('lg'));
   const [classes, setClasses] = useState<ClassCardData[]>([]);
   // Mirrors `classes` for callbacks that fire later than their closure, such as
   // the snackbar's "Add pre-class work": the refetch it follows has landed by
@@ -110,8 +109,6 @@ export default function TeacherTimetable() {
   );
 
 
-  // Planner state
-  const [panelClass, setPanelClass] = useState<ClassCardData | null>(null);
   const [assignmentCounts, setAssignmentCounts] = useState<Record<string, number>>({});
   // Attaching work to a class. Both routes in (the card's "+ Assignment" and the
   // panel's buttons) share these, so linking behaves the same either way.
@@ -134,9 +131,30 @@ export default function TeacherTimetable() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassCardData | null>(null);
   const [attendanceClass, setAttendanceClass] = useState<ClassCardData | null>(null);
+  /** Which tab the attendance dialog opens on. Insights was its own dialog. */
+  const [attendanceTab, setAttendanceTab] = useState<AttendanceTabKey>('who');
   const [backfillOpen, setBackfillOpen] = useState(false);
-  const [insightsClass, setInsightsClass] = useState<ClassCardData | null>(null);
-  const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
+  /**
+   * ONE selection, shared by every view.
+   *
+   * This was two independent states: `selectedClass` for the Day/Week/Month
+   * drawer and `panelClass` for the planner rail. They never synced, so
+   * switching view lost the class you were working on, which is the complaint
+   * this whole change answers.
+   *
+   * The ID, not the object: every handler used to null the selection before
+   * refetching, so nobody noticed the stored object was a stale snapshot. Now
+   * that the selection survives, deriving it from `classes` is what keeps the
+   * panel honest, "Create Teams meeting" would otherwise still say that after
+   * it had succeeded.
+   */
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  /**
+   * Overlay-only. Kept separate from the selection because crossing the lg
+   * boundary in Plan flips docked to drawer: with one field, resizing a laptop
+   * window would spring a bottom sheet open over a selection made in the rail.
+   */
+  const [panelOpen, setPanelOpen] = useState(false);
   const [reschedulingClass, setReschedulingClass] = useState<ClassCardData | null>(null);
   const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
@@ -376,6 +394,18 @@ export default function TeacherTimetable() {
   const visibleClasses = useMemo(
     () => classes.filter((c) => c.scheduled_date >= range.start && c.scheduled_date <= range.end),
     [classes, range.start, range.end],
+  );
+
+  /**
+   * The selected class, always read fresh off the list.
+   *
+   * Deriving rather than storing is what lets the panel stay open across a
+   * refetch and still tell the truth. Paging out of the fetched range clears
+   * the selection, which is the right answer: the class is no longer on screen.
+   */
+  const selectedClass = useMemo(
+    () => classes.find((c) => c.id === selectedClassId) ?? null,
+    [classes, selectedClassId],
   );
 
   /**
@@ -624,17 +654,20 @@ export default function TeacherTimetable() {
   }, [activeClassroom?.id, activeClassroom?.ms_team_id, getToken]);
 
   const handleClassClick = (cls: ClassCardData) => {
-    setSelectedClass(cls);
+    setSelectedClassId(cls.id);
+    setPanelOpen(true);
   };
 
   const handleEdit = (cls: ClassCardData) => {
-    setSelectedClass(null);
+    // Closes the overlay without dropping the selection: the docked rail has no
+    // overlay to close, and the teacher should come back to the same class.
+    setPanelOpen(false);
     setEditingClass(cls);
     setCreateDialogOpen(true);
   };
 
   const handleOpenReschedule = (cls: ClassCardData) => {
-    setSelectedClass(null);
+    setPanelOpen(false);
     setRescheduleError(null);
     setReschedulingClass(cls);
   };
@@ -705,7 +738,9 @@ export default function TeacherTimetable() {
       const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
-        setSelectedClass(null);
+        // The selection deliberately survives: the panel is derived from the
+        // refetched class list, so the teacher watches the repair land instead
+        // of being thrown back to the calendar.
         setSnackbar({
           open: true,
           message: data.message || 'Calendar invites sent',
@@ -747,7 +782,8 @@ export default function TeacherTimetable() {
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        setSelectedClass(null);
+        setSelectedClassId(null);
+        setPanelOpen(false);
         if (data.teamsWarning) {
           setSnackbar({ open: true, message: `Class cancelled, but: ${data.teamsWarning}`, severity: 'warning' });
         } else {
@@ -783,7 +819,8 @@ export default function TeacherTimetable() {
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        setSelectedClass(null);
+        setSelectedClassId(null);
+        setPanelOpen(false);
         if (data.teamsWarning) {
           setSnackbar({ open: true, message: `Class deleted, but: ${data.teamsWarning}`, severity: 'warning' });
         } else {
@@ -899,7 +936,7 @@ export default function TeacherTimetable() {
 
   const handleCreateMeeting = async (cls: ClassCardData) => {
     if (!activeClassroom) return;
-    setSelectedClass(null);
+    setPanelOpen(false);
     try {
       const token = await getTeacherToken();
       if (!token) return;
@@ -1233,6 +1270,62 @@ export default function TeacherTimetable() {
     </Box>
   );
 
+  /**
+   * Plan view on a wide screen shows the panel docked beside the week list;
+   * everywhere else it overlays. The PAGE decides, not the panel: only the page
+   * knows which view it is in, and the panel is deliberately ignorant of view
+   * modes so it can be reused as-is by the student timetable.
+   */
+  const isPlannerDocked = view === 'agenda' && isWide;
+
+  /**
+   * Everything the panel needs, built once. Both mounts spread this, which is
+   * what guarantees a class offers the same features in Plan as it does in
+   * Month, the thing two separate components could never promise.
+   */
+  const classPanelProps = {
+    cls: selectedClass,
+    role: 'teacher' as const,
+    classroomId: activeClassroom?.id || '',
+    getToken,
+    getTeacherToken,
+    // Attaching a prep test or a piece of prework both change who counts as
+    // ready, so one key refreshes the roster, the assignments and the test.
+    refreshKey: assignmentRefreshKey,
+    rsvpSummary: selectedClass ? rsvpData[selectedClass.id] : null,
+    attendanceSummary: selectedClass ? attendanceData[selectedClass.id] : null,
+    averageRating: selectedClass ? averageRatings[selectedClass.id] : null,
+    assignmentsEditable: true,
+    onEdit: handleEdit,
+    onDelete: handleDelete,
+    onDeletePermanent: handleDeletePermanent,
+    onOpenAttendance: (cls: ClassCardData) => {
+      setAttendanceTab('who');
+      setAttendanceClass(cls);
+    },
+    onSyncRecording: handleSyncRecording,
+    onViewRsvpDashboard: handleViewRsvpDashboard,
+    onCreateMeeting: handleCreateMeeting,
+    onReschedule: handleOpenReschedule,
+    onRepairMeeting: handleRepairMeeting,
+    onSetPrepTest: setPrepTestClass,
+    onLinkAssignment: (cls: ClassCardData) => {
+      setPanelOpen(false);
+      setLinkDialogClass(cls);
+    },
+    onCreateAssignment: (cls: ClassCardData) => {
+      setPanelOpen(false);
+      setNewAssignmentTiming('homework');
+      setNewAssignmentClass(cls);
+    },
+    // Forced: onChanged() is called with no arguments, so a bare `fetchClasses`
+    // reference leaves force undefined and the loadedRange cache silently
+    // swallows the refresh.
+    onChanged: () => fetchClasses(true),
+    onNotify: (message: string, severity: 'success' | 'error' | 'warning' = 'success') =>
+      setSnackbar({ open: true, message, severity }),
+  };
+
   return (
     <Box sx={{ position: 'relative' }}>
       <CalendarShell
@@ -1310,45 +1403,35 @@ export default function TeacherTimetable() {
               week={week}
               loading={loading}
               holidays={holidays}
-              selectedId={panelClass?.id ?? null}
+              selectedId={selectedClassId}
               assignmentCounts={assignmentCounts}
-              onSelect={setPanelClass}
+              // Below lg there is no rail to fill, so a tap opens the same bottom
+              // sheet every other view opens. Planner rows used to reach a
+              // feature-poor editor instead.
+              onSelect={handleClassClick}
               onAssignmentClick={openAssignmentMenu}
               onAddClass={(date) => openCreateDialog(date)}
             />
-            <Box
-              sx={{
-                flex: { xs: '0 0 auto', lg: '1 1 0%' },
-                width: { xs: 'auto' },
-                minWidth: { lg: LAYOUT.editPanelMinWidth },
-                maxWidth: { lg: LAYOUT.editPanelMaxWidth },
-                minHeight: 0,
-                overflowY: { xs: 'visible', lg: 'auto' },
-                borderLeft: { lg: `1px solid ${theme.palette.divider}` },
-                borderTop: { xs: `1px solid ${theme.palette.divider}`, lg: 'none' },
-                p: 2,
-                pb: { xs: 9, lg: 2 },
-              }}
-            >
-              <ClassEditPanel
-                cls={panelClass}
-                getToken={getToken}
-                getTeacherToken={getTeacherToken}
-                refreshKey={assignmentRefreshKey}
-                onCreateMeeting={handleCreateMeeting}
-                onEdit={handleEdit}
-                onCreateAssignment={setNewAssignmentClass}
-                onLinkExisting={setLinkDialogClass}
-                onSetPrepTest={setPrepTestClass}
-                // Forced: onChanged() is called with no arguments, so a bare
-                // `fetchClasses` reference leaves force undefined and the
-                // loadedRange cache silently swallows the refresh.
-                onChanged={() => fetchClasses(true)}
-                onNotify={(message, severity = 'success') =>
-                  setSnackbar({ open: true, message, severity })
-                }
-              />
-            </Box>
+            {/* The rail only exists at lg+. Below that the sheet is the panel,
+                and rendering both would double every self-fetching section
+                inside it. */}
+            {isPlannerDocked && (
+              <Box
+                sx={{
+                  flex: '1 1 0%',
+                  minWidth: LAYOUT.editPanelMinWidth,
+                  maxWidth: LAYOUT.editPanelMaxWidth,
+                  minHeight: 0,
+                  // This column owns the scroll, which is what makes the panel's
+                  // sticky header stick.
+                  overflowY: 'auto',
+                  borderLeft: `1px solid ${theme.palette.divider}`,
+                  p: 2,
+                }}
+              >
+                <ClassPanel {...classPanelProps} variant="docked" />
+              </Box>
+            )}
           </Box>
         )}
       </CalendarShell>
@@ -1366,41 +1449,11 @@ export default function TeacherTimetable() {
         </Fab>
       )}
 
-      {/* Class Detail Panel */}
-      <ClassDetailPanel
-        cls={selectedClass}
-        open={!!selectedClass}
-        onClose={() => setSelectedClass(null)}
-        role="teacher"
-        classroomId={activeClassroom?.id || ''}
-        getToken={getToken}
-        // Shares the assignment key: attaching a prep test or a piece of prework
-        // both change who counts as ready, so both must refresh the roster.
-        prepRosterKey={assignmentRefreshKey}
-        rsvpSummary={selectedClass ? rsvpData[selectedClass.id] : null}
-        attendanceSummary={selectedClass ? attendanceData[selectedClass.id] : null}
-        averageRating={selectedClass ? averageRatings[selectedClass.id] : null}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onDeletePermanent={handleDeletePermanent}
-        onViewAttendance={setAttendanceClass}
-        onViewInsights={setInsightsClass}
-        onSyncRecording={handleSyncRecording}
-        onViewRsvpDashboard={handleViewRsvpDashboard}
-        onCreateMeeting={handleCreateMeeting}
-        onReschedule={handleOpenReschedule}
-        onRepairMeeting={handleRepairMeeting}
-        assignmentsEditable
-        onLinkAssignment={(cls) => {
-          setSelectedClass(null);
-          setLinkDialogClass(cls);
-        }}
-        onCreateAssignment={(cls) => {
-          setSelectedClass(null);
-          setNewAssignmentTiming('homework');
-          setNewAssignmentClass(cls);
-        }}
-      />
+      {/* The same panel as the planner rail, overlaid. Exactly one of the two
+          mounts is ever live: two would double every self-fetching section. */}
+      {!isPlannerDocked && (
+        <ClassPanel {...classPanelProps} variant="drawer" open={panelOpen} onClose={() => setPanelOpen(false)} />
+      )}
 
       {/* Move a class to another day or time */}
       <RescheduleDialog
@@ -1492,19 +1545,26 @@ export default function TeacherTimetable() {
         endDate={range.end}
       />
 
-      {/* Attendance Sheet */}
+      {/* The register and what it adds up to, in one dialog. These were two
+          buttons opening two dialogs over the same roster. */}
       {attendanceClass && (
-        <AttendanceSheet
+        <ClassAttendanceDialog
           open={!!attendanceClass}
-          onClose={() => {
-            refreshAttendanceSummary(attendanceClass.id, activeClassroom?.id || '');
-            setAttendanceClass(null);
-          }}
+          onClose={() => setAttendanceClass(null)}
           classId={attendanceClass.id}
           classTitle={attendanceClass.title}
-          classroomId={activeClassroom?.id || ''}
+          // The class's own classroom, not the active one: both routes behind
+          // this guard on class-in-classroom and 404 on a mismatch, which is
+          // what a Common class scheduled elsewhere always hit.
+          classroomId={getClassroomIdForClass(attendanceClass.id)}
           teamsMeetingId={attendanceClass.teams_meeting_id}
           getToken={getToken}
+          initialTab={attendanceTab}
+          // After every write, not just on close: the panel behind this dialog
+          // shows the same numbers and must not sit there contradicting it.
+          onChanged={() =>
+            refreshAttendanceSummary(attendanceClass.id, getClassroomIdForClass(attendanceClass.id))
+          }
         />
       )}
 
@@ -1515,24 +1575,13 @@ export default function TeacherTimetable() {
           classroomId={activeClassroom.id}
           classroomName={activeClassroom.name}
           getToken={getToken}
-          // Forced, for the same reason as ClassEditPanel's onChanged above:
+          // Forced, for the same reason as the class panel's onChanged above:
           // this is exactly the path where a backfill wrote rows and the
           // calendar then refused to re-read them.
           onApplied={() => fetchClasses(true)}
           onNotify={(message, severity) =>
             setSnackbar({ open: true, message, severity: severity ?? 'success' })
           }
-        />
-      )}
-
-      {insightsClass && (
-        <ClassAttendanceInsights
-          open={!!insightsClass}
-          onClose={() => setInsightsClass(null)}
-          classId={insightsClass.id}
-          classroomId={insightsClass.classroom?.id || activeClassroom?.id || ''}
-          classTitle={insightsClass.title}
-          getToken={getToken}
         />
       )}
 
@@ -1576,18 +1625,6 @@ export default function TeacherTimetable() {
         </MenuItem>
       </Menu>
 
-      <LinkAssignmentDialog
-        open={!!linkDialogClass}
-        cls={linkDialogClass}
-        getToken={getToken}
-        onClose={() => setLinkDialogClass(null)}
-        onLinked={refreshAssignments}
-        onCreateInstead={setNewAssignmentClass}
-        onNotify={(message, severity = 'success') =>
-          setSnackbar({ open: true, message, severity })
-        }
-      />
-
       <LinkPrepTestDialog
         open={!!prepTestClass}
         cls={prepTestClass}
@@ -1604,21 +1641,40 @@ export default function TeacherTimetable() {
         }
       />
 
-      {/* The same dialog the Assignments page uses, opened in place. */}
-      {newAssignmentClass && (
-        <NewAssignmentDialog
+      {/* One dialog for both jobs, and the same one the Assignments page opens.
+          Whether it lands on Write a new one or Use an existing one depends on
+          which action the teacher took, but either is a tap away from the other. */}
+      {(newAssignmentClass || linkDialogClass) && (
+        <AssignmentSetupDialog
           open
-          onClose={() => setNewAssignmentClass(null)}
-          classroomId={newAssignmentClass.classroom?.id || activeClassroom?.id || ''}
+          onClose={() => {
+            setNewAssignmentClass(null);
+            setLinkDialogClass(null);
+          }}
+          classroomId={
+            (newAssignmentClass || linkDialogClass)?.classroom?.id || activeClassroom?.id || ''
+          }
           authFetch={authFetch}
           getToken={getTeacherToken}
-          scheduledClassId={newAssignmentClass.id}
-          classContextLabel={`${newAssignmentClass.title}, ${formatDayLabel(newAssignmentClass.scheduled_date)}`}
-          classStartLabel={`${formatDayLabel(newAssignmentClass.scheduled_date)}, ${formatIstTime(
-            classStartIso(newAssignmentClass.scheduled_date, newAssignmentClass.start_time),
+          cls={newAssignmentClass || linkDialogClass}
+          initialMode={newAssignmentClass ? 'create' : 'link'}
+          scheduledClassId={(newAssignmentClass || linkDialogClass)!.id}
+          classContextLabel={`${(newAssignmentClass || linkDialogClass)!.title}, ${formatDayLabel(
+            (newAssignmentClass || linkDialogClass)!.scheduled_date,
+          )}`}
+          classStartLabel={`${formatDayLabel(
+            (newAssignmentClass || linkDialogClass)!.scheduled_date,
+          )}, ${formatIstTime(
+            classStartIso(
+              (newAssignmentClass || linkDialogClass)!.scheduled_date,
+              (newAssignmentClass || linkDialogClass)!.start_time,
+            ),
           )}`}
           defaultTiming={newAssignmentTiming}
-          onCreated={refreshAssignments}
+          onSaved={refreshAssignments}
+          onNotify={(message, severity = 'success') =>
+            setSnackbar({ open: true, message, severity })
+          }
         />
       )}
 

@@ -10,7 +10,9 @@ import {
   getTestFolderById,
   getSupabaseAdminClient,
   updateQBQuestion,
+  NEXUS_TEACHER_TEST_KINDS,
 } from '@neram/database';
+import type { NexusTestKind } from '@neram/database';
 
 /**
  * POST /api/question-bank/import/commit   (teacher/admin)
@@ -25,12 +27,18 @@ import {
  *   new_tags?: [{ slug, label }],                  // theme tags the teacher approved
  *   extra_question_ids?: string[],                 // bank questions added alongside the import
  *   questions: [{
- *     action: 'create' | 'reuse' | 'merge' | 'skip',
- *     existing_question_id?,                       // required for reuse and merge
+ *     action: 'create' | 'reuse' | 'merge' | 'replace' | 'keep_both' | 'skip',
+ *     existing_question_id?,                       // required for every duplicate action
+ *     use_in_test?: 'new' | 'existing',            // only read for keep_both
  *     question_text, question_format, options, correct_answer, explanation,
  *     difficulty, exam_relevance, tag_ids?, new_tag_slugs?
  *   }]
  * }
+ *
+ * The duplicate actions are the teacher's four answers to "the bank already has
+ * something like this": keep what is there (reuse), top it up (merge), prefer
+ * the new wording (replace), or admit they are different questions after all
+ * (keep_both, which then asks which of the two this test should use).
  *
  * Ordering matters: tags first (so a new question can be tagged in the same
  * pass), then questions, then the test. There is no cross-table transaction
@@ -40,11 +48,15 @@ import {
  * searchable, never a half-built test.
  */
 
-type RowAction = 'create' | 'reuse' | 'merge' | 'skip';
+type RowAction = 'create' | 'reuse' | 'merge' | 'replace' | 'keep_both' | 'skip';
+
+/** Actions that need an existing bank question to point at. */
+const DUPLICATE_ACTIONS: RowAction[] = ['reuse', 'merge', 'replace', 'keep_both'];
 
 interface CommitRow {
   action?: RowAction;
   existing_question_id?: string | null;
+  use_in_test?: 'new' | 'existing';
   question_text?: string;
   question_format?: 'MCQ' | 'NUMERICAL';
   options?: Array<{ id: string; text: string }> | null;
@@ -109,60 +121,15 @@ export async function POST(request: NextRequest) {
     let created = 0;
     let reused = 0;
     let merged = 0;
+    let replaced = 0;
+    let keptBoth = 0;
     let skipped = 0;
 
-    for (const row of rows) {
-      const action: RowAction = row?.action || 'create';
-      if (action === 'skip') {
-        skipped += 1;
-        continue;
-      }
-
-      // Resolve this row's tags: registry ids the wizard already knew, plus any
-      // slug that only became real in step 1.
-      const tagIds = new Set<string>((row.tag_ids || []).filter(Boolean));
-      for (const slug of row.new_tag_slugs || []) {
-        const id = slugToNewTagId.get(slug);
-        if (id) tagIds.add(id);
-      }
-
-      if (action === 'reuse' || action === 'merge') {
-        const existingId = row.existing_question_id;
-        if (!existingId) {
-          skipped += 1;
-          continue;
-        }
-
-        if (action === 'merge') {
-          // Merge FILLS GAPS, it never overwrites. A bank question may already
-          // carry a teacher-checked explanation, and silently replacing it with
-          // model prose would be a downgrade the teacher never sees. Tags are
-          // always additive, which is where most of the value is anyway.
-          const { data: existing } = await supabase
-            .from('nexus_qb_questions')
-            .select('id, explanation_brief')
-            .eq('id', existingId)
-            .maybeSingle();
-          if (existing && !existing.explanation_brief && row.explanation) {
-            await updateQBQuestion(existingId, { explanation_brief: row.explanation }, supabase);
-          }
-          merged += 1;
-        } else {
-          reused += 1;
-        }
-
-        orderedQuestionIds.push(existingId);
-        if (tagIds.size > 0) tagPairs.push({ question_id: existingId, tag_ids: [...tagIds] });
-        continue;
-      }
-
-      // action === 'create'
+    /** Write the row as a brand new bank question. Shared by create and keep_both. */
+    async function createFromRow(row: CommitRow): Promise<string | null> {
       const text = (row.question_text || '').trim();
       const answer = (row.correct_answer || '').trim();
-      if (!text || !answer) {
-        skipped += 1;
-        continue;
-      }
+      if (!text || !answer) return null;
       const format = row.question_format === 'NUMERICAL' ? 'NUMERICAL' : 'MCQ';
       const question = await createQBQuestion(
         {
@@ -183,9 +150,104 @@ export async function POST(request: NextRequest) {
         },
         supabase,
       );
+      return question.id;
+    }
+
+    for (const row of rows) {
+      const action: RowAction = row?.action || 'create';
+      if (action === 'skip') {
+        skipped += 1;
+        continue;
+      }
+
+      // Resolve this row's tags: registry ids the wizard already knew, plus any
+      // slug that only became real in step 1.
+      const tagIds = new Set<string>((row.tag_ids || []).filter(Boolean));
+      for (const slug of row.new_tag_slugs || []) {
+        const id = slugToNewTagId.get(slug);
+        if (id) tagIds.add(id);
+      }
+
+      if (DUPLICATE_ACTIONS.includes(action)) {
+        const existingId = row.existing_question_id;
+        if (!existingId) {
+          skipped += 1;
+          continue;
+        }
+
+        if (action === 'merge') {
+          // Merge FILLS GAPS, it never overwrites. A bank question may already
+          // carry a teacher-checked explanation, and silently replacing it with
+          // model prose would be a downgrade the teacher never sees. Tags are
+          // always additive, which is where most of the value is anyway.
+          const { data: existing } = await supabase
+            .from('nexus_qb_questions')
+            .select('id, explanation_brief')
+            .eq('id', existingId)
+            .maybeSingle();
+          if (existing && !existing.explanation_brief && row.explanation) {
+            await updateQBQuestion(existingId, { explanation_brief: row.explanation }, supabase);
+          }
+          merged += 1;
+        } else if (action === 'replace') {
+          // Replace is the deliberate opposite of merge, and it is destructive
+          // by design: the teacher compared the two side by side and said the
+          // new wording is better. Updating in place rather than adding a twin
+          // means every test already using this question inherits the fix, and
+          // its attempt history stays attached.
+          const text = (row.question_text || '').trim();
+          const answer = (row.correct_answer || '').trim();
+          if (!text || !answer) {
+            skipped += 1;
+            continue;
+          }
+          const format = row.question_format === 'NUMERICAL' ? 'NUMERICAL' : 'MCQ';
+          await updateQBQuestion(
+            existingId,
+            {
+              question_text: text,
+              question_format: format,
+              options: format === 'MCQ' ? row.options ?? null : null,
+              correct_answer: answer,
+              explanation_brief: row.explanation ?? null,
+              difficulty: row.difficulty || 'MEDIUM',
+              exam_relevance: row.exam_relevance || 'BOTH',
+            },
+            supabase,
+          );
+          replaced += 1;
+        } else if (action === 'keep_both') {
+          // Two questions that only looked alike. Both stay in the bank, and the
+          // teacher already said which one this particular test should ask.
+          const newId = await createFromRow(row);
+          if (!newId) {
+            skipped += 1;
+            continue;
+          }
+          keptBoth += 1;
+          // The tags describe the text the model wrote, so they go on the new
+          // row whichever question ends up in the test.
+          if (tagIds.size > 0) tagPairs.push({ question_id: newId, tag_ids: [...tagIds] });
+          orderedQuestionIds.push(row.use_in_test === 'existing' ? existingId : newId);
+          continue;
+        } else {
+          reused += 1;
+        }
+
+        orderedQuestionIds.push(existingId);
+        if (tagIds.size > 0) tagPairs.push({ question_id: existingId, tag_ids: [...tagIds] });
+        continue;
+      }
+
+      // action === 'create'
+      const newId = await createFromRow(row);
+      if (!newId) {
+        skipped += 1;
+        continue;
+      }
       created += 1;
-      orderedQuestionIds.push(question.id);
-      if (tagIds.size > 0) tagPairs.push({ question_id: question.id, tag_ids: [...tagIds] });
+      orderedQuestionIds.push(newId);
+      if (tagIds.size > 0) tagPairs.push({ question_id: newId, tag_ids: [...tagIds] });
     }
 
     // Bank questions the teacher added alongside the import, appended at the end.
@@ -225,11 +287,19 @@ export async function POST(request: NextRequest) {
         ? Math.max(1, Math.round((Math.min(passingPct, 100) / 100) * orderedQuestionIds.length))
         : null;
 
+    // The teacher's label for this test. Anything outside the picker's own list
+    // falls back rather than 400ing, because the CHECK constraint is the real
+    // gate and an unknown kind here is a client bug, not a teacher's mistake.
+    const requestedKind = body?.test_kind;
+    const testKind: NexusTestKind = NEXUS_TEACHER_TEST_KINDS.some((k) => k.value === requestedKind)
+      ? requestedKind
+      : 'classroom_assigned';
+
     const { id: testId } = await composeTest(
       {
         title,
         questionIds: orderedQuestionIds,
-        testKind: 'classroom_assigned',
+        testKind,
         timerType: body?.timer_type,
         durationMinutes: body?.duration_minutes ?? null,
         perQuestionSeconds: body?.per_question_seconds ?? null,
@@ -252,6 +322,8 @@ export async function POST(request: NextRequest) {
           created,
           reused,
           merged,
+          replaced,
+          kept_both: keptBoth,
           skipped,
           tags_created: tagsCreated,
           tags_linked: tagsLinked,

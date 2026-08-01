@@ -1,165 +1,224 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+/**
+ * The full student profile.
+ *
+ * ONE ROUTE, A SECTION STACK, THREE FETCHES.
+ *
+ * Not tab sub-routes: at 375px ten tabs mean a horizontally scrolling strip
+ * where every tap is a route transition, a new skeleton, a lost scroll position,
+ * and a Back button that walks through tabs instead of returning to the list.
+ * A stack lets a teacher thumb-scroll, and each accordion summary carries its
+ * headline number so the common question is answered with zero taps.
+ *
+ * The three fetches exist so the page paints fast and so the fee gate has
+ * somewhere to live:
+ *   core         blocking. Identity, application, guardians, documents.
+ *   finance      lazy, and only attempted when the caller holds the capability.
+ *   performance  lazy, fired when attendance or work first becomes visible.
+ *
+ * Collapsed sections on mobile fetch nothing.
+ */
+
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
+  Alert,
   Box,
-  Typography,
-  Paper,
-  Skeleton,
   Button,
-  LinearProgress,
-  Divider,
+  Paper,
   Snackbar,
+  Typography,
+  useMediaQuery,
+  useTheme,
 } from '@neram/ui';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import ParentAccessCard from '@/components/parent/ParentAccessCard';
 import ClassifyDrawer, { type ClassifyMode } from '@/components/students/ClassifyDrawer';
-import StudentStageAvatar from '@/components/students/StudentStageAvatar';
-import ExamYearChip from '@/components/students/ExamYearChip';
-import { DormantChip, StudentStageChip } from '@/components/students/StudentStageChip';
-import { stageKeyOf, type StageKey } from '@/lib/student-stage';
-import { expectedYearForStage } from '@neram/database';
+import ClassStandingCard from '@/components/standing/ClassStandingCard';
+import ProfileHeaderCard from '@/components/students/profile/ProfileHeaderCard';
+import ProfileSkeleton from '@/components/students/profile/ProfileSkeleton';
+import SectionNav, { type NavItem } from '@/components/students/profile/SectionNav';
+import IdentitySection from '@/components/students/profile/IdentitySection';
+import ClassroomSection from '@/components/students/profile/ClassroomSection';
+import ApplicationSection from '@/components/students/profile/ApplicationSection';
+import GuardianSection from '@/components/students/profile/GuardianSection';
+import DocumentsSection from '@/components/students/profile/DocumentsSection';
+import AttendanceSection from '@/components/students/profile/AttendanceSection';
+import WorkSection from '@/components/students/profile/WorkSection';
+import FeeSection from '@/components/students/profile/FeeSection';
+import TimelineSection from '@/components/students/profile/TimelineSection';
+import { formatCurrencyINR } from '@/lib/student-profile-fields';
+import type { StageKey } from '@/lib/student-stage';
+import type {
+  ProfileTimelineEvent,
+  StudentFinancePayload,
+  StudentPerformancePayload,
+  StudentProfileCore,
+} from '@/lib/student-profile-types';
 
-interface StudentDetail {
-  id: string;
-  name: string;
-  email: string | null;
-  avatar_url: string | null;
-  enrollment_date: string | null;
-  study_stage: string | null;
-  participation_status: 'active' | 'dormant';
-  dormant_since: string | null;
-  dormant_reason: string | null;
-  academic_year: string | null;
-  pair_status: string | null;
-  attendance: {
-    attended: number;
-    total: number;
-    percentage: number;
-  };
-  checklist: {
-    completed: number;
-    total: number;
-    percentage: number;
-  };
-  topics: {
-    completed: number;
-    total: number;
-  };
-}
-
-export default function StudentDetailPage() {
+export default function StudentProfilePage() {
   const params = useParams();
   const router = useRouter();
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const { activeClassroom, getToken, can } = useNexusAuthContext();
-  const [student, setStudent] = useState<StudentDetail | null>(null);
+
+  const studentId = params.id as string;
+
+  const [core, setCore] = useState<StudentProfileCore | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [finance, setFinance] = useState<StudentFinancePayload | null>(null);
+  const [financeState, setFinanceState] = useState<FetchState>({ loading: false, error: null });
+
+  const [performance, setPerformance] = useState<StudentPerformancePayload | null>(null);
+  const [perfState, setPerfState] = useState<FetchState>({ loading: false, error: null });
+
   const [drawer, setDrawer] = useState<ClassifyMode | null>(null);
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  const [currentBatch, setCurrentBatch] = useState<string | null>(null);
   const [examYears, setExamYears] = useState<string[]>([]);
 
-  // Any teaching staff may set a class or exam year; only a manager or admin may
-  // mark someone dormant. See staff-capabilities.ts for why the two differ.
   const canSetStage = can('coord.student.stage');
   const canSetDormancy = can('coord.student.dormancy');
-  const studentId = params.id as string;
+  const canSeeFinance = can('coord.student.finance');
 
-  // The selectable exam-year cohorts, from the same read-only registry the
-  // students list uses, so both editors offer identical options.
+  // ── Core bundle. The only blocking fetch. ─────────────────────────────────
   useEffect(() => {
-    async function loadExamYears() {
+    if (!activeClassroom || !studentId) return;
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      setNotFound(false);
       try {
         const token = await getToken();
         if (!token) return;
-        const res = await fetch('/api/batches', { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(
+          `/api/students/${studentId}?classroom=${activeClassroom.id}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (cancelled) return;
+        if (res.status === 404) {
+          setNotFound(true);
+          return;
+        }
+        if (!res.ok) throw new Error('Request failed');
+        setCore(await res.json());
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to load student profile:', err);
+          setNotFound(true);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeClassroom, studentId, getToken, reloadKey]);
+
+  // The exam-year registry, from the same source the students list uses so both
+  // editors offer identical options.
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch('/api/batches', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) return;
         const data = await res.json();
         setExamYears(((data.batches || []) as { code: string }[]).map((b) => b.code));
-        if (data.current?.code) setCurrentBatch(data.current.code);
       } catch {
         /* non-fatal: the drawer just offers no years */
       }
-    }
-    loadExamYears();
+    })();
   }, [getToken]);
 
-  useEffect(() => {
-    if (!activeClassroom || !studentId) return;
+  // Refs, not state, so two callers firing in the same tick cannot both pass
+  // the guard. Several sections plus the standing card all want this data, and
+  // they must produce exactly one request between them.
+  const perfRequested = useRef(false);
+  const financeRequested = useRef(false);
 
-    async function fetchStudent() {
-      setLoading(true);
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        const res = await fetch(
-          `/api/students/${studentId}?classroom=${activeClassroom!.id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        if (res.ok) {
-          const data = await res.json();
-          const s = data.student || data;
-          const att = data.attendanceSummary || {};
-          const cl = data.checklistProgress || {};
-          const tp = data.topicProgress || {};
-          if (data.currentBatch) setCurrentBatch(data.currentBatch);
-          setStudent({
-            id: s.id,
-            name: s.name,
-            email: s.email,
-            avatar_url: s.avatar_url,
-            enrollment_date: s.enrolled_at || s.enrollment_date || null,
-            study_stage: s.study_stage ?? null,
-            participation_status: s.participation_status ?? 'active',
-            dormant_since: s.dormant_since ?? null,
-            dormant_reason: s.dormant_reason ?? null,
-            academic_year: s.academic_year ?? null,
-            pair_status: s.pair_status ?? null,
-            attendance: {
-              attended: att.attended || 0,
-              total: att.total || 0,
-              percentage: att.percentage || 0,
-            },
-            checklist: {
-              completed: cl.completed || 0,
-              total: cl.total || 0,
-              percentage: cl.total > 0 ? Math.round((cl.completed / cl.total) * 100) : 0,
-            },
-            topics: {
-              completed: tp.completed || 0,
-              total: tp.total || 0,
-            },
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load student:', err);
-      } finally {
-        setLoading(false);
-      }
+  // ── Lazy loaders, fired by a section becoming visible ─────────────────────
+  const loadPerformance = useCallback(async () => {
+    if (!activeClassroom || perfRequested.current) return;
+    perfRequested.current = true;
+    setPerfState({ loading: true, error: null });
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(
+        `/api/students/${studentId}/performance?classroom=${activeClassroom.id}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) throw new Error('Could not load this student’s progress.');
+      setPerformance(await res.json());
+      setPerfState({ loading: false, error: null });
+    } catch (err) {
+      // Allow a retry: a failed fetch must not leave the page permanently blank.
+      perfRequested.current = false;
+      setPerfState({
+        loading: false,
+        error: err instanceof Error ? err.message : 'Could not load progress.',
+      });
     }
+  }, [activeClassroom, studentId, getToken]);
 
-    fetchStudent();
-  }, [activeClassroom, studentId, getToken, reloadKey]);
+  const loadFinance = useCallback(async () => {
+    // Skipping the call for a teacher is a courtesy that avoids a guaranteed
+    // 403. It is NOT the gate: the gate is the capability assert on the route.
+    if (!canSeeFinance || !activeClassroom || financeRequested.current) return;
+    financeRequested.current = true;
+    setFinanceState({ loading: true, error: null });
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(
+        `/api/students/${studentId}/finance?classroom=${activeClassroom.id}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) throw new Error('Could not load the fee record.');
+      setFinance(await res.json());
+      setFinanceState({ loading: false, error: null });
+    } catch (err) {
+      financeRequested.current = false;
+      setFinanceState({
+        loading: false,
+        error: err instanceof Error ? err.message : 'Could not load the fee record.',
+      });
+    }
+  }, [canSeeFinance, activeClassroom, studentId, getToken]);
 
-  /**
-   * The same PATCH the bulk bar uses, with a one-element id list. One editor and
-   * one endpoint for both entry points, so the rules cannot diverge.
-   */
+  // The fee section is only ever mounted for a capable caller, so fetch as soon
+  // as we know the caller is capable rather than waiting for an expand.
+  useEffect(() => {
+    if (core && canSeeFinance) void loadFinance();
+  }, [core, canSeeFinance, loadFinance]);
+
+  // Class Standing sits at the top of the page and is the first thing anyone
+  // looks at, so it must not wait for a section to be expanded. This is still
+  // ONE request: the attendance and work sections read the same payload.
+  useEffect(() => {
+    if (core) void loadPerformance();
+  }, [core, loadPerformance]);
+
   async function applyClassification(payload: {
     studyStage?: StageKey | null;
     academicYear?: string | null;
     participationStatus?: 'active' | 'dormant';
     reason?: string;
   }) {
-    if (!activeClassroom || !student) return;
+    if (!activeClassroom || !core) return;
     setSaving(true);
     try {
       const token = await getToken();
@@ -169,7 +228,7 @@ export default function StudentDetailPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           classroomId: activeClassroom.id,
-          studentIds: [student.id],
+          studentIds: [core.student.id],
           ...payload,
         }),
       });
@@ -188,211 +247,173 @@ export default function StudentDetailPage() {
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
-  if (loading) {
-    return (
-      <Box>
-        <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1, mb: 2 }} />
-        <Skeleton variant="circular" width={80} height={80} sx={{ mx: 'auto', mb: 2 }} />
-        <Skeleton variant="rectangular" height={24} sx={{ borderRadius: 1, mb: 1, mx: 'auto', maxWidth: 200 }} />
-        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1, mb: 2 }} />
-        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1, mb: 2 }} />
-        <Skeleton variant="rectangular" height={80} sx={{ borderRadius: 1 }} />
-      </Box>
+  const copyEmail = useCallback((e: React.MouseEvent, email: string) => {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(email).then(
+      () => setSnackbar('Email copied'),
+      () => setSnackbar('Could not copy the email'),
     );
-  }
+  }, []);
 
-  if (!student) {
+  if (loading) return <ProfileSkeleton />;
+
+  if (notFound || !core) {
     return (
       <Box>
-        <Button
-          onClick={() => router.push('/teacher/students')}
-          sx={{ textTransform: 'none', minHeight: 48, mb: 2 }}
-        >
-          &#8592; Back to Students
-        </Button>
+        <BackButton onClick={() => router.push('/teacher/students')} />
         <Paper sx={{ p: 3, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
-            Student not found.
+            This student is not in the classroom you have selected.
           </Typography>
         </Paper>
       </Box>
     );
   }
 
-  return (
-    <Box>
-      {/* Back Button */}
-      <Button
-        onClick={() => router.push('/teacher/students')}
-        sx={{ textTransform: 'none', minHeight: 48, mb: 2 }}
-      >
-        &#8592; Back to Students
-      </Button>
+  // Payment events join the feed only when the finance fetch succeeded, so a
+  // teacher's timeline simply never contains one.
+  const timeline = mergeTimeline(core.timeline, finance);
 
-      {/* Student Header */}
-      <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 2, textAlign: 'center' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
-          <StudentStageAvatar
-            stage={stageKeyOf(student.study_stage)}
-            dormant={student.participation_status === 'dormant'}
-            src={student.avatar_url}
-            name={student.name}
-            size={80}
-          />
-        </Box>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          {student.name}
-        </Typography>
-        {student.email && (
-          <Typography variant="body2" color="text.secondary">
-            {student.email}
-          </Typography>
-        )}
+  const navItems: NavItem[] = [
+    { id: 'profile-identity', label: 'Identity and contact' },
+    { id: 'profile-classroom', label: 'Class and progress' },
+    { id: 'profile-attendance', label: 'Attendance' },
+    { id: 'profile-work', label: 'Assignments and tests' },
+    { id: 'profile-application', label: 'Application form' },
+    ...(canSeeFinance ? [{ id: 'profile-fees', label: 'Fees and payments' }] : []),
+    { id: 'profile-documents', label: 'Documents' },
+    { id: 'profile-guardian', label: 'Parent and guardian' },
+    { id: 'profile-timeline', label: 'Activity' },
+  ];
 
-        {/* Classification. Separate chips, never one: they answer different
-            questions and a student can legitimately be all three. */}
-        <Box sx={{ display: 'flex', gap: 0.75, justifyContent: 'center', flexWrap: 'wrap', mt: 1.25 }}>
-          <StudentStageChip stage={stageKeyOf(student.study_stage)} density="detailed" />
-          <ExamYearChip
-            academicYear={student.academic_year}
-            pairStatus={student.pair_status}
-            studyStage={student.study_stage}
-            expectedYear={
-              currentBatch ? expectedYearForStage(stageKeyOf(student.study_stage), currentBatch) : null
-            }
-            density="detailed"
-          />
-          {student.participation_status === 'dormant' && (
-            <DormantChip
-              since={student.dormant_since}
-              reason={student.dormant_reason}
-              density="detailed"
-            />
-          )}
-          {canSetStage && (
-            <Button
-              size="small"
-              startIcon={<EditOutlinedIcon sx={{ fontSize: '0.9rem' }} />}
-              onClick={() => setDrawer('stage')}
-              sx={{ minHeight: 32, py: 0, fontSize: '0.72rem', fontWeight: 700 }}
-            >
-              Edit
-            </Button>
-          )}
-        </Box>
+  const header = (
+    <ProfileHeaderCard
+      student={core.student}
+      enrollment={core.enrollment}
+      record={core.record}
+      applicationNumber={core.application?.application_number ?? null}
+      currentBatch={core.currentBatch}
+      canSetStage={canSetStage}
+      canSetDormancy={canSetDormancy}
+      onEditStage={() => setDrawer('stage')}
+      onToggleDormancy={() =>
+        setDrawer(core.enrollment.participation_status === 'dormant' ? 'reactivate' : 'dormant')
+      }
+    />
+  );
 
-        {/* Spell out the missing half rather than leaving a gap where a chip
-            would be. "No exam year" is actionable; an absence is not. */}
-        {!student.academic_year && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-            No exam year set, so this student belongs to no cohort.
-          </Typography>
-        )}
+  const standingCard = (
+    <ClassStandingCard
+      standing={performance?.classStanding ?? null}
+      audience="staff"
+      loading={perfState.loading}
+    />
+  );
 
-        {student.enrollment_date && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-            Enrolled: {formatDate(student.enrollment_date)}
-          </Typography>
-        )}
+  const sections = (
+    <>
+      {/* Performance is classroom-scoped while identity and fees are global.
+          Saying so stops a teacher reading one classroom's attendance as the
+          student's whole record. */}
+      <Alert severity="info" variant="outlined" sx={{ mb: 2 }}>
+        Attendance, assignments, tests and catch-up are shown for{' '}
+        {core.classroom.name || 'this classroom'}. Identity, application and documents are
+        the same everywhere.
+      </Alert>
 
-        <Box sx={{ mt: 2, display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <ViewAsStudentButton
-            studentId={student.id}
-            reason={`Student detail: ${student.name}`}
-            variant="contained"
-          />
-          {canSetDormancy && (
-            <Button
-              variant="outlined"
-              color={student.participation_status === 'dormant' ? 'success' : 'warning'}
-              onClick={() => setDrawer(student.participation_status === 'dormant' ? 'reactivate' : 'dormant')}
-              sx={{ minHeight: 48, fontWeight: 700 }}
-            >
-              {student.participation_status === 'dormant' ? 'Bring back' : 'Mark dormant'}
-            </Button>
-          )}
-        </Box>
-      </Paper>
+      <IdentitySection student={core.student} record={core.record} onCopyEmail={copyEmail} />
 
-      {/* Parent access. Renders nothing for staff without the capability. */}
-      <ParentAccessCard
-        studentId={student.id}
-        studentName={student.name}
-        classroomId={activeClassroom?.id ?? null}
+      <ClassroomSection
+        enrollment={core.enrollment}
+        record={core.record}
+        classroom={core.classroom}
+        checklist={core.checklist}
+        topics={core.topics}
+        currentBatch={core.currentBatch}
       />
 
-      {/* Attendance Summary */}
-      <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 2 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Attendance
-        </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-          <Typography variant="body2" color="text.secondary">
-            {student.attendance.attended} / {student.attendance.total} classes
-          </Typography>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {Math.round(student.attendance.percentage)}%
-          </Typography>
-        </Box>
-        <LinearProgress
-          variant="determinate"
-          value={student.attendance.percentage}
-          color={student.attendance.percentage >= 75 ? 'success' : 'warning'}
-          sx={{ height: 8, borderRadius: 4 }}
-        />
-      </Paper>
+      <AttendanceSection
+        performance={performance}
+        loading={perfState.loading}
+        error={perfState.error}
+        onFirstOpen={loadPerformance}
+      />
 
-      {/* Checklist Progress */}
-      <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 2 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Checklist Progress
-        </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-          <Typography variant="body2" color="text.secondary">
-            {student.checklist.completed} / {student.checklist.total} items
-          </Typography>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {Math.round(student.checklist.percentage)}%
-          </Typography>
-        </Box>
-        <LinearProgress
-          variant="determinate"
-          value={student.checklist.percentage}
-          color={student.checklist.percentage >= 50 ? 'info' : 'warning'}
-          sx={{ height: 8, borderRadius: 4 }}
-        />
-      </Paper>
+      <WorkSection
+        performance={performance}
+        loading={perfState.loading}
+        error={perfState.error}
+        onFirstOpen={loadPerformance}
+      />
 
-      {/* Topic Progress */}
-      <Paper sx={{ p: { xs: 2, sm: 3 } }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Topic Progress
-        </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Typography variant="body2" color="text.secondary">
-            Topics completed
-          </Typography>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {student.topics.completed} / {student.topics.total}
-          </Typography>
+      <ApplicationSection application={core.application} />
+
+      {/* Rendered only for a capable caller. The server-side assert is what
+          actually protects the data; this keeps a teacher from seeing an
+          empty section they can do nothing about. */}
+      {canSeeFinance && (
+        <FeeSection
+          finance={finance}
+          loading={financeState.loading}
+          error={financeState.error}
+        />
+      )}
+
+      <DocumentsSection
+        documents={core.documents}
+        guardian={core.guardian}
+        canSeeRestricted={canSeeFinance}
+      />
+
+      <GuardianSection guardian={core.guardian} parentAccess={core.parentAccess} />
+
+      <Box sx={{ mb: 2 }}>
+        <ParentAccessCard
+          studentId={core.student.id}
+          studentName={core.student.name || ''}
+          classroomId={activeClassroom?.id ?? null}
+        />
+      </Box>
+
+      <TimelineSection events={timeline} />
+    </>
+  );
+
+  return (
+    <Box>
+      <BackButton onClick={() => router.push('/teacher/students')} />
+
+      {isDesktop ? (
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: '320px minmax(0, 1fr)',
+            gap: 3,
+            alignItems: 'start',
+          }}
+        >
+          <Box sx={{ position: 'sticky', top: 88 }}>
+            {header}
+            <Box sx={{ mt: 2 }}>{standingCard}</Box>
+            <SectionNav items={navItems} />
+          </Box>
+          <Box sx={{ minWidth: 0 }}>{sections}</Box>
         </Box>
-      </Paper>
+      ) : (
+        <>
+          {header}
+          {standingCard}
+          {sections}
+        </>
+      )}
 
       <ClassifyDrawer
         open={!!drawer}
         mode={drawer ?? 'stage'}
-        names={[student.name]}
+        names={[core.student.name || '']}
         busy={saving}
         examYears={examYears}
-        currentBatch={currentBatch}
+        currentBatch={core.currentBatch}
         onClose={() => setDrawer(null)}
         onApply={applyClassification}
       />
@@ -406,4 +427,40 @@ export default function StudentDetailPage() {
       />
     </Box>
   );
+}
+
+interface FetchState {
+  loading: boolean;
+  error: string | null;
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      onClick={onClick}
+      startIcon={<ArrowBackIcon />}
+      sx={{ textTransform: 'none', minHeight: 48, mb: 2 }}
+    >
+      Back to Students
+    </Button>
+  );
+}
+
+/** Fold payment events into the activity feed, newest first. */
+function mergeTimeline(
+  base: ProfileTimelineEvent[],
+  finance: StudentFinancePayload | null,
+): ProfileTimelineEvent[] {
+  if (!finance) return base;
+
+  const payments: ProfileTimelineEvent[] = finance.payments
+    .filter((p) => p.paid_at && p.status === 'paid')
+    .map((p) => ({
+      at: p.paid_at as string,
+      kind: 'payment' as const,
+      title: `Payment received: ${formatCurrencyINR(p.amount)}`,
+      detail: p.receipt_number ? `Receipt ${p.receipt_number}` : null,
+    }));
+
+  return [...base, ...payments].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 }

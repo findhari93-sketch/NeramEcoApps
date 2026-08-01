@@ -17,7 +17,7 @@
  * back to each feature's `defaultEnabled`; `core` features are always enabled.
  */
 
-export type FeatureSurface = 'student' | 'staff';
+export type FeatureSurface = 'student' | 'staff' | 'parent';
 
 export interface FeatureDef {
   /** Stable id, e.g. 'student.timetable'. Persisted in the settings JSONB. */
@@ -153,6 +153,16 @@ export const FEATURES: FeatureDef[] = [
   // it on is a decision somebody makes once the OAuth grant is verified, not
   // something a deploy does on their behalf.
   { id: 'staff.youtube-auto-backup', label: 'Automatic YouTube backup', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
+  // Not a page (`paths: []`). Gates the nightly job that writes a class's title,
+  // brief, bullets and tags from its transcript once the class has ended.
+  //
+  // Defaults ON, unlike staff.youtube-auto-backup above, because what it spends is
+  // a Gemini call rather than a metered daily quota, and because OFF is the state
+  // that leaves students with a term of classes called "Class by Ar Hari Babu".
+  // It is a kill switch for a bad run, not a rollout gate: it never overwrites
+  // anything a teacher has saved, so the worst case is a mediocre summary a
+  // teacher edits.
+  { id: 'staff.auto-wrapup', label: 'Write class wrap-ups automatically', surface: 'staff', group: 'Teaching', paths: [], defaultEnabled: true },
   // Not a page (`paths: []`). Shows the Test section in the timetable planning
   // rail, so a teacher can attach a short prep test to a class. Separate from
   // student.class-prep-gate on purpose: a teacher can set the tests and see who
@@ -175,6 +185,19 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.admin-review-platforms', label: 'Review URLs', surface: 'staff', group: 'Admin', paths: ['/teacher/admin/review-platforms'], defaultEnabled: true, core: true },
   { id: 'staff.admin-settings', label: 'Settings', surface: 'staff', group: 'Admin', paths: ['/teacher/admin/settings'], defaultEnabled: true, core: true },
   { id: 'staff.admin-features', label: 'Features', surface: 'staff', group: 'Admin', paths: ['/teacher/admin/features'], defaultEnabled: true, core: true },
+
+  // ── Parent ────────────────────────────────────────────────────────────────
+  // Not a page: `paths: []` can never match in featureForPath, so this is a pure
+  // on/off switch with no route-gating side effect.
+  //
+  // Defaults OFF, unlike every other non-student flag. Showing a parent a number
+  // about their own child is a one-way door on trust: once a family has seen it
+  // they will ask about it, and withdrawing it later reads as hiding something.
+  // So it ships dark and is switched on deliberately, for one cohort first.
+  // The gate is enforced server side in /api/parent/overview, which omits the
+  // standing entirely when this is off, so nothing reaches the browser to be
+  // found by a curious parent.
+  { id: 'parent.class-standing', label: 'Show Class Standing to parents', surface: 'parent', group: 'Reporting', paths: [], defaultEnabled: false },
 ];
 
 /** Fast id → def lookup. */

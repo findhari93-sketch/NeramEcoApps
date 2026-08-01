@@ -9,12 +9,18 @@ export const dynamic = 'force-dynamic';
  * GET /api/cron/recap-autodraft
  *
  * Nightly. Turns recorded classes that already have a stored transcript into
- * DRAFT recaps, checkpoints and quiz questions included, and tells the teachers
- * there is something to review.
+ * recaps, checkpoints and quiz questions included.
  *
- * It never publishes. A student cannot start catching up on a class until a
- * person has read the questions, because the class test that follows is graded
- * at 85% and a wrong question there is a wall with no appeal.
+ * It DOES publish. A generation that clears every check in recap-quality goes
+ * straight to students, because a recap waiting on a human is a recap that never
+ * arrives: nine classes sat recorded and transcribed for a month with no recap
+ * at all. Anything short of the bar is held instead and raises an alert, so the
+ * only material that reaches a student unread is material the checks vouched for.
+ *
+ * This is the straggler sweep. The main path is event-driven, off the back of
+ * the transcript landing in /api/cron/sync-attendance, roughly twenty minutes
+ * after a class ends. This catches whatever that missed: a late transcript, a
+ * night Gemini refused, a class that failed under the retry cap.
  *
  * Runs at 06:00 IST, well clear of the evening attendance and follow-up crons,
  * so a slow Gemini call cannot delay the work that has to finish before people
@@ -36,8 +42,13 @@ export async function GET(request: NextRequest) {
 
     // Tell the teachers, once per classroom. A row per recap would bury the
     // signal on a night that drafts three at once.
+    //
+    // Published recaps only. A held one has already alerted every teacher on the
+    // TopBar bell via notifyHeld, which is the surface people actually see;
+    // adding it here as well would say "ready to review" about something that is
+    // stuck, and say it on a screen that only renders on the timetable page.
     let notified = 0;
-    for (const [classroomId, count] of run.byClassroom) {
+    for (const [classroomId, count] of run.publishedByClassroom) {
       try {
         const { data: staff } = await supabase
           .from('nexus_enrollments')
@@ -50,9 +61,12 @@ export async function GET(request: NextRequest) {
           classroom_id: classroomId,
           user_id: s.user_id,
           event_type: 'recap_draft_ready',
-          title: count === 1 ? 'A class recap is ready to review' : `${count} class recaps are ready to review`,
+          title:
+            count === 1
+              ? 'A class recap is open for catch-up'
+              : `${count} class recaps are open for catch-up`,
           message:
-            'Checkpoints and questions were drafted from the transcript. Review and publish to open it for catch-up.',
+            'Checkpoints and questions were built from the transcript and cleared the automatic checks. Students who missed the class can catch up now.',
           metadata: { count },
         }));
 

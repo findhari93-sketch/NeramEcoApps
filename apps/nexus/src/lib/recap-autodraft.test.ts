@@ -7,12 +7,14 @@ import {
   runRecapAutodraft,
   MAX_DRAFTS_PER_RUN,
   STALLED_DRAFT_HOURS,
+  MAX_GENERATION_ATTEMPTS,
 } from './recap-autodraft';
 
 vi.mock('@neram/database', () => ({
   createRecapForClass: vi.fn(async (classId: string) => ({
     id: `recap-${classId}`,
     title: 'Generated title',
+    generation_attempts: 0,
   })),
   replaceRecapSections: vi.fn(async () => undefined),
   setRecapReadiness: vi.fn(async () => undefined),
@@ -27,7 +29,7 @@ vi.mock('./transcript-resolver', () => ({
   readStoredTranscript: vi.fn(),
 }));
 
-import { createRecapForClass, replaceRecapSections } from '@neram/database';
+import { createRecapForClass, replaceRecapSections, setRecapReadiness } from '@neram/database';
 import { generateSectionsAndQuestions } from './ai-generate';
 import { readStoredTranscript } from './transcript-resolver';
 
@@ -66,6 +68,39 @@ const goodSection = {
     },
   ],
 };
+
+/**
+ * A generation good enough to clear all eight quality checks and go live.
+ *
+ * Every other fixture in this file is deliberately thin, which means every other
+ * test exercises the HELD path. Without one of these, nothing here would prove
+ * that a recap can reach a student at all, which is the entire purpose of the
+ * pipeline.
+ *
+ * Shaped against `richTranscript`: the question text reuses that transcript's
+ * vocabulary so the grounding check can find its three shared content words
+ * inside each segment's own window, and the correct answer rotates so the
+ * answer-balance check sees no favoured letter.
+ */
+function publishableSections(durationSeconds = 1800, target = 300) {
+  const letters = ['a', 'b', 'c', 'd'] as const;
+  const count = Math.round(durationSeconds / target);
+  return Array.from({ length: count }, (_, s) => ({
+    title: `Vanishing points, part ${s + 1}`,
+    description: 'How placement changes the perceived elevation',
+    start_timestamp_seconds: s * target,
+    end_timestamp_seconds: (s + 1) * target,
+    questions: Array.from({ length: 12 }, (_, q) => ({
+      question_text: `Part ${s + 1}, question ${q + 1}: how does vanishing point placement change the perceived elevation height in a NATA drawing?`,
+      option_a: 'It raises the horizon line',
+      option_b: 'It lowers the horizon line',
+      option_c: 'It has no effect at all',
+      option_d: 'It only changes the shadow',
+      correct_option: letters[q % 4],
+      explanation: 'The horizon line always sits at the eye level of the viewer.',
+    })),
+  }));
+}
 
 /**
  * A stand-in for the Supabase builder, just deep enough for the three batched
@@ -258,6 +293,77 @@ describe('findAutodraftCandidates', () => {
     expect(found[0].existing_recap_id).toBe('recap-1');
   });
 
+  it('retries a pending row at once instead of waiting out the stall window', async () => {
+    // The exact production failure: the sweep created the row, generation threw,
+    // and the 24 hour rule (which exists to protect a teacher mid-review) then
+    // parked the class for a day behind a draft nobody was editing.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          readiness: 'pending',
+          generated_at: null,
+          created_at: new Date(Date.now() - 1 * HOUR).toISOString(),
+          generation_attempts: 1,
+        },
+      ],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    const found = await findAutodraftCandidates(supabase);
+    expect(found).toHaveLength(1);
+    expect(found[0].existing_recap_id).toBe('recap-1');
+  });
+
+  it('stops retrying a class that has failed too many times', async () => {
+    // Matters now that a failure holds rather than abandons: a held row with no
+    // generated_at is a candidate again every night, so a class that can never
+    // produce enough questions would spend the shared Gemini key forever.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          readiness: 'held',
+          generated_at: null,
+          created_at: new Date(Date.now() - 40 * HOUR).toISOString(),
+          generation_attempts: MAX_GENERATION_ATTEMPTS,
+        },
+      ],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
+  });
+
+  it('still retries a held class that has attempts left', async () => {
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          readiness: 'held',
+          generated_at: null,
+          created_at: new Date(Date.now() - 40 * HOUR).toISOString(),
+          generation_attempts: MAX_GENERATION_ATTEMPTS - 1,
+        },
+      ],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(1);
+  });
+
   it('never returns more than the run cap', async () => {
     const classes = Array.from({ length: 10 }, (_, i) =>
       classRow({ id: `class-${i}`, scheduled_date: `2026-07-${10 + i}` }),
@@ -356,6 +462,72 @@ describe('autodraftRecapForClass', () => {
     const out = await autodraftRecapForClass({} as any, candidate);
     expect(out).toMatchObject({ ok: false, reason: 'error', detail: 'transcript table is gone' });
   });
+
+  it('marks the row it creates as pending, so an empty one cannot read as ready', async () => {
+    // readiness defaults to 'ready' in the database. Without this the row the
+    // sweep inserts before it has anything to put in it is indistinguishable
+    // from a finished recap.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({
+      sections: [goodSection],
+    } as any);
+
+    await autodraftRecapForClass({} as any, candidate);
+
+    expect(createRecapForClass).toHaveBeenCalledWith('class-1', null, expect.anything(), {
+      readiness: 'pending',
+    });
+  });
+
+  it('holds the recap when generation throws, instead of abandoning it', async () => {
+    // The production bug this fixes: the catch returned without touching the row
+    // it had already created, leaving an empty draft that read as healthy, told
+    // nobody, and blocked its own retry for a day.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockRejectedValue(
+      new Error('malformed JSON from the model'),
+    );
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: false, reason: 'error' });
+    expect(setRecapReadiness).toHaveBeenCalledWith(
+      'recap-class-1',
+      expect.objectContaining({
+        readiness: 'held',
+        hold_reason: 'generation_failed',
+        hold_detail: 'malformed JSON from the model',
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('does not hold on a rate limit, because the key says nothing about the class', async () => {
+    // Holding here would spend an attempt and alert every teacher over a queue
+    // that drains by itself. The row stays pending and is retried next run.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockRejectedValue(new Error('RESOURCE_EXHAUSTED'));
+
+    await autodraftRecapForClass({} as any, candidate);
+
+    expect(setRecapReadiness).not.toHaveBeenCalled();
+  });
+
+  it('publishes a generation that clears every check', async () => {
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({
+      sections: publishableSections(),
+    } as any);
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: true, published: true, held: false });
+    expect(setRecapReadiness).toHaveBeenCalledWith(
+      'recap-class-1',
+      expect.objectContaining({ readiness: 'ready', publish: true }),
+      expect.anything(),
+    );
+  });
 });
 
 describe('runRecapAutodraft', () => {
@@ -371,12 +543,26 @@ describe('runRecapAutodraft', () => {
 
   it('counts each classroom so the teachers get one notification, not three', async () => {
     vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({
+      sections: publishableSections(),
+    } as any);
+
+    const run = await runRecapAutodraft(threeCandidates());
+    expect(run.drafted).toBe(3);
+    expect(run.publishedByClassroom.get('room-1')).toBe(3);
+    expect(run.rateLimited).toBe(false);
+  });
+
+  it('does not announce a held recap as open for catch-up', async () => {
+    // One section fails the segment-count check, so all three are held. They
+    // already alert through notifyHeld; counting them here too would tell
+    // teachers the class is ready when a student still cannot open it.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
     vi.mocked(generateSectionsAndQuestions).mockResolvedValue({ sections: [goodSection] } as any);
 
     const run = await runRecapAutodraft(threeCandidates());
     expect(run.drafted).toBe(3);
-    expect(run.byClassroom.get('room-1')).toBe(3);
-    expect(run.rateLimited).toBe(false);
+    expect(run.publishedByClassroom.size).toBe(0);
   });
 
   it('stops the whole run on a refusal instead of burning the rest of the key', async () => {

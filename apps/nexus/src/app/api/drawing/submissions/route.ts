@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, getAssignment, getUserEnrollment, recordPointEvent } from '@neram/database';
-import { createDrawingSubmissionWithThread, recordGamificationEvent } from '@neram/database/queries/nexus';
+import {
+  createDrawingSubmissionWithThread,
+  getStudentAssignmentDrawing,
+  replaceDrawingSubmission,
+  recordGamificationEvent,
+} from '@neram/database/queries/nexus';
 import { isSubmissionOnTime } from '@/lib/assignment-clock';
+import { resolveSubmitMode, lockedReason } from '@/lib/assignment-submit-window';
 
 
 export async function POST(request: NextRequest) {
@@ -27,6 +33,44 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // A drawing that belongs to an assignment answers to the assignment's submit
+    // window, exactly like a document one. Free practice drawings (question_id,
+    // no assignment) have no deadline and no marking, so they keep their old
+    // behaviour of always inserting a fresh attempt.
+    if (assignment_id) {
+      const assignment = await getAssignment(assignment_id);
+      if (assignment) {
+        const enr = await getUserEnrollment(user.id, assignment.classroom_id);
+        const latest = await getStudentAssignmentDrawing(user.id, assignment_id);
+        const mode = resolveSubmitMode(
+          latest as any,
+          {
+            class_date: assignment.class_date,
+            enrolled_at: (enr as any)?.enrolled_at ?? null,
+            due_at: assignment.due_at,
+            catchup_window_days: assignment.catchup_window_days ?? 7,
+          },
+          new Date().toISOString(),
+        );
+        if (mode === 'locked') {
+          return NextResponse.json({ error: lockedReason(latest as any) }, { status: 403 });
+        }
+        if (mode === 'replace' && latest) {
+          const replaced = await replaceDrawingSubmission(latest.id, {
+            original_image_url,
+            self_note: self_note || null,
+          });
+          // No points here on purpose: this is the same submission corrected, and
+          // both the drawing_submitted event and the on-time bonus were already
+          // awarded when it first arrived.
+          return NextResponse.json(
+            { submission: replaced, attemptNumber: replaced.attempt_number ?? 1, replaced: true },
+            { status: 200 },
+          );
+        }
+      }
     }
 
     const { submission, isRedo, attemptNumber } = await createDrawingSubmissionWithThread({

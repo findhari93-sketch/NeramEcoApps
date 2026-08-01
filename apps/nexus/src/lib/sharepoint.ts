@@ -214,6 +214,166 @@ export async function resolveShareUrlToItem(shareUrl: string): Promise<ResolvedS
   };
 }
 
+/**
+ * A PDF rendition of an Office file, as a short-lived pre-authenticated URL.
+ *
+ * This is what lets a teacher attach a PowerPoint and a student read it in the
+ * app. Nothing in this stack can render a .pptx: the secure reader is pdf.js, and
+ * handing the browser the real file would just download it, which is exactly what
+ * the watermark and the download block exist to prevent. Graph will convert
+ * pptx, docx and xlsx server-side, so the deck arrives as a PDF and every
+ * protection downstream keeps working unchanged.
+ *
+ * Returns null rather than throwing when the conversion is refused, so the caller
+ * can fall back to "open it in SharePoint" instead of presenting a dead viewer.
+ * Graph declines for files past its size limit and for formats it cannot render.
+ *
+ * NOT cached. A conversion is one Graph call and the response carries an hour of
+ * browser caching, so a student reading a deck twice pays for it once. Writing
+ * the rendition back to SharePoint would need Files.ReadWrite.All app permission,
+ * which this app does not hold today.
+ */
+export async function getSharePointPdfRendition(target: {
+  itemId?: string | null;
+  shareUrl?: string | null;
+}): Promise<string | null> {
+  const token = await getAppOnlyToken();
+
+  let url: string;
+  if (target.shareUrl) {
+    // A LINKED file can live on any site or drive, so it has to be reached the
+    // same way its bytes are, through /shares.
+    const encoded = encodeSharingUrl(unwrapTeamsRecapUrl(target.shareUrl));
+    url = `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem/content?format=pdf`;
+  } else if (target.itemId) {
+    const siteId = await getSiteId(token);
+    url = `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${target.itemId}/content?format=pdf`;
+  } else {
+    return null;
+  }
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    redirect: 'manual',
+  });
+
+  // 302 to a pre-authenticated URL is the success path, the same shape /content
+  // uses without the format parameter.
+  if (res.status === 302) return res.headers.get('Location');
+
+  console.warn(`[sharepoint] PDF rendition unavailable: ${res.status}`);
+  return null;
+}
+
+/** One search hit, narrowed to what a file picker actually renders. */
+export interface SiteDriveItem {
+  id: string;
+  name: string;
+  webUrl: string;
+  mimeType: string | null;
+  size: number | null;
+  lastModified: string | null;
+  /** Present on folders only, so the picker can grey them out. */
+  isFolder: boolean;
+}
+
+function toDriveItem(item: any): SiteDriveItem {
+  return {
+    id: item.id,
+    name: item.name || 'Untitled',
+    webUrl: item.webUrl || '',
+    mimeType: item.file?.mimeType || null,
+    size: typeof item.size === 'number' ? item.size : null,
+    lastModified: item.lastModifiedDateTime || null,
+    isFolder: !!item.folder,
+  };
+}
+
+/**
+ * Search the shared Neram document library for a file to attach to a class.
+ *
+ * App-only against the one configured site, which is the whole reason this needs
+ * no new Graph permission and no consent prompt: searching a teacher's PERSONAL
+ * OneDrive would need the delegated Files.Read.All scope, and adding that to the
+ * MSAL config makes every teacher re-consent at next sign-in.
+ *
+ * The consequence to tell users about: a deck that exists only in someone's
+ * personal OneDrive will not appear here. Move it into the Neram site, or paste
+ * its share link, which resolveShareUrlToItem handles across any drive.
+ */
+export async function searchSiteDrive(query: string, limit = 25): Promise<SiteDriveItem[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  const token = await getAppOnlyToken();
+  const siteId = await getSiteId(token);
+
+  // Single quotes inside the OData search term have to be doubled, or a file
+  // called "Ravi's notes" turns the query into a syntax error.
+  const escaped = encodeURIComponent(q.replace(/'/g, "''"));
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/root/search(q='${escaped}')?$top=${limit}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`SharePoint search failed: ${res.status} ${err}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return ((data?.value || []) as any[]).map(toDriveItem);
+}
+
+/**
+ * List one folder of the shared library, so the picker can be browsed as well as
+ * searched. An empty path lists the root.
+ */
+export async function browseSiteFolder(path = '', limit = 100): Promise<SiteDriveItem[]> {
+  const token = await getAppOnlyToken();
+  const siteId = await getSiteId(token);
+
+  const clean = path.replace(/^\/+|\/+$/g, '');
+  const base = `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/root`;
+  const url = clean
+    ? `${base}:/${encodeURI(clean)}:/children?$top=${limit}`
+    : `${base}/children?$top=${limit}`;
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`SharePoint browse failed: ${res.status} ${err}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return ((data?.value || []) as any[]).map(toDriveItem);
+}
+
+/**
+ * A read-only, organization-scoped link to a file, for the "Open in SharePoint"
+ * escape hatch on a resource card.
+ *
+ * `type: 'view'` is the guarantee that matters: a student following this link can
+ * read the deck in SharePoint and cannot edit it. Same call uploadToSharePoint
+ * already makes for the files it uploads.
+ */
+export async function createViewLink(itemId: string): Promise<string | null> {
+  const token = await getAppOnlyToken();
+  const siteId = await getSiteId(token);
+
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${itemId}/createLink`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'view', scope: 'organization' }),
+    },
+  );
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  return data?.link?.webUrl || null;
+}
+
 interface SharePointUploadResult {
   /** SharePoint/OneDrive item ID (for deletion) */
   itemId: string;

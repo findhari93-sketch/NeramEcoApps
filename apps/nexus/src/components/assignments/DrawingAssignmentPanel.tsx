@@ -13,6 +13,7 @@ import {
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import type { GalleryReactionType } from '@neram/database/types';
 import DrawingSubmissionSheet from '@/components/drawings/DrawingSubmissionSheet';
+import type { SubmitMode } from '@/lib/assignment-submit-window';
 import GradeDisplay from './GradeDisplay';
 import ReactionAppreciation from './ReactionAppreciation';
 
@@ -43,6 +44,8 @@ export default function DrawingAssignmentPanel({
   submission,
   evaluationType = 'stars',
   maxMarks = 5,
+  submitMode = 'first',
+  lockedReason,
   getToken,
   onChanged,
 }: {
@@ -50,13 +53,17 @@ export default function DrawingAssignmentPanel({
   submission: DrawingSubmissionView | null;
   evaluationType?: 'marks' | 'stars';
   maxMarks?: number;
+  /** Resolved server-side, the same window the document path uses. */
+  submitMode?: SubmitMode;
+  lockedReason?: string | null;
   getToken: () => Promise<string | null>;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'mine' | 'overlay' | 'reference'>('mine');
 
-  const canRedo = !submission || submission.status === 'redo';
+  const isReplace = submitMode === 'replace';
+  const canRedo = submitMode !== 'locked';
   const isReviewed = submission?.status === 'completed' || submission?.status === 'reviewed';
   const meta = submission ? STATUS_META[submission.status] || STATUS_META.submitted : null;
 
@@ -171,15 +178,39 @@ export default function DrawingAssignmentPanel({
         </Typography>
       )}
 
-      {canRedo && (
-        <Button
-          variant="contained"
-          startIcon={<BrushOutlinedIcon />}
-          onClick={() => setOpen(true)}
-          sx={{ mt: 1.5, minHeight: 48, textTransform: 'none' }}
-        >
-          {submission?.status === 'redo' ? 'Redo your drawing' : 'Submit your drawing'}
-        </Button>
+      {canRedo ? (
+        <Box sx={{ mt: 1.5 }}>
+          <Button
+            variant={isReplace ? 'outlined' : 'contained'}
+            fullWidth
+            startIcon={<BrushOutlinedIcon />}
+            onClick={() => setOpen(true)}
+            sx={{ minHeight: 48, textTransform: 'none' }}
+          >
+            {submitMode === 'redo'
+              ? 'Redo your drawing'
+              : isReplace
+                ? 'Replace your drawing'
+                : 'Submit your drawing'}
+          </Button>
+          {isReplace && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', mt: 0.75, textAlign: 'center' }}
+            >
+              Not happy with it? You can change this until your teacher reviews it.
+            </Typography>
+          )}
+        </Box>
+      ) : (
+        lockedReason && (
+          <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
+            <Typography variant="body2" color="text.secondary">
+              {lockedReason}
+            </Typography>
+          </Box>
+        )
       )}
 
       <DrawingSubmissionSheet

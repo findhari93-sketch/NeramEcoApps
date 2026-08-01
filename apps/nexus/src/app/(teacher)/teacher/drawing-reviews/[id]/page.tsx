@@ -76,9 +76,9 @@ export default function DrawingReviewDetailPage() {
   const [draftSaved, setDraftSaved] = useState(false);
   const [error, setError] = useState('');
   const [action, setAction] = useState<'redo' | 'complete'>('complete');
-  // Default ON for standalone practice drawings (shared Drawing Reviews queue).
-  // Default OFF for assignment submissions, teacher opts in per student instead.
-  const [showInGallery, setShowInGallery] = useState(!fromAssignmentId);
+  // Always OFF by default. Publishing a student's work to the shared gallery is
+  // the teacher's call, so it is opt-in for every drawing, practice or assignment.
+  const [showInGallery, setShowInGallery] = useState(false);
   const [tagLabels, setTagLabels] = useState<string[]>([]);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -185,13 +185,12 @@ export default function DrawingReviewDetailPage() {
     setIsEditMode(drawingRoundOpensForGrading(submission.status, newerAttemptExists));
 
     // Visibility toggle reflects the server state for any round that has already
-    // been through a review action (that is where is_gallery_visible is written).
-    // For pending ones: standalone practice drawings default to shown, but
-    // assignment submissions (from the roster link or their own assignment_id)
-    // default to hidden so classwork isn't published without an explicit opt-in.
+    // been through a review action (that is where is_gallery_visible is written),
+    // so a teacher who published a drawing earlier still sees it published. A
+    // round nobody has reviewed yet starts OFF: no work reaches the gallery
+    // without the teacher turning it on.
     const hasBeenReviewed = ['reviewed', 'redo', 'completed'].includes(submission.status);
-    const isFromAssignment = !!(fromAssignmentId || (submission as any).assignment_id);
-    setShowInGallery(hasBeenReviewed ? !!(submission as any).is_gallery_visible : !isFromAssignment);
+    setShowInGallery(hasBeenReviewed ? !!(submission as any).is_gallery_visible : false);
 
     // Hydrate tag labels from the loaded submission.
     const existingTags = ((submission as any).tags as DrawingTag[] | undefined) || [];
@@ -467,7 +466,7 @@ export default function DrawingReviewDetailPage() {
         {saving && action === 'complete' ? '...' : ['reviewed', 'completed'].includes(submission.status) ? 'Save' : 'Complete'}
       </Button>
 
-      {/* Gallery visibility toggle: on by default once a rating + feedback are present */}
+      {/* Gallery visibility toggle: off unless the teacher opts this drawing in */}
       <Switch
         checked={showInGallery}
         onChange={(e) => setShowInGallery(e.target.checked)}

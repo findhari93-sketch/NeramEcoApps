@@ -19,6 +19,7 @@ import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import FamilyRestroomOutlinedIcon from '@mui/icons-material/FamilyRestroomOutlined';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
@@ -35,7 +36,7 @@ const EDITABLE = FEATURES.filter((f) => !f.core);
 /** Ordered surface sections with their sub-groups (registry order preserved). */
 const SECTIONS: { surface: FeatureSurface; title: string; subtitle: string; groups: string[] }[] =
   (() => {
-    const order: FeatureSurface[] = ['student', 'staff'];
+    const order: FeatureSurface[] = ['student', 'staff', 'parent'];
     const meta: Record<FeatureSurface, { title: string; subtitle: string }> = {
       student: {
         title: 'Student features',
@@ -44,6 +45,11 @@ const SECTIONS: { surface: FeatureSurface; title: string; subtitle: string; grou
       staff: {
         title: 'Teacher menus',
         subtitle: 'Teacher and management tools. On by default. Turn off anything not ready.',
+      },
+      parent: {
+        title: 'Parent portal',
+        subtitle:
+          'What a parent sees about their own child. Off by default: switch these on deliberately, ideally for one cohort first.',
       },
     };
     return order.map((surface) => {
@@ -175,6 +181,8 @@ export default function AdminFeaturesPage() {
               >
                 {section.surface === 'student' ? (
                   <SchoolOutlinedIcon color="primary" />
+                ) : section.surface === 'parent' ? (
+                  <FamilyRestroomOutlinedIcon color="primary" />
                 ) : (
                   <GroupsOutlinedIcon color="primary" />
                 )}

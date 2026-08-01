@@ -31,6 +31,7 @@ import SubmissionFiles, { type SubmissionFile } from './SubmissionFiles';
 import ReactionPicker from './ReactionPicker';
 import SubmissionHistoryTimeline from './SubmissionHistoryTimeline';
 import { documentSubmissionToViews } from '@/lib/submission-history';
+import { studentEditedAt } from '@/lib/assignment-submit-window';
 
 export interface ReviewRow {
   student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
@@ -43,16 +44,45 @@ export interface ReviewRow {
     feedback: string | null;
     reaction?: GalleryReactionType | null;
     submitted_at: string;
+    /** Moves when the student replaces their own unmarked file. See studentEditedAt. */
+    updated_at?: string | null;
+    reviewed_at?: string | null;
     /** Prior attempts appended on each redo-resubmit (files + marks + feedback per round). */
     history?: NexusAssignmentSubmissionHistoryEntry[];
   } | null;
+  /** This student's go at the question paper, when the assignment has one. */
+  answers?: {
+    score: number;
+    total_marks: number;
+    percentage: number;
+    answers: Record<string, string>;
+  } | null;
   bucket: 'submitted' | 'late' | 'missing';
+}
+
+export interface ReviewPaper {
+  questions: {
+    id: string;
+    question_text: string;
+    format: string;
+    marks: number;
+    correct_answer?: string | null;
+  }[];
+  auto_marks: number;
+  manual_marks: number;
+  total_marks: number;
 }
 
 interface SubmissionReviewSheetProps {
   open: boolean;
   row: ReviewRow | null;
   maxMarks: number;
+  /**
+   * The question paper, when the assignment has one. Its presence changes what
+   * the teacher is asked for: marks on the working alone, not on the whole
+   * assignment, because the objective half already marked itself.
+   */
+  paper?: ReviewPaper | null;
   /** Grading scale: numeric marks out of maxMarks, or a 1-5 star rating. */
   evaluationType: 'marks' | 'stars';
   busy: boolean;
@@ -74,6 +104,7 @@ export default function SubmissionReviewSheet({
   open,
   row,
   maxMarks,
+  paper = null,
   evaluationType,
   busy,
   onClose,
@@ -100,6 +131,14 @@ export default function SubmissionReviewSheet({
   }, [row?.submission?.id]);
 
   const submission = row?.submission ?? null;
+  const editedAt = studentEditedAt(submission);
+
+  // With a paper attached, the teacher is only marking the working, so the
+  // ceiling shown and validated against is the manual half, not the whole
+  // assignment. The auto marks are added on the server.
+  const hasPaper = !isStars && !!paper && paper.questions.length > 0;
+  const markCeiling = hasPaper ? paper!.manual_marks : maxMarks;
+  const studentAnswers = row?.answers ?? null;
   // Prior rounds (everything before the current attempt) so the teacher can see
   // what was submitted and what they asked for last time before re-grading.
   const priorViews = submission
@@ -118,12 +157,16 @@ export default function SubmissionReviewSheet({
         marksVal = stars;
       } else {
         if (marks.trim() === '') {
-          setError('Enter marks, or use Request redo.');
+          setError(hasPaper ? 'Enter marks for their working, or use Request redo.' : 'Enter marks, or use Request redo.');
           return;
         }
         const m = Number(marks);
-        if (!Number.isFinite(m) || m < 0 || m > maxMarks) {
-          setError(`Marks must be between 0 and ${maxMarks}.`);
+        if (!Number.isFinite(m) || m < 0 || m > markCeiling) {
+          setError(
+            hasPaper
+              ? `Marks for the working must be between 0 and ${markCeiling}.`
+              : `Marks must be between 0 and ${maxMarks}.`,
+          );
           return;
         }
         marksVal = m;
@@ -166,6 +209,24 @@ export default function SubmissionReviewSheet({
                   hour: 'numeric',
                   minute: '2-digit',
                 })}
+                {editedAt && (
+                  // Not a resubmission and deliberately not styled like one: the
+                  // student corrected their own work before anyone marked it.
+                  // The teacher still needs to know the file is not the one that
+                  // arrived at the time above.
+                  <>
+                    {' · '}
+                    <Box component="span" sx={{ color: 'text.primary', fontWeight: 600 }}>
+                      student updated{' '}
+                      {new Date(editedAt).toLocaleString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </Box>
+                  </>
+                )}
               </Typography>
             )}
           </Box>
@@ -207,9 +268,69 @@ export default function SubmissionReviewSheet({
 
             <Divider />
 
+            {/* What the machine already marked, so the teacher is not re-checking
+                arithmetic a grader has settled. Shown before the marks box
+                because it changes what that box is for. */}
+            {hasPaper && (
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: 2,
+                  bgcolor: alpha('#2E7D32', 0.06),
+                  border: `1px solid ${alpha('#2E7D32', 0.22)}`,
+                }}
+              >
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: '#1B5E20', flex: 1 }}>
+                    MARKED AUTOMATICALLY
+                  </Typography>
+                  <Chip
+                    size="small"
+                    label={
+                      studentAnswers
+                        ? `${studentAnswers.score} / ${studentAnswers.total_marks}`
+                        : 'Not answered'
+                    }
+                    sx={{ height: 22, fontWeight: 700, bgcolor: alpha('#2E7D32', 0.16), color: '#1B5E20' }}
+                  />
+                </Stack>
+                <Stack spacing={0.5}>
+                  {paper!.questions.map((q, i) => {
+                    if (q.format === 'SUBJECTIVE') return null;
+                    const given = studentAnswers?.answers?.[q.id];
+                    const right =
+                      given != null && q.correct_answer != null
+                        ? String(given).trim().toLowerCase() ===
+                            String(q.correct_answer).trim().toLowerCase() ||
+                          (Number.isFinite(Number(given)) &&
+                            Number.isFinite(Number(q.correct_answer)) &&
+                            Math.abs(Number(given) - Number(q.correct_answer)) < 1e-9)
+                        : false;
+                    return (
+                      <Stack key={q.id} direction="row" spacing={1} alignItems="center">
+                        <Typography variant="caption" sx={{ fontWeight: 700, minWidth: 26 }}>
+                          Q{i + 1}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ flex: 1, minWidth: 0 }} noWrap>
+                          {given == null || given === '' ? 'no answer' : `answered ${given}`}
+                          {!right && q.correct_answer ? ` (correct: ${q.correct_answer})` : ''}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{ fontWeight: 700, color: right ? 'success.main' : 'error.main' }}
+                        >
+                          {right ? `+${q.marks}` : '0'}
+                        </Typography>
+                      </Stack>
+                    );
+                  })}
+                </Stack>
+              </Box>
+            )}
+
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75 }}>
-                {isStars ? 'Rating' : 'Marks'}
+                {isStars ? 'Rating' : hasPaper ? 'Marks for their working' : 'Marks'}
               </Typography>
               {isStars ? (
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
@@ -231,7 +352,12 @@ export default function SubmissionReviewSheet({
                     sx={{ width: 100 }}
                     placeholder="0"
                   />
-                  <Typography color="text.secondary">out of {maxMarks}</Typography>
+                  <Typography color="text.secondary">out of {markCeiling}</Typography>
+                  {hasPaper && (
+                    <Typography variant="caption" color="text.secondary">
+                      (+{studentAnswers?.score ?? 0} already earned)
+                    </Typography>
+                  )}
                 </Stack>
               )}
             </Box>

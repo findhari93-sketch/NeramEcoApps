@@ -4,8 +4,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { canRunSession } from '@/lib/staff-capabilities';
 import { resolveTranscript } from '@/lib/transcript-resolver';
 import { findRecordingForClass } from '@/lib/recording-locator';
-import { resolveSuggestedTags, type RegistryTag } from '@/lib/tag-resolver';
-import { generateClassSummary, type ClassImageInput } from '@/lib/class-summary-ai';
+import { buildWrapUpDraft, loadClassImages } from '@/lib/class-wrapup-draft';
 
 /**
  * POST /api/timetable/[classId]/summarize  (staff)
@@ -55,7 +54,6 @@ const CLASS_COLS = [
   'scheduled_date',
   'start_time',
 ].join(', ');
-const MAX_IMAGES = 4;
 
 /**
  * What to tell the teacher when the ladder came back empty.
@@ -111,31 +109,6 @@ async function resolveAccess(supabase: any, msOid: string, classId: string) {
     return { error: NextResponse.json({ error: 'Only staff can summarize a class' }, { status: 403 }) };
   }
   return { cls };
-}
-
-/** Fetch attached class images and convert to base64 parts for the model. */
-async function loadClassImages(supabase: any, classId: string): Promise<ClassImageInput[]> {
-  const { data } = await supabase
-    .from('nexus_class_images')
-    .select('url')
-    .eq('scheduled_class_id', classId)
-    .order('sort_order', { ascending: true })
-    .limit(MAX_IMAGES);
-
-  const rows = (data || []) as Array<{ url: string }>;
-  const out: ClassImageInput[] = [];
-  for (const row of rows) {
-    try {
-      const res = await fetch(row.url);
-      if (!res.ok) continue;
-      const buf = Buffer.from(await res.arrayBuffer());
-      const ct = res.headers.get('content-type') || 'image/jpeg';
-      out.push({ base64: buf.toString('base64'), mimeType: ct.startsWith('image/') ? ct : 'image/jpeg' });
-    } catch {
-      // one unreachable image should not sink the whole request
-    }
-  }
-  return out;
 }
 
 export async function POST(request: NextRequest, { params }: Ctx) {
@@ -204,50 +177,30 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       });
     }
 
-    // --- The tag registry, both to prompt with and to match against ---
-    const { data: registryRows } = await supabase
-      .from('nexus_qb_tags')
-      .select('id, slug, label, group_type, color, aliases')
-      .in('group_type', ['subject', 'theme'])
-      .eq('is_active', true)
-      .order('group_type', { ascending: true })
-      .order('sort_order', { ascending: true });
-    const registry = (registryRows || []) as RegistryTag[];
-
     // --- Generate ---
-    const summary = await generateClassSummary({
+    // The registry load, the model call and the tag matching all live in
+    // lib/class-wrapup-draft, shared with the nightly autodraft so the two cannot
+    // produce differently shaped drafts.
+    const draft = await buildWrapUpDraft(supabase, {
       transcript,
       images,
       fallbackTitle: cls.title || 'Untitled class',
-      tags: registry,
-    });
-
-    const { matched, unmatched } = resolveSuggestedTags({
-      registry,
-      tagSlugs: summary.tag_slugs,
-      newTags: summary.new_tags,
     });
 
     return NextResponse.json({
       summary: {
-        suggested_title: summary.suggested_title,
-        short_description: summary.short_description,
-        detailed_description: summary.detailed_description,
-        bullets: summary.bullets,
+        suggested_title: draft.suggested_title,
+        short_description: draft.short_description,
+        detailed_description: draft.detailed_description,
+        bullets: draft.bullets,
       },
       // Tags that already exist: the panel ticks these on without a tap.
-      auto_tag_ids: matched.map((t) => t.id),
+      auto_tag_ids: draft.matched.map((t) => t.id),
       // The registry rows behind them, so the panel can render a chip for a tag
       // it did not have when the page loaded.
-      tags: matched.map((t) => ({
-        id: t.id,
-        slug: t.slug,
-        label: t.label,
-        group_type: t.group_type,
-        color: t.color ?? null,
-      })),
+      tags: draft.matched,
       // Genuinely new ideas. Created only if the teacher taps one.
-      suggested_tags: unmatched,
+      suggested_tags: draft.unmatched,
       used: { transcript: transcript.length > 0, images: images.length, source },
     });
   } catch (err) {

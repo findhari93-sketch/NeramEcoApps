@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
-import { composeTest, listRepositoryTests } from '@neram/database';
+import { composeTest, listRepositoryTests, NEXUS_TEACHER_TEST_KINDS } from '@neram/database';
 
 /**
  * GET /api/question-bank/tests   (teacher/admin)
@@ -58,9 +58,12 @@ export async function POST(request: NextRequest) {
       shuffle: Boolean(shuffle),
       isPublished: is_published ?? false,
       isRepository: true,
-      // An unplaced repository test. It becomes practice_pool or class_prep only
-      // when someone places it, and those routes set the kind themselves.
-      testKind: 'classroom_assigned',
+      // The teacher's label for this test, defaulting to a plain class test. It
+      // becomes practice_pool or class_prep only when someone places it, and
+      // those routes set the kind themselves.
+      testKind: NEXUS_TEACHER_TEST_KINDS.some((k) => k.value === body?.test_kind)
+        ? body.test_kind
+        : 'classroom_assigned',
       createdBy: access.caller.id,
     });
 

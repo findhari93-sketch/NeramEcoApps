@@ -34,6 +34,7 @@ import { compressImage } from '@/utils/imageCompression';
 import { imagesToPdf } from '@/utils/imagesToPdf';
 import ResponsiveActionSheet from '@/components/upload/ResponsiveActionSheet';
 import PhotoCapturePdf from '@/components/upload/PhotoCapturePdf';
+import type { SubmitMode } from '@/lib/assignment-submit-window';
 
 type Format = 'pdf' | 'image' | 'pdf_or_image';
 const MAX_IMAGES = 12;
@@ -44,6 +45,12 @@ interface AssignmentSubmitSheetProps {
   onClose: () => void;
   assignmentId: string;
   format: Format;
+  /**
+   * What this hand-in means. 'replace' retitles the sheet and warns that the old
+   * file goes away. Named submitMode, not mode, because `mode` below is already
+   * the photos-or-PDF choice and the two are unrelated.
+   */
+  submitMode?: SubmitMode;
   redoFeedback?: string | null;
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
   onSubmitted: () => void;
@@ -54,10 +61,12 @@ export default function AssignmentSubmitSheet({
   onClose,
   assignmentId,
   format,
+  submitMode = 'first',
   redoFeedback,
   authFetch,
   onSubmitted,
 }: AssignmentSubmitSheetProps) {
+  const isReplace = submitMode === 'replace';
   const existingPdfRef = useRef<HTMLInputElement>(null);
   // For "Images or PDF" the student picks a mode so we can enforce no-mixing.
   const [mode, setMode] = useState<'images' | 'pdf'>(format === 'pdf' ? 'pdf' : 'images');
@@ -160,13 +169,35 @@ export default function AssignmentSubmitSheet({
         </Typography>
       )}
       <Button variant="contained" fullWidth disabled={busy || !canSubmit} onClick={submit} sx={{ minHeight: 48 }}>
-        {busy ? (effectiveMode === 'pdf' && !pdfFile ? 'Building PDF…' : 'Submitting…') : 'Submit'}
+        {busy
+          ? effectiveMode === 'pdf' && !pdfFile
+            ? 'Building PDF…'
+            : isReplace
+              ? 'Replacing…'
+              : 'Submitting…'
+          : isReplace
+            ? 'Replace my work'
+            : 'Submit'}
       </Button>
     </>
   );
 
   return (
-    <ResponsiveActionSheet open={open} onClose={onClose} title="Submit your work" footer={footer}>
+    <ResponsiveActionSheet
+      open={open}
+      onClose={onClose}
+      title={isReplace ? 'Replace your work' : 'Submit your work'}
+      footer={footer}
+    >
+      {isReplace && (
+        <Box sx={{ p: 1.5, mb: 2, borderRadius: 2, bgcolor: 'action.hover' }}>
+          <Typography variant="body2">
+            This takes the place of the file you sent earlier. Your submission time does not change,
+            so replacing a file will not make your work late.
+          </Typography>
+        </Box>
+      )}
+
       {redoFeedback && (
         <Box
           sx={{

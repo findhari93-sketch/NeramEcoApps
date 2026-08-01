@@ -24,10 +24,28 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
 import CheckIcon from '@mui/icons-material/Check';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
+import ViewDayOutlinedIcon from '@mui/icons-material/ViewDayOutlined';
+import ViewWeekOutlinedIcon from '@mui/icons-material/ViewWeekOutlined';
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import { RADIUS, LAYOUT } from './timetable-theme';
 import { describeWindow } from '@/lib/timetable-window';
 import { describeBands } from '@/lib/plan-shape';
 import type { TimetableViewMode, TimetableViewState } from '@/hooks/useTimetableView';
+
+/**
+ * One icon per view, so the switch is recognisable before it is read.
+ *
+ * These are also what makes the button survivable at 375px: an icon plus a
+ * short word is a control a teacher can find, where the bare chevron this used
+ * to collapse to on a phone was not identifiable as a view switch at all.
+ */
+const VIEW_ICONS: Record<TimetableViewMode, typeof ViewDayOutlinedIcon> = {
+  day: ViewDayOutlinedIcon,
+  week: ViewWeekOutlinedIcon,
+  month: CalendarMonthOutlinedIcon,
+  agenda: FormatListBulletedIcon,
+};
 
 interface CalendarToolbarProps {
   state: TimetableViewState;
@@ -92,6 +110,8 @@ export default function CalendarToolbar({
     agenda: agendaLabel,
   };
 
+  const ActiveViewIcon = VIEW_ICONS[view];
+
   // "Previous week" / "Previous month" reads correctly, and keeps the existing
   // week-based E2E selectors working while the default view is still the week.
   const periodNoun = view === 'day' ? 'day' : view === 'month' ? 'month' : 'week';
@@ -149,14 +169,10 @@ export default function CalendarToolbar({
       >
         Today
       </Button>
-      <IconButton
-        onClick={goToToday}
-        disabled={showingToday}
-        aria-label="Go to today"
-        sx={{ ...navSx, display: { xs: 'inline-flex', sm: 'none' } }}
-      >
-        <TodayIcon fontSize="small" />
-      </IconButton>
+      {/* No xs twin. The view switch now carries an icon AND its label at every
+          width, and something had to give way for it on a 375px row. Today is
+          navigation rather than a mode, prev/next reach it in a couple of taps,
+          and it is the first item of the view menu below. */}
 
       <IconButton
         onClick={previous}
@@ -210,25 +226,33 @@ export default function CalendarToolbar({
       </Typography>
 
       {/* ── Right: view switch, overflow, page actions ─────────────────── */}
+      {/* The label is never hidden. It used to collapse to a bare chevron below
+          sm, which is the whole reason teachers reported they could not find
+          the view option on a phone: there was nothing on screen that said a
+          view could be changed, or which one they were in. */}
       <Button
         onClick={(e) => setViewAnchor(e.currentTarget)}
         data-testid="cal-view-switch"
+        startIcon={<ActiveViewIcon fontSize="small" />}
         endIcon={<ExpandMoreIcon />}
         aria-haspopup="menu"
         aria-label={`Change view, currently ${VIEW_LABELS[view]}`}
         sx={{
           minHeight: 44,
-          px: { xs: 1, sm: 1.5 },
+          px: { xs: 0.75, sm: 1.5 },
           textTransform: 'none',
           fontWeight: 600,
+          fontSize: { xs: '0.8125rem', sm: '0.875rem' },
           borderRadius: RADIUS.control,
           border: `1px solid ${theme.palette.divider}`,
           color: 'text.primary',
           whiteSpace: 'nowrap',
+          flexShrink: 0,
+          '& .MuiButton-startIcon': { mr: { xs: 0.375, sm: 0.75 } },
           '& .MuiButton-endIcon': { ml: { xs: 0, sm: 0.5 } },
         }}
       >
-        {!compact && VIEW_LABELS[view]}
+        {VIEW_LABELS[view]}
       </Button>
 
       <Menu
@@ -240,26 +264,52 @@ export default function CalendarToolbar({
         MenuListProps={{ 'aria-label': 'Calendar view' }}
         PaperProps={{ sx: { minWidth: 240, borderRadius: RADIUS.control } }}
       >
-        {(['day', 'week', 'month', 'agenda'] as const).map((mode) => (
-          <MenuItem
-            key={mode}
-            role="menuitemradio"
-            aria-checked={view === mode}
-            selected={view === mode}
-            onClick={() => {
-              setView(mode);
-              setViewAnchor(null);
-            }}
-            sx={{ minHeight: 44 }}
-          >
-            <ListItemIcon sx={{ minWidth: 32 }}>
-              {view === mode && <CheckIcon fontSize="small" color="primary" />}
-            </ListItemIcon>
-            <ListItemText primaryTypographyProps={{ fontWeight: view === mode ? 700 : 500 }}>
-              {VIEW_LABELS[mode]}
-            </ListItemText>
-          </MenuItem>
-        ))}
+        {/* Today lives here at xs, where its own button gave way to the view
+            label. Above sm the toolbar button is the one a teacher reaches for,
+            so this row would be a duplicate and is hidden. */}
+        <MenuItem
+          onClick={() => {
+            goToToday();
+            setViewAnchor(null);
+          }}
+          disabled={showingToday}
+          sx={{ minHeight: 44, display: { xs: 'flex', sm: 'none' } }}
+        >
+          <ListItemIcon sx={{ minWidth: 32 }}>
+            <TodayIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Today</ListItemText>
+        </MenuItem>
+        <Divider sx={{ display: { xs: 'block', sm: 'none' } }} />
+
+        {(['day', 'week', 'month', 'agenda'] as const).map((mode) => {
+          const ModeIcon = VIEW_ICONS[mode];
+          return (
+            <MenuItem
+              key={mode}
+              role="menuitemradio"
+              aria-checked={view === mode}
+              selected={view === mode}
+              onClick={() => {
+                setView(mode);
+                setViewAnchor(null);
+              }}
+              sx={{ minHeight: 44 }}
+            >
+              {/* The same icon as the button, so the two read as one control.
+                  The check moves to the end rather than replacing the icon:
+                  swapping them would leave the current view as the only row
+                  without a picture of itself. */}
+              <ListItemIcon sx={{ minWidth: 32 }}>
+                <ModeIcon fontSize="small" color={view === mode ? 'primary' : 'inherit'} />
+              </ListItemIcon>
+              <ListItemText primaryTypographyProps={{ fontWeight: view === mode ? 700 : 500 }}>
+                {VIEW_LABELS[mode]}
+              </ListItemText>
+              {view === mode && <CheckIcon fontSize="small" color="primary" sx={{ ml: 1 }} />}
+            </MenuItem>
+          );
+        })}
 
         {/* Density lost its own toolbar button. It only means anything where a
             time band is drawn, and it carries the band note with it, which is

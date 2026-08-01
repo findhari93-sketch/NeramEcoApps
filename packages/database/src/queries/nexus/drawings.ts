@@ -320,6 +320,40 @@ export async function createDrawingSubmission(
 }
 
 /**
+ * Swap the image on a drawing the student already sent in, without creating a
+ * new attempt.
+ *
+ * Assignment drawings number their attempts by counting rows (see
+ * createDrawingSubmissionWithThread), and the teacher's roster reads a count
+ * above one as "a redo came back, re-review this". So a student fixing their own
+ * unmarked drawing must NOT insert: it would raise a redo flag nobody asked for
+ * and inflate every attempt count downstream. Correct the row in place instead.
+ *
+ * Any AI overlay is cleared with it. Those annotations describe the picture that
+ * is being replaced, and a review overlay tracing lines that are no longer in
+ * the image is worse than no overlay.
+ */
+export async function replaceDrawingSubmission(
+  submissionId: string,
+  data: { original_image_url: string; self_note?: string | null },
+  client?: TypedSupabaseClient,
+): Promise<DrawingSubmission> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: updated, error } = await supabase
+    .from('drawing_submissions' as any)
+    .update({
+      original_image_url: data.original_image_url,
+      self_note: data.self_note ?? null,
+      ai_overlay_annotations: null,
+    })
+    .eq('id', submissionId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return updated as DrawingSubmission;
+}
+
+/**
  * Create a backing drawing question for a drawing-type class assignment. Kept
  * out of the student practice bank via is_active=false and sub_type='assignment';
  * it exists only so the assignment's submissions can flow through the drawing

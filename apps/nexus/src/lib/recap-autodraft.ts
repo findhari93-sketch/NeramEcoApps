@@ -7,9 +7,16 @@
  * five step job (create, generate, review, save, publish) and nobody was doing
  * it, so seventy-seven recorded absences had nowhere to go.
  *
- * This does the first four steps. Publishing stays a person's decision, because
- * an AI question that is wrong becomes an 85% wall a student cannot pass and
- * cannot appeal.
+ * This does all five. Publishing is automatic when the generation clears every
+ * check in recap-quality; anything short of that is HELD for a tutor and the
+ * teaching staff are told, because an AI question that is wrong becomes a wall a
+ * student cannot pass and cannot appeal.
+ *
+ * A held recap is loud on purpose. A FAILED one has to be just as loud: a throw
+ * mid-generation used to leave the recap row it had already created sitting
+ * there empty, with the `readiness` column at its 'ready' default, no hold
+ * reason and nobody told. Three of those were sitting in production, looking
+ * from the teacher's screen exactly like a draft somebody had started.
  *
  * Two cost rules shape everything here:
  *
@@ -30,10 +37,12 @@ import {
   setRecapReadiness,
   createUserNotification,
   type GeneratedRecapSection,
+  type NexusClassRecap,
 } from '@neram/database';
 import { generateSectionsAndQuestions } from './ai-generate';
 import { readStoredTranscript } from './transcript-resolver';
 import { preflight, scoreRecapGeneration } from './recap-quality';
+import { readRecapDefaults, questionsToPass } from './recap-defaults';
 
 /**
  * Classes drafted per run.
@@ -52,6 +61,18 @@ export const SCAN_LIMIT = 80;
  * been abandoned, so the sweep cannot overwrite a teacher who is mid-review.
  */
 export const STALLED_DRAFT_HOURS = 24;
+
+/**
+ * Generation attempts before a class is left alone.
+ *
+ * Matters because a failure now HOLDS the recap instead of abandoning it, and a
+ * held recap with no `generated_at` is a candidate again tomorrow. Without a
+ * ceiling, one class whose transcript can never produce ten questions per
+ * segment would spend Gemini calls on the shared key every night forever. Four
+ * nights is enough for a late transcript or a transient outage to resolve; past
+ * that it is a real problem and it is already in the tutor's review queue.
+ */
+export const MAX_GENERATION_ATTEMPTS = 4;
 
 const CLASS_COLUMNS =
   'id, classroom_id, title, scheduled_date, start_time, recording_url, youtube_url';
@@ -183,7 +204,9 @@ export async function findAutodraftCandidates(
   const [{ data: recaps }, { data: transcripts }] = await Promise.all([
     supabase
       .from('nexus_class_recaps')
-      .select('id, scheduled_class_id, status, generated_at, created_at')
+      .select(
+        'id, scheduled_class_id, status, readiness, generated_at, created_at, generation_attempts',
+      )
       .in('scheduled_class_id', classIds),
     supabase
       .from('nexus_class_transcripts')
@@ -206,11 +229,24 @@ export async function findAutodraftCandidates(
     const recap = recapByClass.get(cls.id);
     if (recap) {
       // Anything with content, or on its way to being published, is a teacher's
-      // work and is left alone. Only an empty draft that has sat untouched for a
-      // day is treated as abandoned.
+      // work and is left alone.
       if (recap.generated_at) continue;
       if (recap.status !== 'draft') continue;
-      if (recap.created_at && Date.parse(recap.created_at) > stalledBefore) continue;
+      if ((recap.generation_attempts ?? 0) >= MAX_GENERATION_ATTEMPTS) continue;
+
+      // 'pending' means the row was inserted and generation never finished, so
+      // there is no review in progress to protect and no reason to wait out
+      // STALLED_DRAFT_HOURS. That delay exists for a draft a teacher created by
+      // hand and may be mid-way through; it should never strand a class behind a
+      // crash for a day, which is what it did.
+      const neverGenerated = recap.readiness === 'pending';
+      if (
+        !neverGenerated &&
+        recap.created_at &&
+        Date.parse(recap.created_at) > stalledBefore
+      ) {
+        continue;
+      }
     }
 
     candidates.push({
@@ -300,6 +336,15 @@ export async function autodraftRecapForClass(
   supabase: any,
   cls: AutodraftCandidate,
 ): Promise<AutodraftOutcome> {
+  /**
+   * Held outside the try so the catch can park the row.
+   *
+   * Everything after the insert can throw, and the throw we actually see is
+   * Gemini's. Without a handle out here that leaves a recap nobody generated,
+   * nobody held and nobody heard about.
+   */
+  let recap: NexusClassRecap | null = null;
+
   try {
     const transcript = await readStoredTranscript(supabase, cls.id);
     if (!transcript || transcript.length === 0) {
@@ -307,12 +352,19 @@ export async function autodraftRecapForClass(
     }
 
     // Idempotent, and returns the existing row rather than a duplicate, so a
-    // rerun after a mid-loop failure picks up where it stopped.
-    const recap = await createRecapForClass(cls.id, null, supabase);
+    // rerun after a mid-loop failure picks up where it stopped. 'pending' marks
+    // it as ours and unfinished until the readiness call below settles it.
+    recap = await createRecapForClass(cls.id, null, supabase, { readiness: 'pending' });
 
-    const targetSegmentSeconds = recap.target_segment_seconds ?? 300;
-    const poolPerSegment = recap.question_pool_per_segment ?? 15;
-    const questionsToServe = recap.questions_per_segment ?? 10;
+    // Per-recap columns win; the classroom settings row fills the gaps.
+    const defaults = await readRecapDefaults(supabase);
+    const targetSegmentSeconds = recap.target_segment_seconds ?? defaults.target_segment_seconds;
+    const poolPerSegment = recap.question_pool_per_segment ?? defaults.question_pool_per_segment;
+    const questionsToServe = Math.min(
+      poolPerSegment,
+      recap.questions_per_segment ?? defaults.questions_per_segment,
+    );
+    const passPercentage = recap.pass_percentage ?? defaults.pass_percentage;
     const durationSeconds =
       recap.video_duration_seconds ?? transcript[transcript.length - 1]?.end ?? 0;
 
@@ -337,7 +389,20 @@ export async function autodraftRecapForClass(
       return { ok: false, classId: cls.id, reason: 'no_sections' };
     }
 
-    await replaceRecapSections(recap.id, sections, supabase);
+    // Stamp the gate onto every checkpoint. Both of these were being left NULL,
+    // and NULL is not "unset" here: a NULL questions_to_serve serves the whole
+    // bank of fifteen, and a NULL min_questions_to_pass then demands all fifteen
+    // correct. Every recap this sweep produced would have been unpassable.
+    const graded = sections.map((s) => ({
+      ...s,
+      questions_to_serve: Math.min(questionsToServe, (s.questions || []).length),
+      min_questions_to_pass: questionsToPass(
+        Math.min(questionsToServe, (s.questions || []).length),
+        passPercentage,
+      ),
+    }));
+
+    await replaceRecapSections(recap.id, graded, supabase);
 
     // Nobody reads these before a student does, so the bar is what stands
     // between a bad generation and a teenager being asked to pass it.
@@ -381,9 +446,16 @@ export async function autodraftRecapForClass(
     };
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown error';
+
+    // Transient, and the caller stops the whole run on it. Deliberately NOT
+    // held: an exhausted key says nothing about this class, and holding would
+    // spend the attempts counter and alert every teacher over a queue that will
+    // drain by itself. The row stays 'pending', which the candidate query treats
+    // as retryable on the next run.
     if (isRateLimited(detail)) {
       return { ok: false, classId: cls.id, reason: 'rate_limited', detail };
     }
+
     // Students have already worked through this recap's checkpoints, so the
     // sweep refused to overwrite it. Correct behaviour, not a failure: a stalled
     // draft that students have since started belongs to them now, and any change
@@ -391,6 +463,11 @@ export async function autodraftRecapForClass(
     if (detail === 'RECAP_HAS_ATTEMPTS') {
       return { ok: false, classId: cls.id, reason: 'has_attempts', detail };
     }
+
+    // Anything else is a real failure on a row that already exists. Park it and
+    // say so, or it sits in the teacher's list looking like work in progress.
+    if (recap) await holdRecap(supabase, recap, 'generation_failed', detail);
+
     return { ok: false, classId: cls.id, reason: 'error', detail };
   }
 }
@@ -401,8 +478,14 @@ export interface AutodraftRunResult {
   skipped: number;
   /** True when Gemini refused and the run stopped early on purpose. */
   rateLimited: boolean;
-  /** Classroom id to the number of recaps now waiting for review. */
-  byClassroom: Map<string, number>;
+  /**
+   * Classroom id to the number of recaps that went live to students this run.
+   *
+   * Published only. A HELD recap already raises its own alert on the TopBar bell
+   * through notifyHeld, and counting it here too produced a second message
+   * telling teachers to go and publish something that was in fact stuck.
+   */
+  publishedByClassroom: Map<string, number>;
   outcomes: AutodraftOutcome[];
 }
 
@@ -426,7 +509,7 @@ export async function runRecapAutodraft(
     drafted: 0,
     skipped: 0,
     rateLimited: false,
-    byClassroom: new Map(),
+    publishedByClassroom: new Map(),
     outcomes: [],
   };
 
@@ -436,10 +519,10 @@ export async function runRecapAutodraft(
 
     if (outcome.ok) {
       result.drafted += 1;
-      if (cls.classroom_id) {
-        result.byClassroom.set(
+      if (cls.classroom_id && outcome.published) {
+        result.publishedByClassroom.set(
           cls.classroom_id,
-          (result.byClassroom.get(cls.classroom_id) || 0) + 1,
+          (result.publishedByClassroom.get(cls.classroom_id) || 0) + 1,
         );
       }
       continue;

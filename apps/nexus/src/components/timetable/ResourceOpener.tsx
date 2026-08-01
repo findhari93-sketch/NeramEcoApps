@@ -16,6 +16,7 @@
 import { useEffect, useState } from 'react';
 import {
   Box,
+  Button,
   CircularProgress,
   Dialog,
   IconButton,
@@ -24,6 +25,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import RecordingPlayerDialog from '@/components/course-plan/RecordingPlayerDialog';
 import PDFReader from '@/components/reader/PDFReader';
 import ProtectedContent from '@/components/ProtectedContent';
@@ -103,9 +105,15 @@ export default function ResourceOpener({
   }
 
   if (resource.kind === 'study_file') {
+    // The read-only, organisation-scoped SharePoint address. Offered as a
+    // secondary action for anyone who would rather read the deck in Office, and
+    // as the ONLY action when Graph refused to render it (too large, or a format
+    // it cannot convert). `type: 'view'` is what guarantees they cannot edit it.
+    const sharePointUrl = resource.file?.sharepoint_web_url || null;
+
     return (
       <Dialog open onClose={onClose} maxWidth="lg" fullScreen={fullScreen} fullWidth>
-        <ViewerChrome title={resource.title} onClose={onClose}>
+        <ViewerChrome title={resource.title} onClose={onClose} openInUrl={sharePointUrl}>
           {token ? (
             <ProtectedContent disableScreenshot sx={{ width: '100%' }}>
               <PDFReader
@@ -126,16 +134,27 @@ export default function ResourceOpener({
   return null;
 }
 
-/** Shared dialog frame: a title, a 48px close target, and the body. */
+/**
+ * Shared dialog frame: a title, an optional "Open in SharePoint" action, and a
+ * 48px close target.
+ *
+ * The SharePoint action is icon-only below `sm` so the title keeps the room it
+ * needs on a 375px screen, which is why it carries an aria-label either way.
+ */
 function ViewerChrome({
   title,
   onClose,
+  openInUrl,
   children,
 }: {
   title: string;
   onClose: () => void;
+  openInUrl?: string | null;
   children: React.ReactNode;
 }) {
+  const theme = useTheme();
+  const compact = useMediaQuery(theme.breakpoints.down('sm'));
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <Box
@@ -151,6 +170,33 @@ function ViewerChrome({
         <Typography sx={{ flex: 1, fontWeight: 700, fontSize: '0.9375rem' }} noWrap>
           {title}
         </Typography>
+
+        {openInUrl &&
+          (compact ? (
+            <IconButton
+              component="a"
+              href={openInUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open in SharePoint, read only"
+              sx={{ width: 48, height: 48 }}
+            >
+              <OpenInNewIcon fontSize="small" />
+            </IconButton>
+          ) : (
+            <Button
+              component="a"
+              href={openInUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              size="small"
+              startIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+              sx={{ textTransform: 'none', minHeight: 40, flexShrink: 0 }}
+            >
+              Open in SharePoint
+            </Button>
+          ))}
+
         <IconButton onClick={onClose} aria-label="Close" sx={{ width: 48, height: 48 }}>
           <CloseIcon />
         </IconButton>

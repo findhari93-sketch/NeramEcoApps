@@ -38,6 +38,7 @@ export * from './catchup-test';
 export * from './class-prep';
 export * from './class-recaps';
 export * from './assignments';
+export * from './assignment-questions';
 export * from './drawing-checklist';
 export * from './drawing-gallery';
 export * from './drawing-references';

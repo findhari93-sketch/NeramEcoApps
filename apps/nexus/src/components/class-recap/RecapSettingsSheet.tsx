@@ -30,7 +30,8 @@ export interface RecapSettings {
   target_segment_seconds: number;
   question_pool_per_segment: number;
   questions_per_segment: number;
-  questions_to_pass: number;
+  /** Share of the served questions needed to pass, 50 to 100. */
+  pass_percentage: number;
 }
 
 interface Props {
@@ -57,7 +58,7 @@ export default function RecapSettingsSheet({
   const [minutes, setMinutes] = useState(String(Math.round(initial.target_segment_seconds / 60)));
   const [pool, setPool] = useState(String(initial.question_pool_per_segment));
   const [serve, setServe] = useState(String(initial.questions_per_segment));
-  const [pass, setPass] = useState(String(initial.questions_to_pass));
+  const [pass, setPass] = useState(String(initial.pass_percentage));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,14 +69,17 @@ export default function RecapSettingsSheet({
 
   /** Live arithmetic, so the numbers stop being abstract. */
   const preview = useMemo(() => {
-    const mins = n(minutes, 5);
+    const mins = n(minutes, 15);
     const p = n(pool, 15);
     const s = Math.min(n(serve, 10), p);
-    const q = Math.min(n(pass, 8), s);
+    const pct = Math.max(50, Math.min(100, n(pass, 70)));
+    // The same rounding the server and the quiz engine use, so what a teacher
+    // reads here is exactly what a student will be asked for.
+    const correct = Math.max(1, Math.min(s, Math.ceil((s * pct) / 100)));
     const segments = videoDurationSeconds
-      ? Math.max(1, Math.round(videoDurationSeconds / (mins * 60)))
+      ? Math.max(2, Math.round(videoDurationSeconds / (mins * 60)))
       : null;
-    return { mins, p, s, q, segments };
+    return { mins, p, s, pct, correct, segments };
   }, [minutes, pool, serve, pass, videoDurationSeconds]);
 
   const save = useCallback(async () => {
@@ -88,7 +92,7 @@ export default function RecapSettingsSheet({
           target_segment_seconds: preview.mins * 60,
           question_pool_per_segment: preview.p,
           questions_per_segment: preview.s,
-          questions_to_pass: preview.q,
+          pass_percentage: preview.pct,
         }),
       });
       onSaved(res.settings as RecapSettings);
@@ -145,10 +149,15 @@ export default function RecapSettingsSheet({
         )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {field('Segment length (minutes)', minutes, setMinutes, 'Roughly. A natural topic break wins.')}
-          {field('Questions to write per segment', pool, setPool, 'The bank the quiz draws from.')}
+          {field(
+            'Checkpoint length (minutes)',
+            minutes,
+            setMinutes,
+            'The class is divided evenly, then nudged to the nearest pause.',
+          )}
+          {field('Questions to write per checkpoint', pool, setPool, 'The bank the quiz draws from.')}
           {field('Questions shown per attempt', serve, setServe, 'Fewer than the bank, so a retry differs.')}
-          {field('Correct answers needed to pass', pass, setPass, 'Out of the questions shown.')}
+          {field('Pass mark (%)', pass, setPass, 'Of the questions shown. 50% or higher.')}
         </Box>
 
         <Box
@@ -161,9 +170,9 @@ export default function RecapSettingsSheet({
         >
           <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
             {preview.segments
-              ? `About ${preview.segments} checkpoints of ${preview.mins} minutes. `
+              ? `${preview.segments} checkpoints of about ${preview.mins} minutes. `
               : `Checkpoints of about ${preview.mins} minutes. `}
-            {`${preview.p} questions written per checkpoint, ${preview.s} shown each attempt, ${preview.q} right to pass.`}
+            {`${preview.p} questions written per checkpoint, ${preview.s} shown each attempt, ${preview.correct} of those ${preview.s} right to pass.`}
           </Typography>
           {preview.p <= preview.s && (
             <Typography variant="body2" color="warning.main" sx={{ mt: 1, fontWeight: 600 }}>

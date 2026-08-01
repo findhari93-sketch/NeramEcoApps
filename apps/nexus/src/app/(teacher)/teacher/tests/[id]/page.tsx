@@ -25,7 +25,9 @@ import {
   Divider,
   Tabs,
   Tab,
+  MenuItem,
 } from '@neram/ui';
+import { NEXUS_TEACHER_TEST_KINDS, type NexusTestKind } from '@neram/database';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -52,6 +54,7 @@ interface DetailTest {
   is_published: boolean;
   is_repository: boolean;
   created_from: string | null;
+  test_kind?: NexusTestKind | null;
 }
 
 interface DetailQuestion {
@@ -123,6 +126,7 @@ export default function TestDetailPage() {
   const { getToken, isTeacher, activeClassroom } = useNexusAuthContext();
 
   const [test, setTest] = useState<DetailTest | null>(null);
+  const [kindDraft, setKindDraft] = useState<NexusTestKind>('classroom_assigned');
   const [questions, setQuestions] = useState<DetailQuestion[]>([]);
   const [placements, setPlacements] = useState<DetailPlacement[]>([]);
   const [attemptsCount, setAttemptsCount] = useState(0);
@@ -170,6 +174,7 @@ export default function TestDetailPage() {
     try {
       const json = await authFetch(`/api/question-bank/tests/${testId}`);
       setTest(json.data.test);
+      setKindDraft(json.data.test?.test_kind || 'classroom_assigned');
       setQuestions(json.data.questions || []);
       setPlacements(json.data.placements || []);
       setAttemptsCount(json.data.attempts_count || 0);
@@ -183,6 +188,25 @@ export default function TestDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /** Relabel the test. Saved immediately so the choice survives closing the dialog. */
+  async function saveKind(kind: NexusTestKind) {
+    if (!test) return;
+    setKindDraft(kind);
+    setBusy(true);
+    try {
+      await authFetch(`/api/question-bank/tests/${test.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ test_kind: kind }),
+      });
+      setTest((t) => (t ? { ...t, test_kind: kind } : t));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set the test type');
+      setKindDraft(test.test_kind || 'classroom_assigned');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function togglePublish() {
     if (!test) return;
@@ -628,6 +652,25 @@ export default function TestDetailPage() {
       <Dialog open={assignOpen} onClose={() => !busy && setAssignOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontWeight: 700 }}>Assign this test</DialogTitle>
         <DialogContent>
+          {/* Set here rather than only at creation, because a teacher usually
+              decides "this is the weekly one" at the moment they assign it. */}
+          <TextField
+            select
+            size="small"
+            fullWidth
+            label="Test type"
+            value={kindDraft}
+            onChange={(e) => saveKind(e.target.value as NexusTestKind)}
+            disabled={busy}
+            sx={{ mt: 0.5, mb: 2 }}
+            helperText="Students see this on the test card"
+          >
+            {NEXUS_TEACHER_TEST_KINDS.map((k) => (
+              <MenuItem key={k.value} value={k.value}>
+                {k.label}
+              </MenuItem>
+            ))}
+          </TextField>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2, mt: 0.5 }}>
             <TextField
               size="small"

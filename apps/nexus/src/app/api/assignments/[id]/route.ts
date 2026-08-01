@@ -22,6 +22,12 @@ import {
   deleteDrawingQuestion,
   createUserNotification,
   getSupabaseAdminClient,
+  getAssignmentPaper,
+  getAssignmentAttempt,
+  getAssignmentAttemptsByStudent,
+  saveAssignmentQuestions,
+  clearAssignmentQuestions,
+  validateAssignmentQuestions,
 } from '@neram/database';
 import type { GalleryReactionType } from '@neram/database/types';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
@@ -29,6 +35,33 @@ import { errorResponse, ApiError } from '@/lib/api-errors';
 import { notifyAssignmentPublished, notifyAssignmentReviewed } from '@/lib/timetable-notifications';
 import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
 import { classStartIso } from '@/lib/prework';
+import { resolveSubmitMode, lockedReason } from '@/lib/assignment-submit-window';
+
+/**
+ * What the student may do with this assignment right now, resolved server-side
+ * so the page never has to re-derive the rule. Both assignment types answer to
+ * the same window: unmarked work inside the deadline can be replaced.
+ */
+function submitWindow(
+  detail: any,
+  enrollment: any,
+  submission: { status: string; reviewed_at?: string | null } | null,
+) {
+  const mode = resolveSubmitMode(
+    submission,
+    {
+      class_date: detail.class_date,
+      enrolled_at: (enrollment as any)?.enrolled_at ?? null,
+      due_at: detail.due_at,
+      catchup_window_days: detail.catchup_window_days ?? 7,
+    },
+    new Date().toISOString(),
+  );
+  return {
+    submit_mode: mode,
+    submit_locked_reason: mode === 'locked' ? lockedReason(submission) : null,
+  };
+}
 
 const REACTION_TYPES: GalleryReactionType[] = ['heart', 'clap', 'fire', 'star', 'wow'];
 function parseReaction(input: unknown): GalleryReactionType | null {
@@ -102,11 +135,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         return NextResponse.json({ assignment: detail, drawing_roster: rows, counts, reminders, role: 'staff' });
       }
 
+      // Staff see the paper WITH its answer key: they wrote it, and they need it
+      // to check a question that half the class got wrong.
+      const paper = await getAssignmentPaper(params.id, true);
+      const attemptsByStudent = paper
+        ? await getAssignmentAttemptsByStudent(paper.test_id)
+        : new Map();
+
       const { rows } = await getAssignmentRoster(params.id);
       const rosterWithUrls = await Promise.all(
         rows.map(async (r) => ({
           ...r,
           submission: await signSubmissionWithHistory(r.submission),
+          answers: attemptsByStudent.get(r.student.id) ?? null,
         })),
       );
       const counts = rosterWithUrls.reduce(
@@ -117,7 +158,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         },
         { total: 0, submitted: 0, late: 0, missing: 0 } as Record<string, number>,
       );
-      return NextResponse.json({ assignment: detail, roster: rosterWithUrls, counts, reminders, role: 'staff' });
+      return NextResponse.json({
+        assignment: detail,
+        roster: rosterWithUrls,
+        counts,
+        reminders,
+        paper,
+        role: 'staff',
+      });
     }
 
     // Student branch: must be published and enrolled in the classroom.
@@ -143,17 +191,34 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         enrolled_at: (enrollment as any)?.enrolled_at ?? null,
         recording,
         role: 'student',
+        ...submitWindow(detail, enrollment, drawing as any),
       });
     }
 
     const submission = await getSubmission(params.id, user.id);
     const signed = await signSubmissionWithHistory(submission);
+
+    // The answer key is withheld until this student's own answers are locked in.
+    // Asking for the attempt first, then re-reading the paper with answers only
+    // once one exists, means an unanswered paper never carries the key over the
+    // wire at all: it cannot leak from a payload it was never in.
+    const blindPaper = await getAssignmentPaper(params.id, false);
+    const attempt = blindPaper ? await getAssignmentAttempt(blindPaper.test_id, user.id) : null;
+    const paper = attempt && blindPaper ? await getAssignmentPaper(params.id, true) : blindPaper;
+
     return NextResponse.json({
       assignment: detail,
       submission: signed,
       enrolled_at: (enrollment as any)?.enrolled_at ?? null,
       recording,
       role: 'student',
+      paper,
+      answers_locked: !!attempt,
+      my_answers: attempt?.answers ?? null,
+      my_result: attempt
+        ? { score: attempt.score, total_marks: attempt.total_marks, percentage: attempt.percentage }
+        : null,
+      ...submitWindow(detail, enrollment, submission),
     });
   } catch (err) {
     return errorResponse(err, 'Failed to load assignment');
@@ -256,6 +321,26 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           const w = Number(body.catchup_window_days);
           if (Number.isFinite(w) && w >= 0) updates.catchup_window_days = Math.round(w);
         }
+        if (body.requires_pdf !== undefined) {
+          const wantsPdf = body.requires_pdf !== false;
+          // Turning it off is only allowed when there is something else to hand
+          // in. Otherwise the student would face an assignment with no upload
+          // and no questions, and no way to submit anything at all.
+          if (!wantsPdf) {
+            const paper = await getAssignmentPaper(params.id, false);
+            const autoQuestions = paper?.questions.filter((q) => q.format !== 'SUBJECTIVE') ?? [];
+            if (autoQuestions.length === 0) {
+              return NextResponse.json(
+                {
+                  error:
+                    'Add at least one multiple choice or numerical question before making the PDF optional, otherwise students have nothing to submit.',
+                },
+                { status: 400 },
+              );
+            }
+          }
+          updates.requires_pdf = wantsPdf;
+        }
         const updated = await updateAssignment(params.id, updates);
 
         // Keep a drawing assignment's backing question in sync so the Drawing
@@ -334,21 +419,89 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return NextResponse.json({ assignment: detail, added: added.length });
       }
 
+      /**
+       * Replace the assignment's question paper.
+       *
+       * Refused once anyone has answered. Editing a paper underneath a student
+       * who has already sat it would re-key their answers against questions they
+       * never saw, and the marks already shown to them would silently change.
+       * Clearing and re-adding is the deliberate way to start over.
+       */
+      case 'save_questions': {
+        const questions = Array.isArray(body.questions) ? body.questions : [];
+        const invalid = validateAssignmentQuestions(questions);
+        if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
+
+        const current = await getAssignmentPaper(params.id, false);
+        if (current) {
+          const answered = await getAssignmentAttemptsByStudent(current.test_id);
+          if (answered.size > 0) {
+            return NextResponse.json(
+              {
+                error: `${answered.size} ${answered.size === 1 ? 'student has' : 'students have'} already answered these questions, so the paper cannot be changed.`,
+                code: 'PAPER_ANSWERED',
+              },
+              { status: 409 },
+            );
+          }
+        }
+
+        const paper = await saveAssignmentQuestions(params.id, questions, {
+          title: assignment.title,
+          createdBy: user.id,
+          classroomId: assignment.classroom_id,
+        });
+        return NextResponse.json({ paper });
+      }
+
+      case 'clear_questions': {
+        const current = await getAssignmentPaper(params.id, false);
+        if (current) {
+          const answered = await getAssignmentAttemptsByStudent(current.test_id);
+          if (answered.size > 0) {
+            return NextResponse.json(
+              {
+                error: `${answered.size} ${answered.size === 1 ? 'student has' : 'students have'} already answered these questions, so the paper cannot be removed.`,
+                code: 'PAPER_ANSWERED',
+              },
+              { status: 409 },
+            );
+          }
+        }
+        await clearAssignmentQuestions(params.id);
+        // The PDF becomes the only thing left to hand in, so it must be required
+        // again or the assignment would have no way to be submitted.
+        await updateAssignment(params.id, { requires_pdf: true } as any);
+        return NextResponse.json({ ok: true });
+      }
+
       case 'review_submission': {
         if (!body.submission_id) {
           return NextResponse.json({ error: 'submission_id is required' }, { status: 400 });
         }
         const reviewAction = body.review_action === 'redo' ? 'redo' : 'complete';
         const isStars = (assignment as any).evaluation_type === 'stars';
+
+        // With a question paper attached, the teacher is only asked to mark the
+        // working, so the ceiling on what they type is the manual half, not the
+        // assignment total. The auto marks are added below rather than trusted
+        // from the client: the browser knows the score, but it must not be the
+        // thing that decides it.
+        const gradedPaper = isStars ? null : await getAssignmentPaper(params.id, false);
+        const hasPaper = !!gradedPaper && gradedPaper.questions.length > 0;
+        const manualCeiling = hasPaper ? gradedPaper!.manual_marks : assignment.max_marks;
+
         let marks: number | null = null;
         if (body.marks !== null && body.marks !== undefined && body.marks !== '') {
           const m = Number(body.marks);
-          if (!Number.isFinite(m) || m < 0 || m > assignment.max_marks) {
+          if (!Number.isFinite(m) || m < 0 || m > manualCeiling) {
             return NextResponse.json(
               {
                 error: isStars
                   ? 'Rating must be between 1 and 5 stars.'
-                  : `Marks must be between 0 and ${assignment.max_marks}.`,
+                  : hasPaper
+                    ? `Marks for the working must be between 0 and ${manualCeiling}.`
+                    : `Marks must be between 0 and ${assignment.max_marks}.`,
               },
               { status: 400 },
             );
@@ -357,8 +510,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }
         const reaction = parseReaction(body.reaction);
         const submission = await getSubmission(params.id, body.student_id ?? '');
+
+        // Auto marks are read from the student's own attempt, server-side, and
+        // added to whatever the teacher gave the working. One total goes on the
+        // submission, because that is the number a student is owed an
+        // explanation for.
+        let finalMarks = marks;
+        let autoMarks: number | null = null;
+        if (hasPaper && body.student_id) {
+          const attempt = await getAssignmentAttempt(gradedPaper!.test_id, body.student_id);
+          autoMarks = attempt ? attempt.score : 0;
+          if (reviewAction === 'complete' || marks != null) {
+            finalMarks = Math.round(((marks ?? 0) + autoMarks) * 100) / 100;
+          }
+        }
+
         const reviewed = await reviewSubmission(body.submission_id, {
-          marks,
+          marks: finalMarks,
           feedback: body.feedback ? String(body.feedback) : null,
           action: reviewAction,
           reviewed_by: user.id,
@@ -378,12 +546,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           // Always-visible top-bar bell: a warm "reviewed" ping carrying the grade
           // and the teacher's reaction, deep-linking to the student's assignment.
           if (reviewAction === 'complete') {
+            // finalMarks, not marks: the student is told the total they got,
+            // which includes whatever their answers earned automatically.
             const gradeText = isStars
-              ? marks != null
-                ? `${marks}/5 stars`
+              ? finalMarks != null
+                ? `${finalMarks}/5 stars`
                 : 'a star rating'
-              : marks != null
-                ? `${marks}/${assignment.max_marks} marks`
+              : finalMarks != null
+                ? `${finalMarks}/${assignment.max_marks} marks`
                 : 'your marks';
             const emoji = reactionEmoji(reaction);
             createUserNotification({
@@ -397,8 +567,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
           // Marks feed the leaderboard: up to 20 pts scaled by the score, awarded
           // once per assignment (first completed review). Redo requests award none.
-          if (reviewAction === 'complete' && marks != null && assignment.max_marks > 0) {
-            const pts = Math.round((marks / assignment.max_marks) * 20);
+          if (reviewAction === 'complete' && finalMarks != null && assignment.max_marks > 0) {
+            const pts = Math.round((finalMarks / assignment.max_marks) * 20);
             recordGamificationEvent({
               student_id: studentId,
               classroom_id: assignment.classroom_id,
@@ -408,11 +578,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
               source_id: params.id,
               activity_type: 'assignment_reviewed',
               activity_title: `Marked: ${assignment.title}`,
-              metadata: { assignment_id: params.id, marks, max_marks: assignment.max_marks },
+              metadata: {
+                assignment_id: params.id,
+                marks: finalMarks,
+                teacher_marks: marks,
+                auto_marks: autoMarks,
+                max_marks: assignment.max_marks,
+              },
             }).catch((e) => console.error('assignment_reviewed points failed:', e));
           }
         }
-        return NextResponse.json({ submission: reviewed });
+        return NextResponse.json({ submission: reviewed, auto_marks: autoMarks });
       }
 
       default:

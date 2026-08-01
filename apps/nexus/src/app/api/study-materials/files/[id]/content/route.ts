@@ -6,7 +6,12 @@ import {
   effectiveDownloadable,
   hasActiveDownloadGrant,
 } from '@neram/database';
-import { getSharePointDownloadUrl, getSharePointStreamUrl } from '@/lib/sharepoint';
+import {
+  getSharePointDownloadUrl,
+  getSharePointStreamUrl,
+  getSharePointPdfRendition,
+} from '@/lib/sharepoint';
+import { needsPdfRendition } from '@/lib/office-rendition';
 import { getRequestUser, isStaff, getStudentExamSet } from '@/lib/study-materials';
 
 /**
@@ -52,11 +57,46 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const downloadable = staff || effectiveDownloadable(file, folder) || granted;
     const wantDownload = request.nextUrl.searchParams.get('download') === '1' && downloadable;
 
-    // Linked files (no uploaded bytes) resolve via the share URL, which works
-    // across any site/drive; uploaded files use the single-site item id.
-    const downloadUrl = file.link_url
-      ? await getSharePointStreamUrl(file.link_url)
-      : await getSharePointDownloadUrl(file.sharepoint_item_id as string);
+    // A PowerPoint or Word file cannot be shown by the reader, and handing the
+    // real bytes to the browser would just download it, defeating the watermark
+    // and the download block. Graph renders it as PDF instead, and everything
+    // downstream carries on unchanged.
+    //
+    // Only for VIEWING. A permitted download gets the real file, because a
+    // teacher who is allowed to save the deck wants the deck, not a flattened
+    // copy of it.
+    const convert = !wantDownload && needsPdfRendition(file.file_type, file.file_name);
+
+    let servedType = file.file_type || 'application/octet-stream';
+    let downloadUrl: string | null = null;
+
+    if (convert) {
+      downloadUrl = await getSharePointPdfRendition({
+        itemId: file.sharepoint_item_id,
+        shareUrl: file.link_url,
+      });
+      if (!downloadUrl) {
+        // Graph refuses past its size limit and for formats it cannot render.
+        // Say so plainly: the card offers "Open in SharePoint", and that is a far
+        // better outcome than a viewer that spins forever.
+        return NextResponse.json(
+          {
+            error:
+              'This file cannot be shown in the app. Open it in SharePoint instead.',
+            code: 'RENDITION_UNAVAILABLE',
+          },
+          { status: 415 },
+        );
+      }
+      servedType = 'application/pdf';
+    } else {
+      // Linked files (no uploaded bytes) resolve via the share URL, which works
+      // across any site/drive; uploaded files use the single-site item id.
+      downloadUrl = file.link_url
+        ? await getSharePointStreamUrl(file.link_url)
+        : await getSharePointDownloadUrl(file.sharepoint_item_id as string);
+    }
+
     const upstream = await fetch(downloadUrl, { redirect: 'follow' });
     if (!upstream.ok) {
       return NextResponse.json({ error: 'Could not fetch file' }, { status: 502 });
@@ -67,7 +107,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return new NextResponse(buffer, {
       status: 200,
       headers: {
-        'Content-Type': file.file_type || 'application/octet-stream',
+        'Content-Type': servedType,
         'Content-Length': String(buffer.byteLength),
         'Cache-Control': 'private, max-age=3600',
         'Content-Disposition': wantDownload ? `attachment; filename="${safeName}"` : 'inline',

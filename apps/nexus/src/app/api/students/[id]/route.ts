@@ -1,13 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { getRequestUser, assertCapability, hasCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
-import { getSupabaseAdminClient, getCurrentBatch, pairStatus } from '@neram/database';
+import { loadStudentProfileCore, StudentNotInClassroomError } from '@/lib/student-profile';
 
 /**
- * GET /api/students/[id]?classroom={id}
+ * GET /api/students/[id]?classroom={id}&full=1
  *
- * Returns detailed student info: profile, attendance summary,
- * checklist progress, and topic progress.
+ * The core student-profile bundle: identity, enrolment, application form,
+ * guardians, parent-portal access, documents, checklist, topics and a merged
+ * activity timeline. This is the only blocking fetch the profile page makes.
+ *
+ * NOT HERE, on purpose:
+ *
+ *   Money        lives in ./finance, behind coord.student.finance. The
+ *                commercial columns are never named in a query this route can
+ *                reach, so a teacher's request does not ask Postgres for them
+ *                and there is nothing to find in the response.
+ *
+ *   Attendance,  live in ./performance. They are the expensive reads, and a
+ *   assignments, slow attendance query must not stop a teacher seeing a phone
+ *   tests,       number. This route used to compute an attendance percentage
+ *   catch-up     from nexus_attendance filtered on student_id ALONE, then
+ *                divide by ONE classroom's completed-class count: a student in
+ *                two classrooms scored above 100%, and a classroom whose
+ *                attendance was never synced scored 0% rather than admitting it
+ *                was not measured. Both are fixed in ./performance by reusing
+ *                loadChildAttendance, which scopes to the classroom and
+ *                intersects against the roster-wide measured set.
+ *
+ * `full=1` returns completed checklist items too. The default ships only the
+ * open ones plus counts, because the full list is tens of kilobytes a phone
+ * never renders.
  */
 export async function GET(
   request: NextRequest,
@@ -15,8 +38,6 @@ export async function GET(
 ) {
   try {
     const caller = await getRequestUser(request.headers.get('Authorization'));
-    // Staff-only: any student's profile, phone, attendance and progress. Previously
-    // authenticated but not authorised.
     assertCapability(caller, 'coord.student.view');
 
     const { id: studentId } = await params;
@@ -26,151 +47,23 @@ export async function GET(
       return NextResponse.json({ error: 'Missing classroom parameter' }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdminClient();
-
-    // Verify the student exists and is enrolled
-    const [userResult, enrollmentResult] = await Promise.all([
-      supabase
-        .from('users')
-        .select('id, name, email, avatar_url, phone, academic_year')
-        .eq('id', studentId)
-        .single(),
-
-      supabase
-        .from('nexus_enrollments')
-        .select(
-          'role, enrolled_at, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason',
-        )
-        .eq('classroom_id', classroomId)
-        .eq('user_id', studentId)
-        .eq('role', 'student')
-        .single(),
-    ]);
-
-    if (userResult.error || !userResult.data) {
-      return NextResponse.json({ error: 'Student not found' }, { status: 404 });
-    }
-
-    if (enrollmentResult.error || !enrollmentResult.data) {
-      return NextResponse.json({ error: 'Student not enrolled in this classroom' }, { status: 404 });
-    }
-
-    // Fetch all stats in parallel
-    const [
-      attendanceRecordsResult,
-      totalClassesResult,
-      checklistItemsResult,
-      checklistProgressResult,
-      topicTotalResult,
-      topicProgressResult,
-    ] = await Promise.all([
-      // Attendance records
-      supabase
-        .from('nexus_attendance')
-        .select('id, attended, class:nexus_scheduled_classes(id, title, scheduled_date)')
-        .eq('student_id', studentId),
-
-      // Total completed classes
-      supabase
-        .from('nexus_scheduled_classes')
-        .select('id', { count: 'exact', head: true })
-        .eq('classroom_id', classroomId)
-        .eq('status', 'completed'),
-
-      // All checklist items
-      supabase
-        .from('nexus_checklist_items')
-        .select('id, title, topic:nexus_topics(title, category)')
-        .eq('classroom_id', classroomId)
-        .eq('is_active', true)
-        .order('sort_order', { ascending: true }),
-
-      // Student's checklist progress
-      supabase
-        .from('nexus_student_checklist_progress')
-        .select('checklist_item_id, is_completed, completed_at')
-        .eq('student_id', studentId),
-
-      // Total topics
-      supabase
-        .from('nexus_topics')
-        .select('id', { count: 'exact', head: true })
-        .eq('classroom_id', classroomId)
-        .eq('is_active', true),
-
-      // Student topic progress
-      supabase
-        .from('nexus_student_topic_progress')
-        .select('topic_id, status, completed_at')
-        .eq('student_id', studentId)
-        .eq('classroom_id', classroomId),
-    ]);
-
-    const totalClasses = totalClassesResult.count || 0;
-    const attendedCount = (attendanceRecordsResult.data || []).filter((a) => a.attended).length;
-
-    // Build checklist with progress
-    const progressMap = new Map(
-      (checklistProgressResult.data || []).map((p) => [p.checklist_item_id, p]),
-    );
-
-    const checklistItems = (checklistItemsResult.data || []).map((item) => {
-      const progress = progressMap.get(item.id);
-      return {
-        ...item,
-        is_completed: progress?.is_completed || false,
-        completed_at: progress?.completed_at || null,
-      };
+    const core = await loadStudentProfileCore(studentId, classroomId, {
+      includeAllChecklist: request.nextUrl.searchParams.get('full') === '1',
     });
 
-    const completedChecklist = checklistItems.filter((i) => i.is_completed).length;
+    // Tells the client whether to attempt the finance fetch. It is a hint that
+    // saves a guaranteed 403, not the gate: the gate is the assert in ./finance.
+    core.capabilities = { finance: hasCapability(caller, 'coord.student.finance') };
 
-    const enrollment = enrollmentResult.data as any;
-    const user = userResult.data as any;
-    const currentCode = (await getCurrentBatch())?.code ?? null;
-
-    return NextResponse.json({
-      student: {
-        ...user,
-        enrolled_at: enrollment.enrolled_at,
-        // Two orthogonal axes: where they are in their studies, and whether they
-        // are still participating. See migration 20260802090000.
-        study_stage: enrollment.current_standard ?? null,
-        study_stage_source: enrollment.current_standard_source ?? null,
-        study_stage_set_at: enrollment.current_standard_set_at ?? null,
-        participation_status: enrollment.participation_status ?? 'active',
-        dormant_since: enrollment.dormant_since ?? null,
-        dormant_reason: enrollment.dormant_reason ?? null,
-        // Exam-year cohort, and whether it agrees with the class above. Set from
-        // the same sheet, but stored on users, so it is global.
-        academic_year: user.academic_year ?? null,
-        pair_status: pairStatus(
-          enrollment.current_standard ?? null,
-          user.academic_year ?? null,
-          currentCode ?? '',
-        ),
-      },
-      currentBatch: currentCode,
-      attendanceSummary: {
-        total: totalClasses,
-        attended: attendedCount,
-        percentage: totalClasses > 0 ? Math.round((attendedCount / totalClasses) * 100) : 0,
-        records: attendanceRecordsResult.data || [],
-      },
-      checklistProgress: {
-        completed: completedChecklist,
-        total: checklistItems.length,
-        items: checklistItems,
-      },
-      topicProgress: {
-        completed: (topicProgressResult.data || []).filter((t) => t.status === 'completed').length,
-        total: topicTotalResult.count || 0,
-        topics: topicProgressResult.data || [],
-      },
-    });
+    return NextResponse.json(core);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load student details';
-    console.error('Student detail error:', message);
-    return NextResponse.json({ error: message }, { status: 401 });
+    if (err instanceof StudentNotInClassroomError) {
+      return NextResponse.json({ error: err.message }, { status: 404 });
+    }
+    // errorResponse maps an authorization failure to 403 and an auth failure to
+    // 401. This route previously answered 401 for EVERY error, which turned the
+    // capability denial into "your session expired" and hid real 500s.
+    console.error('Student detail error:', err);
+    return errorResponse(err, 'Failed to load student details');
   }
 }

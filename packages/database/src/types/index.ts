@@ -6678,7 +6678,12 @@ export type NexusPlacementContext =
  * What a test IS, stored on nexus_tests.test_kind rather than inferred from its
  * placement. Two gated kinds ('class_prep', 'catchup_class') must only ever be
  * opened through their own route, so api/tests excludes them from the student
- * list. 'weekly' and 'mock' are reserved with no writer yet.
+ * list.
+ *
+ * 'weekly', 'mock', 'full' and 'chapter' are the teacher-chosen labels for a
+ * class test. They behave exactly like 'classroom_assigned' and differ only in
+ * how they group and how they read to a student, which is the whole point: a
+ * student could not previously tell a weekly test from a model paper.
  */
 export type NexusTestKind =
   | 'class_prep'
@@ -6688,10 +6693,58 @@ export type NexusTestKind =
   | 'student_custom'
   | 'content_gate'
   | 'weekly'
-  | 'mock';
+  | 'mock'
+  | 'full'
+  | 'chapter'
+  /**
+   * The questions inside one assignment. Gated like class_prep and
+   * catchup_class: answered through the assignment, never listed as a test.
+   */
+  | 'assignment';
 
-/** Kinds a student must never reach through the generic test list or take page. */
-export const NEXUS_GATED_TEST_KINDS: readonly NexusTestKind[] = ['class_prep', 'catchup_class'];
+/**
+ * The kinds a teacher picks from when setting a test, in menu order, with the
+ * label the interface shows. 'mock' keeps its database name and reads as "Model
+ * test", which is what teachers here call it.
+ */
+export const NEXUS_TEACHER_TEST_KINDS: ReadonlyArray<{
+  value: NexusTestKind;
+  label: string;
+  hint: string;
+}> = [
+  { value: 'classroom_assigned', label: 'Class test', hint: 'A test you set for the class' },
+  { value: 'weekly', label: 'Weekly test', hint: "Covers the week's syllabus" },
+  { value: 'chapter', label: 'Chapter test', hint: 'Everything from one chapter or topic' },
+  { value: 'mock', label: 'Model test', hint: 'Full-length rehearsal of the real exam' },
+  { value: 'full', label: 'Full test', hint: 'Whole syllabus, used close to the exam' },
+];
+
+/** Label for any kind, including the ones a teacher never picks. */
+export const NEXUS_TEST_KIND_LABELS: Record<NexusTestKind, string> = {
+  class_prep: 'Before class',
+  catchup_class: 'Catch-up',
+  classroom_assigned: 'Class test',
+  practice_pool: 'Practice',
+  student_custom: 'My own',
+  content_gate: 'Chapter quiz',
+  weekly: 'Weekly test',
+  mock: 'Model test',
+  full: 'Full test',
+  chapter: 'Chapter test',
+  assignment: 'Assignment questions',
+};
+
+/**
+ * Kinds a student must never reach through the generic test list or take page.
+ * 'assignment' joins the gated set: its questions are answered inside the
+ * assignment, where the PDF gate and the instant-results rules live. Reaching
+ * them through the test player would bypass both.
+ */
+export const NEXUS_GATED_TEST_KINDS: readonly NexusTestKind[] = [
+  'class_prep',
+  'catchup_class',
+  'assignment',
+];
 
 export interface NexusTestPlacement {
   id: string;
@@ -6720,6 +6773,23 @@ export interface NexusComposedQuestion {
   options: unknown;
   marks: number;
   sort_order: number;
+}
+
+/**
+ * A composed question carrying its answer key. Only ever built on the grading
+ * path, never in a pre-submit payload: the tolerance narrows the search space
+ * for a guesser and the explanation gives the answer away outright.
+ *
+ * Typed rather than reached through `as any`, because that cast is exactly what
+ * let the explanation go missing for every attempt in the product: the query
+ * did not select the column, the review mapped `(q as any).explanation_brief`,
+ * and the compiler had nothing to say about it.
+ */
+export interface NexusComposedQuestionWithAnswer extends NexusComposedQuestion {
+  correct_answer?: string | null;
+  answer_tolerance?: number | null;
+  explanation_brief?: string | null;
+  explanation_detailed?: string | null;
 }
 
 export interface NexusTestGradeReviewItem {
@@ -6784,7 +6854,9 @@ export type NexusTestOverviewGroupKey =
   /** Teacher-offered optional practice, distinct from mandatory classroom work. */
   | 'practice_pool'
   | 'weekly'
-  | 'mock';
+  | 'mock'
+  | 'full'
+  | 'chapter';
 
 export interface NexusTestOverviewGroup {
   key: NexusTestOverviewGroupKey;

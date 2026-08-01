@@ -96,6 +96,7 @@ export type Capability =
   | 'coord.student.view'
   | 'coord.student.stage'
   | 'coord.student.dormancy'
+  | 'coord.student.finance'
   | 'coord.attendance.view'
   | 'coord.nudge'
   | 'coord.watchlist'
@@ -164,6 +165,16 @@ const SHARED_STAFF: readonly Capability[] = [
  *
  * One route still serves both. It asserts whichever capability the request body
  * actually needs, after parsing and before touching the database.
+ *
+ * `coord.student.finance` is here for a different reason: it is not a teaching
+ * signal at all. It gates what a family owes and has paid, plus the two fields
+ * that decide scholarship eligibility (caste category and its certificate) and
+ * the marketing attribution on the application. A visiting teacher has every
+ * reason to see a student's attendance and no reason to see their balance.
+ *
+ * It is enforced by ABSENCE, not by hiding. The routes that serve a teacher
+ * never select the commercial columns, so the values are not in the payload to
+ * be found in devtools. See student-finance.ts for the two column allowlists.
  */
 const MANAGER_EXTRA: readonly Capability[] = [
   'structure.classroom.create',
@@ -174,6 +185,7 @@ const MANAGER_EXTRA: readonly Capability[] = [
   'structure.plan.delete',
   'teach.timetable.schedule',
   'coord.student.dormancy',
+  'coord.student.finance',
   'coord.photo_ms_push',
   'impersonate.any',
 ];
@@ -320,6 +332,7 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   'coord.student.view',
   'coord.student.stage',
   'coord.student.dormancy',
+  'coord.student.finance',
   'coord.attendance.view',
   'coord.nudge',
   'coord.watchlist',

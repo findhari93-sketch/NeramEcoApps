@@ -32,11 +32,20 @@ test.describe('Class reference material (mobile)', () => {
     await page.goto(`${NEXUS}/teacher/timetable`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
 
-    // The section lives in the planning rail, which needs a class selected.
+    // The section lives in the class panel, which needs a class selected.
     const classCard = page.locator('[class*="MuiBox"]').filter({ hasText: /PM|AM/ }).first();
     if (await classCard.count()) {
       await classCard.click().catch(() => {});
       await page.waitForTimeout(1200);
+    }
+
+    // The panel is tabbed now. Reference material is one of the things this
+    // class hands out, so it lives on Prep alongside the assignment and the
+    // pre-class test.
+    const prepTab = page.getByRole('tab', { name: 'Prep', exact: true });
+    if (await prepTab.count()) {
+      await prepTab.first().click();
+      await page.waitForTimeout(600);
     }
 
     const pasteBox = page.getByLabel(/paste a link to add reference material/i);
@@ -50,8 +59,9 @@ test.describe('Class reference material (mobile)', () => {
     const boxSize = await pasteBox.first().boundingBox();
     expect(boxSize!.height, 'paste box must be at least 48px tall').toBeGreaterThanOrEqual(47);
 
-    // Both add affordances sit under the input and are the primary taps.
+    // All three add affordances sit under the input and are the primary taps.
     await assertTouchTargetSize(page, 'button:has-text("Image or PDF")', 44);
+    await assertTouchTargetSize(page, 'button:has-text("Choose from SharePoint")', 44);
     await assertTouchTargetSize(page, 'button:has-text("Add from another class")', 44);
 
     // The whole rail, with the section in it, must not scroll sideways.
@@ -95,6 +105,63 @@ test.describe('Class reference material (mobile)', () => {
     await context.close();
   });
 
+  test('375px: the SharePoint picker opens as a drawer and stays inside the phone', async ({
+    browser,
+  }) => {
+    // The picker is how a PowerPoint gets attached, and it is the one add flow
+    // that renders a variable-length list of arbitrary file names. A long name is
+    // exactly what would push the drawer sideways, so the overflow check here is
+    // the point of the test rather than a formality.
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+    const page = await context.newPage();
+
+    const injected = await injectAuthForPage(page, 'teacher');
+    test.skip(!injected, 'Nexus test-login unavailable');
+
+    await page.goto(`${NEXUS}/teacher/timetable`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+
+    const classCard = page.locator('[class*="MuiBox"]').filter({ hasText: /PM|AM/ }).first();
+    if (await classCard.count()) {
+      await classCard.click().catch(() => {});
+      await page.waitForTimeout(1200);
+    }
+
+    const openPicker = page.getByRole('button', { name: /choose from sharepoint/i });
+    test.skip(
+      (await openPicker.count()) === 0,
+      'No class with the reference-material editor on screen in this environment',
+    );
+
+    await openPicker.first().click();
+    await page.waitForTimeout(1200);
+
+    await expect(page.getByText(/attach a presentation or document/i)).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+
+    const search = page.getByLabel(/search sharepoint for a file/i);
+    await expect(search).toBeVisible();
+    const searchBox = await search.boundingBox();
+    expect(searchBox!.height, 'picker search must be at least 48px tall').toBeGreaterThanOrEqual(47);
+
+    // Typing must not break the layout, whatever comes back: results, the empty
+    // state, or the error state when Graph is unreachable from this environment.
+    await search.fill('presentation');
+    await page.waitForTimeout(2000);
+    await assertNoHorizontalOverflow(page);
+
+    // Every row is a tap target that attaches a file, so it carries the same
+    // 44px floor as the buttons around it.
+    const rows = page.getByRole('button', { name: /^(attach|open folder) /i });
+    if (await rows.count()) {
+      const rowBox = await rows.first().boundingBox();
+      expect(rowBox!.height, 'a file row must clear 44px').toBeGreaterThanOrEqual(44);
+    }
+
+    await page.getByRole('button', { name: /^close$/i }).click();
+    await context.close();
+  });
+
   test('375px: a student sees the list read-only, with no editing affordances', async ({
     browser,
   }) => {
@@ -115,6 +182,10 @@ test.describe('Class reference material (mobile)', () => {
     expect(await page.getByLabel(/paste a link to add reference material/i).count()).toBe(0);
     expect(await page.getByRole('button', { name: /add from another class/i }).count()).toBe(0);
     expect(await page.getByRole('button', { name: /^options for /i }).count()).toBe(0);
+    // The SharePoint picker reads the document library with the APPLICATION's
+    // permissions, not the caller's, so a student reaching it would be able to
+    // enumerate a library they have no account on. It must not exist here.
+    expect(await page.getByRole('button', { name: /choose from sharepoint/i }).count()).toBe(0);
 
     await context.close();
   });

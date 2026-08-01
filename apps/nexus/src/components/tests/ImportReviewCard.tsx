@@ -4,9 +4,13 @@
  * One parsed question in the import review step.
  *
  * Carries the whole decision for that row: what the AI wrote, whether the bank
- * already has it, and what we are going to do about it. The three-way action
- * toggle is the point of the screen, so it is always visible on a duplicate row
- * rather than hidden behind an expander.
+ * already has it, and what we are going to do about it.
+ *
+ * The action chooser is a menu rather than a row of toggle buttons because the
+ * previous toggles said only "Add as new" with no indication of what that did,
+ * and the captions for the other two appeared only once selected, so the
+ * choices could never be compared before choosing. Every option now carries its
+ * consequence in the menu, and the selected one repeats it underneath.
  */
 
 import { useState } from 'react';
@@ -16,24 +20,77 @@ import {
   Chip,
   IconButton,
   Paper,
-  ToggleButton,
-  ToggleButtonGroup,
   Collapse,
   Button,
+  Menu,
+  MenuItem,
+  ListItemText,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@neram/ui';
 import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
 import ExpandLessOutlinedIcon from '@mui/icons-material/ExpandLessOutlined';
-import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import CompareArrowsOutlinedIcon from '@mui/icons-material/CompareArrowsOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import type { ImportQuestion } from '@/lib/qb-import-schema';
 
-export type RowAction = 'create' | 'reuse' | 'merge' | 'skip';
+export type RowAction = 'create' | 'reuse' | 'merge' | 'replace' | 'keep_both' | 'skip';
+
+/**
+ * What each action does, in the teacher's words. Exported because the review
+ * page shows the same wording in its summary and its legend, and two copies of
+ * this drift the moment one is edited.
+ */
+export const ROW_ACTIONS: Record<
+  RowAction,
+  { label: string; effect: string; duplicateOnly: boolean }
+> = {
+  create: {
+    label: 'Add as new',
+    effect: 'Creates a new question in the bank and puts it in this test.',
+    duplicateOnly: false,
+  },
+  reuse: {
+    label: 'Keep the bank one',
+    effect: 'Nothing is created. This test uses the question already in the bank.',
+    duplicateOnly: true,
+  },
+  merge: {
+    label: 'Fill in the gaps',
+    effect:
+      'Keeps the bank question and adds these tags. Its explanation is filled in only if it is missing.',
+    duplicateOnly: true,
+  },
+  replace: {
+    label: 'Replace the bank one',
+    effect:
+      'Rewrites the bank question with this wording, options, answer and explanation. Every test already using it gets the update.',
+    duplicateOnly: true,
+  },
+  keep_both: {
+    label: 'Keep both',
+    effect: 'Adds this alongside the existing one, and you pick which of the two this test uses.',
+    duplicateOnly: true,
+  },
+  skip: {
+    label: 'Do not include',
+    effect: 'Nothing is created and this question is left out of the test.',
+    duplicateOnly: false,
+  },
+};
+
+const ACTION_ORDER: RowAction[] = ['create', 'reuse', 'merge', 'replace', 'keep_both', 'skip'];
 
 export interface DuplicateCandidate {
   id: string;
   question_text: string | null;
+  options: Array<{ id: string; text: string }> | null;
+  correct_answer: string | null;
+  explanation_brief: string | null;
+  difficulty: string | null;
+  exam_relevance: string | null;
   similarity: number;
   used_in_tests: number;
   verdict: 'likely_duplicate' | 'near_identical' | 'similar';
@@ -42,9 +99,17 @@ export interface DuplicateCandidate {
 export interface ReviewRow {
   question: ImportQuestion;
   action: RowAction;
+  /**
+   * What the preview suggested. Kept so that un-skipping a row restores the
+   * suggestion instead of silently dropping back to 'create', which is how a
+   * skipped duplicate used to come back as a second copy in the bank.
+   */
+  suggestedAction: RowAction;
   candidates: DuplicateCandidate[];
-  /** Which existing bank question reuse/merge points at. */
+  /** Which existing bank question the duplicate actions point at. */
   existingId: string | null;
+  /** Only read for 'keep_both': which of the two goes into this test. */
+  useInTest: 'new' | 'existing';
 }
 
 const DIFFICULTY_COLOR: Record<string, 'success' | 'warning' | 'error'> = {
@@ -58,7 +123,8 @@ export default function ImportReviewCard({
   index,
   tagLabels,
   onActionChange,
-  onRemove,
+  onUseInTestChange,
+  onCompare,
   onEditTags,
 }: {
   row: ReviewRow;
@@ -66,13 +132,24 @@ export default function ImportReviewCard({
   /** tag id or pending slug -> display label. */
   tagLabels: Map<string, string>;
   onActionChange: (action: RowAction) => void;
-  onRemove: () => void;
+  onUseInTestChange: (which: 'new' | 'existing') => void;
+  onCompare: () => void;
   onEditTags: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const { question, candidates, action } = row;
-  const top = candidates[0];
-  const isDuplicate = Boolean(top && top.verdict !== 'similar');
+
+  // The teacher may have switched candidates in the compare dialog, so the
+  // question being acted on is the one existingId names, not simply the top hit.
+  const existing = candidates.find((c) => c.id === row.existingId) || candidates[0];
+  const isDuplicate = Boolean(existing && existing.verdict !== 'similar');
+  // Below the duplicate threshold the trigram still found something. It gets a
+  // quiet way in rather than a warning, because most of these are not duplicates
+  // and the ones that are would otherwise be unreachable.
+  const hasNearMiss = Boolean(existing && existing.verdict === 'similar');
+
+  const available = ACTION_ORDER.filter((a) => !ROW_ACTIONS[a].duplicateOnly || isDuplicate);
 
   return (
     <Paper
@@ -130,7 +207,7 @@ export default function ImportReviewCard({
             </IconButton>
           </Box>
 
-          {isDuplicate && top && (
+          {isDuplicate && existing && (
             <Box
               sx={{
                 p: 1,
@@ -141,52 +218,102 @@ export default function ImportReviewCard({
               }}
             >
               <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, mb: 0.5 }}>
-                {Math.round(top.similarity * 100)}% match already in the bank
-                {top.used_in_tests > 0 ? `, used in ${top.used_in_tests} test${top.used_in_tests !== 1 ? 's' : ''}` : ''}
+                {Math.round(existing.similarity * 100)}% match already in the bank
+                {existing.used_in_tests > 0
+                  ? `, used in ${existing.used_in_tests} test${existing.used_in_tests !== 1 ? 's' : ''}`
+                  : ''}
               </Typography>
               <Typography
                 variant="caption"
                 sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
               >
-                {top.question_text}
+                {existing.question_text}
               </Typography>
+              <Button
+                size="small"
+                onClick={onCompare}
+                startIcon={<CompareArrowsOutlinedIcon sx={{ fontSize: 16 }} />}
+                sx={{ textTransform: 'none', mt: 0.5, minHeight: 36, color: 'inherit', fontWeight: 700 }}
+              >
+                Compare the two{candidates.length > 1 ? ` (${candidates.length} matches)` : ''}
+              </Button>
             </Box>
           )}
 
-          <ToggleButtonGroup
-            size="small"
-            exclusive
-            value={action}
-            onChange={(_, v) => v && onActionChange(v as RowAction)}
-            aria-label={`What to do with question ${index + 1}`}
-            sx={{ flexWrap: 'wrap' }}
-          >
-            <ToggleButton value="create" sx={{ textTransform: 'none', px: 1.25, minHeight: 36 }}>
-              Add as new
-            </ToggleButton>
-            {isDuplicate && (
-              <ToggleButton value="reuse" sx={{ textTransform: 'none', px: 1.25, minHeight: 36 }}>
-                <ContentCopyOutlinedIcon sx={{ fontSize: 15, mr: 0.5 }} />
-                Reuse existing
-              </ToggleButton>
-            )}
-            {isDuplicate && (
-              <ToggleButton value="merge" sx={{ textTransform: 'none', px: 1.25, minHeight: 36 }}>
-                <CheckCircleOutlinedIcon sx={{ fontSize: 15, mr: 0.5 }} />
-                Merge
-              </ToggleButton>
-            )}
-          </ToggleButtonGroup>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={(e) => setMenuAnchor(e.currentTarget)}
+              endIcon={<ArrowDropDownIcon />}
+              aria-label={`What to do with question ${index + 1}`}
+              sx={{ textTransform: 'none', minHeight: 40, px: 1.25 }}
+            >
+              {ROW_ACTIONS[action].label}
+            </Button>
 
-          {action === 'merge' && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-              Keeps the existing question and adds these tags. An explanation is only filled in if it is missing.
-            </Typography>
-          )}
-          {action === 'reuse' && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-              The test uses the question already in the bank. Nothing new is created.
-            </Typography>
+            {hasNearMiss && (
+              <Button
+                size="small"
+                onClick={onCompare}
+                startIcon={<CompareArrowsOutlinedIcon sx={{ fontSize: 16 }} />}
+                sx={{ textTransform: 'none', minHeight: 40, color: 'text.secondary' }}
+              >
+                {candidates.length} similar in the bank
+              </Button>
+            )}
+          </Box>
+
+          <Menu
+            anchorEl={menuAnchor}
+            open={Boolean(menuAnchor)}
+            onClose={() => setMenuAnchor(null)}
+            slotProps={{ paper: { sx: { maxWidth: 340 } } }}
+          >
+            {available.map((a) => (
+              <MenuItem
+                key={a}
+                selected={a === action}
+                onClick={() => {
+                  onActionChange(a);
+                  setMenuAnchor(null);
+                }}
+                sx={{ whiteSpace: 'normal', alignItems: 'flex-start', minHeight: 48, py: 1 }}
+              >
+                <ListItemText
+                  primary={ROW_ACTIONS[a].label}
+                  secondary={ROW_ACTIONS[a].effect}
+                  primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+                  secondaryTypographyProps={{ variant: 'caption' }}
+                />
+              </MenuItem>
+            ))}
+          </Menu>
+
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            {ROW_ACTIONS[action].effect}
+          </Typography>
+
+          {action === 'keep_both' && (
+            <Box sx={{ mt: 0.75 }}>
+              <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, mb: 0.25 }}>
+                Which one goes in this test?
+              </Typography>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={row.useInTest}
+                onChange={(_, v) => v && onUseInTestChange(v as 'new' | 'existing')}
+                aria-label={`Which question to use for row ${index + 1}`}
+              >
+                <ToggleButton value="new" sx={{ textTransform: 'none', px: 1.25, minHeight: 36 }}>
+                  The new one
+                </ToggleButton>
+                <ToggleButton value="existing" sx={{ textTransform: 'none', px: 1.25, minHeight: 36 }}>
+                  The bank one
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
           )}
 
           <Button
@@ -238,15 +365,6 @@ export default function ImportReviewCard({
             </Box>
           </Collapse>
         </Box>
-
-        <IconButton
-          size="small"
-          aria-label={action === 'skip' ? `Put question ${index + 1} back` : `Drop question ${index + 1}`}
-          onClick={onRemove}
-          sx={{ minWidth: 44, minHeight: 44 }}
-        >
-          <DeleteOutlineOutlinedIcon sx={{ fontSize: 18 }} />
-        </IconButton>
       </Box>
     </Paper>
   );

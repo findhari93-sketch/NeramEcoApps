@@ -38,7 +38,10 @@ export interface NexusClassRecap {
   target_segment_seconds: number;
   question_pool_per_segment: number;
   questions_per_segment: number;
+  /** The derived count, kept in sync with pass_percentage for older readers. */
   questions_to_pass: number;
+  /** NULL inherits nexus_settings.recap_defaults.pass_percentage. */
+  pass_percentage: number | null;
   /** 'proxied' streams through Nexus; 'embedded' is the YouTube fallback. */
   protection_level: 'proxied' | 'embedded';
   generated_at: string | null;
@@ -129,11 +132,21 @@ function sortSections(sections: NexusClassRecapSection[]): NexusClassRecapSectio
  * Create (or return the existing) draft recap for a recorded scheduled class.
  * Snapshots the class recording + transcript URLs so later edits to the class
  * row don't strand the recap.
+ *
+ * `opts.readiness` exists for the automatic sweep, which inserts the row before
+ * it has anything to put in it. It passes 'pending' so that a crash between the
+ * insert and the generation leaves a row that is visibly unfinished. The column
+ * defaults to 'ready', so without this an empty recap and a good one are
+ * indistinguishable, and three empty ones sat in production reading as healthy
+ * drafts. A teacher pressing "Create recap" still gets the default: they are
+ * about to fill it in themselves, and 'pending' would invite the sweep to
+ * generate over the top of their work.
  */
 export async function createRecapForClass(
   scheduledClassId: string,
   createdBy: string | null,
   client?: TypedSupabaseClient,
+  opts: { readiness?: RecapReadiness } = {},
 ): Promise<NexusClassRecap> {
   const supabase = client || getSupabaseAdminClient();
 
@@ -169,6 +182,7 @@ export async function createRecapForClass(
       video_source: videoSource,
       video_duration_seconds: durationSeconds,
       status: 'draft',
+      ...(opts.readiness ? { readiness: opts.readiness } : {}),
       created_by: createdBy,
     })
     .select()
@@ -340,7 +354,12 @@ export async function replaceRecapSections(
         start_timestamp_seconds: Math.max(0, Math.round(s.start_timestamp_seconds)),
         end_timestamp_seconds: Math.round(s.end_timestamp_seconds),
         sort_order: i,
+        // Both NULLable, and NULL is not "unset" for either: a NULL
+        // questions_to_serve serves the entire bank, and a NULL
+        // min_questions_to_pass then requires every one of them correct. The
+        // generator now always supplies both.
         min_questions_to_pass: s.min_questions_to_pass ?? null,
+        questions_to_serve: s.questions_to_serve ?? null,
       })
       .select('id')
       .single();
@@ -872,7 +891,13 @@ export async function setRecapReadiness(
   if (error) throw error;
 }
 
-/** Recaps a tutor needs to look at: generated but not servable. */
+/**
+ * Recaps a tutor needs to look at: generated but not servable.
+ *
+ * Held and failed only. 'pending' means the sweep has the row and has not
+ * finished with it, which resolves by itself tonight and is not a decision
+ * anyone needs to make; listing it would train tutors to ignore this queue.
+ */
 export async function listRecapsNeedingReview(
   classroomIds: string[],
   client?: TypedSupabaseClient,
@@ -883,7 +908,7 @@ export async function listRecapsNeedingReview(
     .from(RECAPS)
     .select('*')
     .in('classroom_id', classroomIds)
-    .neq('readiness', 'ready')
+    .in('readiness', ['held', 'failed'])
     .order('updated_at', { ascending: false })
     .limit(100);
   if (error) throw error;

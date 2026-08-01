@@ -52,7 +52,9 @@ const GROUP_META: Record<NexusTestOverviewGroupKey, { icon: React.ReactNode; col
   classroom: { icon: <ClassOutlinedIcon />, color: '#6366F1' },
   catchup: { icon: <HistoryOutlinedIcon />, color: '#0891B2' },
   weekly: { icon: <EventRepeatOutlinedIcon />, color: '#DB2777' },
+  chapter: { icon: <MenuBookOutlinedIcon />, color: '#7C3AED' },
   mock: { icon: <TimerOutlinedIcon />, color: '#DC2626' },
+  full: { icon: <SchoolOutlinedIcon />, color: '#B91C1C' },
   practice_pool: { icon: <FitnessCenterOutlinedIcon />, color: '#059669' },
   practice: { icon: <ScienceOutlinedIcon />, color: '#64748B' },
 };

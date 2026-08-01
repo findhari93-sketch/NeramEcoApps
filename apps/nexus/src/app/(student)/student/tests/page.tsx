@@ -36,7 +36,11 @@ import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
+import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
+import { NEXUS_TEST_KIND_LABELS, type NexusTestKind } from '@neram/database';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+
+type TestStatus = 'open' | 'upcoming' | 'closed' | 'done';
 
 interface StudentTest {
   id: string;
@@ -45,8 +49,10 @@ interface StudentTest {
   folder_label: string | null;
   question_count: number;
   test_type: string;
+  test_kind?: string | null;
   duration_minutes: number | null;
   placement_id: string | null;
+  placement_context?: string | null;
   passing_pct: number | null;
   available_from: string | null;
   available_until: string | null;
@@ -54,10 +60,13 @@ interface StudentTest {
   attempts: number;
   best_percentage: number | null;
   last_submitted_at: string | null;
+  status?: TestStatus;
 }
 
 interface Overview {
   due: StudentTest[];
+  all?: StudentTest[];
+  has_classroom?: boolean;
   practice_groups: Array<{ key: string; label: string; tests: StudentTest[] }>;
   mine: StudentTest[];
   recent: Array<{
@@ -70,6 +79,14 @@ interface Overview {
     submitted_at: string | null;
   }>;
 }
+
+const STATUS_FILTERS: Array<{ key: TestStatus | 'all'; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'open', label: 'To do' },
+  { key: 'upcoming', label: 'Coming up' },
+  { key: 'done', label: 'Done' },
+  { key: 'closed', label: 'Closed' },
+];
 
 function formatWhen(iso: string | null): string {
   if (!iso) return '';
@@ -143,6 +160,17 @@ function TestCard({
       </Box>
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', mb: 1.5 }}>
+        {/* What kind of paper this is. Weekly, model and full read very
+            differently to a student and used to be indistinguishable. */}
+        {test.test_kind && test.test_kind !== 'classroom_assigned' && (
+          <Chip
+            size="small"
+            color="primary"
+            variant="outlined"
+            label={NEXUS_TEST_KIND_LABELS[test.test_kind as NexusTestKind] || test.test_kind}
+            sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700 }}
+          />
+        )}
         <Chip size="small" variant="outlined" label={`${test.question_count} questions`} sx={{ height: 22, fontSize: '0.7rem' }} />
         {test.duration_minutes && (
           <Chip size="small" variant="outlined" label={`${test.duration_minutes} min`} sx={{ height: 22, fontSize: '0.7rem' }} />
@@ -241,6 +269,7 @@ export default function StudentTestsPage() {
   const [mistakeCount, setMistakeCount] = useState(0);
   const [buildingMistakes, setBuildingMistakes] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<TestStatus | 'all'>('all');
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -271,7 +300,7 @@ export default function StudentTestsPage() {
       setData(json.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load your tests');
-      setData({ due: [], practice_groups: [], mine: [], recent: [] });
+      setData({ due: [], all: [], practice_groups: [], mine: [], recent: [] });
     }
     try {
       const m = await authFetch(`/api/student/tests/mistakes${classroomParam}`);
@@ -314,6 +343,12 @@ export default function StudentTestsPage() {
     [data],
   );
 
+  const allTests = useMemo(() => data?.all || [], [data]);
+  const visibleAllTests = useMemo(
+    () => (statusFilter === 'all' ? allTests : allTests.filter((t) => t.status === statusFilter)),
+    [allTests, statusFilter],
+  );
+
   if (authLoading || data === null) {
     return (
       <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 800, mx: 'auto' }}>
@@ -328,7 +363,11 @@ export default function StudentTestsPage() {
   }
 
   const nothingAtAll =
-    data.due.length === 0 && totalPractice === 0 && data.mine.length === 0 && data.recent.length === 0;
+    data.due.length === 0 &&
+    allTests.length === 0 &&
+    totalPractice === 0 &&
+    data.mine.length === 0 &&
+    data.recent.length === 0;
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 800, mx: 'auto', pb: 8 }}>
@@ -343,7 +382,11 @@ export default function StudentTestsPage() {
         <Paper variant="outlined" sx={{ py: 6, px: 3, textAlign: 'center', borderRadius: 2 }}>
           <AssignmentOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-            No tests yet. When your teacher sets one it appears here.
+            {/* Two very different situations that used to read identically. Only
+                one of them is something the student can act on. */}
+            {!activeClassroom?.id
+              ? 'Pick your class at the top of the screen to see the tests set for it.'
+              : 'No tests yet. Weekly tests, model tests and chapter tests appear here when your teacher sets one.'}
           </Typography>
           <Button
             variant="outlined"
@@ -356,17 +399,30 @@ export default function StudentTestsPage() {
         </Paper>
       )}
 
-      {data.due.length > 0 && (
+      {/* Rendered even when empty. Unmounting it is what made teacher-set tests
+          look as though they did not exist: a student with nothing assigned saw
+          no trace of the idea anywhere on the page. */}
+      {!nothingAtAll && (
         <Section
           icon={<AssignmentOutlinedIcon />}
           title="Due now"
           subtitle="Set by your teacher, soonest first"
         >
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            {data.due.map((t) => (
-              <TestCard key={t.id} test={t} onStart={start} emphasis />
-            ))}
-          </Box>
+          {data.due.length === 0 ? (
+            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                {!activeClassroom?.id
+                  ? 'Pick your class at the top of the screen to see the tests set for it.'
+                  : 'Nothing due right now. Weekly tests, model tests and chapter tests appear here when your teacher sets one.'}
+              </Typography>
+            </Paper>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {data.due.map((t) => (
+                <TestCard key={t.id} test={t} onStart={start} emphasis />
+              ))}
+            </Box>
+          )}
         </Section>
       )}
 
@@ -414,6 +470,48 @@ export default function StudentTestsPage() {
               </Box>
             </Box>
           ))}
+        </Section>
+      )}
+
+      {/* The consolidated record. Everything the class has had, closed included,
+          so "did I miss one" has an answer. */}
+      {allTests.length > 0 && (
+        <Section
+          icon={<ClassOutlinedIcon />}
+          title="All class tests"
+          subtitle={`Everything your teacher has set, ${allTests.length} in total`}
+        >
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+            {STATUS_FILTERS.map((f) => {
+              const n = f.key === 'all' ? allTests.length : allTests.filter((t) => t.status === f.key).length;
+              if (n === 0 && f.key !== 'all') return null;
+              return (
+                <Chip
+                  key={f.key}
+                  label={`${f.label} (${n})`}
+                  size="small"
+                  color={statusFilter === f.key ? 'primary' : 'default'}
+                  variant={statusFilter === f.key ? 'filled' : 'outlined'}
+                  onClick={() => setStatusFilter(f.key)}
+                  sx={{ height: 32, cursor: 'pointer' }}
+                />
+              );
+            })}
+          </Box>
+
+          {visibleAllTests.length === 0 ? (
+            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                Nothing here with that filter.
+              </Typography>
+            </Paper>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {visibleAllTests.map((t) => (
+                <TestCard key={`${t.id}-${t.placement_id}`} test={t} onStart={start} />
+              ))}
+            </Box>
+          )}
         </Section>
       )}
 

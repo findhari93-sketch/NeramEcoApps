@@ -3,11 +3,13 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { recordCatchupTestAttempt } from './catchup-journey';
 import { gradeQBAnswerStrict, normaliseQuestionFormat } from './question-bank';
+import { NEXUS_TEACHER_TEST_KINDS } from '../../types';
 import type {
   NexusPlacementContext,
   NexusTestKind,
   NexusTestPlacement,
   NexusComposedQuestion,
+  NexusComposedQuestionWithAnswer,
   NexusTestGradeResult,
   NexusOverviewTest,
   NexusTestOverviewGroup,
@@ -152,6 +154,10 @@ function groupKeyForKind(kind: NexusTestKind, hasClassroom: boolean): NexusTestO
       return 'weekly';
     case 'mock':
       return 'mock';
+    case 'full':
+      return 'full';
+    case 'chapter':
+      return 'chapter';
     case 'student_custom':
       // A student's own paper is not staff work. It lands in the drafts bucket
       // rather than pretending a teacher set it.
@@ -580,7 +586,9 @@ export async function listTestsGroupedByContext(
     { key: 'classroom', label: 'Classroom tests' },
     { key: 'catchup', label: 'Catch-up class tests' },
     { key: 'weekly', label: 'Weekly tests' },
-    { key: 'mock', label: 'Mock tests' },
+    { key: 'chapter', label: 'Chapter tests' },
+    { key: 'mock', label: 'Model tests' },
+    { key: 'full', label: 'Full tests' },
     { key: 'practice_pool', label: 'Practice pool' },
     { key: 'practice', label: 'Practice / Drafts' },
   ];
@@ -685,7 +693,7 @@ export async function getComposedTestQuestions(
   testId: string,
   withAnswers: boolean,
   client?: TypedSupabaseClient,
-): Promise<Array<NexusComposedQuestion & { correct_answer?: string | null }>> {
+): Promise<NexusComposedQuestionWithAnswer[]> {
   const supabase = client || getSupabaseAdminClient();
   const { data: tqs, error } = await supabase
     .from(TEST_QUESTIONS)
@@ -706,7 +714,13 @@ export async function getComposedTestQuestions(
       // answer_tolerance is load-bearing for NUMERICAL. Without it the grader
       // fell back to an exact compare, so a question keyed 3.1416 with a 0.01
       // tolerance marked 3.14 wrong and the tolerance was silently ignored.
-      .select('id, question_text, question_image_url, question_format, options, correct_answer, answer_tolerance')
+      //
+      // The explanations are the reason a student sits a practice test at all.
+      // They were missing from this select while the review UI rendered them,
+      // so every attempt in the product showed a blank explanation.
+      .select(
+        'id, question_text, question_image_url, question_format, options, correct_answer, answer_tolerance, explanation_brief, explanation_detailed',
+      )
       .in('id', qbIds);
     for (const q of data || []) qbMap.set(q.id, q);
   }
@@ -714,7 +728,7 @@ export async function getComposedTestQuestions(
   if (vIds.length > 0) {
     const { data } = await supabase
       .from('nexus_verified_questions')
-      .select('id, question_text, question_image_url, question_type, options, correct_answer')
+      .select('id, question_text, question_image_url, question_type, options, correct_answer, explanation')
       .in('id', vIds);
     for (const q of data || []) vMap.set(q.id, q);
   }
@@ -740,6 +754,11 @@ export async function getComposedTestQuestions(
       // Answer key material. Only ever attached on the grading path, never in a
       // student payload: the tolerance narrows the search space for a guesser.
       out.answer_tolerance = src?.answer_tolerance ?? null;
+      // Legacy verified questions carry a single `explanation`; bank questions
+      // carry a brief/detailed pair. Normalised here so the review payload has
+      // one vocabulary whichever table the question came from.
+      out.explanation_brief = src?.explanation_brief ?? src?.explanation ?? null;
+      out.explanation_detailed = src?.explanation_detailed ?? null;
     }
     return out;
   });
@@ -762,6 +781,12 @@ export interface UpdateTestMetaInput {
   description?: string | null;
   isPublished?: boolean;
   passingMarks?: number | null;
+  /**
+   * Only the teacher-chosen labels are settable here. The gated kinds and the
+   * content mirrors are owned by the routes that create them, and relabelling
+   * one through this path would take it out of the flow that enforces its rules.
+   */
+  testKind?: NexusTestKind;
 }
 
 export async function updateTestMeta(
@@ -775,6 +800,9 @@ export async function updateTestMeta(
   if (updates.description !== undefined) patch.description = updates.description;
   if (typeof updates.isPublished === 'boolean') patch.is_published = updates.isPublished;
   if (updates.passingMarks !== undefined) patch.passing_marks = updates.passingMarks;
+  if (updates.testKind && NEXUS_TEACHER_TEST_KINDS.some((k) => k.value === updates.testKind)) {
+    patch.test_kind = updates.testKind;
+  }
   const { data, error } = await supabase.from(TESTS).update(patch).eq('id', testId).select('*').maybeSingle();
   if (error) throw error;
   return data || null;

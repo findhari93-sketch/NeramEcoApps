@@ -10,14 +10,20 @@
  *    and this file had never adopted it. Pinned to a single model with no
  *    fallback, one bad afternoon for gemini-2.0-flash meant no recaps at all.
  *
- * 2. Generation is TWO calls, not one. Asking for "18 sections of 15 questions"
- *    in a single response either truncates mid-JSON or degrades into invented
- *    filler around question 60. Splitting boundaries from questions keeps each
- *    response small enough to come back whole, and has the useful side effect
- *    that a questions failure does not cost us the section structure.
+ * 2. Questions are asked for in small batches, not all at once. A single
+ *    response holding a whole class of segments at fifteen questions each
+ *    truncates mid-JSON or degrades into invented filler, and a truncated
+ *    response costs the same quota as a complete one.
+ *
+ * 3. Boundaries are no longer generated at all. recap-segments.ts computes them,
+ *    which removed a call per recap, made the checkpoint count predictable, and
+ *    made coverage exact instead of something to be scored. The model's only job
+ *    now is to read one segment's transcript and write about it, which is the
+ *    part it is actually good at.
  */
 
 import { generateGeminiText } from './gemini-client';
+import { planSegments, describeWindow } from './recap-segments';
 import type { TranscriptEntry } from '@neram/database';
 
 export interface GeneratedQuestion {
@@ -52,7 +58,13 @@ export interface GenerateOptions {
 }
 
 const DEFAULTS = {
-  targetSegmentSeconds: 300,
+  /**
+   * Fifteen minutes. A one hour class becomes four checkpoints, which is what
+   * the teaching staff asked for and what a student can hold in their head.
+   * Five minutes gave a sixty minute class twelve checkpoints and a ninety
+   * minute class eighteen, which overran the call budget outright.
+   */
+  targetSegmentSeconds: 900,
   poolPerSegment: 15,
 };
 
@@ -61,16 +73,9 @@ const QUESTION_BATCH_SIZE = 4;
 /** Hard ceiling on Gemini calls for one recap. Shared key, metered quota. */
 export const MAX_CALLS_PER_RECAP = 5;
 
-const BOUNDARY_INSTRUCTION = `You split lecture transcripts into logical checkpoint segments for an architecture entrance exam course (NATA and JEE Paper 2).
-
-Rules:
-1. Split at genuine topic changes, not at fixed intervals. A boundary mid-explanation is worse than a segment slightly off the target length.
-2. Timestamps MUST come from the transcript. Use the start of the first relevant line and the end of the last.
-3. Segments must not overlap, must not leave gaps longer than about three minutes, and together must cover essentially the whole session.
-4. Titles are 3 to 8 words. Descriptions are one or two sentences saying what the segment covers.
-5. Return ONLY segments, no questions.`;
-
 const QUESTION_INSTRUCTION = `You write multiple-choice checkpoint questions for an architecture entrance exam course (NATA and JEE Paper 2).
+
+You are given segments of one class, already split by time. For each segment you name it and write questions about it.
 
 Rules:
 1. Every question must be answerable from the transcript text of ITS OWN segment. Never test something the tutor did not say.
@@ -78,17 +83,8 @@ Rules:
 3. Exactly four options. Exactly one is correct. The three wrong options must be plausible to someone who half-followed the class, not obviously silly.
 4. Vary which letter is correct. Do not make most answers the same letter.
 5. Every question gets a one-sentence explanation of why the answer is right.
-6. Questions must be distinct from one another. No rephrasings of the same fact.`;
-
-function formatTranscript(entries: TranscriptEntry[]): string {
-  return entries
-    .map((e) => {
-      const mm = Math.floor(e.start / 60);
-      const ss = Math.floor(e.start % 60);
-      return `[${mm}:${ss.toString().padStart(2, '0')}] ${e.text}`;
-    })
-    .join('\n');
-}
+6. Questions must be distinct from one another. No rephrasings of the same fact.
+7. The title is 3 to 8 words naming what this stretch of the class covered. The description is one or two sentences. Both describe the segment you were given; do not comment on the split itself.`;
 
 /** Transcript lines inside one segment's window, for the questions pass. */
 function sliceTranscript(entries: TranscriptEntry[], start: number, end: number): string {
@@ -128,84 +124,42 @@ function sanitiseQuestion(q: any): GeneratedQuestion | null {
   };
 }
 
-/**
- * Pass 1: where the segments are.
- * Small output even for a two hour class, so it is the call least likely to truncate.
- */
-async function generateBoundaries(
-  transcript: TranscriptEntry[],
-  itemTitle: string,
-  opts: Required<Pick<GenerateOptions, 'targetSegmentSeconds'>> & { durationSeconds: number },
-): Promise<Array<Omit<GeneratedSection, 'questions'>>> {
-  const target = opts.targetSegmentSeconds;
-  const duration =
-    opts.durationSeconds || (transcript.length ? transcript[transcript.length - 1].end : 0);
-  const wanted = Math.max(2, Math.round(duration / target) || 3);
-
-  const prompt = `Class: "${itemTitle}"
-Approximate length: ${Math.round(duration)} seconds.
-Aim for about ${wanted} segments of roughly ${target} seconds each. One more or one fewer is fine if it lands on a better topic boundary.
-
-Transcript:
-${formatTranscript(transcript)}
-
-Return JSON:
-{"sections":[{"title":"...","description":"...","start_timestamp_seconds":0,"end_timestamp_seconds":300}]}`;
-
-  const raw = await generateGeminiText({
-    parts: [{ text: prompt }],
-    systemInstruction: BOUNDARY_INSTRUCTION,
-    temperature: 0.4,
-    maxOutputTokens: 4096,
-    responseMimeType: 'application/json',
-  });
-
-  const parsed = parseJson<{ sections: any[] }>(raw, 'segments');
-  const sections = (parsed.sections || [])
-    .filter(
-      (s) =>
-        s &&
-        typeof s.title === 'string' &&
-        Number.isFinite(Number(s.start_timestamp_seconds)) &&
-        Number.isFinite(Number(s.end_timestamp_seconds)) &&
-        Number(s.end_timestamp_seconds) > Number(s.start_timestamp_seconds),
-    )
-    .map((s) => ({
-      title: String(s.title).trim(),
-      description: typeof s.description === 'string' ? s.description.trim() : '',
-      start_timestamp_seconds: Math.max(0, Math.round(Number(s.start_timestamp_seconds))),
-      end_timestamp_seconds: Math.round(Number(s.end_timestamp_seconds)),
-    }))
-    .sort((a, b) => a.start_timestamp_seconds - b.start_timestamp_seconds);
-
-  if (!sections.length) throw new Error('AI returned no usable segments');
-  return sections;
+/** What the model returns for one segment: what to call it, and its questions. */
+interface SegmentDraft {
+  title: string;
+  description: string;
+  questions: GeneratedQuestion[];
 }
 
 /**
- * Pass 2: questions for a batch of segments.
+ * Name and question a batch of segments whose boundaries are already fixed.
+ *
  * Batched rather than one call for everything, because a single response holding
- * 18 segments x 15 questions reliably truncates.
+ * a whole class at fifteen questions a segment reliably truncates.
  */
-async function generateQuestionsFor(
-  batch: Array<Omit<GeneratedSection, 'questions'>>,
+async function draftSegments(
+  batch: Array<{ index: number; start: number; end: number }>,
   transcript: TranscriptEntry[],
+  itemTitle: string,
   poolPerSegment: number,
-): Promise<Record<number, GeneratedQuestion[]>> {
-  const segments = batch.map((s, i) => ({
-    index: i,
-    title: s.title,
-    transcript: sliceTranscript(transcript, s.start_timestamp_seconds, s.end_timestamp_seconds),
-  }));
+): Promise<Record<number, SegmentDraft>> {
+  const prompt = `Class: "${itemTitle}"
 
-  const prompt = `Write exactly ${poolPerSegment} questions for EACH segment below, using only that segment's transcript.
+For EACH segment below, write a title, a description, and exactly ${poolPerSegment} questions, using only that segment's transcript.
 
-${segments
-  .map((s) => `--- SEGMENT ${s.index} : ${s.title} ---\n${s.transcript}`)
+${batch
+  .map(
+    (s) =>
+      `--- SEGMENT ${s.index} (${describeWindow(s.start, s.end)}) ---\n${sliceTranscript(
+        transcript,
+        s.start,
+        s.end,
+      )}`,
+  )
   .join('\n\n')}
 
 Return JSON:
-{"segments":[{"index":0,"questions":[{"question_text":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct_option":"a","explanation":"..."}]}]}`;
+{"segments":[{"index":${batch[0]?.index ?? 0},"title":"...","description":"...","questions":[{"question_text":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct_option":"a","explanation":"..."}]}]}`;
 
   const raw = await generateGeminiText({
     parts: [{ text: prompt }],
@@ -218,22 +172,28 @@ Return JSON:
   });
 
   const parsed = parseJson<{ segments: any[] }>(raw, 'questions');
-  const out: Record<number, GeneratedQuestion[]> = {};
+  const out: Record<number, SegmentDraft> = {};
   for (const seg of parsed.segments || []) {
     const idx = Number(seg?.index);
     if (!Number.isFinite(idx)) continue;
+
     const questions = (seg.questions || [])
       .map(sanitiseQuestion)
       .filter(Boolean) as GeneratedQuestion[];
+
     // Duplicate question text is a common degradation near the end of a long
     // response, and a duplicate in a served draw looks like a bug to a student.
     const seen = new Set<string>();
-    out[idx] = questions.filter((q) => {
-      const key = q.question_text.toLowerCase().replace(/\s+/g, ' ').trim();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    out[idx] = {
+      title: typeof seg.title === 'string' ? seg.title.trim() : '',
+      description: typeof seg.description === 'string' ? seg.description.trim() : '',
+      questions: questions.filter((q) => {
+        const key = q.question_text.toLowerCase().replace(/\s+/g, ' ').trim();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }),
+    };
   }
   return out;
 }
@@ -255,23 +215,37 @@ export async function generateSectionsAndQuestions(
   const durationSeconds =
     options.durationSeconds || (transcript.length ? transcript[transcript.length - 1].end : 0);
 
-  const boundaries = await generateBoundaries(transcript, itemTitle, {
-    targetSegmentSeconds,
-    durationSeconds,
-  });
+  const planned = planSegments(transcript, durationSeconds, targetSegmentSeconds);
+  if (!planned.length) throw new Error('Class has no usable duration to split');
 
-  const sections: GeneratedSection[] = boundaries.map((b) => ({ ...b, questions: [] }));
+  // Named up front so a segment whose batch fails still has a title a teacher
+  // can recognise in the editor, rather than an empty string.
+  const sections: GeneratedSection[] = planned.map((p, i) => ({
+    title: `Part ${i + 1}: ${describeWindow(p.start, p.end)}`,
+    description: '',
+    start_timestamp_seconds: p.start,
+    end_timestamp_seconds: p.end,
+    questions: [],
+  }));
 
-  let callsUsed = 1;
-  for (let i = 0; i < boundaries.length; i += QUESTION_BATCH_SIZE) {
+  let callsUsed = 0;
+  for (let i = 0; i < planned.length; i += QUESTION_BATCH_SIZE) {
     if (callsUsed >= MAX_CALLS_PER_RECAP) break;
-    const batch = boundaries.slice(i, i + QUESTION_BATCH_SIZE);
+    // The index travels with the segment so the model's reply maps back to the
+    // right one even when a batch comes back partial or out of order.
+    const batch = planned
+      .slice(i, i + QUESTION_BATCH_SIZE)
+      .map((p, j) => ({ index: i + j, start: p.start, end: p.end }));
     callsUsed++;
     try {
-      const byIndex = await generateQuestionsFor(batch, transcript, poolPerSegment);
-      batch.forEach((_, j) => {
-        sections[i + j].questions = byIndex[j] || [];
-      });
+      const byIndex = await draftSegments(batch, transcript, itemTitle, poolPerSegment);
+      for (const b of batch) {
+        const draft = byIndex[b.index];
+        if (!draft) continue;
+        if (draft.title) sections[b.index].title = draft.title;
+        if (draft.description) sections[b.index].description = draft.description;
+        sections[b.index].questions = draft.questions;
+      }
     } catch (err) {
       // One failed batch must not cost the batches that worked. The quality bar
       // holds the recap if too little came back.

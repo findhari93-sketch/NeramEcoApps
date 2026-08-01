@@ -227,6 +227,14 @@ test.describe('Class prep on a 375px phone', () => {
     await page.locator(`text=${cls.title}`).first().click({ timeout: 10_000 }).catch(() => {});
     await page.waitForTimeout(1200);
 
+    // The readiness roster answers "have they done what I asked", so it heads
+    // the Prep tab.
+    const prepTab = page.getByRole('tab', { name: 'Prep', exact: true });
+    if (await prepTab.count()) {
+      await prepTab.first().click();
+      await page.waitForTimeout(600);
+    }
+
     const headline = page.locator('text=/\\d+ ready/').first();
     if (!(await headline.isVisible().catch(() => false))) {
       test.skip(true, 'Could not open the class panel in this environment');

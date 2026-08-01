@@ -13,6 +13,8 @@ const KINDS: NexusTestKind[] = [
   'content_gate',
   'weekly',
   'mock',
+  'full',
+  'chapter',
 ];
 
 /**

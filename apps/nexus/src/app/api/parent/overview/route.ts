@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listAssignmentsForStudent } from '@neram/database';
+import { listAssignmentsForStudent, getAssignmentEngagement } from '@neram/database';
 import { getParentUser, resolveChildContext } from '@/lib/parent-auth';
 import { errorResponse } from '@/lib/api-errors';
 import { summarise, describeAttendance } from '@/lib/parent-attendance';
 import { buildParentAssignmentViews, summariseAssignments } from '@/lib/parent-assignments';
-import { loadChildAttendance, loadUpcomingClasses, istDaysAgo } from '@/lib/parent-data';
+import { loadChildAttendance, loadUpcomingClasses, istDaysAgo, istToday } from '@/lib/parent-data';
 import { loadEnrollmentContext } from '@/lib/parent-enrollment';
 import { loadChildCatchup } from '@/lib/parent-catchup';
+import { loadParentTests } from '@/lib/parent-tests';
 import { resolveExamCountdown } from '@/lib/exam-countdown-server';
 import { getSupabaseAdminClient } from '@neram/database';
+import {
+  buildClassStandingSignals,
+  loadExcusedClassIds,
+} from '@/lib/class-standing-signals';
+import { computeClassStanding, toLegacyVerdictBand } from '@/lib/class-standing';
+import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
+import { getNexusSetting } from '@neram/database';
+
+/** The flag that decides whether a parent sees the number at all. */
+const PARENT_STANDING_FEATURE = 'parent.class-standing';
 
 /**
  * GET /api/parent/overview?student=&days=
@@ -78,6 +89,48 @@ export async function GET(request: NextRequest) {
     const assignmentViews = buildParentAssignmentViews(assignmentItems as never[]);
     const assignments = summariseAssignments(assignmentViews);
 
+    // Class Standing. Second wave, because every one of these needs the class
+    // ids the attendance window just produced.
+    //
+    // getAssignmentEngagement is called here even though this route already has
+    // assignment views, because the STAFF profile scores from that function. Two
+    // derivations of "how much work has this child handed in" would eventually
+    // disagree, and a parent being told something different from the teacher is
+    // worse than the four extra queries this costs.
+    const classIds = attendanceWindow.classes.map((c: { id: string }) => c.id);
+    const classMeta = new Map<string, { title: string; date: string }>(
+      attendanceWindow.classes.map((c: any) => [c.id, { title: c.title, date: c.scheduled_date }])
+    );
+
+    const [tests, excusedClassIds, engagement, flagRow] = await Promise.all([
+      loadParentTests(child.id, classIds, classMeta),
+      loadExcusedClassIds(child.id, classIds),
+      getAssignmentEngagement(classroomId).catch(() => null),
+      getNexusSetting(FEATURE_FLAGS_KEY).catch(() => null),
+    ]);
+
+    // Gated server side, not in the client. With the flag off the standing is
+    // absent from the payload entirely, so there is nothing for a parent to find
+    // in devtools before we have decided to show it to them.
+    const standingEnabled =
+      resolveFlags((flagRow?.value as FlagMap) || {})[PARENT_STANDING_FEATURE] === true;
+
+    const classStanding = computeClassStanding(
+      buildClassStandingSignals({
+        enrolledAt: enrollment?.enrolled_at ?? null,
+        today: istToday(),
+        windowDays: days,
+        views: attendanceWindow.views,
+        summary: attendance,
+        excusedClassIds,
+        engagement: engagement?.rows.find((r) => r.student.id === child.id) ?? null,
+        tests,
+        catchup,
+      }),
+      // Same number, same band, supportive wording.
+      'parent'
+    );
+
     return NextResponse.json({
       child: {
         id: child.id,
@@ -100,7 +153,22 @@ export async function GET(request: NextRequest) {
       assignments,
       /** Missed classes made up, which is the trend a parent actually acts on. */
       catchup,
-      verdict: buildVerdict(attendance, assignments, child.name, catchup.open),
+      /**
+       * The one number, identical to what staff see on the student profile
+       * because both come from computeClassStanding over the same signals.
+       * null while parent.class-standing is switched off.
+       */
+      classStanding: standingEnabled ? classStanding : null,
+      /**
+       * DEPRECATED, kept for one release so the existing chip on the parent
+       * dashboard keeps working while it is swapped for the standing card.
+       * Delete once nothing reads `verdict`.
+       */
+      verdict: {
+        band: toLegacyVerdictBand(classStanding.band),
+        headline: classStanding.headline,
+        detail: classStanding.detail,
+      },
       /**
        * The exam this child is preparing for, or null. Only the date crosses the
        * wire: the client words it, so a page left open overnight self-corrects
@@ -120,74 +188,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * The one plain-language answer at the top of the screen.
- *
- * Deliberately conservative. An anxious parent reading "Needs attention" will
- * act on it, so the red band is reserved for a pattern (repeated absences, or
- * work genuinely piling up), never a single missed class.
- *
- * 'not_enough_data' is a first-class outcome, not a fallback. With no measured
- * attendance and no assignments there is nothing honest to say, and inventing
- * "On track" would be worse than admitting it.
+/*
+ * buildVerdict lived here. It was a second, independent judgement about the same
+ * child, computed from a different subset of the same data as the staff-facing
+ * one, so a parent and a teacher could look at one student and be told two
+ * different things. It has been subsumed by computeClassStanding
+ * (lib/class-standing.ts), which both surfaces now call with signals built by
+ * the same pure builder. The `verdict` key above is a thin adapter over the new
+ * band, kept for one release.
  */
-function buildVerdict(
-  attendance: ReturnType<typeof summarise>,
-  assignments: ReturnType<typeof summariseAssignments>,
-  childName: string | null,
-  catchupOpen = 0
-): { band: VerdictBand; headline: string; detail: string } {
-  const name = childName?.split(' ')[0] || 'Your child';
-  const reasons: string[] = [];
-
-  const hasAttendanceSignal = attendance.measuredClasses > 0;
-  const hasAssignmentSignal = assignments.total > 0;
-
-  if (!hasAttendanceSignal && !hasAssignmentSignal) {
-    return {
-      band: 'not_enough_data',
-      headline: 'Not enough data yet',
-      detail:
-        "We haven't recorded any classes or assignments for this period yet. This page will fill in as the term goes on.",
-    };
-  }
-
-  const missedRecently = attendance.missed - attendance.missedWithReason;
-  if (missedRecently >= 2) {
-    reasons.push(
-      `missed ${missedRecently} of ${attendance.measuredClasses} recorded classes`
-    );
-  }
-  if (assignments.overdue >= 1) {
-    reasons.push(
-      `${assignments.overdue} assignment${assignments.overdue === 1 ? ' is' : 's are'} overdue`
-    );
-  }
-  if (attendance.droppedMidClass >= 2) {
-    reasons.push(`left ${attendance.droppedMidClass} classes part way through`);
-  }
-  // A backlog of un-caught-up classes compounds: each one makes the next class
-  // harder to follow, so it belongs in the verdict rather than only on its own
-  // tile. Two, not one, so a single class missed last week is not an alarm.
-  if (catchupOpen >= 2) {
-    reasons.push(`has ${catchupOpen} classes still to catch up on`);
-  }
-
-  const serious = missedRecently >= 3 || assignments.overdue >= 3 || catchupOpen >= 4;
-
-  if (reasons.length === 0) {
-    return {
-      band: 'on_track',
-      headline: 'On track',
-      detail: hasAttendanceSignal
-        ? `${name} is attending and keeping up with the work.`
-        : `${name} is keeping up with the work.`,
-    };
-  }
-
-  const detail = `${name} ${reasons.join(', and ')}.`;
-
-  return serious
-    ? { band: 'needs_attention', headline: 'Needs your attention', detail }
-    : { band: 'slipping', headline: 'Slipping', detail };
-}

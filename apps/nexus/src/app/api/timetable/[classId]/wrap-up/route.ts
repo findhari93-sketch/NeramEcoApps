@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { canRunSession, isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
-import { buildClassLinkPatch } from '@/lib/class-links';
-import { syncClassToLibrary } from '@/lib/class-library-bridge';
+import { applyWrapUp } from '@/lib/class-wrapup-write';
 import { refreshClassAnnouncement } from '@/lib/teams-class-announcements';
 import { classShareLinks, shareBaseUrl } from '@/lib/class-share-links';
 
@@ -92,7 +91,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     const access = await resolveAccess(supabase, msUser.oid, params.classId);
     if ('error' in access) return access.error;
 
-    const [tags, availableTags, topics] = await Promise.all([
+    const [tags, availableTags, topics, backup] = await Promise.all([
       loadTags(supabase, params.classId),
       access.canEdit
         ? supabase
@@ -113,6 +112,17 @@ export async function GET(request: NextRequest, { params }: Ctx) {
             .order('sort_order', { ascending: true })
             .then((r: any) => r.data || [])
         : Promise.resolve([]),
+      // The automatic backup's state, so the panel can say where the recording is
+      // rather than showing an empty YouTube box for three days. Staff only: a
+      // student has no use for an upload's byte count.
+      access.canEdit
+        ? supabase
+            .from('nexus_class_video_uploads')
+            .select('status, attempts, detail, bytes_uploaded, file_size, youtube_video_id, privacy_status, uploaded_at')
+            .eq('class_id', params.classId)
+            .maybeSingle()
+            .then((r: any) => r.data || null)
+        : Promise.resolve(null),
     ]);
 
     return NextResponse.json({
@@ -121,6 +131,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       availableTags,
       topics,
       canEdit: access.canEdit,
+      backup,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load the class';
@@ -149,102 +160,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: 'Only staff can wrap up a class' }, { status: 403 });
     }
 
-    const updates: Record<string, unknown> = {};
-
-    if (body.title !== undefined) {
-      const title = String(body.title || '').trim();
-      if (!title) return NextResponse.json({ error: 'Give the class a title.' }, { status: 400 });
-      updates.title = title.slice(0, 200);
+    // Columns, the content lock, the sibling row, tags and the Library mirror all
+    // live in lib/class-wrapup-write, because the nightly autodraft writes exactly
+    // the same thing and a second copy of the lock logic would lose titles.
+    const saved = await applyWrapUp(supabase, access.cls, body, access.userId);
+    if (!saved.ok) {
+      return NextResponse.json({ error: saved.error }, { status: saved.status ?? 400 });
     }
-    if (body.description !== undefined) {
-      const brief = String(body.description || '').trim();
-      updates.description = brief ? brief.slice(0, 2000) : null;
-    }
-    if (body.notes !== undefined) {
-      const notes = String(body.notes || '').trim();
-      updates.notes = notes ? notes.slice(0, 4000) : null;
-    }
-    if (body.topic_id !== undefined) {
-      updates.topic_id = body.topic_id || null;
-    }
-    if (body.summary_bullets !== undefined) {
-      const bullets = Array.isArray(body.summary_bullets)
-        ? body.summary_bullets.map((b: unknown) => String(b || '').trim()).filter(Boolean).slice(0, 20)
-        : [];
-      updates.summary_bullets = bullets.length ? bullets : null;
-    }
-
-    const links = buildClassLinkPatch(body);
-    if (!links.ok) return NextResponse.json({ error: links.error }, { status: 400 });
-    Object.assign(updates, links.patch);
-
-    // Saying what a class turned out to be takes ownership of its content away
-    // from the Teams meeting subject, which was written days earlier and cannot
-    // know. Without this stamp the reconciler puts the old subject back on its
-    // next pass, which is how four July wrap-ups lost their titles in one cron run.
-    //
-    // Recording links deliberately do NOT lock: pasting a YouTube URL a week later
-    // says nothing about the topic.
-    const CONTENT_KEYS = ['title', 'description', 'notes', 'summary_bullets'] as const;
-    const contentEdited = CONTENT_KEYS.some((k) => k in updates);
-    if (contentEdited) {
-      updates.content_edited_at = new Date().toISOString();
-      updates.content_edited_by = access.userId;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      const { error } = await supabase
-        .from('nexus_scheduled_classes')
-        .update(updates)
-        .eq('id', params.classId);
-      if (error) throw error;
-
-      // A class taught to two classrooms at once is two rows sharing one Teams
-      // meeting. Wrapping up either one must carry the account (and the lock) to
-      // its sibling, or the other classroom's students keep reading the meeting
-      // subject and that row keeps being reverted.
-      if (contentEdited && access.cls.meeting_group_id) {
-        const sibling: Record<string, unknown> = {};
-        for (const k of CONTENT_KEYS) if (k in updates) sibling[k] = updates[k];
-        sibling.content_edited_at = updates.content_edited_at;
-        sibling.content_edited_by = updates.content_edited_by;
-
-        const { error: sibErr } = await supabase
-          .from('nexus_scheduled_classes')
-          .update(sibling)
-          .eq('meeting_group_id', access.cls.meeting_group_id)
-          .neq('id', params.classId);
-        // Best-effort: this class is wrapped up either way.
-        if (sibErr) console.error('Sibling wrap-up propagation failed:', sibErr);
-      }
-    }
-
-    // Tags are replaced wholesale when supplied: the picker sends the complete
-    // set, so a diff would only be a way to get out of step with it.
-    if (Array.isArray(body.tag_ids)) {
-      const ids = [...new Set(body.tag_ids.map((t: unknown) => String(t)).filter(Boolean))].slice(0, 12);
-      await supabase.from('nexus_class_tags').delete().eq('scheduled_class_id', params.classId);
-      if (ids.length > 0) {
-        const { error } = await supabase
-          .from('nexus_class_tags')
-          .insert(ids.map((tag_id) => ({ scheduled_class_id: params.classId, tag_id })));
-        // A tag deleted from the registry mid-edit should not lose the rest of
-        // the wrap-up, so this reports rather than throws.
-        if (error) {
-          return NextResponse.json(
-            { error: 'Saved, but one of those tags no longer exists. Pick them again.' },
-            { status: 409 },
-          );
-        }
-      }
-    }
-
-    // Mirror the recording into the student Library so its tags make it
-    // searchable there. Best-effort: a Library hiccup must not fail the wrap-up.
-    try {
-      await syncClassToLibrary(supabase, params.classId);
-    } catch (bridgeErr) {
-      console.error('Class -> Library sync failed:', bridgeErr);
+    if (saved.tagWarning) {
+      return NextResponse.json(
+        { error: 'Saved, but one of those tags no longer exists. Pick them again.' },
+        { status: 409 },
+      );
     }
 
     // Bring the Teams channel card up to date, so the group stops reading the
@@ -257,11 +184,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // Only this class, not its meeting_group_id siblings: a sibling lives in a
     // different classroom with its own team and its own card, and the join card to
     // reply under generally exists on one of them only. Their Nexus rows are
-    // already correct via the propagation above.
-    const topicMoved =
-      ('title' in updates && updates.title !== access.cls.title) ||
-      ('description' in updates && (updates.description ?? null) !== (access.cls.description ?? null)) ||
-      'summary_bullets' in updates;
+    // already correct via the propagation inside applyWrapUp.
+    const topicMoved = saved.topicMoved;
 
     const graphToken = extractBearerToken(request.headers.get('Authorization'));
     // Impersonation, parent and E2E tokens are Nexus's own, not Microsoft's.

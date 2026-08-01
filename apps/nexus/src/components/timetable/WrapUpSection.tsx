@@ -33,6 +33,7 @@ import {
   DialogTitle,
   IconButton,
   InputAdornment,
+  LinearProgress,
   Link as MuiLink,
   MenuItem,
   Paper,
@@ -87,6 +88,26 @@ interface YtResult {
   url?: string;
 }
 
+/**
+ * Where the automatic YouTube backup has got to.
+ *
+ * Worth surfacing because the last step is not ours: an unaudited Google API
+ * project can only upload as PRIVATE, so the video exists and plays for nobody
+ * until a human flips it in Studio. Without this strip that state is invisible,
+ * and the teacher sees an empty YouTube box for three days with no idea whether
+ * anything is happening.
+ */
+interface BackupState {
+  status: 'pending' | 'uploading' | 'ok' | 'unavailable' | 'skipped';
+  attempts: number;
+  detail: string | null;
+  bytes_uploaded: number | null;
+  file_size: number | null;
+  youtube_video_id: string | null;
+  privacy_status: string | null;
+  uploaded_at: string | null;
+}
+
 interface WrapUpSectionProps {
   cls: ClassCardData;
   getToken: () => Promise<string | null>;
@@ -138,6 +159,7 @@ export default function WrapUpSection({
   const [newTagLabel, setNewTagLabel] = useState('');
   const [newTagGroup, setNewTagGroup] = useState<'subject' | 'theme'>('subject');
 
+  const [backup, setBackup] = useState<BackupState | null>(null);
   const [ytOpen, setYtOpen] = useState(false);
   const [ytQuery, setYtQuery] = useState('');
   const [ytResults, setYtResults] = useState<YtResult[]>([]);
@@ -169,6 +191,7 @@ export default function WrapUpSection({
         setTagIds((data.tags || []).map((t: TagOption) => t.id));
         setAvailable(data.availableTags || []);
         setTopics(data.topics || []);
+        setBackup(data.backup || null);
       }
       if (imgRes.ok) {
         const data = await imgRes.json();
@@ -816,6 +839,7 @@ export default function WrapUpSection({
             Search
           </Button>
         </Box>
+        <BackupStatus backup={backup} hasYoutubeUrl={!!youtubeUrl} />
       </Box>
 
       <Button
@@ -934,4 +958,122 @@ export default function WrapUpSection({
       </Dialog>
     </Box>
   );
+}
+
+/**
+ * Where the overnight backup has got to, in one line under the YouTube field.
+ *
+ * The state worth designing for is `ok` + `private`. An unaudited Google API
+ * project is only allowed to upload as private, so at that point the recording is
+ * safely off Teams and onto YouTube, but it plays for nobody. One tap in Studio
+ * flips it, and the next backup run notices and fills the link in here by itself.
+ * Saying exactly that is the difference between a teacher doing it tomorrow and a
+ * teacher never knowing there was anything to do.
+ *
+ * Renders nothing at all when there is no backup row or the link has already
+ * arrived, so a class that needs nothing from the teacher stays quiet.
+ */
+function BackupStatus({
+  backup,
+  hasYoutubeUrl,
+}: {
+  backup: BackupState | null;
+  hasYoutubeUrl: boolean;
+}) {
+  const theme = useTheme();
+  if (!backup || hasYoutubeUrl) return null;
+
+  const line = (
+    text: string,
+    tone: 'info' | 'warn' | 'action',
+    extra?: React.ReactNode,
+    progress?: number,
+  ) => {
+    const color =
+      tone === 'action'
+        ? theme.palette.success.main
+        : tone === 'warn'
+          ? theme.palette.warning.main
+          : theme.palette.text.secondary;
+    return (
+      <Box
+        sx={{
+          mt: 1,
+          p: 1.25,
+          borderRadius: RADIUS.control,
+          bgcolor: alpha(color, 0.08),
+          border: `1px solid ${alpha(color, 0.24)}`,
+        }}
+      >
+        <Typography variant="caption" sx={{ display: 'block', color, fontWeight: 600 }}>
+          {text}
+        </Typography>
+        {typeof progress === 'number' && (
+          <LinearProgress
+            variant="determinate"
+            value={progress}
+            sx={{ mt: 0.75, height: 4, borderRadius: 2 }}
+          />
+        )}
+        {extra}
+      </Box>
+    );
+  };
+
+  if (backup.status === 'uploading') {
+    const pct =
+      backup.file_size && backup.file_size > 0
+        ? Math.min(100, Math.round(((backup.bytes_uploaded ?? 0) / backup.file_size) * 100))
+        : 0;
+    return line(`Uploading to YouTube, ${pct}%`, 'info', undefined, pct);
+  }
+
+  if (backup.status === 'ok' && backup.privacy_status === 'private') {
+    return line(
+      'Uploaded to YouTube as private, so students cannot watch it yet.',
+      'action',
+      <>
+        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 0.5 }}>
+          Change it to Unlisted in YouTube Studio. The link fills in here by itself on the next run.
+        </Typography>
+        {backup.youtube_video_id && (
+          <Button
+            component="a"
+            href={`https://studio.youtube.com/video/${backup.youtube_video_id}/edit`}
+            target="_blank"
+            rel="noopener noreferrer"
+            size="small"
+            variant="outlined"
+            startIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+            sx={{ mt: 1, textTransform: 'none', minHeight: 40 }}
+          >
+            Open in YouTube Studio
+          </Button>
+        )}
+      </>,
+    );
+  }
+
+  if (backup.status === 'unavailable') {
+    return line(
+      `Automatic backup gave up after ${backup.attempts} tries. Upload it by hand and paste the link above.`,
+      'warn',
+      backup.detail ? (
+        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 0.5 }}>
+          {backup.detail}
+        </Typography>
+      ) : null,
+    );
+  }
+
+  if (backup.status === 'pending') {
+    return line(
+      backup.attempts > 0
+        ? `Backup did not finish last night. It tries again tonight (attempt ${backup.attempts + 1}).`
+        : 'Queued for tonight’s automatic YouTube backup.',
+      'info',
+    );
+  }
+
+  return null;
 }

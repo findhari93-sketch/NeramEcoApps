@@ -159,6 +159,28 @@ suite('unified test engine', () => {
     expect(mistakes).not.toContain(qCorrect);
   }, 60000);
 
+  it('carries the explanation onto the graded payload but never the student one', async () => {
+    // The regression this locks down: getComposedTestQuestions did not select
+    // explanation_brief, the review mapped it through an `as any`, and so every
+    // student in the product saw a blank explanation after every test. The
+    // compiler had nothing to say because of the cast.
+    const { getComposedTestQuestions } = await import('@neram/database');
+
+    const graded = await getComposedTestQuestions(testId, true);
+    expect(graded).toHaveLength(2);
+    for (const q of graded) {
+      expect(q.explanation_brief).toMatch(/^Because [ab] is right\.$/);
+    }
+
+    // The other half of the contract. An explanation names the answer, so it is
+    // answer-key material and must not reach a student before they submit.
+    const studentSafe = await getComposedTestQuestions(testId, false);
+    for (const q of studentSafe) {
+      expect(q.explanation_brief).toBeUndefined();
+      expect(q.correct_answer).toBeUndefined();
+    }
+  }, 60000);
+
   it('duplicates a test without carrying its attempts or its placement', async () => {
     const { duplicateTest, getComposedTestQuestions, getSupabaseAdminClient } = await import('@neram/database');
     const copy = await duplicateTest(testId, null);

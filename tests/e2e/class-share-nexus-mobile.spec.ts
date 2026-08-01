@@ -43,6 +43,14 @@ test.describe('Share this class (mobile)', () => {
       await page.waitForTimeout(1200);
     }
 
+    // Sharing is about what the class IS, so it lives on the Class tab. Say so
+    // rather than depending on which tab the panel happens to open on.
+    const classTab = page.getByRole('tab', { name: 'Class', exact: true });
+    if (await classTab.count()) {
+      await classTab.first().click();
+      await page.waitForTimeout(500);
+    }
+
     const shareButton = page.getByRole('button', { name: /share this class/i });
     test.skip(
       (await shareButton.count()) === 0,
