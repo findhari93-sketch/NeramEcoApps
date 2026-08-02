@@ -57,6 +57,7 @@ import { RADIUS } from './timetable-theme';
 import ClassVideoMetaPanel from './ClassVideoMetaPanel';
 import ClassImagesEditor, { type ClassImage } from './ClassImagesEditor';
 import { makeThumbnail } from '@/lib/image-downscale';
+import { useNexusSWR, revalidateClass } from '@/lib/nexus-swr';
 
 interface TagOption {
   id: string;
@@ -133,7 +134,6 @@ export default function WrapUpSection({
   onNotify,
 }: WrapUpSectionProps) {
   const theme = useTheme();
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
 
@@ -174,46 +174,62 @@ export default function WrapUpSection({
   const classId = cls.id;
   const transcriptInputRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const [wrapRes, imgRes] = await Promise.all([
-        fetch(`/api/timetable/${classId}/wrap-up`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`/api/timetable/${classId}/images`, { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
-      if (wrapRes.ok) {
-        const data = await wrapRes.json();
-        setTitle(data.class?.title || '');
-        setBrief(data.class?.description || '');
-        setDetailed(data.class?.notes || '');
-        setShowDetailed(!!data.class?.notes);
-        setBullets(Array.isArray(data.class?.summary_bullets) ? data.class.summary_bullets : []);
-        setTopicId(data.class?.topic_id || '');
-        setRecordingUrl(data.class?.recording_url || '');
-        setYoutubeUrl(data.class?.youtube_url || '');
-        setPlanEntryId(data.class?.plan_entry_id || null);
-        setTagIds((data.tags || []).map((t: TagOption) => t.id));
-        setAvailable(data.availableTags || []);
-        setTopics(data.topics || []);
-        setBackup(data.backup || null);
-      }
-      if (imgRes.ok) {
-        const data = await imgRes.json();
-        setImages(data.images || []);
-        setCoverImageId(data.cover_image_id ?? null);
-      }
-    } catch {
-      /* the fields simply stay empty */
-    } finally {
-      setLoading(false);
-    }
-  }, [classId, getToken]);
+  // Shares both URLs with ClassCaptureView above it in the After tab. Two
+  // components, one request each, and none at all on a revisit inside the cache
+  // window: this section used to be half of a four-call round trip for two
+  // resources every time the tab was opened.
+  const { data: wrapData, isLoading: wrapLoading } = useNexusSWR<any>(
+    `/api/timetable/${classId}/wrap-up`,
+    getToken,
+  );
+  const { data: imgData, isLoading: imgLoading } = useNexusSWR<any>(
+    `/api/timetable/${classId}/images`,
+    getToken,
+  );
 
+  const loading = wrapLoading || imgLoading;
+
+  /**
+   * Fill the form once per class, and never again.
+   *
+   * This is an editor, not a read-only view, so a background revalidation must
+   * NOT flow back into the fields: a teacher three paragraphs into a note would
+   * watch it revert to whatever the server last stored. The ref records which
+   * class has been hydrated, so a refresh repopulates only when the teacher has
+   * actually moved to a different class.
+   */
+  const hydratedFor = useRef<string | null>(null);
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!wrapData || hydratedFor.current === classId) return;
+    hydratedFor.current = classId;
+    setTitle(wrapData.class?.title || '');
+    setBrief(wrapData.class?.description || '');
+    setDetailed(wrapData.class?.notes || '');
+    setShowDetailed(!!wrapData.class?.notes);
+    setBullets(Array.isArray(wrapData.class?.summary_bullets) ? wrapData.class.summary_bullets : []);
+    setTopicId(wrapData.class?.topic_id || '');
+    setRecordingUrl(wrapData.class?.recording_url || '');
+    setYoutubeUrl(wrapData.class?.youtube_url || '');
+    setPlanEntryId(wrapData.class?.plan_entry_id || null);
+    setTagIds((wrapData.tags || []).map((t: TagOption) => t.id));
+    setAvailable(wrapData.availableTags || []);
+    setTopics(wrapData.topics || []);
+  }, [wrapData, classId]);
+
+  // The backup strip is pure status, written by the nightly job and never by
+  // this form, so unlike the fields above it SHOULD track every refresh: that is
+  // what makes "Uploading, 62%" climb while the teacher is looking at it.
+  useEffect(() => {
+    if (wrapData) setBackup(wrapData.backup || null);
+  }, [wrapData]);
+
+  const imagesHydratedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!imgData || imagesHydratedFor.current === classId) return;
+    imagesHydratedFor.current = classId;
+    setImages(imgData.images || []);
+    setCoverImageId(imgData.cover_image_id ?? null);
+  }, [imgData, classId]);
 
   // --- AI generate ---------------------------------------------------------
   const runGenerate = async (bodyOverride?: Record<string, unknown>) => {
@@ -539,6 +555,9 @@ export default function WrapUpSection({
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        // The wrap-up write moves the class row that half this tab reads, so the
+        // whole class is dropped from the cache rather than just this one URL.
+        await revalidateClass(classId);
         onNotify('Class wrapped up');
         onSaved();
       } else {

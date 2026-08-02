@@ -228,6 +228,48 @@ describe('applyWrapUp', () => {
     expect(changed.topicMoved).toBe(true);
   });
 
+  it('treats a recording link arriving as news worth re-posting', async () => {
+    // The card now carries a watch link, so a video appearing changes what it
+    // says. Before this, pasting a YouTube URL a week later was explicitly NOT
+    // news, and the class was never told the recording existed.
+    const { client } = makeSupabase();
+    const cls = {
+      id: 'class-1',
+      title: 'Perspective basics',
+      description: 'Brief',
+      meeting_group_id: null,
+      youtube_url: null,
+    };
+
+    const arrived = await applyWrapUp(
+      client,
+      cls,
+      { youtube_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      'user-9',
+    );
+    expect(arrived.topicMoved).toBe(true);
+  });
+
+  it('does not re-post when the same recording link is saved again', async () => {
+    // A teacher tidying up an old class must not put a second card in the
+    // channel about a video the group was told about weeks ago.
+    const { client } = makeSupabase();
+    const url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    const resaved = await applyWrapUp(
+      client,
+      {
+        id: 'class-1',
+        title: 'Perspective basics',
+        description: 'Brief',
+        meeting_group_id: null,
+        youtube_url: url,
+      },
+      { youtube_url: url },
+      'user-9',
+    );
+    expect(resaved.topicMoved).toBe(false);
+  });
+
   it('returns a 400 rather than throwing on a bad body', async () => {
     const { client, calls } = makeSupabase();
     const result = await applyWrapUp(

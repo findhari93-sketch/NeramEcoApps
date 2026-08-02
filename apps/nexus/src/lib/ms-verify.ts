@@ -19,12 +19,42 @@
  * refusal so a parent token cannot reach any non-parent route.
  */
 
+import { createHash } from 'crypto';
 import { getSupabaseAdminClient } from '@neram/database';
 import {
   isImpersonationToken,
   verifyImpersonationToken,
 } from '@/lib/impersonation-token';
 import { isParentToken, verifyParentToken } from '@/lib/parent-token';
+import { TtlCache } from '@/lib/ttl-cache';
+
+/**
+ * Resolved identities for Microsoft access tokens we have already checked with Graph.
+ *
+ * Every authed request used to spend a full HTTPS round trip to graph.microsoft.com
+ * just to learn who the caller was, on the large majority of routes, before the route
+ * began its own work. From India that is a serial 150-400ms added to everything.
+ *
+ * A minute is a deliberate ceiling on staleness: a token revoked at Entra keeps working
+ * for at most that long. The alternative, re-asking Graph every time, is what made the
+ * app feel slow, and the fact being cached (which Microsoft account this token belongs
+ * to) cannot change during that token's life anyway, so the window costs nothing in
+ * practice.
+ *
+ * Keyed on a hash of the token, never the token itself, so an inspected heap or a
+ * logged cache key cannot be replayed as a credential.
+ */
+const IDENTITY_TTL_MS = 60_000;
+const graphIdentityCache = new TtlCache<MsUserInfo>(IDENTITY_TTL_MS);
+
+function tokenKey(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/** Test seam. Resets the module-level identity cache between cases. */
+export function __clearGraphIdentityCache(): void {
+  graphIdentityCache.clear();
+}
 
 export interface MsUserInfo {
   oid: string;
@@ -205,23 +235,38 @@ export async function verifyMsToken(
     };
   }
 
+  // Real Microsoft users land here, so this is the hot path for the whole app.
+  // Everything above returns before this point, which is why only this branch is
+  // cached: the parent branch deliberately re-reads its credential row every time so
+  // that "Revoke" takes effect at once, and the impersonation and test branches are
+  // rare and already local.
+  const cacheKey = tokenKey(token);
+  const cached = graphIdentityCache.get(cacheKey);
+  if (cached) return cached;
+
   const response = await fetch('https://graph.microsoft.com/v1.0/me', {
     headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
+    // Failures are never cached. A token rejected once may be accepted a moment later
+    // (a clock skew, a transient Graph 5xx), and caching the rejection would strand a
+    // signed-in teacher for the length of the TTL.
     throw new Error(`Invalid Microsoft token: ${response.status} ${errorText}`);
   }
 
   const profile = await response.json();
 
-  return {
+  const identity: MsUserInfo = {
     oid: profile.id,
     email: profile.userPrincipalName || profile.mail || '',
     name: profile.displayName || '',
     displayName: profile.displayName || '',
   };
+
+  graphIdentityCache.set(cacheKey, identity);
+  return identity;
 }
 
 /**

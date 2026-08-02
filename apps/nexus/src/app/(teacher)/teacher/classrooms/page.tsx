@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -20,6 +20,7 @@ import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import ClassroomFormDialog from '@/components/ClassroomFormDialog';
 
 interface ClassroomSummary {
@@ -59,35 +60,21 @@ export default function ClassroomsPage() {
   const router = useRouter();
   const theme = useTheme();
   const { getToken } = useNexusAuthContext();
-  const [classrooms, setClassrooms] = useState<ClassroomSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [view, setView] = useState<ClassroomView>('active');
 
-  const fetchClassrooms = useCallback(async (which: ClassroomView) => {
-    setLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
+  // The Active/Archived toggle is part of the key rather than a refetch, so flipping
+  // back to a view already seen is instant instead of another round trip.
+  const { data, isLoading, mutate } = useAuthSWR<{ classrooms: ClassroomSummary[] }>(
+    `/api/classrooms${view === 'archived' ? '?archived=1' : ''}`,
+  );
 
-      const res = await fetch(`/api/classrooms${which === 'archived' ? '?archived=1' : ''}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  const classrooms = data?.classrooms ?? [];
+  const loading = isLoading;
 
-      if (res.ok) {
-        const data = await res.json();
-        setClassrooms(data.classrooms || []);
-      }
-    } catch (err) {
-      console.error('Failed to load classrooms:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [getToken]);
-
-  useEffect(() => {
-    fetchClassrooms(view);
-  }, [fetchClassrooms, view]);
+  const refresh = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
 
   const handleCreate = async (formData: { name: string; type: string; description: string; ms_team_id: string | null }) => {
     const token = await getToken();
@@ -107,7 +94,10 @@ export default function ClassroomsPage() {
       throw new Error(err.error || 'Failed to create classroom');
     }
 
-    await fetchClassrooms('active');
+    // A newly created classroom is always active, so make sure that is the view being
+    // shown before refreshing it.
+    setView('active');
+    await refresh();
   };
 
   const isArchived = view === 'archived';

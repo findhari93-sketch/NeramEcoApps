@@ -27,6 +27,8 @@ import {
   type CapabilityMap,
   type StaffRole,
 } from '@/lib/staff-capabilities';
+import { readCachedAuth, writeCachedAuth, clearCachedAuth } from '@/lib/auth-cache';
+import { clearPersistentCache } from '@/lib/swr-cache';
 
 // Types for Nexus auth context
 interface NexusUser {
@@ -236,6 +238,39 @@ function readStoredImpersonation(): StoredImpersonation | null {
   }
 }
 
+/**
+ * Pick the classroom to open with: the one they last looked at, else the current one.
+ *
+ * /api/auth/me returns non-archived classrooms with the current academic year first,
+ * so `classrooms[0]` is the current cohort. A saved id that no longer maps to a live
+ * classroom (archived at a year-end rollover) is dropped rather than honoured.
+ */
+function pickActiveClassroom(list: NexusClassroom[]): NexusClassroom | null {
+  if (typeof window === 'undefined') return list[0] || null;
+
+  const savedId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
+  const saved = list.find((c) => c.id === savedId);
+  if (savedId && !saved) {
+    localStorage.removeItem(ACTIVE_CLASSROOM_KEY);
+  }
+  return saved || list[0] || null;
+}
+
+/**
+ * The cached /api/auth/me payload to open with, or null to fall back to waiting for
+ * the network.
+ *
+ * Skipped entirely while impersonating or inside a parent session. Both are separate,
+ * short-lived identities with their own storage, and replaying a teacher's own shell
+ * underneath either of them would be precisely the wrong thing to do.
+ */
+function readBootPayload(): Record<string, any> | null {
+  if (typeof window === 'undefined') return null;
+  if (readStoredImpersonation()) return null;
+  if (readParentSession()) return null;
+  return readCachedAuth()?.payload ?? null;
+}
+
 export function useNexusAuth(): NexusAuthState {
   const {
     user: msUser,
@@ -244,27 +279,51 @@ export function useNexusAuth(): NexusAuthState {
     signOut: msSignOut,
   } = useMicrosoftAuth();
 
-  const [user, setUser] = useState<NexusUser | null>(null);
-  const [nexusRole, setNexusRole] = useState<NexusRole | null>(null);
-  const [classrooms, setClassrooms] = useState<NexusClassroom[]>([]);
-  const [activeClassroom, setActiveClassroomState] = useState<NexusClassroom | null>(null);
-  const [dbLoading, setDbLoading] = useState(true);
+  /**
+   * Last session's /api/auth/me answer, read once, synchronously, before the first
+   * paint. Every piece of state below opens from it when it is present, which is what
+   * lets the app draw its real shell instead of a spinner while the network catches up.
+   */
+  const [booted] = useState<Record<string, any> | null>(() => readBootPayload());
+
+  const [user, setUser] = useState<NexusUser | null>(booted?.user ?? null);
+  const [nexusRole, setNexusRole] = useState<NexusRole | null>(booted?.nexusRole ?? null);
+  const [classrooms, setClassrooms] = useState<NexusClassroom[]>(booted?.classrooms ?? []);
+  const [activeClassroom, setActiveClassroomState] = useState<NexusClassroom | null>(() =>
+    booted ? pickActiveClassroom(booted.classrooms || []) : null
+  );
+  // Only ever starts true when there is nothing cached to show. With a cached payload
+  // the app is already displaying the right thing, so the revalidation behind it is
+  // not a "loading" state and must not raise the RoleGuard spinner.
+  const [dbLoading, setDbLoading] = useState(!booted);
   const [error, setError] = useState<string | null>(null);
   const [accessEnded, setAccessEnded] = useState<{ reason: string; message: string } | null>(null);
   // Default to registry defaults (student features off, staff on) until /me loads.
-  const [featureFlags, setFeatureFlags] = useState<FlagMap>(() => resolveFlags({}));
-  const [timetableWindow, setTimetableWindow] = useState<TimetableWindow>(() => cloneDefaultWindow());
-  const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
-  const [canTeach, setCanTeach] = useState<boolean>(true);
+  const [featureFlags, setFeatureFlags] = useState<FlagMap>(
+    () => booted?.featureFlags ?? resolveFlags({})
+  );
+  const [timetableWindow, setTimetableWindow] = useState<TimetableWindow>(() =>
+    booted ? parseWindow(booted.timetableWindow) : cloneDefaultWindow()
+  );
+  const [staffRole, setStaffRole] = useState<StaffRole | null>(booted?.staffRole ?? null);
+  const [canTeach, setCanTeach] = useState<boolean>(booted ? booted.canTeach !== false : true);
   // Starts as the all-false map, so the UI hides staff actions until /me answers
-  // rather than flashing them and then removing them.
-  const [capabilities, setCapabilities] = useState<CapabilityMap>(() => capabilityMap(null));
+  // rather than flashing them and then removing them. Recomputed from the tier rather
+  // than read from the payload, exactly as the live path does, so a hand-edited cache
+  // entry cannot grant a capability.
+  const [capabilities, setCapabilities] = useState<CapabilityMap>(() =>
+    booted ? capabilityMap(booted.staffRole ?? null, booted.canTeach !== false) : capabilityMap(null)
+  );
   // Default never blocks: a gate that defaults to "blocked" would flash the
   // blocker on every page load for every compliant student.
-  const [photoGate, setPhotoGate] = useState<PhotoGateState>(DEFAULT_PHOTO_GATE);
+  const [photoGate, setPhotoGate] = useState<PhotoGateState>(
+    booted?.photoGate ?? DEFAULT_PHOTO_GATE
+  );
   // Parent portal: which children this login covers. Empty for every other role.
-  const [children, setChildren] = useState<ParentChildRef[]>([]);
-  const [activeChildId, setActiveChildId] = useState<string | null>(null);
+  const [children, setChildren] = useState<ParentChildRef[]>(booted?.children ?? []);
+  const [activeChildId, setActiveChildId] = useState<string | null>(
+    booted ? booted.activeChildId ?? booted.children?.[0]?.id ?? null : null
+  );
 
   // "View as Student" (impersonation) state, persisted in sessionStorage so it
   // survives reloads within the tab but auto-clears when the tab closes.
@@ -435,6 +494,11 @@ export function useNexusAuth(): NexusAuthState {
           // set, and see PhotoRequiredGate.)
           if (response.status === 403 && data?.error === 'alumni') {
             if (!isCancelled()) {
+              // Drop the cached shell and everything read under it. Without this a
+              // graduated student would keep booting into their old classrooms for a
+              // frame before the gate caught up, on every open, for a day.
+              clearCachedAuth();
+              clearPersistentCache();
               setAccessEnded({
                 reason: data.error,
                 message:
@@ -486,19 +550,25 @@ export function useNexusAuth(): NexusAuthState {
         setChildren(linkedChildren);
         setActiveChildId(data.activeChildId ?? linkedChildren[0]?.id ?? null);
 
-        // Restore active classroom from localStorage or use first one. /api/auth/me
-        // returns non-archived classrooms with the current academic-year one first,
-        // so classrooms[0] is the current cohort.
-        const savedClassroomId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
-        const savedClassroom = (data.classrooms || []).find(
-          (c: NexusClassroom) => c.id === savedClassroomId
-        );
-        // Drop a stale saved id that no longer maps to a live classroom (e.g. it was
-        // archived at a year-end rollover) so we fall back to the current-year one.
-        if (savedClassroomId && !savedClassroom) {
-          localStorage.removeItem(ACTIVE_CLASSROOM_KEY);
+        setActiveClassroomState(pickActiveClassroom(data.classrooms || []));
+
+        // Remember this answer so the next open can paint before the network replies.
+        // Only the plain Microsoft path: an impersonated or parent session is a
+        // different, deliberately short-lived identity and must never become the shell
+        // the app opens with.
+        if (!impersonationToken && !parentToken) {
+          const previousOid = readCachedAuth()?.oid ?? null;
+          const nextOid = (data.user?.ms_oid as string | undefined) ?? null;
+
+          // Somebody else is signed in on this device now. Everything cached under the
+          // previous account, both the shell and every screen's data, belongs to them
+          // and not to whoever is holding the phone.
+          if (previousOid && nextOid && previousOid !== nextOid) {
+            clearPersistentCache();
+          }
+
+          writeCachedAuth(nextOid, data);
         }
-        setActiveClassroomState(savedClassroom || data.classrooms?.[0] || null);
       } catch (err) {
         if (!isCancelled()) {
           setError(err instanceof Error ? err.message : 'Failed to load user data');
@@ -519,10 +589,25 @@ export function useNexusAuth(): NexusAuthState {
     // Skip MSAL auth fetch if test token bypass is active and not impersonating
     if (testMode && !impersonationToken && !parentToken) return;
 
+    // Still booting MSAL while a cached shell is on screen: leave it alone. Blanking
+    // here is what the cache exists to prevent, and "MSAL has not answered yet" is not
+    // evidence that anyone is signed out. The branch below still fires the moment MSAL
+    // settles on "no account", so a genuinely expired session is caught a beat later.
+    if (!impersonationToken && !parentToken && msLoading && booted) {
+      return;
+    }
+
     // A parent is never expected to have an MSAL user, so this reset block must
     // not fire for them. Without the guard, the moment MSAL reports "no account"
     // it would blank a perfectly valid parent context.
     if (!impersonationToken && !parentToken && (!msUser || msLoading)) {
+      // MSAL has settled and there is no account: the session really is gone, so the
+      // cached shell and its data go with it rather than outliving the sign-in they
+      // described.
+      if (!msLoading) {
+        clearCachedAuth();
+        clearPersistentCache();
+      }
       setUser(null);
       setNexusRole(null);
       setClassrooms([]);
@@ -543,7 +628,10 @@ export function useNexusAuth(): NexusAuthState {
     let cancelled = false;
     loadNexusUser(() => cancelled);
     return () => { cancelled = true; };
-  }, [msUser, msLoading, impersonationToken, parentToken, testMode, loadNexusUser]);
+    // `booted` is frozen for the life of the hook, so it adds no re-runs. `user` is
+    // deliberately NOT a dependency: this effect sets it, and depending on it would
+    // make every successful load schedule the next one.
+  }, [msUser, msLoading, impersonationToken, parentToken, testMode, loadNexusUser, booted]);
 
   /**
    * Manual re-fetch. The photo blocker calls this after a successful upload so
@@ -680,6 +768,12 @@ export function useNexusAuth(): NexusAuthState {
     setChildren([]);
     setActiveChildId(null);
     localStorage.removeItem(ACTIVE_CLASSROOM_KEY);
+    // The cached shell and every cached read describe a session that is ending, so
+    // they go with it. Parents share devices with their children and teachers share
+    // them with each other, so "signed out" has to mean the next person sees nothing
+    // of this one.
+    clearCachedAuth();
+    clearPersistentCache();
     clearImpersonation();
 
     if (wasParent) {
@@ -759,7 +853,13 @@ export function useNexusAuth(): NexusAuthState {
     // would still sit waiting on initializeMsal()'s dynamic import for a result
     // that is then discarded. This is what makes the parent path genuinely
     // MSAL-independent rather than merely MSAL-tolerant.
-    loading: testMode || parentToken ? dbLoading : msLoading || dbLoading,
+    //
+    // A cached shell short-circuits the whole thing. `loading` is what raises the
+    // full-screen RoleGuard spinner, and there is nothing to wait for when the real
+    // screen is already drawn: MSAL and /api/auth/me are still running, they are just
+    // running behind a usable app instead of in front of an empty one. The moment
+    // either says the session is gone, `user` clears and RoleGuard redirects.
+    loading: user && booted ? false : testMode || parentToken ? dbLoading : msLoading || dbLoading,
     error,
     accessEnded,
     isTeacher: nexusRole === 'teacher' || nexusRole === 'admin',

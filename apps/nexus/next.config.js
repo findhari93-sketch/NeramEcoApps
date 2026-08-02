@@ -1,8 +1,39 @@
+const defaultRuntimeCaching = require('next-pwa/cache');
+
+// Never let the service worker hold an authenticated API response.
+//
+// next-pwa's default list ends with a NetworkFirst rule over `/api/**` that keeps GET
+// responses for 24 hours in a Cache Storage bucket called 'apis'. That bucket belongs
+// to the origin, not to the person signed in: it is not namespaced by account and
+// nothing clears it at sign-out. On the devices Nexus actually runs on, a parent's
+// phone shared with their child, a staffroom laptop, that is one person's roster
+// sitting where the next person's browser will happily serve it.
+//
+// Placed FIRST so Workbox matches it before the default rule it is replacing.
+// Responses still get cached for speed, just in lib/swr-cache.ts instead, which is
+// keyed per account and dropped on sign-out.
+const apiNetworkOnly = {
+  urlPattern: ({ url }) => url.origin === self.origin && url.pathname.startsWith('/api/'),
+  handler: 'NetworkOnly',
+};
+
+// Belt and braces. Prepending the rule above is enough on its own, because Workbox
+// takes the first route that matches, but leaving the original in the list means one
+// innocent reorder silently starts caching authenticated JSON again. Dropping it as
+// well makes that impossible, and the NetworkOnly rule still covers us if next-pwa
+// ever renames the bucket this filter looks for.
+const runtimeCachingWithoutApis = defaultRuntimeCaching.filter(
+  (rule) => rule?.options?.cacheName !== 'apis',
+);
+
 const withPWA = require('next-pwa')({
   dest: 'public',
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
+  // NOTE: public/sw.js and public/workbox-*.js are GENERATED and gitignored here, so
+  // this takes effect on the next build with no artifact to commit.
+  runtimeCaching: [apiNetworkOnly, ...runtimeCachingWithoutApis],
 });
 
 /** @type {import('next').NextConfig} */
@@ -13,6 +44,21 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth'],
+  experimental: {
+    // Rewrite barrel imports into direct ones at build time.
+    //
+    // Icons in this app are already imported deep (1808 of 1809 call sites), which is
+    // the usual advice and is done right. The catch is that every MUI *component*
+    // arrives through the `@neram/ui` barrel instead: one `export *` module that
+    // re-exports ~130 components from `@mui/material`, imported by bare specifier in
+    // ~592 files here. So the barrel cost the deep icon imports were avoiding simply
+    // moved one package over.
+    //
+    // This flag undoes that from inside Nexus, without touching packages/ui, which
+    // matters because editing a shared package makes the deploy path filter rebuild
+    // and redeploy all four apps.
+    optimizePackageImports: ['@neram/ui', '@mui/material', '@mui/icons-material'],
+  },
   async redirects() {
     return [
       {

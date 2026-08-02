@@ -7,6 +7,7 @@
 import { getSupabaseAdminClient } from '@neram/database';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { ApiError } from '@/lib/api-errors';
+import { TtlCache } from '@/lib/ttl-cache';
 import {
   can,
   isInternalStaff as isInternalStaffRole,
@@ -24,6 +25,26 @@ export interface RequestUser {
   staff_role: string | null;
   /** Tutor eligibility. Orthogonal to staff_role. */
   can_teach: boolean | null;
+}
+
+/**
+ * Nexus user rows we have already looked up, keyed by ms_oid.
+ *
+ * Resolving a caller costs two round trips: identify the token, then find the matching
+ * row. ms-verify now caches the first; this caches the second, so a warm request
+ * reaches its own work with no preamble at all.
+ *
+ * Shorter than the identity TTL on purpose. This row carries `staff_role` and
+ * `can_teach`, which decide what the caller may do, so a demotion should take effect
+ * quickly. Half a minute is the accepted window, and it is small next to the hour-long
+ * life of the access token the caller is holding regardless.
+ */
+const USER_ROW_TTL_MS = 30_000;
+const requestUserCache = new TtlCache<RequestUser>(USER_ROW_TTL_MS);
+
+/** Test seam, and the hook to call if a route ever needs a caller re-read immediately. */
+export function invalidateRequestUser(msOid: string): void {
+  requestUserCache.delete(msOid);
 }
 
 /**
@@ -47,6 +68,11 @@ export async function getRequestUser(authHeader: string | null): Promise<Request
     throw new ApiError('Parent accounts cannot access this resource.', 403);
   }
 
+  // Cached AFTER the parent refusal above, never before, so a cache hit can never be
+  // used to skip that check.
+  const cached = requestUserCache.get(msUser.oid);
+  if (cached) return cached;
+
   const supabase = getSupabaseAdminClient();
   const { data: user } = await supabase
     .from('users')
@@ -54,6 +80,8 @@ export async function getRequestUser(authHeader: string | null): Promise<Request
     .eq('ms_oid', msUser.oid)
     .single();
   if (!user) throw new Error('User not found');
+
+  requestUserCache.set(msUser.oid, user as RequestUser);
   return user as RequestUser;
 }
 

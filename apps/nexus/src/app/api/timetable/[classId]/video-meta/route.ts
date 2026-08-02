@@ -5,6 +5,9 @@ import { resolveClassStaffAccess } from '@/lib/class-staff-access';
 import { validateVideoMetaPatch } from '@/lib/class-video-meta-schema';
 import { syncClassToLibrary } from '@/lib/class-library-bridge';
 import { buildClassLinkPatch } from '@/lib/class-links';
+import { refreshClassAnnouncement, buildWrapUpHtml, cardHash } from '@/lib/teams-class-announcements';
+import { classShareLinks, shareBaseUrl } from '@/lib/class-share-links';
+import { extractBearerToken } from '@/lib/ms-verify';
 import {
   VIDEO_META_CLASS_COLS,
   VIDEO_META_COLS,
@@ -30,6 +33,40 @@ import {
 
 interface Ctx {
   params: { classId: string };
+}
+
+/**
+ * Would posting the wrap-up card to Teams say anything new?
+ *
+ * True means the class carries a video link that the card in the channel does
+ * not mention yet. That is the normal end state of a nightly backup run: it
+ * fills youtube_url, and it cannot announce that itself, because an application
+ * Graph token is not allowed to send a channel message. Rendering the card and
+ * comparing its fingerprint against the stored one answers the question with no
+ * Graph call, no extra column and nothing to keep in step.
+ *
+ * A draft class is excluded because it was never announced in the first place,
+ * so there is no card to bring up to date.
+ */
+function teamsCardIsStale(cls: VideoMetaClass, classUrl: string): boolean {
+  if (!cls.youtube_url) return false;
+  if (cls.publish_state === 'draft') return false;
+  return (
+    cardHash(
+      buildWrapUpHtml(
+        {
+          title: cls.title || '',
+          scheduled_date: cls.scheduled_date || '',
+          description: cls.description,
+          summary_bullets: Array.isArray(cls.summary_bullets)
+            ? (cls.summary_bullets as string[])
+            : null,
+          youtube_url: cls.youtube_url,
+        },
+        classUrl,
+      ),
+    ) !== cls.teams_wrapup_hash
+  );
 }
 
 /** Fields PATCH is allowed to touch. Anything else in the body is ignored. */
@@ -95,6 +132,10 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       tags: (classTagsRes?.data || []).map((r: any) => r.tag).filter(Boolean),
       registry: registryRes?.data || [],
       canEdit: true,
+      teamsCardStale: teamsCardIsStale(
+        access.cls,
+        classShareLinks(shareBaseUrl(request.nextUrl.origin)).classInTimetable(params.classId),
+      ),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load the video metadata';
@@ -156,15 +197,21 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // uploaded, so it writes youtube_url through the same validator the wrap-up
     // and Class Day screens use. That canonicalises youtu.be and /shorts/ forms
     // to one watch URL, which is what keeps the Library dedupe honest.
+    let videoLinkArrived = false;
     if (body.youtube_url !== undefined) {
       const links = buildClassLinkPatch({ youtube_url: body.youtube_url });
       if (!links.ok) return NextResponse.json({ error: links.error }, { status: 400 });
       if (Object.keys(links.patch).length > 0) {
+        // Compare against what was already there. Saving the same link twice is
+        // not news, and re-announcing it would put a second card in the channel
+        // for a video the group has already been told about.
+        const previous = access.cls.youtube_url || null;
         const { error } = await supabase
           .from('nexus_scheduled_classes')
           .update(links.patch)
           .eq('id', params.classId);
         if (error) throw error;
+        videoLinkArrived = Boolean(links.patch.youtube_url) && links.patch.youtube_url !== previous;
       }
     }
 
@@ -209,13 +256,63 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    /**
+     * Tell the class the recording is up.
+     *
+     * Publishing used to be silent in Teams, which is where the students
+     * actually are: the video went into the Library and the channel card still
+     * ended at "full notes in Nexus", so the only people who learned a recording
+     * existed were the ones who went looking for one.
+     *
+     * Fires only on a link that was not there a moment ago, and
+     * refreshClassAnnouncement is itself deduped on a hash of the rendered card,
+     * so a teacher who saves four more times gets no further posts. Best-effort
+     * and last, exactly like the Library sync above: a Graph outage must not lose
+     * the teacher's work or fail their save.
+     */
+    let teamsCardPosted = false;
+    // `announce` is the teacher pressing the button that appears when the
+    // nightly backup filled the link while nobody was watching. Same code path,
+    // and it deliberately does not need a link to have changed on THIS request.
+    if (videoLinkArrived || body.announce === true) {
+      const graphToken = extractBearerToken(request.headers.get('Authorization'));
+      // Impersonation, parent and E2E tokens are Nexus's own, not Microsoft's.
+      // Handing one to Graph earns a 401 and a confusing log line.
+      const isGraphToken = !!graphToken && !/^(test_|imp_|par_)/.test(graphToken);
+      if (isGraphToken) {
+        try {
+          await refreshClassAnnouncement(
+            graphToken!,
+            supabase,
+            params.classId,
+            classShareLinks(shareBaseUrl(request.nextUrl.origin)).classInTimetable(params.classId),
+          );
+          // Ask the row, do not assume. refreshClassAnnouncement swallows every
+          // Graph failure by design, and a class with no team, no group chat or
+          // a draft publish_state is a silent no-op, so reporting success off
+          // the mere absence of a throw would tell the teacher their students
+          // had been notified when nothing left the building. The hash is only
+          // stamped when something actually reached Teams.
+          const { data: after } = await supabase
+            .from('nexus_scheduled_classes')
+            .select('teams_wrapup_hash')
+            .eq('id', params.classId)
+            .maybeSingle();
+          teamsCardPosted = Boolean(after?.teams_wrapup_hash) &&
+            after.teams_wrapup_hash !== access.cls.teams_wrapup_hash;
+        } catch (teamsErr) {
+          console.error('Teams card refresh after publish failed (non-blocking):', teamsErr);
+        }
+      }
+    }
+
     const { data: meta } = await supabase
       .from('nexus_class_video_meta')
       .select(VIDEO_META_COLS)
       .eq('scheduled_class_id', params.classId)
       .maybeSingle();
 
-    return NextResponse.json({ meta, librarySynced });
+    return NextResponse.json({ meta, librarySynced, teamsCardPosted });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save the video metadata';
     return NextResponse.json({ error: message }, { status: 500 });

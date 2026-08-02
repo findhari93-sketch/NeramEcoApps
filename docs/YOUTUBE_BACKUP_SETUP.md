@@ -137,23 +137,19 @@ WHERE table_schema = 'public'
 
 ## 8. Connect the account
 
-Sign in to Nexus as an admin, then visit:
+Sign in to Nexus as an admin and go to **/teacher/admin/settings**, then press **Connect YouTube** on the YouTube backup card.
 
-```
-https://nexus.neramclasses.com/api/admin/youtube-oauth/start
-```
+Consent **with the Google account that owns the Neram channel**. Authorising a personal account is the likeliest mistake here and it fails silently: recordings would upload to the wrong channel and nothing would look broken. The card shows the channel title it actually connected to, for exactly that reason. If the channel has multiple managers, Google shows a channel picker: pick the Neram channel, not the "personal channel" entry above it.
 
-Consent **with the Google account that owns the Neram channel**. Authorising a personal account is the likeliest mistake here and it fails silently: recordings would upload to the wrong channel and nothing would look broken.
+> **This step used to be impossible, which is why it was never done.** The instruction here was "visit `https://nexus.neramclasses.com/api/admin/youtube-oauth/start`" in a browser. That route is gated on `system.settings` and Nexus authenticates with a bearer token held in JavaScript, not a cookie, so an address-bar navigation sends no `Authorization` header and gets a 403. The route now also answers `?mode=json` with the consent URL, and the admin card fetches that with a token and navigates itself. `nexus_youtube_credentials` was empty in production until this landed, so **nothing had ever been backed up**.
 
-If the channel has multiple managers, Google shows a channel picker. Pick the Neram channel, not the "personal channel" entry that appears above it.
+The same card then offers **Dry run**, which reports how many classes are queued and how much of the day's quota is left without opening a session or spending a unit, and **Upload one now, for real** once a dry run has shown what would happen.
 
-Confirm what was actually connected:
+The raw status endpoint is still there if you want it. It returns the channel id and title, and never any token:
 
 ```
 GET /api/admin/youtube-oauth/status
 ```
-
-It returns the channel id and title, and never any token. Check the title is the Neram channel.
 
 ---
 
@@ -179,9 +175,10 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
 
 Want `"rangeSupported": true`. Verified across all four recording URL shapes on 2026-07-30, so a `false` here means something changed on the SharePoint side.
 
-**Step 3, one real class.** Turn the flag on at `/teacher/admin/features`, then run with `limit=1` and watch it:
+**Step 3, one real class.** Turn the flag on at `/teacher/admin/features`, then press **Dry run** followed by **Upload one now, for real** on the YouTube backup card at `/teacher/admin/settings`. Same sweep, same limit, no shell:
 
 ```bash
+# The equivalent by hand, if you prefer it
 curl -H "Authorization: Bearer $CRON_SECRET" \
   "https://nexus.neramclasses.com/api/cron/youtube-backup?limit=1"
 ```
@@ -210,6 +207,8 @@ If a class never gets a link, look there first, not here. Its `recording_sync_st
 
 That strip is the whole reason the forced-private rule is survivable. The teacher's one click in Studio is the real publish trigger, and the promotion pass fills `youtube_url` in by itself on the next run.
 
+**Telling the class.** The Teams wrap-up card now carries a "Watch the recording on YouTube" link, so students find out in the channel rather than by going and looking in Nexus. Publishing by hand posts it on save. The nightly promotion pass cannot: **an application Graph token may not send a channel message**, and every Teams post in this app uses a delegated user token. So the panel compares the card's stored fingerprint against the card the class would render now, and when a video arrived overnight it shows "The class has not been told the recording is up" with a **Post it** button. One tap, and it is deduped on that same fingerprint, so it cannot post twice.
+
 ---
 
 ## What the numbers mean
@@ -228,6 +227,7 @@ That strip is the whole reason the forced-private rule is survivable. The teache
 
 | Symptom | Cause |
 |---|---|
+| `403` visiting `/api/admin/youtube-oauth/start` in a browser | Expected. That route needs a bearer header. Use the Connect button at `/teacher/admin/settings`. Step 8. |
 | `503` from the cron | `CRON_SECRET` is not set. Step 6. |
 | `{"skipped":"feature disabled"}` | Normal until you turn the flag on. |
 | `reasons.oauth_revoked`, roughly 7 days after setup | An External app still in **Testing**. Step 2. |

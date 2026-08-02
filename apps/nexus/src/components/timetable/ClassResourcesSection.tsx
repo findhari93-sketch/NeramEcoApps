@@ -13,7 +13,7 @@
  * teacher arranges here is literally what a student sees.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -40,6 +40,7 @@ import {
   sortResources,
   type ClassResource,
 } from '@/lib/class-resources';
+import { useNexusSWR, useRefreshKey } from '@/lib/nexus-swr';
 
 interface ClassResourcesSectionProps {
   cls: ClassCardData;
@@ -81,8 +82,6 @@ export default function ClassResourcesSection({
 }: ClassResourcesSectionProps) {
   const theme = useTheme();
   const selfFetch = provided === undefined;
-  const [fetched, setFetched] = useState<ClassResource[]>([]);
-  const [loading, setLoading] = useState(selfFetch);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(false);
   const [draft, setDraft] = useState('');
@@ -94,32 +93,36 @@ export default function ClassResourcesSection({
 
   const classId = cls.id;
 
-  const load = useCallback(async () => {
-    if (!selfFetch) return;
-    setLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(`/api/timetable/${classId}/resources`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setFetched(sortResources(data.resources || []));
-      }
-    } catch {
-      /* the empty state covers this */
-    } finally {
-      setLoading(false);
-    }
-  }, [selfFetch, classId, getToken]);
+  const { data, isLoading, mutate } = useNexusSWR<{ resources?: ClassResource[] }>(
+    selfFetch ? `/api/timetable/${classId}/resources` : null,
+    getToken,
+  );
+  useRefreshKey(refreshKey, mutate);
 
-  useEffect(() => {
-    load();
-  }, [load, refreshKey]);
+  const loading = isLoading;
+  const resources = sortResources(provided ?? data?.resources ?? []);
 
-  const resources = provided ? sortResources(provided) : fetched;
-  const setResources = setFetched;
+  /**
+   * Write a local edit straight into the cache without a refetch.
+   *
+   * Every caller below already knows the outcome, because the server just told
+   * it in the mutation response. Keeping the same `setResources(prev => ...)`
+   * signature the component used before means the twelve call sites are
+   * untouched, they simply land in the shared cache instead of private state,
+   * so reopening the drawer shows the edit rather than the pre-edit list.
+   */
+  const setResources = useCallback(
+    (updater: ClassResource[] | ((prev: ClassResource[]) => ClassResource[])) => {
+      void mutate(
+        (current) => {
+          const prev = sortResources(current?.resources ?? []);
+          return { ...current, resources: typeof updater === 'function' ? updater(prev) : updater };
+        },
+        { revalidate: false },
+      );
+    },
+    [mutate],
+  );
 
   /** Every mutation funnels through here so one place owns errors and busy state. */
   const send = useCallback(

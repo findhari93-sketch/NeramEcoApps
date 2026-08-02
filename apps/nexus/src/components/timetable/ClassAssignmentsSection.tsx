@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Button,
@@ -15,6 +15,7 @@ import LinkOffIcon from '@mui/icons-material/LinkOff';
 import type { ClassCardData } from './ClassCard';
 import { RADIUS } from './timetable-theme';
 import { preworkDueLabel } from '@/lib/prework';
+import { useNexusSWR, useRefreshKey } from '@/lib/nexus-swr';
 
 export interface SectionAssignment {
   id: string;
@@ -61,37 +62,20 @@ export default function ClassAssignmentsSection({
   header,
 }: ClassAssignmentsSectionProps) {
   const theme = useTheme();
-  const [fetched, setFetched] = useState<SectionAssignment[]>([]);
-  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // A caller that already holds the rows passes them in, and this section must
+  // not fetch at all. A null SWR key is how that is expressed.
   const selfFetch = provided === undefined;
 
-  const load = useCallback(async () => {
-    if (!selfFetch || !cls?.id) return;
-    setLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(`/api/timetable/${cls.id}/assignments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setFetched(data.assignments || []);
-      }
-    } catch {
-      /* the empty state covers this */
-    } finally {
-      setLoading(false);
-    }
-  }, [selfFetch, cls?.id, getToken]);
+  const { data, isLoading, mutate } = useNexusSWR<{ assignments?: SectionAssignment[] }>(
+    selfFetch && cls?.id ? `/api/timetable/${cls.id}/assignments` : null,
+    getToken,
+  );
+  useRefreshKey(refreshKey, mutate);
 
-  useEffect(() => {
-    load();
-  }, [load, refreshKey]);
-
-  const assignments = provided ?? fetched;
+  const loading = isLoading;
+  const assignments = provided ?? data?.assignments ?? [];
 
   const unlink = async (assignmentId: string) => {
     setBusy(true);
@@ -103,7 +87,16 @@ export default function ClassAssignmentsSection({
         body: JSON.stringify({ assignment_id: assignmentId }),
       });
       if (res.ok) {
-        setFetched((prev) => prev.filter((a) => a.id !== assignmentId));
+        // Drop the row from the cache immediately and skip the refetch: the
+        // DELETE already told us the outcome, so a round trip would only make
+        // the row linger for another 200ms.
+        await mutate(
+          (current) => ({
+            ...current,
+            assignments: (current?.assignments ?? []).filter((a) => a.id !== assignmentId),
+          }),
+          { revalidate: false },
+        );
         onNotify?.('Unlinked from this class');
       } else {
         const d = await res.json().catch(() => ({}));

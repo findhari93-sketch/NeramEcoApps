@@ -8,9 +8,15 @@
  * transcripts on one screen but not the other.
  */
 
-/** Class columns both video-meta routes need. */
+/**
+ * Class columns both video-meta routes need.
+ *
+ * `teams_wrapup_hash` is here so the GET can tell whether the Teams card still
+ * matches the class. It is the only way to notice that the nightly backup filled
+ * youtube_url without anybody being able to announce it.
+ */
 export const VIDEO_META_CLASS_COLS =
-  'id, classroom_id, teacher_id, title, description, summary_bullets, scheduled_date, youtube_url, recording_url, transcript_url, teams_meeting_id';
+  'id, classroom_id, teacher_id, title, description, summary_bullets, scheduled_date, youtube_url, recording_url, transcript_url, teams_meeting_id, publish_state, teams_wrapup_hash';
 
 /** Every column of nexus_class_video_meta the panel reads and writes. */
 export const VIDEO_META_COLS =
@@ -29,4 +35,6 @@ export interface VideoMetaClass {
   recording_url: string | null;
   transcript_url: string | null;
   teams_meeting_id: string | null;
+  publish_state: string | null;
+  teams_wrapup_hash: string | null;
 }

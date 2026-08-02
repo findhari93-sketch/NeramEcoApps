@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Chip,
@@ -16,6 +16,13 @@ import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import { stageKeyOf } from '@/lib/student-stage';
 import type { PrepRosterRow, PrepRosterSummary } from '@/lib/class-prep-roster';
 import { preworkReasonShortLabel } from '@/lib/prework-reasons';
+import { useNexusSWR, useRefreshKey } from '@/lib/nexus-swr';
+
+interface PrepRosterResponse {
+  rows?: PrepRosterRow[];
+  summary?: PrepRosterSummary | null;
+  headline?: string;
+}
 
 type Filter = 'all' | 'pending' | 'unprepared';
 
@@ -36,43 +43,28 @@ interface ClassPrepRosterProps {
  */
 export default function ClassPrepRoster({ classId, getToken, refreshKey }: ClassPrepRosterProps) {
   const theme = useTheme();
-  const [rows, setRows] = useState<PrepRosterRow[]>([]);
-  const [summary, setSummary] = useState<PrepRosterSummary | null>(null);
-  const [headline, setHeadline] = useState('');
-  const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [filter, setFilter] = useState<Filter>('pending');
 
-  const load = useCallback(async () => {
-    if (!classId) return;
-    setLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(`/api/timetable/${classId}/prep-roster`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const d = await res.json();
-        setRows(d.rows || []);
-        setSummary(d.summary || null);
-        setHeadline(d.headline || '');
-      }
-    } catch {
-      /* the collapsed state is a fine failure mode */
-    } finally {
-      setLoading(false);
-    }
-  }, [classId, getToken]);
+  const { data, isLoading, mutate } = useNexusSWR<PrepRosterResponse>(
+    classId ? `/api/timetable/${classId}/prep-roster` : null,
+    getToken,
+  );
+  useRefreshKey(refreshKey, mutate);
 
-  useEffect(() => {
-    load();
-  }, [load, refreshKey]);
+  const rows = data?.rows ?? [];
+  const summary = data?.summary ?? null;
+  const headline = data?.headline ?? '';
 
   // Nothing was asked of anybody, so there is nothing to report. Rendering an
   // empty "0 ready" box on every class would be noise on the overwhelming
   // majority of them.
-  if (!loading && (!summary || summary.total === 0)) return null;
+  //
+  // `isLoading` is false on a revisit, because the cached roster is already
+  // there: the second time a teacher opens this class the section renders
+  // populated on the first frame instead of flashing a spinner.
+  if (!isLoading && (!summary || summary.total === 0)) return null;
+  const loading = isLoading;
 
   const visible = rows.filter((r) => {
     if (filter === 'all') return true;

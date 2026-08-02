@@ -56,15 +56,49 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
     }
   }, [getToken]);
 
-  // Fetch on mount and poll
+  // Fetch on mount and poll, but only while somebody is actually looking.
+  //
+  // This provider is mounted in both the teacher and student layouts, so an unguarded
+  // interval means every signed-in person costs a round of database counts every minute
+  // for as long as the tab exists, including the tab left open in the background since
+  // Tuesday. Pausing on hidden and catching up on return keeps the badge just as fresh
+  // to the person reading it, and stops billing for the ones who are not.
   useEffect(() => {
     if (!user) return;
 
-    fetchBadges();
-    intervalRef.current = setInterval(fetchBadges, POLL_INTERVAL);
+    const start = () => {
+      if (intervalRef.current) return;
+      intervalRef.current = setInterval(fetchBadges, POLL_INTERVAL);
+    };
+
+    const stop = () => {
+      if (!intervalRef.current) return;
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        stop();
+        return;
+      }
+      // Refetch immediately on return: the counts may have moved while away, and
+      // waiting out the rest of the interval would show a stale badge at the exact
+      // moment someone is looking at it.
+      fetchBadges();
+      start();
+    };
+
+    if (document.visibilityState !== 'hidden') {
+      fetchBadges();
+      start();
+    }
+
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [user, fetchBadges]);
 

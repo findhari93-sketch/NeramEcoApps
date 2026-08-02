@@ -557,8 +557,27 @@ export async function listTestsGroupedByContext(
     const recapIds = [...new Set((secs || []).map((s: any) => s.recap_id).filter(Boolean))];
     const recapMap = new Map<string, string>();
     if (recapIds.length > 0) {
-      const { data: recaps } = await supabase.from('nexus_class_recaps').select('id, title').in('id', recapIds);
-      for (const r of recaps || []) recapMap.set(r.id, r.title);
+      const { data: recaps } = await supabase
+        .from('nexus_class_recaps')
+        .select('id, title, scheduled_class_id')
+        .in('id', recapIds);
+      // A recap's stored title is a snapshot taken when its row was created, so
+      // a class renamed since then would label its questions with the old Teams
+      // meeting subject. Same rule as withClassTitles in class-recaps.ts.
+      const classIds = [
+        ...new Set((recaps || []).map((r: any) => r.scheduled_class_id).filter(Boolean)),
+      ];
+      const classTitles = new Map<string, string>();
+      if (classIds.length > 0) {
+        const { data: classes } = await supabase
+          .from('nexus_scheduled_classes')
+          .select('id, title')
+          .in('id', classIds);
+        for (const c of classes || []) if (c.title) classTitles.set(c.id, c.title);
+      }
+      for (const r of recaps || []) {
+        recapMap.set(r.id, (r.scheduled_class_id && classTitles.get(r.scheduled_class_id)) || r.title);
+      }
     }
     for (const s of secs || []) {
       const parent = s.recap_id ? recapMap.get(s.recap_id) : null;

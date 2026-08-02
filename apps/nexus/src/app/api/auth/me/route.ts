@@ -203,24 +203,50 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (Object.keys(updates).length > 0) {
-      await supabase
-        .from('users')
-        .update(updates)
-        .eq('id', user.id);
-    }
+    // Everything left to do needs only `user.id`, and nothing here reads anything
+    // another line here produces, so it all goes at once.
+    //
+    // These used to run one after another: write the login stamp, then read the
+    // enrolments, then resolve the current batch, then read two settings rows. Four
+    // serial waits on the one request that blocks the entire app from painting, on
+    // every single load. Running them together makes the whole tail cost one round
+    // trip instead of four.
+    //
+    // The login-stamp write stays awaited rather than fired and forgotten: a
+    // serverless instance may be frozen the moment the response is sent, which would
+    // silently drop it. Awaiting it alongside the reads costs nothing, because it is
+    // no longer in anyone's way.
+    const [, enrollmentsResult, currentBatchCode, settingsResults] = await Promise.all([
+      Object.keys(updates).length > 0
+        ? supabase.from('users').update(updates).eq('id', user.id)
+        : Promise.resolve(null),
+
+      // Fetch enrolled classrooms with role
+      supabase
+        .from('nexus_enrollments')
+        .select('*, classroom:nexus_classrooms(*)')
+        .eq('user_id', user.id)
+        .eq('is_active', true),
+
+      getCurrentBatch(supabase)
+        .then((b) => b.code as string | null)
+        .catch(() => null),
+
+      // Both settings are fetched together so the timetable's evening window costs
+      // no extra round trip on top of the flags read. Neither may break auth, so
+      // each falls back to its own default independently.
+      Promise.allSettled([
+        getNexusSetting(FEATURE_FLAGS_KEY),
+        getNexusSetting(TIMETABLE_WINDOW_KEY),
+      ]),
+    ]);
 
     if (updates.name) user = { ...user, name: updates.name };
     if (updates.linked_classroom_email) {
       user = { ...user, linked_classroom_email: updates.linked_classroom_email };
     }
 
-    // Fetch enrolled classrooms with role
-    const { data: enrollments } = await supabase
-      .from('nexus_enrollments')
-      .select('*, classroom:nexus_classrooms(*)')
-      .eq('user_id', user.id)
-      .eq('is_active', true);
+    const enrollments = enrollmentsResult.data;
 
     // Only surface enrollments whose classroom is still live. A classroom drops
     // out of the student's view when it is disabled (is_active=false, hard
@@ -236,12 +262,6 @@ export async function GET(request: NextRequest) {
     // classrooms[0] when no saved selection matches, so a student who persisted
     // across a rollover (and whose old classroom is now archived + filtered out)
     // defaults to the current year. Archived cohorts are already excluded above.
-    let currentBatchCode: string | null = null;
-    try {
-      currentBatchCode = (await getCurrentBatch(supabase)).code;
-    } catch {
-      currentBatchCode = null;
-    }
     activeEnrollments.sort((a: any, b: any) => {
       const ay = a.classroom?.academic_year || '';
       const by = b.classroom?.academic_year || '';
@@ -288,13 +308,8 @@ export async function GET(request: NextRequest) {
     // items and pages are available (student features default off; staff on).
     // One cheap read on an already-dynamic route. Never let a settings error
     // break auth — fall back to registry defaults.
-    // Both settings are fetched together so the timetable's evening window costs
-    // no extra round trip on top of the flags read. Neither may break auth, so
-    // each falls back to its own default independently.
-    const [flagsResult, windowResult] = await Promise.allSettled([
-      getNexusSetting(FEATURE_FLAGS_KEY),
-      getNexusSetting(TIMETABLE_WINDOW_KEY),
-    ]);
+    // Read above, alongside the enrolments, rather than after them.
+    const [flagsResult, windowResult] = settingsResults;
 
     const featureFlags: FlagMap = resolveFlags(
       flagsResult.status === 'fulfilled' ? ((flagsResult.value?.value as FlagMap) || {}) : {},

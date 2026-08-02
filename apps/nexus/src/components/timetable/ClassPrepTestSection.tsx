@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Box, Button, CircularProgress, Typography, alpha, useTheme } from '@neram/ui';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import type { ClassCardData } from './ClassCard';
 import { RADIUS } from './timetable-theme';
+import { useNexusSWR, useRefreshKey } from '@/lib/nexus-swr';
 
 export interface PrepTestInfo {
   placement_id?: string;
@@ -50,35 +51,17 @@ export default function ClassPrepTestSection({
   header,
 }: ClassPrepTestSectionProps) {
   const theme = useTheme();
-  const [prepTest, setPrepTest] = useState<PrepTestInfo | null>(null);
-  const [hasStarted, setHasStarted] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!cls?.id) return;
-    setLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(`/api/timetable/${cls.id}/prep-test`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const d = await res.json();
-        setPrepTest(d.prep_test || null);
-        setHasStarted(!!d.has_started);
-      }
-    } catch {
-      /* the empty state covers this */
-    } finally {
-      setLoading(false);
-    }
-  }, [cls?.id, getToken]);
+  const { data, isLoading, mutate } = useNexusSWR<{
+    prep_test?: PrepTestInfo | null;
+    has_started?: boolean;
+  }>(cls?.id ? `/api/timetable/${cls.id}/prep-test` : null, getToken);
+  useRefreshKey(refreshKey, mutate);
 
-  useEffect(() => {
-    load();
-  }, [load, refreshKey]);
+  const loading = isLoading;
+  const prepTest = data?.prep_test ?? null;
+  const hasStarted = !!data?.has_started;
 
   const remove = async () => {
     setBusy(true);
@@ -89,7 +72,7 @@ export default function ClassPrepTestSection({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        setPrepTest(null);
+        await mutate((current) => ({ ...current, prep_test: null }), { revalidate: false });
         // Says "removed from this class", not "deleted": the paper and every past
         // attempt survive, and a teacher who taps this by mistake loses nothing.
         onNotify?.('Test removed from this class');

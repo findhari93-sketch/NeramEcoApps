@@ -53,6 +53,8 @@ export interface WrapUpClassRow {
   title?: string | null;
   description?: string | null;
   meeting_group_id?: string | null;
+  /** Compared against the incoming link, so a re-save announces nothing. */
+  youtube_url?: string | null;
 }
 
 export interface BuildWrapUpResult {
@@ -214,7 +216,13 @@ export async function applyWrapUp(
   const topicMoved =
     ('title' in updates && updates.title !== cls.title) ||
     ('description' in updates && (updates.description ?? null) !== (cls.description ?? null)) ||
-    'summary_bullets' in updates;
+    'summary_bullets' in updates ||
+    // A recording appearing IS news, and the card now carries a watch link, so
+    // the old rule that only a moved topic was worth re-posting no longer holds.
+    // Still guarded on the value changing: re-saving the same link posts nothing,
+    // which is what stops a teacher tidying up an old class from spamming the
+    // channel with a video the group was told about weeks ago.
+    ('youtube_url' in updates && (updates.youtube_url ?? null) !== (cls.youtube_url ?? null));
 
   return { ok: true, tagWarning, contentEdited, topicMoved };
 }

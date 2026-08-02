@@ -16,6 +16,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import { computeAssignmentClock } from '@/lib/assignment-clock';
 import { reactionEmoji } from '@/lib/assignment-reactions';
 import type { GalleryReactionType } from '@neram/database/types';
@@ -50,27 +51,31 @@ function formatDay(ymd: string): string {
   return new Date(ymd + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: undefined });
 }
 
+/** Stable empty list, so a failed load does not change identity on every render. */
+const NONE: StudentAssignment[] = [];
+
 export default function StudentAssignmentsPage() {
   const router = useRouter();
   const authFetch = useAuthFetch();
   const { loading: authLoading } = useNexusAuthContext();
 
-  const [items, setItems] = useState<StudentAssignment[] | null>(null);
   const [tab, setTab] = useState<'todo' | 'done'>('todo');
 
-  const load = useCallback(async () => {
-    setItems(null);
-    try {
-      const res = await authFetch('/api/student/assignments');
-      setItems(res.assignments as StudentAssignment[]);
-    } catch {
-      setItems([]);
-    }
-  }, [authFetch]);
+  const { data, error, mutate } = useAuthSWR<{ assignments: StudentAssignment[] }>(
+    authLoading ? null : '/api/student/assignments',
+  );
 
-  useEffect(() => {
-    if (!authLoading) load();
-  }, [authLoading, load]);
+  // Null means "still finding out" and drives the skeleton; an empty array means
+  // "nothing to do", which is a real answer. On a revisit this is already populated
+  // from the device, so the skeleton is skipped entirely.
+  //
+  // NONE is a module constant rather than a literal, so a failed load keeps the same
+  // array identity between renders and the useMemos below do not recompute forever.
+  const items = data?.assignments ?? (error ? NONE : null);
+
+  const load = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
 
   const isTodo = (a: StudentAssignment) => !a.submission || a.submission.status === 'redo';
   const visible = useMemo(

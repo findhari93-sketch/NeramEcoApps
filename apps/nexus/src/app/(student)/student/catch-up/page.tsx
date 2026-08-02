@@ -41,6 +41,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import VideocamOffOutlinedIcon from '@mui/icons-material/VideocamOffOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import CatchupTrack, { TrackStep, TrackStepStatus } from '@/components/course-plan/CatchupTrack';
 import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
@@ -166,42 +167,50 @@ function Gates({ item }: { item: BacklogItem }) {
   );
 }
 
+/** What the screen shows when the request failed and nothing was cached. */
+const EMPTY_PAYLOAD: Payload = {
+  journey: null,
+  pace: null,
+  totals: null,
+  missedTotals: { total: 0, completed: 0, open: 0, overdue: 0 },
+  missed: [],
+  items: [],
+  excluded: [],
+};
+
 export default function StudentCatchUpPage() {
   const router = useRouter();
   const theme = useTheme();
   const { loading: authLoading } = useNexusAuthContext();
   const authFetch = useAuthFetch();
 
-  const [data, setData] = useState<Payload | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
-  const [offline, setOffline] = useState(false);
+
+  const {
+    data: fetched,
+    error,
+    mutate,
+  } = useAuthSWR<Payload>(authLoading ? null : '/api/student/catchup-journey');
+
+  // On a phone with no signal this now resolves to the list saved on the device, which
+  // is what the banner below has always claimed to be showing. Before there was a
+  // cache it could only ever be the empty payload.
+  const data = fetched ?? (error ? EMPTY_PAYLOAD : null);
+
+  const offline = !!error && typeof navigator !== 'undefined' && navigator.onLine === false;
 
   const load = useCallback(async () => {
-    try {
-      const res = (await authFetch('/api/student/catchup-journey')) as Payload;
-      setData(res);
-      setOffline(false);
-    } catch (err) {
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        setOffline(true);
-      } else {
-        setSnack({ msg: err instanceof Error ? err.message : 'Could not load your list', sev: 'error' });
-      }
-      setData({
-        journey: null,
-        pace: null,
-        totals: null,
-        missedTotals: { total: 0, completed: 0, open: 0, overdue: 0 },
-        missed: [],
-        items: [],
-        excluded: [],
-      });
-    }
-  }, [authFetch]);
+    await mutate();
+  }, [mutate]);
 
   useEffect(() => {
-    if (!authLoading) load();
-  }, [authLoading, load]);
+    // A genuine failure still deserves a message. Being offline does not: that is what
+    // the banner is for, and a red snackbar on top of a working cached list would read
+    // as though something had gone wrong.
+    if (error && !offline) {
+      setSnack({ msg: error.message || 'Could not load your list', sev: 'error' });
+    }
+  }, [error, offline]);
 
   /** Where an item's CTA goes. Straight to the step, not to a landing page. */
   const openItem = useCallback(

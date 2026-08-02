@@ -129,6 +129,53 @@ function sortSections(sections: NexusClassRecapSection[]): NexusClassRecapSectio
 }
 
 /**
+ * Overlay each recap with the CURRENT title of the class it belongs to.
+ *
+ * `nexus_class_recaps.title` is written once, by createRecapForClass, from the
+ * class row as it stood that day. For a class nobody has wrapped up yet that
+ * value is still the Teams meeting subject ("Class by Ar Hari Babu"). Renaming
+ * the class afterwards writes nexus_scheduled_classes and nothing else, so every
+ * recap made before the rename kept announcing the old subject to its teacher
+ * and to the students catching the class up.
+ *
+ * Resolved on read rather than synced on write on purpose. Class titles are
+ * written from four places (the Wrap Up panel, the timetable PATCH, the Teams
+ * reconciler and the autodraft cron) and a fifth would eventually forget to
+ * carry the recap along, which is the failure this is fixing. Reading also heals
+ * the rows that already drifted, with no backfill. buildClassTestFromRecap
+ * already names its test this way.
+ *
+ * The stored column stays as the fallback, and is the only title an ad-hoc recap
+ * (scheduled_class_id NULL) has ever had.
+ */
+async function withClassTitles<T extends { scheduled_class_id?: string | null; title?: string }>(
+  supabase: TypedSupabaseClient,
+  rows: T[],
+): Promise<T[]> {
+  const classIds = [...new Set(rows.map((r) => r.scheduled_class_id).filter(Boolean))];
+  if (!classIds.length) return rows;
+
+  const { data, error } = await supabase
+    .from('nexus_scheduled_classes')
+    .select('id, title')
+    .in('id', classIds);
+  // Best-effort: a recap that cannot reach its class is better shown under its
+  // old name than not shown at all.
+  if (error) {
+    console.error('[recap] class title lookup failed (non-fatal):', error.message);
+    return rows;
+  }
+
+  const titleByClass = new Map<string, string>();
+  for (const c of data || []) if (c.title) titleByClass.set(c.id, c.title);
+
+  return rows.map((r) => {
+    const live = r.scheduled_class_id ? titleByClass.get(r.scheduled_class_id) : undefined;
+    return live ? { ...r, title: live } : r;
+  });
+}
+
+/**
  * Create (or return the existing) draft recap for a recorded scheduled class.
  * Snapshots the class recording + transcript URLs so later edits to the class
  * row don't strand the recap.
@@ -253,8 +300,9 @@ export async function getRecapById(
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  data.sections = sortSections(data.sections || []);
-  return data as NexusClassRecap & { sections: NexusClassRecapSection[] };
+  const [recap] = await withClassTitles(supabase, [data]);
+  recap.sections = sortSections(recap.sections || []);
+  return recap as NexusClassRecap & { sections: NexusClassRecapSection[] };
 }
 
 /** Snapshot latest recording/transcript URLs onto the recap (from the class row). */
@@ -912,7 +960,7 @@ export async function listRecapsNeedingReview(
     .order('updated_at', { ascending: false })
     .limit(100);
   if (error) throw error;
-  return (data as NexusClassRecap[]) || [];
+  return withClassTitles(supabase, (data as NexusClassRecap[]) || []);
 }
 
 export interface RecapDraw {
@@ -1139,7 +1187,7 @@ export async function listRecapsForClassroom(
     .eq('classroom_id', classroomId)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return (data || []).map((r) => {
+  const rows = (data || []).map((r) => {
     const { sections, progress, ...rest } = r;
     return {
       ...rest,
@@ -1148,6 +1196,7 @@ export async function listRecapsForClassroom(
       in_progress_count: (progress || []).filter((p) => p.status === 'in_progress').length,
     };
   });
+  return withClassTitles(supabase, rows);
 }
 
 /**
@@ -1184,7 +1233,7 @@ export async function listPublishedRecapsForStudent(
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  return (data || []).map((r) => {
+  const rows = (data || []).map((r) => {
     const { sections, progress, ...rest } = r;
     const mine = (progress || []).find((p) => p.student_id === studentId);
     return {
@@ -1193,6 +1242,7 @@ export async function listPublishedRecapsForStudent(
       progress_status: mine?.status ?? null,
     };
   });
+  return withClassTitles(supabase, rows);
 }
 
 /** Per-student completion for one recap (management drill-down). */

@@ -92,6 +92,13 @@ export function buildRescheduledHtml(
  * weeks later wants the topic and the points, not a diff against an intention.
  * Deliberately short: the full note, the images and the recording live in Nexus,
  * which the trailing link points at.
+ *
+ * The video line is separate from that Nexus link and appears only once the
+ * recording is actually watchable. A YouTube URL on the class row means one of
+ * two things has happened: a teacher pasted the link, or the nightly backup
+ * uploaded it and then saw the teacher flip it off private. Either way the video
+ * is live, so the card can say so, and a student in Teams no longer has to open
+ * Nexus and hunt for the recording to find out whether one exists.
  */
 export function buildWrapUpHtml(
   cls: {
@@ -99,10 +106,15 @@ export function buildWrapUpHtml(
     scheduled_date: string;
     description?: string | null;
     summary_bullets?: string[] | null;
+    youtube_url?: string | null;
   },
   classUrl?: string | null,
 ): string {
   const bullets = (cls.summary_bullets || []).filter(Boolean).slice(0, 6);
+  // Only an http(s) link goes into an href. Anything else on that column is
+  // either junk or an injection attempt, and a `javascript:` URL in a card every
+  // student in the cohort can tap is not a risk worth carrying for a convenience.
+  const video = /^https?:\/\//i.test(cls.youtube_url || '') ? (cls.youtube_url as string) : null;
   return `<h3>✅ ${esc(cls.title)}</h3>
 <p><strong>Class on:</strong> ${esc(cls.scheduled_date)} (IST)</p>${
     cls.description ? `\n<p>${esc(cls.description)}</p>` : ''
@@ -112,7 +124,9 @@ export function buildWrapUpHtml(
           .map((b) => `<li>${esc(b)}</li>`)
           .join('')}</ul>`
       : ''
-  }${classUrl ? `\n<p><a href="${classUrl}">📖 Full notes, images and recording in Nexus</a></p>` : ''}`;
+  }${video ? `\n<p><a href="${esc(video)}">▶️ Watch the recording on YouTube</a></p>` : ''}${
+    classUrl ? `\n<p><a href="${classUrl}">📖 Full notes, images and recording in Nexus</a></p>` : ''
+  }`;
 }
 
 /**
@@ -279,8 +293,18 @@ export async function resolveMeetingChannelId(token: string, teamId: string): Pr
   return (await findChannel(MEETING_CHANNEL_NAME)) || (await findChannel('General'));
 }
 
-/** Short, stable fingerprint of a rendered card, so an unchanged save posts nothing. */
-function cardHash(html: string): string {
+/**
+ * Short, stable fingerprint of a rendered card, so an unchanged save posts nothing.
+ *
+ * Exported because the fingerprint is also how a caller asks "does the card in
+ * Teams still say what this class says?" without a Graph round trip. That
+ * question has an owner now: the nightly backup fills youtube_url with no human
+ * present and cannot post the news itself, because application Graph tokens
+ * cannot send channel messages. Comparing a freshly built card against the
+ * stored hash is what makes that gap visible to the next teacher who looks,
+ * with no extra column and nothing to keep in step.
+ */
+export function cardHash(html: string): string {
   let h = 0;
   for (let i = 0; i < html.length; i++) {
     h = (Math.imul(31, h) + html.charCodeAt(i)) | 0;
@@ -319,7 +343,7 @@ export async function refreshClassAnnouncement(
     const { data: cls } = await sb
       .from('nexus_scheduled_classes')
       .select(
-        'id, classroom_id, title, description, summary_bullets, scheduled_date, publish_state, meeting_group_id, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, teams_wrapup_message_id, teams_wrapup_chat_message_id, teams_wrapup_hash',
+        'id, classroom_id, title, description, summary_bullets, scheduled_date, youtube_url, publish_state, meeting_group_id, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id, teams_wrapup_message_id, teams_wrapup_chat_message_id, teams_wrapup_hash',
       )
       .eq('id', classId)
       .single();

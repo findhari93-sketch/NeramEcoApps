@@ -16,10 +16,11 @@
  * the class fields and tags to any enrolled user, and the images GET returns the
  * gallery to enrolled users.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Box, Button, Chip, CircularProgress, Typography } from '@neram/ui';
 import { sortClassImages, type ClassImageRef } from '@/lib/class-cover';
 import ClassImagesViewer from './ClassImagesViewer';
+import { useNexusSWR } from '@/lib/nexus-swr';
 
 interface Props {
   classId: string;
@@ -42,44 +43,29 @@ interface Tag {
 const CLAMP_OVER_CHARS = 320;
 
 export default function ClassCaptureView({ classId, getToken }: Props) {
-  const [loading, setLoading] = useState(true);
-  const [notes, setNotes] = useState('');
   const [notesOpen, setNotesOpen] = useState(false);
-  const [bullets, setBullets] = useState<string[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [images, setImages] = useState<Img[]>([]);
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const token = await getToken();
-        const [w, i] = await Promise.all([
-          fetch(`/api/timetable/${classId}/wrap-up`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`/api/timetable/${classId}/images`, { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-        if (active && w.ok) {
-          const d = await w.json();
-          setNotes(typeof d.class?.notes === 'string' ? d.class.notes.trim() : '');
-          setBullets(Array.isArray(d.class?.summary_bullets) ? d.class.summary_bullets : []);
-          setTags(d.tags || []);
-        }
-        if (active && i.ok) {
-          const d = await i.json();
-          setImages(sortClassImages(d.images || []));
-        }
-      } catch {
-        /* leave empty */
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [classId, getToken]);
+  // The exact two URLs WrapUpSection asks for, one component up the tree. That
+  // used to be four requests for two resources on every open of this tab; SWR
+  // dedupes them into two, and into zero on a revisit inside the cache window.
+  const { data: wrapUp, isLoading: wrapUpLoading } = useNexusSWR<{
+    class?: { notes?: unknown; summary_bullets?: unknown };
+    tags?: Tag[];
+  }>(classId ? `/api/timetable/${classId}/wrap-up` : null, getToken);
+
+  const { data: imageData, isLoading: imagesLoading } = useNexusSWR<{ images?: Img[] }>(
+    classId ? `/api/timetable/${classId}/images` : null,
+    getToken,
+  );
+
+  const loading = wrapUpLoading || imagesLoading;
+  const notes = typeof wrapUp?.class?.notes === 'string' ? wrapUp.class.notes.trim() : '';
+  const bullets = Array.isArray(wrapUp?.class?.summary_bullets)
+    ? (wrapUp?.class?.summary_bullets as string[])
+    : [];
+  const tags = wrapUp?.tags ?? [];
+  const images = sortClassImages(imageData?.images ?? []);
 
   if (loading) {
     return (

@@ -61,26 +61,32 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    // Look up user (need the staff tier so staff can browse archived past-year
-    // classrooms, and so an external teacher's view can be session-scoped below)
-    const { data: user } = await supabase
-      .from('users')
-      .select('id, user_type, staff_role, can_teach')
-      .eq('ms_oid', msUser.oid)
-      .single();
+    // The caller and the classroom have nothing to do with each other, so they are
+    // looked up together. This is the timetable, the heaviest page in the app, and it
+    // used to spend three separate round trips here before it began collecting a
+    // single class.
+    const [{ data: user }, { data: classroom }] = await Promise.all([
+      // Look up user (need the staff tier so staff can browse archived past-year
+      // classrooms, and so an external teacher's view can be session-scoped below)
+      supabase
+        .from('users')
+        .select('id, user_type, staff_role, can_teach')
+        .eq('ms_oid', msUser.oid)
+        .single(),
+
+      // Look up the classroom to know whether it is an archived (past-year, read-only)
+      // cohort. Under one-classroom-per-year each classroom is a single cohort, so no
+      // cross-classroom "Common" merge is needed anymore.
+      supabase
+        .from('nexus_classrooms')
+        .select('id, is_archived')
+        .eq('id', classroomId)
+        .single(),
+    ]);
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
-
-    // Look up the classroom to know whether it is an archived (past-year, read-only)
-    // cohort. Under one-classroom-per-year each classroom is a single cohort, so no
-    // cross-classroom "Common" merge is needed anymore.
-    const { data: classroom } = await supabase
-      .from('nexus_classrooms')
-      .select('id, is_archived')
-      .eq('id', classroomId)
-      .single();
 
     if (!classroom) {
       return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
@@ -88,6 +94,8 @@ export async function GET(request: NextRequest) {
 
     const isStaff = resolveStaffRole(user) !== null;
 
+    // Genuinely dependent on the lookup above, since enrolments are keyed by users.id
+    // rather than by ms_oid, so this one stays a second wave.
     const { data: enrollment } = await supabase
       .from('nexus_enrollments')
       .select('role, batch_id')

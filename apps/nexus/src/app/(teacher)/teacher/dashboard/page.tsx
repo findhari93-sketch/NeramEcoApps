@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -23,6 +22,7 @@ import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import StatCard from '@/components/StatCard';
 import ExamCountdown from '@/components/ExamCountdown';
 import type { ExamCountdownTarget } from '@/lib/exam-countdown';
@@ -48,41 +48,20 @@ interface TeacherDashboardData {
 export default function TeacherDashboard() {
   const router = useRouter();
   const theme = useTheme();
-  const { user, activeClassroom, getToken, loading: authLoading, classrooms } = useNexusAuthContext();
-  const [data, setData] = useState<TeacherDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, activeClassroom, loading: authLoading, classrooms } = useNexusAuthContext();
 
   const noClassrooms = !authLoading && classrooms.length === 0;
 
-  useEffect(() => {
-    if (!activeClassroom) {
-      if (!authLoading) setLoading(false);
-      return;
-    }
+  // The classroom is part of the key, so switching classroom reads a different cache
+  // entry rather than refetching this one. A teacher's own dashboard is the screen they
+  // open most, and on a revisit it now paints from cache with no wait at all.
+  const { data, isLoading } = useAuthSWR<TeacherDashboardData>(
+    activeClassroom ? `/api/dashboard/teacher?classroom=${activeClassroom.id}` : null,
+  );
 
-    async function fetchDashboard() {
-      setLoading(true);
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        const res = await fetch(
-          `/api/dashboard/teacher?classroom=${activeClassroom!.id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        if (res.ok) {
-          setData(await res.json());
-        }
-      } catch (err) {
-        console.error('Failed to load dashboard:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchDashboard();
-  }, [activeClassroom, getToken, authLoading]);
+  // With no classroom there is nothing to wait for, so the skeleton must not linger:
+  // the empty state below is the real answer for that teacher.
+  const loading = activeClassroom ? isLoading : authLoading;
 
   const formatTime = (time: string) => {
     const [h, m] = time.split(':');

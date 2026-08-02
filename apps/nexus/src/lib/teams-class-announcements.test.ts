@@ -132,4 +132,49 @@ describe('buildWrapUpHtml', () => {
     expect(html).not.toContain('--');
     expect(html).not.toContain('&mdash;');
   });
+
+  describe('the video link', () => {
+    const url = 'https://www.youtube.com/watch?v=abc123';
+
+    it('offers the recording once the class carries a YouTube link', () => {
+      // The card used to end at "full notes in Nexus", so a student in Teams
+      // could not tell whether a recording existed without going and looking.
+      const html = buildWrapUpHtml({ ...wrapped, youtube_url: url });
+      expect(html).toContain(url);
+      expect(html).toContain('Watch the recording on YouTube');
+    });
+
+    it('says nothing about a recording when there is no link', () => {
+      expect(buildWrapUpHtml(wrapped)).not.toContain('Watch the recording');
+    });
+
+    it('keeps the Nexus link as well, and puts the video first', () => {
+      // Two different jobs: the video is what most students came for, the Nexus
+      // link is where the note, the images and the tags live.
+      const html = buildWrapUpHtml({ ...wrapped, youtube_url: url }, 'https://nexus.neramclasses.com/x');
+      expect(html).toContain('https://nexus.neramclasses.com/x');
+      expect(html.indexOf(url)).toBeLessThan(html.indexOf('https://nexus.neramclasses.com/x'));
+    });
+
+    it('refuses anything that is not an http url', () => {
+      // This href goes into a card every student in the cohort can tap, so a
+      // javascript: or data: value must never reach it.
+      for (const bad of ['javascript:alert(1)', 'data:text/html,<script>', 'not a url', '']) {
+        const html = buildWrapUpHtml({ ...wrapped, youtube_url: bad });
+        expect(html).not.toContain('Watch the recording');
+      }
+    });
+
+    it('escapes a link carrying html metacharacters', () => {
+      const html = buildWrapUpHtml({ ...wrapped, youtube_url: 'https://x.test/a?b=1&c="2"' });
+      expect(html).toContain('&amp;c=');
+      expect(html).not.toContain('c="2"');
+    });
+
+    it('adds no em dash or double dash', () => {
+      const html = buildWrapUpHtml({ ...wrapped, youtube_url: url }, 'https://x');
+      expect(html).not.toContain('—');
+      expect(html).not.toContain('--');
+    });
+  });
 });

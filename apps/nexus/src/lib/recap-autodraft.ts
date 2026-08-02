@@ -379,7 +379,11 @@ export async function autodraftRecapForClass(
 
     const generated = await generateSectionsAndQuestions(
       transcript,
-      recap.title || cls.title || 'Class recap',
+      // Class first: the recap's copy of the title was taken when its row was
+      // created and does not follow a rename, so it can still be the Teams
+      // meeting subject. The generator writes checkpoints about this topic, so
+      // handing it "Class by Ar Hari Babu" costs real quality.
+      cls.title || recap.title || 'Class recap',
       { targetSegmentSeconds, poolPerSegment, durationSeconds },
     );
 

@@ -22,6 +22,7 @@ import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useRouter } from 'next/navigation';
 import TimetableWindowCard from '@/components/admin/TimetableWindowCard';
+import YouTubeBackupCard from '@/components/admin/YouTubeBackupCard';
 
 export default function AdminSettingsPage() {
   const { isAdmin, loading, getToken } = useNexusAuthContext();
@@ -221,6 +222,12 @@ export default function AdminSettingsPage() {
       {/* Timetable window */}
       <Box sx={{ mt: 3 }}>
         <TimetableWindowCard getToken={getToken} />
+      </Box>
+
+      {/* The OAuth callback redirects back to this page, so the card that reads
+          its result has to live here. */}
+      <Box sx={{ mt: 3 }}>
+        <YouTubeBackupCard getToken={getToken} />
       </Box>
     </Box>
   );

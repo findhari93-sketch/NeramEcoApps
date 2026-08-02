@@ -64,11 +64,48 @@ import {
 } from '@/lib/youtube-metadata';
 import type { ClassVideoChapter } from '@neram/database/types';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useNexusSWR, revalidateClass } from '@/lib/nexus-swr';
 import { RADIUS } from './timetable-theme';
 
 interface RegistryTag extends AllowedTag {
   id: string;
   color?: string | null;
+}
+
+interface SavedMeta {
+  status?: string | null;
+  yt_title?: string | null;
+  yt_description?: string | null;
+  yt_tags?: string[] | null;
+  chapters?: unknown;
+  search_terms?: string[] | null;
+  category?: string | null;
+  exam?: string | null;
+  language?: string | null;
+  difficulty?: string | null;
+}
+
+interface VideoMetaResponse {
+  registry?: RegistryTag[];
+  tags?: RegistryTag[];
+  class?: { youtube_url?: string | null };
+  meta?: SavedMeta | null;
+  /** The class has a video link the Teams card does not mention yet. */
+  teamsCardStale?: boolean;
+}
+
+/**
+ * Where a teacher returning to a saved listing should land.
+ *
+ * The old rule sent everyone to Review, including the teacher who had already
+ * pressed "Ready to upload" and come back for nothing but the three Copy
+ * buttons. Landing on the step that still has a job left to do is what makes a
+ * finished listing feel finished.
+ */
+function stepForStatus(status: string | null | undefined): number {
+  if (status === 'published') return 4;
+  if (status === 'ready') return 3;
+  return 2;
 }
 
 interface Props {
@@ -151,11 +188,12 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
   const theme = useTheme();
   const { featureFlags } = useNexusAuthContext();
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [announcing, setAnnouncing] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
+  /** Reveal the five-step wizard over a listing that is already written. */
+  const [editing, setEditing] = useState(false);
 
-  const [registry, setRegistry] = useState<RegistryTag[]>([]);
   const [status, setStatus] = useState<string>('draft');
   const [classYoutubeUrl, setClassYoutubeUrl] = useState('');
 
@@ -203,43 +241,62 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
     [getToken],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await authed(`/api/timetable/${classId}/video-meta`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Could not load');
+  /**
+   * The saved listing, cached for the life of the page.
+   *
+   * Fetched on mount rather than on expand, which is a deliberate change. The
+   * old code only loaded when the card was opened, so the status chip on the
+   * collapsed header read "Draft" on every class in the database, including the
+   * ones already published: a teacher could not tell from the outside whether
+   * this job was done, and the only way to find out was to open it and wait for
+   * a spinner. It is one indexed single-row read, and SWR serves the second
+   * visit from cache.
+   */
+  const { data, isLoading, mutate } = useNexusSWR<VideoMetaResponse>(
+    classId ? `/api/timetable/${classId}/video-meta` : null,
+    getToken,
+  );
 
-      setRegistry(json.registry || []);
-      setSelectedTagIds((json.tags || []).map((t: RegistryTag) => t.id));
-      setClassYoutubeUrl(json.class?.youtube_url || '');
-      setYoutubeUrl(json.class?.youtube_url || '');
+  const registry = useMemo(() => data?.registry ?? [], [data]);
 
-      const meta = json.meta;
-      if (meta) {
-        setStatus(meta.status || 'draft');
-        setYtTitle(meta.yt_title || '');
-        setYtDescription(meta.yt_description || '');
-        setYtTags(meta.yt_tags || []);
-        setChapters(Array.isArray(meta.chapters) ? meta.chapters : []);
-        setSearchTerms(meta.search_terms || []);
-        setCategory(meta.category || '');
-        setExam(meta.exam || '');
-        setLanguage(meta.language || '');
-        setDifficulty(meta.difficulty || '');
-        // A draft that already has a title is past the paste step.
-        if (meta.yt_title) setActiveStep(meta.status === 'published' ? 4 : 2);
-      }
-    } catch (err) {
-      onNotify?.(err instanceof Error ? err.message : 'Could not load the video metadata');
-    } finally {
-      setLoading(false);
-    }
-  }, [authed, classId, onNotify]);
-
+  /**
+   * Fill the editable fields once per class.
+   *
+   * Guarded the same way the wrap-up form is: steps 3 and 5 are text a teacher
+   * types into, and a background revalidation writing over them mid-sentence is
+   * a data-loss bug, not a refresh.
+   */
+  const hydratedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (open && !registry.length) void load();
-  }, [open, registry.length, load]);
+    if (!data || hydratedFor.current === classId) return;
+    hydratedFor.current = classId;
+
+    setSelectedTagIds((data.tags || []).map((t) => t.id));
+    setClassYoutubeUrl(data.class?.youtube_url || '');
+    setYoutubeUrl(data.class?.youtube_url || '');
+
+    const meta = data.meta;
+    if (!meta) return;
+    setStatus(meta.status || 'draft');
+    setYtTitle(meta.yt_title || '');
+    setYtDescription(meta.yt_description || '');
+    setYtTags(meta.yt_tags || []);
+    setChapters(Array.isArray(meta.chapters) ? (meta.chapters as ClassVideoChapter[]) : []);
+    setSearchTerms(meta.search_terms || []);
+    setCategory(meta.category || '');
+    setExam(meta.exam || '');
+    setLanguage(meta.language || '');
+    setDifficulty(meta.difficulty || '');
+    if (meta.yt_title) setActiveStep(stepForStatus(meta.status));
+  }, [data, classId]);
+
+  // A different class means a different listing, so the wizard must not stay
+  // open over the top of it.
+  useEffect(() => {
+    setEditing(false);
+  }, [classId]);
+
+  const loading = isLoading;
 
   const allowedTags: AllowedTag[] = useMemo(
     () => registry.filter((t) => t.group_type !== 'exam'),
@@ -405,8 +462,15 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Could not save');
       if (nextStatus) setStatus(nextStatus);
+      // Refresh the cached row so the status chip, and anything else reading
+      // this class, matches what was just written. The fields on screen are
+      // already correct, so this never blanks the form.
+      void mutate();
       if (withUrl) {
         setClassYoutubeUrl(youtubeUrl);
+        // Publishing writes youtube_url onto the class row itself, which the
+        // wrap-up section and the recording section both read.
+        void revalidateClass(classId);
         onNotify?.(
           json.librarySynced
             ? 'Published. The class is in the student Library with these tags.'
@@ -420,6 +484,36 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
       onNotify?.(err instanceof Error ? err.message : 'Could not save');
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * Tell the class the recording is up, when nothing else already has.
+   *
+   * The nightly backup fills the link with nobody present and cannot post to
+   * Teams itself, because an application Graph token may not send a channel
+   * message. So the news waits here, behind one tap, for the next teacher to
+   * open the class. Publishing by hand needs no button: that path posts on save.
+   */
+  const announce = async () => {
+    setAnnouncing(true);
+    try {
+      const res = await authed(`/api/timetable/${classId}/video-meta`, {
+        method: 'PATCH',
+        body: JSON.stringify({ announce: true }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not post to Teams');
+      void mutate();
+      onNotify?.(
+        json.teamsCardPosted
+          ? 'Posted to Teams with the video link.'
+          : 'Teams did not take it. The class may have no team or group chat linked.',
+      );
+    } catch (err) {
+      onNotify?.(err instanceof Error ? err.message : 'Could not post to Teams');
+    } finally {
+      setAnnouncing(false);
     }
   };
 
@@ -461,9 +555,27 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
         }}
       >
         <YouTubeIcon sx={{ color: '#ff0000' }} />
-        <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
-          Publish to YouTube
-        </Typography>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle2" fontWeight={700}>
+            Publish to YouTube
+          </Typography>
+          {/* The saved title, on the closed card. A teacher who wrote this
+              three weeks ago needs to recognise it without opening anything. */}
+          {ytTitle && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{
+                display: 'block',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {ytTitle}
+            </Typography>
+          )}
+        </Box>
         <Chip size="small" label={STATUS_LABELS[status] || status} color={statusColor as never} />
         <ExpandMoreIcon
           sx={{
@@ -480,6 +592,91 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
               <CircularProgress size={24} />
+            </Box>
+          ) : ytTitle && !editing ? (
+            /*
+             * The listing is already written, so this is the whole job.
+             *
+             * The five-step wizard is for producing a listing, and it was the
+             * only thing this card ever showed. That meant a teacher coming
+             * back for the three fields, which is what they come back for,
+             * had to click down a stepper past a "Generate with AI" button
+             * to reach buttons they had already used once. The listing is
+             * stored, so it should be handed over, not re-navigated to.
+             */
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                {status === 'published'
+                  ? 'This listing is live. Copy any field again if you need it.'
+                  : 'Saved. Paste these three into YouTube Studio.'}
+              </Typography>
+
+              <Paper
+                variant="outlined"
+                sx={{ p: 1.25, mb: 1.5, borderRadius: RADIUS.control, bgcolor: 'action.hover' }}
+              >
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                  {ytTitle}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {ytTags.length} tags
+                  {chapters.length ? `, ${chapters.length} chapters` : ''}
+                  {ytDescription ? `, ${ytDescription.length} characters of description` : ''}
+                </Typography>
+              </Paper>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 1.5 }}>
+                <CopyButton text={ytTitle} label="Copy title" fullWidth />
+                <CopyButton text={ytDescription} label="Copy description" fullWidth />
+                <CopyButton text={ytTags.join(', ')} label="Copy tags" fullWidth />
+              </Box>
+
+              {classYoutubeUrl && (
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  href={classYoutubeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  startIcon={<YouTubeIcon />}
+                  sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control, mb: 1 }}
+                >
+                  Open the video
+                </Button>
+              )}
+
+              {/* Shown only when Teams is genuinely behind, which in practice
+                  means the nightly backup published this one overnight. */}
+              {data?.teamsCardStale && (
+                <Alert
+                  severity="info"
+                  icon={false}
+                  sx={{ mb: 1 }}
+                  action={
+                    <Button
+                      size="small"
+                      onClick={() => void announce()}
+                      disabled={announcing}
+                      sx={{ textTransform: 'none', minHeight: 44 }}
+                    >
+                      {announcing ? 'Posting...' : 'Post it'}
+                    </Button>
+                  }
+                >
+                  The class has not been told the recording is up.
+                </Alert>
+              )}
+
+              <Button
+                fullWidth
+                onClick={() => {
+                  setEditing(true);
+                  setActiveStep(stepForStatus(status));
+                }}
+                sx={{ textTransform: 'none', minHeight: 44 }}
+              >
+                {status === 'published' ? 'Edit the listing' : 'Edit, or finish publishing'}
+              </Button>
             </Box>
           ) : (
             <Stepper activeStep={activeStep} orientation="vertical" nonLinear>
@@ -551,7 +748,21 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
                   <Button
                     variant="contained"
                     fullWidth
-                    onClick={() => void generateWithAI(Boolean(ytTitle))}
+                    onClick={() => {
+                      // The row has no undo, which is exactly why the server
+                      // refuses to overwrite a saved listing without `force`.
+                      // Sending force silently from here would defeat that, so
+                      // the teacher confirms the overwrite they are asking for.
+                      if (
+                        ytTitle &&
+                        !window.confirm(
+                          'This replaces the title, description, tags and chapters you already have. Continue?',
+                        )
+                      ) {
+                        return;
+                      }
+                      void generateWithAI(Boolean(ytTitle));
+                    }}
                     disabled={generating}
                     startIcon={
                       generating

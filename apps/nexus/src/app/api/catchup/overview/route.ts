@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import {
   getSupabaseAdminClient,
-  loadClassFacts,
   toFacts,
   resolveCatchupBacklog,
   summariseCatchupBacklog,
@@ -12,6 +11,7 @@ import {
   istTodayYmd,
 } from '@neram/database';
 import { canUser } from '@/lib/staff-capabilities';
+import { loadClassFactsForStudents } from '@/lib/catchup-facts';
 import { computeCatchupPace } from '@/lib/catchup-pace';
 import { tallyReasons } from '@/lib/rsvp-reasons';
 
@@ -243,6 +243,19 @@ export async function GET(request: NextRequest) {
     let explainedTotal = 0;
     let unexplainedTotal = 0;
 
+    // Every student's facts in one batch, before the loop rather than inside it.
+    // Doing this per student was six queries each, in series, so a class of forty cost
+    // eighty round trips before anything rendered. See lib/catchup-facts.ts.
+    const factsByStudent = await loadClassFactsForStudents(
+      supabase,
+      new Map(
+        [...byStudent].map(([studentId, studentItems]) => [
+          studentId,
+          studentItems.map((i: any) => i.scheduled_class_id),
+        ]),
+      ),
+    );
+
     for (const [studentId, studentItems] of byStudent) {
       studentItems.sort((a: any, b: any) => {
         const d = String(a.class.scheduled_date).localeCompare(String(b.class.scheduled_date));
@@ -250,11 +263,7 @@ export async function GET(request: NextRequest) {
         return String(a.class.start_time || '').localeCompare(String(b.class.start_time || ''));
       });
 
-      const facts = await loadClassFacts(
-        supabase,
-        studentId,
-        studentItems.map((i: any) => i.scheduled_class_id),
-      );
+      const facts = factsByStudent.get(studentId)!;
       const resolved = resolveCatchupBacklog(studentItems.map((i: any) => toFacts(i, facts)));
 
       // Only an `open` item has a deadline. Same rule as getCatchupBacklog: a

@@ -25,6 +25,7 @@ import { useSearchParams } from 'next/navigation';
 import { Alert, Box, Skeleton, Snackbar, Tab, Tabs, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import { StatTile } from '@/components/catchup/shared';
 import NeedsActionTab from '@/components/catchup/NeedsActionTab';
 import ReasonsTab from '@/components/catchup/ReasonsTab';
@@ -61,7 +62,6 @@ function TeacherCatchUpWorkspace() {
   const { loading: authLoading, activeClassroom } = useNexusAuthContext();
   const authFetch = useAuthFetch();
 
-  const [data, setData] = useState<Payload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
 
@@ -89,25 +89,36 @@ function TeacherCatchUpWorkspace() {
     );
   }, []);
 
-  const load = useCallback(async () => {
-    try {
-      // Follow the classroom switcher. Without this the route falls back to the
-      // newest active classroom, which is not necessarily the one the teacher is
-      // looking at: classrooms are per academic year, and the Class Recaps page
-      // this tab absorbed was classroom-aware, so dropping it would have been a
-      // regression rather than a simplification.
-      const qs = activeClassroom?.id ? `?classroomId=${activeClassroom.id}` : '';
-      const res = (await authFetch(`/api/catchup/overview${qs}`)) as Payload;
-      setData(res);
-    } catch (err) {
-      setSnack({ msg: err instanceof Error ? err.message : 'Failed to load', sev: 'error' });
-      setData(EMPTY);
-    }
-  }, [authFetch, activeClassroom?.id]);
+  // Follow the classroom switcher. Without this the route falls back to the newest
+  // active classroom, which is not necessarily the one the teacher is looking at:
+  // classrooms are per academic year, and the Class Recaps page this tab absorbed was
+  // classroom-aware, so dropping it would have been a regression rather than a
+  // simplification.
+  //
+  // The classroom id is part of the key rather than a manual refetch, so switching
+  // classroom looks up a different cache entry instead of clearing this one. A
+  // classroom the teacher has already opened comes back instantly.
+  //
+  // Held until auth settles: a request fired before there is a token 401s, and the
+  // null key is how SWR is told to wait.
+  const key = authLoading
+    ? null
+    : `/api/catchup/overview${activeClassroom?.id ? `?classroomId=${activeClassroom.id}` : ''}`;
+
+  const { data: fetched, error, mutate } = useAuthSWR<Payload>(key);
+
+  // On a revisit `fetched` is already populated from the persisted cache, so the
+  // skeleton below is never reached and the teacher lands on real rows.
+  //
+  // Falling back to EMPTY on an error keeps the previous behaviour: the page shows its
+  // empty state next to the error snackbar, rather than a skeleton that never resolves.
+  const data = fetched ?? (error ? EMPTY : null);
 
   useEffect(() => {
-    if (!authLoading) load();
-  }, [authLoading, load]);
+    if (error) {
+      setSnack({ msg: error.message || 'Failed to load', sev: 'error' });
+    }
+  }, [error]);
 
   const onAct = useCallback(
     async (itemId: string, action: ItemAction) => {
@@ -126,14 +137,18 @@ function TeacherCatchUpWorkspace() {
                 : 'Quiz reset. They can sit it again without rewatching.',
           sev: 'success',
         });
-        await load();
+        // Refetch underneath the rows already on screen. The single-argument form is
+        // deliberate: passing `undefined` as the second argument would blank the entry
+        // first, dropping the teacher back to the skeleton for a whole round trip
+        // after excusing one student.
+        await mutate();
       } catch (err) {
         setSnack({ msg: err instanceof Error ? err.message : 'Could not save', sev: 'error' });
       } finally {
         setBusy(null);
       }
     },
-    [authFetch, load],
+    [authFetch, mutate],
   );
 
   const onNudge = useCallback(
@@ -157,9 +172,13 @@ function TeacherCatchUpWorkspace() {
     [authFetch],
   );
 
+  const onReload = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
+
   const tabProps: TabProps | null = useMemo(
-    () => (data ? { data, busy, onAct, onNudge, onReload: load } : null),
-    [data, busy, onAct, onNudge, load],
+    () => (data ? { data, busy, onAct, onNudge, onReload } : null),
+    [data, busy, onAct, onNudge, onReload],
   );
 
   if (data === null || tabProps === null) {
