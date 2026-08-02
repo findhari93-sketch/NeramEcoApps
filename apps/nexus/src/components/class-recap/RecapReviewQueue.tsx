@@ -33,6 +33,7 @@ interface QueueItem {
   id: string;
   title: string;
   scheduled_class_id: string | null;
+  status?: string;
   readiness: string;
   hold_reason: string | null;
   hold_detail: string | null;
@@ -67,6 +68,7 @@ export default function RecapReviewQueue({ compact = false }: RecapReviewQueuePr
   const authFetch = useAuthFetch();
   const router = useRouter();
   const [items, setItems] = useState<QueueItem[] | null>(null);
+  const [flagged, setFlagged] = useState<QueueItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -74,6 +76,7 @@ export default function RecapReviewQueue({ compact = false }: RecapReviewQueuePr
     try {
       const res = await authFetch('/api/class-recaps/review-queue');
       setItems(res.items || []);
+      setFlagged(res.flagged || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the review queue');
     }
@@ -117,7 +120,7 @@ export default function RecapReviewQueue({ compact = false }: RecapReviewQueuePr
     );
   }
 
-  if (items.length === 0) {
+  if (items.length === 0 && flagged.length === 0) {
     if (compact) return null;
     return (
       <EmptyState
@@ -127,85 +130,128 @@ export default function RecapReviewQueue({ compact = false }: RecapReviewQueuePr
     );
   }
 
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: compact ? 2.5 : 0 }}>
-      <Typography variant={compact ? 'subtitle2' : 'body2'} color="text.secondary" sx={{ fontWeight: compact ? 700 : 400 }}>
-        {compact
-          ? `${items.length} recap${items.length === 1 ? '' : 's'} need a look before students can open them`
-          : 'These classes generated but did not clear the automatic checks, so students cannot open them yet. Review the questions, then publish.'}
-      </Typography>
-
-      {items.map((item) => (
-        <Box
-          key={item.id}
-          sx={{
-            p: 2,
-            borderRadius: 3,
-            border: (t) => `1px solid ${alpha(t.palette.warning.main, 0.35)}`,
-            bgcolor: (t) => alpha(t.palette.warning.main, 0.04),
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, mb: 1 }}>
-            <WarningAmberRoundedIcon sx={{ color: 'warning.main', fontSize: 20, mt: 0.25 }} />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{item.title}</Typography>
-              <Box sx={{ display: 'flex', gap: 0.75, mt: 0.75, flexWrap: 'wrap' }}>
-                <Chip
-                  size="small"
-                  label={REASON_LABEL[item.hold_reason || ''] || 'Needs review'}
-                  sx={{ fontWeight: 600 }}
-                />
-                {item.quality_score != null && (
-                  <Chip size="small" variant="outlined" label={`Score ${item.quality_score}`} />
-                )}
-                {item.protection_level === 'embedded' && (
-                  // Worth surfacing: this copy plays from YouTube, so its id is
-                  // in the page and is copyable. A tutor may prefer to hold it.
-                  <Chip size="small" variant="outlined" color="warning" label="Reduced protection" />
-                )}
-              </Box>
-            </Box>
-          </Box>
-
-          {item.failed_checks.length > 0 && (
-            <Box component="ul" sx={{ m: 0, mb: 1.5, pl: 2.5 }}>
-              {item.failed_checks.map((c) => (
-                <Typography
-                  component="li"
-                  key={c.id}
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ fontSize: 13 }}
-                >
-                  {c.detail}
-                </Typography>
-              ))}
-            </Box>
-          )}
-
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Button
-              variant="outlined"
+  /**
+   * One recap, in whichever of the two lists it belongs to.
+   *
+   * `live` changes the whole reading of the card: amber and "students cannot
+   * open this" for a held recap, neutral and "already live" for a flagged one.
+   * A published recap dressed as a blocker would send a tutor rushing to fix
+   * something that is working.
+   */
+  const card = (item: QueueItem, live: boolean) => (
+    <Box
+      key={item.id}
+      sx={{
+        p: 2,
+        borderRadius: 3,
+        border: (t) =>
+          `1px solid ${alpha(live ? t.palette.text.primary : t.palette.warning.main, live ? 0.12 : 0.35)}`,
+        bgcolor: (t) => (live ? 'background.paper' : alpha(t.palette.warning.main, 0.04)),
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, mb: 1 }}>
+        {live ? (
+          <CheckCircleRoundedIcon sx={{ color: 'success.main', fontSize: 20, mt: 0.25 }} />
+        ) : (
+          <WarningAmberRoundedIcon sx={{ color: 'warning.main', fontSize: 20, mt: 0.25 }} />
+        )}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{item.title}</Typography>
+          <Box sx={{ display: 'flex', gap: 0.75, mt: 0.75, flexWrap: 'wrap' }}>
+            <Chip
               size="small"
-              startIcon={<EditRoundedIcon />}
-              onClick={() => router.push(`/teacher/class-recaps/${item.id}`)}
-              sx={{ minHeight: 44, textTransform: 'none' }}
-            >
-              Review questions
-            </Button>
-            <Button
-              variant="contained"
-              size="small"
-              disabled={busyId === item.id}
-              startIcon={<CheckCircleRoundedIcon />}
-              onClick={() => publish(item.id)}
-              sx={{ minHeight: 44, textTransform: 'none' }}
-            >
-              Publish anyway
-            </Button>
+              color={live ? 'success' : 'default'}
+              variant={live ? 'outlined' : 'filled'}
+              label={live ? 'Live for students' : REASON_LABEL[item.hold_reason || ''] || 'Needs review'}
+              sx={{ fontWeight: 600 }}
+            />
+            {item.quality_score != null && (
+              <Chip size="small" variant="outlined" label={`Score ${item.quality_score}`} />
+            )}
+            {item.protection_level === 'embedded' && (
+              // Worth surfacing: this copy plays from YouTube, so its id is
+              // in the page and is copyable. A tutor may prefer to hold it.
+              <Chip size="small" variant="outlined" color="warning" label="Reduced protection" />
+            )}
           </Box>
         </Box>
-      ))}
+      </Box>
+
+      {item.failed_checks.length > 0 && (
+        <Box component="ul" sx={{ m: 0, mb: 1.5, pl: 2.5 }}>
+          {item.failed_checks.map((c) => (
+            <Typography
+              component="li"
+              key={c.id}
+              variant="body2"
+              color="text.secondary"
+              sx={{ fontSize: 13 }}
+            >
+              {c.detail}
+            </Typography>
+          ))}
+        </Box>
+      )}
+
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        <Button
+          variant={live ? 'text' : 'outlined'}
+          size="small"
+          startIcon={<EditRoundedIcon />}
+          onClick={() => router.push(`/teacher/class-recaps/${item.id}`)}
+          sx={{ minHeight: 44, textTransform: 'none' }}
+        >
+          Review questions
+        </Button>
+        {/* Only a held recap has anything to publish. */}
+        {!live && (
+          <Button
+            variant="contained"
+            size="small"
+            disabled={busyId === item.id}
+            startIcon={<CheckCircleRoundedIcon />}
+            onClick={() => publish(item.id)}
+            sx={{ minHeight: 44, textTransform: 'none' }}
+          >
+            Publish anyway
+          </Button>
+        )}
+      </Box>
+    </Box>
+  );
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: compact ? 2.5 : 0 }}>
+      {items.length > 0 && (
+        <>
+          <Typography
+            variant={compact ? 'subtitle2' : 'body2'}
+            color="text.secondary"
+            sx={{ fontWeight: compact ? 700 : 400 }}
+          >
+            {compact
+              ? `${items.length} recap${items.length === 1 ? '' : 's'} need a look before students can open them`
+              : 'These classes generated but did not clear the automatic checks, so students cannot open them yet. Review the questions, then publish.'}
+          </Typography>
+          {items.map((item) => card(item, false))}
+        </>
+      )}
+
+      {/* Second, and quieter, because nobody is blocked by these. */}
+      {flagged.length > 0 && (
+        <>
+          <Typography
+            variant={compact ? 'subtitle2' : 'body2'}
+            color="text.secondary"
+            sx={{ fontWeight: compact ? 700 : 400, mt: items.length > 0 ? 1 : 0 }}
+          >
+            {flagged.length === 1
+              ? '1 published recap is worth a look when you have a minute'
+              : `${flagged.length} published recaps are worth a look when you have a minute`}
+          </Typography>
+          {flagged.map((item) => card(item, true))}
+        </>
+      )}
     </Box>
   );
 }

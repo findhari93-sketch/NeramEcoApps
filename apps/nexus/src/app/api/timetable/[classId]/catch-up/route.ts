@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import {
   getSupabaseAdminClient,
+  createRecapForClass,
   ensureCatchupItemForClass,
   getCatchupJourney,
   getCatchupBacklog,
@@ -310,6 +311,33 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         // is the student's own, hence 'student'.
         patch.reason_source = 'student';
         patch.reason_submitted_by = access.userId;
+        break;
+      }
+
+      case 'request_recap': {
+        // A student just pressed Watch on a class with no guided recap, so they
+        // are about to watch the raw recording with no checkpoints. Insert the
+        // pending row that puts this class at the FRONT of the nightly sweep's
+        // queue, so the next person to open it gets the real thing.
+        //
+        // Deliberately no Gemini call here. Generating takes four to six calls
+        // over tens of seconds on a key all four apps share, which is neither
+        // something to do inside a student's tap nor something to expose to
+        // repeat taps. createRecapForClass is idempotent and returns the
+        // existing row, so pressing Watch ten times inserts nothing extra.
+        if (!recap) {
+          try {
+            await createRecapForClass(params.classId, null, supabase, { readiness: 'pending' });
+          } catch (err) {
+            // Never worth failing the student's tap over. They are on their way
+            // to the recording either way, and the sweep will find this class on
+            // its own schedule.
+            console.error(
+              '[catch-up] could not queue a recap:',
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
         break;
       }
 

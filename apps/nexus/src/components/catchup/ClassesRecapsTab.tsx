@@ -25,6 +25,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -39,6 +40,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CloseIcon from '@mui/icons-material/Close';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import VideocamOffOutlinedIcon from '@mui/icons-material/VideocamOffOutlined';
@@ -87,6 +89,24 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
   const [manualTitle, setManualTitle] = useState('');
   const [manualUrl, setManualUrl] = useState('');
   const [creatingManual, setCreatingManual] = useState(false);
+
+  /**
+   * The backfill run: where it is, and what it has done so far.
+   *
+   * Held here rather than in a dialog so it survives scrolling and stays visible
+   * while it works. A run takes a minute per class, which is long enough that a
+   * spinner with no words reads as a hang.
+   */
+  const [prep, setPrep] = useState<{
+    total: number;
+    done: number;
+    current: string;
+    published: number;
+    held: number;
+    failed: number;
+    finished: boolean;
+    stopped: string | null;
+  } | null>(null);
 
   const teacherFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -168,6 +188,75 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
     [router, teacherFetch, onReload],
   );
 
+  /**
+   * Prepare every class that has a recording and a transcript but no usable
+   * recap, one at a time.
+   *
+   * ONE REQUEST PER CLASS, deliberately. Preparing a class is several Gemini
+   * calls of tens of seconds each, so a server-side loop over a backlog would
+   * run past the Vercel function timeout and lose everything it had finished.
+   * Walking the list from here also means the teacher can watch it work and the
+   * run can stop cleanly the moment the shared key refuses, instead of spending
+   * the rest of the backlog on a key that has already said no.
+   */
+  const prepareMissing = useCallback(async () => {
+    setError(null);
+    setPrep({
+      total: 0, done: 0, current: '', published: 0, held: 0, failed: 0,
+      finished: false, stopped: null,
+    });
+    try {
+      const list = await teacherFetch('/api/class-recaps/autodraft');
+      const candidates: Array<{ class_id: string; title: string | null }> = list.candidates || [];
+      if (candidates.length === 0) {
+        setPrep((p) => (p ? { ...p, finished: true } : p));
+        return;
+      }
+      setPrep((p) => (p ? { ...p, total: candidates.length } : p));
+
+      for (const [i, c] of candidates.entries()) {
+        setPrep((p) => (p ? { ...p, done: i, current: c.title || 'Class' } : p));
+        const out = await teacherFetch('/api/class-recaps/autodraft', {
+          method: 'POST',
+          body: JSON.stringify({ classId: c.class_id }),
+        });
+
+        if (out.reason === 'rate_limited') {
+          setPrep((p) =>
+            p
+              ? {
+                  ...p,
+                  done: i,
+                  finished: true,
+                  stopped:
+                    'The AI service is rate limited right now. What finished is saved. Try the rest in a few minutes.',
+                }
+              : p,
+          );
+          return;
+        }
+
+        setPrep((p) =>
+          p
+            ? {
+                ...p,
+                done: i + 1,
+                published: p.published + (out.ok && out.published ? 1 : 0),
+                held: p.held + (out.ok && out.held ? 1 : 0),
+                failed: p.failed + (out.ok ? 0 : 1),
+              }
+            : p,
+        );
+      }
+
+      setPrep((p) => (p ? { ...p, current: '', finished: true } : p));
+      onReload();
+    } catch (err) {
+      setPrep(null);
+      setError(err instanceof Error ? err.message : 'Could not prepare the missing classes');
+    }
+  }, [teacherFetch, onReload]);
+
   const createManual = useCallback(async () => {
     if (!manualTitle.trim() || !manualUrl.trim() || !data.classroomId) return;
     setCreatingManual(true);
@@ -247,6 +336,19 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           />
         )}
         <Box sx={{ flex: 1 }} />
+        {/* The backlog button. Everything it prepares would eventually be done
+            by the nightly sweep; this is for the teacher who has students
+            waiting today. */}
+        <Button
+          size="small"
+          variant="contained"
+          startIcon={<AutoAwesomeIcon />}
+          onClick={prepareMissing}
+          disabled={!!prep && !prep.finished}
+          sx={{ minHeight: 40, textTransform: 'none', fontWeight: 700 }}
+        >
+          {prep && !prep.finished ? 'Preparing...' : 'Prepare missing classes'}
+        </Button>
         <Button
           size="small"
           variant="outlined"
@@ -258,6 +360,80 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           Recap from a link
         </Button>
       </Stack>
+
+      {prep && (
+        <Box
+          sx={{
+            p: 2,
+            mb: 2,
+            borderRadius: RADIUS.card,
+            border: '1px solid',
+            borderColor: prep.finished ? 'divider' : alpha(theme.palette.primary.main, 0.35),
+            bgcolor: prep.finished ? 'background.paper' : alpha(theme.palette.primary.main, 0.04),
+          }}
+        >
+          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1 }}>
+            {!prep.finished && <CircularProgress size={18} />}
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', flex: 1, minWidth: 0 }}>
+              {prep.finished
+                ? prep.total === 0
+                  ? 'Nothing to prepare. Every recorded class already has its checkpoints.'
+                  : 'Finished preparing.'
+                : prep.total === 0
+                  ? 'Looking for classes that need checkpoints...'
+                  : `${prep.done + 1} of ${prep.total}: ${prep.current}`}
+            </Typography>
+            {prep.finished && (
+              <IconButton
+                size="small"
+                aria-label="Dismiss"
+                onClick={() => setPrep(null)}
+                sx={{ minWidth: 44, minHeight: 44 }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Stack>
+
+          {prep.total > 0 && (
+            <Box
+              sx={{
+                height: 8,
+                borderRadius: 99,
+                overflow: 'hidden',
+                bgcolor: alpha(theme.palette.text.disabled, 0.12),
+                mb: 1,
+              }}
+            >
+              <Box
+                sx={{
+                  width: `${Math.round((prep.done / prep.total) * 100)}%`,
+                  height: '100%',
+                  bgcolor: 'primary.main',
+                  transition: 'width 300ms ease',
+                }}
+              />
+            </Box>
+          )}
+
+          {/* Held and failed are reported plainly rather than hidden behind a
+              success count. A held recap is still a student who cannot catch
+              up, and calling the run a success would bury that. */}
+          {(prep.published > 0 || prep.held > 0 || prep.failed > 0) && (
+            <Typography variant="caption" color="text.secondary">
+              {prep.published} published
+              {prep.held > 0 ? `, ${prep.held} need a look` : ''}
+              {prep.failed > 0 ? `, ${prep.failed} could not be prepared` : ''}
+            </Typography>
+          )}
+
+          {prep.stopped && (
+            <Alert severity="warning" sx={{ mt: 1, borderRadius: 2 }}>
+              {prep.stopped}
+            </Alert>
+          )}
+        </Box>
+      )}
 
       {rows.length === 0 ? (
         <Alert severity="success" sx={{ borderRadius: 2 }}>

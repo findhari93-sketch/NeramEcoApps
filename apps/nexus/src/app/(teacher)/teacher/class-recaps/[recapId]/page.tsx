@@ -1,9 +1,21 @@
 'use client';
 
 /**
- * Teacher: turn a recorded class into a gated recap. Generate checkpoint
- * quizzes from the class transcript (or an uploaded .vtt), review and edit them,
- * then publish so late joiners can watch-and-pass to catch up.
+ * Teacher: turn a recorded class into a gated recap.
+ *
+ * One button does the whole thing, and everything else on the screen exists for
+ * the rare case where that button produced something worth changing by hand.
+ * That ordering is deliberate and it is a correction. This used to be five
+ * separate steps (generate, review, save, publish, build the class test), which
+ * left production with nine recorded classes and no usable recap: nobody presses
+ * five buttons per class.
+ *
+ * Two of those steps were also quietly broken, and between them they published a
+ * recap with nothing in it. Generate returned a PREVIEW and saved nothing, and
+ * Publish sent a PATCH that knew only what the server already had, so pressing
+ * one and then the other published an empty recap and said "Published to
+ * students." Publish now saves first, and reports the class test warning the API
+ * has always returned and this screen has always discarded.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -216,24 +228,56 @@ export default function TeacherClassRecapEditor() {
     if (fileRef.current) fileRef.current.value = '';
   };
 
-  const save = useCallback(async () => {
-    setBusy('save');
-    try {
-      await teacherFetch(`/api/class-recaps/${recapId}/sections`, {
-        method: 'PUT',
-        body: JSON.stringify({ sections }),
-      });
-      setSnack({ msg: 'Checkpoints saved.', sev: 'success' });
-      await load();
-    } catch (err) {
-      setSnack({ msg: err instanceof Error ? err.message : 'Save failed', sev: 'error' });
-    } finally {
-      setBusy(null);
-    }
-  }, [teacherFetch, recapId, sections, load]);
+  /**
+   * Persist the checkpoints currently on screen.
+   *
+   * Returns whether it worked, because publish now depends on it: publishing
+   * without saving first is how a recap went live with nothing in it.
+   */
+  const save = useCallback(
+    async (announce = true): Promise<boolean> => {
+      setBusy('save');
+      try {
+        await teacherFetch(`/api/class-recaps/${recapId}/sections`, {
+          method: 'PUT',
+          body: JSON.stringify({ sections }),
+        });
+        if (announce) setSnack({ msg: 'Checkpoints saved.', sev: 'success' });
+        await load();
+        return true;
+      } catch (err) {
+        setSnack({ msg: err instanceof Error ? err.message : 'Save failed', sev: 'error' });
+        return false;
+      } finally {
+        setBusy(null);
+      }
+    },
+    [teacherFetch, recapId, sections, load],
+  );
+
+  /** Success, then out. Long enough to read, short enough not to feel stuck. */
+  const leaveTo = useCallback(
+    (msg: string) => {
+      setSnack({ msg, sev: 'success' });
+      setTimeout(() => router.push('/teacher/catch-up?tab=classes'), 1400);
+    },
+    [router],
+  );
 
   const setStatus = useCallback(
     async (action: 'publish' | 'unpublish') => {
+      // Publishing SAVES first. Without this, Generate put checkpoints on screen
+      // and nowhere else, Publish sent a PATCH that knew nothing about them, and
+      // the recap went live empty while the button reported plain success. That
+      // is exactly what happened to the 12 July class in production.
+      if (action === 'publish') {
+        if (sections.length === 0) {
+          setSnack({ msg: 'There are no checkpoints to publish yet.', sev: 'error' });
+          return;
+        }
+        if (!(await save(false))) return;
+      }
+
       setBusy(action);
       try {
         const res = await teacherFetch(`/api/class-recaps/${recapId}`, {
@@ -241,15 +285,73 @@ export default function TeacherClassRecapEditor() {
           body: JSON.stringify({ action }),
         });
         setRecap((prev) => (prev ? { ...prev, status: res.recap.status } : prev));
-        setSnack({ msg: action === 'publish' ? 'Published to students.' : 'Unpublished.', sev: 'success' });
+        if (action !== 'publish') {
+          setSnack({ msg: 'Unpublished.', sev: 'success' });
+          return;
+        }
+        // load() re-reads the class test alongside the recap, so the panel below
+        // stops offering to build something that now exists.
+        await load();
+        // The API has always returned this and the editor has always thrown it
+        // away, so "Published to students." was printed over a recap with no
+        // class test and no way for anyone to clear the class.
+        if (res.classTestWarning) {
+          setSnack({ msg: res.classTestWarning, sev: 'error' });
+          return;
+        }
+        leaveTo('Published to students. Class test ready.');
       } catch (err) {
         setSnack({ msg: err instanceof Error ? err.message : 'Failed', sev: 'error' });
       } finally {
         setBusy(null);
       }
     },
-    [teacherFetch, recapId],
+    [teacherFetch, recapId, sections.length, save, load, leaveTo],
   );
+
+  /**
+   * The whole job in one press: generate, save, grade, publish, build the test.
+   *
+   * This is what the screen is for. The five-button version left production with
+   * nine recorded classes and no usable recap, because nobody presses five
+   * buttons per class and the second one only ever produced a preview.
+   *
+   * A hold is not a failure and does not navigate away: the checkpoints are
+   * already saved, the reason is on screen, and the teacher fixes what is wrong
+   * and presses Publish.
+   */
+  const generateAndPublish = useCallback(async () => {
+    setBusy('autopublish');
+    setSnack({ msg: 'Writing checkpoints from the class transcript. This takes a minute.', sev: 'info' });
+    try {
+      const res = await teacherFetch(`/api/class-recaps/${recapId}/autopublish`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      await load();
+
+      if (!res.published) {
+        setSnack({
+          msg: res.summary
+            ? `Not published yet. ${res.summary}`
+            : 'Not published yet. Review the checkpoints below.',
+          sev: 'error',
+        });
+        return;
+      }
+
+      const test = res.classTest
+        ? `class test of ${res.classTest.question_count} questions ready`
+        : res.classTestWarning || 'no class test';
+      leaveTo(
+        `Published. ${res.sections} checkpoints, ${res.questions} questions, ${test}.`,
+      );
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Could not prepare this recap', sev: 'error' });
+    } finally {
+      setBusy(null);
+    }
+  }, [teacherFetch, recapId, load, leaveTo]);
 
   const setVideoSource = useCallback(
     async (source: 'sharepoint' | 'youtube') => {
@@ -310,8 +412,16 @@ export default function TeacherClassRecapEditor() {
 
   return (
     <Box sx={{ maxWidth: 820, mx: 'auto', pb: 6 }}>
-      <Button startIcon={<ArrowBackIcon />} onClick={() => router.back()} sx={{ mb: 1, color: 'text.secondary', minHeight: 44 }}>
-        Back
+      {/* Pushed, not router.back(). This editor is opened from the review queue,
+          from a class row, and straight from a link in a notification, and
+          back() sent a teacher who arrived by the last of those nowhere useful.
+          Catch-up is the screen this work belongs to whichever way you came. */}
+      <Button
+        startIcon={<ArrowBackIcon />}
+        onClick={() => router.push('/teacher/catch-up?tab=classes')}
+        sx={{ mb: 1, color: 'text.secondary', minHeight: 44 }}
+      >
+        Back to Catch-up
       </Button>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 0.5 }}>
@@ -357,16 +467,36 @@ export default function TeacherClassRecapEditor() {
         </Typography>
       </Box>
 
+      {/* The one press that does the whole job. Full width and alone, because
+          every other control on this screen exists for the rare case where this
+          one produced something a teacher wants to change by hand. */}
+      <Button
+        fullWidth
+        variant="contained"
+        size="large"
+        startIcon={<AutoAwesomeIcon />}
+        disabled={!!busy}
+        onClick={generateAndPublish}
+        sx={{ mb: 1.5, minHeight: 56, textTransform: 'none', fontWeight: 800, borderRadius: 99 }}
+      >
+        {busy === 'autopublish' ? 'Preparing this class...' : 'Generate and publish'}
+      </Button>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2.5 }}>
+        Writes the checkpoints and their questions, saves them, builds the class test and publishes,
+        in one go. If anything looks wrong it stops and tells you, and everything below stays
+        editable.
+      </Typography>
+
       {/* Actions */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2.5 }}>
         <Button
-          variant="contained"
+          variant="outlined"
           startIcon={<AutoAwesomeIcon />}
           disabled={!!busy}
           onClick={() => generate()}
           sx={{ minHeight: 44, textTransform: 'none' }}
         >
-          {busy === 'generate' ? 'Generating...' : 'Generate from transcript'}
+          {busy === 'generate' ? 'Generating...' : 'Generate only'}
         </Button>
         <Button variant="outlined" startIcon={<UploadFileIcon />} disabled={!!busy} onClick={() => fileRef.current?.click()} sx={{ minHeight: 44, textTransform: 'none' }}>
           Upload .vtt
@@ -384,7 +514,7 @@ export default function TeacherClassRecapEditor() {
         </Button>
         <input ref={fileRef} type="file" accept=".vtt,text/vtt" hidden onChange={onUpload} />
         <Box sx={{ flex: 1 }} />
-        <Button variant="outlined" startIcon={<SaveOutlinedIcon />} disabled={!!busy || sections.length === 0} onClick={save} sx={{ minHeight: 44, textTransform: 'none' }}>
+        <Button variant="outlined" startIcon={<SaveOutlinedIcon />} disabled={!!busy || sections.length === 0} onClick={() => save()} sx={{ minHeight: 44, textTransform: 'none' }}>
           Save
         </Button>
         {published ? (
@@ -443,7 +573,8 @@ export default function TeacherClassRecapEditor() {
       {sections.length === 0 && (
         <Box sx={{ p: 3, borderRadius: 2, border: '1px dashed', borderColor: 'divider', textAlign: 'center', color: 'text.secondary' }}>
           <Typography variant="body2">
-            No checkpoints yet. Click <strong>Generate from transcript</strong>, or upload the class .vtt to build them automatically.
+            No checkpoints yet. Press <strong>Generate and publish</strong> above and this fills
+            itself in. Use <strong>Generate only</strong> if you want to read them before students do.
           </Typography>
         </Box>
       )}

@@ -4,6 +4,7 @@ import { extractBearerToken } from '@/lib/ms-verify';
 import { getRecapById, getSupabaseAdminClient } from '@neram/database';
 import { generateSectionsAndQuestions } from '@/lib/ai-generate';
 import { resolveTranscript } from '@/lib/transcript-resolver';
+import { readRecapDefaults, questionsToPass } from '@/lib/recap-defaults';
 
 /**
  * POST /api/class-recaps/[recapId]/generate
@@ -79,8 +80,37 @@ export async function POST(
       );
     }
 
-    const generated = await generateSectionsAndQuestions(transcript, recap.title);
-    return NextResponse.json({ generated: { sections: generated.sections, transcript } });
+    // The recap's own checkpoint settings, then the classroom defaults. This
+    // route used to pass NOTHING, so a teacher who set a ten minute segment
+    // length and a bank of twenty got fifteen minutes and fifteen every time,
+    // with no sign that the settings sheet had been ignored.
+    const defaults = await readRecapDefaults(getSupabaseAdminClient());
+    const generated = await generateSectionsAndQuestions(transcript, recap.title, {
+      targetSegmentSeconds: recap.target_segment_seconds ?? defaults.target_segment_seconds,
+      poolPerSegment: recap.question_pool_per_segment ?? defaults.question_pool_per_segment,
+      durationSeconds:
+        recap.video_duration_seconds ?? transcript[transcript.length - 1]?.end ?? 0,
+    });
+
+    // Stamp the gate the same way the sweep does. Left NULL, questions_to_serve
+    // serves the whole bank and min_questions_to_pass then demands every one of
+    // them correct, so a hand-reviewed recap was harder to pass than an
+    // auto-published one.
+    const questionsToServe = Math.min(
+      recap.question_pool_per_segment ?? defaults.question_pool_per_segment,
+      recap.questions_per_segment ?? defaults.questions_per_segment,
+    );
+    const passPercentage = recap.pass_percentage ?? defaults.pass_percentage;
+    const sections = generated.sections.map((s) => {
+      const serve = Math.min(questionsToServe, (s.questions || []).length);
+      return {
+        ...s,
+        questions_to_serve: serve,
+        min_questions_to_pass: questionsToPass(serve, passPercentage),
+      };
+    });
+
+    return NextResponse.json({ generated: { sections, transcript } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to generate recap quiz';
     console.error('Class recap generate error:', message);

@@ -68,10 +68,30 @@ const DEFAULTS = {
   poolPerSegment: 15,
 };
 
-/** Questions for at most this many segments per call, so JSON comes back whole. */
-const QUESTION_BATCH_SIZE = 4;
-/** Hard ceiling on Gemini calls for one recap. Shared key, metered quota. */
-export const MAX_CALLS_PER_RECAP = 5;
+/**
+ * Segments per call. ONE.
+ *
+ * This was four, and four is what emptied the checkpoints out of production.
+ * Four segments at fifteen questions is sixty MCQs in a single response, which
+ * overruns maxOutputTokens on a real class, truncates mid-object, and takes the
+ * whole batch down with it: a recap that planned five checkpoints saved one.
+ * From the outside that looked like a coverage problem, so the quality bar held
+ * the recap for a fault that was never in the split.
+ *
+ * One segment per call is fifteen questions, which comes back whole, and a
+ * failure now costs one checkpoint instead of four.
+ */
+const QUESTION_BATCH_SIZE = 1;
+
+/**
+ * Hard ceiling on Gemini calls for one recap. Shared key, metered quota.
+ *
+ * Sized for the longest class we actually teach (ninety minutes, six segments at
+ * the fifteen minute target) plus a few retries for segments that came back
+ * empty. It is a backstop against a runaway loop, not the working budget: a
+ * typical hour-long class spends four.
+ */
+export const MAX_CALLS_PER_RECAP = 10;
 
 const QUESTION_INSTRUCTION = `You write multiple-choice checkpoint questions for an architecture entrance exam course (NATA and JEE Paper 2).
 
@@ -95,13 +115,105 @@ function sliceTranscript(entries: TranscriptEntry[], start: number, end: number)
     .slice(0, 12000);
 }
 
-function parseJson<T>(raw: string, what: string): T {
-  const text = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+function stripFences(raw: string): string {
+  return raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+}
+
+/**
+ * The segment array, or null when the response is not valid JSON.
+ *
+ * Deliberately does not throw. A malformed response is the common failure here,
+ * not the exceptional one, and the caller has a salvage path that works on the
+ * raw text.
+ */
+function parseSegments(raw: string): any[] | null {
   try {
-    return JSON.parse(text) as T;
+    const parsed = JSON.parse(stripFences(raw));
+    const segments = parsed?.segments;
+    return Array.isArray(segments) ? segments : null;
   } catch {
-    throw new Error(`AI returned invalid JSON for ${what}`);
+    return null;
   }
+}
+
+/**
+ * Every complete `{...}` object in a string, innermost first, ignoring braces
+ * inside string literals.
+ *
+ * This is what rescues a truncated response. The object the model was midway
+ * through when it ran out of tokens never closes, so it is never emitted, while
+ * every complete one before it comes back intact. The outer wrapper never closes
+ * either, which is exactly why JSON.parse fails on the whole thing and this does
+ * not.
+ */
+function scanJsonObjects(text: string): string[] {
+  const out: string[] = [];
+  const opens: number[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') opens.push(i);
+    else if (ch === '}' && opens.length) out.push(text.slice(opens.pop()!, i + 1));
+  }
+  return out;
+}
+
+/** The first value of a top-level-ish string key, for a title we could not parse. */
+function salvageString(raw: string, key: string): string {
+  const m = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`).exec(raw);
+  if (!m) return '';
+  try {
+    return JSON.parse(`"${m[1]}"`);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Pull whatever complete questions a broken response still contains.
+ *
+ * Worth doing because a truncation at question twelve of fifteen used to cost
+ * all twelve, and twelve grounded questions is a working checkpoint.
+ */
+function salvageQuestions(raw: string): GeneratedQuestion[] {
+  const out: GeneratedQuestion[] = [];
+  for (const chunk of scanJsonObjects(raw)) {
+    if (!chunk.includes('"question_text"')) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(chunk);
+    } catch {
+      continue;
+    }
+    const q = sanitiseQuestion(parsed);
+    if (q) out.push(q);
+  }
+  return out;
+}
+
+/**
+ * Drop repeats of the same question.
+ *
+ * Duplicate text is a common degradation near the end of a long response, and a
+ * duplicate inside a served draw looks like a bug to the student sitting it.
+ */
+function dedupe(questions: GeneratedQuestion[]): GeneratedQuestion[] {
+  const seen = new Set<string>();
+  return questions.filter((q) => {
+    const key = q.question_text.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function sanitiseQuestion(q: any): GeneratedQuestion | null {
@@ -171,30 +283,37 @@ Return JSON:
     responseMimeType: 'application/json',
   });
 
-  const parsed = parseJson<{ segments: any[] }>(raw, 'questions');
   const out: Record<number, SegmentDraft> = {};
-  for (const seg of parsed.segments || []) {
+  for (const seg of parseSegments(raw) || []) {
     const idx = Number(seg?.index);
     if (!Number.isFinite(idx)) continue;
 
-    const questions = (seg.questions || [])
+    const questions = ((seg.questions || []) as unknown[])
       .map(sanitiseQuestion)
       .filter(Boolean) as GeneratedQuestion[];
 
-    // Duplicate question text is a common degradation near the end of a long
-    // response, and a duplicate in a served draw looks like a bug to a student.
-    const seen = new Set<string>();
     out[idx] = {
       title: typeof seg.title === 'string' ? seg.title.trim() : '',
       description: typeof seg.description === 'string' ? seg.description.trim() : '',
-      questions: questions.filter((q) => {
-        const key = q.question_text.toLowerCase().replace(/\s+/g, ' ').trim();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }),
+      questions: dedupe(questions),
     };
   }
+
+  // The response did not parse, but a truncated one still holds every question
+  // written before the cut. With one segment per call there is no ambiguity
+  // about which segment they belong to, so they are worth rescuing rather than
+  // spending another call on the shared key to ask again.
+  if (Object.keys(out).length === 0 && batch.length === 1) {
+    const questions = dedupe(salvageQuestions(raw));
+    if (questions.length > 0) {
+      out[batch[0].index] = {
+        title: salvageString(raw, 'title'),
+        description: salvageString(raw, 'description'),
+        questions,
+      };
+    }
+  }
+
   return out;
 }
 
@@ -229,31 +348,63 @@ export async function generateSectionsAndQuestions(
   }));
 
   let callsUsed = 0;
+
+  /**
+   * One call for one batch, writing whatever came back onto `sections`.
+   *
+   * Returns false when nothing usable arrived, which is what the retry pass
+   * reads. Never throws: one failed batch must not cost the batches that worked,
+   * and the quality bar downstream decides whether what survived is publishable.
+   */
+  const runBatch = async (
+    batch: Array<{ index: number; start: number; end: number }>,
+  ): Promise<boolean> => {
+    callsUsed++;
+    try {
+      const byIndex = await draftSegments(batch, transcript, itemTitle, poolPerSegment);
+      let got = false;
+      for (const b of batch) {
+        const draft = byIndex[b.index];
+        if (!draft || draft.questions.length === 0) continue;
+        if (draft.title) sections[b.index].title = draft.title;
+        if (draft.description) sections[b.index].description = draft.description;
+        sections[b.index].questions = draft.questions;
+        got = true;
+      }
+      return got;
+    } catch (err) {
+      // A rate limit is the caller's business, not this loop's: swallowing it
+      // would spend the remaining budget on a key that has already said no, and
+      // the sweep upstream stops its whole run on it.
+      const message = err instanceof Error ? err.message : String(err);
+      if (/429|Too Many Requests|quota|RESOURCE_EXHAUSTED/.test(message)) throw err;
+      console.error('[ai-generate] question batch failed:', message);
+      return false;
+    }
+  };
+
   for (let i = 0; i < planned.length; i += QUESTION_BATCH_SIZE) {
     if (callsUsed >= MAX_CALLS_PER_RECAP) break;
     // The index travels with the segment so the model's reply maps back to the
     // right one even when a batch comes back partial or out of order.
-    const batch = planned
-      .slice(i, i + QUESTION_BATCH_SIZE)
-      .map((p, j) => ({ index: i + j, start: p.start, end: p.end }));
-    callsUsed++;
-    try {
-      const byIndex = await draftSegments(batch, transcript, itemTitle, poolPerSegment);
-      for (const b of batch) {
-        const draft = byIndex[b.index];
-        if (!draft) continue;
-        if (draft.title) sections[b.index].title = draft.title;
-        if (draft.description) sections[b.index].description = draft.description;
-        sections[b.index].questions = draft.questions;
-      }
-    } catch (err) {
-      // One failed batch must not cost the batches that worked. The quality bar
-      // holds the recap if too little came back.
-      console.error(
-        '[ai-generate] question batch failed:',
-        err instanceof Error ? err.message : err,
-      );
-    }
+    await runBatch(
+      planned
+        .slice(i, i + QUESTION_BATCH_SIZE)
+        .map((p, j) => ({ index: i + j, start: p.start, end: p.end })),
+    );
+  }
+
+  // Second pass over the segments that came back with nothing. A single retry,
+  // because the usual causes (a truncated response, a transient refusal) clear
+  // on the next attempt and the ones that do not are a transcript problem no
+  // number of retries will fix. Bounded by the same call budget, so a recap with
+  // many empty segments retries the earliest ones and stops.
+  for (let i = 0; i < sections.length; i++) {
+    if (callsUsed >= MAX_CALLS_PER_RECAP) break;
+    if (sections[i].questions.length > 0) continue;
+    await runBatch([
+      { index: i, start: planned[i].start, end: planned[i].end },
+    ]);
   }
 
   return { sections };

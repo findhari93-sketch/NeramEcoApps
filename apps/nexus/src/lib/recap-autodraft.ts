@@ -7,10 +7,23 @@
  * five step job (create, generate, review, save, publish) and nobody was doing
  * it, so seventy-seven recorded absences had nowhere to go.
  *
- * This does all five. Publishing is automatic when the generation clears every
- * check in recap-quality; anything short of that is HELD for a tutor and the
- * teaching staff are told, because an AI question that is wrong becomes a wall a
- * student cannot pass and cannot appeal.
+ * This does all five, and then builds the class test, which is the sixth and was
+ * missing: every recap this sweep published went out without one, so students
+ * passed the checkpoints and then had nothing to actually finish the class with.
+ *
+ * Publishing is automatic when the generation clears every HARD check in
+ * recap-quality; anything short of that is HELD for a tutor and the teaching
+ * staff are told, because an AI question that is wrong becomes a wall a student
+ * cannot pass and cannot appeal. Soft failures publish and are flagged: holding
+ * a correct, complete, grounded recap over a duplicated question is a student
+ * who cannot catch up until somebody notices, and nobody was noticing.
+ *
+ * It also REPAIRS. A recap saved with fewer than two checkpoints did not come
+ * from a bad split (planSegments cannot produce one), it came from a generation
+ * that mostly failed, and the old rules skipped anything published or already
+ * generated forever. Three such recaps sat live on production, one of them with
+ * no checkpoints at all. Anything a student has already worked through is still
+ * untouchable.
  *
  * A held recap is loud on purpose. A FAILED one has to be just as loud: a throw
  * mid-generation used to leave the recap row it had already created sitting
@@ -32,6 +45,7 @@
  *   stop the moment Gemini says it has had enough.
  */
 import {
+  buildClassTestFromRecap,
   createRecapForClass,
   replaceRecapSections,
   setRecapReadiness,
@@ -51,7 +65,20 @@ import { readRecapDefaults, questionsToPass } from './recap-defaults';
  * material that is already weeks old, and the shared Gemini key stays usable by
  * everything else.
  */
-export const MAX_DRAFTS_PER_RUN = 3;
+export const MAX_DRAFTS_PER_RUN = 6;
+
+/**
+ * Fewer checkpoints than this and the recap is broken as a gate, not merely
+ * thin.
+ *
+ * The same number the `segment_count` hard check uses, and the same number
+ * planSegments guarantees by arithmetic: it never returns fewer than two. So a
+ * saved recap under this floor did not come from a bad split, it came from a
+ * generation that mostly failed, and it is worth regenerating whatever the row's
+ * status claims. One checkpoint at the end of an hour is a test, not a set of
+ * checkpoints, and it tells nobody whether the middle was watched.
+ */
+export const MIN_USABLE_SECTIONS = 2;
 
 /** How far back to look for candidates. Newest first: those matter most. */
 export const SCAN_LIMIT = 80;
@@ -84,6 +111,17 @@ export interface AutodraftCandidate {
   scheduled_date: string;
   /** Set when a stalled empty draft already exists, so we generate into it. */
   existing_recap_id: string | null;
+  /**
+   * A recap already exists and is broken: under MIN_USABLE_SECTIONS checkpoints,
+   * with no student work on it. Regenerated in place, and pulled back to draft
+   * first if it was live.
+   */
+  repair: boolean;
+  /**
+   * A student pressed Watch on a class with no recap, which inserted the pending
+   * row. Sorted to the front: somebody is waiting on this one today.
+   */
+  requested: boolean;
 }
 
 export type AutodraftOutcome =
@@ -99,6 +137,10 @@ export type AutodraftOutcome =
       held?: boolean;
       holdReason?: string;
       score?: number;
+      /** Published, but a soft check failed. Live to students, and worth a look. */
+      flagged?: boolean;
+      /** Questions on the class test built alongside it. Null when held. */
+      classTestQuestions?: number | null;
     }
   | {
       ok: false;
@@ -221,44 +263,150 @@ export async function findAutodraftCandidates(
   const hasTranscript = new Set<string>((transcripts || []).map((t: any) => t.class_id));
   const stalledBefore = Date.now() - STALLED_DRAFT_HOURS * 3_600_000;
 
-  const candidates: AutodraftCandidate[] = [];
+  // How many checkpoints each existing recap actually has, and whether anyone has
+  // sat one. Without these a recap that generated badly looks identical to a
+  // finished one: three of the recaps live on production were published with one
+  // checkpoint or none, and the sweep skipped every one of them forever because
+  // the only thing it looked at was the status column.
+  //
+  // Two more batched reads, no loop, so this stays flat over a whole term.
+  const { sectionsByRecap, attemptedSections } = await readRecapShape(
+    supabase,
+    (recaps || []).map((r: any) => r.id),
+  );
+
+  const eligible: AutodraftCandidate[] = [];
   for (const cls of rows) {
-    if (candidates.length >= limit) break;
     if (!hasTranscript.has(cls.id)) continue;
 
     const recap = recapByClass.get(cls.id);
+    let repair = false;
+
     if (recap) {
-      // Anything with content, or on its way to being published, is a teacher's
-      // work and is left alone.
-      if (recap.generated_at) continue;
-      if (recap.status !== 'draft') continue;
+      // Whatever the reason, a class whose generation has failed this many times
+      // is a real problem that more Gemini calls will not solve, and it is
+      // already sitting in the tutor's review queue.
       if ((recap.generation_attempts ?? 0) >= MAX_GENERATION_ATTEMPTS) continue;
 
-      // 'pending' means the row was inserted and generation never finished, so
-      // there is no review in progress to protect and no reason to wait out
-      // STALLED_DRAFT_HOURS. That delay exists for a draft a teacher created by
-      // hand and may be mid-way through; it should never strand a class behind a
-      // crash for a day, which is what it did.
-      const neverGenerated = recap.readiness === 'pending';
-      if (
-        !neverGenerated &&
-        recap.created_at &&
-        Date.parse(recap.created_at) > stalledBefore
-      ) {
-        continue;
+      const sectionIds = sectionsByRecap.get(recap.id) || [];
+      const hasStudentWork = sectionIds.some((id) => attemptedSections.has(id));
+
+      // Broken as a gate, and only for a recap the ordinary rules would skip
+      // FOREVER: one that is live, or one that has already been through
+      // generation. A recap published with zero checkpoints is not a teacher's
+      // work that deserves protecting, it is a student staring at "Checkpoints
+      // coming soon" on a class they cannot clear.
+      //
+      // An empty draft nobody has generated yet is a different thing: unstarted,
+      // not broken. It stays under the stall window below, which is what keeps
+      // the sweep from writing into a recap a teacher is halfway through making.
+      // A published one is repaired at once: it is failing a student right now,
+      // so waiting a day helps nobody. A DRAFT that generated badly waits out
+      // the same stall window as any other draft, because a teacher who just
+      // generated it may be hand-writing the missing checkpoints as we look.
+      const broken = sectionIds.length < MIN_USABLE_SECTIONS && !hasStudentWork;
+      repair =
+        broken &&
+        (recap.status === 'published' ||
+          (!!recap.generated_at && Date.parse(recap.generated_at) < stalledBefore));
+
+      if (!repair) {
+        // Anything with content, or on its way to being published, is a
+        // teacher's work and is left alone.
+        if (recap.generated_at) continue;
+        if (recap.status !== 'draft') continue;
+
+        // 'pending' means the row was inserted and generation never finished, so
+        // there is no review in progress to protect and no reason to wait out
+        // STALLED_DRAFT_HOURS. That delay exists for a draft a teacher created by
+        // hand and may be mid-way through; it should never strand a class behind a
+        // crash for a day, which is what it did.
+        const neverGenerated = recap.readiness === 'pending';
+        if (
+          !neverGenerated &&
+          recap.created_at &&
+          Date.parse(recap.created_at) > stalledBefore
+        ) {
+          continue;
+        }
       }
     }
 
-    candidates.push({
+    eligible.push({
       id: cls.id,
       classroom_id: cls.classroom_id,
       title: cls.title,
       scheduled_date: cls.scheduled_date,
       existing_recap_id: recap ? recap.id : null,
+      repair,
+      requested: recap?.readiness === 'pending',
     });
   }
 
-  return candidates;
+  // Somebody is waiting on a requested class TODAY, so it goes first even though
+  // it is older than the rest. The sort is stable and `rows` arrived newest
+  // first, so within each group the date order is untouched. Truncating after
+  // the sort rather than inside the loop is the whole point: a cap applied while
+  // scanning would keep handing the budget to whatever happened to be newest.
+  eligible.sort((a, b) => Number(b.requested) - Number(a.requested));
+
+  return eligible.slice(0, limit);
+}
+
+/**
+ * Checkpoint ids per recap, and which of them a student has attempted.
+ *
+ * Split out because it is the only part of candidate-finding that is about the
+ * recap's contents rather than its status, and because both reads must stay
+ * batched: this runs nightly over every recorded class in the term.
+ */
+async function readRecapShape(
+  supabase: any,
+  recapIds: string[],
+): Promise<{ sectionsByRecap: Map<string, string[]>; attemptedSections: Set<string> }> {
+  const sectionsByRecap = new Map<string, string[]>();
+  const attemptedSections = new Set<string>();
+  if (recapIds.length === 0) return { sectionsByRecap, attemptedSections };
+
+  const { data: sectionRows } = await supabase
+    .from('nexus_class_recap_sections')
+    .select('id, recap_id')
+    .in('recap_id', recapIds);
+
+  for (const s of sectionRows || []) {
+    const list = sectionsByRecap.get(s.recap_id) || [];
+    list.push(s.id);
+    sectionsByRecap.set(s.recap_id, list);
+  }
+
+  const sectionIds = [...sectionsByRecap.values()].flat();
+  if (sectionIds.length === 0) return { sectionsByRecap, attemptedSections };
+
+  const { data: attemptRows } = await supabase
+    .from('nexus_class_recap_attempts')
+    .select('section_id')
+    .in('section_id', sectionIds);
+
+  for (const a of attemptRows || []) attemptedSections.add(a.section_id);
+  return { sectionsByRecap, attemptedSections };
+}
+
+/**
+ * Take a live recap down so its checkpoints can be replaced.
+ *
+ * Only ever called on a recap that is broken as a gate and that no student has
+ * worked through, so nothing is being taken away from anybody: a recap with no
+ * checkpoints cannot be completed, and the catch-up screen falls back to the
+ * in-app recording while this is down. Written here rather than added to
+ * setRecapReadiness because unpublishing is a repair step, not a readiness
+ * verdict, and this keeps a shared package out of the change.
+ */
+async function unpublishForRepair(supabase: any, recapId: string): Promise<void> {
+  const { error } = await supabase
+    .from('nexus_class_recaps')
+    .update({ status: 'draft', published_at: null, auto_published_at: null })
+    .eq('id', recapId);
+  if (error) throw error;
 }
 
 /**
@@ -356,6 +504,14 @@ export async function autodraftRecapForClass(
     // it as ours and unfinished until the readiness call below settles it.
     recap = await createRecapForClass(cls.id, null, supabase, { readiness: 'pending' });
 
+    // Repairing something that is currently live. Take it down first: for the
+    // minute this takes, a student opening it would meet a half-replaced
+    // checkpoint list, and the in-app fallback on the catch-up screen is a
+    // better thing to meet than that. It goes back up below if it passes.
+    if (cls.repair && recap.status === 'published') {
+      await unpublishForRepair(supabase, recap.id);
+    }
+
     // Per-recap columns win; the classroom settings row fills the gaps.
     const defaults = await readRecapDefaults(supabase);
     const targetSegmentSeconds = recap.target_segment_seconds ?? defaults.target_segment_seconds;
@@ -387,7 +543,8 @@ export async function autodraftRecapForClass(
       { targetSegmentSeconds, poolPerSegment, durationSeconds },
     );
 
-    const sections = (generated.sections || []).filter(isUsableSection);
+    const planned = generated.sections || [];
+    const sections = planned.filter(isUsableSection);
     if (sections.length === 0) {
       await holdRecap(supabase, recap, 'generation_failed', 'The model returned no usable segments.');
       return { ok: false, classId: cls.id, reason: 'no_sections' };
@@ -410,19 +567,53 @@ export async function autodraftRecapForClass(
 
     // Nobody reads these before a student does, so the bar is what stands
     // between a bad generation and a teenager being asked to pass it.
+    //
+    // Scored against every PLANNED segment, not just the ones that came back
+    // with questions. Filtering first is what made a thin generation report
+    // itself as "covers 20% of the class": planSegments guarantees contiguous
+    // coverage by arithmetic, so coverage can only look broken once the empty
+    // segments have been dropped, and a teacher reading that hold reason went
+    // looking for a bug in the split that was never there. Given the whole plan,
+    // coverage passes and question_volume names what actually went wrong.
     const verdict = scoreRecapGeneration({
-      sections,
+      sections: planned,
       transcript,
       durationSeconds,
       targetSegmentSeconds,
       questionsToServe,
     });
 
+    // Built BEFORE publishing, not after, so a recap never goes live without the
+    // test that clears the class. Every auto-published recap on production was
+    // missing one: the checkpoints proved a student had watched, and then there
+    // was nothing to actually finish. Assembled from the checkpoint questions
+    // already saved above, so it costs no Gemini call.
+    let classTestQuestions: number | null = null;
+    if (verdict.publish) {
+      try {
+        const built = await buildClassTestFromRecap(recap.id, { createdBy: null }, supabase);
+        classTestQuestions = built.question_count;
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : 'unknown error';
+        await holdRecap(
+          supabase,
+          recap,
+          'generation_failed',
+          `The checkpoints generated, but the class test could not be built (${detail}).`,
+        );
+        return { ok: false, classId: cls.id, reason: 'error', detail };
+      }
+    }
+
     await setRecapReadiness(
       recap.id,
       {
         readiness: verdict.publish ? 'ready' : 'held',
         publish: verdict.publish,
+        // A published recap keeps its hold_reason null even when a soft check
+        // failed. The review queue finds it by quality_score instead, so a
+        // teacher reading hold_reason never sees a reason on something that is
+        // in fact live and working.
         hold_reason: verdict.holdReason,
         hold_detail: verdict.summary,
         quality_score: Number(verdict.score.toFixed(2)),
@@ -447,6 +638,8 @@ export async function autodraftRecapForClass(
       held: !verdict.publish,
       holdReason: verdict.holdReason ?? undefined,
       score: verdict.score,
+      flagged: verdict.flagged,
+      classTestQuestions,
     };
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown error';

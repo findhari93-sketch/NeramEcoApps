@@ -8,10 +8,20 @@
  * said, covering the first ten minutes and calling it a class, or producing
  * eleven questions whose answer is always B.
  *
- * Structure: four HARD checks that hold the recap whatever the score, and four
- * SOFT checks that contribute to a score. Hard checks are the ones where a
- * failure means the recap is not merely mediocre but broken as a gate. A student
- * cannot be asked to pass a checkpoint whose questions are unanswerable.
+ * Structure: five HARD checks that hold the recap, and four SOFT checks that
+ * contribute to a score. Hard checks are the ones where a failure means the
+ * recap is not merely mediocre but broken as a gate. A student cannot be asked
+ * to pass a checkpoint whose questions are unanswerable.
+ *
+ * Only the hard checks decide whether it publishes. The score decides whether a
+ * PUBLISHED recap is worth a teacher's eye. That split matters: gating on the
+ * score as well meant a duplicated question could hold a correct, complete,
+ * grounded recap, and a held recap is a student who cannot catch up until
+ * somebody notices.
+ *
+ * Grounding appears twice on purpose, once soft and once hard, at different
+ * thresholds. Mild drift is a flag; half the questions sharing no vocabulary
+ * with their own segment means the model wrote about a class it was not given.
  *
  * Pure: no Supabase, no network, no clock. Everything it needs is passed in, so
  * every branch is testable and a threshold change is a one-line diff with a test
@@ -43,6 +53,11 @@ export interface QualityCheck {
 
 export interface QualityVerdict {
   publish: boolean;
+  /**
+   * Published, but a soft check failed. Goes to students and to the teacher's
+   * review list at the same time: worth a look, not worth blocking on.
+   */
+  flagged: boolean;
   score: number;
   holdReason: HoldReason | null;
   checks: QualityCheck[];
@@ -67,6 +82,16 @@ export const THRESHOLDS = {
   minExplanationShare: 0.8,
   minExplanationChars: 20,
   minGroundedShare: 0.7,
+  /**
+   * Below this, grounding stops being a style note and becomes a hard block.
+   *
+   * The soft threshold above asks "is this well anchored in what the tutor
+   * said". This one asks a different question: "did the model make this class
+   * up". Half the questions sharing no vocabulary with the segment they claim to
+   * test is not a recap worth polishing, and it is the one soft failure that can
+   * put an unanswerable question in front of a student.
+   */
+  hardGroundedShare: 0.5,
   groundingWordOverlap: 3,
   minQuestionChars: 25,
   publishScore: 0.8,
@@ -324,6 +349,26 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
     THRESHOLDS.minGroundedShare,
   );
 
+  // ── Hard 5: the grounding floor ──────────────────────────────────────────
+  //
+  // Separate from the soft check above so the two can say different things.
+  // Between the floor and the soft threshold the recap publishes with a flag;
+  // below the floor it does not publish at all, because at that point the
+  // likeliest explanation is that the model wrote about a class it was not
+  // given.
+  add(
+    'grounding_floor',
+    true,
+    considered === 0 || groundedShare >= THRESHOLDS.hardGroundedShare,
+    `Only ${(groundedShare * 100).toFixed(
+      0,
+    )}% of questions use words from their own segment, under the ${(
+      THRESHOLDS.hardGroundedShare * 100
+    ).toFixed(0)}% floor. The questions may not be about this class.`,
+    groundedShare,
+    THRESHOLDS.hardGroundedShare,
+  );
+
   // ── Soft 4: distinct questions ───────────────────────────────────────────
   add(
     'distinctness',
@@ -337,29 +382,48 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
   const failedHard = checks.filter((c) => c.hard && !c.passed);
   const failedSoft = soft.filter((c) => !c.passed);
 
-  const publish = failedHard.length === 0 && score >= THRESHOLDS.publishScore;
+  /**
+   * Publishing turns ONLY on the hard checks.
+   *
+   * The soft score used to gate this too, at 0.8, which meant one duplicated
+   * question or a run of answers on the same letter held a recap that was
+   * otherwise correct, complete and grounded. Holding is not free: a held recap
+   * is a student who cannot catch up until somebody notices, and nobody was
+   * noticing. A cosmetic flaw is worth flagging, not worth blocking a teenager
+   * over, so the score now decides whether a published recap is worth a look
+   * rather than whether it goes out at all.
+   *
+   * The hard checks still hold, and they are the ones where a failure means the
+   * recap is broken as a gate rather than merely mediocre.
+   */
+  const publish = failedHard.length === 0;
 
-  let holdReason: HoldReason | null = null;
-  if (failedHard.length) {
-    const first = failedHard[0].id;
-    holdReason =
-      first === 'coverage'
-        ? 'low_coverage'
-        : first === 'boundaries'
-          ? 'bad_boundaries'
-          : first === 'question_volume'
-            ? 'thin_questions'
-            : 'bad_boundaries';
-  } else if (!publish) {
-    holdReason = 'low_quality';
-  }
+  /** Published, but a soft check failed, so it belongs in the review list. */
+  const flagged = publish && score < THRESHOLDS.publishScore;
 
-  const summary = publish
-    ? 'Passed every check.'
-    : [...failedHard, ...failedSoft]
+  const HOLD_BY_CHECK: Record<string, HoldReason> = {
+    coverage: 'low_coverage',
+    boundaries: 'bad_boundaries',
+    question_volume: 'thin_questions',
+    segment_count: 'bad_boundaries',
+    grounding_floor: 'low_quality',
+  };
+
+  const holdReason: HoldReason | null = failedHard.length
+    ? HOLD_BY_CHECK[failedHard[0].id] ?? 'low_quality'
+    : null;
+
+  const summary = failedHard.length
+    ? failedHard
         .slice(0, 2)
         .map((c) => c.detail)
-        .join(' ');
+        .join(' ')
+    : failedSoft.length
+      ? `Published with ${failedSoft.length === 1 ? 'one thing' : `${failedSoft.length} things`} worth a look. ${failedSoft
+          .slice(0, 2)
+          .map((c) => c.detail)
+          .join(' ')}`
+      : 'Passed every check.';
 
-  return { publish, score, holdReason, checks, summary };
+  return { publish, flagged, score, holdReason, checks, summary };
 }

@@ -14,11 +14,19 @@ vi.mock('@neram/database', () => ({
   createRecapForClass: vi.fn(async (classId: string) => ({
     id: `recap-${classId}`,
     title: 'Generated title',
+    status: 'draft',
     generation_attempts: 0,
   })),
   replaceRecapSections: vi.fn(async () => undefined),
   setRecapReadiness: vi.fn(async () => undefined),
   createUserNotification: vi.fn(async () => ({ id: 'notif-1' })),
+  buildClassTestFromRecap: vi.fn(async () => ({
+    test_id: 'test-1',
+    placement_id: 'placement-1',
+    question_count: 24,
+    passing_pct: 85,
+    must_get_right: 21,
+  })),
 }));
 
 vi.mock('./ai-generate', () => ({
@@ -29,7 +37,12 @@ vi.mock('./transcript-resolver', () => ({
   readStoredTranscript: vi.fn(),
 }));
 
-import { createRecapForClass, replaceRecapSections, setRecapReadiness } from '@neram/database';
+import {
+  buildClassTestFromRecap,
+  createRecapForClass,
+  replaceRecapSections,
+  setRecapReadiness,
+} from '@neram/database';
 import { generateSectionsAndQuestions } from './ai-generate';
 import { readStoredTranscript } from './transcript-resolver';
 
@@ -103,17 +116,28 @@ function publishableSections(durationSeconds = 1800, target = 300) {
 }
 
 /**
- * A stand-in for the Supabase builder, just deep enough for the three batched
- * reads the candidate query makes. Each table answers from a fixture.
+ * A stand-in for the Supabase builder, just deep enough for the batched reads
+ * the candidate query makes. Each table answers from a fixture; a table with no
+ * fixture answers empty, which is what a class with no checkpoints looks like.
+ *
+ * `updates` records every write, so a test can assert that a live recap was
+ * actually taken down before its checkpoints were replaced.
  */
 function fakeSupabase(tables: Record<string, any[]>) {
+  const updates: Array<{ table: string; patch: any }> = [];
   return {
+    updates,
     from(table: string) {
       const rows = tables[table] ?? [];
       const builder: any = {
         select: () => builder,
+        update: (patch: any) => {
+          updates.push({ table, patch });
+          return builder;
+        },
         eq: () => builder,
         neq: () => builder,
+        not: () => builder,
         lt: () => builder,
         in: () => builder,
         or: () => builder,
@@ -124,6 +148,11 @@ function fakeSupabase(tables: Record<string, any[]>) {
       return builder;
     },
   };
+}
+
+/** Checkpoint rows for a recap, enough to satisfy the "not broken" rule. */
+function sectionRows(recapId: string, count: number) {
+  return Array.from({ length: count }, (_, i) => ({ id: `sec-${recapId}-${i}`, recap_id: recapId }));
 }
 
 const HOUR = 3_600_000;
@@ -228,13 +257,14 @@ describe('findAutodraftCandidates', () => {
           created_at: '2026-07-23T00:00:00Z',
         },
       ],
+      nexus_class_recap_sections: sectionRows('recap-1', 4),
       nexus_class_transcripts: [{ class_id: 'class-1' }],
     });
 
     expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
   });
 
-  it('leaves a published recap alone even when it was never generated', async () => {
+  it('leaves a published recap with real checkpoints alone', async () => {
     const supabase = fakeSupabase({
       nexus_classrooms: [{ id: 'room-1' }],
       nexus_scheduled_classes: [classRow()],
@@ -247,6 +277,106 @@ describe('findAutodraftCandidates', () => {
           created_at: new Date(Date.now() - 40 * HOUR).toISOString(),
         },
       ],
+      nexus_class_recap_sections: sectionRows('recap-1', 4),
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
+  });
+
+  it('repairs a published recap that has no checkpoints at all', async () => {
+    // Exactly the 12 July class on production: status 'published', zero
+    // sections, so every student who opened it met "Checkpoints coming soon" on
+    // a class they could never clear. The old rule skipped anything published,
+    // which meant it would have sat there forever.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'published',
+          generated_at: null,
+          created_at: new Date(Date.now() - 40 * HOUR).toISOString(),
+        },
+      ],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    const found = await findAutodraftCandidates(supabase);
+    expect(found).toHaveLength(1);
+    expect(found[0].repair).toBe(true);
+    expect(found[0].existing_recap_id).toBe('recap-1');
+  });
+
+  it('repairs a published recap left with a single checkpoint', async () => {
+    // One checkpoint at the end of an hour is a test, not a set of checkpoints.
+    // planSegments cannot produce fewer than two, so this is a generation that
+    // mostly failed, not a deliberate split.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'published',
+          generated_at: new Date(Date.now() - 2 * HOUR).toISOString(),
+          created_at: new Date(Date.now() - 3 * HOUR).toISOString(),
+          generation_attempts: 1,
+        },
+      ],
+      nexus_class_recap_sections: sectionRows('recap-1', 1),
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    const found = await findAutodraftCandidates(supabase);
+    expect(found).toHaveLength(1);
+    expect(found[0].repair).toBe(true);
+  });
+
+  it('refuses to repair a recap students have already worked through', async () => {
+    // Their passed checkpoints live on these section rows and cascade on delete.
+    // Regenerating would wipe progress somebody earned, so this belongs to them
+    // now and any change has to go through the teacher's diffing editor.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'published',
+          generated_at: new Date(Date.now() - 40 * HOUR).toISOString(),
+          created_at: new Date(Date.now() - 41 * HOUR).toISOString(),
+        },
+      ],
+      nexus_class_recap_sections: sectionRows('recap-1', 1),
+      nexus_class_recap_attempts: [{ section_id: 'sec-recap-1-0' }],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
+  });
+
+  it('waits out the stall window before repairing a draft somebody just generated', async () => {
+    // A published recap is failing a student right now, so it is repaired at
+    // once. A draft is not visible to anyone, and the teacher who generated it
+    // five minutes ago may be writing the missing checkpoints by hand.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          generated_at: new Date(Date.now() - 1 * HOUR).toISOString(),
+          created_at: new Date(Date.now() - 2 * HOUR).toISOString(),
+        },
+      ],
+      nexus_class_recap_sections: sectionRows('recap-1', 1),
       nexus_class_transcripts: [{ class_id: 'class-1' }],
     });
 
@@ -378,6 +508,40 @@ describe('findAutodraftCandidates', () => {
     expect(await findAutodraftCandidates(supabase)).toHaveLength(MAX_DRAFTS_PER_RUN);
   });
 
+  it('puts a class a student is waiting on ahead of newer ones', async () => {
+    // The pending row was inserted when a student pressed Watch and found no
+    // guided recap. Without this ordering the run cap always went to whatever
+    // happened to be most recent, and the class somebody actually opened today
+    // waited its turn behind classes nobody had asked for.
+    const classes = [
+      classRow({ id: 'newest', scheduled_date: '2026-07-30' }),
+      classRow({ id: 'middle', scheduled_date: '2026-07-20' }),
+      classRow({ id: 'asked-for', scheduled_date: '2026-07-03' }),
+    ];
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: classes,
+      nexus_class_recaps: [
+        {
+          id: 'recap-asked',
+          scheduled_class_id: 'asked-for',
+          status: 'draft',
+          readiness: 'pending',
+          generated_at: null,
+          created_at: new Date().toISOString(),
+          generation_attempts: 0,
+        },
+      ],
+      nexus_class_transcripts: classes.map((c) => ({ class_id: c.id })),
+    });
+
+    const found = await findAutodraftCandidates(supabase, 3);
+    expect(found[0].id).toBe('asked-for');
+    expect(found[0].requested).toBe(true);
+    // The rest keep their newest-first order behind it.
+    expect(found.map((c) => c.id)).toEqual(['asked-for', 'newest', 'middle']);
+  });
+
   it('returns nothing when no classroom is active', async () => {
     const supabase = fakeSupabase({ nexus_classrooms: [] });
     expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
@@ -391,6 +555,8 @@ describe('autodraftRecapForClass', () => {
     title: 'Class by Ar. Hari Babu',
     scheduled_date: '2026-07-22',
     existing_recap_id: null,
+    repair: false,
+    requested: false,
   };
 
   it('drafts checkpoints from the stored transcript', async () => {
@@ -527,6 +693,80 @@ describe('autodraftRecapForClass', () => {
       expect.objectContaining({ readiness: 'ready', publish: true }),
       expect.anything(),
     );
+  });
+
+  it('builds the class test before it publishes', async () => {
+    // The gap this closes: every recap the sweep published went out without a
+    // test, so a catch-up student passed all the checkpoints and then had
+    // nothing to actually clear the class with. Built BEFORE the publish so a
+    // recap can never be live without one.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({
+      sections: publishableSections(),
+    } as any);
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(buildClassTestFromRecap).toHaveBeenCalledOnce();
+    expect(out).toMatchObject({ ok: true, published: true, classTestQuestions: 24 });
+    expect(vi.mocked(buildClassTestFromRecap).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(setRecapReadiness).mock.invocationCallOrder[0],
+    );
+  });
+
+  it('holds the recap when the class test cannot be built', async () => {
+    // Publishing anyway would put a recap in front of students that they can
+    // finish the checkpoints of and then never clear.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({
+      sections: publishableSections(),
+    } as any);
+    vi.mocked(buildClassTestFromRecap).mockRejectedValueOnce(
+      new Error('NO_CHECKPOINT_QUESTIONS'),
+    );
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: false, reason: 'error' });
+    expect(setRecapReadiness).toHaveBeenCalledWith(
+      'recap-class-1',
+      expect.objectContaining({ readiness: 'held', hold_reason: 'generation_failed' }),
+      expect.anything(),
+    );
+  });
+
+  it('does not build a class test for a recap it is holding', async () => {
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({ sections: [goodSection] } as any);
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: true, held: true });
+    expect(buildClassTestFromRecap).not.toHaveBeenCalled();
+  });
+
+  it('takes a live recap down before replacing its checkpoints', async () => {
+    // For the minute a repair takes, a student opening it would meet a
+    // half-replaced checkpoint list. The catch-up screen's in-app recording is
+    // a better thing to meet than that, and it goes back up if it passes.
+    vi.mocked(createRecapForClass).mockResolvedValueOnce({
+      id: 'recap-class-1',
+      title: 'Generated title',
+      status: 'published',
+      generation_attempts: 1,
+    } as any);
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({
+      sections: publishableSections(),
+    } as any);
+
+    const supabase = fakeSupabase({});
+    await autodraftRecapForClass(supabase, { ...candidate, repair: true });
+
+    expect(supabase.updates).toContainEqual({
+      table: 'nexus_class_recaps',
+      patch: { status: 'draft', published_at: null, auto_published_at: null },
+    });
   });
 });
 

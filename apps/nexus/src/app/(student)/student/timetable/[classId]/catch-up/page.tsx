@@ -40,6 +40,7 @@ import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
 import { formatTime } from '@/components/timetable/date-utils';
 import ClassCoverThumb from '@/components/timetable/ClassCoverThumb';
 import ClassResourcesSection from '@/components/timetable/ClassResourcesSection';
+import RecordingPlayerDialog from '@/components/timetable/RecordingPlayerDialog';
 import { SECTION_LABEL_SX } from '@/components/timetable/timetable-theme';
 import type { ClassImageRef } from '@/lib/class-cover';
 import type { ClassResource } from '@/lib/class-resources';
@@ -98,6 +99,8 @@ export default function CatchUpPage() {
   const [note, setNote] = useState('');
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The in-app recording, for a class whose guided recap is not ready yet. */
+  const [playerOpen, setPlayerOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -148,6 +151,27 @@ export default function CatchUpPage() {
     }
   };
 
+  /**
+   * Ask for this class to be prepared, silently.
+   *
+   * Deliberately outside `act`: it must not set `busy`, must not raise a
+   * snackbar and must not refetch, because none of that is the student's
+   * business. They pressed Watch; the video is what should happen. The server
+   * side is idempotent, so pressing Watch ten times queues once.
+   */
+  const queueRecap = async () => {
+    try {
+      const token = await getToken();
+      await fetch(`/api/timetable/${classId}/catch-up`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'request_recap' }),
+      });
+    } catch {
+      // Nothing to say. The nightly sweep finds this class on its own anyway.
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -190,17 +214,34 @@ export default function CatchUpPage() {
       test: test ? ++n : 0,
     };
   })();
-  // A guided recap is the better way to watch when one exists: it checkpoints
-  // and quizzes. Otherwise the raw recording, YouTube first since Teams copies
-  // expire.
-  //
   // The player route is SINGULAR: /student/class-recap/[recapId]. The plural
   // /student/class-recaps is the list page and has no [recapId] child, so
-  // linking there 404s and every student silently falls through to the raw
-  // YouTube tab. Every other caller in the app uses the singular form.
-  const watchHref = recap
-    ? `/student/class-recap/${recap.id}`
-    : cls.youtube_url || cls.recording_url;
+  // linking there 404s.
+  const recapHref = recap ? `/student/class-recap/${recap.id}` : null;
+
+  /**
+   * Watch. Either the guided recap, or the recording inside Nexus.
+   *
+   * There used to be a third possibility and it was the one students actually
+   * met: with no recap, this button opened cls.youtube_url in a NEW TAB. That
+   * took a student out of the app entirely, to a page with no checkpoints, no
+   * quizzes, no watermark and no record that they had watched anything, which
+   * is every protection this feature exists to provide, dropped in one click.
+   *
+   * Now a missing recap falls back to RecordingPlayerDialog, which streams the
+   * same recording through Nexus with a per-viewer grant. It is ungated, so the
+   * "I have watched it" declaration below still applies, but it never leaves the
+   * boundary. Pressing it also queues the class for the recap sweep, so the next
+   * person to open it gets the real thing.
+   */
+  const watch = () => {
+    if (recapHref) {
+      router.push(recapHref);
+      return;
+    }
+    setPlayerOpen(true);
+    void queueRecap();
+  };
 
   const stepBox = (
     n: number,
@@ -400,17 +441,14 @@ export default function CatchUpPage() {
             </Typography>
           ) : (
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {watchHref && (
-                <Button
-                  variant={steps.watched ? 'outlined' : 'contained'}
-                  href={watchHref}
-                  {...(recap ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
-                  startIcon={<SmartDisplayOutlinedIcon />}
-                  sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
-                >
-                  {recap ? 'Open the guided recap' : steps.watched ? 'Watch again' : 'Watch now'}
-                </Button>
-              )}
+              <Button
+                variant={steps.watched ? 'outlined' : 'contained'}
+                onClick={watch}
+                startIcon={<SmartDisplayOutlinedIcon />}
+                sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
+              >
+                {recap ? 'Open the guided recap' : steps.watched ? 'Watch again' : 'Watch now'}
+              </Button>
               {/* Only offered when there is no guided recap. Where one exists,
                   finishing its checkpoints IS the proof, and the server refuses
                   a self-declaration alongside it. */}
@@ -423,6 +461,19 @@ export default function CatchUpPage() {
                 >
                   I have watched it
                 </Button>
+              )}
+              {/* Said out loud, because a student who was promised checkpoints
+                  and gets a plain video deserves to know why, and to know it is
+                  temporary rather than the way this class works. */}
+              {!recap && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ width: '100%', mt: 0.5 }}
+                >
+                  The guided version with checkpoints is still being prepared for this class. Watch
+                  the recording now and it will be here next time.
+                </Typography>
               )}
             </Stack>
           ),
@@ -547,6 +598,17 @@ export default function CatchUpPage() {
           )}
         </Box>
       )}
+
+      {/* Streams through Nexus with a per-viewer grant rather than handing out a
+          Microsoft URL. showFallbackLink stays off: the raw SharePoint link is
+          the one that refuses students who were not on the meeting invite. */}
+      <RecordingPlayerDialog
+        open={playerOpen}
+        onClose={() => setPlayerOpen(false)}
+        classId={cls.id}
+        title={cls.title}
+        getToken={getToken}
+      />
 
       <Snackbar
         open={!!snack}

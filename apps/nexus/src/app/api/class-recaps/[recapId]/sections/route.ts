@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTeacher } from '@/lib/verify-teacher';
-import { saveRecapSections, getRecapById } from '@neram/database';
+import { saveRecapSections, getRecapById, getSupabaseAdminClient } from '@neram/database';
 import type { GeneratedRecapSection } from '@neram/database';
+import { readRecapDefaults, questionsToPass } from '@/lib/recap-defaults';
 
 /**
  * PUT /api/class-recaps/[recapId]/sections
@@ -13,6 +14,13 @@ import type { GeneratedRecapSection } from '@neram/database';
  * passed attempts away and silently re-lock them. Send each existing checkpoint
  * back with its `id` so it is updated in place; anything without an id is
  * treated as new, and anything omitted is archived rather than deleted.
+ *
+ * The gate is filled in here rather than trusted from the client. NULL is not
+ * "unset" for these two columns: a NULL questions_to_serve serves the whole bank
+ * of fifteen, and a NULL min_questions_to_pass then demands all fifteen correct.
+ * The editor does not carry questions_to_serve through its form state and a
+ * hand-added checkpoint has neither, so every checkpoint saved by hand was
+ * unpassable. Doing it at the write covers every caller at once.
  */
 export async function PUT(
   request: NextRequest,
@@ -39,7 +47,7 @@ export async function PUT(
       }
     }
 
-    await saveRecapSections(recapId, sections);
+    await saveRecapSections(recapId, await withGate(recapId, sections));
     const recap = await getRecapById(recapId);
     return NextResponse.json({ recap });
   } catch (err) {
@@ -47,4 +55,50 @@ export async function PUT(
     const status = message === 'Not authorized' ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
+}
+
+/**
+ * Fill in how many questions each checkpoint serves and how many must be right.
+ *
+ * A value the teacher set explicitly is left exactly as it is; only a missing or
+ * nonsensical one is derived, from the recap's own settings and then the
+ * classroom defaults. Serving is capped at the number of questions the
+ * checkpoint actually holds, because a checkpoint that promises ten questions
+ * from a bank of four cannot draw them and a pass mark computed against ten it
+ * cannot serve is a wall.
+ */
+async function withGate(
+  recapId: string,
+  sections: GeneratedRecapSection[],
+): Promise<GeneratedRecapSection[]> {
+  const supabase = getSupabaseAdminClient() as any;
+  const defaults = await readRecapDefaults(supabase);
+
+  const { data: recap } = await supabase
+    .from('nexus_class_recaps')
+    .select('question_pool_per_segment, questions_per_segment, pass_percentage')
+    .eq('id', recapId)
+    .maybeSingle();
+
+  const wanted = Math.min(
+    recap?.question_pool_per_segment ?? defaults.question_pool_per_segment,
+    recap?.questions_per_segment ?? defaults.questions_per_segment,
+  );
+  const passPercentage = recap?.pass_percentage ?? defaults.pass_percentage;
+
+  return sections.map((s) => {
+    const available = (s.questions || []).length;
+    const asked = Number(s.questions_to_serve);
+    const serve = Math.max(
+      1,
+      Math.min(available || 1, Number.isFinite(asked) && asked > 0 ? asked : wanted),
+    );
+    const declared = Number(s.min_questions_to_pass);
+    const pass =
+      Number.isFinite(declared) && declared > 0
+        ? Math.min(serve, declared)
+        : questionsToPass(serve, passPercentage);
+
+    return { ...s, questions_to_serve: serve, min_questions_to_pass: pass };
+  });
 }

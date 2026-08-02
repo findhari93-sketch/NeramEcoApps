@@ -159,8 +159,11 @@ describe('soft checks pull the score down', () => {
     expect(score(sections).checks.find((c) => c.id === 'explanations')?.passed).toBe(false);
   });
 
-  it('flags questions that share no vocabulary with their own segment', () => {
-    // The cheap hallucination detector: the tutor never mentioned any of this.
+  it('holds questions that share no vocabulary with their own segment', () => {
+    // The cheap hallucination detector, and the one soft check that also has a
+    // hard floor under it. Nothing here was ever said in the class, so this is
+    // not a recap worth polishing, it is one the model invented.
+    //
     // Texts must be globally unique, or the duplicate filter starves the
     // segments and the thin_questions HARD check fires first, masking this one.
     let n = 0;
@@ -173,6 +176,7 @@ describe('soft checks pull the score down', () => {
     }));
     const v = score(sections);
     expect(v.checks.find((c) => c.id === 'grounding')?.passed).toBe(false);
+    expect(v.checks.find((c) => c.id === 'grounding_floor')?.passed).toBe(false);
     expect(v.publish).toBe(false);
     expect(v.holdReason).toBe('low_quality');
   });
@@ -182,6 +186,79 @@ describe('soft checks pull the score down', () => {
     const sections = goodSections().map((s) => ({ ...s, questions: [dup, dup, dup] }));
     const v = score(sections);
     expect(v.checks.find((c) => c.id === 'distinctness')?.passed).toBe(false);
+  });
+});
+
+describe('a soft failure publishes and is flagged, rather than holding', () => {
+  // The change this suite exists to pin down. Holding on the soft score meant
+  // one duplicated question could keep a correct, complete, grounded recap away
+  // from a student for as long as it took somebody to notice, and on production
+  // nobody was noticing. Cosmetic flaws are worth telling a teacher about; they
+  // are not worth blocking a teenager over.
+
+  it('publishes a recap whose answers all share one letter', () => {
+    const sections = goodSections().map((s) => ({
+      ...s,
+      questions: s.questions.map((q) => ({ ...q, correct_option: 'a' as const })),
+    }));
+    const v = score(sections);
+
+    expect(v.checks.find((c) => c.id === 'answer_balance')?.passed).toBe(false);
+    expect(v.score).toBeLessThan(THRESHOLDS.publishScore);
+    expect(v.publish).toBe(true);
+    expect(v.flagged).toBe(true);
+    expect(v.holdReason).toBeNull();
+    expect(v.summary).toMatch(/worth a look/);
+  });
+
+  it('publishes a recap with no explanations', () => {
+    const sections = goodSections().map((s) => ({
+      ...s,
+      questions: s.questions.map((q) => ({ ...q, explanation: '' })),
+    }));
+    const v = score(sections);
+    expect(v.publish).toBe(true);
+    expect(v.flagged).toBe(true);
+  });
+
+  it('does not flag a recap that passed everything', () => {
+    const v = score(goodSections());
+    expect(v.publish).toBe(true);
+    expect(v.flagged).toBe(false);
+  });
+
+  it('publishes mild grounding drift but holds anything under the floor', () => {
+    // Between the floor and the soft threshold the questions are still mostly
+    // about the class, so a teacher gets told rather than a student getting
+    // blocked. Under the floor the likeliest explanation is that the model wrote
+    // about a class it was never given, and that is a wall nobody can appeal.
+    let n = 0;
+    const drifted = goodSections().map((s) => ({
+      ...s,
+      questions: s.questions.map((q, i) =>
+        // One of every three questions talks about something else entirely,
+        // which lands grounding at 67%: under the 70% soft bar, over the 50%
+        // hard floor.
+        i === 2 ? { ...q, question_text: `Explain benzene aromaticity, case ${n++}?` } : q,
+      ),
+    }));
+    const mild = score(drifted);
+    expect(mild.checks.find((c) => c.id === 'grounding')?.passed).toBe(false);
+    expect(mild.checks.find((c) => c.id === 'grounding_floor')?.passed).toBe(true);
+    expect(mild.publish).toBe(true);
+    expect(mild.flagged).toBe(true);
+
+    let m = 0;
+    const invented = goodSections().map((s) => ({
+      ...s,
+      questions: s.questions.map((q) => ({
+        ...q,
+        question_text: `Explain benzene aromaticity and orbital hybridisation, case ${m++}?`,
+      })),
+    }));
+    const severe = score(invented);
+    expect(severe.checks.find((c) => c.id === 'grounding_floor')?.passed).toBe(false);
+    expect(severe.publish).toBe(false);
   });
 });
 
