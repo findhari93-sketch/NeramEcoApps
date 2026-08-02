@@ -225,6 +225,12 @@ export default function CalendarToolbar({
           : ''}
       </Typography>
 
+      {/* Below md the band note is hidden, and with it went the only thing
+          holding the two halves of this row apart: every control collapsed into
+          a clump on the left with a hand's width of empty bar to the right of
+          the overflow button. This is that spacer, and nothing else. */}
+      <Box sx={{ flex: 1, minWidth: 0, display: { xs: 'block', md: 'none' } }} />
+
       {/* ── Right: view switch, overflow, page actions ─────────────────── */}
       {/* The label is never hidden. It used to collapse to a bare chevron below
           sm, which is the whole reason teachers reported they could not find

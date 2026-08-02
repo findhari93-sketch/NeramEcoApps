@@ -22,9 +22,11 @@ import {
   ListItemText,
 } from '@neram/ui';
 import GraphAvatar from '@/components/GraphAvatar';
+import NexusMark from '@/components/NexusMark';
 import NotificationBell from '@/components/NotificationBell';
 import PanelSwitcher from '@/components/PanelSwitcher';
 import ZoneSwitcher from '@/components/ZoneSwitcher';
+import ClassroomSwitchSheet from '@/components/ClassroomSwitchSheet';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
@@ -78,6 +80,8 @@ export default function TopBar() {
   const [viewAsOpen, setViewAsOpen] = useState(false);
   const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
   const [classroomAnchor, setClassroomAnchor] = useState<null | HTMLElement>(null);
+  // Phones switch classroom through a bottom sheet instead of the anchored menu.
+  const [classroomSheetOpen, setClassroomSheetOpen] = useState(false);
 
   // Drawing reviews are not classroom-scoped (review queue is shared across classrooms),
   // so hide the chip there to avoid implying a filter that doesn't exist.
@@ -95,6 +99,15 @@ export default function TopBar() {
     nexusRole !== 'parent' &&
     !!activeClassroom &&
     (nexusRole === 'student' || (activePanel === 'teaching' && !isDrawingReviewRoute));
+
+  // One classroom is context, not a control. On a phone that distinction is the
+  // difference between a bar that fits and one that does not: the labelled chip
+  // costs ~190px of a 360px row, and it is the reason the bell and the avatar
+  // used to be pushed off the right edge of the screen. So below sm the chip is
+  // replaced by an icon button, and only when there is somewhere to switch to.
+  // The classroom name is still on screen: every dashboard prints it under the
+  // greeting, and the page header names it elsewhere.
+  const canSwitchClassrooms = classrooms.length > 1;
 
   // The child a parent is currently looking at. Falls back to the first link so
   // the chip still names someone if activeChildId ever arrives empty.
@@ -126,7 +139,19 @@ export default function TopBar() {
         width: '100%',
       }}
     >
-      <Toolbar sx={{ minHeight: { xs: 52, sm: 56 }, px: { xs: 1.5, sm: 2 } }}>
+      <Toolbar
+        sx={{
+          minHeight: { xs: 52, sm: 56 },
+          px: { xs: 1, sm: 2 },
+          gap: { xs: 0.75, sm: 1 },
+          // The guard rail. Every child below is shrink-safe, but a future
+          // addition that is not should crop at the edge rather than push the
+          // avatar off screen and give the whole document a sideways scroll.
+          // `clip` and not `hidden`: hidden would make this a scroll container.
+          // Both menus render through a portal, so neither is affected.
+          overflowX: 'clip',
+        }}
+      >
         {/* Hamburger - desktop only, when sidebar is hidden */}
         {sidebarState === 'hidden' && (
           <IconButton
@@ -142,160 +167,229 @@ export default function TopBar() {
           </IconButton>
         )}
 
-        {/* Brand - Mobile only (desktop has sidebar). Taps → home dashboard */}
-        <Typography
-          variant="h6"
+        {/* Brand - Mobile only (desktop has sidebar). Taps → home dashboard.
+            The logo mark, not a wordmark: it is the same artwork the PWA puts
+            on the home screen, and it costs 28px where "Nexus" cost 55. */}
+        <Box
           component="button"
+          type="button"
           onClick={() => router.push(getRoleDashboard(nexusRole))}
           aria-label="Go to dashboard"
           sx={{
-            display: { xs: 'block', md: 'none' },
-            fontWeight: 800,
-            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            mr: 1.5,
-            letterSpacing: '-0.3px',
-            // Make it a clean tappable button
+            display: { xs: 'flex', md: 'none' },
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 40,
+            height: 40,
+            flexShrink: 0,
             border: 'none',
             p: 0,
+            borderRadius: 2,
+            bgcolor: 'transparent',
             cursor: 'pointer',
             WebkitTapHighlightColor: 'transparent',
             '&:active': { opacity: 0.7 },
+            '&:focus-visible': {
+              outline: `2px solid ${theme.palette.primary.main}`,
+              outlineOffset: 2,
+            },
           }}
         >
-          Nexus
-        </Typography>
-
-        {/* Workspace/zone switcher - compact segmented control. Staff see the
-            Teaching / Management / Admin pill; students see the Study Zone /
-            Classroom pill. Each self-hides when it has nothing to switch, so
-            only the relevant one shows. */}
-        <Box sx={{ mr: showClassroomSelector ? 1 : 0 }}>
-          <PanelSwitcher accent={roleAccent} />
-          <ZoneSwitcher accent={roleAccent} />
+          <NexusMark size={28} />
         </Box>
 
-        {/* Active Classroom Chip - shown for students (always) and teachers on Teaching panel */}
-        {showClassroomSelector && (
-          <Box
-            component="button"
-            onClick={classrooms.length > 1 ? (e: React.MouseEvent<HTMLButtonElement>) => setClassroomAnchor(e.currentTarget) : undefined}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.75,
-              px: 1.25,
-              py: 0.5,
-              borderRadius: 1.5,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
-              bgcolor: alpha(theme.palette.primary.main, 0.06),
-              cursor: classrooms.length > 1 ? 'pointer' : 'default',
-              maxWidth: { xs: 160, sm: 260 },
-              transition: 'background-color 200ms ease',
-              '&:hover': classrooms.length > 1 ? { bgcolor: alpha(theme.palette.primary.main, 0.12) } : {},
-              outline: 'none',
-            }}
-          >
-            <SchoolOutlinedIcon sx={{ fontSize: '0.95rem', color: theme.palette.primary.main, flexShrink: 0 }} />
-            <Box sx={{ minWidth: 0, textAlign: 'left' }}>
-              <Typography
-                variant="caption"
-                noWrap
-                sx={{
-                  display: 'block',
-                  fontWeight: 600,
-                  fontSize: '0.7rem',
-                  lineHeight: 1.2,
-                  color: 'text.primary',
-                }}
-              >
-                {activeClassroom.name}
-              </Typography>
-              <Typography
-                variant="caption"
-                noWrap
-                sx={{
-                  display: 'block',
-                  fontSize: '0.6rem',
-                  lineHeight: 1.2,
-                  color: 'text.secondary',
-                  textTransform: 'capitalize',
-                }}
-              >
-                {activeClassroom.type && activeClassroom.type !== 'common'
-                  ? `${activeClassroom.type} · ${activeClassroom.enrollmentRole}`
-                  : activeClassroom.enrollmentRole}
-              </Typography>
-            </Box>
-            {classrooms.length > 1 && (
-              <SwapHorizIcon sx={{ fontSize: '0.85rem', color: 'text.secondary', flexShrink: 0, ml: 0.25 }} />
-            )}
-          </Box>
-        )}
+        {/* Left group: workspace/zone switcher, then classroom context. Shares
+            one shrink-safe track so nothing here can push the right cluster off
+            screen: minWidth:0 removes the flex min-content floor, which is the
+            rule that used to keep the classroom chip at its full text width. */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: { xs: 0.75, sm: 1 },
+            minWidth: 0,
+            flex: '1 1 auto',
+          }}
+        >
+          {/* Staff see the Teaching / Management / Admin pill; students see the
+              Study Zone / Classroom pill. Each self-hides when it has nothing
+              to switch, so only the relevant one shows. */}
+          <PanelSwitcher accent={roleAccent} />
+          <ZoneSwitcher accent={roleAccent} />
 
-        {/*
-          Who a parent is looking at.
+          {/* Active classroom - students always, teachers on the Teaching panel */}
+          {showClassroomSelector && (
+            <>
+              {/* Phone: icon button → bottom sheet, and only when there is more
+                  than one classroom to move between. */}
+              {canSwitchClassrooms && (
+                <IconButton
+                  onClick={() => setClassroomSheetOpen(true)}
+                  aria-label={`Switch classroom, currently ${activeClassroom.name}`}
+                  data-testid="classroom-switch-mobile"
+                  sx={{
+                    display: { xs: 'inline-flex', sm: 'none' },
+                    width: 44,
+                    height: 44,
+                    flexShrink: 0,
+                    color: theme.palette.primary.main,
+                    bgcolor: alpha(theme.palette.primary.main, 0.06),
+                    border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
+                    borderRadius: 2,
+                    '& .MuiSvgIcon-root': { fontSize: '1.15rem' },
+                  }}
+                >
+                  <SchoolOutlinedIcon />
+                </IconButton>
+              )}
 
-          Occupies the same slot as the classroom chip, but is deliberately NOT
-          the classroom chip: `classrooms` holds the CHILD's classroom for a
-          parent, so labelling it as theirs would read as "you are enrolled in
-          JEE B.Arch Session 1". Static in Phase 1 because a parent has exactly
-          one linked child; when siblings arrive this becomes the switcher.
-        */}
-        {nexusRole === 'parent' && activeChild && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.75,
-              px: 1.25,
-              py: 0.5,
-              borderRadius: 1.5,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
-              bgcolor: alpha(theme.palette.primary.main, 0.06),
-              maxWidth: { xs: 160, sm: 260 },
-              minWidth: 0,
-            }}
-          >
-            <SchoolOutlinedIcon
-              sx={{ fontSize: '0.95rem', color: theme.palette.primary.main, flexShrink: 0 }}
-            />
-            <Box sx={{ minWidth: 0, textAlign: 'left' }}>
-              <Typography
-                variant="caption"
-                noWrap
+              {/* sm and up: the labelled chip, which now truncates instead of
+                  refusing to shrink. */}
+              <Box
+                component={canSwitchClassrooms ? 'button' : 'div'}
+                onClick={
+                  canSwitchClassrooms
+                    ? (e: React.MouseEvent<HTMLElement>) => setClassroomAnchor(e.currentTarget)
+                    : undefined
+                }
                 sx={{
-                  display: 'block',
-                  fontWeight: 600,
-                  fontSize: '0.7rem',
-                  lineHeight: 1.2,
-                  color: 'text.primary',
+                  display: { xs: 'none', sm: 'flex' },
+                  alignItems: 'center',
+                  gap: 0.75,
+                  px: 1.25,
+                  py: 0.5,
+                  borderRadius: 1.5,
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
+                  bgcolor: alpha(theme.palette.primary.main, 0.06),
+                  cursor: canSwitchClassrooms ? 'pointer' : 'default',
+                  maxWidth: 260,
+                  minWidth: 0,
+                  flexShrink: 1,
+                  transition: 'background-color 200ms ease',
+                  '&:hover': canSwitchClassrooms
+                    ? { bgcolor: alpha(theme.palette.primary.main, 0.12) }
+                    : {},
+                  outline: 'none',
                 }}
               >
-                {activeChild.name || 'Your child'}
-              </Typography>
-              {activeChild.classroom_name && (
+                <SchoolOutlinedIcon sx={{ fontSize: '0.95rem', color: theme.palette.primary.main, flexShrink: 0 }} />
+                <Box sx={{ minWidth: 0, textAlign: 'left' }}>
+                  <Typography
+                    variant="caption"
+                    noWrap
+                    sx={{
+                      display: 'block',
+                      fontWeight: 600,
+                      fontSize: '0.7rem',
+                      lineHeight: 1.2,
+                      color: 'text.primary',
+                    }}
+                  >
+                    {activeClassroom.name}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    noWrap
+                    sx={{
+                      display: 'block',
+                      fontSize: '0.6rem',
+                      lineHeight: 1.2,
+                      color: 'text.secondary',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {activeClassroom.type && activeClassroom.type !== 'common'
+                      ? `${activeClassroom.type} · ${activeClassroom.enrollmentRole}`
+                      : activeClassroom.enrollmentRole}
+                  </Typography>
+                </Box>
+                {canSwitchClassrooms && (
+                  <SwapHorizIcon sx={{ fontSize: '0.85rem', color: 'text.secondary', flexShrink: 0, ml: 0.25 }} />
+                )}
+              </Box>
+            </>
+          )}
+
+          {/*
+            Who a parent is looking at.
+
+            Occupies the same slot as the classroom chip, but is deliberately
+            NOT the classroom chip: `classrooms` holds the CHILD's classroom for
+            a parent, so labelling it as theirs would read as "you are enrolled
+            in JEE B.Arch Session 1". Static in Phase 1 because a parent has
+            exactly one linked child; when siblings arrive this becomes the
+            switcher.
+
+            Kept at every width, unlike the classroom chip. A parent has no
+            workspace pill next to it, so it is competing with nothing for the
+            row, and it now shrinks and truncates rather than holding the bar
+            open at its full text width. Dropping it on a phone left a parent
+            looking at an app bar containing a logo and their own avatar.
+          */}
+          {nexusRole === 'parent' && activeChild && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.75,
+                px: 1.25,
+                py: 0.5,
+                borderRadius: 1.5,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
+                bgcolor: alpha(theme.palette.primary.main, 0.06),
+                maxWidth: 260,
+                minWidth: 0,
+                flexShrink: 1,
+              }}
+            >
+              <SchoolOutlinedIcon
+                sx={{ fontSize: '0.95rem', color: theme.palette.primary.main, flexShrink: 0 }}
+              />
+              <Box sx={{ minWidth: 0, textAlign: 'left' }}>
                 <Typography
                   variant="caption"
                   noWrap
                   sx={{
                     display: 'block',
-                    fontSize: '0.6rem',
+                    fontWeight: 600,
+                    fontSize: '0.7rem',
                     lineHeight: 1.2,
-                    color: 'text.secondary',
+                    color: 'text.primary',
                   }}
                 >
-                  {activeChild.classroom_name}
+                  {activeChild.name || 'Your child'}
                 </Typography>
-              )}
+                {activeChild.classroom_name && (
+                  <Typography
+                    variant="caption"
+                    noWrap
+                    sx={{
+                      display: 'block',
+                      fontSize: '0.6rem',
+                      lineHeight: 1.2,
+                      color: 'text.secondary',
+                    }}
+                  >
+                    {activeChild.classroom_name}
+                  </Typography>
+                )}
+              </Box>
             </Box>
-          </Box>
-        )}
+          )}
+        </Box>
+        {/* ── end left group ── */}
 
-        <Box sx={{ flexGrow: 1 }} />
-
+        {/* Right cluster. Never shrinks, never wraps: the bell and the avatar
+            are the two controls that must survive every viewport. */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: { xs: 0.25, sm: 0.5 },
+            flexShrink: 0,
+            ml: 'auto',
+          }}
+        >
         {/* Notification Bell */}
         {/*
           Not for parents. /api/notifications authenticates with verifyMsToken
@@ -312,7 +406,7 @@ export default function TopBar() {
           onClick={(e: React.MouseEvent<HTMLButtonElement>) => setProfileAnchor(e.currentTarget)}
           aria-label="Open profile menu"
           sx={{
-            ml: 1,
+            flexShrink: 0,
             borderRadius: 50,
             px: { xs: 0.5, sm: 1 },
             py: 0.5,
@@ -411,6 +505,8 @@ export default function TopBar() {
             }}
           />
         </Box>
+        </Box>
+        {/* ── end right cluster ── */}
 
         {/* ── Profile Dropdown Menu ── */}
         <Menu
@@ -862,6 +958,18 @@ export default function TopBar() {
             })}
           </Menu>
         )}
+
+        {/* Classroom switcher, phone shape */}
+        {showClassroomSelector && canSwitchClassrooms && (
+          <ClassroomSwitchSheet
+            open={classroomSheetOpen}
+            onClose={() => setClassroomSheetOpen(false)}
+            items={classrooms}
+            activeId={activeClassroom?.id ?? null}
+            onSelect={setActiveClassroom}
+          />
+        )}
+
         {/* Report Issue Dialog */}
         {nexusRole === 'student' && (
           <ReportIssueDialog

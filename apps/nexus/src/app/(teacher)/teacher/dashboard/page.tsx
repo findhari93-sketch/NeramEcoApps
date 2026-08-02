@@ -159,12 +159,19 @@ export default function TeacherDashboard() {
         </Typography>
       </Box>
 
-      {/* ── Stat Cards: Hero + 3 ── */}
+      {/*
+        ── Stat cards ──
+        Phone: the day's headline full width, the exam line full width under it,
+        then two counts side by side. Four cards in a 3-column grid left an
+        orphan on its own row with a card-sized hole beside it, and the exam
+        card's hedged date ("Expected around 20 Jan 2027…") wrapped to five
+        lines in a half-width cell, dragging its whole row to four times the
+        height of its neighbour. sm shows 2x2, md all four across.
+      */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        {/* Hero stat — full width on mobile, 1/3 on tablet+ */}
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={6} md={3}>
           {loading ? (
-            <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3 }} />
+            <Skeleton variant="rounded" height={88} sx={{ borderRadius: 3 }} />
           ) : (
             <StatCard
               title="Classes Today"
@@ -184,9 +191,9 @@ export default function TeacherDashboard() {
           resolve it against, and its own empty state tells the teacher to link
           the plan, since they are the only person who can.
         */}
-        <Grid item xs={6} sm={4}>
+        <Grid item xs={12} sm={6} md={3}>
           {loading ? (
-            <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3 }} />
+            <Skeleton variant="rounded" height={88} sx={{ borderRadius: 3 }} />
           ) : (
             <ExamCountdown
               target={data?.examCountdown ?? null}
@@ -205,9 +212,9 @@ export default function TeacherDashboard() {
             />
           )}
         </Grid>
-        <Grid item xs={6} sm={4}>
+        <Grid item xs={6} sm={6} md={3}>
           {loading ? (
-            <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3 }} />
+            <Skeleton variant="rounded" height={88} sx={{ borderRadius: 3 }} />
           ) : (
             <StatCard
               title="Students"
@@ -220,9 +227,9 @@ export default function TeacherDashboard() {
             />
           )}
         </Grid>
-        <Grid item xs={6} sm={4}>
+        <Grid item xs={6} sm={6} md={3}>
           {loading ? (
-            <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3 }} />
+            <Skeleton variant="rounded" height={88} sx={{ borderRadius: 3 }} />
           ) : (
             <StatCard
               title="Open Tickets"

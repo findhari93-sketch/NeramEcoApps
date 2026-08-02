@@ -126,6 +126,11 @@ export default function StatCard({
         border: s.border,
         position: 'relative',
         overflow: 'hidden',
+        // Fill the grid cell. Cards in a row carry text of very different
+        // lengths (a bare count next to a hedged exam date), and a card that
+        // sizes to its own content leaves a hole beside its taller neighbour.
+        height: '100%',
+        boxSizing: 'border-box',
         cursor: onClick ? 'pointer' : 'default',
         transition: 'transform 200ms ease, box-shadow 200ms ease',
         animation: `fadeInUp 400ms cubic-bezier(0.05, 0.7, 0.1, 1) ${delay}ms both`,
@@ -205,7 +210,21 @@ export default function StatCard({
           {subtitle && (
             <Typography
               variant="caption"
-              sx={{ color: s.titleColor, mt: 0.5, display: 'block', lineHeight: 1.3 }}
+              // Two lines, then an ellipsis. A supporting sentence is allowed to
+              // explain the number, not to quadruple the height of the card:
+              // "Expected around 20 Jan 2027. The exact date is not announced
+              // yet." wrapped to five lines in a half-width cell at 360px, and
+              // dragged its whole grid row with it.
+              sx={{
+                color: s.titleColor,
+                mt: 0.5,
+                lineHeight: 1.3,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}
+              title={subtitle}
             >
               {subtitle}
             </Typography>
