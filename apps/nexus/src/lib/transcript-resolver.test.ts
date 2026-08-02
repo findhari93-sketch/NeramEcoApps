@@ -40,6 +40,7 @@ import {
   resolveTranscript,
   recordTranscriptFailure,
   MAX_TRANSCRIPT_ATTEMPTS,
+  TRANSCRIPTS_DISABLED_FOR_TENANT,
 } from './transcript-resolver';
 
 const VTT = `WEBVTT
@@ -466,6 +467,113 @@ describe('resolveTranscript', () => {
       expect.objectContaining({ source: 'graph_live', status: 'ok' }),
       { onConflict: 'class_id' },
     );
+  });
+
+  it('falls back to app-only when the delegated transcripts read is refused', async () => {
+    // The whole reason "Generate from the class" could fail while the nightly
+    // sweep succeeded on the very same meeting.
+    //
+    // Listing transcripts delegated needs OnlineMeetingTranscript.Read.All on the
+    // SIGNED-IN user's token, and Microsoft accepts no other delegated permission
+    // for it. loginScopes.nexus never asks for it, so the teacher's token 403s.
+    // summarize sets preferDelegated whenever a teacher is signed in, which routes
+    // every press to `me/onlineMeetings/...`, and that base used to be the only
+    // thing tried. App-only carries the application role and reads the same
+    // meeting fine, so a refused delegated attempt must fall through to it.
+    resolveOnlineMeetingDetailed.mockResolvedValue({
+      meeting: {
+        meetingId: 'm',
+        artifactBase: 'me/onlineMeetings/m',
+        token: 'teacher-token',
+      },
+    });
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const target = String(url);
+      if (target.endsWith('/transcripts')) {
+        const auth = (init?.headers as Record<string, string>)?.Authorization;
+        if (auth === 'Bearer teacher-token') {
+          return new Response(
+            JSON.stringify({ error: { code: 'Forbidden', message: 'Insufficient privileges' } }),
+            { status: 403 },
+          );
+        }
+        return new Response(
+          JSON.stringify({ value: [{ id: 'r', transcriptContentUrl: 'https://graph/content' }] }),
+          { status: 200 },
+        );
+      }
+      return new Response(VTT, { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { supabase } = makeSupabase(null);
+
+    const result = await resolveTranscript({
+      cls: { id: 'c1', online_meeting_id: 'm', organizer_ms_oid: 'organizer-oid' },
+      msToken: 'teacher-token',
+      supabase,
+    });
+
+    expect(result.source).toBe('graph_live');
+    expect(result.entries).toHaveLength(1);
+    const listed = fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.endsWith('/transcripts'));
+    expect(listed).toEqual([
+      'https://graph.microsoft.com/v1.0/me/onlineMeetings/m/transcripts',
+      'https://graph.microsoft.com/v1.0/users/organizer-oid/onlineMeetings/m/transcripts',
+    ]);
+  });
+
+  it('does not invent an app-only retry when the read was already app-only', async () => {
+    // One refusal must stay one Graph call. Retrying the identical base with the
+    // identical token just doubles the cost of every hopeless class.
+    resolveOnlineMeetingDetailed.mockResolvedValue({
+      meeting: { meetingId: 'm', artifactBase: 'users/o/onlineMeetings/m', token: 'app-token' },
+    });
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 403 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { supabase } = makeSupabase(null);
+
+    const result = await resolveTranscript({
+      cls: { id: 'c1', online_meeting_id: 'm', organizer_ms_oid: 'o' },
+      supabase,
+    });
+
+    expect(result.source).toBe('none');
+    expect(result.meetingFailure).toBe('transcripts responded 403');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the tenant switch instead of reporting a bare 403', async () => {
+    // Microsoft turned Graph access to transcripts off for every tenant on
+    // 29 July 2026 (MC1393806), off by default. It answers with an ordinary 403,
+    // indistinguishable from a missing app permission, and both of the remedies
+    // the UI used to offer point at consoles that cannot fix it.
+    resolveOnlineMeetingDetailed.mockResolvedValue({
+      meeting: { meetingId: 'm', artifactBase: 'users/o/onlineMeetings/m', token: 'app-token' },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                code: 'Forbidden',
+                message: 'Graph API access to transcripts is disabled for this tenant.',
+                innerError: { code: 'GraphAccessToTranscriptsDisabled' },
+              },
+            }),
+            { status: 403 },
+          ),
+      ),
+    );
+    const { supabase } = makeSupabase(null);
+
+    const result = await resolveTranscript({
+      cls: { id: 'c1', online_meeting_id: 'm', organizer_ms_oid: 'o' },
+      supabase,
+    });
+
+    expect(result.meetingFailure).toBe(TRANSCRIPTS_DISABLED_FOR_TENANT);
   });
 
   it('refuses a transcript that cannot belong to this class', async () => {

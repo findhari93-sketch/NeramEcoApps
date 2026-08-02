@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { canRunSession } from '@/lib/staff-capabilities';
-import { resolveTranscript } from '@/lib/transcript-resolver';
+import { resolveTranscript, TRANSCRIPTS_DISABLED_FOR_TENANT } from '@/lib/transcript-resolver';
 import { findRecordingForClass } from '@/lib/recording-locator';
 import { buildWrapUpDraft, loadClassImages } from '@/lib/class-wrapup-draft';
 
@@ -66,7 +66,19 @@ const CLASS_COLS = [
  * manual routes left are uploading the .vtt Teams hands out, or attaching a
  * class image and summarizing from that.
  */
-function manualMessage(hasRecording: boolean, sharepointError?: string): string {
+function manualMessage(
+  hasRecording: boolean,
+  sharepointError?: string,
+  meetingFailure?: string,
+): string {
+  // Said first, because it is true whatever else is or is not there. When the
+  // tenant has Graph access to transcripts switched off, waiting achieves
+  // nothing: no transcript will ever arrive through the API, for any class, and
+  // the old "it usually appears a few minutes after the recording" sent teachers
+  // back to press Generate again all week.
+  if (meetingFailure === TRANSCRIPTS_DISABLED_FOR_TENANT) {
+    return 'Transcripts are switched off for this organisation, so none can be read automatically. An admin can turn them back on in the Teams admin center under Meeting policy, Transcript API access. Until then, upload the .vtt from Teams, or attach a class image.';
+  }
   if (!hasRecording) {
     return 'Teams has not published anything for this class yet, no recording and no transcript. It usually appears within an hour. Upload the .vtt from Teams, or attach a class image to generate now.';
   }
@@ -173,7 +185,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       }
       return NextResponse.json({
         needs_manual: true,
-        message: manualMessage(!!recordingUrl, sharepointError),
+        message: manualMessage(!!recordingUrl, sharepointError, meetingFailure),
       });
     }
 

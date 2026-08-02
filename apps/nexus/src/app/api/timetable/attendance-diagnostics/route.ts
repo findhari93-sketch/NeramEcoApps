@@ -309,11 +309,18 @@ export async function GET(request: NextRequest) {
         : `Graph returned ${transcriptsRes.status} ${transcriptBody}`,
       remedy: transcriptsRes.ok
         ? undefined
-        : transcriptsRes.status === 403 && hasTranscriptRole
-          ? 'The permission is granted but Teams still refuses. The application access policy covering this organizer may predate the transcript grant; re-run Grant-CsApplicationAccessPolicy for them.'
-          : transcriptsRes.status === 403
-            ? 'Same fix as the step above: the missing application permission.'
-            : 'Unexpected. Check whether the meeting still exists in Teams.',
+        : // Checked before anything about permissions, because it is neither a
+          // permission nor a policy and the two remedies below both send the
+          // operator to a console that cannot fix it. Microsoft switched Graph
+          // access to transcripts off for every tenant on 29 July 2026
+          // (MC1393806), off by default, and it answers with a plain 403.
+          /GraphAccessToTranscriptsDisabled/i.test(transcriptBody)
+          ? 'Not a permission problem. This organisation has Graph access to transcripts switched off. Teams admin center, Settings & Policies, the global Meeting policy, Transcript API access: turn on Microsoft Graph access (and Include speaker attribution, a separate toggle, or transcripts come back with no speaker names). Then reset the stuck rows: update nexus_class_transcripts set status=\'pending\', attempts=0 where status <> \'ok\'.'
+          : transcriptsRes.status === 403 && hasTranscriptRole
+            ? 'The permission is granted but Teams still refuses. The application access policy covering this organizer may predate the transcript grant; re-run Grant-CsApplicationAccessPolicy for them.'
+            : transcriptsRes.status === 403
+              ? 'Same fix as the step above: the missing application permission.'
+              : 'Unexpected. Check whether the meeting still exists in Teams.',
     });
 
     return respond(steps, cls);

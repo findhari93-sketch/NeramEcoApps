@@ -50,6 +50,19 @@ import type { TranscriptEntry } from '@neram/database';
 export const MAX_TRANSCRIPT_ATTEMPTS = 6;
 
 /**
+ * The meetingFailure reported when Graph refuses because the TENANT has Graph
+ * access to transcripts switched off, rather than because of anything about this
+ * app, this meeting or this person.
+ *
+ * Exported because two places have to turn it into human words: the wrap-up
+ * panel, which must stop telling teachers to wait for a transcript that will
+ * never arrive, and the diagnostics endpoint, which must stop blaming the Teams
+ * application access policy. Fixed in the Teams admin center, Meeting policy,
+ * Transcript API access.
+ */
+export const TRANSCRIPTS_DISABLED_FOR_TENANT = 'transcripts_disabled_for_tenant';
+
+/**
  * How far a transcript's createdDateTime may sit from the class start before we
  * refuse to believe it belongs to this class. Only consulted when a meeting id
  * offers more than one transcript, which is what a recurring meeting does: it
@@ -428,51 +441,92 @@ export async function resolveTranscript(input: ResolveTranscriptInput): Promise<
     meetingFailure = resolution.failure;
 
     if (resolution.meeting) {
-      try {
-        const listRes = await fetch(
-          `https://graph.microsoft.com/v1.0/${resolution.meeting.artifactBase}/transcripts`,
-          { headers: { Authorization: `Bearer ${resolution.meeting.token}` } },
-        );
-        if (listRes.ok) {
-          const list = await listRes.json();
-          const candidates = rankTranscriptsForClass(list.value || [], classStartMs(cls));
-          if (candidates.length === 0) {
-            meetingFailure = (list.value || []).length
-              ? 'no_transcript_matches_this_class'
-              : 'NO_TRANSCRIPT';
-          } else {
-            // Work down the ranking until one actually yields readable content.
-            // Bounded so a meeting listing many entries cannot turn one class
-            // into an unbounded run of Graph calls.
-            for (const pick of candidates.slice(0, MAX_TRANSCRIPT_CANDIDATES)) {
-              const contentUrl = pick.transcriptContentUrl || pick.content || null;
-              if (!contentUrl) continue;
-              const text = await fetchTranscriptContent(contentUrl, [
-                resolution.meeting.token,
-                msToken,
-              ]);
-              if (text && parseVTT(text).length > 0) {
-                // Remember the pointer too. Cheap, and other code reads it.
-                if (supabase) {
-                  try {
-                    await supabase
-                      .from('nexus_scheduled_classes')
-                      .update({ transcript_url: contentUrl })
-                      .eq('id', cls.id);
-                  } catch {
-                    // A failed cache write is not a failed lookup.
-                  }
-                }
-                return await found(text, 'graph_live');
-              }
-              meetingFailure = 'transcript_content_unreadable';
-            }
-          }
-        } else {
-          meetingFailure = `transcripts responded ${listRes.status}`;
+      // Which (base, token) pairs to try, in order.
+      //
+      // A DELEGATED base needs `OnlineMeetingTranscript.Read.All` on the SIGNED-IN
+      // user's token, and Microsoft accepts no other delegated permission for
+      // transcripts (the docs list the higher-privileged column as "Not
+      // available"). loginScopes.nexus never requests it, so a teacher's token
+      // 403s on the list. Because summarize passes preferDelegated whenever a
+      // teacher is signed in, EVERY Generate press lands on `me/onlineMeetings`,
+      // which is how the button could fail while the app-only cron read the very
+      // same meeting without trouble. So a delegated attempt always keeps an
+      // app-only one behind it. Not the other way round: with the teacher present
+      // their own token still goes first, since it is the one route that needs no
+      // Teams application access policy.
+      const attempts: Array<{ base: string; token: string }> = [
+        { base: resolution.meeting.artifactBase, token: resolution.meeting.token },
+      ];
+      if (resolution.meeting.artifactBase.startsWith('me/') && organizerOid) {
+        const fallbackToken = await appToken();
+        if (fallbackToken) {
+          attempts.push({
+            base: `users/${organizerOid}/onlineMeetings/${resolution.meeting.meetingId}`,
+            token: fallbackToken,
+          });
         }
-      } catch (err) {
-        meetingFailure = err instanceof Error ? err.message : 'graph_error';
+      }
+
+      for (const attempt of attempts) {
+        try {
+          const listRes = await fetch(
+            `https://graph.microsoft.com/v1.0/${attempt.base}/transcripts`,
+            { headers: { Authorization: `Bearer ${attempt.token}` } },
+          );
+          if (listRes.ok) {
+            const list = await listRes.json();
+            const candidates = rankTranscriptsForClass(list.value || [], classStartMs(cls));
+            if (candidates.length === 0) {
+              meetingFailure = (list.value || []).length
+                ? 'no_transcript_matches_this_class'
+                : 'NO_TRANSCRIPT';
+            } else {
+              // Work down the ranking until one actually yields readable content.
+              // Bounded so a meeting listing many entries cannot turn one class
+              // into an unbounded run of Graph calls.
+              for (const pick of candidates.slice(0, MAX_TRANSCRIPT_CANDIDATES)) {
+                const contentUrl = pick.transcriptContentUrl || pick.content || null;
+                if (!contentUrl) continue;
+                // The app-only token is offered here as well, for the same reason
+                // the list is retried with it: a delegated token that cannot list
+                // a transcript cannot download one either.
+                const text = await fetchTranscriptContent(contentUrl, [
+                  attempt.token,
+                  msToken,
+                  await appToken(),
+                ]);
+                if (text && parseVTT(text).length > 0) {
+                  // Remember the pointer too. Cheap, and other code reads it.
+                  if (supabase) {
+                    try {
+                      await supabase
+                        .from('nexus_scheduled_classes')
+                        .update({ transcript_url: contentUrl })
+                        .eq('id', cls.id);
+                    } catch {
+                      // A failed cache write is not a failed lookup.
+                    }
+                  }
+                  return await found(text, 'graph_live');
+                }
+                meetingFailure = 'transcript_content_unreadable';
+              }
+            }
+          } else {
+            // Name the tenant switch specifically. Microsoft turned Graph access
+            // to transcripts off for every tenant on 29 July 2026 (MC1393806,
+            // off by default), and it presents as a bare 403 that looks exactly
+            // like a missing app permission. It is neither code nor Azure work:
+            // Teams admin center, Meeting policy, Transcript API access. Left
+            // unnamed it sends whoever reads it to the wrong console.
+            const body = await listRes.text().catch(() => '');
+            meetingFailure = /GraphAccessToTranscriptsDisabled/i.test(body)
+              ? TRANSCRIPTS_DISABLED_FOR_TENANT
+              : `transcripts responded ${listRes.status}`;
+          }
+        } catch (err) {
+          meetingFailure = err instanceof Error ? err.message : 'graph_error';
+        }
       }
     }
   }
