@@ -169,6 +169,47 @@ export function uploadBudget(startedToday: number, perDay: number, perRun: numbe
   return Math.max(0, Math.min(perDay - startedToday, perRun));
 }
 
+/** Why a class with a recording is not going to be uploaded. `null` means it is. */
+export type BackupBlock =
+  | 'done'
+  | 'given_up'
+  | 'skipped'
+  | 'attempts_spent'
+  | 'too_recent';
+
+/**
+ * The single rule for whether a class is due for backup.
+ *
+ * Exported so the backlog screen can answer "why is this one not queued?" from
+ * the same code the sweep decides with. Two implementations of this rule would
+ * drift, and the failure would be an operator staring at a class the table calls
+ * due while the cron quietly skips it every night.
+ *
+ * Returns the reason rather than a boolean for the same purpose: "not due" is
+ * not an answer anybody can act on.
+ */
+export function backupBlockedReason(
+  cls: { scheduled_date: string; end_time?: string | null },
+  prior: { status: string; attempts: number } | undefined,
+  graceMinutes: number = DEFAULT_GRACE_MINUTES,
+  now: number = Date.now(),
+): BackupBlock | null {
+  if (prior?.status === 'ok') return 'done';
+  if (prior?.status === 'unavailable') return 'given_up';
+  if (prior?.status === 'skipped') return 'skipped';
+  if (prior && prior.attempts >= MAX_UPLOAD_ATTEMPTS) return 'attempts_spent';
+
+  // Teams is still writing a 300 MB mp4 for a while after the meeting ends, and
+  // uploading a half-written file costs a full 1600 units to produce a broken
+  // video. IST wall clock, like everywhere else that reconstructs a class time.
+  const endMs = new Date(
+    `${cls.scheduled_date}T${(cls.end_time || '23:59').substring(0, 5)}:00+05:30`,
+  ).getTime();
+  if (endMs >= now - graceMinutes * 60 * 1000) return 'too_recent';
+
+  return null;
+}
+
 /** Everything a class needs to become a YouTube listing, however it got written. */
 async function resolveSnippet(supabase: any, cls: BackupClassRow): Promise<VideoSnippetInput> {
   const { data: meta } = await supabase
@@ -184,6 +225,9 @@ async function resolveSnippet(supabase: any, cls: BackupClassRow): Promise<Video
       tags: meta.yt_tags || [],
       language: meta.language,
       chapters: Array.isArray(meta.chapters) ? meta.chapters : [],
+      // Listings written before dates existed carry an undated title. Passing the
+      // date lets buildInsertBody stamp it on rather than shipping the old shape.
+      classDate: cls.scheduled_date,
     };
   }
 
@@ -196,6 +240,7 @@ async function resolveSnippet(supabase: any, cls: BackupClassRow): Promise<Video
     title: buildYouTubeTitle({
       topic: cls.title || 'Neram class recording',
       exam: null, subject: null, language: null,
+      classDate: cls.scheduled_date,
     }),
     description: buildYouTubeDescription({
       hook: cls.description || '',
@@ -208,6 +253,7 @@ async function resolveSnippet(supabase: any, cls: BackupClassRow): Promise<Video
     }),
     tags: [],
     language: null,
+    classDate: cls.scheduled_date,
   };
 }
 
@@ -435,17 +481,10 @@ export async function syncClassYouTubeBackups(
     .in('class_id', rows.map((r) => r.id));
 
   const prior = new Map<string, UploadRow>((existing || []).map((r: any) => [r.class_id, r]));
-  const cutoff = Date.now() - graceMinutes * 60 * 1000;
 
-  const due = rows.filter((cls) => {
-    const p = prior.get(cls.id);
-    if (p && ['ok', 'unavailable', 'skipped'].includes(p.status)) return false;
-    if (p && p.attempts >= MAX_UPLOAD_ATTEMPTS) return false;
-    const endMs = new Date(
-      `${cls.scheduled_date}T${(cls.end_time || '23:59').substring(0, 5)}:00+05:30`,
-    ).getTime();
-    return endMs < cutoff;
-  }).slice(0, limit);
+  const due = rows
+    .filter((cls) => backupBlockedReason(cls, prior.get(cls.id), graceMinutes) === null)
+    .slice(0, limit);
 
   summary.due = due.length;
   if (!due.length) return summary;

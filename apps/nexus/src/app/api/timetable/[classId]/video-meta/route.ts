@@ -5,6 +5,7 @@ import { resolveClassStaffAccess } from '@/lib/class-staff-access';
 import { validateVideoMetaPatch } from '@/lib/class-video-meta-schema';
 import { syncClassToLibrary } from '@/lib/class-library-bridge';
 import { buildClassLinkPatch } from '@/lib/class-links';
+import { markBackupSkipped, type SkipOutcome } from '@/lib/youtube-backup-skip';
 import { refreshClassAnnouncement, buildWrapUpHtml, cardHash } from '@/lib/teams-class-announcements';
 import { classShareLinks, shareBaseUrl } from '@/lib/class-share-links';
 import { extractBearerToken } from '@/lib/ms-verify';
@@ -198,6 +199,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // and Class Day screens use. That canonicalises youtu.be and /shorts/ forms
     // to one watch URL, which is what keeps the Library dedupe honest.
     let videoLinkArrived = false;
+    let skipOutcome: SkipOutcome | null = null;
     if (body.youtube_url !== undefined) {
       const links = buildClassLinkPatch({ youtube_url: body.youtube_url });
       if (!links.ok) return NextResponse.json({ error: links.error }, { status: 400 });
@@ -212,6 +214,22 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
           .eq('id', params.classId);
         if (error) throw error;
         videoLinkArrived = Boolean(links.patch.youtube_url) && links.patch.youtube_url !== previous;
+
+        // A link arriving through this route always means a person put the video
+        // on the channel themselves: the automation's own link is written by the
+        // promotion pass, server side, never here. So this is the moment we know
+        // the class needs no backup, and the moment to say so on the record.
+        // Idempotent and refuses to overwrite a finished automatic upload, so
+        // re-saving an unchanged link is safe.
+        if (links.patch.youtube_url) {
+          try {
+            skipOutcome = await markBackupSkipped(supabase, params.classId);
+          } catch (skipErr) {
+            // The link is saved and that alone stops a re-upload. Losing the
+            // bookkeeping is not worth failing the teacher's save over.
+            console.error('Could not mark the backup skipped:', skipErr);
+          }
+        }
       }
     }
 
@@ -312,7 +330,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       .eq('scheduled_class_id', params.classId)
       .maybeSingle();
 
-    return NextResponse.json({ meta, librarySynced, teamsCardPosted });
+    return NextResponse.json({ meta, librarySynced, teamsCardPosted, skipOutcome });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save the video metadata';
     return NextResponse.json({ error: message }, { status: 500 });

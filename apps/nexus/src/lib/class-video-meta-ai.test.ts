@@ -285,21 +285,34 @@ describe('composeMetaPatch', () => {
     difficulty: 'beginner' as const,
   };
 
+  // The date the CLASS_ROW fixture is scheduled on, so the composed title can be
+  // checked against the class it belongs to rather than a constant.
+  const CLASS_DATE = '2026-07-28';
+
   it('resolves slugs to registry labels rather than echoing the slug', () => {
-    const patch = composeMetaPatch(data as any, REGISTRY);
+    const patch = composeMetaPatch(data as any, REGISTRY, CLASS_DATE);
     // "Perspective", not "perspective". This is what keeps a student's tap on a
     // topic matching the class.
     expect(patch.yt_description).toContain('Topic: Perspective, Shadow');
   });
 
   it('picks the subject tag for the title, not the theme tag', () => {
-    const patch = composeMetaPatch(data as any, REGISTRY);
+    const patch = composeMetaPatch(data as any, REGISTRY, CLASS_DATE);
     expect(patch.yt_title).toContain('Perspective');
     expect(patch.yt_title).not.toContain('Shadow');
   });
 
+  it('ends the title with the class date', () => {
+    const patch = composeMetaPatch(data as any, REGISTRY, CLASS_DATE);
+    expect(patch.yt_title).toMatch(/\(28 Jul 26\)$/);
+  });
+
   it('drops a slug the registry does not know instead of inventing a label', () => {
-    const patch = composeMetaPatch({ ...data, tagSlugs: ['perspective', 'ghost'] } as any, REGISTRY);
+    const patch = composeMetaPatch(
+      { ...data, tagSlugs: ['perspective', 'ghost'] } as any,
+      REGISTRY,
+      CLASS_DATE,
+    );
     expect(patch.yt_description).toContain('Topic: Perspective');
     expect(patch.yt_description).not.toContain('ghost');
   });
@@ -312,8 +325,11 @@ describe('composeMetaPatch', () => {
         searchTerms: Array.from({ length: 60 }, (_, i) => `search term number ${i}`),
       } as any,
       REGISTRY,
+      CLASS_DATE,
     );
     expect((patch.yt_title as string).length).toBeLessThanOrEqual(YT_TITLE_MAX);
+    // A runaway topic must not be allowed to push the date off the end.
+    expect(patch.yt_title).toMatch(/\(28 Jul 26\)$/);
     expect(tagsCharCount(patch.yt_tags as string[])).toBeLessThanOrEqual(YT_TAGS_MAX_CHARS);
     expect(validateVideoMetaPatch(patch)).toEqual([]);
   });

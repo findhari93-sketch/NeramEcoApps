@@ -31,6 +31,7 @@ import {
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
+import YouTubeBacklogTable from './YouTubeBacklogTable';
 
 interface Props {
   getToken: () => Promise<string | null>;
@@ -77,6 +78,9 @@ export default function YouTubeBackupCard({ getToken }: Props) {
     null,
   );
   const [run, setRun] = useState<RunSummary | null>(null);
+  // Bumped after a run so the table below re-reads instead of showing the state
+  // from before the button was pressed.
+  const [backlogKey, setBacklogKey] = useState(0);
 
   const authed = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -190,6 +194,9 @@ export default function YouTubeBackupCard({ getToken }: Props) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'The run failed');
       setRun(json);
+      // A dry run changes nothing, but a real one does, and the table has to
+      // agree with the summary printed directly above it.
+      if (!dryRun) setBacklogKey((k) => k + 1);
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : 'The run failed' });
     } finally {
@@ -351,6 +358,20 @@ export default function YouTubeBackupCard({ getToken }: Props) {
             class panel with a link into Studio, and flipping it to Unlisted there is what publishes
             it to the student Library.
           </Typography>
+
+          {/* The list the dry run's count refers to. Shown whether or not an
+              account is connected: seeing what is waiting is the reason somebody
+              connects one. */}
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+              Every recorded class
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+              A class already on the channel is left alone. To mark one, paste its link in the class
+              panel and the backup skips it from then on.
+            </Typography>
+            <YouTubeBacklogTable getToken={getToken} refreshKey={backlogKey} />
+          </Box>
         </>
       )}
     </Paper>

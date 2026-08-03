@@ -9,7 +9,10 @@ import {
   stripBannedDashes,
   hasBannedDashes,
   tagsCharCount,
+  applyClassDateSuffix,
+  formatClassDateShort,
   YT_TITLE_MAX,
+  YT_TITLE_DATE_SUFFIX_LEN,
   YT_DESCRIPTION_MAX,
   YT_TAGS_MAX_CHARS,
 } from './youtube-metadata';
@@ -99,6 +102,112 @@ describe('buildYouTubeTitle', () => {
 
   it('strips banned dashes out of the topic', () => {
     expect(hasBannedDashes(buildYouTubeTitle({ ...base, topic: 'Shading — basics' }))).toBe(false);
+  });
+});
+
+describe('formatClassDateShort', () => {
+  it('zero-pads the day, unlike the long form used in the description', () => {
+    expect(formatClassDateShort('2026-07-03')).toBe('03 Jul 26');
+    expect(formatClassDateShort('2026-07-20')).toBe('20 Jul 26');
+    expect(formatClassDateShort('2026-08-02')).toBe('02 Aug 26');
+  });
+
+  it('costs exactly the budget the title builder reserves', () => {
+    expect(` (${formatClassDateShort('2026-07-20')})`).toHaveLength(YT_TITLE_DATE_SUFFIX_LEN);
+  });
+
+  it('returns an empty string rather than the input on a date it cannot read', () => {
+    expect(formatClassDateShort('')).toBe('');
+    expect(formatClassDateShort('20-07-2026')).toBe('');
+    expect(formatClassDateShort('2026-13-01')).toBe('');
+  });
+});
+
+describe('buildYouTubeTitle with a class date', () => {
+  // The real 14 July listing, the longest on the channel at 91 characters.
+  const long = {
+    topic: 'One Point Perspective: Boxes and Eye Level',
+    exam: 'both' as const,
+    subject: 'Drawing',
+    language: 'ta_en' as const,
+    classDate: '2026-07-14',
+  };
+
+  it('ends with the class date', () => {
+    expect(buildYouTubeTitle(long).endsWith('(14 Jul 26)')).toBe(true);
+  });
+
+  it('drops the language tag rather than the date when both cannot fit', () => {
+    // Undated this is 91 of 100. The 12-character date is reserved first, which
+    // leaves the 20-character language tag with nowhere to go. Losing it is the
+    // cheap side of the trade: the Library reads language from its own column.
+    const dated = buildYouTubeTitle(long);
+    const undated = buildYouTubeTitle({ ...long, classDate: null });
+
+    expect(undated).toContain('Tamil and English');
+    expect(dated).not.toContain('Tamil and English');
+    expect(dated).toContain('Drawing');
+    expect(dated.length).toBeLessThanOrEqual(YT_TITLE_MAX);
+  });
+
+  it('truncates an over-long topic so the date still survives', () => {
+    // The inversion of "keeps the topic alone when nothing else fits": undated,
+    // a 95-character topic is kept whole. Dated, the date wins and the topic is
+    // the thing that gives way.
+    const title = buildYouTubeTitle({ ...long, topic: 'C'.repeat(95) });
+    expect(title).toBe(`${'C'.repeat(YT_TITLE_MAX - YT_TITLE_DATE_SUFFIX_LEN)} (14 Jul 26)`);
+    expect(title).toHaveLength(YT_TITLE_MAX);
+  });
+
+  it('leaves the title undated when the class has no date', () => {
+    expect(buildYouTubeTitle({ ...long, classDate: null })).not.toMatch(/\(\d{2} \w{3} \d{2}\)$/);
+  });
+});
+
+describe('applyClassDateSuffix', () => {
+  const dated = 'Line Quality and Cube Drawing | NATA + JEE B.Arch (16 Jul 26)';
+
+  it('stamps a date onto a listing written before dates existed', () => {
+    expect(applyClassDateSuffix('Line Quality and Cube Drawing | NATA + JEE B.Arch', '2026-07-16'))
+      .toBe(dated);
+  });
+
+  it('is idempotent, so a copied title pasted back does not gain a second date', () => {
+    expect(applyClassDateSuffix(dated, '2026-07-16')).toBe(dated);
+    expect(applyClassDateSuffix(applyClassDateSuffix(dated, '2026-07-16'), '2026-07-16'))
+      .toBe(dated);
+  });
+
+  it('replaces a stale date when the class is rescheduled', () => {
+    expect(applyClassDateSuffix(dated, '2026-07-23'))
+      .toBe('Line Quality and Cube Drawing | NATA + JEE B.Arch (23 Jul 26)');
+  });
+
+  it('drops trailing segments to make room, never the topic', () => {
+    const title = applyClassDateSuffix(
+      `${'B'.repeat(75)} | NATA + JEE B.Arch | Drawing`,
+      '2026-07-20',
+    );
+    expect(title).toBe(`${'B'.repeat(75)} (20 Jul 26)`);
+    expect(title.length).toBeLessThanOrEqual(YT_TITLE_MAX);
+  });
+
+  it('cuts a single over-long segment as a last resort', () => {
+    const title = applyClassDateSuffix('D'.repeat(300), '2026-07-20');
+    expect(title).toBe(`${'D'.repeat(YT_TITLE_MAX - YT_TITLE_DATE_SUFFIX_LEN)} (20 Jul 26)`);
+    expect(title).toHaveLength(YT_TITLE_MAX);
+  });
+
+  it('returns the title untouched when there is no usable date', () => {
+    expect(applyClassDateSuffix('Colour Theory', null)).toBe('Colour Theory');
+    expect(applyClassDateSuffix('Colour Theory', 'not a date')).toBe('Colour Theory');
+  });
+
+  it('leaves a parenthetical that is not a date alone', () => {
+    // The stripper matches real month names only, so a legitimate tail like this
+    // is not mistaken for a stale date and eaten.
+    expect(applyClassDateSuffix('Shading (Part 2 of 3)', '2026-07-20'))
+      .toBe('Shading (Part 2 of 3) (20 Jul 26)');
   });
 });
 

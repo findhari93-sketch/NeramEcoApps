@@ -20,7 +20,7 @@
  */
 
 import type { ClassVideoChapter } from '@neram/database/types';
-import { YT_DESCRIPTION_MAX, YT_TITLE_MAX } from './youtube-metadata';
+import { applyClassDateSuffix, YT_DESCRIPTION_MAX, YT_TITLE_MAX } from './youtube-metadata';
 
 const UPLOAD_ENDPOINT =
   'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status';
@@ -151,6 +151,8 @@ export interface VideoSnippetInput {
   /** 'ta' | 'en' | 'ta_en' from the meta row. */
   language?: string | null;
   chapters?: ClassVideoChapter[];
+  /** ISO date (yyyy-mm-dd) of the class, stamped onto the end of the title. */
+  classDate?: string | null;
 }
 
 /**
@@ -160,9 +162,19 @@ export interface VideoSnippetInput {
  * "audience not set" state, and YouTube then blocks changing the privacy until
  * an audience is chosen, which would break the one-click flip this whole design
  * hands to the teacher.
+ *
+ * The class date is stamped on here, after the truncation, and not before. That
+ * slice is a tail cut, so it is the one line in the system capable of amputating
+ * a date that was already correct. Doing it at this boundary also means a
+ * listing written before dates existed, or one a teacher edited by hand, still
+ * reaches YouTube dated. `applyClassDateSuffix` is idempotent, so a title that
+ * already carries the right date passes through untouched.
  */
 export function buildInsertBody(input: VideoSnippetInput): Record<string, unknown> {
-  const title = stripAngleBrackets(input.title).slice(0, YT_TITLE_MAX);
+  const title = applyClassDateSuffix(
+    stripAngleBrackets(input.title).slice(0, YT_TITLE_MAX),
+    input.classDate,
+  );
   const description = stripAngleBrackets(input.description).slice(0, YT_DESCRIPTION_MAX);
 
   // 'ta_en' is a Neram value, not a BCP-47 one. A mixed-language class is

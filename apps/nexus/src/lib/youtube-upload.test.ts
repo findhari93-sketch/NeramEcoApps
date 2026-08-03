@@ -155,6 +155,34 @@ describe('buildInsertBody', () => {
     expect(body.snippet.description.length).toBe(YT_DESCRIPTION_MAX);
   });
 
+  it('stamps the class date on a listing that was stored without one', () => {
+    // The path that matters for every listing written before dates existed.
+    const body = buildInsertBody({ ...base, classDate: '2026-07-20' }) as any;
+    expect(body.snippet.title).toBe('Perspective (20 Jul 26)');
+  });
+
+  it('does not double-stamp a title that already carries its date', () => {
+    const body = buildInsertBody({
+      ...base,
+      title: 'Perspective (20 Jul 26)',
+      classDate: '2026-07-20',
+    }) as any;
+    expect(body.snippet.title).toBe('Perspective (20 Jul 26)');
+  });
+
+  it('keeps the date on an over-long title, because the cap cut is a tail cut', () => {
+    // The regression this ordering exists to prevent: slicing to 100 first and
+    // appending after would be fine, but appending first and slicing after would
+    // amputate exactly the date the title was stamped with.
+    const body = buildInsertBody({
+      ...base,
+      title: 'A'.repeat(300),
+      classDate: '2026-07-20',
+    }) as any;
+    expect(body.snippet.title.length).toBe(YT_TITLE_MAX);
+    expect(body.snippet.title.endsWith('(20 Jul 26)')).toBe(true);
+  });
+
   it('declares a mixed Tamil and English class as Tamil audio', () => {
     expect((buildInsertBody({ ...base, language: 'ta_en' }) as any).snippet.defaultAudioLanguage).toBe('ta');
     expect((buildInsertBody({ ...base, language: 'en' }) as any).snippet.defaultAudioLanguage).toBe('en');

@@ -78,7 +78,14 @@ function endedClass(id: string, over: Record<string, unknown> = {}) {
   };
 }
 
-function makeSupabase(classes: any[], uploads: any[], opts: { startedToday?: number } = {}) {
+/** The stored listing resolveSnippet finds. Pass `meta: null` for a class with none. */
+const DEFAULT_META = { yt_title: 'A title', yt_description: 'd', yt_tags: [] };
+
+function makeSupabase(
+  classes: any[],
+  uploads: any[],
+  opts: { startedToday?: number; meta?: any } = {},
+) {
   const upserts: any[] = [];
   const updates: Record<string, any[]> = {};
 
@@ -132,8 +139,9 @@ function makeSupabase(classes: any[], uploads: any[], opts: { startedToday?: num
       }),
       upsert: vi.fn(async () => ({ error: null })),
     };
+    const meta = opts.meta === undefined ? DEFAULT_META : opts.meta;
     generic.select = vi.fn(() => ({
-      eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { yt_title: 'A title', yt_description: 'd', yt_tags: [] } })) })),
+      eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: meta })) })),
     }));
     return generic;
   });
@@ -404,6 +412,26 @@ describe('syncClassYouTubeBackups, on success', () => {
     const s = await syncClassYouTubeBackups(supabase);
     // Teams deletes the source in six months. A mediocre title beats no video.
     expect(s.completed).toBe(1);
+  });
+
+  // Nothing used to assert what actually reached initiateUpload, which is how
+  // eight videos shipped with undated titles while every unit test was green.
+  it('sends the class date on the title of a stored listing that predates dates', async () => {
+    const { supabase } = makeSupabase([endedClass('c1')], []);
+    await syncClassYouTubeBackups(supabase);
+
+    expect(initiateUpload.mock.calls[0][1].classDate).toBe('2026-07-20');
+  });
+
+  it('sends the class date on the fallback title too, when there is no listing', async () => {
+    const { supabase } = makeSupabase([endedClass('c1')], [], { meta: null });
+    await syncClassYouTubeBackups(supabase);
+
+    const snippet = initiateUpload.mock.calls[0][1];
+    expect(snippet.classDate).toBe('2026-07-20');
+    // The fallback builds its own title, so this one is dated on the way out of
+    // resolveSnippet rather than at the API boundary.
+    expect(snippet.title).toBe('Class c1 (20 Jul 26)');
   });
 });
 

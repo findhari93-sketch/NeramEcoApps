@@ -24,6 +24,9 @@ export const YT_TITLE_MAX = 100;
 export const YT_DESCRIPTION_MAX = 5000;
 export const YT_TAGS_MAX_CHARS = 500;
 
+/** Characters " (20 Jul 26)" costs, the leading space included. */
+export const YT_TITLE_DATE_SUFFIX_LEN = 12;
+
 /** YouTube needs at least three markers, starting at 0:00, to render chapters. */
 export const YT_MIN_CHAPTERS = 3;
 /** YouTube ignores chapters closer together than ten seconds. */
@@ -175,6 +178,70 @@ export function validateChapters(chapters: ClassVideoChapter[]): ChapterProblem[
   return problems;
 }
 
+const MONTHS_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/** Matches only a real month, so a title ending "(Part 2 of 3)" is left alone. */
+const DATE_SUFFIX_RE = new RegExp(
+  `\\s*\\(\\d{2} (?:${MONTHS_SHORT.join('|')}) \\d{2}\\)\\s*$`,
+);
+
+/**
+ * "2026-07-20" to "20 Jul 26", the form that goes at the end of a title.
+ *
+ * Zero padded, unlike the long `formatClassDate` used in the description: a
+ * channel listing reads as a column, and a ragged day column is harder to scan
+ * than the two characters cost. Returns "" rather than the input on a date it
+ * cannot parse, so callers can tell "no date" from "a date".
+ */
+export function formatClassDateShort(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  if (!match) return '';
+  const [, y, m, d] = match;
+  const monthName = MONTHS_SHORT[Number(m) - 1];
+  if (!monthName) return '';
+  return `${d} ${monthName} ${y.slice(2)}`;
+}
+
+/**
+ * Stamp the class date onto the end of a title that may or may not have one.
+ *
+ * Titles are built dated by `buildYouTubeTitle`, so on the normal path this is a
+ * no-op. It exists for the two paths that bypass it: a listing written before
+ * this feature, and a title a teacher edited by hand. Applying it at the API
+ * boundary is what lets the upload path actually promise a dated title rather
+ * than hope for one.
+ *
+ * Idempotent by stripping any existing suffix first, so a teacher who copies a
+ * dated title and pastes it back does not end up with two dates.
+ */
+export function applyClassDateSuffix(title: string, iso: string | null | undefined): string {
+  const stamp = iso ? formatClassDateShort(iso) : '';
+  if (!stamp) return title;
+
+  const suffix = ` (${stamp})`;
+  let base = title.replace(DATE_SUFFIX_RE, '').trimEnd();
+  if (!base) return title; // nothing but a date to begin with
+
+  // Drop trailing segments until the dated title fits, never the first one: the
+  // topic is the only part a student scans for, and the date is the whole point
+  // of this function. Everything between them is negotiable.
+  const chunks = base.split(' | ');
+  while (chunks.length > 1 && chunks.join(' | ').length + suffix.length > YT_TITLE_MAX) {
+    chunks.pop();
+  }
+  base = chunks.join(' | ');
+
+  // A single segment too long to fit has to be cut. Safe to tail-slice here
+  // because the date is appended afterwards, not before.
+  if (base.length + suffix.length > YT_TITLE_MAX) {
+    base = base.slice(0, YT_TITLE_MAX - suffix.length).trimEnd();
+  }
+  return `${base}${suffix}`;
+}
+
 export interface TitleParts {
   /** The topic in the words a student would use. Always kept. */
   topic: string;
@@ -182,6 +249,8 @@ export interface TitleParts {
   /** Subject label, for example "Drawing". Dropped first when space runs out. */
   subject?: string | null;
   language: LibraryVideoLanguage | null;
+  /** ISO date (yyyy-mm-dd) of the class. Reserved before anything optional. */
+  classDate?: string | null;
 }
 
 /**
@@ -193,23 +262,33 @@ export interface TitleParts {
  * skipped rather than truncated mid-word. A skipped segment does not stop the
  * ones after it, so a short language tag can still land in space a longer
  * subject could not use. Filling the title beats leaving it half empty.
+ *
+ * The class date, when given, is reserved out of the budget BEFORE anything
+ * optional is fitted, rather than appended at the end. Appending would drop it
+ * exactly when titles are longest, which is most of them: the channel's real
+ * titles average 90 of the 100 characters. Reserving costs the language tag on
+ * a long title, which is the cheaper loss, since the Library reads the language
+ * from its own column rather than from the title text.
  */
 export function buildYouTubeTitle(parts: TitleParts): string {
   const topic = stripBannedDashes(parts.topic || '').trim();
   if (!topic) return '';
+
+  const stamp = parts.classDate ? formatClassDateShort(parts.classDate) : '';
+  const budget = stamp ? YT_TITLE_MAX - YT_TITLE_DATE_SUFFIX_LEN : YT_TITLE_MAX;
 
   const optional: string[] = [];
   if (parts.exam) optional.push(EXAM_LABELS[parts.exam]);
   if (parts.subject) optional.push(stripBannedDashes(parts.subject).trim());
   if (parts.language) optional.push(LANGUAGE_LABELS[parts.language]);
 
-  let title = topic.slice(0, YT_TITLE_MAX);
+  let title = topic.slice(0, budget);
   for (const segment of optional) {
     if (!segment) continue;
     const candidate = `${title} | ${segment}`;
-    if (candidate.length <= YT_TITLE_MAX) title = candidate;
+    if (candidate.length <= budget) title = candidate;
   }
-  return title;
+  return stamp ? `${title} (${stamp})` : title;
 }
 
 export interface DescriptionParts {

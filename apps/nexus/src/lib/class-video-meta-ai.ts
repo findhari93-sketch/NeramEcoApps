@@ -66,15 +66,20 @@ export type VideoMetaOutcome =
  * Compose the parsed AI output into the columns nexus_class_video_meta stores.
  *
  * Deliberately identical to applyPaste in ClassVideoMetaPanel, down to which
- * arguments are NOT passed: the panel omits classDate and tutorName from the
- * description even though buildYouTubeDescription accepts them. Adding them here
- * would make an auto-generated description differ from a hand-pasted one for the
- * same class, which is exactly the drift this file exists to avoid. If those
- * lines are wanted, add them to the panel first and both paths inherit it.
+ * arguments are NOT passed: neither passes classDate or tutorName to
+ * buildYouTubeDescription, even though it accepts them. Adding them on one side
+ * only would make an auto-generated description differ from a hand-pasted one
+ * for the same class, which is exactly the drift this file exists to avoid.
+ *
+ * classDate IS passed to the title, on both sides, because a dated title is the
+ * point. It is a required argument rather than an optional one so that a new
+ * call site cannot quietly produce an undated title: an omission is a type
+ * error, not a video on the channel with the wrong name.
  */
 export function composeMetaPatch(
   d: ClassVideoMetaData,
   registry: RegistryTag[],
+  classDate: string | null,
 ): Record<string, unknown> {
   const bySlug = new Map(registry.map((t) => [t.slug, t]));
   const chosen = d.tagSlugs.map((s) => bySlug.get(s)).filter(Boolean) as RegistryTag[];
@@ -87,6 +92,7 @@ export function composeMetaPatch(
       exam: d.exam,
       subject,
       language: d.language,
+      classDate,
     }),
     yt_description: buildYouTubeDescription({
       hook: d.hook,
@@ -226,7 +232,7 @@ export async function generateVideoMetaForClass(
       return { status: 'failed', reason: 'unparseable' };
     }
 
-    const patch = composeMetaPatch(result.data, registry);
+    const patch = composeMetaPatch(result.data, registry, cls.scheduled_date);
 
     // The same gate the PATCH route applies. A model that produced a 140-character
     // title must be refused here rather than stored and rejected later by YouTube.

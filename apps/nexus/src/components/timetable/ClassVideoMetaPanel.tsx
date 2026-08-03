@@ -88,7 +88,7 @@ interface SavedMeta {
 interface VideoMetaResponse {
   registry?: RegistryTag[];
   tags?: RegistryTag[];
-  class?: { youtube_url?: string | null };
+  class?: { youtube_url?: string | null; scheduled_date?: string | null };
   meta?: SavedMeta | null;
   /** The class has a video link the Teams card does not mention yet. */
   teamsCardStale?: boolean;
@@ -226,6 +226,11 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
   // Step 5
   const [youtubeUrl, setYoutubeUrl] = useState('');
 
+  // The escape hatch: a recording somebody already put on the channel by hand.
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualUrl, setManualUrl] = useState('');
+  const [markingUploaded, setMarkingUploaded] = useState(false);
+
   const authed = useCallback(
     async (url: string, init?: RequestInit) => {
       const token = await getToken();
@@ -295,6 +300,14 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
   useEffect(() => {
     setEditing(false);
   }, [classId]);
+
+  /**
+   * Read straight off the response instead of into state, unlike every field
+   * above. The class date is not editable, so a revalidation overwriting it is a
+   * refresh rather than the data loss the hydration guard exists to prevent, and
+   * a rescheduled class should pick up its new date without a remount.
+   */
+  const scheduledDate = data?.class?.scheduled_date || null;
 
   const loading = isLoading;
 
@@ -415,6 +428,7 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
 
     setYtTitle(buildYouTubeTitle({
       topic: d.topicPhrase, exam: d.exam, subject, language: d.language,
+      classDate: scheduledDate,
     }));
     setYtDescription(buildYouTubeDescription({
       hook: d.hook,
@@ -484,6 +498,48 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
       onNotify?.(err instanceof Error ? err.message : 'Could not save');
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * Record a recording somebody already put on the channel themselves.
+   *
+   * Deliberately not step 5. Step 5 is the tail of the wizard and is gated on a
+   * complete listing, which is exactly what a class backed up by hand in a hurry
+   * does not have: no title, so no way through. Until this existed, the only way
+   * to tell Nexus "leave this one alone" was to write a full listing for a video
+   * that was already published, and the price of not telling it was a second copy
+   * of the same class on the channel and 1600 quota units.
+   *
+   * Sends nothing but the link. The route recognises a human-supplied link and
+   * writes the skip row itself, so this stays honest even when a teacher pastes
+   * the link at the end of the wizard instead.
+   */
+  const markAlreadyUploaded = async () => {
+    setMarkingUploaded(true);
+    try {
+      const res = await authed(`/api/timetable/${classId}/video-meta`, {
+        method: 'PATCH',
+        body: JSON.stringify({ youtube_url: manualUrl }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not save that link');
+
+      setClassYoutubeUrl(manualUrl);
+      setYoutubeUrl(manualUrl);
+      setManualOpen(false);
+      void mutate();
+      void revalidateClass(classId);
+      onSaved?.();
+      onNotify?.(
+        json.skipOutcome === 'abandoned'
+          ? 'Saved. An upload was part way through and has been dropped, so you will not get a second copy.'
+          : 'Saved. The nightly backup will leave this class alone.',
+      );
+    } catch (err) {
+      onNotify?.(err instanceof Error ? err.message : 'Could not save that link');
+    } finally {
+      setMarkingUploaded(false);
     }
   };
 
@@ -589,6 +645,78 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
       <Collapse in={open} unmountOnExit>
         <Divider />
         <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
+          {/*
+            * The way out for a class somebody already backed up by hand.
+            *
+            * Above the wizard on purpose. A teacher opening a July class they
+            * uploaded themselves in a hurry is not here to write a listing, and
+            * the wizard cannot help them: its last step needs a complete listing
+            * before it will accept a link. Leaving them no way to say "this one
+            * is done" is what puts a second copy of the class on the channel.
+            */}
+          {!loading && !classYoutubeUrl && (
+            <Paper
+              variant="outlined"
+              sx={{ p: 1.25, mb: 1.5, borderRadius: RADIUS.control, bgcolor: 'action.hover' }}
+            >
+              {manualOpen ? (
+                <Box>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    autoFocus
+                    label="YouTube link"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={manualUrl}
+                    onChange={(e) => setManualUrl(e.target.value)}
+                    helperText="The nightly backup skips any class that already has a link."
+                  />
+                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={markingUploaded || !manualUrl.trim()}
+                      onClick={markAlreadyUploaded}
+                      sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
+                    >
+                      {markingUploaded ? 'Saving...' : 'Save the link'}
+                    </Button>
+                    <Button
+                      size="small"
+                      disabled={markingUploaded}
+                      onClick={() => setManualOpen(false)}
+                      sx={{ textTransform: 'none', minHeight: 44 }}
+                    >
+                      Cancel
+                    </Button>
+                  </Box>
+                </Box>
+              ) : (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 1,
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    Already put this class on YouTube yourself?
+                  </Typography>
+                  <Button
+                    size="small"
+                    startIcon={<YouTubeIcon />}
+                    onClick={() => setManualOpen(true)}
+                    sx={{ textTransform: 'none', minHeight: 44 }}
+                  >
+                    Add the link
+                  </Button>
+                </Box>
+              )}
+            </Paper>
+          )}
+
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
               <CircularProgress size={24} />
