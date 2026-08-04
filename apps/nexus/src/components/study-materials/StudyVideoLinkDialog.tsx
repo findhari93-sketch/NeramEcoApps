@@ -1,8 +1,15 @@
 'use client';
 
 /**
- * StudyVideoLinkDialog — teacher/admin links (or clears) the class recording for a study file.
+ * StudyVideoLinkDialog: teacher/admin links (or clears) a plain video link on a study file.
  * Paste a YouTube link (embeds inline for students) or any other URL (opens externally).
+ *
+ * NOT the gated bilingual flow. This was titled "Link class recording" and sat in
+ * the menu one row below the feature actually called "Class recordings", with
+ * help text that described that other feature almost word for word. A teacher
+ * could not tell them apart, so the gated flow went unused. The wording here
+ * exists to draw the line: this link is ungated, unchecked and does not count
+ * towards completing a chapter. StudyVideoTracksDialog is the one that does.
  */
 
 import { useState, useEffect } from 'react';
@@ -68,7 +75,7 @@ export default function StudyVideoLinkDialog({ open, file, authFetch, onClose, o
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
         <SmartDisplayOutlinedIcon color="primary" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="h6" fontWeight={700}>Link class recording</Typography>
+          <Typography variant="h6" fontWeight={700}>Quick video link</Typography>
           <Typography variant="caption" color="text.secondary" noWrap>{file?.title}</Typography>
         </Box>
         <IconButton onClick={() => !submitting && onClose()} aria-label="Close" sx={{ width: 40, height: 40 }}>
@@ -79,9 +86,15 @@ export default function StudyVideoLinkDialog({ open, file, authFetch, onClose, o
       <DialogContent sx={{ pt: 2 }}>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Paste the recording link for the class where this chapter was taught. Students can choose to
-          watch it, but they still need to pass the test to complete the chapter.
+          A plain link students can open. There are no checkpoints, nothing stops them skipping,
+          and it does not count towards completing the chapter.
         </Typography>
+        <Alert severity="info" icon={false} sx={{ mb: 2, py: 0.75 }}>
+          <Typography variant="caption">
+            Looking for the Tamil and English class recordings with checkpoints? Close this and
+            pick <strong>Class recordings</strong> instead.
+          </Typography>
+        </Alert>
         <TextField
           fullWidth size="small" label="Recording URL" placeholder="https://youtu.be/... or a Teams/SharePoint link"
           value={url} onChange={(e) => setUrl(e.target.value)} autoFocus
@@ -112,7 +125,7 @@ export default function StudyVideoLinkDialog({ open, file, authFetch, onClose, o
             startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SmartDisplayOutlinedIcon />}
             sx={{ textTransform: 'none', minWidth: 140 }}
           >
-            {submitting ? 'Saving...' : hasExisting ? 'Update link' : 'Link video'}
+            {submitting ? 'Saving...' : hasExisting ? 'Update link' : 'Save link'}
           </Button>
         </Box>
       </DialogActions>

@@ -59,6 +59,13 @@ export interface StudyVideoTrack {
   hold_reason: string | null;
   video_duration_seconds: number | null;
   section_count: number;
+  /**
+   * 'sharepoint' plays through the byte proxy; 'youtube' through the IFrame API.
+   * Surfaced to the teacher because it changes what they can expect: a YouTube
+   * track has no SharePoint folder to look in, so its transcript can only be
+   * uploaded, never fetched.
+   */
+  video_source: string;
 }
 
 export interface StudyVideoState {
@@ -108,6 +115,17 @@ export async function createStudyVideoTrack(
     languageLabel?: string | null;
     title?: string | null;
     recordingUrl: string;
+    /**
+     * Which player the student gets. Passed in rather than sniffed here: the
+     * YouTube id parser lives in the nexus app, and this package must not reach
+     * into it. Defaults to 'sharepoint', which is what this used to hardcode.
+     *
+     * That hardcoding was a real bug, not a simplification. The serving side has
+     * always handled YouTube (the video-embed route branches on this exact
+     * column and hands back a youtube_id), so a YouTube track could be played
+     * but never created.
+     */
+    videoSource?: 'sharepoint' | 'youtube';
     transcriptUrl?: string | null;
     createdBy?: string | null;
   },
@@ -127,7 +145,7 @@ export async function createStudyVideoTrack(
       title: input.title || `${DEFAULT_LANGUAGE_LABELS[input.language]} recording`,
       recording_url: input.recordingUrl,
       transcript_url: input.transcriptUrl ?? null,
-      video_source: 'sharepoint',
+      video_source: input.videoSource ?? 'sharepoint',
       status: 'draft',
       readiness: 'pending',
       created_by: input.createdBy ?? null,
@@ -177,6 +195,7 @@ function toTrack(row: any, counts: Map<string, number>): StudyVideoTrack {
     hold_reason: row.hold_reason ?? null,
     video_duration_seconds: row.video_duration_seconds ?? null,
     section_count: counts.get(row.id) || 0,
+    video_source: row.video_source ?? 'sharepoint',
   };
 }
 

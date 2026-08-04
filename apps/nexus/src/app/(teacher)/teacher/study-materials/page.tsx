@@ -53,16 +53,20 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import InsertLinkOutlinedIcon from '@mui/icons-material/InsertLinkOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
 import StudyUploadDialog from '@/components/study-materials/StudyUploadDialog';
 import DownloadGrantDialog, { type GrantTarget } from '@/components/study-materials/DownloadGrantDialog';
 import StudyTestAuthorDialog from '@/components/study-materials/StudyTestAuthorDialog';
+import GenerateChapterTestSheet from '@/components/study-materials/GenerateChapterTestSheet';
+import GenerateFolderTestsDialog from '@/components/study-materials/GenerateFolderTestsDialog';
 import StudyVideoLinkDialog from '@/components/study-materials/StudyVideoLinkDialog';
 import StudyVideoTracksDialog from '@/components/study-materials/StudyVideoTracksDialog';
 import FolderMovePicker, { type MoveItem } from '@/components/study-materials/FolderMovePicker';
 import { FileThumb, FileIcon } from '@/components/study-materials/FileThumb';
-import type { NexusStudyFileDTO, NexusStudyFolderDTO } from '@neram/database/types';
+import type { NexusStudyFileDTO, NexusStudyFolderDTO, NexusStudyFileRecording } from '@neram/database/types';
 
 const EXAM_OPTIONS = [
   { value: 'nata', label: 'NATA' },
@@ -116,12 +120,20 @@ function TeacherStudyMaterials() {
   const [grantTarget, setGrantTarget] = useState<GrantTarget | null>(null);
   // Test authoring dialog (per file).
   const [testFile, setTestFile] = useState<{ id: string; title: string } | null>(null);
+  // Generate a test straight from a chapter PDF, one file or the whole folder.
+  const [generateFile, setGenerateFile] = useState<{ id: string; title: string } | null>(null);
+  const [folderGenOpen, setFolderGenOpen] = useState(false);
   // Class-recording link dialog (per file).
   const [videoFile, setVideoFile] = useState<FileDTO | null>(null);
   // The gated bilingual recordings, as opposed to the single ungated quick link
   // above. Kept as separate menu items because they are different promises: one
   // is "here is the class", the other is "watch this to finish the chapter".
-  const [tracksFile, setTracksFile] = useState<{ id: string; title: string } | null>(null);
+  // `recording` rides along so the tracks dialog can offer the chapter's existing
+  // quick link as the first track, rather than making a teacher fetch the same
+  // SharePoint URL twice.
+  const [tracksFile, setTracksFile] = useState<
+    { id: string; title: string; recording?: NexusStudyFileRecording | null } | null
+  >(null);
 
   // Deep-link from the Tests hub (?testFile=<id>&testTitle=<name>): open the authoring dialog,
   // then strip the params so closing or refresh does not re-open it.
@@ -175,6 +187,25 @@ function TeacherStudyMaterials() {
       });
     },
     [getToken],
+  );
+
+  /**
+   * authFetch hands back the raw Response because most callers here only check
+   * res.ok. The generate dialogs want parsed JSON and a thrown error carrying
+   * the server's own sentence, since "the AI is rate limited right now" is the
+   * common failure and is worth showing verbatim.
+   */
+  const authJson = useCallback(
+    async (url: string, init?: RequestInit) => {
+      const res = await authFetch(url, {
+        ...init,
+        headers: { ...(init?.headers || {}), ...(init?.body ? { 'Content-Type': 'application/json' } : {}) },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || 'Request failed');
+      return json;
+    },
+    [authFetch],
   );
 
   const load = useCallback(async () => {
@@ -767,6 +798,20 @@ function TeacherStudyMaterials() {
             Progress
           </Button>
         )}
+        {/* Only when there is something to do: a folder whose PDFs all have
+            tests should not offer a button that opens onto "nothing to see". */}
+        {!atRoot && files.some((f) => f.file_type === 'application/pdf' && !f.has_test) && (
+          <Button
+            variant="outlined"
+            size="small"
+            color="primary"
+            startIcon={<AutoAwesomeOutlinedIcon />}
+            onClick={() => setFolderGenOpen(true)}
+            disabled={busy}
+          >
+            Generate tests
+          </Button>
+        )}
         <Button
           variant="outlined"
           size="small"
@@ -931,17 +976,44 @@ function TeacherStudyMaterials() {
           <ListItemIcon><LockClockOutlinedIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Grant download access...</ListItemText>
         </MenuItem>
+        {/* Only for a PDF with nothing on it yet: with a test already linked the
+            honest action is to edit that one, not to quietly build a second. */}
+        {fileMenu?.file.file_type === 'application/pdf' && !fileMenu?.file.has_test && (
+          <MenuItem
+            onClick={() => {
+              if (fileMenu) setGenerateFile({ id: fileMenu.file.id, title: fileMenu.file.title });
+              setFileMenu(null);
+            }}
+          >
+            <ListItemIcon><AutoAwesomeOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText>Generate test from this PDF</ListItemText>
+          </MenuItem>
+        )}
         <MenuItem onClick={() => { if (fileMenu) setTestFile({ id: fileMenu.file.id, title: fileMenu.file.title }); setFileMenu(null); }}>
           <ListItemIcon><QuizOutlinedIcon fontSize="small" /></ListItemIcon>
           <ListItemText>{fileMenu?.file.has_test ? 'Edit test' : 'Attach test'}</ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { if (fileMenu) setTracksFile({ id: fileMenu.file.id, title: fileMenu.file.title }); setFileMenu(null); }}>
-          <ListItemIcon><SmartDisplayOutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Class recordings</ListItemText>
+        {/* These two both attach a video and were previously adjacent, identically
+            iconed, and near-identically worded, which is why the gated flow went
+            unused. They are now told apart three ways: order, icon, and a
+            subtitle naming the one difference a teacher cares about. */}
+        <MenuItem onClick={() => { if (fileMenu) setTracksFile({ id: fileMenu.file.id, title: fileMenu.file.title, recording: fileMenu.file.recording ?? null }); setFileMenu(null); }}>
+          <ListItemIcon><SmartDisplayOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+          <ListItemText
+            primary="Class recordings"
+            secondary="Tamil and English, with checkpoints"
+            primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+            secondaryTypographyProps={{ variant: 'caption' }}
+          />
         </MenuItem>
         <MenuItem onClick={() => { if (fileMenu) setVideoFile(fileMenu.file); setFileMenu(null); }}>
-          <ListItemIcon><SmartDisplayOutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>{fileMenu?.file.recording ? 'Edit quick link' : 'Link a quick video'}</ListItemText>
+          <ListItemIcon><InsertLinkOutlinedIcon fontSize="small" /></ListItemIcon>
+          <ListItemText
+            primary="Quick video link"
+            secondary="Just a link, no checkpoints"
+            primaryTypographyProps={{ variant: 'body2' }}
+            secondaryTypographyProps={{ variant: 'caption' }}
+          />
         </MenuItem>
         <MenuItem onClick={() => { if (fileMenu) router.push(`/teacher/study-materials/completion/${fileMenu.file.id}`); setFileMenu(null); }}>
           <ListItemIcon><GroupsOutlinedIcon fontSize="small" /></ListItemIcon>
@@ -1033,6 +1105,33 @@ function TeacherStudyMaterials() {
         authFetch={authFetch}
         onClose={() => setTestFile(null)}
         onSaved={load}
+        onGenerate={(f) => {
+          setTestFile(null);
+          setGenerateFile(f);
+        }}
+      />
+
+      {/* Chapter PDF straight to a live test, one file or the whole folder. */}
+      <GenerateChapterTestSheet
+        open={!!generateFile}
+        file={generateFile}
+        authFetch={authJson}
+        onClose={() => {
+          setGenerateFile(null);
+          load();
+        }}
+        onGenerated={(s) =>
+          setSnack({ msg: `${s.title} is live, ${s.serve} questions per attempt`, sev: 'success' })
+        }
+      />
+
+      <GenerateFolderTestsDialog
+        open={folderGenOpen}
+        folderName={data?.breadcrumb?.[data.breadcrumb.length - 1]?.name || 'this folder'}
+        files={files}
+        authFetch={authJson}
+        onClose={() => setFolderGenOpen(false)}
+        onFinished={load}
       />
 
       {/* Per-file class-recording link */}

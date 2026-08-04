@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import {
+  applyTestDraw,
   getSupabaseAdminClient,
   getComposedTestQuestions,
   getPlacementById,
@@ -9,6 +10,7 @@ import {
   startOrResumeAttempt,
   submitAttempt,
 } from '@neram/database';
+import { attemptSeed, seededShuffle } from '@/lib/seeded-shuffle';
 
 /**
  * The student take engine.
@@ -112,7 +114,10 @@ export async function GET(request: NextRequest) {
     }
 
     const started = await startOrResumeAttempt({ testId, studentId: user.id, placementId });
-    const composed = await getComposedTestQuestions(testId, false);
+    // Cut to this sitting's draw when the test is a pool: the drawn questions,
+    // in the drawn order, with their options permuted and relabelled. A test
+    // without a pool comes back whole, which is what all of them did before.
+    const composed = applyTestDraw(await getComposedTestQuestions(testId, false), started.draw);
 
     // Shape kept as the take page already expects it.
     let questions = composed.map((q) => ({
@@ -130,8 +135,14 @@ export async function GET(request: NextRequest) {
         options: q.options,
       },
     }));
-    if (test.shuffle_questions) {
-      questions = [...questions].sort(() => Math.random() - 0.5);
+    // A pool has already been ordered by its draw, so reshuffling would undo it.
+    // Otherwise seed the shuffle on the attempt, the way the class-prep and
+    // catch-up gates do. Math.random() here re-ordered the paper on every GET,
+    // so a student who refreshed mid-attempt watched the questions rearrange
+    // themselves around the answers they had already given.
+    if (test.shuffle_questions && !started.draw) {
+      const seed = attemptSeed(user.id, testId, Number(started.attempt.attempt_number) || 1);
+      questions = seededShuffle(questions, seed);
     }
 
     return NextResponse.json({
@@ -185,8 +196,11 @@ export async function POST(request: NextRequest) {
       // Enrich the review with the stem and the explanation. Seeing WHY an
       // answer was wrong is the entire reason to sit a practice test, and the
       // take flow deliberately does not carry explanations until this moment.
+      // Permuted through the same draw the paper was served under, or the
+      // options here would be in the bank's order while the selected and
+      // correct letters beside them are in the order the student saw.
       const withAnswers = await getComposedTestQuestions(result.test_id, true).catch(() => []);
-      const byId = new Map(withAnswers.map((q) => [q.question_id, q]));
+      const byId = new Map(applyTestDraw(withAnswers, result.draw).map((q) => [q.question_id, q]));
 
       return NextResponse.json({
         action: 'submitted',

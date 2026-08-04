@@ -51,6 +51,8 @@ interface StudyTestAuthorDialogProps {
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
   onClose: () => void;
   onSaved: () => void;
+  /** Hand this chapter to the generator instead of hunting the library for a test. */
+  onGenerate?: (file: { id: string; title: string }) => void;
 }
 
 export default function StudyTestAuthorDialog({
@@ -59,6 +61,7 @@ export default function StudyTestAuthorDialog({
   authFetch,
   onClose,
   onSaved,
+  onGenerate,
 }: StudyTestAuthorDialogProps) {
   const theme = useTheme();
   const router = useRouter();
@@ -233,10 +236,28 @@ export default function StudyTestAuthorDialog({
               </Alert>
             )}
 
-            {!linked && !picked && (
-              <Alert severity="info" icon={<AutoAwesomeOutlinedIcon />} sx={{ mt: 2 }}>
-                Nothing suitable in the library? Import a test from this chapter PDF in Tests, then come back
-                and link it here.
+            {/* This used to read "Import a test from this chapter PDF in Tests,
+                then come back and link it here", which described a five-step
+                round trip through another module as though it were help. The
+                generator does the whole thing from the chapter that is already
+                open, so the advice became a button. */}
+            {!linked && !picked && onGenerate && (
+              <Alert
+                severity="info"
+                icon={<AutoAwesomeOutlinedIcon />}
+                sx={{ mt: 2 }}
+                action={
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={() => file && onGenerate({ id: file.id, title: file.title })}
+                    sx={{ minHeight: 40, whiteSpace: 'nowrap' }}
+                  >
+                    Generate
+                  </Button>
+                }
+              >
+                Nothing suitable in the library? Write one from this chapter PDF.
               </Alert>
             )}
           </>

@@ -6,6 +6,8 @@ import {
   TrackLanguageTakenError,
 } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
+import { extractYouTubeId } from '@/lib/youtube';
+import { normalizeRecordingUrl } from '@/lib/sharepoint-transcript';
 
 /**
  * Language tracks on a Foundation chapter.
@@ -48,14 +50,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const body = await request.json().catch(() => ({}));
     const language = String(body.language || '').trim();
-    const recordingUrl = String(body.recording_url || '').trim();
+    const rawUrl = String(body.recording_url || '').trim();
 
     if (!LANGUAGES.includes(language as (typeof LANGUAGES)[number])) {
       return NextResponse.json({ error: 'Pick a language: en, ta or ta_en' }, { status: 400 });
     }
-    if (!recordingUrl) {
+    if (!rawUrl) {
       return NextResponse.json({ error: 'A recording link is required' }, { status: 400 });
     }
+
+    // A Teams meetingrecap link carries the real SharePoint file URL in its
+    // `fileUrl` param and is not resolvable by Graph on its own, so unwrap it
+    // before storing. Harmless for a plain SharePoint or YouTube link.
+    const recordingUrl = normalizeRecordingUrl(rawUrl);
+
+    // Which player the student gets. Both are fully supported downstream; only
+    // this classification was missing, which is why YouTube recordings could
+    // not be attached even though the embed route already served them.
+    const videoSource = extractYouTubeId(recordingUrl) ? 'youtube' : 'sharepoint';
 
     const track = await createStudyVideoTrack({
       studyFileId: params.id,
@@ -63,6 +75,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       languageLabel: body.language_label ? String(body.language_label) : null,
       title: body.title ? String(body.title) : `${file.title} (${language})`,
       recordingUrl,
+      videoSource,
       transcriptUrl: body.transcript_url ? String(body.transcript_url) : null,
       createdBy: user.id,
     });

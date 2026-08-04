@@ -51,7 +51,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ test: null, locked: true, reason: 'video_required' });
     }
 
-    const test = await getPlacedTestForStudent(params.id);
+    // Per student: a pooled chapter test draws its own subset for each sitting,
+    // and the draw is fixed here so the paper they answer is the paper they are
+    // graded against.
+    const test = await getPlacedTestForStudent(params.id, user.id);
     return NextResponse.json({ test, locked: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load test';

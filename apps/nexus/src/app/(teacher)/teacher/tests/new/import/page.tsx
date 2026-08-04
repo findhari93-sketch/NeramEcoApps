@@ -69,17 +69,10 @@ export default function ImportTestPage() {
   const [registry, setRegistry] = useState<ImportRegistryTag[]>([]);
   const [registryLoaded, setRegistryLoaded] = useState(false);
 
-  // Step 1
-  const [chapter, setChapter] = useState('');
+  // Step 1. No chapter field: the document names itself, and the AI is asked to
+  // read that name and return it as test.title, which then fills step 4.
   const [exam, setExam] = useState<ImportExam>('NATA');
   const [count, setCount] = useState(30);
-  // Folder. The id is what the test is actually filed under; the path is kept
-  // alongside it for the prompt, and doubles as the AI's suggested folder when
-  // nothing has been picked, which the commit route materialises for us.
-  const [folderId, setFolderId] = useState<string | null>(null);
-  const [folderPath, setFolderPath] = useState<string[]>([]);
-  // Once the teacher has picked, the AI's suggestion stops overwriting it.
-  const [folderChosen, setFolderChosen] = useState(false);
 
   // Step 2
   const [pasted, setPasted] = useState('');
@@ -97,6 +90,15 @@ export default function ImportTestPage() {
   // Step 4
   const [title, setTitle] = useState('');
   const [testKind, setTestKind] = useState<NexusTestKind>('classroom_assigned');
+  // Filing is asked once, here, where the test is named. The id is what the test
+  // is filed under; the path is the fallback for a folder that does not exist
+  // yet, which the commit route materialises. Asking on step 1 as well only fed
+  // the folder into the prompt so the AI could read it back to us, and the read
+  // back was then discarded, so it was a question with nowhere to go.
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [folderPath, setFolderPath] = useState<string[]>([]);
+  // Once the teacher has picked, the AI's suggestion stops overwriting it.
+  const [folderChosen, setFolderChosen] = useState(false);
   const [passingPct, setPassingPct] = useState(60);
   const [publish, setPublish] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -174,12 +176,7 @@ export default function ImportTestPage() {
 
   async function copyPrompt() {
     try {
-      const prompt = buildImportPrompt(registry, {
-        chapter: chapter.trim() || undefined,
-        exam,
-        count,
-        folderPath,
-      });
+      const prompt = buildImportPrompt(registry, { exam, count, folderPath });
       await navigator.clipboard.writeText(prompt);
       setToast('Prompt copied. Open ChatGPT or Gemini, attach your PDF, and paste it.');
       setStep(1);
@@ -203,9 +200,9 @@ export default function ImportTestPage() {
       }
 
       setProposedTags(result.proposedTags.map((t) => ({ ...t, approved: true })));
-      if (!title.trim()) {
-        setTitle(result.test.title || (chapter.trim() ? `${chapter.trim()} Test` : ''));
-      }
+      // The AI read the chapter name off the document, so this is now the only
+      // source for the title rather than a fallback behind a typed one.
+      if (!title.trim()) setTitle(result.test.title);
       // The AI's suggestion only fills a gap. It never overrides a folder the
       // teacher has already picked, and it stays a path rather than an id
       // because that folder may not exist yet.
@@ -299,6 +296,9 @@ export default function ImportTestPage() {
           folder_path: folderPath,
           passing_pct: passingPct,
           is_published: publish,
+          // Recorded with the archived payload, so a test can say where its
+          // questions came from long after the wizard has been closed.
+          source: fileName ? 'file_upload' : 'paste',
           new_tags: proposedTags.filter((t) => t.approved).map((t) => ({ slug: t.slug, label: t.label })),
           extra_question_ids: [...extraQuestions.keys()],
           questions: rows.map((r) => ({
@@ -386,15 +386,10 @@ export default function ImportTestPage() {
             Tell the AI what to write
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              label="Chapter or topic"
-              placeholder="History of Architecture"
-              value={chapter}
-              onChange={(e) => setChapter(e.target.value)}
-              fullWidth
-              size="small"
-              helperText="Used in the prompt and to name the test"
-            />
+            {/* The chapter is no longer typed here. The prompt tells the AI to
+                read the chapter name off the document it is given and return it
+                as test.title, which it already did: the typed value only ever
+                supplied a fallback title that the AI's own answer overrode. */}
             <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
               <TextField
                 select
@@ -418,17 +413,6 @@ export default function ImportTestPage() {
                 inputProps={{ min: 1, max: 200, inputMode: 'numeric' }}
               />
             </Box>
-            <TestFolderPicker
-              value={folderId}
-              onChange={chooseFolder}
-              authFetch={authFetch}
-              pendingPath={suggestedPath}
-              helperText={
-                folderPath.length > 0
-                  ? `Filed under ${folderPath.join(' > ')}, and the AI is told so too`
-                  : 'Optional. Pick where the test will live, or make a new folder.'
-              }
-            />
           </Box>
 
           <Alert severity="info" sx={{ mt: 2 }}>
@@ -822,7 +806,9 @@ export default function ImportTestPage() {
               getToken={getToken}
               selected={bankDraft}
               onChange={setBankDraft}
-              initialSearch={chapter.trim()}
+              // Seeded from the test's own name, which by this step is the
+              // chapter the AI read off the document.
+              initialSearch={title.trim()}
             />
           </Box>
         </DialogContent>

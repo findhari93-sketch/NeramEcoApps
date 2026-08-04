@@ -28,6 +28,14 @@ const TRANSCRIPTS = 'nexus_class_recap_transcripts';
 
 export type TrackTranscriptSource = 'upload' | 'stored' | 'sharepoint' | 'none';
 
+/** No transcript, and why. Each maps to a different sentence for the teacher. */
+export type TrackTranscriptError =
+  | 'NO_ACCESS'
+  | 'VIDEO_NOT_FOUND'
+  | 'NO_TRANSCRIPT'
+  /** A YouTube-hosted track: there is no SharePoint folder to search at all. */
+  | 'YOUTUBE_NO_FETCH';
+
 export interface TrackTranscript {
   entries: TranscriptEntry[];
   source: TrackTranscriptSource;
@@ -107,6 +115,13 @@ export async function resolveTrackTranscript(input: {
   vttContent?: string | null;
   /** The teacher's Microsoft token. Without it, rung 3 is skipped. */
   msToken?: string | null;
+  /**
+   * 'youtube' skips rung 3 outright. Graph can only resolve a SharePoint sharing
+   * URL, so handing it a youtu.be link produces VIDEO_NOT_FOUND, which reads to
+   * the teacher as "that recording link is broken" when the link is fine and the
+   * step simply does not apply.
+   */
+  videoSource?: string | null;
 }): Promise<TrackTranscript> {
   // 1. The upload in front of them.
   if (input.vttContent) {
@@ -121,7 +136,11 @@ export async function resolveTrackTranscript(input: {
   const stored = await readStored(input.trackId);
   if (stored) return { entries: stored, source: 'stored' };
 
-  // 3. Graph, via the recording's sharing link.
+  // 3. Graph, via the recording's sharing link. Only meaningful for a file that
+  //    actually lives in SharePoint.
+  if (input.videoSource === 'youtube') {
+    return { entries: [], source: 'none', sharepointError: 'YOUTUBE_NO_FETCH' };
+  }
   if (!input.recordingUrl || !input.msToken) {
     return { entries: [], source: 'none', sharepointError: 'NO_TRANSCRIPT' };
   }

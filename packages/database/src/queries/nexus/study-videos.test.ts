@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getStudyVideoState, listStudyVideoTracks } from './study-videos';
+import { getStudyVideoState, listStudyVideoTracks, createStudyVideoTrack } from './study-videos';
 
 /**
  * Which recordings a student is shown, and which of them gate the chapter test.
@@ -219,5 +219,63 @@ describe('listStudyVideoTracks: the staff view', () => {
       }),
     );
     expect(tracks[0].section_count).toBe(1);
+  });
+});
+
+/**
+ * Which player a track gets.
+ *
+ * This used to be hardcoded to 'sharepoint' on insert, which was a real bug
+ * rather than a simplification: the serving side has always branched on this
+ * column and can hand back a YouTube id, so a YouTube recording could be played
+ * but never attached. The classification itself lives in the route, because the
+ * YouTube id parser is an app module this package must not reach into.
+ */
+function insertCapturingClient(captured: { payload?: Record<string, unknown> }) {
+  const chain: any = {
+    insert: (payload: Record<string, unknown>) => {
+      captured.payload = payload;
+      return chain;
+    },
+    select: () => chain,
+    single: async () => ({ data: { id: 'new-track', ...captured.payload }, error: null }),
+  };
+  return { from: () => chain } as never;
+}
+
+describe('createStudyVideoTrack: the recording decides the player', () => {
+  const base = {
+    studyFileId: FILE,
+    language: 'en' as const,
+    recordingUrl: 'https://example.sharepoint.com/:v:/s/CommonClasses/abc',
+  };
+
+  it('stores a YouTube track when the route classifies it as one', async () => {
+    const captured: { payload?: Record<string, unknown> } = {};
+    await createStudyVideoTrack(
+      { ...base, recordingUrl: 'https://youtu.be/dQw4w9WgXcQ', videoSource: 'youtube' },
+      insertCapturingClient(captured),
+    );
+    expect(captured.payload?.video_source).toBe('youtube');
+  });
+
+  it('stores a SharePoint track when told so', async () => {
+    const captured: { payload?: Record<string, unknown> } = {};
+    await createStudyVideoTrack({ ...base, videoSource: 'sharepoint' }, insertCapturingClient(captured));
+    expect(captured.payload?.video_source).toBe('sharepoint');
+  });
+
+  it('defaults to sharepoint, preserving the old behaviour for any caller that omits it', async () => {
+    const captured: { payload?: Record<string, unknown> } = {};
+    await createStudyVideoTrack(base, insertCapturingClient(captured));
+    expect(captured.payload?.video_source).toBe('sharepoint');
+  });
+
+  it('never claims a class parent, so a track cannot leak into the catch-up journey', async () => {
+    const captured: { payload?: Record<string, unknown> } = {};
+    await createStudyVideoTrack(base, insertCapturingClient(captured));
+    expect(captured.payload?.scheduled_class_id).toBeNull();
+    expect(captured.payload?.classroom_id).toBeNull();
+    expect(captured.payload?.study_file_id).toBe(FILE);
   });
 });

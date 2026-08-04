@@ -40,6 +40,13 @@ export interface ImportQuestion {
   explanation: string | null;
   difficulty: ImportDifficulty;
   exam_relevance: ImportExam;
+  /**
+   * The sentence from the source document the answer rests on. Null when the
+   * model did not give one, which is the whole point: when nobody reads the
+   * questions before students do, an unquoted question is an unchecked claim,
+   * and the PDF generator drops it. The paste flow only records it.
+   */
+  source_quote: string | null;
   /** Registry tag ids resolved from known slugs. */
   tag_ids: string[];
   /** Every slug kept for this question, including ones still pending creation. */
@@ -67,19 +74,31 @@ export interface ImportValidationResult {
 }
 
 export interface BuildImportPromptOptions {
-  /** The chapter or topic being turned into a test, used in the prompt and the title. */
+  /**
+   * A chapter or topic hint. Optional, and only ever a hint: the document is
+   * the authority on what it covers, so the model is told to name the chapter
+   * itself and to overrule this when it disagrees.
+   */
   chapter?: string;
   exam?: ImportExam;
   /** How many questions to ask for. */
   count?: number;
   /** Where the teacher intends to file it, offered back as suggested_folder. */
   folderPath?: string[];
+  /**
+   * The document is attached to the same call rather than by a human in a chat
+   * window. Makes source_quote mandatory, because the server drops any question
+   * without one and there is no reviewer to catch what slips through.
+   */
+  fromDocument?: boolean;
 }
 
 /** Dense tagging is the point, so this sits well above the tagging assistant's 5. */
 export const MAX_TAGS_PER_QUESTION = 8;
 const MAX_QUESTIONS_PER_PASTE = 200;
 const MIN_QUESTION_CHARS = 10;
+/** Short enough to admit a real one-line quote, long enough to reject "yes". */
+const MIN_SOURCE_QUOTE_CHARS = 15;
 const OPTION_KEYS = ['a', 'b', 'c', 'd', 'e', 'f'] as const;
 
 /** Same rule as qbSlugify in qb-tags.ts, so a proposed slug survives the round trip unchanged. */
@@ -92,7 +111,11 @@ export function importSlugify(input: string): string {
     .slice(0, 60);
 }
 
-/** The full copy-paste prompt. The teacher attaches the PDF themselves. */
+/**
+ * The full prompt. Two callers: the wizard, where the teacher attaches the PDF
+ * themselves in ChatGPT, and the chapter generator, which attaches it to the
+ * same request. Both get the same contract so one reply parser serves both.
+ */
 export function buildImportPrompt(
   registry: ImportRegistryTag[],
   opts: BuildImportPromptOptions = {},
@@ -108,17 +131,28 @@ export function buildImportPrompt(
   const exam = opts.exam || 'BOTH';
   const count = opts.count && opts.count > 0 ? opts.count : 30;
   const folder = (opts.folderPath || []).filter(Boolean).join(' / ');
-  const title = chapter ? `${chapter} Test` : 'Chapter Test';
 
   return [
     'You are writing architecture entrance-exam questions (NATA / JEE Paper 2) for a question bank.',
     '',
     'TASK',
-    `Read the attached document and write ${count} questions${chapter ? ` on: ${chapter}` : ''}.`,
+    `Read the attached document and write ${count} questions on what it covers.`,
     `Target exam: ${exam}.`,
     'Every question must be answerable from the document. Do not invent facts.',
     'Spread the difficulty: roughly 30% EASY, 50% MEDIUM, 20% HARD.',
     'Write a one or two sentence explanation for every answer, saying why the answer is right.',
+    'Quote, in "source_quote", the sentence or short passage from the document the answer rests on.',
+    opts.fromDocument
+      ? 'A question with no "source_quote" is discarded without being read by anyone, so quote every one.'
+      : 'Copy it from the document rather than paraphrasing it.',
+    '',
+    'NAMING',
+    // The document knows its own chapter better than a filename does, so the
+    // hint is offered and overrulable rather than baked into the sample title.
+    'Read the chapter name off the document itself and use it for "title" and the first level of "suggested_folder".',
+    chapter
+      ? `The file is called "${chapter}". Use that only if the document does not name itself more precisely.`
+      : 'Nothing else names this chapter, so take the name from the document.',
     '',
     'ALLOWED TAGS (use these slug values, never invent a slug here):',
     tagLines,
@@ -133,13 +167,17 @@ export function buildImportPrompt(
     'Reply with ONLY this JSON. No commentary, no markdown fences.',
     JSON.stringify(
       {
-        test: { title, suggested_folder: folder || 'Foundation / Chapter name' },
+        test: {
+          title: 'The chapter name, read from the document',
+          suggested_folder: folder || 'Foundation / The chapter name',
+        },
         questions: [
           {
             question: 'The question stem.',
             options: { a: 'first option', b: 'second option', c: 'third option', d: 'fourth option' },
             answer: 'b',
             explanation: 'Why b is right.',
+            source_quote: 'The sentence from the document that makes b the answer.',
             difficulty: 'MEDIUM',
             exam: exam,
             tag_slugs: ['history_of_architecture', 'indian_architecture'],
@@ -155,6 +193,7 @@ export function buildImportPrompt(
     '"answer" must be one of the option keys (a, b, c, d), not the option text.',
     'Omit "options" only for a numerical-answer question, and then put the number in "answer".',
     'Omit "new_tags" when every tag you need already exists.',
+    'Never omit "source_quote".',
     'Do not repeat the same question twice.',
   ].join('\n');
 }
@@ -421,6 +460,13 @@ export function validateImportJSON(
       options: format === 'MCQ' ? options : null,
       correct_answer: correctAnswer,
       explanation: typeof r.explanation === 'string' && r.explanation.trim() ? r.explanation.trim() : null,
+      // Kept verbatim rather than normalised: a quote that has been reflowed is
+      // no longer quite a quote, and the only thing read off it is whether it
+      // is there. A one-word "yes" is not evidence, hence the length floor.
+      source_quote:
+        typeof r.source_quote === 'string' && r.source_quote.trim().length >= MIN_SOURCE_QUOTE_CHARS
+          ? r.source_quote.trim()
+          : null,
       difficulty: difficulty || 'MEDIUM',
       exam_relevance: exam || 'BOTH',
       tag_ids: tagIds.slice(0, MAX_TAGS_PER_QUESTION),

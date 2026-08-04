@@ -3,6 +3,14 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { recordCatchupTestAttempt } from './catchup-journey';
 import { gradeQBAnswerStrict, normaliseQuestionFormat } from './question-bank';
+import {
+  applyTestOptionMap,
+  buildTestOptionMaps,
+  originalToDisplayedId,
+  pickTestDraw,
+  testDrawSeed,
+  translateDrawnAnswers,
+} from './question-draw';
 import { NEXUS_TEACHER_TEST_KINDS } from '../../types';
 import type {
   NexusPlacementContext,
@@ -22,6 +30,7 @@ const TESTS = 'nexus_tests';
 const TEST_QUESTIONS = 'nexus_test_questions';
 const ATTEMPTS = 'nexus_test_attempts';
 const PLACEMENTS = 'nexus_test_placements';
+const DRAWS = 'nexus_test_draws';
 
 export type TimerType = 'none' | 'full' | 'per_question';
 
@@ -62,6 +71,13 @@ export interface ComposeTestInput {
   classroomId?: string | null;
   /** Where this test is filed in the library. null means Unfiled. */
   folderId?: string | null;
+  /**
+   * How many of the test's questions one sitting is served. Omit to serve all
+   * of them, which is what every test did before pools existed. Setting it
+   * below the question count turns the test into a pool: each attempt draws its
+   * own window, so a retry is mostly questions the student has not seen.
+   */
+  questionsToServe?: number | null;
 }
 
 /**
@@ -115,6 +131,13 @@ export async function composeTest(
       created_by: input.createdBy ?? null,
       created_by_student: input.createdByStudent ?? null,
       folder_id: input.folderId ?? null,
+      // Clamped rather than trusted: a serve count above the question count is
+      // the same as serving everything, and storing it that way would make the
+      // teacher's "40 of 20" read back as a pool it is not.
+      questions_to_serve:
+        typeof input.questionsToServe === 'number' && input.questionsToServe > 0
+          ? Math.min(Math.floor(input.questionsToServe), ids.length)
+          : null,
     })
     .select('id')
     .single();
@@ -783,12 +806,213 @@ export async function getComposedTestQuestions(
   });
 }
 
+/* ─────────────────────────── PER-ATTEMPT DRAWS ──────────────────────────── */
+
+export interface NexusTestDraw {
+  attempt_number: number;
+  /** Exactly the questions served, in the order served. */
+  question_ids: string[];
+  /** { questionId: original option ids in displayed order }. */
+  option_maps: Record<string, string[]>;
+}
+
+/**
+ * The next attempt number this student would sit.
+ *
+ * Needed by surfaces that serve a paper before an attempt row exists (a study
+ * chapter test is fetched on a GET and only writes an attempt when the answers
+ * arrive), so the draw can be pinned to the sitting the student is about to
+ * take rather than to the one they last finished.
+ */
+export async function nextAttemptNumber(
+  testId: string,
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<number> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(ATTEMPTS)
+    .select('attempt_number, status')
+    .eq('test_id', testId)
+    .eq('student_id', studentId)
+    .order('attempt_number', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const latest = (data || [])[0];
+  if (!latest) return 1;
+  // An attempt still open IS the sitting in progress, so it keeps its number.
+  // Anything else has been submitted or abandoned and the next go is a new one.
+  return latest.status === 'in_progress'
+    ? Number(latest.attempt_number) || 1
+    : (Number(latest.attempt_number) || 0) + 1;
+}
+
+export async function getTestDraw(
+  testId: string,
+  studentId: string,
+  attemptNumber: number,
+  client?: TypedSupabaseClient,
+): Promise<NexusTestDraw | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(DRAWS)
+    .select('attempt_number, question_ids, option_maps')
+    .eq('test_id', testId)
+    .eq('student_id', studentId)
+    .eq('attempt_number', attemptNumber)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    attempt_number: Number(data.attempt_number) || attemptNumber,
+    question_ids: (data.question_ids as string[]) || [],
+    option_maps: (data.option_maps as Record<string, string[]>) || {},
+  };
+}
+
+/**
+ * The draw for one sitting, computed and stored the first time it is asked for.
+ *
+ * Returns null when the test is not a pool, which leaves every existing test on
+ * exactly the path it was on before draws existed.
+ *
+ * Storing rather than recomputing is the point. The pick is deterministic on
+ * (student, test, attempt number), but the pool it picks FROM is not: a teacher
+ * who edits the paper between a student opening it and submitting it would
+ * otherwise change the questions under them mid-attempt, and the grade would be
+ * computed against a paper they never saw.
+ */
+export async function ensureTestDraw(
+  input: {
+    testId: string;
+    studentId: string;
+    attemptNumber: number;
+    questions: NexusComposedQuestion[];
+    /** From nexus_tests.questions_to_serve. null or >= the pool size means no draw. */
+    serve: number | null | undefined;
+  },
+  client?: TypedSupabaseClient,
+): Promise<NexusTestDraw | null> {
+  const serve = Number(input.serve);
+  if (!Number.isFinite(serve) || serve <= 0 || serve >= input.questions.length) return null;
+
+  const existing = await getTestDraw(input.testId, input.studentId, input.attemptNumber, client);
+  if (existing) return existing;
+
+  const supabase = client || getSupabaseAdminClient();
+  const seed = testDrawSeed(input.studentId, input.testId);
+  const questionIds = pickTestDraw(
+    input.questions.map((q) => q.question_id),
+    serve,
+    input.attemptNumber,
+    seed,
+  );
+  const drawn = input.questions.filter((q) => questionIds.includes(q.question_id));
+  const optionMaps = buildTestOptionMaps(drawn, input.attemptNumber, seed);
+
+  const { error } = await supabase.from(DRAWS).insert({
+    test_id: input.testId,
+    student_id: input.studentId,
+    attempt_number: input.attemptNumber,
+    question_ids: questionIds,
+    option_maps: optionMaps,
+  });
+
+  if (error) {
+    // Two tabs opened the same paper at once. The pick is deterministic, so the
+    // row that won is the one this call would have written; read it back rather
+    // than failing a student who did nothing wrong.
+    if ((error as any).code === '23505') {
+      const raced = await getTestDraw(input.testId, input.studentId, input.attemptNumber, supabase);
+      if (raced) return raced;
+    }
+    throw error;
+  }
+
+  return { attempt_number: input.attemptNumber, question_ids: questionIds, option_maps: optionMaps };
+}
+
+/**
+ * Attach the attempt row to its draw, once the attempt exists.
+ *
+ * Best-effort by design: the draw is found by (test, student, attempt number)
+ * on every read, and attempt_id is only there so an attempt can be traced back
+ * to the paper it was sat under. Failing the submit over a reporting column
+ * would be the wrong trade.
+ */
+async function stampDrawWithAttempt(
+  testId: string,
+  studentId: string,
+  attemptNumber: number,
+  attemptId: string,
+  supabase: TypedSupabaseClient,
+): Promise<void> {
+  const { error } = await supabase
+    .from(DRAWS)
+    .update({ attempt_id: attemptId })
+    .eq('test_id', testId)
+    .eq('student_id', studentId)
+    .eq('attempt_number', attemptNumber)
+    .is('attempt_id', null);
+  if (error) console.error('Could not attach the attempt to its draw:', error.message);
+}
+
+/**
+ * Cut a composed paper down to one draw: the drawn questions, in the drawn
+ * order, with their options permuted and relabelled.
+ *
+ * A drawn id the test no longer holds is skipped rather than served empty,
+ * which is what happens when a teacher removes a question mid-attempt.
+ */
+export function applyTestDraw<T extends NexusComposedQuestion>(questions: T[], draw: NexusTestDraw | null): T[] {
+  if (!draw) return questions;
+  const byId = new Map(questions.map((q) => [q.question_id, q]));
+  const out: T[] = [];
+  draw.question_ids.forEach((id, index) => {
+    const q = byId.get(id);
+    if (!q) return;
+    out.push({ ...applyTestOptionMap(q, draw.option_maps?.[id]), sort_order: index });
+  });
+  return out;
+}
+
+/**
+ * A test's questions as one student should see them for their next sitting:
+ * drawn, permuted and answer-free.
+ *
+ * For surfaces that hand over a whole paper at once and grade it in a single
+ * later call. The timed take page goes through startOrResumeAttempt instead,
+ * which returns the same paper alongside the attempt row.
+ */
+export async function getServedTestQuestions(
+  testId: string,
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<NexusComposedQuestion[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const [meta, questions] = await Promise.all([
+    getTestMeta(testId, supabase),
+    getComposedTestQuestions(testId, false, supabase),
+  ]);
+  if (!meta || questions.length === 0) return questions;
+
+  const attemptNumber = await nextAttemptNumber(testId, studentId, supabase);
+  const draw = await ensureTestDraw(
+    { testId, studentId, attemptNumber, questions, serve: meta.questions_to_serve },
+    supabase,
+  );
+  return applyTestDraw(questions, draw);
+}
+
 /** Test metadata (student-safe fields). */
 export async function getTestMeta(testId: string, client?: TypedSupabaseClient): Promise<any | null> {
   const supabase = client || getSupabaseAdminClient();
   const { data } = await supabase
     .from(TESTS)
-    .select('id, title, description, test_type, duration_minutes, per_question_seconds, total_marks, passing_marks, is_published, is_active, shuffle_questions, is_repository, created_from, created_at')
+    // test_kind and folder_id were missing while the test detail page read both:
+    // it seeds its type dropdown from test_kind, so every test read back as
+    // 'classroom_assigned' no matter what had been stored.
+    .select('id, title, description, test_type, duration_minutes, per_question_seconds, total_marks, passing_marks, is_published, is_active, shuffle_questions, is_repository, created_from, test_kind, folder_id, questions_to_serve, created_at')
     .eq('id', testId)
     .maybeSingle();
   return data || null;
@@ -1206,6 +1430,12 @@ export interface StartAttemptResult {
   /** Submitted attempts before this one. */
   previous_attempts: number;
   best_percentage: number | null;
+  /**
+   * The paper this sitting was served, when the test is a pool. null means the
+   * caller should serve the whole composed test, which is what every
+   * non-pool test does.
+   */
+  draw: NexusTestDraw | null;
 }
 
 /**
@@ -1261,6 +1491,20 @@ export async function startOrResumeAttempt(
 
   const mode = input.mode ?? 'official';
 
+  /** The paper for one sitting. Idempotent, so resuming re-reads rather than re-draws. */
+  const drawFor = (attemptNumber: number) =>
+    ensureTestDraw(
+      { testId: input.testId, studentId: input.studentId, attemptNumber, questions, serve: meta.questions_to_serve },
+      supabase,
+    );
+
+  // The clock belongs to the paper the student is sitting, not to the pool it
+  // was drawn from. A per-question timer measured against 40 pooled questions
+  // would give a 20-question sitting twice the time it is meant to have.
+  const serve = Number(meta.questions_to_serve);
+  const servedCount =
+    Number.isFinite(serve) && serve > 0 ? Math.min(serve, questions.length) : questions.length;
+
   const open = rows.find((r) => r.status === 'in_progress');
   if (open) {
     // A stale attempt in the OTHER mode must not be resumed into this one.
@@ -1271,8 +1515,14 @@ export async function startOrResumeAttempt(
     // attempt who starts a revision would resume the official one, and passing
     // it would overwrite their real best score with a practice result.
     const sameMode = (open.mode ?? 'official') === mode;
-    if (sameMode && !attemptIsStale(open, meta, questions.length)) {
-      return { attempt: open, resumed: true, previous_attempts: submitted.length, best_percentage: best };
+    if (sameMode && !attemptIsStale(open, meta, servedCount)) {
+      return {
+        attempt: open,
+        resumed: true,
+        previous_attempts: submitted.length,
+        best_percentage: best,
+        draw: await drawFor(Number(open.attempt_number) || 1),
+      };
     }
     // The clock ran out while they were away. Retire it so a fresh attempt can
     // start; before the CHECK was widened this write failed and the dead attempt
@@ -1316,22 +1566,35 @@ export async function startOrResumeAttempt(
         .eq('status', 'in_progress')
         .maybeSingle();
       if (raced) {
+        const racedNumber = Number((raced as NexusAttemptRow).attempt_number) || 1;
+        const racedDraw = await drawFor(racedNumber);
+        if (racedDraw) {
+          await stampDrawWithAttempt(input.testId, input.studentId, racedNumber, raced.id, supabase);
+        }
         return {
           attempt: raced as NexusAttemptRow,
           resumed: true,
           previous_attempts: submitted.length,
           best_percentage: best,
+          draw: racedDraw,
         };
       }
     }
     throw error;
   }
 
+  // After the insert, so the draw can name the attempt it belongs to. Drawing
+  // first would be wrong in the opposite direction: a draw for an attempt that
+  // failed to insert would be adopted by the NEXT sitting under the same number.
+  const draw = await drawFor(nextNumber);
+  if (draw) await stampDrawWithAttempt(input.testId, input.studentId, nextNumber, created.id, supabase);
+
   return {
     attempt: created as NexusAttemptRow,
     resumed: false,
     previous_attempts: submitted.length,
     best_percentage: best,
+    draw,
   };
 }
 
@@ -1361,7 +1624,9 @@ export async function saveAttemptAnswers(
 export async function submitAttempt(
   input: { attemptId: string; studentId: string; answers?: Record<string, string> },
   client?: TypedSupabaseClient,
-): Promise<NexusTestGradeResult & { test_id: string; attempt_number: number }> {
+): Promise<
+  NexusTestGradeResult & { test_id: string; attempt_number: number; draw: NexusTestDraw | null }
+> {
   const supabase = client || getSupabaseAdminClient();
 
   const { data: attempt, error: aErr } = await supabase
@@ -1374,17 +1639,40 @@ export async function submitAttempt(
   if (!attempt) throw new Error('ATTEMPT_NOT_FOUND');
   if (attempt.status !== 'in_progress') throw new Error('ATTEMPT_ALREADY_SUBMITTED');
 
-  const [meta, questions, placement] = await Promise.all([
+  const attemptNumber = Number(attempt.attempt_number) || 1;
+  const [meta, composed, placement, draw] = await Promise.all([
     getTestMeta(attempt.test_id, supabase),
     getComposedTestQuestions(attempt.test_id, true, supabase),
     attempt.placement_id ? getPlacementById(attempt.placement_id, supabase) : Promise.resolve(null),
+    getTestDraw(attempt.test_id, attempt.student_id, attemptNumber, supabase),
   ]);
   if (!meta) throw new Error('TEST_NOT_FOUND');
+  if (composed.length === 0) throw new Error('TEST_HAS_NO_QUESTIONS');
+
+  // Grade the paper the student was actually served, not the pool it came from.
+  // Both halves matter: scoring 20 answers out of a 40-question denominator
+  // caps everyone at 50%, and reading a permuted answer without translating it
+  // marks a correct choice wrong.
+  const questions = applyTestDraw(composed, draw);
   if (questions.length === 0) throw new Error('TEST_HAS_NO_QUESTIONS');
 
-  const answers = input.answers || (attempt.answers as Record<string, string>) || {};
+  const submitted = input.answers || (attempt.answers as Record<string, string>) || {};
+  const answers = draw
+    ? translateDrawnAnswers(submitted, draw.question_ids, draw.option_maps)
+    : submitted;
   const totalPossible = questions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
   const graded = gradeComposedAnswers(questions, answers, resolvePassingPct(placement, meta, totalPossible));
+
+  // Grading ran in the question's own lettering; the student only ever saw the
+  // permuted one. Handing back an untranslated review would highlight a
+  // different option than they clicked and name a different one as correct.
+  if (draw) {
+    graded.review = graded.review.map((r) => ({
+      ...r,
+      selected: originalToDisplayedId(r.selected, draw.option_maps?.[r.question_id]),
+      correct_answer: originalToDisplayedId(r.correct_answer, draw.option_maps?.[r.question_id]),
+    }));
+  }
 
   const startedAt = new Date(attempt.started_at || Date.now()).getTime();
   const timeSpent = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
@@ -1392,7 +1680,10 @@ export async function submitAttempt(
   const { error: uErr } = await supabase
     .from(ATTEMPTS)
     .update({
-      answers,
+      // The raw submission, in the lettering the student clicked. Storing the
+      // translated form would make the answers row unreadable without also
+      // fetching the draw, and would disagree with every autosave before it.
+      answers: submitted,
       status: 'submitted',
       submitted_at: new Date().toISOString(),
       time_spent_seconds: timeSpent,
@@ -1422,7 +1713,11 @@ export async function submitAttempt(
   return {
     attempt_id: attempt.id,
     test_id: attempt.test_id,
-    attempt_number: Number(attempt.attempt_number) || 1,
+    attempt_number: attemptNumber,
+    // Handed back so a caller enriching the review with stems and options
+    // permutes them the same way the paper was, rather than re-reading the
+    // bank and pairing displayed answers with original lettering.
+    draw,
     ...graded,
   };
 }

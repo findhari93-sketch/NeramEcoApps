@@ -456,6 +456,7 @@ import {
   createPlacement,
   getComposedTestQuestions,
   getPlacementsByContext,
+  getServedTestQuestions,
   getTestMeta,
   gradeTestOneShot,
 } from './test-repository';
@@ -465,7 +466,10 @@ export interface NexusPlacedChapterTest {
   test_id: string;
   title: string;
   passing_pct: number;
+  /** How many questions one sitting asks. For a pool this is the serve count, not the pool size. */
   question_count: number;
+  /** The whole pool, when the test holds more than it serves. null when it serves everything. */
+  pool_size: number | null;
   is_published: boolean;
 }
 
@@ -485,6 +489,11 @@ export async function getPlacedChapterTest(
   const questions = await getComposedTestQuestions(placement.test_id, false, supabase);
   const totalMarks = questions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
 
+  // A pool holds more than it asks. The teacher's dashboard and the student's
+  // "12 questions" label both want the sitting, not the reservoir.
+  const serve = Number(meta.questions_to_serve);
+  const isPool = Number.isFinite(serve) && serve > 0 && serve < questions.length;
+
   return {
     placement_id: placement.id,
     test_id: placement.test_id,
@@ -497,7 +506,8 @@ export async function getPlacedChapterTest(
         : meta.passing_marks != null && totalMarks > 0
           ? Math.round((Number(meta.passing_marks) / totalMarks) * 100)
           : 70,
-    question_count: questions.length,
+    question_count: isPool ? serve : questions.length,
+    pool_size: isPool ? questions.length : null,
     is_published: !!meta.is_published,
   };
 }
@@ -506,16 +516,23 @@ export async function getPlacedChapterTest(
  * The student-facing paper, in the shape the chapter dialog already renders.
  * Answers are never included. Returns null when nothing is linked or the linked
  * test is unpublished.
+ *
+ * Takes the student because a pooled chapter test serves a different subset per
+ * student and per sitting. The draw is decided and stored HERE, on the read,
+ * rather than when the answers arrive: this route hands over the whole paper at
+ * once, so a draw made at grade time would score them against questions they
+ * were never shown.
  */
 export async function getPlacedTestForStudent(
   fileId: string,
+  studentId: string,
   client?: TypedSupabaseClient,
 ): Promise<(NexusStudyTestForStudent & { placement_id: string; test_id: string }) | null> {
   const supabase = client || getSupabaseAdminClient();
   const placed = await getPlacedChapterTest(fileId, supabase);
   if (!placed || !placed.is_published) return null;
 
-  const questions = await getComposedTestQuestions(placed.test_id, false, supabase);
+  const questions = await getServedTestQuestions(placed.test_id, studentId, supabase);
   return {
     id: placed.test_id,
     test_id: placed.test_id,

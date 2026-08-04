@@ -39,8 +39,10 @@ import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
+import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import MathText from '@/components/common/MathText';
+import TestQuestionEditorDialog from '@/components/tests/TestQuestionEditorDialog';
 
 interface DetailTest {
   id: string;
@@ -55,6 +57,8 @@ interface DetailTest {
   is_repository: boolean;
   created_from: string | null;
   test_kind?: NexusTestKind | null;
+  /** How many of the questions one sitting asks. null asks all of them. */
+  questions_to_serve?: number | null;
 }
 
 interface DetailQuestion {
@@ -142,6 +146,7 @@ export default function TestDetailPage() {
   const [tab, setTab] = useState<'overview' | 'results'>('overview');
   const [duplicating, setDuplicating] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [assignFrom, setAssignFrom] = useState('');
   const [assignUntil, setAssignUntil] = useState('');
   const [assignPct, setAssignPct] = useState<number>(70);
@@ -418,6 +423,16 @@ export default function TestDetailPage() {
         >
           Assign
         </Button>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<EditNoteOutlinedIcon />}
+          onClick={() => setEditorOpen(true)}
+          disabled={busy}
+          sx={{ textTransform: 'none', minHeight: 44 }}
+        >
+          Edit questions
+        </Button>
         {attemptsCount > 0 && (
           <Button
             variant="outlined"
@@ -517,9 +532,22 @@ export default function TestDetailPage() {
       )}
 
       {/* Questions */}
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-        Questions
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+          Questions
+        </Typography>
+        {/* A pool holds more than it asks, so the count above the list would
+            otherwise contradict the count a student sees on the paper. */}
+        {test.questions_to_serve != null && test.questions_to_serve < questions.length && (
+          <Chip
+            size="small"
+            color="primary"
+            variant="outlined"
+            label={`Pool of ${questions.length}, ${test.questions_to_serve} asked each attempt`}
+            sx={{ height: 22 }}
+          />
+        )}
+      </Box>
       {questions.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No questions found for this test.
@@ -736,6 +764,15 @@ export default function TestDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <TestQuestionEditorDialog
+        open={editorOpen}
+        testId={testId}
+        testTitle={test.title}
+        authFetch={authFetch}
+        onClose={() => setEditorOpen(false)}
+        onSaved={load}
+      />
 
       <Snackbar
         open={Boolean(toast)}

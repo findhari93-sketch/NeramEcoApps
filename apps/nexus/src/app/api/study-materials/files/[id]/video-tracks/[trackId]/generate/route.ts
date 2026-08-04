@@ -37,6 +37,7 @@ export async function POST(
       recordingUrl: track.recording_url,
       vttContent: body?.vtt_content ? String(body.vtt_content) : null,
       msToken: (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '') || null,
+      videoSource: track.video_source,
     });
 
     if (!transcript.entries.length) {
@@ -56,10 +57,18 @@ export async function POST(
       // 200, not an error status. "No transcript yet" is an ordinary state for a
       // recording that was uploaded rather than recorded in Teams, and the
       // editor answers it by offering a .vtt upload rather than by apologising.
+      //
+      // Name the reason. The old wording ("Upload a .vtt file and try again")
+      // read as a transient failure worth retrying, when for a hand-uploaded
+      // recording there is nothing to retry: no Teams meeting was ever behind
+      // it, so no transcript will ever appear on its own.
       return NextResponse.json({
         error: 'no_transcript',
+        code,
         message:
-          'No transcript found for this recording. Upload a .vtt file and try again.',
+          code === 'YOUTUBE_NO_FETCH'
+            ? 'This recording is on YouTube, so there is no SharePoint transcript to fetch. Upload its .vtt file to create the checkpoints.'
+            : 'This recording has no transcript stored in SharePoint, which is normal for a recording that was uploaded by hand. Upload its .vtt file to create the checkpoints.',
       });
     }
 

@@ -208,7 +208,58 @@ describe('validateImportJSON', () => {
   });
 });
 
+describe('source_quote, which decides what an unreviewed test may publish', () => {
+  it('keeps a quote the model gave', () => {
+    const quote = 'Shahjahanabad was founded by Shah Jahan in 1639 and is now Old Delhi.';
+    const result = validateImportJSON(wrap([{ ...GOOD_MCQ, source_quote: quote }]), REGISTRY);
+    expect(result.questions[0].source_quote).toBe(quote);
+  });
+
+  it('reports no quote rather than inventing one', () => {
+    // The generator drops these. It is the only thing standing between a
+    // hallucinated question and a student, so it must not be filled in with a
+    // default that would make an ungrounded question look grounded.
+    expect(validateImportJSON(wrap([GOOD_MCQ]), REGISTRY).questions[0].source_quote).toBeNull();
+  });
+
+  it('rejects a quote too short to be evidence', () => {
+    const result = validateImportJSON(wrap([{ ...GOOD_MCQ, source_quote: 'yes' }]), REGISTRY);
+    expect(result.questions[0].source_quote).toBeNull();
+  });
+
+  it('does not drop the question itself over a missing quote', () => {
+    // Dropping is the generator's decision, not the validator's: a teacher
+    // pasting from ChatGPT is reviewing the questions themselves and should
+    // keep every usable one.
+    const result = validateImportJSON(wrap([GOOD_MCQ]), REGISTRY);
+    expect(result.questions).toHaveLength(1);
+    expect(result.errors).toEqual([]);
+  });
+});
+
 describe('buildImportPrompt', () => {
+  it('asks the model to name the chapter from the document', () => {
+    // The typed "Chapter or topic" field is gone. The document is the only
+    // thing that knows what it covers, and its answer already won: the AI's
+    // test.title has always overridden the title built from the typed value.
+    const prompt = buildImportPrompt(REGISTRY, { exam: 'NATA', count: 40 });
+    expect(prompt).toContain('Read the chapter name off the document');
+    expect(prompt).toContain('take the name from the document');
+    expect(prompt).not.toContain('Chapter Test');
+  });
+
+  it('offers a filename as a hint the model may overrule', () => {
+    const prompt = buildImportPrompt(REGISTRY, { chapter: 'Islamic architecture _ Chapter 2' });
+    expect(prompt).toContain('Islamic architecture _ Chapter 2');
+    expect(prompt).toContain('does not name itself more precisely');
+  });
+
+  it('demands a quote when the document is attached to the same call', () => {
+    const attached = buildImportPrompt(REGISTRY, { fromDocument: true });
+    expect(attached).toContain('discarded without being read by anyone');
+    expect(buildImportPrompt(REGISTRY, {})).not.toContain('discarded without being read');
+  });
+
   it('lists every registry slug and states the reply contract', () => {
     const prompt = buildImportPrompt(REGISTRY, { chapter: 'History of Architecture', exam: 'NATA', count: 40 });
     for (const tag of REGISTRY) expect(prompt).toContain(tag.slug);

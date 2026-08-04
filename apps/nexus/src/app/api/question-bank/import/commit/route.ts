@@ -1,18 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
-import {
-  addQuestionTagPairs,
-  composeTest,
-  createQBQuestion,
-  findOrCreateTestFolderPath,
-  findOrCreateQBTag,
-  getTestFolderById,
-  getSupabaseAdminClient,
-  updateQBQuestion,
-  NEXUS_TEACHER_TEST_KINDS,
-} from '@neram/database';
-import type { NexusTestKind } from '@neram/database';
+import { commitImport, ImportInputError, type CommitRow } from '@/lib/qb-import-service';
+import { saveTestImportPayload } from '@/lib/test-import-store';
 
 /**
  * POST /api/question-bank/import/commit   (teacher/admin)
@@ -24,8 +14,10 @@ import type { NexusTestKind } from '@neram/database';
  * {
  *   title, folder_id?, folder_path?: string[],
  *   timer_type?, duration_minutes?, per_question_seconds?, passing_pct?, is_published?,
+ *   questions_to_serve?,                           // pool: ask fewer than the test holds
  *   new_tags?: [{ slug, label }],                  // theme tags the teacher approved
  *   extra_question_ids?: string[],                 // bank questions added alongside the import
+ *   source?: 'paste' | 'file_upload',              // how the JSON arrived, recorded with it
  *   questions: [{
  *     action: 'create' | 'reuse' | 'merge' | 'replace' | 'keep_both' | 'skip',
  *     existing_question_id?,                       // required for every duplicate action
@@ -35,38 +27,9 @@ import type { NexusTestKind } from '@neram/database';
  *   }]
  * }
  *
- * The duplicate actions are the teacher's four answers to "the bank already has
- * something like this": keep what is there (reuse), top it up (merge), prefer
- * the new wording (replace), or admit they are different questions after all
- * (keep_both, which then asks which of the two this test should use).
- *
- * Ordering matters: tags first (so a new question can be tagged in the same
- * pass), then questions, then the test. There is no cross-table transaction
- * available through PostgREST, so each step is written to be re-runnable:
- * findOrCreateQBTag is idempotent, and tag writes upsert on their primary key.
- * A failure part way leaves orphan bank questions, which are harmless and
- * searchable, never a half-built test.
+ * The writes themselves live in lib/qb-import-service, shared with the chapter
+ * generator so both build a test the same way.
  */
-
-type RowAction = 'create' | 'reuse' | 'merge' | 'replace' | 'keep_both' | 'skip';
-
-/** Actions that need an existing bank question to point at. */
-const DUPLICATE_ACTIONS: RowAction[] = ['reuse', 'merge', 'replace', 'keep_both'];
-
-interface CommitRow {
-  action?: RowAction;
-  existing_question_id?: string | null;
-  use_in_test?: 'new' | 'existing';
-  question_text?: string;
-  question_format?: 'MCQ' | 'NUMERICAL';
-  options?: Array<{ id: string; text: string }> | null;
-  correct_answer?: string;
-  explanation?: string | null;
-  difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
-  exam_relevance?: 'JEE' | 'NATA' | 'BOTH';
-  tag_ids?: string[];
-  new_tag_slugs?: string[];
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -80,258 +43,46 @@ export async function POST(request: NextRequest) {
     const callerId = access.caller.id;
 
     const body = await request.json();
-    const title = typeof body?.title === 'string' ? body.title.trim() : '';
-    if (!title) return NextResponse.json({ error: 'title is required' }, { status: 400 });
-
     const rows: CommitRow[] = Array.isArray(body?.questions) ? body.questions : [];
-    const extraIds: string[] = Array.isArray(body?.extra_question_ids)
-      ? body.extra_question_ids.filter((id: unknown) => typeof id === 'string')
-      : [];
-    if (rows.length === 0 && extraIds.length === 0) {
-      return NextResponse.json({ error: 'Nothing to import' }, { status: 400 });
-    }
-    if (rows.length > 200) {
-      return NextResponse.json({ error: 'Import at most 200 questions at a time' }, { status: 400 });
-    }
 
-    const supabase = getSupabaseAdminClient();
+    const result = await commitImport({
+      title: typeof body?.title === 'string' ? body.title : '',
+      callerId,
+      rows,
+      newTags: Array.isArray(body?.new_tags) ? body.new_tags : [],
+      extraQuestionIds: Array.isArray(body?.extra_question_ids) ? body.extra_question_ids : [],
+      folderId: typeof body?.folder_id === 'string' ? body.folder_id : null,
+      folderPath: Array.isArray(body?.folder_path) ? body.folder_path : null,
+      testKind: body?.test_kind,
+      timerType: body?.timer_type,
+      durationMinutes: body?.duration_minutes ?? null,
+      perQuestionSeconds: body?.per_question_seconds ?? null,
+      passingPct: body?.passing_pct ?? null,
+      isPublished: body?.is_published ?? false,
+      questionsToServe: body?.questions_to_serve ?? null,
+      createdFrom: 'ai_import',
+    });
 
-    // 1. Approved new tags. Only theme tags: exam and subject are the curated,
-    //    is_system vocabulary and an import must not extend them.
-    const slugToNewTagId = new Map<string, string>();
-    let tagsCreated = 0;
-    const approvedTags = Array.isArray(body?.new_tags) ? body.new_tags : [];
-    for (const t of approvedTags) {
-      const label = typeof t?.label === 'string' ? t.label.trim() : '';
-      const slug = typeof t?.slug === 'string' ? t.slug.trim() : '';
-      if (!label && !slug) continue;
-      const { tag, created } = await findOrCreateQBTag(
-        { group_type: 'theme', label: label || slug, slug: slug || undefined, created_by: callerId },
-        supabase,
-      );
-      slugToNewTagId.set(tag.slug, tag.id);
-      if (slug && slug !== tag.slug) slugToNewTagId.set(slug, tag.id);
-      if (created) tagsCreated += 1;
-    }
-
-    // 2. Questions, in the teacher's order. The composed test reads this array,
-    //    so a reused question sits exactly where the imported one would have.
-    const orderedQuestionIds: string[] = [];
-    const tagPairs: Array<{ question_id: string; tag_ids: string[] }> = [];
-    let created = 0;
-    let reused = 0;
-    let merged = 0;
-    let replaced = 0;
-    let keptBoth = 0;
-    let skipped = 0;
-
-    /** Write the row as a brand new bank question. Shared by create and keep_both. */
-    async function createFromRow(row: CommitRow): Promise<string | null> {
-      const text = (row.question_text || '').trim();
-      const answer = (row.correct_answer || '').trim();
-      if (!text || !answer) return null;
-      const format = row.question_format === 'NUMERICAL' ? 'NUMERICAL' : 'MCQ';
-      const question = await createQBQuestion(
-        {
-          question_text: text,
-          question_format: format,
-          options: format === 'MCQ' ? row.options ?? null : null,
-          correct_answer: answer,
-          explanation_brief: row.explanation ?? null,
-          difficulty: row.difficulty || 'MEDIUM',
-          exam_relevance: row.exam_relevance || 'BOTH',
-          // categories[] is the legacy taxonomy. Imports are tag-native, and
-          // syncTagsForNewQuestion is deliberately not called here because the
-          // model already chose better tags than a category mapping would.
-          categories: [],
-          origin: 'authored',
-          status: 'active',
-          created_by: callerId,
-        },
-        supabase,
-      );
-      return question.id;
-    }
-
-    for (const row of rows) {
-      const action: RowAction = row?.action || 'create';
-      if (action === 'skip') {
-        skipped += 1;
-        continue;
-      }
-
-      // Resolve this row's tags: registry ids the wizard already knew, plus any
-      // slug that only became real in step 1.
-      const tagIds = new Set<string>((row.tag_ids || []).filter(Boolean));
-      for (const slug of row.new_tag_slugs || []) {
-        const id = slugToNewTagId.get(slug);
-        if (id) tagIds.add(id);
-      }
-
-      if (DUPLICATE_ACTIONS.includes(action)) {
-        const existingId = row.existing_question_id;
-        if (!existingId) {
-          skipped += 1;
-          continue;
-        }
-
-        if (action === 'merge') {
-          // Merge FILLS GAPS, it never overwrites. A bank question may already
-          // carry a teacher-checked explanation, and silently replacing it with
-          // model prose would be a downgrade the teacher never sees. Tags are
-          // always additive, which is where most of the value is anyway.
-          const { data: existing } = await supabase
-            .from('nexus_qb_questions')
-            .select('id, explanation_brief')
-            .eq('id', existingId)
-            .maybeSingle();
-          if (existing && !existing.explanation_brief && row.explanation) {
-            await updateQBQuestion(existingId, { explanation_brief: row.explanation }, supabase);
-          }
-          merged += 1;
-        } else if (action === 'replace') {
-          // Replace is the deliberate opposite of merge, and it is destructive
-          // by design: the teacher compared the two side by side and said the
-          // new wording is better. Updating in place rather than adding a twin
-          // means every test already using this question inherits the fix, and
-          // its attempt history stays attached.
-          const text = (row.question_text || '').trim();
-          const answer = (row.correct_answer || '').trim();
-          if (!text || !answer) {
-            skipped += 1;
-            continue;
-          }
-          const format = row.question_format === 'NUMERICAL' ? 'NUMERICAL' : 'MCQ';
-          await updateQBQuestion(
-            existingId,
-            {
-              question_text: text,
-              question_format: format,
-              options: format === 'MCQ' ? row.options ?? null : null,
-              correct_answer: answer,
-              explanation_brief: row.explanation ?? null,
-              difficulty: row.difficulty || 'MEDIUM',
-              exam_relevance: row.exam_relevance || 'BOTH',
-            },
-            supabase,
-          );
-          replaced += 1;
-        } else if (action === 'keep_both') {
-          // Two questions that only looked alike. Both stay in the bank, and the
-          // teacher already said which one this particular test should ask.
-          const newId = await createFromRow(row);
-          if (!newId) {
-            skipped += 1;
-            continue;
-          }
-          keptBoth += 1;
-          // The tags describe the text the model wrote, so they go on the new
-          // row whichever question ends up in the test.
-          if (tagIds.size > 0) tagPairs.push({ question_id: newId, tag_ids: [...tagIds] });
-          orderedQuestionIds.push(row.use_in_test === 'existing' ? existingId : newId);
-          continue;
-        } else {
-          reused += 1;
-        }
-
-        orderedQuestionIds.push(existingId);
-        if (tagIds.size > 0) tagPairs.push({ question_id: existingId, tag_ids: [...tagIds] });
-        continue;
-      }
-
-      // action === 'create'
-      const newId = await createFromRow(row);
-      if (!newId) {
-        skipped += 1;
-        continue;
-      }
-      created += 1;
-      orderedQuestionIds.push(newId);
-      if (tagIds.size > 0) tagPairs.push({ question_id: newId, tag_ids: [...tagIds] });
-    }
-
-    // Bank questions the teacher added alongside the import, appended at the end.
-    for (const id of extraIds) {
-      if (!orderedQuestionIds.includes(id)) orderedQuestionIds.push(id);
-    }
-
-    if (orderedQuestionIds.length === 0) {
-      return NextResponse.json(
-        { error: 'Every question was skipped, so there is nothing to build a test from.' },
-        { status: 400 },
-      );
-    }
-
-    // 3. Tags, batched. Additive upsert, so a retry of this whole route is safe.
-    let tagsLinked = 0;
-    for (let i = 0; i < tagPairs.length; i += 100) {
-      const { inserted } = await addQuestionTagPairs(tagPairs.slice(i, i + 100), callerId, supabase);
-      tagsLinked += inserted;
-    }
-
-    // 4. Folder. An explicit id wins; otherwise materialise the suggested path.
-    let folderId: string | null = null;
-    if (typeof body?.folder_id === 'string' && body.folder_id) {
-      const folder = await getTestFolderById(body.folder_id, supabase);
-      if (!folder) return NextResponse.json({ error: 'That folder no longer exists' }, { status: 400 });
-      folderId = folder.id;
-    } else if (Array.isArray(body?.folder_path) && body.folder_path.length > 0) {
-      const folder = await findOrCreateTestFolderPath({ scope: 'staff' }, body.folder_path, callerId, supabase);
-      folderId = folder?.id ?? null;
-    }
-
-    // 5. The test itself.
-    const passingPct = Number(body?.passing_pct);
-    const passingMarks =
-      Number.isFinite(passingPct) && passingPct > 0
-        ? Math.max(1, Math.round((Math.min(passingPct, 100) / 100) * orderedQuestionIds.length))
-        : null;
-
-    // The teacher's label for this test. Anything outside the picker's own list
-    // falls back rather than 400ing, because the CHECK constraint is the real
-    // gate and an unknown kind here is a client bug, not a teacher's mistake.
-    const requestedKind = body?.test_kind;
-    const testKind: NexusTestKind = NEXUS_TEACHER_TEST_KINDS.some((k) => k.value === requestedKind)
-      ? requestedKind
-      : 'classroom_assigned';
-
-    const { id: testId } = await composeTest(
-      {
-        title,
-        questionIds: orderedQuestionIds,
-        testKind,
-        timerType: body?.timer_type,
-        durationMinutes: body?.duration_minutes ?? null,
-        perQuestionSeconds: body?.per_question_seconds ?? null,
-        passingMarks,
-        isPublished: body?.is_published ?? false,
-        isRepository: true,
-        createdFrom: 'ai_import',
-        createdBy: callerId,
-        folderId,
+    // Keep the paper the test was built from, so it can be downloaded, edited
+    // and handed back. Best-effort: losing the archive copy is worth far less
+    // than the test that was just created successfully.
+    await saveTestImportPayload({
+      testId: result.test_id,
+      questionIds: result.question_ids,
+      source: body?.source === 'file_upload' ? 'file_upload' : 'paste',
+      createdBy: callerId,
+      promptMeta: {
+        title: typeof body?.title === 'string' ? body.title.trim() : '',
+        questions_to_serve: body?.questions_to_serve ?? null,
+        folder_path: Array.isArray(body?.folder_path) ? body.folder_path : null,
       },
-      supabase,
-    );
+    }).catch((err) => console.error('Could not archive the import payload:', err));
 
-    return NextResponse.json(
-      {
-        data: {
-          test_id: testId,
-          folder_id: folderId,
-          question_count: orderedQuestionIds.length,
-          created,
-          reused,
-          merged,
-          replaced,
-          kept_both: keptBoth,
-          skipped,
-          tags_created: tagsCreated,
-          tags_linked: tagsLinked,
-        },
-      },
-      { status: 201 },
-    );
+    return NextResponse.json({ data: result }, { status: 201 });
   } catch (err) {
+    if (err instanceof ImportInputError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     const message = err instanceof Error ? err.message : 'Failed to import questions';
     console.error('QB import commit error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
