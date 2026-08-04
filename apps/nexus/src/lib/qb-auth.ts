@@ -117,3 +117,26 @@ export async function verifyQBAccess(
 
   return { ok: true, caller: asCaller };
 }
+
+/**
+ * Gate the routes that write a `student_custom` test.
+ *
+ * verifyQBAccess answers "may you touch the Question Bank", which is not the
+ * same question. Staff short-circuit its enrolment check, so on its own it lets
+ * a teacher create a paper stamped `created_by_student = <the teacher>`, which
+ * then surfaces in the teacher hub's "Student tests" list as if a student had
+ * built it. Pairing the two gives the real rule: a student's own paper is
+ * created only by a genuine student, and only one enrolled in the classroom.
+ *
+ * Impersonation still works as intended. A `View as student` token resolves to
+ * the target student, so the caller here IS the student, not the teacher.
+ *
+ * Returns a response to send back, or null when the caller may proceed.
+ */
+export function refuseUnlessStudent(caller: QBCaller): NextResponse | null {
+  if (resolveStaffRole(caller) === null) return null;
+  return NextResponse.json(
+    { error: 'Only students build their own practice papers. Use the teacher test builder instead.' },
+    { status: 403 },
+  );
+}

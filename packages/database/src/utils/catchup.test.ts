@@ -6,10 +6,21 @@ import {
   resolveCatchupBacklog,
   summariseCatchupBacklog,
   summariseMissedClasses,
+  summariseCatchupClock,
   missedClassDueOn,
   isOverdue,
   addDaysYmd,
+  diffDaysYmd,
+  catchupWindowDays,
+  catchupDueOn,
+  catchupDaysLeft,
+  catchupDaysSpent,
+  bankCatchupClock,
+  isCatchupClockRunning,
+  planCatchupActivation,
+  DEFAULT_CATCHUP_WINDOWS,
   type CatchupItemFacts,
+  type ResolveCatchupContext,
 } from './catchup';
 
 const cls = (over: Partial<Parameters<typeof classifyCatchupCandidate>[0]> = {}) => ({
@@ -18,6 +29,18 @@ const cls = (over: Partial<Parameters<typeof classifyCatchupCandidate>[0]> = {})
   youtube_url: null,
   ...over,
 });
+
+const TODAY = '2026-08-10';
+
+/** The context every resolve needs, with the shipped defaults. */
+const ctx = (over: Partial<ResolveCatchupContext> = {}): ResolveCatchupContext => ({
+  today: TODAY,
+  windows: DEFAULT_CATCHUP_WINDOWS,
+  ...over,
+});
+
+/** A clock started on `on`, with `used` days already banked from earlier stints. */
+const clock = (on: string | null, used = 0) => ({ activatedOn: on, daysUsed: used });
 
 /** A class with everything still to do. */
 const open = (over: Partial<CatchupItemFacts> = {}): CatchupItemFacts => ({
@@ -95,52 +118,160 @@ describe('catchupItemStep', () => {
 });
 
 describe('resolveCatchupBacklog', () => {
-  it('opens exactly one item and locks the rest', () => {
-    const r = resolveCatchupBacklog([cleared(), open(), open(), open()]);
-    expect(r.map((i) => i.status)).toEqual(['done', 'current', 'locked', 'locked']);
+  it('leaves every unfinished item startable, and locks nothing', () => {
+    // The old rule opened one and padlocked the rest. One unprepared recap in
+    // the middle then stalled the entire backlog behind it.
+    const r = resolveCatchupBacklog([cleared(), open(), open(), open()], ctx());
+    expect(r.map((i) => i.status)).toEqual(['done', 'waiting', 'waiting', 'waiting']);
     expect(r.map((i) => i.position)).toEqual([1, 2, 3, 4]);
   });
 
-  it('has no current item once the whole backlog is cleared', () => {
-    const r = resolveCatchupBacklog([cleared(), cleared()]);
-    expect(r.every((i) => i.status === 'done')).toBe(true);
+  it('recommends exactly one item, the oldest that is startable', () => {
+    const r = resolveCatchupBacklog([cleared(), open(), open()], ctx());
+    expect(r.filter((i) => i.recommended)).toHaveLength(1);
+    expect(r[1].recommended).toBe(true);
+    expect(r.map((i) => i.order)).toEqual([null, 1, 2]);
   });
 
-  it('steps over a class with no recording instead of stalling behind it', () => {
-    const r = resolveCatchupBacklog([open({ excluded: true }), open(), open()]);
-    expect(r.map((i) => i.status)).toEqual(['blocked', 'current', 'locked']);
+  it('gives nothing a deadline until something is started', () => {
+    // The whole point. Four missed classes used to render four red "Was due"
+    // cards on first open, with no way to tell where to begin.
+    const r = resolveCatchupBacklog([open(), open(), open(), open()], ctx());
+    expect(r.every((i) => i.dueOn === null)).toBe(true);
+    expect(r.every((i) => i.overdue === false)).toBe(true);
+    expect(r.some((i) => i.active)).toBe(false);
+  });
+
+  it('recommends nothing once the whole backlog is cleared', () => {
+    const r = resolveCatchupBacklog([cleared(), cleared()], ctx());
+    expect(r.every((i) => i.status === 'done')).toBe(true);
+    expect(r.some((i) => i.recommended)).toBe(false);
+  });
+
+  it('steps over a class with no recording instead of recommending it', () => {
+    const r = resolveCatchupBacklog([open({ excluded: true }), open(), open()], ctx());
+    expect(r.map((i) => i.status)).toEqual(['blocked', 'waiting', 'waiting']);
     // Excluded work is not numbered, so the student is never told to do "class 1"
     // when class 1 is the one they cannot do.
     expect(r.map((i) => i.position)).toEqual([null, 1, 2]);
+    expect(r[1].recommended).toBe(true);
   });
 
   it('steps over a class the teacher has not prepared yet', () => {
-    const r = resolveCatchupBacklog([open({ notReady: true }), open()]);
-    expect(r.map((i) => i.status)).toEqual(['pending_teacher', 'current']);
+    const r = resolveCatchupBacklog([open({ notReady: true }), open()], ctx());
+    expect(r.map((i) => i.status)).toEqual(['pending_teacher', 'waiting']);
     expect(r[0].countsTowardPace).toBe(false);
+    expect(r[0].order).toBeNull();
   });
 
-  it('steps over an excused class without opening it', () => {
-    const r = resolveCatchupBacklog([open({ excused: true }), open()]);
-    expect(r.map((i) => i.status)).toEqual(['excused', 'current']);
+  it('steps over an excused class without recommending it', () => {
+    const r = resolveCatchupBacklog([open({ excused: true }), open()], ctx());
+    expect(r.map((i) => i.status)).toEqual(['excused', 'waiting']);
     expect(r[0].step).toBe('done');
   });
 
   it('is empty-safe', () => {
-    expect(resolveCatchupBacklog([])).toEqual([]);
+    expect(resolveCatchupBacklog([], ctx())).toEqual([]);
+  });
+});
+
+describe('resolveCatchupBacklog: one clock', () => {
+  it('marks the started item active and gives only it a deadline', () => {
+    const r = resolveCatchupBacklog(
+      [open(), open({ clock: clock('2026-08-08') }), open()],
+      ctx(),
+    );
+    expect(r.map((i) => i.status)).toEqual(['waiting', 'active', 'waiting']);
+    expect(r[1].dueOn).toBe('2026-08-14'); // started 08-08 + (7 - 0 - 1)
+    expect(r[1].daysLeft).toBe(4);
+    expect(r[0].dueOn).toBeNull();
+    expect(r[2].dueOn).toBeNull();
+  });
+
+  it('points the recommendation at the running clock, not the oldest', () => {
+    // Telling a student to go and do something else while their clock ticks on
+    // this one contradicts itself.
+    const r = resolveCatchupBacklog(
+      [open(), open(), open({ clock: clock('2026-08-08') })],
+      ctx(),
+    );
+    expect(r[2].recommended).toBe(true);
+    expect(r[2].order).toBe(1);
+  });
+
+  it('reports overdue only once the due day has passed', () => {
+    const onTime = resolveCatchupBacklog([open({ clock: clock('2026-08-04') })], ctx());
+    expect(onTime[0].dueOn).toBe('2026-08-10');
+    expect(onTime[0].overdue).toBe(false); // the due day itself is not late
+
+    const late = resolveCatchupBacklog([open({ clock: clock('2026-08-03') })], ctx());
+    expect(late[0].dueOn).toBe('2026-08-09');
+    expect(late[0].overdue).toBe(true);
+    expect(late[0].daysLeft).toBe(-1);
+  });
+
+  it('collapses two running clocks to the earliest, deterministically', () => {
+    // The partial unique index makes this impossible in the database, but the
+    // write is two statements. A half-finished switch must still draw a
+    // coherent screen rather than two competing deadlines.
+    const r = resolveCatchupBacklog(
+      [open({ clock: clock('2026-08-09') }), open({ clock: clock('2026-08-06') })],
+      ctx(),
+    );
+    expect(r.filter((i) => i.active)).toHaveLength(1);
+    expect(r[1].active).toBe(true);
+  });
+
+  it('never puts a clock on a finished item', () => {
+    const r = resolveCatchupBacklog([cleared({ clock: clock('2026-08-08') }), open()], ctx());
+    expect(r[0].status).toBe('done');
+    expect(r[0].active).toBe(false);
+    expect(r[0].dueOn).toBeNull();
+  });
+});
+
+describe('resolveCatchupBacklog: what to do first', () => {
+  it('puts a missed live class ahead of the whole late joiner backlog', () => {
+    // A late joiner with months of backlog who then misses tomorrow's class.
+    // The live class is the one the course is building on right now.
+    const r = resolveCatchupBacklog(
+      [open({ kind: 'late_joiner' }), open({ kind: 'late_joiner' }), open({ kind: 'no_show' })],
+      ctx(),
+    );
+    expect(r[2].recommended).toBe(true);
+    expect(r.map((i) => i.order)).toEqual([2, 3, 1]);
+  });
+
+  it('keeps oldest first within each group', () => {
+    const r = resolveCatchupBacklog(
+      [open({ kind: 'no_show' }), open({ kind: 'opted_out' }), open({ kind: 'late_joiner' })],
+      ctx(),
+    );
+    expect(r.map((i) => i.order)).toEqual([1, 2, 3]);
+  });
+
+  it('gives a declined class the shorter window', () => {
+    const r = resolveCatchupBacklog(
+      [open({ kind: 'opted_out' }), open({ kind: 'no_show' }), open({ kind: 'late_joiner' })],
+      ctx(),
+    );
+    expect(r.map((i) => i.windowDays)).toEqual([3, 7, 7]);
   });
 });
 
 describe('summariseCatchupBacklog', () => {
   it('counts only work the student could actually do', () => {
-    const r = resolveCatchupBacklog([
-      cleared(),
-      cleared(),
-      open(),
-      open({ excluded: true }),
-      open({ notReady: true }),
-      open({ excused: true }),
-    ]);
+    const r = resolveCatchupBacklog(
+      [
+        cleared(),
+        cleared(),
+        open(),
+        open({ excluded: true }),
+        open({ notReady: true }),
+        open({ excused: true }),
+      ],
+      ctx(),
+    );
     // 2 done + 1 open = 3 countable. The excluded, not-ready and excused rows
     // stay out of the denominator so nobody is marked behind for them.
     expect(summariseCatchupBacklog(r)).toEqual({
@@ -158,58 +289,44 @@ describe('summariseCatchupBacklog', () => {
 
 describe('unchained items', () => {
   it('never waits its turn', () => {
-    // Three missed classes, none finished. All three are startable. The chained
-    // rule would have opened only the first and locked the other two.
-    const r = resolveCatchupBacklog([
-      open({ chained: false }),
-      open({ chained: false }),
-      open({ chained: false }),
-    ]);
-    expect(r.map((x) => x.status)).toEqual(['open', 'open', 'open']);
-  });
-
-  it('never holds up a chained backlog behind it', () => {
-    // The dangerous mix: a late joiner who then misses a live class. The missed
-    // class must not consume the backlog's one open slot, and must not sit
-    // locked behind six months of syllabus either.
-    const r = resolveCatchupBacklog([
-      open({ chained: false }),
-      open(),
-      open(),
-    ]);
-    expect(r[0].status).toBe('open');
-    expect(r[1].status).toBe('current');
-    expect(r[2].status).toBe('locked');
+    const r = resolveCatchupBacklog(
+      [open({ chained: false }), open({ chained: false }), open({ chained: false })],
+      ctx(),
+    );
+    expect(r.map((x) => x.status)).toEqual(['waiting', 'waiting', 'waiting']);
   });
 
   it('stays out of the weekly quota entirely', () => {
     // Pace is a promise about the backlog. A missed class arriving must not
     // silently move the target the student was measured against.
-    const r = resolveCatchupBacklog([open({ chained: false }), cleared(), open()]);
+    const r = resolveCatchupBacklog([open({ chained: false }), cleared(), open()], ctx());
     expect(summariseCatchupBacklog(r)).toMatchObject({ total: 2, completed: 1 });
     expect(r[0].position).toBeNull();
     expect(r[0].countsTowardPace).toBe(false);
   });
 
   it('still reports done when every gate is cleared', () => {
-    const r = resolveCatchupBacklog([cleared({ chained: false })]);
+    const r = resolveCatchupBacklog([cleared({ chained: false })], ctx());
     expect(r[0].status).toBe('done');
   });
 
   it('is still excluded when the class was never recorded', () => {
-    const r = resolveCatchupBacklog([open({ chained: false, excluded: true })]);
+    const r = resolveCatchupBacklog([open({ chained: false, excluded: true })], ctx());
     expect(r[0].status).toBe('blocked');
   });
 
   it('is still waived when a teacher excuses it', () => {
-    const r = resolveCatchupBacklog([open({ chained: false, excused: true })]);
+    const r = resolveCatchupBacklog([open({ chained: false, excused: true })], ctx());
     expect(r[0].status).toBe('excused');
   });
 
-  it('treats an item with no chained flag as chained, so nothing regressed', () => {
-    const r = resolveCatchupBacklog([open(), open()]);
-    expect(r.map((x) => x.status)).toEqual(['current', 'locked']);
+  it('reads a caller that still speaks only of chained, so nothing regressed', () => {
+    const r = resolveCatchupBacklog([open(), open()], ctx());
     expect(r[0].chained).toBe(true);
+    expect(r[0].kind).toBe('late_joiner');
+    // And the reverse: chained:false with no kind is a class they were here for.
+    const legacy = resolveCatchupBacklog([open({ chained: false })], ctx());
+    expect(legacy[0].kind).toBe('no_show');
   });
 });
 
@@ -264,31 +381,244 @@ describe('addDaysYmd', () => {
 describe('summariseMissedClasses', () => {
   it('counts only the missed half, and only what is owed', () => {
     const facts = [
-      open({ chained: false }),                  // owed, overdue
-      cleared({ chained: false }),               // done
-      open({ chained: false, excused: true }),   // waived, owes nothing
-      open({ chained: false, excluded: true }),  // no recording, owes nothing
-      open(),                                    // a backlog item, not counted
+      open({ chained: false, clock: clock('2026-08-01') }), // owed, started, late
+      cleared({ chained: false }),                          // done
+      open({ chained: false, excused: true }),              // waived, owes nothing
+      open({ chained: false, excluded: true }),             // no recording, owes nothing
+      open(),                                               // a backlog item, not counted
     ];
-    const resolved = resolveCatchupBacklog(facts);
-    const overdue = [true, false, false, false, false];
+    const resolved = resolveCatchupBacklog(facts, ctx());
 
-    expect(summariseMissedClasses(resolved, overdue)).toEqual({
+    expect(summariseMissedClasses(resolved)).toEqual({
       total: 2,
       completed: 1,
       open: 1,
       overdue: 1,
+      waiting: 0,
     });
   });
 
+  it('counts an unstarted missed class as waiting, never as overdue', () => {
+    const resolved = resolveCatchupBacklog(
+      [open({ chained: false }), open({ chained: false })],
+      ctx(),
+    );
+    expect(summariseMissedClasses(resolved)).toMatchObject({ open: 2, overdue: 0, waiting: 2 });
+  });
+
   it('reports nothing when there are no missed classes', () => {
-    const resolved = resolveCatchupBacklog([open(), cleared()]);
-    expect(summariseMissedClasses(resolved, [false, false])).toEqual({
+    const resolved = resolveCatchupBacklog([open(), cleared()], ctx());
+    expect(summariseMissedClasses(resolved)).toEqual({
       total: 0,
       completed: 0,
       open: 0,
       overdue: 0,
+      waiting: 0,
     });
+  });
+});
+
+describe('summariseCatchupClock', () => {
+  it('flags a student with work owed and no clock running', () => {
+    // The replacement chase signal. "How many are overdue" can only ever be one
+    // now, so it stopped being a magnitude a teacher can sort by.
+    const r = resolveCatchupBacklog([open(), open()], ctx());
+    expect(summariseCatchupClock(r)).toEqual({
+      active: false,
+      waiting: 2,
+      overdue: false,
+      daysLeft: null,
+      stalled: true,
+    });
+  });
+
+  it('is not stalled while something is running', () => {
+    const r = resolveCatchupBacklog([open({ clock: clock('2026-08-08') }), open()], ctx());
+    expect(summariseCatchupClock(r)).toMatchObject({
+      active: true,
+      waiting: 1,
+      daysLeft: 4,
+      stalled: false,
+    });
+  });
+
+  it('is not stalled when there is simply nothing owed', () => {
+    const r = resolveCatchupBacklog([cleared(), cleared()], ctx());
+    expect(summariseCatchupClock(r)).toMatchObject({ stalled: false, waiting: 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The clock
+// ---------------------------------------------------------------------------
+
+describe('catchupWindowDays', () => {
+  it('gives a declined class less time than a genuine absence', () => {
+    expect(catchupWindowDays('opted_out')).toBe(3);
+    expect(catchupWindowDays('no_show')).toBe(7);
+    expect(catchupWindowDays('late_joiner')).toBe(7);
+  });
+
+  it('honours a classroom override', () => {
+    const w = { standardDays: 10, optedOutDays: 2 };
+    expect(catchupWindowDays('late_joiner', w)).toBe(10);
+    expect(catchupWindowDays('opted_out', w)).toBe(2);
+  });
+
+  it('falls back rather than handing out a zero day window', () => {
+    expect(catchupWindowDays('no_show', { standardDays: 0, optedOutDays: 3 })).toBe(7);
+    expect(catchupWindowDays('no_show', { standardDays: NaN, optedOutDays: 3 })).toBe(7);
+  });
+});
+
+describe('catchupDueOn', () => {
+  it('is null until the student starts, which is the whole redesign', () => {
+    expect(catchupDueOn({ activatedOn: null, daysUsed: 0 }, 7)).toBeNull();
+    expect(catchupDueOn(null, 7)).toBeNull();
+  });
+
+  it('gives the full window from the day they started, inclusive', () => {
+    // Start Monday with 7 days: due Sunday, and Sunday itself is not late.
+    expect(catchupDueOn(clock('2026-08-10'), 7)).toBe('2026-08-16');
+    expect(isOverdue('2026-08-16', '2026-08-16')).toBe(false);
+  });
+
+  it('subtracts days already spent, so a restart is not a fresh window', () => {
+    expect(catchupDueOn(clock('2026-08-10', 3), 7)).toBe('2026-08-13');
+  });
+
+  it('lands in the past when the window is already spent', () => {
+    // Deliberate. Moving it forward on every restart would hand out a free day
+    // per restart, which is the exploit again at a slower rate.
+    expect(catchupDueOn(clock('2026-08-10', 12), 7)).toBe('2026-08-04');
+  });
+
+  it('treats an unparseable activation date as not started rather than throwing', () => {
+    // The nudge cron sweeps every running clock in the school in one pass. One
+    // malformed row must not take the whole run down, and reading as "not
+    // started" is the safe direction: nobody gets chased by mistake.
+    expect(catchupDueOn({ activatedOn: 'null', daysUsed: 0 }, 7)).toBeNull();
+    expect(catchupDueOn({ activatedOn: 'not-a-date', daysUsed: 0 }, 7)).toBeNull();
+    expect(catchupDueOn({ activatedOn: '', daysUsed: 0 }, 7)).toBeNull();
+  });
+});
+
+describe('bankCatchupClock: switching is not a reset', () => {
+  it('banks the days actually spent', () => {
+    expect(bankCatchupClock(clock('2026-08-07'), '2026-08-10')).toBe(3);
+  });
+
+  it('adds to what was already banked', () => {
+    expect(bankCatchupClock(clock('2026-08-07', 2), '2026-08-10')).toBe(5);
+  });
+
+  it('banks nothing for a stopped clock', () => {
+    expect(bankCatchupClock(clock(null, 4), '2026-08-10')).toBe(4);
+  });
+
+  it('makes a same-day switch away and back a no-op', () => {
+    // The obvious exploit attempt: bail out and come straight back for a fresh
+    // seven days. Banking zero recomputes the identical deadline.
+    const before = catchupDueOn(clock('2026-08-10'), 7);
+    const banked = bankCatchupClock(clock('2026-08-10'), '2026-08-10');
+    expect(banked).toBe(0);
+    expect(catchupDueOn(clock('2026-08-10', banked), 7)).toBe(before);
+  });
+
+  it('totals exactly one window across many stints', () => {
+    // Three days, park it, four days later. Seven days of window, all spent.
+    let used = bankCatchupClock(clock('2026-08-01'), '2026-08-04'); // 3
+    const due = catchupDueOn(clock('2026-08-20', used), 7);
+    expect(used).toBe(3);
+    expect(due).toBe('2026-08-23'); // 20th + (7 - 3 - 1)
+    used = bankCatchupClock(clock('2026-08-20', used), '2026-08-24');
+    expect(used).toBe(7);
+    expect(catchupDaysLeft(clock('2026-08-24', used), 7, '2026-08-24')).toBe(-1);
+  });
+
+  it('ignores a clock that appears to run backwards', () => {
+    expect(bankCatchupClock(clock('2026-08-10'), '2026-08-07')).toBe(0);
+  });
+});
+
+describe('catchupDaysSpent and catchupDaysLeft', () => {
+  it('counts the running stint as it goes', () => {
+    expect(catchupDaysSpent(clock('2026-08-08'), '2026-08-10')).toBe(2);
+    expect(catchupDaysSpent(clock(null, 5), '2026-08-10')).toBe(5);
+  });
+
+  it('is null with no clock, so nothing can read as late', () => {
+    expect(catchupDaysLeft(clock(null), 7, TODAY)).toBeNull();
+  });
+
+  it('counts down to zero on the due day, then goes negative', () => {
+    expect(catchupDaysLeft(clock('2026-08-10'), 7, '2026-08-10')).toBe(6);
+    expect(catchupDaysLeft(clock('2026-08-10'), 7, '2026-08-16')).toBe(0);
+    expect(catchupDaysLeft(clock('2026-08-10'), 7, '2026-08-18')).toBe(-2);
+  });
+});
+
+describe('planCatchupActivation', () => {
+  it('just starts when nothing is running', () => {
+    const items = [open(), open()];
+    expect(planCatchupActivation(items, 1, TODAY)).toEqual({
+      deactivateIndex: null,
+      deactivateDaysUsed: 0,
+      activateOn: TODAY,
+    });
+  });
+
+  it('banks the running one before starting the new one', () => {
+    const items = [open({ clock: clock('2026-08-07') }), open()];
+    expect(planCatchupActivation(items, 1, TODAY)).toEqual({
+      deactivateIndex: 0,
+      deactivateDaysUsed: 3,
+      activateOn: TODAY,
+    });
+  });
+
+  it('does nothing when the target is already the running one', () => {
+    // Idempotent. A second press must not restart the window.
+    const items = [open({ clock: clock('2026-08-07') })];
+    expect(planCatchupActivation(items, 0, TODAY)).toEqual({
+      deactivateIndex: null,
+      deactivateDaysUsed: 0,
+      activateOn: null,
+    });
+  });
+});
+
+describe('diffDaysYmd', () => {
+  it('counts whole days in both directions', () => {
+    expect(diffDaysYmd('2026-08-01', '2026-08-10')).toBe(9);
+    expect(diffDaysYmd('2026-08-10', '2026-08-01')).toBe(-9);
+    expect(diffDaysYmd('2026-08-10', '2026-08-10')).toBe(0);
+  });
+
+  it('crosses a month and a year boundary', () => {
+    expect(diffDaysYmd('2026-07-28', '2026-08-04')).toBe(7);
+    expect(diffDaysYmd('2026-12-30', '2027-01-04')).toBe(5);
+  });
+});
+
+describe('isCatchupClockRunning', () => {
+  it('is exactly "has an activation date"', () => {
+    expect(isCatchupClockRunning(clock('2026-08-10'))).toBe(true);
+    expect(isCatchupClockRunning(clock(null, 6))).toBe(false);
+    expect(isCatchupClockRunning(undefined)).toBe(false);
+  });
+});
+
+describe('day one after deploy', () => {
+  it('leaves every existing row waiting, with nothing overdue and no backfill', () => {
+    // Every production row takes activated_on = NULL and days_used = 0 from the
+    // column defaults. Nobody should be nudged, and nobody should see red.
+    const backlog = [open(), open({ chained: false }), open({ kind: 'opted_out' }), cleared()];
+    const r = resolveCatchupBacklog(backlog, ctx());
+    expect(r.filter((i) => i.overdue)).toHaveLength(0);
+    expect(r.filter((i) => i.active)).toHaveLength(0);
+    expect(r.filter((i) => i.dueOn !== null)).toHaveLength(0);
+    expect(summariseCatchupClock(r).stalled).toBe(true);
   });
 });
 

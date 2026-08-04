@@ -14,6 +14,8 @@ import {
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import { OPEN_GATE } from '@/lib/video-gate';
 
 /**
  * Plays a class recording inside Nexus.
@@ -25,8 +27,13 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
  * token after checking Nexus enrollment, so anyone who belongs in the class can
  * watch, wherever the file happens to live.
  *
- * SharePoint refuses to be iframed, so this is a plain <video> pointed at a
+ * SharePoint refuses to be iframed, so this points the shared player at a
  * short-lived pre-authenticated URL. Those URLs expire, hence the retry.
+ *
+ * Ungated: this is a teacher or a student reviewing a class they attended, so
+ * there are no checkpoints to earn. It goes through the shared player anyway,
+ * which is what removes the native Download and Picture in picture entries that
+ * a plain <video controls> was handing out with the file.
  */
 
 const MAX_RETRIES = 2;
@@ -172,20 +179,14 @@ export default function RecordingPlayerDialog({
           )}
 
           {!loading && !error && streamUrl && (
-            <video
-              src={streamUrl}
-              controls
-              playsInline
-              autoPlay
-              onError={handleVideoError}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'contain',
-              }}
-            />
+            <Box sx={{ position: 'absolute', inset: 0 }}>
+              <NeramVideoPlayer
+                source={{ kind: 'html5', src: streamUrl }}
+                gate={OPEN_GATE}
+                allowFullscreen
+                onError={handleVideoError}
+              />
+            </Box>
           )}
         </Box>
       </DialogContent>

@@ -38,12 +38,25 @@ export async function GET(
 
     const { data: recap } = await supabase
       .from('nexus_class_recaps')
-      .select('id, classroom_id, scheduled_class_id, recording_url, video_source, status, readiness')
+      .select('id, classroom_id, scheduled_class_id, study_file_id, recording_url, video_source, status, readiness')
       .eq('id', recapId)
       .single();
 
     if (!recap || recap.status !== 'published') {
       return NextResponse.json({ error: 'Recap not available' }, { status: 403 });
+    }
+
+    // A Foundation chapter video track is a nexus_class_recaps row with
+    // classroom_id NULL. It must never be served here, and this is the one place
+    // where sharing that table could become a security hole rather than a 403:
+    // the enrollment check below is .eq('classroom_id', recap.classroom_id), and
+    // .eq() against NULL matches NOTHING, so maybeSingle() returns null and
+    // every student is refused... which is only safe by accident. Refuse
+    // explicitly instead, and let the track routes authorise by study-folder
+    // audience, which is the right question to ask about a chapter that is
+    // standard for every cohort.
+    if (recap.study_file_id) {
+      return NextResponse.json({ error: 'Recap not available' }, { status: 404 });
     }
     // readiness may be undefined on rows read before the column existed, which
     // must not lock anyone out of a recap that was already published.

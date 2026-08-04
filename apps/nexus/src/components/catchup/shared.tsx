@@ -48,16 +48,29 @@ export function daysBetween(fromYmd: string, toIso: string): number {
   return Math.max(0, Math.round((b - a) / 86400000));
 }
 
-/** One line summarising what a student owes. Kept in one place so it never drifts. */
+/**
+ * One line summarising what a student owes. Kept in one place so it never drifts.
+ *
+ * "N overdue" is gone. With one clock at a time it could only ever be 0 or 1, so
+ * it stopped being a magnitude and started reading as though a student with ten
+ * untouched classes were doing fine. What replaces it is the state of their one
+ * clock: running and how long is left, run over, or not started at all.
+ */
 export function owedLine(s: {
   missedTotals: { open: number; overdue: number };
   totals: { total: number; completed: number };
+  clock?: { active: boolean; overdue: boolean; daysLeft: number | null; stalled: boolean };
 }): string {
   const parts: string[] = [];
   if (s.missedTotals.open > 0) parts.push(`${s.missedTotals.open} missed`);
-  if (s.missedTotals.overdue > 0) parts.push(`${s.missedTotals.overdue} overdue`);
   const backlogOpen = s.totals.total - s.totals.completed;
   if (backlogOpen > 0) parts.push(`${backlogOpen} before joining`);
+
+  if (s.clock?.overdue) parts.push('run over');
+  else if (s.clock?.active && typeof s.clock.daysLeft === 'number') {
+    parts.push(s.clock.daysLeft === 1 ? '1 day left' : `${s.clock.daysLeft} days left`);
+  } else if (s.clock?.stalled) parts.push('not started');
+
   return parts.length ? parts.join(' · ') : 'Nothing outstanding';
 }
 
@@ -67,8 +80,12 @@ export function stateLabel(item: Item): { label: string; tone: 'good' | 'warn' |
   if (item.caught_up_at) return { label: 'Caught up', tone: 'good' };
   if (item.status === 'blocked') return { label: 'No recording yet', tone: 'idle' };
   if (item.status === 'pending_teacher') return { label: 'Waiting on a recap', tone: 'idle' };
-  if (item.overdue) return { label: 'Overdue', tone: 'bad' };
-  if (!item.watched) return { label: 'Not started', tone: 'warn' };
+  if (item.overdue) return { label: 'Run over', tone: 'bad' };
+  // Only the class the student actually started carries a clock. Everything
+  // else is genuinely waiting rather than late, and saying so is the difference
+  // between a list a teacher can act on and a screen of red.
+  if (item.active) return { label: 'In progress', tone: 'warn' };
+  if (!item.watched) return { label: 'Not started', tone: 'idle' };
   if (item.assignments_outstanding > 0) return { label: 'Work outstanding', tone: 'warn' };
   if (item.has_test && !item.test_passed) return { label: 'Quiz to pass', tone: 'warn' };
   return { label: 'Nearly there', tone: 'warn' };

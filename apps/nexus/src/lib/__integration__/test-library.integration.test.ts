@@ -209,4 +209,73 @@ suite('test library query layer', () => {
     // The label is resolved from the polymorphic context id, which has no FK.
     expect(found!.placements[0].context_label).toBe(classroom.name);
   }, 60000);
+
+  it('bulk delete clears the library without destroying the rows behind it', async () => {
+    const { composeTest, createQBQuestion, listLibraryTests, softDeleteTests, getSupabaseAdminClient } =
+      await import('@neram/database');
+
+    const question = await createQBQuestion({
+      question_text: `${PREFIX}Which material is fired at the highest temperature?`,
+      question_format: 'MCQ',
+      options: [
+        { id: 'a', text: 'Terracotta' },
+        { id: 'b', text: 'Porcelain' },
+      ],
+      correct_answer: 'b',
+      difficulty: 'EASY',
+      exam_relevance: 'NATA',
+      categories: [],
+      status: 'active',
+    });
+    created.questionIds.push(question.id);
+
+    const ids: string[] = [];
+    for (const n of [1, 2, 3]) {
+      const { id } = await composeTest({
+        title: `${PREFIX}Bulk delete probe ${n}`,
+        questionIds: [question.id],
+        testKind: 'classroom_assigned',
+        isRepository: true,
+        isPublished: true,
+      });
+      ids.push(id);
+      created.testIds.push(id);
+    }
+
+    const before = await listLibraryTests({
+      scope: 'staff',
+      search: 'Bulk delete probe',
+      includeUnpublished: true,
+    });
+    expect(before.tests).toHaveLength(3);
+
+    // Deleting two of the three, plus an id that does not exist, which is what a
+    // stale selection looks like.
+    const deleted = await softDeleteTests([ids[0], ids[1], '00000000-0000-0000-0000-000000000000']);
+    expect(deleted.sort()).toEqual([ids[0], ids[1]].sort());
+
+    const after = await listLibraryTests({
+      scope: 'staff',
+      search: 'Bulk delete probe',
+      includeUnpublished: true,
+    });
+    expect(after.tests.map((t) => t.id)).toEqual([ids[2]]);
+
+    // The rows are still there, just deactivated. This is the whole reason the
+    // delete is soft: nexus_test_attempts cascades from nexus_tests, so a hard
+    // delete here would erase the score history of everyone who sat the paper.
+    const supabase = getSupabaseAdminClient() as any;
+    const { data: rows } = await supabase
+      .from('nexus_tests')
+      .select('id, is_active')
+      .in('id', [ids[0], ids[1]]);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r: any) => r.is_active === false)).toBe(true);
+
+    const { count: questionCount } = await supabase
+      .from('nexus_test_questions')
+      .select('id', { count: 'exact', head: true })
+      .eq('test_id', ids[0]);
+    expect(questionCount).toBe(1);
+  }, 60000);
 });

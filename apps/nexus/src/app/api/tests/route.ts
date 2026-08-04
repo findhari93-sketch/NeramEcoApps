@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { getSupabaseAdminClient, loadClassPrepStates } from '@neram/database';
 
 /**
@@ -149,6 +150,9 @@ export async function GET(request: NextRequest) {
             .from('nexus_test_attempts')
             .select('id, test_id, status, score, total_marks, percentage, started_at, submitted_at')
             .eq('student_id', user.id)
+            // Official only, so the student's own list shows their real standing
+            // rather than the last thing they practised.
+            .eq('mode', 'official')
             .in('test_id', testIds)
         : { data: [] };
 
@@ -256,12 +260,20 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdminClient();
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, user_type, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .single();
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // This route writes to any classroom_id the body names, through the
+    // service-role client, so RLS is not a second line of defence. It used to
+    // check only that the caller existed in `users`, which let any signed-in
+    // student post a test into any classroom. Creating a class test is staff work.
+    if (resolveStaffRole(user) === null) {
+      return NextResponse.json({ error: 'Only staff can create a class test' }, { status: 403 });
     }
 
     const { data: test, error } = await supabase

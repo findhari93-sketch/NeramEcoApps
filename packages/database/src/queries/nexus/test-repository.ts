@@ -836,6 +836,47 @@ export async function softDeleteTest(testId: string, client?: TypedSupabaseClien
   if (pErr) throw pErr;
 }
 
+/**
+ * Soft-delete many tests at once, in two statements rather than two per test.
+ *
+ * Soft on purpose, and it matters more here than for a single delete: every
+ * child of nexus_tests is ON DELETE CASCADE, so a hard bulk delete would take
+ * nexus_test_attempts with it and destroy the score history of everyone who had
+ * sat those papers. Flipping is_active hides them from the library and from
+ * students while leaving that history intact and recoverable.
+ *
+ * Returns the ids actually deactivated, which is how the caller distinguishes
+ * "deleted 39" from "38 of the 39 ids you sent still exist".
+ */
+export async function softDeleteTests(
+  testIds: string[],
+  client?: TypedSupabaseClient,
+): Promise<string[]> {
+  const ids = [...new Set(testIds.filter((id) => typeof id === 'string' && id))];
+  if (ids.length === 0) return [];
+
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(TESTS)
+    .update({ is_active: false })
+    .in('id', ids)
+    .select('id');
+  if (error) throw error;
+
+  const deleted = (data || []).map((r: any) => r.id as string);
+  if (deleted.length === 0) return [];
+
+  // Placements go too, so a deleted test stops occupying the single-test slot on
+  // a class or a lesson and the teacher can put another one there.
+  const { error: pErr } = await supabase
+    .from(PLACEMENTS)
+    .update({ is_active: false })
+    .in('test_id', deleted);
+  if (pErr) throw pErr;
+
+  return deleted;
+}
+
 export async function countTestAttempts(testId: string, client?: TypedSupabaseClient): Promise<number> {
   const supabase = client || getSupabaseAdminClient();
   const { count, error } = await supabase
@@ -998,6 +1039,8 @@ export interface NexusAttemptRow {
   placement_id: string | null;
   attempt_number: number;
   status: string;
+  /** 'official' counts towards the record; 'revision' is practice after completion. */
+  mode?: 'official' | 'revision';
   answers: Record<string, string>;
   started_at: string | null;
   submitted_at: string | null;
@@ -1067,21 +1110,41 @@ export function gradeComposedAnswers(
  */
 async function dispatchPlacementSideEffect(
   placement: NexusTestPlacement | null,
-  args: { studentId: string; attemptId: string; percentage: number; passed: boolean },
+  args: {
+    studentId: string;
+    attemptId: string;
+    percentage: number;
+    passed: boolean;
+    mode?: 'official' | 'revision';
+  },
   supabase: TypedSupabaseClient,
 ): Promise<void> {
   if (!placement) return;
 
   if (placement.context_type === 'study_file' && args.passed) {
-    // Re-fires the EXISTING study-material completion (best-score upsert on
-    // nexus_study_file_reads). best_attempt_id has no FK, so a
-    // nexus_test_attempts id is accepted.
-    await supabase.rpc('nexus_study_mark_completed', {
-      p_user: args.studentId,
-      p_file: placement.context_id,
-      p_score: args.percentage,
-      p_attempt: args.attemptId,
-    });
+    if (args.mode === 'revision') {
+      // Practice on a chapter the student already finished. Routed to a function
+      // that does not name best_score_pct at all, so the official record is
+      // physically unreachable from this path rather than merely untouched.
+      await supabase.rpc('nexus_study_record_revision', {
+        p_user: args.studentId,
+        p_file: placement.context_id,
+        p_score: args.percentage,
+        p_attempt: args.attemptId,
+      });
+    } else {
+      // The study-material completion (best-score upsert on
+      // nexus_study_file_reads). best_attempt_id has no FK, so a
+      // nexus_test_attempts id is accepted. Since 20260820090100 this only
+      // completes the chapter outright when there is no servable video track, or
+      // when one has already been watched through.
+      await supabase.rpc('nexus_study_mark_completed', {
+        p_user: args.studentId,
+        p_file: placement.context_id,
+        p_score: args.percentage,
+        p_attempt: args.attemptId,
+      });
+    }
   } else if (placement.context_type === 'catchup_class') {
     await recordCatchupTestAttempt(
       {
@@ -1153,7 +1216,13 @@ export interface StartAttemptResult {
  * that wants a one-shot assessment sets gating.attempt_limit.
  */
 export async function startOrResumeAttempt(
-  input: { testId: string; studentId: string; placementId?: string | null },
+  input: {
+    testId: string;
+    studentId: string;
+    placementId?: string | null;
+    /** 'revision' is practice after completion and never touches the record. */
+    mode?: 'official' | 'revision';
+  },
   client?: TypedSupabaseClient,
 ): Promise<StartAttemptResult> {
   const supabase = client || getSupabaseAdminClient();
@@ -1170,7 +1239,7 @@ export async function startOrResumeAttempt(
   const { data: history, error: histErr } = await supabase
     .from(ATTEMPTS)
     .select(
-      'id, test_id, student_id, placement_id, attempt_number, status, answers, started_at, submitted_at, time_spent_seconds, score, total_marks, percentage',
+      'id, test_id, student_id, placement_id, attempt_number, status, mode, answers, started_at, submitted_at, time_spent_seconds, score, total_marks, percentage',
     )
     .eq('test_id', input.testId)
     .eq('student_id', input.studentId)
@@ -1190,9 +1259,19 @@ export async function startOrResumeAttempt(
     throw new Error('ATTEMPT_LIMIT_REACHED');
   }
 
+  const mode = input.mode ?? 'official';
+
   const open = rows.find((r) => r.status === 'in_progress');
   if (open) {
-    if (!attemptIsStale(open, meta, questions.length)) {
+    // A stale attempt in the OTHER mode must not be resumed into this one.
+    // uq_test_attempt_one_in_progress is (test_id, student_id) and deliberately
+    // knows nothing about mode, because widening it would allow two open
+    // attempts and reopen the two-tab race it exists to stop. So the mismatch is
+    // resolved here instead: without this, a student with a forgotten official
+    // attempt who starts a revision would resume the official one, and passing
+    // it would overwrite their real best score with a practice result.
+    const sameMode = (open.mode ?? 'official') === mode;
+    if (sameMode && !attemptIsStale(open, meta, questions.length)) {
       return { attempt: open, resumed: true, previous_attempts: submitted.length, best_percentage: best };
     }
     // The clock ran out while they were away. Retire it so a fresh attempt can
@@ -1213,6 +1292,11 @@ export async function startOrResumeAttempt(
       student_id: input.studentId,
       placement_id: placement?.id ?? null,
       attempt_number: nextNumber,
+      // Decided when the attempt STARTS and never re-derived. "Anything after
+      // completed_at is revision" would misfile the common case here: a student
+      // can pass the chapter test before finishing the video, so their official
+      // attempt predates completion.
+      mode,
       status: 'in_progress',
       answers: {},
       started_at: new Date().toISOString(),
@@ -1322,7 +1406,16 @@ export async function submitAttempt(
 
   await dispatchPlacementSideEffect(
     placement,
-    { studentId: input.studentId, attemptId: attempt.id, percentage: graded.percentage, passed: graded.passed },
+    {
+      studentId: input.studentId,
+      attemptId: attempt.id,
+      percentage: graded.percentage,
+      passed: graded.passed,
+      // Read off the attempt, not off the request. The mode was fixed when the
+      // attempt started; letting a submit body claim it would make "practice
+      // never counts" a client-side promise.
+      mode: (attempt.mode as 'official' | 'revision') ?? 'official',
+    },
     supabase,
   );
 
@@ -1363,12 +1456,19 @@ export async function gradeTestOneShot(
     studentId: string;
     answers: Record<string, string>;
     placementId?: string | null;
+    /** Practice on an already-completed chapter. Kept out of the record. */
+    mode?: 'official' | 'revision';
   },
   client?: TypedSupabaseClient,
 ): Promise<NexusTestGradeResult> {
   const supabase = client || getSupabaseAdminClient();
   const { attempt } = await startOrResumeAttempt(
-    { testId: input.testId, studentId: input.studentId, placementId: input.placementId },
+    {
+      testId: input.testId,
+      studentId: input.studentId,
+      placementId: input.placementId,
+      mode: input.mode,
+    },
     supabase,
   );
   return submitAttempt(

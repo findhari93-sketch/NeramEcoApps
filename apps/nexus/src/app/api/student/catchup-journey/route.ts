@@ -5,7 +5,7 @@ import {
   ensureCatchupJourney,
   getCatchupBacklog,
 } from '@neram/database';
-import { computeCatchupPace, itemDueOn, describeCatchupPace } from '@/lib/catchup-pace';
+import { computeCatchupPace, describeCatchupPace } from '@/lib/catchup-pace';
 
 /**
  * GET /api/student/catchup-journey
@@ -71,9 +71,10 @@ export async function GET(request: NextRequest) {
 
     const { journey, missed, totals, missedTotals } = backlog;
 
-    // Pace belongs to the journey, and only a late joiner has one. A student who
-    // has simply missed a class is not "behind on a quota"; their deadline comes
-    // from the timetable, one class at a time.
+    // Pace belongs to the journey, and only a late joiner has one. It is a
+    // gentle "you are roughly here" for the whole backlog, and it is NOT a
+    // deadline: the only deadline a student has is the clock on the one class
+    // they started.
     const quota = journey?.weekly_quota ?? 2;
     const pace = journey
       ? computeCatchupPace({
@@ -101,15 +102,17 @@ export async function GET(request: NextRequest) {
       pace: pace ? { ...pace, message: describeCatchupPace(pace, quota) } : null,
       totals,
       missedTotals,
-      // Missed classes first in the payload as well as on the screen: they carry
-      // a real deadline, and the backlog does not.
+      clock: backlog.clock,
+      windows: backlog.windows,
+      // Missed classes first in the payload as well as on the screen, because a
+      // class the course has already built on matters more than one taught
+      // before the student existed here.
       missed: missed.filter((i) => i.status !== 'blocked'),
-      items: paced.map((i) => ({
-        ...i,
-        // The quota deadline. A class awaiting its recap has no due date,
-        // because the student cannot start it.
-        due_on: i.position && journey ? itemDueOn(journey.started_on, quota, i.position) : null,
-      })),
+      // No due_on override any more. It used to stamp a quota deadline over
+      // every backlog item, so a late joiner's card carried a date they had
+      // never agreed to and which competed with the real clock. The only
+      // deadline is the one the student started.
+      items: paced,
       excluded: blocked.map((i) => ({
         id: i.id,
         scheduled_class_id: i.scheduled_class_id,

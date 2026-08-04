@@ -55,6 +55,19 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.catchup', label: 'Catch-up', surface: 'student', group: 'Live Class', paths: ['/student/catch-up'], defaultEnabled: true },
 
   { id: 'student.library', label: 'Library', surface: 'student', group: 'Learn', paths: ['/student/library'], defaultEnabled: false },
+  /**
+   * The original Foundation module. It predates this registry, so until now it
+   * was the one student feature with no switch at all: featureForPath returned
+   * undefined for its routes and FeatureGate lets undefined through. That made
+   * it unkillable, and since /student/dashboard is core and renders
+   * FoundationOverviewCard whenever any chapter is published, every student saw
+   * it whether or not it was ready for them.
+   *
+   * Default OFF: the guided Foundation flow is being rebuilt on Study Materials.
+   * The data stays put, so switching this back on restores the old module intact
+   * for the students who still have progress in it.
+   */
+  { id: 'student.foundation', label: 'Foundation (old module)', surface: 'student', group: 'Learn', paths: ['/student/foundation', '/student/modules'], defaultEnabled: false },
   { id: 'student.question-bank', label: 'Question Bank', surface: 'student', group: 'Learn', paths: ['/student/question-bank'], defaultEnabled: false },
   { id: 'student.checklist', label: 'Checklist', surface: 'student', group: 'Learn', paths: ['/student/checklist'], defaultEnabled: false },
   { id: 'student.leaderboard', label: 'Leaderboard', surface: 'student', group: 'Learn', paths: ['/student/leaderboard'], defaultEnabled: false },

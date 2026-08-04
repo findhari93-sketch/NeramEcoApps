@@ -1,10 +1,20 @@
 /**
- * Chasing a missed class that the course has already moved past.
+ * Chasing a class a student started and did not finish in time.
  *
  * Separate from the weekly quota sweep next door, because the two measure
- * different things. A late joiner is behind a quota; someone who missed last
- * Tuesday is behind the timetable, and the timetable is what sets their
- * deadline.
+ * different things. A late joiner is behind a quota; this is about the one class
+ * a student put their clock on and let run out.
+ *
+ * The sweep used to work the other way round: every unfinished missed class,
+ * with a deadline derived from the timetable. That meant a student with a July
+ * backlog was overdue on every single item at once, and the honest thing for
+ * this cron to do would have been to message them about all of them. Now there
+ * is one running clock per student per classroom, so there is at most one thing
+ * to chase, and a student who has started nothing is not chased at all: they owe
+ * nothing yet, and the teacher's list flags them as stalled instead.
+ *
+ * It also no longer skips late joiners. They have clocks now too, and a late
+ * joiner who started a class and let it lapse is exactly as chaseable.
  *
  * This lives here rather than in `class-followups`, whose docblock states as a
  * contract that it never messages students and that the first contact after an
@@ -16,7 +26,15 @@
  * Nothing here locks anything. Overdue changes a colour, sends one message, and
  * puts a name on the teacher's list.
  */
-import { missedClassDueOn, isOverdue, istTodayYmd } from '@neram/database';
+import {
+  isOverdue,
+  istTodayYmd,
+  catchupDueOn,
+  catchupWindowDays,
+  DEFAULT_CATCHUP_WINDOWS,
+  type CatchupKind,
+  type CatchupWindows,
+} from '@neram/database';
 import { sendNudge } from './nudge-delivery';
 
 /** Do not chase the same student about the same class twice in a week. */
@@ -58,15 +76,18 @@ export async function sweepOverdueMissedClasses(supabase: any): Promise<OverdueS
     errors: [],
   };
 
-  // Open, unexcused, genuinely missed. A late joiner's backlog is the other
-  // sweep's business and has no timetable deadline at all.
+  // Every running clock, everywhere. This is the whole working set now, and it
+  // is tiny: at most one row per student per classroom, indexed on the partial
+  // `activated_on IS NOT NULL`. It used to be every unfinished absence in the
+  // school plus a full timetable read per classroom to date them.
   const { data: rows, error } = await supabase
     .from('nexus_class_absences')
     .select(
-      'id, student_id, classroom_id, scheduled_class_id, followup_sent_at, ' +
+      'id, student_id, classroom_id, scheduled_class_id, kind, activated_on, days_used, ' +
+        'followup_sent_at, ' +
         'class:nexus_scheduled_classes(id, title, scheduled_date, status, recording_url, youtube_url)',
     )
-    .neq('kind', 'late_joiner')
+    .not('activated_on', 'is', null)
     .is('caught_up_at', null)
     .is('excused_at', null);
   if (error) throw error;
@@ -75,23 +96,19 @@ export async function sweepOverdueMissedClasses(supabase: any): Promise<OverdueS
   result.scanned = items.length;
   if (items.length === 0) return result;
 
-  // The classroom timetables, one read each, so "when did the course next run"
-  // costs nothing per item.
+  // The window each classroom gives, one read for all of them.
   const classroomIds = [...new Set(items.map((i: any) => i.classroom_id))] as string[];
-  const { data: allClasses } = await supabase
-    .from('nexus_scheduled_classes')
-    .select('classroom_id, scheduled_date')
-    .in('classroom_id', classroomIds)
-    .eq('publish_state', 'published')
-    .neq('status', 'cancelled')
-    .order('scheduled_date', { ascending: true });
+  const { data: classrooms } = await supabase
+    .from('nexus_classrooms')
+    .select('id, catchup_window_days, catchup_optout_window_days')
+    .in('id', classroomIds);
 
-  const datesByClassroom = new Map<string, string[]>();
-  for (const c of allClasses || []) {
-    const list = datesByClassroom.get(c.classroom_id) || [];
-    const ymd = String(c.scheduled_date).slice(0, 10);
-    if (list[list.length - 1] !== ymd) list.push(ymd);
-    datesByClassroom.set(c.classroom_id, list);
+  const windowsByClassroom = new Map<string, CatchupWindows>();
+  for (const c of classrooms || []) {
+    windowsByClassroom.set(c.id, {
+      standardDays: Number(c.catchup_window_days) || DEFAULT_CATCHUP_WINDOWS.standardDays,
+      optedOutDays: Number(c.catchup_optout_window_days) || DEFAULT_CATCHUP_WINDOWS.optedOutDays,
+    });
   }
 
   const today = istTodayYmd();
@@ -108,11 +125,18 @@ export async function sweepOverdueMissedClasses(supabase: any): Promise<OverdueS
     // missing recording.
     if (!i.class.recording_url && !i.class.youtube_url) continue;
 
-    const dates = datesByClassroom.get(i.classroom_id) || [];
+    // Nothing running on this one. The query filters these out, so reaching
+    // here means a row changed under us mid-sweep. Skipped rather than
+    // coerced: String(null) is "null", which is not a date.
+    if (!i.activated_on) continue;
+
     const missedDay = String(i.class.scheduled_date).slice(0, 10);
-    const next = dates.find((d) => d > missedDay) ?? null;
-    const dueOn = missedClassDueOn(missedDay, next);
-    if (!isOverdue(dueOn, today)) continue;
+    const windows = windowsByClassroom.get(i.classroom_id) || DEFAULT_CATCHUP_WINDOWS;
+    const dueOn = catchupDueOn(
+      { activatedOn: String(i.activated_on).slice(0, 10), daysUsed: Number(i.days_used) || 0 },
+      catchupWindowDays((i.kind ?? 'no_show') as CatchupKind, windows),
+    );
+    if (!dueOn || !isOverdue(dueOn, today)) continue;
 
     overdue.push({
       id: i.id,

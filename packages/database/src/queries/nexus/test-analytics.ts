@@ -46,6 +46,9 @@ export async function listStudentAttempts(
     .select('id, test_id, attempt_number, score, total_marks, percentage, time_spent_seconds, submitted_at, placement_id')
     .eq('student_id', studentId)
     .eq('status', 'submitted')
+    // Practice runs on an already-completed chapter are not results. Without
+    // this a parent would see a revision score reported as their child's mark.
+    .eq('mode', 'official')
     .order('submitted_at', { ascending: false })
     .limit(Math.min(Math.max(opts?.limit ?? 25, 1), 200));
   if (opts?.testId) query = query.eq('test_id', opts.testId);
@@ -98,6 +101,8 @@ export async function getStudentTestStats(
     .select('test_id, percentage, submitted_at')
     .eq('student_id', studentId)
     .eq('status', 'submitted')
+    // best_percentage must be the best OFFICIAL score, never a practice run.
+    .eq('mode', 'official')
     .in('test_id', ids);
   if (error) throw error;
 
@@ -138,6 +143,10 @@ async function collectAnsweredQuestions(
     .select('answers, submitted_at')
     .eq('student_id', studentId)
     .eq('status', 'submitted')
+    // Deliberately NOT filtered to official. This feeds "fix my mistakes", and a
+    // question got wrong during revision is still a gap worth revisiting. Nothing
+    // here is reported as a score, so a practice run cannot flatter or damage a
+    // record; it only changes which questions come back.
     .order('submitted_at', { ascending: true })
     .limit(Math.min(Math.max(opts.limit ?? 100, 1), 500));
   if (error) throw error;
@@ -275,6 +284,9 @@ export async function getTestResults(
       .select('student_id, percentage, submitted_at, attempt_number')
       .eq('test_id', testId)
       .eq('status', 'submitted')
+      // Cohort stats. A student practising after completion must not move the
+      // class average or the pass rate.
+      .eq('mode', 'official')
       .order('submitted_at', { ascending: true }),
     supabase.from(TESTS).select('passing_marks, total_marks').eq('id', testId).maybeSingle(),
   ]);
@@ -364,7 +376,14 @@ export async function getQuestionAnalysis(
 
   const [questions, { data: attempts, error }] = await Promise.all([
     getComposedTestQuestions(testId, true, supabase),
-    supabase.from(ATTEMPTS).select('answers').eq('test_id', testId).eq('status', 'submitted'),
+    // Per-question difficulty for the teacher. Official attempts only, for the
+    // same reason as the cohort stats above.
+    supabase
+      .from(ATTEMPTS)
+      .select('answers')
+      .eq('test_id', testId)
+      .eq('status', 'submitted')
+      .eq('mode', 'official'),
   ]);
   if (error) throw error;
   if (questions.length === 0) return [];

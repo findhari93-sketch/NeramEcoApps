@@ -8,7 +8,7 @@
  * types a title wants the test, not a lesson about where they are standing.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Typography,
@@ -84,6 +84,16 @@ export default function TestLibraryView({
   const [renameValue, setRenameValue] = useState('');
   const [moveOpen, setMoveOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<FolderNode | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  /**
+   * Which listing request is the current one. Without this, a slow reply for an
+   * earlier folder or search term can land after a newer one and repaint the
+   * list with rows that do not match the heading above them. That was survivable
+   * while the only bulk action was "move", and is not once "delete" is one click
+   * away from a set of checkboxes.
+   */
+  const requestSeq = useRef(0);
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -126,6 +136,7 @@ export default function TestLibraryView({
   }, [search]);
 
   const loadTests = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setTests(null);
     try {
       const params = new URLSearchParams();
@@ -136,9 +147,11 @@ export default function TestLibraryView({
       if (debouncedSearch) params.set('search', debouncedSearch);
       params.set('page_size', '100');
       const json = await authFetch(`/api/question-bank/tests/library?${params.toString()}`);
+      if (seq !== requestSeq.current) return;
       setTests(json.data?.tests || []);
       setTotal(json.data?.total || 0);
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load tests');
       setTests([]);
     }
@@ -247,6 +260,35 @@ export default function TestLibraryView({
       setBusy(false);
     }
   }
+
+  async function deleteSelected() {
+    setBusy(true);
+    try {
+      const json = await authFetch('/api/question-bank/tests/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ test_ids: [...selected] }),
+      });
+      const deleted = json.data?.deleted || 0;
+      setConfirmBulkDelete(false);
+      setSelected(new Set());
+      await Promise.all([loadFolders(), loadTests()]);
+      setToast(`${deleted} test${deleted !== 1 ? 's' : ''} deleted.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete the tests');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const shown = tests || [];
+  const selectedTests = useMemo(() => shown.filter((t) => selected.has(t.id)), [shown, selected]);
+  // Attempted papers are the ones worth a second thought: deleting them takes a
+  // test a student has already sat out of their list.
+  const selectedAttempts = useMemo(
+    () => selectedTests.reduce((n, t) => n + (t.attempt_count || 0), 0),
+    [selectedTests],
+  );
+  const allShownSelected = shown.length > 0 && shown.every((t) => selected.has(t.id));
 
   const folderPanel = (
     <Box>
@@ -369,6 +411,15 @@ export default function TestLibraryView({
             >
               Move to folder
             </Button>
+            <Button
+              size="small"
+              color="error"
+              startIcon={<DeleteOutlineOutlinedIcon />}
+              onClick={() => setConfirmBulkDelete(true)}
+              sx={{ textTransform: 'none', minHeight: 40 }}
+            >
+              Delete
+            </Button>
             <Button size="small" onClick={() => setSelected(new Set())} sx={{ textTransform: 'none', minHeight: 40 }}>
               Clear
             </Button>
@@ -394,6 +445,21 @@ export default function TestLibraryView({
           </Paper>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Checkbox
+                size="small"
+                checked={allShownSelected}
+                indeterminate={selected.size > 0 && !allShownSelected}
+                onChange={() =>
+                  setSelected(allShownSelected ? new Set() : new Set(tests.map((t) => t.id)))
+                }
+                inputProps={{ 'aria-label': 'Select every test shown' }}
+                sx={{ p: 1 }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                Select all {tests.length} shown
+              </Typography>
+            </Box>
             {tests.map((t) => {
               const isSelected = selected.has(t.id);
               return (
@@ -599,6 +665,61 @@ export default function TestLibraryView({
           </Button>
           <Button color="error" variant="contained" onClick={deleteFolder} disabled={busy} sx={{ textTransform: 'none', minHeight: 44 }}>
             Delete folder
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete selected tests */}
+      <Dialog
+        open={confirmBulkDelete}
+        onClose={() => setConfirmBulkDelete(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>
+          Delete {selected.size} test{selected.size !== 1 ? 's' : ''}?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            They leave the library and stop opening for students. Attempt history is kept, so past
+            scores stay on record.
+          </Typography>
+          {selectedAttempts > 0 && (
+            <Alert severity="warning" sx={{ mt: 1.5 }}>
+              {selectedAttempts} attempt{selectedAttempts !== 1 ? 's have' : ' has'} been made on
+              these papers. Check you are not deleting a test a class has already sat.
+            </Alert>
+          )}
+          <Box
+            sx={{
+              mt: 1.5,
+              maxHeight: 200,
+              overflowY: 'auto',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              p: 1,
+            }}
+          >
+            {selectedTests.map((t) => (
+              <Typography key={t.id} variant="caption" sx={{ display: 'block', py: 0.25 }} noWrap>
+                {t.title}
+              </Typography>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmBulkDelete(false)} sx={{ textTransform: 'none', minHeight: 44 }}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={deleteSelected}
+            disabled={busy}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Delete {selected.size} test{selected.size !== 1 ? 's' : ''}
           </Button>
         </DialogActions>
       </Dialog>

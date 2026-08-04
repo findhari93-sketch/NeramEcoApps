@@ -7,17 +7,59 @@
 // ../../utils/catchup.ts, which is pure, unit tested, and NOT under @ts-nocheck.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import {
+  bankCatchupClock,
   classifyCatchupCandidate,
   isCatchupItemComplete,
-  isOverdue,
-  missedClassDueOn,
   resolveCatchupBacklog,
   summariseCatchupBacklog,
+  summariseCatchupClock,
   summariseMissedClasses,
+  DEFAULT_CATCHUP_WINDOWS,
+  type CatchupWindows,
 } from '../../utils/catchup';
 
 const JOURNEYS = 'nexus_catchup_journeys';
 const ITEMS = 'nexus_class_absences';
+
+/**
+ * The two clock columns, selected everywhere an item is read.
+ *
+ * A missing `activated_on` in a select is not a null clock, it is an item that
+ * silently renders as never started while a deadline runs against it in the
+ * database. Keeping the list in one constant is what stops that drifting.
+ */
+const CLOCK_COLUMNS = 'activated_on, days_used';
+
+/** How long a student gets in this classroom, once they start something. */
+export async function readCatchupWindows(
+  supabase: any,
+  classroomId: string,
+): Promise<CatchupWindows> {
+  try {
+    const { data } = await supabase
+      .from('nexus_classrooms')
+      .select('catchup_window_days, catchup_optout_window_days')
+      .eq('id', classroomId)
+      .maybeSingle();
+    return {
+      standardDays: Number(data?.catchup_window_days) || DEFAULT_CATCHUP_WINDOWS.standardDays,
+      optedOutDays:
+        Number(data?.catchup_optout_window_days) || DEFAULT_CATCHUP_WINDOWS.optedOutDays,
+    };
+  } catch {
+    // A student mid-flow must not see an error because a settings column was
+    // unreadable. The fallback is the same pair the migration defaults to.
+    return { ...DEFAULT_CATCHUP_WINDOWS };
+  }
+}
+
+/** The stopwatch as the pure rules want it. */
+export function toClock(item: any) {
+  return {
+    activatedOn: item?.activated_on ? String(item.activated_on).slice(0, 10) : null,
+    daysUsed: Number(item?.days_used) || 0,
+  };
+}
 
 /** A timestamp's calendar day in IST. Classes are Indian evenings; servers are UTC. */
 function istDay(iso: string): string {
@@ -257,9 +299,22 @@ export interface CatchupBacklogItem {
   step: string;
   /** False for a class they were enrolled for and missed. */
   chained: boolean;
-  /** The day this must be cleared by. Null when nothing is owed. */
+  /**
+   * The day this must be cleared by, and null on every item except the one the
+   * student actually started. That null is the fix for a screen where every
+   * card read "Was due" the moment it appeared.
+   */
   due_on: string | null;
   overdue: boolean;
+  /** The clock is running on this one. At most one per classroom. */
+  active: boolean;
+  days_left: number | null;
+  /** How long they get, so the screen can say so BEFORE they commit. */
+  window_days: number;
+  /** 1-based suggested order among startable items. */
+  order: number | null;
+  /** The one we point at. Exactly one item carries it. */
+  recommended: boolean;
   position: number | null;
   countsTowardPace: boolean;
   /** Why they missed it, when they have said. Null for a late joiner. */
@@ -288,13 +343,29 @@ export interface CatchupBacklog {
   journey: any | null;
   /** Everything, chronological. Both kinds, for callers that just want a list. */
   items: CatchupBacklogItem[];
-  /** Classes they were enrolled for and missed. Always open, timetable deadline. */
+  /** Classes they were enrolled for and missed. Recommended ahead of the backlog. */
   missed: CatchupBacklogItem[];
-  /** Classes taught before they joined. Sequentially unlocked, weekly quota. */
+  /** Classes taught before they joined. Suggested in order, never locked. */
   backlog: CatchupBacklogItem[];
   /** Late-joiner totals ONLY. This feeds the weekly quota, so a missed class must never enter it. */
   totals: { total: number; completed: number; blocked: number; pendingTeacher: number };
-  missedTotals: { total: number; completed: number; open: number; overdue: number };
+  missedTotals: {
+    total: number;
+    completed: number;
+    open: number;
+    overdue: number;
+    waiting: number;
+  };
+  /** The one-clock view: what is running, what is waiting, and who has stalled. */
+  clock: {
+    active: boolean;
+    waiting: number;
+    overdue: boolean;
+    daysLeft: number | null;
+    stalled: boolean;
+  };
+  /** How long this classroom gives, so a screen can say so before they commit. */
+  windows: CatchupWindows;
 }
 
 /**
@@ -324,7 +395,9 @@ export async function getCatchupBacklog(
     .from(ITEMS)
     .select(
       'id, scheduled_class_id, kind, recording_watched_at, caught_up_at, test_unlocked_at, ' +
-        'test_passed_at, excused_at, reason_code, class:nexus_scheduled_classes(id, title, scheduled_date, ' +
+        'test_passed_at, excused_at, reason_code, ' +
+        CLOCK_COLUMNS +
+        ', class:nexus_scheduled_classes(id, title, scheduled_date, ' +
         'start_time, status, recording_url, youtube_url)',
     )
     .eq('student_id', studentId)
@@ -346,25 +419,21 @@ export async function getCatchupBacklog(
   });
 
   const classIds = items.map((i: any) => i.scheduled_class_id);
-  const [facts, nextClassDates] = await Promise.all([
+  const [facts, windows] = await Promise.all([
     loadClassFacts(supabase, studentId, classIds),
-    loadNextClassDates(supabase, studentId, classroomId),
+    readCatchupWindows(supabase, classroomId),
   ]);
 
-  const resolved = resolveCatchupBacklog(items.map((i: any) => toFacts(i, facts)));
-
-  // A deadline only belongs on work the student can actually start. `open` is
-  // the only unchained status that qualifies: done and excused are finished,
-  // blocked has no recording, and pending_teacher is waiting on us, so putting
-  // "due before Thursday" on any of them would be a deadline for our own
-  // homework dressed up as theirs.
+  // Deadlines come from the student's own clock now, not from the timetable.
+  // The old rule set a missed class's deadline to the day the next class ran,
+  // which meant every class more than a week old was overdue the instant it
+  // appeared: a July backlog opened in August was a wall of red with no order
+  // to it. Nothing is due here until the student starts it.
   const today = istTodayYmd();
-  const dueOn = items.map((i: any, idx: number) =>
-    resolved[idx].status === 'open'
-      ? missedClassDueOn(i.class.scheduled_date, nextClassDates.after(i.class.scheduled_date))
-      : null,
+  const resolved = resolveCatchupBacklog(
+    items.map((i: any) => toFacts(i, facts)),
+    { today, windows },
   );
-  const overdueFlags = dueOn.map((d: string | null) => isOverdue(d, today));
 
   // Reconcile the stored caught_up_at against what the facts now say.
   //
@@ -389,14 +458,26 @@ export async function getCatchupBacklog(
   // own statement that they are done. That is not ours to withdraw.
   const toStamp: string[] = [];
   const toClear: string[] = [];
+  // Third list: a clock still running on something the student can no longer do.
+  //
+  // It holds the single active slot, so without this the student cannot start
+  // anything else without a confirm dialog naming a class that is not even on
+  // their screen. Happens whenever a teacher unpublishes the recap on the item
+  // they had started, or a recording is pulled, and on completion if the write
+  // that should have banked the clock did not land.
+  const toRelease: Array<{ id: string; days_used: number }> = [];
   items.forEach((i: any, idx: number) => {
-    const done = resolved[idx].status === 'done';
+    const r = resolved[idx];
+    if (i.activated_on && !r.active) {
+      toRelease.push({ id: i.id, days_used: bankCatchupClock(toClock(i), today) });
+    }
+    const done = r.status === 'done';
     if (done && !i.caught_up_at) {
       toStamp.push(i.id);
       return;
     }
     if (done || !i.caught_up_at) return;
-    const machineChecked = resolved[idx].chained || facts.recapByClass.has(i.scheduled_class_id);
+    const machineChecked = r.chained || facts.recapByClass.has(i.scheduled_class_id);
     if (machineChecked) toClear.push(i.id);
   });
   if (toStamp.length) {
@@ -412,6 +493,19 @@ export async function getCatchupBacklog(
       if (toClear.includes(i.id)) i.caught_up_at = null;
     });
   }
+  // One statement each: the banked total differs per row, so these cannot be
+  // batched into a single `.in()`. There is almost never more than one.
+  for (const rel of toRelease) {
+    await supabase
+      .from(ITEMS)
+      .update({ activated_on: null, days_used: rel.days_used })
+      .eq('id', rel.id);
+    const row = items.find((i: any) => i.id === rel.id);
+    if (row) {
+      row.activated_on = null;
+      row.days_used = rel.days_used;
+    }
+  }
 
   const shaped: CatchupBacklogItem[] = items.map((i: any, idx: number) => {
       const r = resolved[idx];
@@ -424,8 +518,14 @@ export async function getCatchupBacklog(
         status: r.status,
         step: r.step,
         chained: r.chained,
-        due_on: dueOn[idx],
-        overdue: overdueFlags[idx],
+        // Null on everything except the one item the student actually started.
+        due_on: r.dueOn,
+        overdue: r.overdue,
+        active: r.active,
+        days_left: r.daysLeft,
+        window_days: r.windowDays,
+        order: r.order,
+        recommended: r.recommended,
         position: r.position,
         countsTowardPace: r.countsTowardPace,
         reason_code: i.reason_code ?? null,
@@ -455,8 +555,89 @@ export async function getCatchupBacklog(
     missed: shaped.filter((i) => !i.chained),
     backlog: shaped.filter((i) => i.chained),
     totals: summariseCatchupBacklog(resolved),
-    missedTotals: summariseMissedClasses(resolved, overdueFlags),
+    missedTotals: summariseMissedClasses(resolved),
+    clock: summariseCatchupClock(resolved),
+    windows,
   };
+}
+
+/**
+ * Move the clock onto one item, banking whatever the running one has spent.
+ *
+ * Deactivate FIRST, always. Supabase has no transaction across two statements,
+ * and the partial unique index means an activate-then-deactivate order would
+ * reject the first write whenever something else is running. Failing in this
+ * order leaves the student with nothing running, which they can fix by pressing
+ * Start again; failing the other way would be a 500 in the middle of a flow.
+ *
+ * @param force false refuses to displace a clock that is already running, and
+ *   reports which item holds it, so the caller can ask before taking it away.
+ */
+export async function activateCatchupItem(
+  studentId: string,
+  classroomId: string,
+  itemId: string,
+  opts: { force?: boolean } = {},
+  client?: TypedSupabaseClient,
+): Promise<
+  | { ok: true; alreadyActive: boolean }
+  | { ok: false; conflict: { id: string; scheduled_class_id: string } }
+> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const today = istTodayYmd();
+
+  const { data: running } = await supabase
+    .from(ITEMS)
+    .select(`id, scheduled_class_id, ${CLOCK_COLUMNS}`)
+    .eq('student_id', studentId)
+    .eq('classroom_id', classroomId)
+    .not('activated_on', 'is', null)
+    .maybeSingle();
+
+  if (running?.id === itemId) return { ok: true, alreadyActive: true };
+  if (running && !opts.force) {
+    return { ok: false, conflict: { id: running.id, scheduled_class_id: running.scheduled_class_id } };
+  }
+
+  if (running) {
+    await supabase
+      .from(ITEMS)
+      .update({ activated_on: null, days_used: bankCatchupClock(toClock(running), today) })
+      .eq('id', running.id);
+  }
+
+  // Guarded on the null so a concurrent start cannot double-write this row.
+  await supabase
+    .from(ITEMS)
+    .update({ activated_on: today })
+    .eq('id', itemId)
+    .is('activated_on', null);
+
+  return { ok: true, alreadyActive: false };
+}
+
+/**
+ * Stop the clock on one item and bank what it spent.
+ *
+ * Called on completion and on a teacher excusing something. Banking rather than
+ * zeroing is what makes a later restore resume where they were: a teacher
+ * un-excusing an item should not hand back a window the student already used.
+ */
+export async function releaseCatchupClock(
+  itemId: string,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const { data: row } = await supabase
+    .from(ITEMS)
+    .select(`id, ${CLOCK_COLUMNS}`)
+    .eq('id', itemId)
+    .maybeSingle();
+  if (!row?.activated_on) return;
+  await supabase
+    .from(ITEMS)
+    .update({ activated_on: null, days_used: bankCatchupClock(toClock(row), istTodayYmd()) })
+    .eq('id', itemId);
 }
 
 /**
@@ -631,12 +812,20 @@ export function toFacts(item: any, facts: ClassFacts) {
       : null,
   );
   const work = facts.assignmentsByClass.get(item.scheduled_class_id) || [];
+  const kind =
+    item.kind === 'late_joiner' || item.kind === 'opted_out' || item.kind === 'no_show'
+      ? item.kind
+      : 'no_show';
   return {
-    // Only a late joiner's backlog waits its turn. A class this student was
-    // enrolled for and missed is always open: there is no teaching order to keep
-    // between two scattered absences, and chaining one behind a late joiner's
-    // whole backlog would bury the most urgent item in the list.
-    chained: item.kind === 'late_joiner',
+    // `kind` drives two things now: which window the student gets when they
+    // start (a class they declined draws the shorter one) and where it sits in
+    // the recommended order (a class they were on the roster for outranks the
+    // whole late joiner backlog, because it is what the course is building on).
+    kind,
+    // Still splits the pace denominator and the two lists on the student screen.
+    // It no longer locks anything.
+    chained: kind === 'late_joiner',
+    clock: toClock(item),
     excluded: verdict === 'no_recording',
     notReady: verdict === 'not_ready',
     excused: !!item.excused_at,
@@ -799,6 +988,10 @@ export async function recomputeCatchupItemCompletion(
       .from(ITEMS)
       .update({ caught_up_at: new Date().toISOString() })
       .eq('id', item.id);
+    // Finishing frees the clock for the next class. Banked, not zeroed: if a
+    // teacher later resets the test and re-opens this one, it resumes with the
+    // time already spent rather than handing back a fresh window.
+    await releaseCatchupClock(item.id, supabase);
   } else if (!complete && item.caught_up_at) {
     // It went backwards. A teacher restoring an item they had excused, or
     // resetting a passed test, un-does the class.

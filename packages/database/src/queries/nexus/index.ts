@@ -44,3 +44,5 @@ export * from './drawing-gallery';
 export * from './drawing-references';
 export * from './study-materials';
 export * from './study-tests';
+export * from './study-videos';
+export * from './study-reports';

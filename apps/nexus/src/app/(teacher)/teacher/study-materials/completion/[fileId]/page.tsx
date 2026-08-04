@@ -23,7 +23,14 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudyNudgeDialog from '@/components/study-materials/StudyNudgeDialog';
 
-type Status = 'not_opened' | 'studying' | 'completed';
+/**
+ * The two halves of a chapter are named separately.
+ *
+ * Everything between "opened" and "done" used to read as "studying", which told
+ * a tutor nothing about which nudge to send. "Needs the video" and "needs the
+ * test" are different conversations with different students.
+ */
+type Status = 'not_opened' | 'studying' | 'video_pending' | 'test_pending' | 'completed';
 
 interface Row {
   student_id: string;
@@ -34,20 +41,48 @@ interface Row {
   active_seconds: number;
   best_score_pct: number | null;
   days_since_started: number | null;
+  /** Which language satisfied the video half, if it is satisfied. */
+  video_language?: string | null;
+  /** Real playback across this chapter's tracks. Not a scrubber position. */
+  watched_seconds?: number;
+  /** Refused skip attempts. A signal about intent, not a score. */
+  blocked_seeks?: number;
+  checkpoint_attempts?: number;
+  /** Practice after completion. Never mixed into best_score_pct. */
+  revision_best_score_pct?: number | null;
 }
 
 interface CompletionData {
-  file: { id: string; title: string; has_test: boolean };
+  file: { id: string; title: string; has_test?: boolean };
+  requires_video?: boolean;
   students: Row[];
-  stats: { total: number; completed: number; studying: number; not_opened: number; avg_score: number | null };
+  stats: {
+    total: number;
+    completed: number;
+    studying: number;
+    not_opened: number;
+    video_pending?: number;
+    test_pending?: number;
+    avg_score: number | null;
+  };
 }
 
 const STATUS_META: Record<Status, { label: string; icon: any; color: string }> = {
   completed: { label: 'Completed', icon: CheckCircleIcon, color: 'success' },
+  test_pending: { label: 'Needs the test', icon: AutoStoriesOutlinedIcon, color: 'warning' },
+  video_pending: { label: 'Needs the video', icon: AutoStoriesOutlinedIcon, color: 'warning' },
   studying: { label: 'Studying', icon: AutoStoriesOutlinedIcon, color: 'warning' },
   not_opened: { label: 'Not opened', icon: RadioButtonUncheckedIcon, color: 'default' },
 };
-const STATUS_ORDER: Record<Status, number> = { not_opened: 0, studying: 1, completed: 2 };
+// Sorted by how far along they are, so "sort by status" surfaces the students
+// who need chasing rather than the ones who are finished.
+const STATUS_ORDER: Record<Status, number> = {
+  not_opened: 0,
+  studying: 1,
+  video_pending: 2,
+  test_pending: 3,
+  completed: 4,
+};
 
 function fmtTime(sec: number): string {
   if (!sec) return '-';
@@ -82,12 +117,16 @@ export default function CompletionDashboardPage() {
     setError(null);
     try {
       const t = await getToken();
-      const res = await fetch(`/api/study-materials/files/${fileId}/completion?classroom=${activeClassroom.id}`, {
-        headers: { Authorization: `Bearer ${t}` },
-      });
+      // The reports endpoint, which knows about the video half and the
+      // watch-honesty signals. `rows` is renamed to `students` here rather than
+      // in the API, so the rest of this page is untouched.
+      const res = await fetch(
+        `/api/study-materials/reports/chapter/${fileId}?classroom=${activeClassroom.id}`,
+        { headers: { Authorization: `Bearer ${t}` } },
+      );
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error || 'Failed to load');
-      setData(body);
+      setData({ ...body, students: body.rows || [] });
     } catch (e: any) {
       setError(e?.message || 'Failed to load completion');
     } finally {

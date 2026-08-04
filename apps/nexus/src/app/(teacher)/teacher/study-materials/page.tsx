@@ -59,6 +59,7 @@ import StudyUploadDialog from '@/components/study-materials/StudyUploadDialog';
 import DownloadGrantDialog, { type GrantTarget } from '@/components/study-materials/DownloadGrantDialog';
 import StudyTestAuthorDialog from '@/components/study-materials/StudyTestAuthorDialog';
 import StudyVideoLinkDialog from '@/components/study-materials/StudyVideoLinkDialog';
+import StudyVideoTracksDialog from '@/components/study-materials/StudyVideoTracksDialog';
 import FolderMovePicker, { type MoveItem } from '@/components/study-materials/FolderMovePicker';
 import { FileThumb, FileIcon } from '@/components/study-materials/FileThumb';
 import type { NexusStudyFileDTO, NexusStudyFolderDTO } from '@neram/database/types';
@@ -117,6 +118,10 @@ function TeacherStudyMaterials() {
   const [testFile, setTestFile] = useState<{ id: string; title: string } | null>(null);
   // Class-recording link dialog (per file).
   const [videoFile, setVideoFile] = useState<FileDTO | null>(null);
+  // The gated bilingual recordings, as opposed to the single ungated quick link
+  // above. Kept as separate menu items because they are different promises: one
+  // is "here is the class", the other is "watch this to finish the chapter".
+  const [tracksFile, setTracksFile] = useState<{ id: string; title: string } | null>(null);
 
   // Deep-link from the Tests hub (?testFile=<id>&testTitle=<name>): open the authoring dialog,
   // then strip the params so closing or refresh does not re-open it.
@@ -749,6 +754,19 @@ function TeacherStudyMaterials() {
           <ToggleButton value="grid" aria-label="Grid view"><GridViewOutlinedIcon fontSize="small" /></ToggleButton>
           <ToggleButton value="list" aria-label="List view"><ViewListOutlinedIcon fontSize="small" /></ToggleButton>
         </ToggleButtonGroup>
+        {/* Cohort progress for this folder. Only inside a folder: at the root
+            there is no set of chapters to report on. */}
+        {!atRoot && (
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<GroupsOutlinedIcon />}
+            onClick={() => router.push(`/teacher/study-materials/reports/${folderId}`)}
+            disabled={busy}
+          >
+            Progress
+          </Button>
+        )}
         <Button
           variant="outlined"
           size="small"
@@ -917,9 +935,13 @@ function TeacherStudyMaterials() {
           <ListItemIcon><QuizOutlinedIcon fontSize="small" /></ListItemIcon>
           <ListItemText>{fileMenu?.file.has_test ? 'Edit test' : 'Attach test'}</ListItemText>
         </MenuItem>
+        <MenuItem onClick={() => { if (fileMenu) setTracksFile({ id: fileMenu.file.id, title: fileMenu.file.title }); setFileMenu(null); }}>
+          <ListItemIcon><SmartDisplayOutlinedIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Class recordings</ListItemText>
+        </MenuItem>
         <MenuItem onClick={() => { if (fileMenu) setVideoFile(fileMenu.file); setFileMenu(null); }}>
           <ListItemIcon><SmartDisplayOutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>{fileMenu?.file.recording ? 'Edit video' : 'Link video'}</ListItemText>
+          <ListItemText>{fileMenu?.file.recording ? 'Edit quick link' : 'Link a quick video'}</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => { if (fileMenu) router.push(`/teacher/study-materials/completion/${fileMenu.file.id}`); setFileMenu(null); }}>
           <ListItemIcon><GroupsOutlinedIcon fontSize="small" /></ListItemIcon>
@@ -1020,6 +1042,15 @@ function TeacherStudyMaterials() {
         authFetch={authFetch}
         onClose={() => setVideoFile(null)}
         onSaved={load}
+      />
+
+      {/* The gated Tamil and English recordings for a Foundation chapter */}
+      <StudyVideoTracksDialog
+        open={!!tracksFile}
+        file={tracksFile}
+        getToken={getToken}
+        onClose={() => setTracksFile(null)}
+        onChanged={load}
       />
 
       {/* Move to folder... picker (touch-friendly path; drag-and-drop does the same on desktop) */}

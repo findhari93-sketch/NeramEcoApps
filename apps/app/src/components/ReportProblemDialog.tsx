@@ -24,7 +24,7 @@ import SendIcon from '@mui/icons-material/Send';
 import type { SupportTicketCategory } from '@neram/database/types';
 import { collectDeviceInfo } from '@/lib/device-collector';
 import { getRecentErrors } from '@/lib/error-buffer';
-import { compressImage } from '@/lib/image-compress';
+import { collectScreenshotPaths, compressForUpload } from '@/lib/issue-screenshot-upload';
 
 // These are the support_tickets categories, used here verbatim rather than
 // mapped from a second set. A report from this dialog lands in the Admin
@@ -74,19 +74,26 @@ export default function ReportProblemDialog({
   const [description, setDescription] = useState('');
   const [screenshots, setScreenshots] = useState<string[]>([]); // storage paths
   const [submitting, setSubmitting] = useState(false);
-  const [autoHandled, setAutoHandled] = useState(false);
-  const [autoUploading, setAutoUploading] = useState(false);
+  // The auto-captured page shot is held here and uploaded at SUBMIT time. Keep
+  // it that way: uploading it early and writing the path back through state is
+  // what silently lost every screenshot before. See issue-screenshot-upload.ts.
+  const [autoShotDropped, setAutoShotDropped] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  const [autoShotPreview, setAutoShotPreview] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
     severity: 'success',
   });
 
+  const autoShot = autoShotDropped ? null : initialScreenshotFile || null;
+
   const resetForm = () => {
     setCategory(DEFAULT_CATEGORY);
     setTitle('');
     setDescription('');
     setScreenshots([]);
+    setAutoShotDropped(false);
   };
 
   // Manual-upload closure for the shared widget: compress → POST → path.
@@ -94,7 +101,7 @@ export default function ReportProblemDialog({
     async (file: File): Promise<{ url: string; path?: string }> => {
       const token = await getToken();
       if (!token) throw new Error('Not authenticated');
-      const compressed = await compressImage(file);
+      const compressed = await compressForUpload(file);
       const fd = new FormData();
       fd.append('file', compressed, 'screenshot.jpg');
       const res = await fetch('/api/error-reports/upload', {
@@ -115,7 +122,7 @@ export default function ReportProblemDialog({
   // Apply prefill once when opening.
   useEffect(() => {
     if (!open) {
-      setAutoHandled(false);
+      setAutoShotDropped(false);
       return;
     }
     if (prefill) {
@@ -126,27 +133,17 @@ export default function ReportProblemDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Upload the auto-captured screenshot once, when the dialog opens (best-effort).
+  // Local preview of the page shot, so the reporter can see (and drop) what is
+  // about to be attached. Nothing is sent to the server until Submit.
   useEffect(() => {
-    if (!open || !initialScreenshotFile || autoHandled) return;
-    setAutoHandled(true);
-    let cancelled = false;
-    (async () => {
-      setAutoUploading(true);
-      try {
-        const { path } = await uploadScreenshot(initialScreenshotFile);
-        if (!cancelled && path) setScreenshots((prev) => (prev.includes(path) ? prev : [path, ...prev]));
-      } catch {
-        /* best-effort */
-      } finally {
-        if (!cancelled) setAutoUploading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialScreenshotFile, autoHandled]);
+    if (!open || !autoShot) {
+      setAutoShotPreview(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(autoShot);
+    setAutoShotPreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [open, autoShot]);
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
@@ -163,6 +160,17 @@ export default function ReportProblemDialog({
       }
       const consoleLogs = getRecentErrors();
 
+      // Upload the page shot now, so its path goes straight into the body below
+      // instead of through component state. Best-effort: a failed or slow upload
+      // never blocks the report.
+      if (autoShot) setAttaching(true);
+      const screenshotPaths = await collectScreenshotPaths({
+        manual: screenshots,
+        autoFile: autoShot,
+        upload: (file) => uploadScreenshot(file).then((r) => r.path || null),
+      });
+      setAttaching(false);
+
       const res = await fetch('/api/error-reports', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -171,7 +179,7 @@ export default function ReportProblemDialog({
           description: description.trim(),
           category,
           page_url: pageUrl || window.location.pathname,
-          screenshot_urls: screenshots.length > 0 ? screenshots : undefined,
+          screenshot_urls: screenshotPaths.length > 0 ? screenshotPaths : undefined,
           device_info: deviceInfo,
           console_logs: consoleLogs.length > 0 ? consoleLogs : undefined,
         }),
@@ -193,6 +201,7 @@ export default function ReportProblemDialog({
         err instanceof Error && err.message ? err.message : 'Could not send the report. Please try again.';
       setSnackbar({ open: true, message, severity: 'error' });
     } finally {
+      setAttaching(false);
       setSubmitting(false);
     }
   };
@@ -244,6 +253,43 @@ export default function ReportProblemDialog({
         inputProps={{ maxLength: 2000 }}
       />
 
+      {autoShotPreview && (
+        <Box>
+          <Typography variant="body2" sx={{ mb: 0.75, fontWeight: 600 }}>
+            Picture of this page
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box
+              component="img"
+              src={autoShotPreview}
+              alt="This page"
+              sx={{
+                width: 88,
+                height: 88,
+                objectFit: 'cover',
+                objectPosition: 'top',
+                borderRadius: 1.5,
+                border: '1px solid',
+                borderColor: 'divider',
+              }}
+            />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                We will send this along so we can see what you saw.
+              </Typography>
+              <Button
+                size="small"
+                onClick={() => setAutoShotDropped(true)}
+                disabled={submitting}
+                sx={{ textTransform: 'none', minHeight: 40, px: 1, mt: 0.25 }}
+              >
+                Do not send it
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
       <ImageUploadList
         label="Screenshots"
         values={screenshots.map(pathToUrl)}
@@ -253,11 +299,6 @@ export default function ReportProblemDialog({
         accept="image/jpeg,image/png,image/webp"
       />
 
-      {autoUploading && (
-        <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
-          Attaching a screenshot of this page…
-        </Typography>
-      )}
       <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
         Technical details (page, device, recent errors) are attached automatically so we can fix this faster.
         {pageUrl ? ` Page: ${pageUrl}` : ''}
@@ -277,7 +318,7 @@ export default function ReportProblemDialog({
         endIcon={<SendIcon sx={{ fontSize: '1rem !important' }} />}
         sx={{ textTransform: 'none', minHeight: 40 }}
       >
-        {submitting ? 'Sending…' : 'Send report'}
+        {attaching ? 'Attaching picture…' : submitting ? 'Sending…' : 'Send report'}
       </Button>
     </>
   );

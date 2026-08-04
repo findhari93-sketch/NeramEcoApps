@@ -43,15 +43,24 @@ export async function GET(request: NextRequest) {
     const testIds = rows.map((t: any) => t.id);
     const studentIds = [...new Set(rows.map((t: any) => t.created_by_student))];
 
-    const [{ data: users }, { data: tqRows }, { data: attempts }, { data: folders }] = await Promise.all([
-      supabase.from('users').select('id, full_name, avatar_url').in('id', studentIds),
+    const [{ data: users, error: userError }, { data: tqRows }, { data: attempts }, { data: folders }] = await Promise.all([
+      // `name` is the display name on users. Selecting a column that does not
+      // exist makes PostgREST reject the whole request, and because this result
+      // was previously destructured without its error, the rejection was
+      // swallowed and every single row rendered as "Unknown student".
+      supabase.from('users').select('id, name, avatar_url').in('id', studentIds),
       supabase.from('nexus_test_questions').select('test_id').in('test_id', testIds).range(0, 100000),
-      supabase.from('nexus_test_attempts').select('test_id, percentage').in('test_id', testIds).eq('status', 'submitted'),
+      // Official only: a revision run must not move a student's reported score.
+      supabase.from('nexus_test_attempts').select('test_id, percentage').in('test_id', testIds).eq('status', 'submitted').eq('mode', 'official'),
       supabase.from('nexus_test_folders').select('id, name').in('id', rows.map((t: any) => t.folder_id).filter(Boolean)),
     ]);
 
-    const userMap = new Map<string, { full_name: string | null; avatar_url: string | null }>(
-      (users || []).map((u: any) => [u.id, { full_name: u.full_name ?? null, avatar_url: u.avatar_url ?? null }]),
+    // Loud rather than degraded. A name lookup that fails should read as broken,
+    // not as a roomful of anonymous students.
+    if (userError) throw userError;
+
+    const userMap = new Map<string, { name: string | null; avatar_url: string | null }>(
+      (users || []).map((u: any) => [u.id, { name: u.name ?? null, avatar_url: u.avatar_url ?? null }]),
     );
     const folderMap = new Map((folders || []).map((f: any) => [f.id, f.name]));
     const qCount = new Map<string, number>();
@@ -71,7 +80,7 @@ export async function GET(request: NextRequest) {
         const u = userMap.get(key);
         groups.set(key, {
           student_id: key,
-          student_name: u?.full_name ?? 'Unknown student',
+          student_name: u?.name?.trim() || 'Unknown student',
           avatar_url: u?.avatar_url ?? null,
           tests: [],
         });

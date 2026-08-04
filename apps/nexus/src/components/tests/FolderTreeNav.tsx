@@ -12,7 +12,7 @@
  * (tests with folder_id NULL, which would otherwise be invisible).
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Typography, IconButton, Chip, Collapse } from '@neram/ui';
 import type { SxProps, Theme } from '@neram/ui';
 import ChevronRightOutlinedIcon from '@mui/icons-material/ChevronRightOutlined';
@@ -42,6 +42,12 @@ interface FolderTreeNavProps {
   onSelect: (id: string) => void;
   /** Omit to hide the per-folder overflow menu (pickers do not manage folders). */
   onFolderMenu?: (folder: FolderNode, anchor: HTMLElement) => void;
+  /**
+   * Folder ids to force open. Memoise it: a fresh array every render would keep
+   * re-opening what the teacher has just collapsed. Used by the picker to reveal
+   * a folder it has just created inside a collapsed parent.
+   */
+  expandedIds?: string[];
   /** Hidden in pickers, where "everything" is the sensible default view. */
   showAll?: boolean;
   totalCount?: number;
@@ -175,6 +181,7 @@ export default function FolderTreeNav({
   selected,
   onSelect,
   onFolderMenu,
+  expandedIds,
   showAll = true,
   totalCount = 0,
   sx,
@@ -182,6 +189,25 @@ export default function FolderTreeNav({
   // Top level starts open. Anything deeper starts closed, so a big library does
   // not open as a wall of folders.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(tree.map((f) => f.id)));
+
+  // Every caller fetches the tree after this mounts, so the initialiser above
+  // ran against an empty list and nothing opened. Apply the rule once, when the
+  // roots actually arrive, and not on later refetches: re-opening a folder the
+  // teacher just collapsed because they renamed something is worse than useless.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || tree.length === 0) return;
+    seeded.current = true;
+    setExpanded((prev) => new Set([...prev, ...tree.map((f) => f.id)]));
+  }, [tree]);
+
+  useEffect(() => {
+    if (!expandedIds || expandedIds.length === 0) return;
+    setExpanded((prev) => {
+      const missing = expandedIds.filter((id) => !prev.has(id));
+      return missing.length === 0 ? prev : new Set([...prev, ...missing]);
+    });
+  }, [expandedIds]);
 
   const toggle = useCallback((id: string) => {
     setExpanded((prev) => {

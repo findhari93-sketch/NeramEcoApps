@@ -140,6 +140,9 @@ export async function loadParentTests(
         .select('test_id, percentage, score, total_marks, submitted_at')
         // Submitted only. See trap 2 in the module docblock.
         .eq('status', 'submitted')
+        // Official only. A parent must never be shown a practice run on an
+        // already-completed chapter as though it were their child's result.
+        .eq('mode', 'official')
         .eq('student_id', studentId)
         .in('test_id', testIds);
       return (data || []) as {

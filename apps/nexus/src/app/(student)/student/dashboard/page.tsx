@@ -81,7 +81,8 @@ interface DashboardData {
 export default function StudentDashboard() {
   const theme = useTheme();
   const router = useRouter();
-  const { user, activeClassroom, getToken, loading: authLoading, classrooms } = useNexusAuthContext();
+  const { user, activeClassroom, getToken, loading: authLoading, classrooms, isFeatureEnabled } =
+    useNexusAuthContext();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [foundationChapters, setFoundationChapters] = useState<NexusFoundationChapterWithProgress[] | null>(null);
@@ -301,15 +302,21 @@ export default function StudentDashboard() {
         </Paper>
       )}
 
-      {/* ── Foundation Progress ── */}
-      <Box sx={{ mb: 2 }}>
-        <FoundationOverviewCard
-          chapters={foundationChapters}
-          loading={foundationLoading}
-          onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
-          onViewAll={() => router.push('/student/foundation')}
-        />
-      </Box>
+      {/* ── Foundation Progress ──
+          This dashboard is a core feature and can never be switched off, so
+          until student.foundation existed the card rode in on that and appeared
+          for every student the moment any chapter was published. It has to check
+          the flag itself; there is no route here for FeatureGate to match. */}
+      {isFeatureEnabled('student.foundation') && (
+        <Box sx={{ mb: 2 }}>
+          <FoundationOverviewCard
+            chapters={foundationChapters}
+            loading={foundationLoading}
+            onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
+            onViewAll={() => router.push('/student/foundation')}
+          />
+        </Box>
+      )}
 
       {/* ── "Next Up" Hero Card ── */}
       {!loading && (

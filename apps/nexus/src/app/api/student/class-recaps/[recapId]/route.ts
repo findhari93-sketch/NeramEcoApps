@@ -26,6 +26,12 @@ export async function GET(
 
     const recap = await getRecapForStudent(recapId, user.id);
     if (!recap) return NextResponse.json({ error: 'Recap not found' }, { status: 404 });
+    // Foundation chapter tracks share this table but are reached through
+    // /api/student/study-videos, which authorises by study-folder audience
+    // rather than by classroom enrollment.
+    if (recap.study_file_id) {
+      return NextResponse.json({ error: 'Recap not found' }, { status: 404 });
+    }
     if (recap.status !== 'published') {
       return NextResponse.json({ error: 'This recap is not available yet' }, { status: 403 });
     }

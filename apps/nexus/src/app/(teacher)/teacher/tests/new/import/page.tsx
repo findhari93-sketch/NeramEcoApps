@@ -50,6 +50,7 @@ import TagPicker from '@/components/question-bank/TagPicker';
 import QuestionPickerList from '@/components/question-bank/QuestionPickerList';
 import ImportReviewCard, { ROW_ACTIONS, type ReviewRow, type RowAction } from '@/components/tests/ImportReviewCard';
 import CompareQuestionsDialog from '@/components/tests/CompareQuestionsDialog';
+import TestFolderPicker from '@/components/tests/TestFolderPicker';
 import {
   buildImportPrompt,
   validateImportJSON,
@@ -72,7 +73,13 @@ export default function ImportTestPage() {
   const [chapter, setChapter] = useState('');
   const [exam, setExam] = useState<ImportExam>('NATA');
   const [count, setCount] = useState(30);
-  const [folderPath, setFolderPath] = useState('');
+  // Folder. The id is what the test is actually filed under; the path is kept
+  // alongside it for the prompt, and doubles as the AI's suggested folder when
+  // nothing has been picked, which the commit route materialises for us.
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [folderPath, setFolderPath] = useState<string[]>([]);
+  // Once the teacher has picked, the AI's suggestion stops overwriting it.
+  const [folderChosen, setFolderChosen] = useState(false);
 
   // Step 2
   const [pasted, setPasted] = useState('');
@@ -156,10 +163,14 @@ export default function ImportTestPage() {
     return map;
   }, [registry, proposedTags]);
 
-  const folderSegments = useMemo(
-    () => folderPath.split('/').map((s) => s.trim()).filter(Boolean),
-    [folderPath],
-  );
+  /** A path with no id behind it is the AI's suggestion, not yet a real folder. */
+  const suggestedPath = folderId === null && folderPath.length > 0 ? folderPath : undefined;
+
+  const chooseFolder = useCallback((id: string | null, path: string[]) => {
+    setFolderId(id);
+    setFolderPath(path);
+    setFolderChosen(true);
+  }, []);
 
   async function copyPrompt() {
     try {
@@ -167,7 +178,7 @@ export default function ImportTestPage() {
         chapter: chapter.trim() || undefined,
         exam,
         count,
-        folderPath: folderSegments,
+        folderPath,
       });
       await navigator.clipboard.writeText(prompt);
       setToast('Prompt copied. Open ChatGPT or Gemini, attach your PDF, and paste it.');
@@ -195,8 +206,11 @@ export default function ImportTestPage() {
       if (!title.trim()) {
         setTitle(result.test.title || (chapter.trim() ? `${chapter.trim()} Test` : ''));
       }
-      if (!folderPath.trim() && result.test.folder_path.length > 0) {
-        setFolderPath(result.test.folder_path.join(' / '));
+      // The AI's suggestion only fills a gap. It never overrides a folder the
+      // teacher has already picked, and it stays a path rather than an id
+      // because that folder may not exist yet.
+      if (!folderChosen && result.test.folder_path.length > 0) {
+        setFolderPath(result.test.folder_path);
       }
 
       const dedupe = await authFetch('/api/question-bank/import/preview', {
@@ -279,7 +293,10 @@ export default function ImportTestPage() {
         body: JSON.stringify({
           title: title.trim(),
           test_kind: testKind,
-          folder_path: folderSegments,
+          // The id wins server side. The path is the fallback for a suggested
+          // folder nobody has created yet.
+          folder_id: folderId,
+          folder_path: folderPath,
           passing_pct: passingPct,
           is_published: publish,
           new_tags: proposedTags.filter((t) => t.approved).map((t) => ({ slug: t.slug, label: t.label })),
@@ -401,14 +418,16 @@ export default function ImportTestPage() {
                 inputProps={{ min: 1, max: 200, inputMode: 'numeric' }}
               />
             </Box>
-            <TextField
-              label="Folder"
-              placeholder="Foundation / History of Architecture"
-              value={folderPath}
-              onChange={(e) => setFolderPath(e.target.value)}
-              fullWidth
-              size="small"
-              helperText="Separate levels with a slash. Folders are created if they do not exist."
+            <TestFolderPicker
+              value={folderId}
+              onChange={chooseFolder}
+              authFetch={authFetch}
+              pendingPath={suggestedPath}
+              helperText={
+                folderPath.length > 0
+                  ? `Filed under ${folderPath.join(' > ')}, and the AI is told so too`
+                  : 'Optional. Pick where the test will live, or make a new folder.'
+              }
             />
           </Box>
 
@@ -679,17 +698,17 @@ export default function ImportTestPage() {
                 </MenuItem>
               ))}
             </TextField>
-            <TextField
-              label="Folder"
-              value={folderPath}
-              onChange={(e) => setFolderPath(e.target.value)}
-              fullWidth
-              size="small"
-              placeholder="Foundation / History of Architecture"
+            <TestFolderPicker
+              value={folderId}
+              onChange={chooseFolder}
+              authFetch={authFetch}
+              pendingPath={suggestedPath}
               helperText={
-                folderSegments.length > 0
-                  ? `Filed under ${folderSegments.join(' > ')}`
-                  : 'Leave blank to put it in Unfiled'
+                folderId
+                  ? `Filed under ${folderPath.join(' > ')}`
+                  : folderPath.length > 0
+                    ? `The AI suggested ${folderPath.join(' > ')}. It will be created when the test is.`
+                    : 'Leave it in Unfiled, or pick a folder.'
               }
             />
             <TextField

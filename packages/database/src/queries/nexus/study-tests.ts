@@ -547,6 +547,13 @@ export async function gradePlacedChapterAttempt(
   fileId: string,
   studentId: string,
   answers: Record<string, string>,
+  /**
+   * 'revision' is practice on a chapter the student has already completed. It
+   * grades and explains identically, but is routed away from the official record
+   * by dispatchPlacementSideEffect. The route decides this; it is not taken from
+   * the request body without a completion check first.
+   */
+  mode: 'official' | 'revision' = 'official',
   client?: TypedSupabaseClient,
 ): Promise<NexusStudyTestAttemptResult> {
   const supabase = client || getSupabaseAdminClient();
@@ -559,6 +566,7 @@ export async function gradePlacedChapterAttempt(
       studentId,
       answers,
       placementId: placed.placement_id,
+      mode,
     },
     supabase,
   );

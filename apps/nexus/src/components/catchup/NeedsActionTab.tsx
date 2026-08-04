@@ -50,10 +50,18 @@ function itemLine(item: Item): string {
     const said = describeReason(item.reason_code, item.reason_note);
     bits.push(item.reason_note ? `"${said}"` : said);
   }
+  // Only the class they actually started has a clock. Saying "due" about one
+  // they have not touched was how every card ended up looking late.
   if (item.overdue) {
-    bits.push(`overdue since ${item.due_on ? shortDate(item.due_on) : 'the next class'}`);
-  } else if (item.due_on) {
-    bits.push(`due ${shortDate(item.due_on)}`);
+    bits.push(`ran over ${item.due_on ? shortDate(item.due_on) : ''}`.trim());
+  } else if (item.active && item.due_on) {
+    bits.push(
+      typeof item.days_left === 'number'
+        ? `${item.days_left === 1 ? '1 day' : `${item.days_left} days`} left`
+        : `due ${shortDate(item.due_on)}`,
+    );
+  } else {
+    bits.push('not started');
   }
   return bits.join(' · ');
 }
@@ -69,8 +77,16 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge }: TabProps)
     if (saved === 'matrix' || saved === 'cards') setView(saved);
   }, []);
 
+  // Run over, or stalled: work owed with no clock running on any of it. The
+  // second one is the important addition. Counting overdue items used to surface
+  // whoever had the most, but with one clock at a time that count tops out at 1,
+  // and a student who has started nothing would otherwise look identical to one
+  // who is halfway through.
   const needsAttention = useMemo(
-    () => data.students.filter((s) => s.missedTotals.overdue > 0 || s.pace.state === 'behind'),
+    () =>
+      data.students.filter(
+        (s) => s.clock?.overdue || s.clock?.stalled || s.pace.state === 'behind',
+      ),
     [data.students],
   );
   const rest = useMemo(

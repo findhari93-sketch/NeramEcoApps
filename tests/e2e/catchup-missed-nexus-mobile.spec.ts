@@ -86,7 +86,7 @@ test.describe('Catch-up (mobile)', () => {
 
     // Either there is work, in which case the hero names it, or there is not, in
     // which case the empty state says so plainly. A blank screen is the failure.
-    const hero = page.getByText(/do this next|overdue, do this first/i);
+    const hero = page.getByText(/we suggest starting here|you are on this one|running late/i);
     const empty = page.getByText(/nothing to catch up on/i);
     const hasHero = (await hero.count()) > 0;
     expect(hasHero || (await empty.count()) > 0).toBe(true);
@@ -94,9 +94,11 @@ test.describe('Catch-up (mobile)', () => {
     if (hasHero) {
       // The single call to action has to clear the touch minimum, because on a
       // phone it is the only thing on the screen anyone is meant to press.
-      await assertTouchTargetSize(page, 'button:has-text("Watch the class")', 44).catch(async () => {
-        await assertTouchTargetSize(page, '.MuiButton-contained', 44);
-      });
+      await assertTouchTargetSize(page, 'button:has-text("Start this class")', 44).catch(
+        async () => {
+          await assertTouchTargetSize(page, '.MuiButton-contained', 44);
+        },
+      );
     }
 
     await context.close();
@@ -112,14 +114,17 @@ test.describe('Catch-up (mobile)', () => {
     await page.goto(`${NEXUS}/student/catch-up`, { waitUntil: 'domcontentloaded' });
     await waitForScreen(page, /catch-up|nothing to catch up on/i);
 
-    const section = page.getByText(/classes you missed|^overdue$/i);
+    const section = page.getByText(/classes you missed/i);
     test.skip(
       (await section.count()) === 0,
       'This account has not missed a class in this environment',
     );
 
     // Whole card is the tap target, not a small chevron.
-    const card = page.locator('button').filter({ hasText: /due|caught up/i }).first();
+    const card = page
+      .locator('button')
+      .filter({ hasText: /days once you start|days left|caught up|due/i })
+      .first();
     test.skip((await card.count()) === 0, 'No missed-class card rendered');
 
     const box = await card.boundingBox();

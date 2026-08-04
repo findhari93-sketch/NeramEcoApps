@@ -49,12 +49,18 @@ import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
 interface BacklogItem {
   id: string;
   scheduled_class_id: string;
-  status: 'done' | 'current' | 'locked' | 'open' | 'excused' | 'pending_teacher';
+  status: 'done' | 'active' | 'waiting' | 'excused' | 'blocked' | 'pending_teacher';
   step: 'watch' | 'assignment' | 'test' | 'done';
   chained: boolean;
   position: number | null;
+  /** Null on everything except the one class this student started. */
   due_on: string | null;
   overdue: boolean;
+  active: boolean;
+  days_left: number | null;
+  window_days: number;
+  order: number | null;
+  recommended: boolean;
   reason_code: string | null;
   watched: boolean;
   assignments_outstanding: number;
@@ -75,7 +81,15 @@ interface Payload {
     message: string;
   } | null;
   totals: { total: number; completed: number; blocked: number; pendingTeacher: number } | null;
-  missedTotals: { total: number; completed: number; open: number; overdue: number };
+  missedTotals: { total: number; completed: number; open: number; overdue: number; waiting: number };
+  clock: {
+    active: boolean;
+    waiting: number;
+    overdue: boolean;
+    daysLeft: number | null;
+    stalled: boolean;
+  } | null;
+  windows: { standardDays: number; optedOutDays: number } | null;
   missed: BacklogItem[];
   items: BacklogItem[];
   excluded: Array<{ id: string; class: { title: string | null; scheduled_date: string } }>;
@@ -104,25 +118,33 @@ function formatDay(ymd: string): string {
   return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-function shortDay(ymd: string | null): string | null {
-  if (!ymd) return null;
-  const d = new Date(`${ymd}T00:00:00+05:30`);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('en-IN', { weekday: 'short' });
+/**
+ * The clock, said the way a person would say it.
+ *
+ * Only the class the student actually started has one. Everything else returns
+ * null and renders with no colour, which is the fix for a screen where four
+ * cards all read "Was due" the moment it opened.
+ */
+function dueLabel(item: BacklogItem): string | null {
+  if (!item.active || !item.due_on || item.status === 'done') return null;
+  const left = item.days_left;
+  if (left == null) return null;
+  if (left < 0) return left === -1 ? 'Due yesterday' : `${Math.abs(left)} days over`;
+  if (left === 0) return 'Due today';
+  if (left === 1) return '1 day left';
+  return `${left} days left`;
 }
 
-/** The deadline, said the way a person would say it. */
-function dueLabel(item: BacklogItem): string | null {
-  if (!item.due_on || item.status === 'done') return null;
-  if (item.overdue) return `Was due ${formatDay(item.due_on)}`;
-  return `Due before ${formatDay(item.due_on)}`;
+/** What a class that has not been started yet promises, before they commit. */
+function offerLabel(item: BacklogItem): string {
+  return `${item.window_days} days once you start`;
 }
 
 const TRACK_STATUS: Record<BacklogItem['status'], TrackStepStatus> = {
   done: 'done',
-  current: 'current',
-  open: 'current',
-  locked: 'locked',
+  active: 'current',
+  waiting: 'current',
+  blocked: 'pending',
   excused: 'excused',
   pending_teacher: 'pending',
 };
@@ -172,7 +194,9 @@ const EMPTY_PAYLOAD: Payload = {
   journey: null,
   pace: null,
   totals: null,
-  missedTotals: { total: 0, completed: 0, open: 0, overdue: 0 },
+  missedTotals: { total: 0, completed: 0, open: 0, overdue: 0, waiting: 0 },
+  clock: null,
+  windows: null,
   missed: [],
   items: [],
   excluded: [],
@@ -212,17 +236,16 @@ export default function StudentCatchUpPage() {
     }
   }, [error, offline]);
 
-  /** Where an item's CTA goes. Straight to the step, not to a landing page. */
+  /**
+   * One destination, always.
+   *
+   * This used to branch on `step` and send the student to three different
+   * routes, so one class was spread over three screens and the Back button
+   * landed somewhere different depending on how far through they were. The
+   * per-class page is the workspace now, and the recap plays inside it.
+   */
   const openItem = useCallback(
     (item: BacklogItem) => {
-      if (item.step === 'test' && item.has_test) {
-        router.push(`/student/catch-up/${item.scheduled_class_id}/test`);
-        return;
-      }
-      if (item.step === 'watch' && item.recap_id) {
-        router.push(`/student/class-recap/${item.recap_id}`);
-        return;
-      }
       router.push(`/student/timetable/${item.scheduled_class_id}/catch-up`);
     },
     [router],
@@ -232,7 +255,6 @@ export default function StudentCatchUpPage() {
     () => (data?.missed || []).filter((i) => i.status !== 'done' && i.status !== 'excused'),
     [data],
   );
-  const overdue = useMemo(() => missedOpen.filter((i) => i.overdue), [missedOpen]);
 
   if (data === null) {
     return (
@@ -249,11 +271,15 @@ export default function StudentCatchUpPage() {
   }
 
   const { items, missed, pace, totals, excluded } = data;
-  const backlogCurrent = items.find((i) => i.status === 'current') || null;
 
-  // The one thing to do next. A missed class outranks the backlog: it has a real
-  // deadline and the course is about to move past it. Overdue outranks the rest.
-  const current = overdue[0] || missedOpen[0] || backlogCurrent;
+  // The server picks this now, across both lists at once, and it already knows
+  // the rules: the running clock first if there is one, then a class they were
+  // on the roster for ahead of the late joiner backlog, then oldest. Picking it
+  // here as well would be a second copy of the same rule, free to disagree.
+  const current =
+    [...missed, ...items].find((i) => i.recommended) ??
+    [...missed, ...items].find((i) => i.status === 'waiting' || i.status === 'active') ??
+    null;
   const behind = pace?.state === 'behind';
   const nothingAtAll =
     missed.length === 0 && items.length === 0 && excluded.length === 0;
@@ -282,7 +308,7 @@ export default function StudentCatchUpPage() {
         ? 'Your teacher is still preparing this one'
         : i.status === 'excused'
           ? 'Excused by your teacher'
-          : `${formatDay(i.class.scheduled_date)}${i.status === 'current' ? ` · ${STEP_COPY[i.step].label}` : ''}`,
+          : `${formatDay(i.class.scheduled_date)}${i.active ? ` · ${STEP_COPY[i.step].label}` : ''}`,
     done: i.status === 'done',
     status: TRACK_STATUS[i.status],
     label: i.position ?? '·',
@@ -292,7 +318,16 @@ export default function StudentCatchUpPage() {
 
   /** One missed class, as a tappable card. */
   const missedCard = (item: BacklogItem) => {
-    const tone = item.status === 'done' ? 'success' : item.overdue ? 'error' : 'warning';
+    // Grey unless it is actually theirs to worry about. Painting every unstarted
+    // class amber was what made the list read as a pile of failures.
+    const tone =
+      item.status === 'done'
+        ? 'success'
+        : item.overdue
+          ? 'error'
+          : item.active
+            ? 'primary'
+            : 'divider';
     const due = dueLabel(item);
 
     return (
@@ -327,7 +362,7 @@ export default function StudentCatchUpPage() {
             bottom: 12,
             width: 4,
             borderRadius: '0 4px 4px 0',
-            bgcolor: `${tone}.main`,
+            bgcolor: tone === 'divider' ? 'divider' : `${tone}.main`,
           },
         }}
       >
@@ -373,10 +408,19 @@ export default function StudentCatchUpPage() {
           ) : due ? (
             <Chip
               size="small"
-              color={item.overdue ? 'error' : 'warning'}
+              color={item.overdue ? 'error' : 'primary'}
               variant={item.overdue ? 'filled' : 'outlined'}
               label={due}
               sx={{ fontWeight: 700 }}
+            />
+          ) : item.status === 'waiting' ? (
+            // Not started, so not late. It says what they will get rather than
+            // dressing an untouched class up as a missed deadline.
+            <Chip
+              size="small"
+              variant="outlined"
+              label={offerLabel(item)}
+              sx={{ fontWeight: 600, color: 'text.secondary' }}
             />
           ) : null}
         </Stack>
@@ -433,18 +477,24 @@ export default function StudentCatchUpPage() {
                   mb: 0.75,
                 }}
               >
-                {current.overdue ? 'Overdue, do this first' : 'Do this next'}
+                {current.overdue
+                  ? 'Running late'
+                  : current.active
+                    ? 'You are on this one'
+                    : 'We suggest starting here'}
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.25, mb: 0.25 }}>
                 {current.class.title || 'Class'}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 {formatDay(current.class.scheduled_date)}
-                {current.chained && totals
-                  ? ` · class ${current.position} of ${totals.total}`
-                  : dueLabel(current)
-                    ? ` · ${dueLabel(current)?.toLowerCase()}`
-                    : ''}
+                {current.chained && totals ? ` · class ${current.position} of ${totals.total}` : ''}
+                {/* The clock, only once they have actually started it. Before
+                    that the card says what they will get rather than what they
+                    have already lost. */}
+                {current.active
+                  ? ` · ${dueLabel(current)?.toLowerCase() ?? ''}`
+                  : ` · ${offerLabel(current)}`}
               </Typography>
 
               {/* Three steps, always in this order, so the shape of the work is
@@ -483,7 +533,7 @@ export default function StudentCatchUpPage() {
                 onClick={() => openItem(current)}
                 sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, borderRadius: RADIUS.control }}
               >
-                {STEP_COPY[current.step].cta}
+                {current.active ? STEP_COPY[current.step].cta : 'Start this class'}
               </Button>
             </Box>
           ) : (
@@ -527,28 +577,13 @@ export default function StudentCatchUpPage() {
         </Stack>
 
         <Box>
-          {/* Missed classes first. They carry a deadline; the backlog does not. */}
-          {overdue.length > 0 && (
-            <>
-              <Typography
-                sx={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 800,
-                  letterSpacing: '.1em',
-                  textTransform: 'uppercase',
-                  color: 'error.main',
-                  mb: 1,
-                }}
-              >
-                Overdue
-              </Typography>
-              <Stack spacing={1} sx={{ mb: 3 }}>
-                {overdue.map(missedCard)}
-              </Stack>
-            </>
-          )}
-
-          {missed.filter((i) => !i.overdue || i.status === 'done').length > 0 && (
+          {/* One list, not two.
+              It used to split into "Overdue" and "Classes you missed", which
+              with a timetable deadline meant everything older than a week piled
+              into the red section and the second heading was usually empty.
+              With one clock at a time there is at most one urgent card, and the
+              hero above already points at it. */}
+          {missed.length > 0 && (
             <>
               <Typography
                 sx={{
@@ -563,7 +598,7 @@ export default function StudentCatchUpPage() {
                 Classes you missed
               </Typography>
               <Stack spacing={1} sx={{ mb: 3 }}>
-                {missed.filter((i) => !i.overdue || i.status === 'done').map(missedCard)}
+                {missed.map(missedCard)}
               </Stack>
             </>
           )}
@@ -584,30 +619,37 @@ export default function StudentCatchUpPage() {
                 Before you joined
               </Typography>
 
+              {/* No padlocks. The order is a suggestion, and any of these can be
+                  started. Locking them meant one unprepared recap in the middle
+                  stalled the whole backlog, and it decided for the student where
+                  to begin. */}
               <CatchupTrack
                 steps={steps}
-                lockFuture
+                lockFuture={false}
                 onStepClick={(_s, i) => openItem(items[i])}
                 currentAction={() => (
                   <Button
                     size="small"
                     variant="contained"
-                    onClick={() => backlogCurrent && openItem(backlogCurrent)}
+                    onClick={() => current && openItem(current)}
                     sx={{ minHeight: 40, textTransform: 'none', borderRadius: RADIUS.control }}
                   >
-                    Start
+                    {current?.active ? 'Continue' : 'Start'}
                   </Button>
                 )}
                 trailing={(_s, i) => {
                   const item = items[i];
-                  if (item.status === 'locked' && item.due_on) {
-                    return (
-                      <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap' }}>
-                        due {shortDay(item.due_on)}
-                      </Typography>
-                    );
-                  }
-                  return null;
+                  // Only the one with the clock on it says anything about time.
+                  if (!item.active) return null;
+                  return (
+                    <Typography
+                      variant="caption"
+                      color={item.overdue ? 'error.main' : 'text.secondary'}
+                      sx={{ whiteSpace: 'nowrap', fontWeight: 700 }}
+                    >
+                      {dueLabel(item)}
+                    </Typography>
+                  );
                 }}
               />
             </>

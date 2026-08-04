@@ -20,8 +20,24 @@ export type RecapReadiness = 'pending' | 'ready' | 'held' | 'failed';
 
 export interface NexusClassRecap {
   id: string;
-  scheduled_class_id: string;
+  /**
+   * NULL on an ad-hoc recap and on every study-file track. The column has been
+   * nullable since 20260703130000 and this type said otherwise; @ts-nocheck hid
+   * it. Tracks make the lie load-bearing, because they always have it NULL.
+   */
+  scheduled_class_id: string | null;
   classroom_id: string | null;
+  /**
+   * Set when this row is a Foundation chapter video track rather than a class
+   * recap. Mutually exclusive with scheduled_class_id.
+   */
+  study_file_id: string | null;
+  /** 'en' | 'ta' | 'ta_en'. Required on a track, NULL on a class recap. */
+  language: string | null;
+  /** What the language picker shows, e.g. "English". Stored, not translated. */
+  language_label: string | null;
+  /** Generated from study_file_id. Never write it. */
+  kind: 'class_recap' | 'study_video';
   title: string;
   recording_url: string | null;
   transcript_url: string | null;

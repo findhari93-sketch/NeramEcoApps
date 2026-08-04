@@ -6,11 +6,17 @@
  * route it is added here, and every tab picks it up.
  */
 
+/**
+ * `current`, `locked` and `open` are gone.
+ *
+ * They described a chain: one item open, the rest padlocked behind it. There is
+ * no chain now. A student may start any class, and `active` means the one their
+ * clock is actually running on.
+ */
 export type ItemStatus =
   | 'done'
-  | 'current'
-  | 'locked'
-  | 'open'
+  | 'active'
+  | 'waiting'
   | 'excused'
   | 'blocked'
   | 'pending_teacher';
@@ -34,8 +40,14 @@ export interface Item {
   status: ItemStatus;
   step: 'watch' | 'assignment' | 'test' | 'done';
   chained: boolean;
+  /** Null on everything except the one class this student started. */
   due_on: string | null;
   overdue: boolean;
+  /** The clock is running on this one. At most one per student per classroom. */
+  active: boolean;
+  days_left: number | null;
+  /** The one we point the student at. */
+  recommended: boolean;
   reason_code: string | null;
   /** What the student typed. Null unless they picked "other" or added detail. */
   reason_note: string | null;
@@ -61,7 +73,23 @@ export interface Row {
   journey_id: string | null;
   student: StudentCard;
   totals: { total: number; completed: number; blocked: number; pendingTeacher: number };
-  missedTotals: { total: number; completed: number; open: number; overdue: number };
+  missedTotals: {
+    total: number;
+    completed: number;
+    open: number;
+    /** 0 or 1: only the running clock can be late. Use `clock.stalled` to chase. */
+    overdue: number;
+    waiting: number;
+  };
+  /** The one-clock view, and the replacement chase signal. */
+  clock: {
+    active: boolean;
+    waiting: number;
+    overdue: boolean;
+    daysLeft: number | null;
+    /** Work owed and no clock running on any of it. */
+    stalled: boolean;
+  };
   pace: { state: 'on_track' | 'behind' | 'done'; deficit: number; remaining: number };
   items: Item[];
 }

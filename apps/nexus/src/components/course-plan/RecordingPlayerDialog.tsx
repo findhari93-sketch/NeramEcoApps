@@ -1,12 +1,19 @@
 'use client';
 
 /**
- * View-only recording player for students. Embeds the unlisted YouTube backup
- * of a completed class (youtube-nocookie, no related videos). This is the plain
- * self-study path; the gated "guided recap" with checkpoint quizzes is separate.
+ * View-only recording player for students. Plays the unlisted YouTube backup of
+ * a completed class. This is the plain self-study path; the gated "guided recap"
+ * with checkpoint quizzes is separate.
+ *
+ * Ungated, but not unprotected. It used to be a bare iframe, which meant no
+ * watermark, no telemetry and YouTube's own menu one right-click away. It now
+ * runs through the shared player in open mode: scrub freely, but the picture
+ * still carries the student's name and the chrome is ours.
  */
 import { Dialog, DialogContent, DialogTitle, IconButton, Box, Typography } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
+import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import { OPEN_GATE } from '@/lib/video-gate';
 
 export default function RecordingPlayerDialog({
   open,
@@ -31,14 +38,13 @@ export default function RecordingPlayerDialog({
       </DialogTitle>
       <DialogContent sx={{ p: 0, bgcolor: '#000' }}>
         <Box sx={{ position: 'relative', pt: '56.25%' }}>
-          <Box
-            component="iframe"
-            src={`https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0&modestbranding=1`}
-            title={title || 'Class recording'}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowFullScreen
-            sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
-          />
+          <Box sx={{ position: 'absolute', inset: 0 }}>
+            <NeramVideoPlayer
+              source={{ kind: 'youtube', youtubeId }}
+              gate={OPEN_GATE}
+              allowFullscreen
+            />
+          </Box>
         </Box>
       </DialogContent>
     </Dialog>

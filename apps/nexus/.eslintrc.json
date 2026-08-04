@@ -1,6 +1,27 @@
 {
   "extends": "next/core-web-vitals",
   "rules": {
-    "react/no-unescaped-entities": "off"
-  }
+    "react/no-unescaped-entities": "off",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "JSXOpeningElement[name.name='video']",
+        "message": "Play video through NeramVideoPlayer (src/components/video). A bare <video> ships native controls, and the native scrubber is how a student drags past a checkpoint. It also offers Download and Picture in picture, which hand over the file."
+      },
+      {
+        "selector": "JSXAttribute[name.name='src'] Literal[value=/youtube.*embed/]",
+        "message": "Embed YouTube through NeramVideoPlayer (src/components/video) so the checkpoint gate, the watermark and the progress telemetry come with it."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/components/video/**"],
+      "rules": { "no-restricted-syntax": "off" }
+    },
+    {
+      "files": ["src/components/foundation/**", "src/app/(student)/student/modules/**"],
+      "rules": { "no-restricted-syntax": "off" }
+    }
+  ]
 }

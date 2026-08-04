@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyTeacher } from '@/lib/verify-teacher';
 import { saveRecapSections, getRecapById, getSupabaseAdminClient } from '@neram/database';
 import type { GeneratedRecapSection } from '@neram/database';
-import { readRecapDefaults, questionsToPass } from '@/lib/recap-defaults';
+import { readRecapDefaults } from '@/lib/recap-defaults';
+import { resolveSectionGate } from '@/lib/recap-gate';
 
 /**
  * PUT /api/class-recaps/[recapId]/sections
@@ -86,19 +87,13 @@ async function withGate(
   );
   const passPercentage = recap?.pass_percentage ?? defaults.pass_percentage;
 
+  // Same resolver the student quiz route uses, so what is written and what is
+  // graded can never drift apart.
   return sections.map((s) => {
-    const available = (s.questions || []).length;
-    const asked = Number(s.questions_to_serve);
-    const serve = Math.max(
-      1,
-      Math.min(available || 1, Number.isFinite(asked) && asked > 0 ? asked : wanted),
-    );
-    const declared = Number(s.min_questions_to_pass);
-    const pass =
-      Number.isFinite(declared) && declared > 0
-        ? Math.min(serve, declared)
-        : questionsToPass(serve, passPercentage);
-
-    return { ...s, questions_to_serve: serve, min_questions_to_pass: pass };
+    const { serve, minToPass } = resolveSectionGate(s, (s.questions || []).length, {
+      questionsPerSegment: wanted,
+      passPercentage,
+    });
+    return { ...s, questions_to_serve: serve, min_questions_to_pass: minToPass };
   });
 }

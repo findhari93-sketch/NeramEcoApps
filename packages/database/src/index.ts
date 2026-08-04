@@ -128,10 +128,22 @@ export {
   resolveCatchupBacklog,
   summariseCatchupBacklog,
   summariseMissedClasses,
+  summariseCatchupClock,
   missedClassDueOn,
   isOverdue,
   addDaysYmd,
+  diffDaysYmd,
   MISSED_CLASS_FALLBACK_DAYS,
+  // The clock: one deadline at a time, started by the student.
+  catchupWindowDays,
+  catchupDueOn,
+  catchupDaysLeft,
+  catchupDaysSpent,
+  bankCatchupClock,
+  isCatchupClockRunning,
+  isMissedLiveClass,
+  planCatchupActivation,
+  DEFAULT_CATCHUP_WINDOWS,
 } from './utils/catchup';
 export { computeAssignmentClock, isSubmissionOnTime, istTodayStr } from './utils/assignment-clock';
 export type {
@@ -147,6 +159,10 @@ export type {
   CatchupStep,
   CatchupItemStatus,
   ResolvedCatchupItem,
+  CatchupKind,
+  CatchupClock,
+  CatchupWindows,
+  ResolveCatchupContext,
 } from './utils/catchup';
 
 // Data

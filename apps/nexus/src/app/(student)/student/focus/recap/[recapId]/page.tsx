@@ -22,7 +22,8 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
-import ProtectedVideo from '@/components/class-recap/ProtectedVideo';
+import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import { computeGate } from '@/lib/video-gate';
 import { focusChannelName } from '@/components/class-recap/openFocusWindow';
 import { useWatchHeartbeat } from '@/components/class-recap/useWatchHeartbeat';
 import QuizModal from '@/components/foundation/QuizModal';
@@ -102,19 +103,29 @@ export default function FocusRecapPage() {
   }, [authLoading, recapId, load]);
 
   /**
-   * How far playback is allowed to reach: the end of the first checkpoint they
-   * have not passed. Everything after that is earned, not browsed.
+   * How far playback is allowed to reach. Everything after that is earned, not
+   * browsed.
+   *
+   * This page used to work the boundary out itself, and its copy differed from
+   * the two in the players: it never pulled the last checkpoint just inside the
+   * file, so a recording trimmed after its checkpoints were built relied
+   * entirely on the ended fallback to open the final quiz. That is the kind of
+   * drift three copies of one rule produce. computeGate is now the only copy.
    */
-  const unlockedUntil = useMemo(() => {
-    const next = sections.find((s) => !s.passed);
-    if (!next) return duration || 0;
-    return next.end_timestamp_seconds;
-  }, [sections, duration]);
-
-  const currentSegmentPassed = useMemo(() => {
-    const next = sections.find((s) => !s.passed);
-    return !next;
-  }, [sections]);
+  const gate = useMemo(
+    () =>
+      computeGate({
+        checkpoints: sections.map((s) => ({
+          id: s.id,
+          endSeconds: s.end_timestamp_seconds,
+          passed: s.passed,
+        })),
+        duration,
+        furthestSeconds: furthest,
+        mode: 'gated',
+      }),
+    [sections, duration, furthest],
+  );
 
   const passedCount = sections.filter((s) => s.passed).length;
 
@@ -322,16 +333,14 @@ export default function FocusRecapPage() {
         </Box>
       ) : (
         <>
-          <ProtectedVideo
-            src={src!}
+          <NeramVideoPlayer
+            source={{ kind: 'html5', src: src! }}
+            gate={gate}
             videoRef={videoRef}
             watermark={watermark}
-            unlockedUntilSeconds={unlockedUntil}
-            furthestSeconds={furthest}
-            currentSegmentPassed={currentSegmentPassed}
             resumeAt={resumeAt}
             onTimeUpdate={handleTick}
-            onSegmentBoundary={openQuiz}
+            onCheckpointReached={openQuiz}
             onLoadedMetadata={setDuration}
           />
 

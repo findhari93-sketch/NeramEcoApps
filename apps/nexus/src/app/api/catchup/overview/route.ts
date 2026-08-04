@@ -4,6 +4,8 @@ import {
   getSupabaseAdminClient,
   toFacts,
   resolveCatchupBacklog,
+  summariseCatchupClock,
+  readCatchupWindows,
   summariseCatchupBacklog,
   summariseMissedClasses,
   missedClassDueOn,
@@ -123,6 +125,7 @@ export async function GET(request: NextRequest) {
         'id, student_id, scheduled_class_id, kind, recording_watched_at, caught_up_at, ' +
           'test_unlocked_at, test_passed_at, excused_at, excuse_note, detected_at, ' +
           'followup_sent_at, reason_code, reason_note, reason_submitted_at, reason_source, ' +
+          'activated_on, days_used, ' +
           'class:nexus_scheduled_classes(id, title, scheduled_date, start_time, status, ' +
           'recording_url, youtube_url)',
       )
@@ -200,15 +203,10 @@ export async function GET(request: NextRequest) {
       (journeys || []).map((j: any) => [j.student_id, j]),
     );
 
-    // The classroom timetable, deduped, so "when did the course next run" is one
-    // in-memory lookup rather than a query per missed class.
-    const termDates: string[] = [];
-    for (const c of termClasses || []) {
-      const ymd = String(c.scheduled_date).slice(0, 10);
-      if (termDates[termDates.length - 1] !== ymd) termDates.push(ymd);
-    }
-    const nextClassAfter = (ymd: string): string | null =>
-      termDates.find((d) => d > String(ymd).slice(0, 10)) ?? null;
+    // How long a student gets once they start something here. One row, read
+    // live rather than snapshotted, so a teacher widening the window to help a
+    // struggling cohort applies at once instead of at their next activation.
+    const windows = await readCatchupWindows(supabase, classroomId);
 
     const presentByClass = new Map<string, number>();
     for (const a of attendance || []) {
@@ -264,20 +262,21 @@ export async function GET(request: NextRequest) {
       });
 
       const facts = factsByStudent.get(studentId)!;
-      const resolved = resolveCatchupBacklog(studentItems.map((i: any) => toFacts(i, facts)));
-
-      // Only an `open` item has a deadline. Same rule as getCatchupBacklog: a
-      // class with no recording, or one still waiting on its recap, is our
-      // homework and must never be shown as the student's.
-      const dueOn = studentItems.map((i: any, idx: number) =>
-        resolved[idx].status === 'open'
-          ? missedClassDueOn(i.class.scheduled_date, nextClassAfter(i.class.scheduled_date))
-          : null,
+      // Deadlines come off each student's own clock now. The item they started
+      // carries one; everything else carries none, which is why there is no
+      // longer a per-item due-date pass here.
+      const resolved = resolveCatchupBacklog(
+        studentItems.map((i: any) => toFacts(i, facts)),
+        { today, windows },
       );
-      const overdueFlags = dueOn.map((d: string | null) => isOverdue(d, today));
 
       const totals = summariseCatchupBacklog(resolved);
-      const missedTotals = summariseMissedClasses(resolved, overdueFlags);
+      const missedTotals = summariseMissedClasses(resolved);
+      // "How many are overdue" can only be 0 or 1 now, so it stopped being a
+      // magnitude a teacher can sort by. `stalled` replaces it: work owed and
+      // nothing running on any of it, which is the student who opened the list
+      // and closed it again.
+      const clockSummary = summariseCatchupClock(resolved);
 
       const journey = journeyByStudent.get(studentId) || null;
       const pace = journey
@@ -348,8 +347,12 @@ export async function GET(request: NextRequest) {
           status: r.status,
           step: r.step,
           chained: r.chained,
-          due_on: dueOn[idx],
-          overdue: overdueFlags[idx],
+          // Null on everything except the one class this student started.
+          due_on: r.dueOn,
+          overdue: r.overdue,
+          active: r.active,
+          days_left: r.daysLeft,
+          recommended: r.recommended,
           reason_code: i.reason_code ?? null,
           // The words the student actually typed. Selected but never returned
           // before, which is why no screen has ever been able to show them.
@@ -413,16 +416,20 @@ export async function GET(request: NextRequest) {
         weekly_quota: journey?.weekly_quota ?? null,
         totals,
         missedTotals,
+        clock: clockSummary,
         pace,
         items: shaped,
       });
     }
 
-    // Sorted as a work queue, not a register: overdue first, then most behind,
-    // then the biggest pile.
+    // Sorted as a work queue, not a register. Overdue still leads, but it can
+    // only ever be one item now, so the second key does the real work: a student
+    // who has not started anything at all is the one a teacher most needs to
+    // see, and under the old model they looked identical to someone mid-class.
     students.sort(
       (a, b) =>
-        b.missedTotals.overdue - a.missedTotals.overdue ||
+        Number(b.clock.overdue) - Number(a.clock.overdue) ||
+        Number(b.clock.stalled) - Number(a.clock.stalled) ||
         b.pace.deficit - a.pace.deficit ||
         b.missedTotals.open - a.missedTotals.open,
     );
@@ -477,8 +484,12 @@ export async function GET(request: NextRequest) {
         String(a.scheduled_date).localeCompare(String(b.scheduled_date)),
       ),
       totals: {
-        studentsBehind: students.filter((s) => s.missedTotals.overdue > 0 || s.pace.state === 'behind')
-          .length,
+        studentsBehind: students.filter(
+          (s) => s.clock.overdue || s.pace.state === 'behind',
+        ).length,
+        // Work owed and no clock running on any of it. The replacement for
+        // counting overdue items, which under one clock tops out at one.
+        studentsStalled: students.filter((s) => s.clock.stalled).length,
         studentsCatchingUp: students.length,
         outstanding: outstandingTotal,
         clearedThisMonth,

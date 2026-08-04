@@ -5,6 +5,7 @@ import {
   isFolderVisibleToStudent,
   getPlacedChapterTest,
   getPlacedTestForStudent,
+  getStudyVideoState,
   linkTestToStudyFile,
   unlinkTestFromStudyFile,
 } from '@neram/database';
@@ -40,8 +41,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ test });
     }
     await assertStudentCanSee(user.id, user.student_program, params.id);
+
+    // A chapter with a servable video track is not takeable until one language
+    // has been watched through. This is the read-side gate only: the attempt
+    // route re-asserts it, because a GET returning null is a hint to the UI, not
+    // a boundary.
+    const video = await getStudyVideoState(params.id, user.id);
+    if (video.requires_video && !video.video_completed_at) {
+      return NextResponse.json({ test: null, locked: true, reason: 'video_required' });
+    }
+
     const test = await getPlacedTestForStudent(params.id);
-    return NextResponse.json({ test });
+    return NextResponse.json({ test, locked: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load test';
     const status = message === 'Not authorized' ? 403 : 500;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyQBAccess } from '@/lib/qb-auth';
+import { refuseUnlessStudent, verifyQBAccess } from '@/lib/qb-auth';
 import { buildMistakesTest, getStudentMistakeQuestionIds } from '@neram/database';
 
 /**
@@ -34,6 +34,11 @@ export async function POST(request: NextRequest) {
     const classroomId = typeof body?.classroom_id === 'string' ? body.classroom_id : null;
     const access = await verifyQBAccess(request.headers.get('Authorization'), classroomId);
     if (!access.ok) return access.response;
+
+    // POST composes a student_custom paper; GET above only counts, so it stays
+    // open to staff previewing the student screen.
+    const notAStudent = refuseUnlessStudent(access.caller);
+    if (notAStudent) return notAStudent;
 
     const result = await buildMistakesTest({
       studentId: access.caller.id,

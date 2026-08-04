@@ -5,15 +5,20 @@ import {
   createRecapForClass,
   ensureCatchupItemForClass,
   getCatchupJourney,
-  getCatchupBacklog,
   loadClassFacts,
-  loadNextClassDates,
   toFacts,
+  toClock,
   catchupItemStep,
   isCatchupItemComplete,
   isOverdue,
-  missedClassDueOn,
   istTodayYmd,
+  activateCatchupItem,
+  releaseCatchupClock,
+  readCatchupWindows,
+  catchupDueOn,
+  catchupDaysLeft,
+  catchupWindowDays,
+  type CatchupKind,
 } from '@neram/database';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 import { CLASS_RESOURCES_EMBED } from '@/lib/class-resources';
@@ -131,34 +136,33 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       ? await getCatchupJourney(access.userId, access.cls.classroom_id, supabase)
       : null;
 
-    // The deadline for a missed class comes from the timetable: it is due before
-    // the course moves on. Derived here rather than stored, so a rescheduled
-    // class carries its deadline with it.
+    // The deadline is the student's own clock, and it only exists once they
+    // have started this class. The timetable used to set it (due before the
+    // course moves on), which made every class more than a week old overdue on
+    // sight and gave a student with a backlog nothing but red.
     //
-    // Only for work the student can actually start. A class with no recording,
-    // one whose recap is not published yet, and one a teacher excused are all
-    // either our homework or nobody's, and a deadline on any of them would be a
-    // deadline for something they cannot do.
-    const deadlineApplies =
-      !!item &&
-      item.kind !== 'late_joiner' &&
-      !item.caught_up_at &&
-      !itemFacts.excused &&
-      !itemFacts.excluded &&
-      !itemFacts.notReady;
+    // Every kind gets one now, including a late joiner. The old rule excluded
+    // them outright, so their per-class screen never showed a deadline at all.
+    const today = istTodayYmd();
+    const windows = await readCatchupWindows(supabase, access.cls.classroom_id);
+    const kind = (item?.kind ?? 'no_show') as CatchupKind;
+    const windowDays = catchupWindowDays(kind, windows);
+    const clock = item ? toClock(item) : { activatedOn: null, daysUsed: 0 };
+    const dueOn = catchupDueOn(clock, windowDays);
 
-    let dueOn: string | null = null;
-    if (deadlineApplies) {
-      const nextDates = await loadNextClassDates(
-        supabase,
-        access.userId,
-        access.cls.classroom_id,
-      );
-      dueOn = missedClassDueOn(
-        access.cls.scheduled_date,
-        nextDates.after(access.cls.scheduled_date),
-      );
-    }
+    // Something else in this classroom already has the clock. The screen needs
+    // its name to ask "starting this pauses that, carry on?" without a second
+    // round trip.
+    const { data: activeElsewhere } = item
+      ? await supabase
+          .from('nexus_class_absences')
+          .select('id, kind, days_used, activated_on, class:nexus_scheduled_classes(id, title)')
+          .eq('student_id', access.userId)
+          .eq('classroom_id', access.cls.classroom_id)
+          .not('activated_on', 'is', null)
+          .neq('id', item.id)
+          .maybeSingle()
+      : { data: null };
 
     // loadClassFacts already knows which of these are submitted (it derives that
     // from both nexus_assignment_submissions and drawing_submissions); this only
@@ -202,7 +206,23 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       },
       step: catchupItemStep(itemFacts),
       due_on: dueOn,
-      overdue: isOverdue(dueOn, istTodayYmd()),
+      overdue: isOverdue(dueOn, today),
+      /** The clock is running on this class. */
+      active: !!clock.activatedOn,
+      days_left: catchupDaysLeft(clock, windowDays, today),
+      /** How long they get, shown BEFORE they commit rather than after. */
+      window_days: windowDays,
+      active_elsewhere: activeElsewhere
+        ? {
+            scheduled_class_id: activeElsewhere.class?.id ?? null,
+            title: activeElsewhere.class?.title ?? 'another class',
+            days_left: catchupDaysLeft(
+              toClock(activeElsewhere),
+              catchupWindowDays((activeElsewhere.kind ?? 'no_show') as CatchupKind, windows),
+              today,
+            ),
+          }
+        : null,
       // A late joiner was not enrolled when this ran, so there is nothing to
       // explain. Asking them why they missed it is a nonsense question.
       reasonRequired: (item?.kind ?? 'no_show') !== 'late_joiner',
@@ -215,37 +235,56 @@ export async function GET(request: NextRequest, { params }: Ctx) {
 }
 
 /**
- * Refuse work on a class whose turn has not come.
+ * Start the clock on this class, if nothing else is holding it.
  *
- * The chronological order is the order the material was taught, so skipping
- * ahead means sitting an 85% test on a topic whose foundation is still unwatched.
- * Enforced here and not only in the UI, because a locked row is a suggestion,
- * not a rule. Plain absences have no order to keep and are never gated.
+ * This replaces `assertItemUnlocked`, which used to 403 any work on a late
+ * joiner's class whose turn had not come. That chain meant one unprepared recap
+ * in the middle stalled a student's whole backlog, and it decided for them where
+ * to begin. Order is now a recommendation and this is the only thing that is
+ * ever refused, and even then only until they confirm.
  */
-async function assertItemUnlocked(
+async function startClock(
   supabase: any,
-  userId: string,
-  classroomId: string,
+  access: { userId: string; cls: any },
   item: any,
+  confirmSwitch: boolean,
 ): Promise<NextResponse | null> {
-  // Keyed on the kind, not on journey_id. Those meant the same thing while only
-  // a late joiner had a journey; now that an ordinary absence is read by the
-  // same code, the kind is the honest test. A missed class is never gated.
-  if (item?.kind !== 'late_joiner') return null;
-  const backlog = await getCatchupBacklog(userId, classroomId, supabase);
-  const row = backlog?.items.find((i: any) => i.id === item.id);
-  if (row && row.status === 'locked') {
-    return NextResponse.json(
-      { error: 'Finish the earlier classes first.' },
-      { status: 403 },
-    );
-  }
-  return null;
+  const result = await activateCatchupItem(
+    access.userId,
+    access.cls.classroom_id,
+    item.id,
+    { force: confirmSwitch },
+    supabase,
+  );
+  if (result.ok) return null;
+
+  const { data: held } = await supabase
+    .from('nexus_scheduled_classes')
+    .select('id, title')
+    .eq('id', result.conflict.scheduled_class_id)
+    .maybeSingle();
+
+  // 409, not 403. Nothing here is forbidden; the student simply has to decide
+  // which class their one clock belongs to, and the body carries what the
+  // dialog needs to say so.
+  return NextResponse.json(
+    {
+      error: 'You already have a class on the go.',
+      code: 'CLOCK_HELD',
+      active: {
+        scheduled_class_id: result.conflict.scheduled_class_id,
+        title: held?.title ?? 'another class',
+      },
+    },
+    { status: 409 },
+  );
 }
 
 /**
  * POST /api/timetable/[classId]/catch-up
+ * body { action: 'start', confirm_switch? }
  * body { action: 'give_reason', reason_code, reason_note? }
+ * body { action: 'request_recap' }
  * body { action: 'mark_watched' }
  * body { action: 'mark_caught_up' }
  */
@@ -278,13 +317,16 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       );
     }
 
-    const locked = await assertItemUnlocked(supabase, access.userId, access.cls.classroom_id, item);
-    if (locked) return locked;
-
     const { recap, itemFacts } = await readItemState(supabase, access.userId, access.cls, item);
     const patch: Record<string, unknown> = {};
 
     switch (body.action) {
+      case 'start': {
+        const conflict = await startClock(supabase, access, item, body.confirm_switch === true);
+        if (conflict) return conflict;
+        return NextResponse.json({ ok: true, started: true });
+      }
+
       case 'give_reason': {
         if (item.kind === 'late_joiner') {
           return NextResponse.json(
@@ -338,6 +380,19 @@ export async function POST(request: NextRequest, { params }: Ctx) {
             );
           }
         }
+        // Pressing Watch is unambiguously starting this class, so it takes the
+        // clock if one is free. It never TAKES the clock from another class: a
+        // student who does real work while their clock runs elsewhere has had a
+        // windfall, which is a far better failure than a deadline silently
+        // moving to a class they only glanced at. Only an explicit, confirmed
+        // start displaces.
+        await activateCatchupItem(
+          access.userId,
+          access.cls.classroom_id,
+          item.id,
+          { force: false },
+          supabase,
+        );
         break;
       }
 
@@ -356,6 +411,15 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         if (!item.recording_watched_at) {
           patch.recording_watched_at = new Date().toISOString();
         }
+        // Same rule as request_recap: declaring you watched it starts the clock
+        // if one is free, and never takes it from another class.
+        await activateCatchupItem(
+          access.userId,
+          access.cls.classroom_id,
+          item.id,
+          { force: false },
+          supabase,
+        );
         break;
       }
 
@@ -387,6 +451,10 @@ export async function POST(request: NextRequest, { params }: Ctx) {
           );
         }
         patch.caught_up_at = new Date().toISOString();
+        // Finishing frees the clock so the next class can take it. Banked, not
+        // zeroed, so a teacher who later resets the test does not hand back a
+        // window this student already spent.
+        await releaseCatchupClock(item.id, supabase);
         break;
       }
 

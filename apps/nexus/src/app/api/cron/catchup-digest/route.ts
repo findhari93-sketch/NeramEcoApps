@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   getSupabaseAdminClient,
   sendEmail,
-  missedClassDueOn,
+  catchupDueOn,
+  catchupWindowDays,
+  DEFAULT_CATCHUP_WINDOWS,
   istTodayYmd,
+  type CatchupKind,
+  type CatchupWindows,
 } from '@neram/database';
 import { sendTeamsActivityNotification } from '@neram/auth';
 import { assertCronRequest } from '@/lib/cron-auth';
@@ -82,7 +86,7 @@ export async function GET(request: NextRequest) {
       .from('nexus_class_absences')
       .select(
         'id, student_id, classroom_id, scheduled_class_id, kind, reason_code, reason_note, ' +
-          'reason_source, reason_submitted_at, caught_up_at, ' +
+          'reason_source, reason_submitted_at, caught_up_at, activated_on, days_used, ' +
           'class:nexus_scheduled_classes(id, title, scheduled_date)',
       )
       .or(`reason_submitted_at.gte.${since},caught_up_at.gte.${since}`)
@@ -98,29 +102,27 @@ export async function GET(request: NextRequest) {
     const studentIds = [...new Set(items.map((i: any) => i.student_id))] as string[];
     const classroomIds = [...new Set(items.map((i: any) => i.classroom_id))] as string[];
 
-    const [{ data: students }, { data: termClasses }] = await Promise.all([
+    const [{ data: students }, { data: classrooms }] = await Promise.all([
       supabase.from('users').select('id, name').in('id', studentIds),
       supabase
-        .from('nexus_scheduled_classes')
-        .select('classroom_id, scheduled_date')
-        .in('classroom_id', classroomIds)
-        .eq('publish_state', 'published')
-        .neq('status', 'cancelled')
-        .order('scheduled_date', { ascending: true }),
+        .from('nexus_classrooms')
+        .select('id, catchup_window_days, catchup_optout_window_days')
+        .in('id', classroomIds),
     ]);
 
     const nameById = new Map<string, string | null>(
       (students || []).map((s: any) => [s.id, s.name ?? null]),
     );
 
-    // "When did this course next run", per classroom, so a deadline can be
-    // derived the same way every other catch-up surface derives it.
-    const datesByClassroom = new Map<string, string[]>();
-    for (const c of termClasses || []) {
-      const list = datesByClassroom.get(c.classroom_id) || [];
-      const ymd = String(c.scheduled_date).slice(0, 10);
-      if (list[list.length - 1] !== ymd) list.push(ymd);
-      datesByClassroom.set(c.classroom_id, list);
+    // The window each classroom gives, so a deadline is derived the same way
+    // every other catch-up surface derives it: from the student's own clock, not
+    // from when the course next ran.
+    const windowsByClassroom = new Map<string, CatchupWindows>();
+    for (const c of classrooms || []) {
+      windowsByClassroom.set(c.id, {
+        standardDays: Number(c.catchup_window_days) || DEFAULT_CATCHUP_WINDOWS.standardDays,
+        optedOutDays: Number(c.catchup_optout_window_days) || DEFAULT_CATCHUP_WINDOWS.optedOutDays,
+      });
     }
 
     const eventsByClassroom = new Map<string, DigestEvent[]>();
@@ -142,7 +144,7 @@ export async function GET(request: NextRequest) {
       if (row.kind === 'late_joiner') continue;
 
       const scheduledDate = String(row.class.scheduled_date).slice(0, 10);
-      const dates = datesByClassroom.get(row.classroom_id) || [];
+      const windows = windowsByClassroom.get(row.classroom_id) || DEFAULT_CATCHUP_WINDOWS;
       const base = {
         studentId: row.student_id as string,
         studentName: nameById.get(row.student_id) ?? null,
@@ -153,9 +155,18 @@ export async function GET(request: NextRequest) {
         reasonNote: row.reason_note ?? null,
         reasonSource: row.reason_source ?? null,
         caughtUpAt: row.caught_up_at ?? null,
+        // Null unless they have actually started it, which is the same rule the
+        // student's own screen follows. A parent should never be told a class is
+        // "due" on a date their child never agreed to.
         dueOn: row.caught_up_at
           ? null
-          : missedClassDueOn(scheduledDate, dates.find((d) => d > scheduledDate) ?? null),
+          : catchupDueOn(
+              {
+                activatedOn: row.activated_on ? String(row.activated_on).slice(0, 10) : null,
+                daysUsed: Number(row.days_used) || 0,
+              },
+              catchupWindowDays((row.kind ?? 'no_show') as CatchupKind, windows),
+            ),
       };
 
       if (row.reason_submitted_at && row.reason_submitted_at >= since) {

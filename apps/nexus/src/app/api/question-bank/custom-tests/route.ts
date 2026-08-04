@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyQBAccess } from '@/lib/qb-auth';
+import { refuseUnlessStudent, verifyQBAccess } from '@/lib/qb-auth';
 import { composeTest, getTestFolderById } from '@neram/database';
 
 /**
@@ -15,6 +15,11 @@ export async function POST(request: NextRequest) {
     const access = await verifyQBAccess(request.headers.get('Authorization'), classroom_id);
     if (!access.ok) return access.response;
     const { caller } = access;
+
+    // This row is stamped created_by_student, so the caller has to actually be
+    // one. Without this a staff account lands in the teacher hub's student list.
+    const notAStudent = refuseUnlessStudent(caller);
+    if (notAStudent) return notAStudent;
 
     // A student may file their paper only in their own tree. Without this check
     // a crafted folder_id would drop a student's test into the staff library.

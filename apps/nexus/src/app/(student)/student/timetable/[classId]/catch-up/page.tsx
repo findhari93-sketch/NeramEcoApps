@@ -22,6 +22,10 @@ import {
   Box,
   Button,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Snackbar,
   Stack,
   TextField,
@@ -41,6 +45,7 @@ import { formatTime } from '@/components/timetable/date-utils';
 import ClassCoverThumb from '@/components/timetable/ClassCoverThumb';
 import ClassResourcesSection from '@/components/timetable/ClassResourcesSection';
 import RecordingPlayerDialog from '@/components/timetable/RecordingPlayerDialog';
+import RecapWatch from '@/components/class-recap/RecapWatch';
 import { SECTION_LABEL_SX } from '@/components/timetable/timetable-theme';
 import type { ClassImageRef } from '@/lib/class-cover';
 import type { ClassResource } from '@/lib/class-resources';
@@ -75,9 +80,23 @@ interface CatchUpData {
   /** False for someone who joined after the class ran: nothing to explain. */
   reasonRequired: boolean;
   hasRecording: boolean;
-  /** The day this must be cleared by, which is the day the course next runs. */
+  /**
+   * The day this must be cleared by. Null until the student starts it: the
+   * deadline is their own clock, not a date the timetable picked for them.
+   */
   due_on: string | null;
   overdue: boolean;
+  /** The clock is running on this class. */
+  active: boolean;
+  days_left: number | null;
+  /** How long they get, so we can say so before they commit. */
+  window_days: number;
+  /** Another class in this classroom holds the clock. */
+  active_elsewhere: {
+    scheduled_class_id: string | null;
+    title: string;
+    days_left: number | null;
+  } | null;
 }
 
 function formatDay(ymd: string): string {
@@ -101,6 +120,10 @@ export default function CatchUpPage() {
   const [error, setError] = useState<string | null>(null);
   /** The in-app recording, for a class whose guided recap is not ready yet. */
   const [playerOpen, setPlayerOpen] = useState(false);
+  /** The guided recap is mounted inline once they have chosen to start. */
+  const [watching, setWatching] = useState(false);
+  /** Another class holds the clock, and we are asking before taking it. */
+  const [switchAsk, setSwitchAsk] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -214,10 +237,6 @@ export default function CatchUpPage() {
       test: test ? ++n : 0,
     };
   })();
-  // The player route is SINGULAR: /student/class-recap/[recapId]. The plural
-  // /student/class-recaps is the list page and has no [recapId] child, so
-  // linking there 404s.
-  const recapHref = recap ? `/student/class-recap/${recap.id}` : null;
 
   /**
    * Watch. Either the guided recap, or the recording inside Nexus.
@@ -235,12 +254,46 @@ export default function CatchUpPage() {
    * person to open it gets the real thing.
    */
   const watch = () => {
-    if (recapHref) {
-      router.push(recapHref);
+    // Pressing Watch is unambiguously starting this class, so it takes the clock
+    // if one is free. If another class already holds it, ask first: switching is
+    // a decision, and the student keeps whatever time is left on the other one.
+    if (!data.active && data.active_elsewhere) {
+      setSwitchAsk(true);
+      return;
+    }
+    if (recap) {
+      setWatching(true);
+      void startClock(false);
       return;
     }
     setPlayerOpen(true);
     void queueRecap();
+  };
+
+  /**
+   * Take the clock for this class.
+   *
+   * The 409 is not a failure, it is the server saying another class holds it and
+   * naming which. Every other error is swallowed: the student came here to
+   * watch, and a clock that failed to move should not stop them.
+   */
+  const startClock = async (confirmSwitch: boolean) => {
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/timetable/${classId}/catch-up`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'start', confirm_switch: confirmSwitch }),
+      });
+      if (res.status === 409) {
+        setSwitchAsk(true);
+        return false;
+      }
+      if (res.ok) await load();
+      return res.ok;
+    } catch {
+      return false;
+    }
   };
 
   const stepBox = (
@@ -315,28 +368,41 @@ export default function CatchUpPage() {
         </Box>
       </Box>
 
-      {/* The deadline, and what it actually means. Stated plainly rather than as
-          a colour, because "overdue" without a consequence reads as a threat and
-          there is no consequence here beyond your teacher seeing it. */}
-      {data.due_on && !data.steps.caughtUp && (
-        <Alert
-          severity={data.overdue ? 'error' : 'info'}
-          sx={{ mb: 2, borderRadius: RADIUS.control }}
-        >
-          {data.overdue ? (
-            <>
-              <strong>This one is overdue.</strong> It was due before the class on{' '}
-              {formatDay(data.due_on)}. Finishing it puts you back on track, and your teacher stops
-              seeing you on the chase list.
-            </>
-          ) : (
-            <>
-              Finish this before the next class on <strong>{formatDay(data.due_on)}</strong>, so you
-              are not behind when it starts.
-            </>
-          )}
-        </Alert>
-      )}
+      {/* The clock, and what it actually means. Stated plainly rather than as a
+          colour, because "overdue" without a consequence reads as a threat and
+          there is no consequence here beyond your teacher seeing it.
+          Nothing is shown until they have started: a class nobody has begun
+          cannot be late, and telling them otherwise was the whole problem. */}
+      {!data.steps.caughtUp &&
+        (data.active && data.due_on ? (
+          <Alert
+            severity={data.overdue ? 'error' : 'info'}
+            sx={{ mb: 2, borderRadius: RADIUS.control }}
+          >
+            {data.overdue ? (
+              <>
+                <strong>This one has run over.</strong> It was due on {formatDay(data.due_on)}.
+                Finishing it puts you back on track, and your teacher stops seeing you on the chase
+                list.
+              </>
+            ) : (
+              <>
+                You have <strong>{data.days_left === 1 ? '1 day' : `${data.days_left} days`}</strong>{' '}
+                left on this one, until {formatDay(data.due_on)}.
+              </>
+            )}
+          </Alert>
+        ) : data.active_elsewhere ? (
+          <Alert severity="info" sx={{ mb: 2, borderRadius: RADIUS.control }}>
+            You are part way through <strong>{data.active_elsewhere.title}</strong>. You can start
+            this one instead, and the other keeps the time it has left.
+          </Alert>
+        ) : (
+          <Alert severity="info" sx={{ mb: 2, borderRadius: RADIUS.control }}>
+            Nothing is overdue here. Once you start, you get{' '}
+            <strong>{data.window_days} days</strong> to finish it.
+          </Alert>
+        ))}
 
       {cls.description && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -430,15 +496,41 @@ export default function CatchUpPage() {
           ),
         )}
 
-        {/* Watch. */}
+        {/* Watch.
+            The guided recap plays HERE now, rather than on its own route. One
+            class used to span three screens, and Back landed somewhere
+            different depending on which step you were on. */}
         {stepBox(
           stepNo.watch,
           steps.watched,
-          'Watch the recording',
+          'Class Recap',
           !data.hasRecording ? (
             <Typography variant="body2" color="text.secondary">
               The recording is not up yet. Check back, or ask your teacher.
             </Typography>
+          ) : recap ? (
+            <Box sx={{ mt: 0.5 }}>
+              {watching ? (
+                <RecapWatch
+                  recapId={recap.id}
+                  onProgress={(p) => {
+                    // Finishing the recap clears the watch gate and opens the
+                    // class test, both decided server-side, so the page has to
+                    // refetch rather than infer it here.
+                    if (p.completed) void load();
+                  }}
+                />
+              ) : (
+                <Button
+                  variant={steps.watched ? 'outlined' : 'contained'}
+                  onClick={watch}
+                  startIcon={<SmartDisplayOutlinedIcon />}
+                  sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
+                >
+                  {steps.watched ? 'Watch again' : 'Start the class recap'}
+                </Button>
+              )}
+            </Box>
           ) : (
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               <Button
@@ -447,12 +539,12 @@ export default function CatchUpPage() {
                 startIcon={<SmartDisplayOutlinedIcon />}
                 sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
               >
-                {recap ? 'Open the guided recap' : steps.watched ? 'Watch again' : 'Watch now'}
+                {steps.watched ? 'Watch again' : 'Watch now'}
               </Button>
               {/* Only offered when there is no guided recap. Where one exists,
                   finishing its checkpoints IS the proof, and the server refuses
                   a self-declaration alongside it. */}
-              {!steps.watched && !recap && (
+              {!steps.watched && (
                 <Button
                   variant="outlined"
                   disabled={busy}
@@ -465,16 +557,10 @@ export default function CatchUpPage() {
               {/* Said out loud, because a student who was promised checkpoints
                   and gets a plain video deserves to know why, and to know it is
                   temporary rather than the way this class works. */}
-              {!recap && (
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ width: '100%', mt: 0.5 }}
-                >
-                  The guided version with checkpoints is still being prepared for this class. Watch
-                  the recording now and it will be here next time.
-                </Typography>
-              )}
+              <Typography variant="caption" color="text.secondary" sx={{ width: '100%', mt: 0.5 }}>
+                The guided version with checkpoints is still being prepared for this class. Watch
+                the recording now and it will be here next time.
+              </Typography>
             </Stack>
           ),
         )}
@@ -609,6 +695,43 @@ export default function CatchUpPage() {
         title={cls.title}
         getToken={getToken}
       />
+
+      {/* Switching is a decision, so it is asked rather than done quietly.
+          The reassurance matters more than the warning: the other class keeps
+          the days it has left, so this is a choice about order, not a penalty. */}
+      <Dialog open={switchAsk} onClose={() => setSwitchAsk(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight: 800 }}>Start this one instead?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            You are part way through <strong>{data.active_elsewhere?.title}</strong>
+            {typeof data.active_elsewhere?.days_left === 'number' && data.active_elsewhere.days_left >= 0
+              ? `, with ${data.active_elsewhere.days_left === 1 ? '1 day' : `${data.active_elsewhere.days_left} days`} left`
+              : ''}
+            . Starting this class pauses that one, and it will still have the same time left when you
+            go back to it.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            onClick={() => setSwitchAsk(false)}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Keep going with that one
+          </Button>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              setSwitchAsk(false);
+              const ok = await startClock(true);
+              if (ok && recap) setWatching(true);
+              else if (ok) setPlayerOpen(true);
+            }}
+            sx={{ textTransform: 'none', minHeight: 44, fontWeight: 700 }}
+          >
+            Start this one
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={!!snack}

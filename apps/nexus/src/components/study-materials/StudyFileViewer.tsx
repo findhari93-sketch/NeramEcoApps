@@ -26,7 +26,7 @@ import PDFReader from '@/components/reader/PDFReader';
 import ProtectedContent from '@/components/ProtectedContent';
 import StudyCommentPanel from '@/components/study-materials/StudyCommentPanel';
 import StudyTestDialog from '@/components/study-materials/StudyTestDialog';
-import RecordingPlayerDialog from '@/components/course-plan/RecordingPlayerDialog';
+import ChapterVideoPanel from '@/components/study-materials/ChapterVideoPanel';
 import { useStudyTimeTracker } from '@/hooks/useStudyTimeTracker';
 import type { NexusStudyFileDTO } from '@neram/database/types';
 
@@ -70,15 +70,7 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [tab, setTab] = useState<'doc' | 'comments'>('doc');
   const [testOpen, setTestOpen] = useState(false);
-  const [watchOpen, setWatchOpen] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
-
-  const watchClass = () => {
-    const rec = file?.recording;
-    if (!rec) return;
-    if (rec.source === 'youtube' && rec.youtube_id) setWatchOpen(true);
-    else if (rec.url) window.open(rec.url, '_blank', 'noopener');
-  };
 
   // Reset to the document tab whenever a new file opens.
   useEffect(() => { if (file) { setTab('doc'); setJustCompleted(false); } }, [file]);
@@ -194,44 +186,24 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
             )}
           </Box>
 
-          {/* Student "next step" footer: study the PDF, optionally watch the class, then pass the test. */}
+          {/*
+            Student "next step" footer.
+            The PDF stays readable from the moment the chapter opens; this is
+            about finishing it. ChapterVideoPanel owns the whole rule now,
+            because "watch one language, then pass the test" is one sentence and
+            splitting it across a button here and a message there is how a
+            student ends up thinking the test is broken.
+          */}
           {track && (
-            <Box sx={{ flexShrink: 0, borderTop: `1px solid ${theme.palette.divider}`, px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', bgcolor: 'background.paper' }}>
-              {file.recording && (
-                <Button variant="outlined" size="small" startIcon={<SmartDisplayOutlinedIcon />} onClick={watchClass} sx={{ textTransform: 'none', flexShrink: 0 }}>
-                  Watch class
-                </Button>
-              )}
-              {completed ? (
-                <>
-                  <CheckCircleIcon sx={{ color: 'success.main' }} />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={700} color="success.main">Chapter completed</Typography>
-                    {file.best_score_pct != null && (
-                      <Typography variant="caption" color="text.secondary">Best score {Math.round(file.best_score_pct)}%</Typography>
-                    )}
-                  </Box>
-                  {file.has_test && (
-                    <Button size="small" variant="text" onClick={() => setTestOpen(true)} sx={{ textTransform: 'none', flexShrink: 0 }}>Retake</Button>
-                  )}
-                </>
-              ) : file.has_test ? (
-                <>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={700}>Ready to complete this chapter?</Typography>
-                    <Typography variant="caption" color="text.secondary">Pass the short test to mark it completed.</Typography>
-                  </Box>
-                  <Button variant="contained" startIcon={<QuizOutlinedIcon />} onClick={() => setTestOpen(true)} sx={{ textTransform: 'none', flexShrink: 0 }}>Take test</Button>
-                </>
-              ) : (
-                <>
-                  <HourglassEmptyIcon sx={{ color: 'text.disabled' }} />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={600} color="text.secondary">Test coming soon</Typography>
-                    <Typography variant="caption" color="text.secondary">A test will be added so you can complete this chapter.</Typography>
-                  </Box>
-                </>
-              )}
+            <Box sx={{ flexShrink: 0, borderTop: `1px solid ${theme.palette.divider}`, px: 2, py: 1.25, bgcolor: 'background.paper' }}>
+              <ChapterVideoPanel
+                fileId={file.id}
+                hasTest={!!file.has_test}
+                bestScorePct={file.best_score_pct ?? null}
+                getToken={getToken}
+                onTakeTest={() => setTestOpen(true)}
+                onPractise={() => setTestOpen(true)}
+              />
             </Box>
           )}
         </Box>
@@ -246,14 +218,6 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
       onCompleted={() => { setJustCompleted(true); onProgressChange?.(); }}
     />
 
-    {file?.recording?.youtube_id && (
-      <RecordingPlayerDialog
-        open={watchOpen}
-        onClose={() => setWatchOpen(false)}
-        youtubeId={file.recording.youtube_id}
-        title={`${file.title} - class recording`}
-      />
-    )}
     </>
   );
 }

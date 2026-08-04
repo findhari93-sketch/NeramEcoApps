@@ -53,8 +53,12 @@ import TimelineIcon from '@mui/icons-material/Timeline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ViewAsStudentButton from '@/components/ViewAsStudentButton';
+import { buildIssueMarkdown, screenshotPublicUrls } from '@/lib/issue-report-bundle';
+import { copyScreenshotsToClipboard } from '@/lib/screenshot-clipboard';
 import type {
   NexusFoundationIssueWithDetails,
   FoundationIssueStatus,
@@ -133,11 +137,49 @@ export default function TeacherIssuesPage() {
   // Description copy
   const [descCopied, setDescCopied] = useState(false);
 
+  // Hand-off to Claude: one press for all the text, one press for all the
+  // pictures. Two pastes, never more.
+  const [reportCopied, setReportCopied] = useState(false);
+  const [imagesCopied, setImagesCopied] = useState(false);
+  const [copyingImages, setCopyingImages] = useState(false);
+
   function handleCopyDescription(text: string) {
     navigator.clipboard.writeText(text).then(() => {
       setDescCopied(true);
       setTimeout(() => setDescCopied(false), 2000);
     });
+  }
+
+  async function handleCopyReport() {
+    if (!selectedIssue) return;
+    try {
+      await navigator.clipboard.writeText(buildIssueMarkdown(selectedIssue));
+      setReportCopied(true);
+      setTimeout(() => setReportCopied(false), 2000);
+    } catch {
+      setSnackbar({ open: true, message: 'Could not reach the clipboard' });
+    }
+  }
+
+  // Not async: the clipboard write has to start inside the click handler or
+  // Safari rejects it as untrusted. copyScreenshotsToClipboard handles the wait.
+  function handleCopyImages() {
+    if (!selectedIssue) return;
+    const urls = screenshotPublicUrls(selectedIssue);
+    if (urls.length === 0) return;
+
+    setCopyingImages(true);
+    copyScreenshotsToClipboard(urls, `${selectedIssue.ticket_number}-screenshots.png`)
+      .then((result) => {
+        if (result === 'download') {
+          setSnackbar({ open: true, message: 'Saved as a file. Drag it into Claude.' });
+          return;
+        }
+        setImagesCopied(true);
+        setTimeout(() => setImagesCopied(false), 2000);
+      })
+      .catch(() => setSnackbar({ open: true, message: 'Could not copy the screenshots' }))
+      .finally(() => setCopyingImages(false));
   }
 
   async function handleDeleteIssue() {
@@ -538,6 +580,8 @@ export default function TeacherIssuesPage() {
   // ============================================
   // DETAIL DRAWER CONTENT
   // ============================================
+  const screenshotCount = selectedIssue?.screenshot_urls?.length || 0;
+
   const detailContent = selectedIssue && (
     <Box sx={{ p: 3, height: '100%', overflow: 'auto' }}>
       {/* Header */}
@@ -594,7 +638,7 @@ export default function TeacherIssuesPage() {
       </Box>
 
       {/* Reproduce the issue exactly as the student sees it */}
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 1.5 }}>
         <ViewAsStudentButton
           studentId={selectedIssue.student_id}
           reason={`Ticket ${selectedIssue.ticket_number}`}
@@ -603,6 +647,50 @@ export default function TeacherIssuesPage() {
           fullWidth
           label="View as this student"
         />
+      </Box>
+
+      {/* Hand the whole ticket to Claude in two pastes: all the text, then all
+          the pictures stacked into one image. */}
+      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+        <Button
+          fullWidth
+          variant="outlined"
+          data-testid="copy-report"
+          onClick={handleCopyReport}
+          startIcon={
+            reportCopied ? (
+              <CheckIcon sx={{ fontSize: '1.1rem' }} />
+            ) : (
+              <DescriptionOutlinedIcon sx={{ fontSize: '1.1rem' }} />
+            )
+          }
+          color={reportCopied ? 'success' : 'primary'}
+          sx={{ textTransform: 'none', minHeight: 44, fontWeight: 600 }}
+        >
+          {reportCopied ? 'Copied' : 'Copy report'}
+        </Button>
+        {screenshotCount > 0 && (
+          <Button
+            fullWidth
+            variant="outlined"
+            data-testid="copy-images"
+            onClick={handleCopyImages}
+            disabled={copyingImages}
+            startIcon={
+              copyingImages ? (
+                <CircularProgress size={16} />
+              ) : imagesCopied ? (
+                <CheckIcon sx={{ fontSize: '1.1rem' }} />
+              ) : (
+                <ImageOutlinedIcon sx={{ fontSize: '1.1rem' }} />
+              )
+            }
+            color={imagesCopied ? 'success' : 'primary'}
+            sx={{ textTransform: 'none', minHeight: 44, fontWeight: 600 }}
+          >
+            {imagesCopied ? 'Copied' : `Copy ${screenshotCount} image${screenshotCount > 1 ? 's' : ''}`}
+          </Button>
+        )}
       </Box>
 
       {/* Assigned to */}

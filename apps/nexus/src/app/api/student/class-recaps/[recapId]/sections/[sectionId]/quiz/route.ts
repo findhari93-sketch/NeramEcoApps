@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import {
   getSupabaseAdminClient,
+  getRecapById,
   getRecapSection,
   getRecapSectionQuestionsForStudent,
   getRecapSectionQuestionsWithAnswers,
@@ -25,6 +26,33 @@ import {
   drawSeed,
   type OptionLetter,
 } from '@/lib/recap-draw';
+import {
+  resolveSectionGate,
+  gateIsIncomplete,
+  readGateSettings,
+  FALLBACK_GATE_SETTINGS,
+  type ResolvedGate,
+} from '@/lib/recap-gate';
+
+/**
+ * The gate for this checkpoint, filling in either column if it is blank.
+ *
+ * A checkpoint the pipeline stamped carries both numbers, and that path costs no
+ * extra query. Only a legacy row, saved before the gate was written at
+ * PUT /sections, pays for the settings lookup. Reading a blank as "serve the
+ * whole bank and get every one right" is what made those rows unpassable.
+ */
+async function gateFor(
+  section: { recap_id?: string; questions_to_serve?: number | null; min_questions_to_pass?: number | null } | null,
+  available: number,
+): Promise<ResolvedGate> {
+  if (!gateIsIncomplete(section)) {
+    return resolveSectionGate(section, available, FALLBACK_GATE_SETTINGS);
+  }
+  const supabase = getSupabaseAdminClient() as any;
+  const settings = await readGateSettings(supabase, section?.recap_id);
+  return resolveSectionGate(section, available, settings);
+}
 
 async function resolveStudent(request: NextRequest) {
   const msUser = await verifyMsToken(request.headers.get('Authorization'));
@@ -44,6 +72,15 @@ async function resolveStudent(request: NextRequest) {
 async function assertUnlocked(sectionId: string, studentId: string): Promise<string> {
   const section = await getRecapSection(sectionId);
   if (!section) throw new Error('SECTION_NOT_FOUND');
+
+  // A Foundation chapter track shares this table but not this route. Its
+  // audience is the study folder, not a classroom, and clearing its checkpoints
+  // has to fire the chapter-completion side effect that only the track quiz
+  // route knows about. Passing checkpoints through here would leave a student
+  // with a finished track and an unfinished chapter.
+  const owner = await getRecapById(section.recap_id);
+  if (owner?.study_file_id) throw new Error('SECTION_NOT_FOUND');
+
   const order = await listRecapSectionOrder(section.recap_id);
   const idx = order.findIndex((s) => s.id === sectionId);
   const prior = order.slice(0, idx).map((s) => s.id);
@@ -70,7 +107,7 @@ async function resolveDraw(studentId: string, sectionId: string, questionIds: st
   if (existing) return { draw: existing, attemptNumber, section };
 
   const seed = drawSeed(studentId, sectionId);
-  const serve = section?.questions_to_serve ?? questionIds.length;
+  const { serve } = await gateFor(section as any, questionIds.length);
   const chosen = pickDraw(questionIds, serve, attemptNumber, seed);
   const draw = await createRecapDraw({
     student_id: studentId,
@@ -195,7 +232,11 @@ export async function POST(
       };
     });
 
-    const minToPass = Math.min(section?.min_questions_to_pass ?? totalCount, totalCount);
+    // Clamped to what this attempt actually served, so a question deleted since
+    // the draw was minted cannot push the pass mark above the paper in front of
+    // the student.
+    const gate = await gateFor(section as any, all.length);
+    const minToPass = Math.min(gate.minToPass, totalCount);
     const scorePct = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
     const passed = correctCount >= minToPass;
 
