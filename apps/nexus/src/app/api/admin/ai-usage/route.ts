@@ -27,9 +27,24 @@ import { canUser } from '@/lib/staff-capabilities';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  /**
+   * Auth is settled before the main try, so a missing token cannot fall into
+   * the catch-all below.
+   *
+   * verifyMsToken throws a plain Error, so folding it into the general handler
+   * answered an anonymous caller with a 500 carrying the internal error text.
+   * A refusal is not a server fault: 500 is indistinguishable from the route
+   * being broken, which is exactly the wrong signal on the page you open when
+   * you suspect something is wrong.
+   */
+  let msUser: Awaited<ReturnType<typeof verifyMsToken>>;
   try {
-    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    msUser = await verifyMsToken(request.headers.get('Authorization'));
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
+  try {
     const supabase = getSupabaseAdminClient();
     const { data: user } = await supabase
       .from('users')
@@ -181,8 +196,10 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err) {
+    // Logged in full, returned as a fixed string: the detail is for us, and
+    // this route is reachable by anyone who can guess the path.
     const message = err instanceof Error ? err.message : 'Failed to load AI usage';
     console.error('GET /api/admin/ai-usage error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to load AI usage' }, { status: 500 });
   }
 }
