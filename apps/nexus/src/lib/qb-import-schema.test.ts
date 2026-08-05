@@ -237,6 +237,59 @@ describe('source_quote, which decides what an unreviewed test may publish', () =
   });
 });
 
+describe('a question set written outside the app', () => {
+  /**
+   * The uploaded case, which is not the pasted case scaled up. A teacher who ran
+   * the prompt themselves comes back with far more questions than one in-app
+   * model call produces, none of them necessarily quoting the chapter, and the
+   * whole point is that all of them land.
+   */
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      ...GOOD_MCQ,
+      question: `Question number ${i + 1}: which dynasty built this monument?`,
+    }));
+
+  it('keeps every row of a large hand-written set', () => {
+    const result = validateImportJSON(wrap(many(150)), REGISTRY);
+    expect(result.questions).toHaveLength(150);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('keeps a set in which nothing carries a quote', () => {
+    // The upload route does not run the generator's grounding filter, so a set
+    // with no source_quote anywhere has to survive validation intact or the
+    // feature imports nothing.
+    const result = validateImportJSON(wrap(many(30)), REGISTRY);
+    expect(result.questions).toHaveLength(30);
+    expect(result.questions.every((q) => q.source_quote === null)).toBe(true);
+  });
+
+  it('warns rather than failing when a file passes the per-import cap', () => {
+    // Surfaced in the confirm step. Silently keeping 200 of 250 would look like
+    // a successful import of the whole file.
+    const result = validateImportJSON(wrap(many(250)), REGISTRY);
+    expect(result.questions).toHaveLength(200);
+    expect(result.warnings.join(' ')).toContain('Only the first 200');
+  });
+
+  it('accepts question_text and correct_answer as the field names', () => {
+    const result = validateImportJSON(
+      wrap([
+        {
+          question_text: 'Which walled city is Shahjahanabad today?',
+          options: { a: 'Agra', b: 'Old Delhi' },
+          correct_answer: 'b',
+          tag_slugs: ['history_of_architecture'],
+        },
+      ]),
+      REGISTRY,
+    );
+    expect(result.questions).toHaveLength(1);
+    expect(result.questions[0].correct_answer).toBe('b');
+  });
+});
+
 describe('buildImportPrompt', () => {
   it('asks the model to name the chapter from the document', () => {
     // The typed "Chapter or topic" field is gone. The document is the only

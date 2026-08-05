@@ -11,17 +11,41 @@
       {
         "selector": "JSXAttribute[name.name='src'] Literal[value=/youtube.*embed/]",
         "message": "Embed YouTube through NeramVideoPlayer (src/components/video) so the checkpoint gate, the watermark and the progress telemetry come with it."
+      },
+      {
+        "selector": "Literal[value=/generativelanguage\\.googleapis\\.com/]",
+        "message": "Call Gemini through @neram/ai rather than building the URL by hand, so the call is metered and the budget guard can refuse it."
+      }
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@google/generative-ai",
+            "message": "Call Gemini through @neram/ai. It owns the model list, the fallback order, the per-feature Auto/Manual/Off switch and the token metering behind the AI usage panel. Six private copies of this SDK are how the app kept calling models Google had already shut down."
+          }
+        ]
       }
     ]
   },
   "overrides": [
     {
-      "files": ["src/components/video/**"],
-      "rules": { "no-restricted-syntax": "off" }
+      "files": [
+        "src/components/video/**"
+      ],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
     },
     {
-      "files": ["src/components/foundation/**", "src/app/(student)/student/modules/**"],
-      "rules": { "no-restricted-syntax": "off" }
+      "files": [
+        "src/components/foundation/**",
+        "src/app/(student)/student/modules/**"
+      ],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
     }
   ]
 }

@@ -12,7 +12,7 @@ const nextConfig = {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth'],
+  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/auth'],
   images: {
     minimumCacheTTL: 2592000, // 30 days — Supabase storage images are immutable
     remotePatterns: [

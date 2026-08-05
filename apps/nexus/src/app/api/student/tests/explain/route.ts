@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
 import { getSupabaseAdminClient } from '@neram/database';
-import { generateGeminiText } from '@/lib/gemini-client';
+import { AiBlockedError, generateGeminiText } from '@neram/ai';
 
 /**
  * "Explain this in more detail" on the post-submit review.
@@ -85,6 +85,8 @@ export async function POST(request: NextRequest) {
     let text = '';
     try {
       text = await generateGeminiText({
+        feature: 'nexus.answer-explain',
+        actorId: access.caller.id,
         parts: [{ text: buildPrompt(question) }],
         systemInstruction:
           'You are a patient tutor for architecture entrance exams (NATA and JEE Paper 2). You explain why a given answer is correct, clearly and without padding.',
@@ -92,6 +94,15 @@ export async function POST(request: NextRequest) {
         maxOutputTokens: MAX_OUTPUT_TOKENS,
       });
     } catch (err) {
+      // There is no manual path for a student sitting in front of the screen,
+      // so a refusal reads as the tutor being busy rather than as an error.
+      if (err instanceof AiBlockedError) {
+        return NextResponse.json(
+          { error: 'The AI tutor is unavailable right now. Please try again later.' },
+          { status: 503 },
+        );
+      }
+
       const message = err instanceof Error ? err.message : 'AI request failed';
       // The shared key running dry is the common case and it is temporary, so
       // it gets a 503 and its own copy rather than looking like a broken button.

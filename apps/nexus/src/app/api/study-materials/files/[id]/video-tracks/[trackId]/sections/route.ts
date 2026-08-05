@@ -55,6 +55,70 @@ async function withGate(
   });
 }
 
+/**
+ * GET the checkpoints so a teacher can actually read them.
+ *
+ * The editor used to save whatever the generator produced and then tell the
+ * teacher to "review them, then publish", with no screen anywhere that could
+ * open them. The two-step this whole feature rests on, generate then review,
+ * only existed in the comments.
+ *
+ * Returns each section's ID. That is not incidental: updateRecapSections
+ * decides update-in-place versus re-create on the presence of that id, and
+ * re-creating archives the live sections, which strands every student's passed
+ * checkpoint on an invisible row and silently re-locks them mid-chapter. An
+ * editor that loads without ids destroys work on its first save.
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string; trackId: string } },
+) {
+  try {
+    const user = await getRequestUser(request.headers.get('Authorization'));
+    assertStaff(user);
+
+    const track = await getRecapById(params.trackId);
+    if (!track || track.study_file_id !== params.id) {
+      return NextResponse.json({ error: 'Track not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      track: {
+        id: track.id,
+        title: track.title,
+        language: track.language,
+        language_label: track.language_label,
+        status: track.status,
+        readiness: track.readiness,
+        recording_url: track.recording_url,
+        video_source: track.video_source,
+        video_duration_seconds: track.video_duration_seconds,
+      },
+      sections: (track.sections || []).map((s: any) => ({
+        id: s.id,
+        title: s.title || '',
+        description: s.description || '',
+        start_timestamp_seconds: s.start_timestamp_seconds ?? 0,
+        end_timestamp_seconds: s.end_timestamp_seconds ?? 0,
+        min_questions_to_pass: s.min_questions_to_pass ?? null,
+        questions_to_serve: s.questions_to_serve ?? null,
+        questions: (s.questions || []).map((q: any) => ({
+          question_text: q.question_text || '',
+          option_a: q.option_a || '',
+          option_b: q.option_b || '',
+          option_c: q.option_c || '',
+          option_d: q.option_d || '',
+          correct_option: q.correct_option || 'a',
+          explanation: q.explanation || '',
+        })),
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to load checkpoints';
+    return NextResponse.json({ error: message }, { status: message === 'Not authorized' ? 403 : 500 });
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string; trackId: string } },

@@ -540,7 +540,9 @@ export async function autodraftRecapForClass(
       // meeting subject. The generator writes checkpoints about this topic, so
       // handing it "Class by Ar Hari Babu" costs real quality.
       cls.title || recap.title || 'Class recap',
-      { targetSegmentSeconds, poolPerSegment, durationSeconds },
+      // The nightly sweep is metered separately from a teacher pressing
+      // Generate: same work, very different thing to see on the usage panel.
+      { targetSegmentSeconds, poolPerSegment, durationSeconds, feature: 'nexus.recap-questions-cron' },
     );
 
     const planned = generated.sections || [];

@@ -1,10 +1,36 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-// The module reads GEMINI_API_KEY into a constant at import time, so the key has
-// to exist before the import runs, not merely before the first test.
+// @neram/ai reads GEMINI_API_KEY at call time rather than at import time, so
+// this no longer has to be hoisted. It stays hoisted anyway: the cost is
+// nothing and the ordering trap is easy to reintroduce.
 vi.hoisted(() => {
   process.env.GEMINI_API_KEY = 'test-key';
 });
+
+// These tests drive the real client through a stubbed fetch, so the budget
+// guard and the usage logger behind it would otherwise reach for Supabase.
+// Both fail open, so the tests would still pass, but they would pass slowly and
+// with a page of connection errors hiding anything real.
+vi.mock('@neram/database', () => ({
+  getNexusSetting: vi.fn(async () => null),
+  getAiSpend: vi.fn(async () => ({
+    calls: 0,
+    blockedCalls: 0,
+    promptTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+  })),
+  getAiSpendForFeature: vi.fn(async () => ({
+    calls: 0,
+    blockedCalls: 0,
+    promptTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+  })),
+  recordAiUsage: vi.fn(async () => {}),
+  utcDay: () => '2026-08-04',
+  utcMonthStart: () => '2026-08-01',
+}));
 
 import { buildTagList, generateClassSummary, type AllowedTag } from './class-summary-ai';
 

@@ -253,11 +253,12 @@ export default function StudyTestAuthorDialog({
                     onClick={() => file && onGenerate({ id: file.id, title: file.title })}
                     sx={{ minHeight: 40, whiteSpace: 'nowrap' }}
                   >
-                    Generate
+                    Add a test
                   </Button>
                 }
               >
-                Nothing suitable in the library? Write one from this chapter PDF.
+                Nothing suitable in the library? Write one from this chapter PDF, or upload questions you already
+                have.
               </Alert>
             )}
           </>

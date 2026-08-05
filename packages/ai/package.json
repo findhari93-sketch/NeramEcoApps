@@ -1,0 +1,25 @@
+{
+  "name": "@neram/ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The single chokepoint for every Gemini call, with per-feature controls, token metering and a spend ceiling",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./features": "./src/features.ts",
+    "./pricing": "./src/pricing.ts"
+  },
+  "scripts": {
+    "lint": "echo 'Linted via consuming apps'",
+    "type-check": "echo 'Type-checked via consuming apps'",
+    "clean": "rm -rf dist .turbo node_modules",
+    "clean:build": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@neram/database": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

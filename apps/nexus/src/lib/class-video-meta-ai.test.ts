@@ -18,8 +18,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const generateGeminiText = vi.fn();
 const readStoredTranscript = vi.fn();
 
-vi.mock('@/lib/gemini-client', () => ({
+vi.mock('@neram/ai', () => ({
   generateGeminiText: (...args: unknown[]) => generateGeminiText(...args),
+  AiBlockedError: class AiBlockedError extends Error {},
 }));
 vi.mock('@/lib/transcript-resolver', () => ({
   readStoredTranscript: (...args: unknown[]) => readStoredTranscript(...args),

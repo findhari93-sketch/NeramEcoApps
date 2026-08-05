@@ -13,7 +13,7 @@
  */
 
 import type { TranscriptEntry } from '@neram/database';
-import { generateGeminiText } from './gemini-client';
+import { generateGeminiText } from '@neram/ai';
 
 // Keep the prompt within a comfortable window even for a long class.
 const MAX_TRANSCRIPT_CHARS = 48000;
@@ -204,6 +204,7 @@ export async function generateClassSummary(input: {
   ];
 
   const text = await generateGeminiText({
+    feature: 'nexus.class-summary',
     parts,
     systemInstruction: SYSTEM_INSTRUCTION,
     temperature: 0.4,

@@ -1,6 +1,24 @@
 {
   "extends": "next/core-web-vitals",
   "rules": {
-    "react/no-unescaped-entities": "off"
+    "react/no-unescaped-entities": "off",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@google/generative-ai",
+            "message": "Call Gemini through @neram/ai. It owns the model list, the fallback order, the per-feature Auto/Manual/Off switch and the token metering behind the AI usage panel. Six private copies of this SDK are how the app kept calling models Google had already shut down."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value=/generativelanguage\\.googleapis\\.com/]",
+        "message": "Call Gemini through @neram/ai rather than building the URL by hand, so the call is metered and the budget guard can refuse it."
+      }
+    ]
   }
 }

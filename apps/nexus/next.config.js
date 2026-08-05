@@ -43,7 +43,7 @@ const nextConfig = {
     // Drawing feature gamification types not yet in generated DB types
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth'],
+  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/auth'],
   experimental: {
     // Rewrite barrel imports into direct ones at build time.
     //

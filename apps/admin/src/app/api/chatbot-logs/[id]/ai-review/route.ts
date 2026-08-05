@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * AI Review for a single Aintra conversation.
  *
@@ -8,16 +7,13 @@
  * of the answer-quality review, it turns the one-off review report into an
  * ongoing, one-click check for new conversations.
  *
- * Depends on GEMINI_API_KEY (same key as the marketing chat); if Gemini quota is
- * depleted the route returns a clear 502 so the UI can show a friendly message.
+ * Runs through @neram/ai, which owns the model list, the fallback order and the
+ * metering. The hand-rolled two-model loop that used to live here is gone; so is
+ * the `@ts-nocheck` that was covering its untyped fetch body.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-// Try current models in order; the first that responds wins (mirrors the chat route).
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+import { AiBlockedError, generateGemini } from '@neram/ai';
 
 const REVIEW_SYSTEM_PROMPT = `You are a meticulous quality reviewer for "Aintra", the AI assistant of Neram Classes, an architecture-entrance coaching institute in India (NATA and JEE Paper 2 / B.Arch admissions).
 
@@ -46,14 +42,7 @@ const RESPONSE_SCHEMA = {
   required: ['verdict', 'reasoning', 'suggestedCorrection'],
 };
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  if (!GEMINI_API_KEY) {
-    return NextResponse.json({ error: 'AI review is not configured (GEMINI_API_KEY missing).' }, { status: 503 });
-  }
-
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const supabase = createAdminClient();
     const { data: row, error } = await supabase
@@ -71,59 +60,49 @@ export async function POST(
 
     const userPrompt = `Student's question:\n"${row.user_message}"\n\nAintra's answer:\n"${row.ai_response || '(no answer was generated)'}"\n\nReview this answer and respond with the JSON object.`;
 
-    let lastErr = 'unknown';
-    for (const model of GEMINI_MODELS) {
-      const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: REVIEW_SYSTEM_PROMPT }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 900,
-            topP: 0.8,
-            responseMimeType: 'application/json',
-            responseSchema: RESPONSE_SCHEMA,
-          },
-        }),
+    let raw: string;
+    let model: string;
+    try {
+      const result = await generateGemini({
+        feature: 'admin.chat-review',
+        systemInstruction: REVIEW_SYSTEM_PROMPT,
+        parts: [{ text: userPrompt }],
+        temperature: 0.2,
+        maxOutputTokens: 900,
+        responseSchema: RESPONSE_SCHEMA,
       });
-
-      if (!response.ok) {
-        lastErr = `${model}:HTTP${response.status}`;
-        const text = await response.text().catch(() => '');
-        // 429 = quota depleted; try next model, then fail clearly.
-        if (response.status === 429) continue;
-        console.error('[AintraReview] Gemini error:', lastErr, text.slice(0, 200));
-        continue;
+      raw = result.text;
+      model = result.model;
+    } catch (err) {
+      if (err instanceof AiBlockedError) {
+        return NextResponse.json(
+          { error: err.message, reason: err.reason, manualPrompt: err.manualPrompt },
+          { status: 409 }
+        );
       }
-
-      const data = await response.json();
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!raw) {
-        lastErr = `${model}:EMPTY`;
-        continue;
-      }
-
-      try {
-        const parsed = JSON.parse(raw);
-        return NextResponse.json({
-          verdict: parsed.verdict || 'uncertain',
-          reasoning: parsed.reasoning || '',
-          suggestedCorrection: (parsed.suggestedCorrection || '').trim(),
-          model,
-        });
-      } catch {
-        lastErr = `${model}:BAD_JSON`;
-        continue;
-      }
+      const message = err instanceof Error ? err.message : 'unknown';
+      console.error('[AintraReview] Gemini error:', message);
+      return NextResponse.json(
+        {
+          error: message.includes('429')
+            ? 'AI review is temporarily unavailable: every model is rate limited. Try again shortly.'
+            : `AI review failed (${message}).`,
+        },
+        { status: 502 }
+      );
     }
 
-    const friendly = lastErr.includes('HTTP429')
-      ? 'AI review is temporarily unavailable: the Gemini quota is depleted. Top up the GEMINI_API_KEY billing and try again.'
-      : `AI review failed (${lastErr}).`;
-    return NextResponse.json({ error: friendly }, { status: 502 });
+    try {
+      const parsed = JSON.parse(raw);
+      return NextResponse.json({
+        verdict: parsed.verdict || 'uncertain',
+        reasoning: parsed.reasoning || '',
+        suggestedCorrection: (parsed.suggestedCorrection || '').trim(),
+        model,
+      });
+    } catch {
+      return NextResponse.json({ error: 'AI review failed (BAD_JSON).' }, { status: 502 });
+    }
   } catch (err) {
     console.error('[AintraReview] Error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

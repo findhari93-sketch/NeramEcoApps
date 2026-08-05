@@ -2,11 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database';
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Try models in order: 2.5-flash (best quota), 2.0-flash, 2.0-flash-lite
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'];
-const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+import { AiBlockedError, generateGemini, hashClientKey, ipFromHeaders } from '@neram/ai';
 
 const NATA_SYSTEM_PROMPT = `You are Aintra, the friendly NATA Assistant by Neram Classes. You ONLY answer questions about NATA (National Aptitude Test in Architecture), B.Arch admissions, and architecture education. If a question is not related to these topics, politely decline and redirect to NATA topics.
 
@@ -378,69 +374,49 @@ async function getKBSection(): Promise<string> {
   }
 }
 
+/**
+ * One answer from the model.
+ *
+ * The model list, the fallback order and the metering now live in @neram/ai.
+ * What was here was a private copy with its own list, and the copies are how
+ * the ecosystem drifted onto models Google had already shut down.
+ */
 async function callGemini(
-  model: string,
   contents: Array<{ role: string; parts: Array<{ text: string }> }>,
   systemPrompt: string,
-  errors: string[]
+  errors: string[],
+  clientKey: string | null
 ): Promise<{ reply: string; model: string; finishReason: string } | null> {
   try {
-    const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: {
-          temperature: 0.75,
-          maxOutputTokens: 4096,
-          topP: 0.9,
-        },
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        ],
-      }),
+    const result = await generateGemini({
+      feature: 'marketing.nata-chat',
+      clientKey,
+      systemInstruction: systemPrompt,
+      contents: contents as never,
+      temperature: 0.75,
+      maxOutputTokens: 4096,
+      responseMimeType: 'text/plain',
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ],
     });
 
-    if (!response.ok) {
-      const status = response.status;
-      const errorText = await response.text().catch(() => 'unknown');
-      const shortError = errorText.slice(0, 150);
-      const detail = `${model}:HTTP${status}(${shortError})`;
-      errors.push(detail);
-      console.error(`[NataChat] Gemini ${model} error: ${status}`, errorText);
-      return null;
-    }
-
-    const data = await response.json();
-    const candidate = data?.candidates?.[0];
-    const reply = candidate?.content?.parts?.[0]?.text;
-    if (!reply) {
-      const blockReason = data?.promptFeedback?.blockReason || candidate?.finishReason || 'NO_CONTENT';
-      const detail = `${model}:${blockReason}`;
-      errors.push(detail);
-      console.error(`[NataChat] Gemini ${model}: no reply (${blockReason})`, JSON.stringify(data).slice(0, 200));
-      return null;
-    }
-
-    const finishReason: string = candidate?.finishReason || 'UNKNOWN';
-    let finalReply = reply;
-
-    if (finishReason === 'MAX_TOKENS') {
-      console.warn(`[NataChat] Gemini ${model}: response truncated (MAX_TOKENS)`);
-      finalReply = reply.trimEnd() +
+    let finalReply = result.text;
+    if (result.finishReason === 'MAX_TOKENS') {
+      console.warn(`[NataChat] Gemini ${result.model}: response truncated (MAX_TOKENS)`);
+      finalReply =
+        result.text.trimEnd() +
         '\n\n*For more details, please contact us at **+91 91761 37043** or visit **neramclasses.com**.*';
     }
 
-    return { reply: finalReply, model, finishReason };
+    return { reply: finalReply, model: result.model, finishReason: result.finishReason };
   } catch (err) {
-    const detail = `${model}:FETCH_ERROR(${err instanceof Error ? err.message : 'unknown'})`;
-    errors.push(detail);
-    console.error(`[NataChat] Gemini ${model} fetch error:`, err);
+    if (err instanceof AiBlockedError) throw err;
+    errors.push(err instanceof Error ? err.message : 'unknown');
+    console.error('[NataChat] Gemini error:', err);
     return null;
   }
 }
@@ -496,13 +472,6 @@ async function logConversation(params: {
 }
 
 export async function POST(request: NextRequest) {
-  if (!GEMINI_API_KEY) {
-    return NextResponse.json(
-      { error: 'Chat service not configured' },
-      { status: 503 }
-    );
-  }
-
   try {
     const body = await request.json();
     const { message, history, sessionId, userId, userName, pageUrl } = body;
@@ -531,31 +500,48 @@ export async function POST(request: NextRequest) {
     const kbSection = await getKBSection();
     const effectivePrompt = NATA_SYSTEM_PROMPT + kbSection;
 
-    // Try models with fallback
-    let result: { reply: string; model: string; finishReason: string } | null = null;
+    /**
+     * One attempt. Not three.
+     *
+     * This used to run the whole model cascade, sleep three seconds, run it
+     * again, sleep five, then make a final call, so a single visitor message
+     * could cost seven Gemini calls, each resending this file's very large
+     * system prompt plus the knowledge base. It was also eight seconds of a
+     * visitor watching a spinner before being told it failed.
+     *
+     * Two things made it pointless. The retries existed for rate limiting, and
+     * @neram/ai already walks a model cascade for exactly that. And the "most
+     * available" model the last retry reached for was GEMINI_MODELS[len - 1],
+     * which was gemini-2.5-pro: the most expensive model on the list, at 25x
+     * flash-lite on output. The cheapest fallback was doing the priciest retry.
+     */
     const errors: string[] = [];
-
-    for (const model of GEMINI_MODELS) {
-      result = await callGemini(model, contents, effectivePrompt, errors);
-      if (result) break;
-    }
-
-    // Retry with increasing delays if rate-limited
-    if (!result) {
-      await new Promise((r) => setTimeout(r, 3000));
-      errors.push('RETRY_1');
-      for (const model of GEMINI_MODELS) {
-        result = await callGemini(model, contents, effectivePrompt, errors);
-        if (result) break;
+    let result: { reply: string; model: string; finishReason: string } | null;
+    try {
+      result = await callGemini(
+        contents,
+        effectivePrompt,
+        errors,
+        hashClientKey(sessionId, ipFromHeaders(request.headers)),
+      );
+    } catch (err) {
+      if (err instanceof AiBlockedError) {
+        await logConversation({
+          sessionId: sessionId || 'unknown',
+          userMessage: message.trim(),
+          aiResponse: null,
+          userId,
+          userName,
+          pageUrl,
+          error: `AI_BLOCKED:${err.reason}`,
+          responseTimeMs: Date.now() - startTime,
+        });
+        return NextResponse.json(
+          { error: 'The assistant is taking a short break. Please try again later.' },
+          { status: 503 }
+        );
       }
-    }
-
-    // Second retry with longer delay
-    if (!result) {
-      await new Promise((r) => setTimeout(r, 5000));
-      errors.push('RETRY_2');
-      // Only try the lite model on last retry (most available)
-      result = await callGemini(GEMINI_MODELS[GEMINI_MODELS.length - 1], contents, effectivePrompt, errors);
+      throw err;
     }
 
     const responseTimeMs = Date.now() - startTime;

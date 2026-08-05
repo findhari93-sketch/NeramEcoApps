@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFileById, getFolderById, linkTestToStudyFile, listQBTags } from '@neram/database';
+import { getFileById, listQBTags } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { getSharePointDownloadUrl, getSharePointStreamUrl } from '@/lib/sharepoint';
-import { generateGeminiText } from '@/lib/gemini-client';
+import { AiBlockedError, generateGeminiText } from '@neram/ai';
 import { buildImportPrompt, validateImportJSON, type ImportExam } from '@/lib/qb-import-schema';
-import { commitImport, dedupeImportRows, ImportInputError, type CommitRow } from '@/lib/qb-import-service';
-import { saveTestImportPayload } from '@/lib/test-import-store';
+import { ImportInputError } from '@/lib/qb-import-service';
+import { buildChapterTest } from '@/lib/chapter-test-build';
 
 /**
  * POST /api/study-materials/files/[id]/test/generate   (staff)
@@ -113,6 +113,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     let raw: string;
     try {
       raw = await generateGeminiText({
+        // The 'document' tier keeps this off the lite models, which read an
+        // attached PDF poorly. That used to be a pinned `models` array here;
+        // it lives in packages/ai/src/pricing.ts now so a model shutdown is
+        // one edit rather than a hunt through call sites.
+        feature: 'nexus.chapter-test',
+        actorId: user.id,
         parts: [
           { inline_data: { mime_type: 'application/pdf', data: Buffer.from(bytes).toString('base64') } },
           { text: prompt },
@@ -120,15 +126,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         // 4096 is the client default and truncates a 40-question reply with
         // explanations less than halfway through.
         maxOutputTokens: 16384,
-        // Pinned rather than cascaded: 2.0-flash-lite handles a document input
-        // poorly, and silently getting a worse paper is worse than a clear
-        // failure the teacher can retry.
-        models: ['gemini-2.5-flash'],
       });
     } catch (err) {
+      // Manual mode or a spent budget. Not a failure: hand back the prompt so
+      // the teacher can run it themselves and paste the JSON into Import.
+      if (err instanceof AiBlockedError) {
+        return NextResponse.json(
+          { error: err.message, reason: err.reason, manualPrompt: err.manualPrompt },
+          { status: 409 },
+        );
+      }
+
       const message = err instanceof Error ? err.message : 'The AI could not be reached';
-      // One free-tier key serves all four apps, so this is the common failure
-      // and it is worth naming rather than reporting as a generic error.
+      // One key serves all four apps, so this is the common failure and it is
+      // worth naming rather than reporting as a generic error.
       if (message.includes('429')) {
         return NextResponse.json(
           { error: 'The AI is rate limited right now. Try this chapter again in a few minutes.' },
@@ -160,98 +171,38 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       );
     }
 
-    // ── 4. Dedupe against the bank, resolved without a human ─────────────────
-    // At or above the reuse threshold the two are the same question in
-    // different words, so the bank's copy is used and its attempt history and
-    // tags stay attached. Everything else is new. There is no 'review' outcome
-    // here, because there is nobody to review it.
-    const dedupe = await dedupeImportRows(
-      grounded.map((q) => ({ key: q.key, question_text: q.question_text, exam_relevance: q.exam_relevance })),
-    );
-    const verdictByKey = new Map(dedupe.results.map((r) => [r.key, r]));
-
-    const rows: CommitRow[] = grounded.map((q) => {
-      const verdict = verdictByKey.get(q.key);
-      const top = verdict?.candidates?.[0];
-      const reuse = verdict?.suggested_action === 'reuse' && top?.id;
-      return {
-        action: reuse ? 'reuse' : 'create',
-        existing_question_id: reuse ? top!.id : null,
-        question_text: q.question_text,
-        question_format: q.question_format,
-        options: q.options,
-        correct_answer: q.correct_answer,
-        explanation: q.explanation,
-        difficulty: q.difficulty,
-        exam_relevance: q.exam_relevance,
-        tag_ids: q.tag_ids,
-        new_tag_slugs: q.new_tag_slugs,
-      };
-    });
-
-    // ── 5. Build and file the test ───────────────────────────────────────────
-    const folder = await getFolderById(file.folder_id);
-    const folderPath =
-      parsed.test.folder_path.length > 0
-        ? parsed.test.folder_path
-        : [folder?.name || 'Study materials', file.title].filter(Boolean);
-
-    const result = await commitImport({
-      title: parsed.test.title || file.title,
-      callerId: user.id,
-      rows,
-      newTags: parsed.proposedTags.map((t) => ({ slug: t.slug, label: t.label })),
-      folderPath,
-      testKind: 'chapter',
-      timerType: 'none',
+    // ── 4. Dedupe, commit, archive, place ────────────────────────────────────
+    // Shared with the upload route, which reaches the same place having been
+    // handed its questions by a teacher instead of by the model.
+    const result = await buildChapterTest({
+      file,
+      parsed,
+      questions: grounded,
+      serve,
       passingPct,
-      isPublished: true,
-      questionsToServe: serve,
-      createdFrom: 'ai_pdf',
-    });
-
-    // ── 6. Keep the paper, and gate the chapter with it ──────────────────────
-    await saveTestImportPayload({
-      testId: result.test_id,
+      callerId: user.id,
       source: 'pdf_generate',
-      sourceFileId: file.id,
-      createdBy: user.id,
-      // Keyed by question text because the commit renumbers everything and a
-      // skipped row would break any positional pairing.
-      extras: Object.fromEntries(
-        grounded.map((q) => [
-          q.question_text.toLowerCase().replace(/[^a-z0-9]/g, ''),
-          { source_quote: q.source_quote },
-        ]),
-      ),
+      createdFrom: 'ai_pdf',
       promptMeta: {
         exam,
         pool_size: poolSize,
         serve,
         passing_pct: passingPct,
         model: 'gemini-2.5-flash',
-        folder_path: folderPath,
         dropped_ungrounded: droppedUngrounded,
         source_file_title: file.title,
       },
-    }).catch((err) => console.error('Could not archive the generated payload:', err));
-
-    await linkTestToStudyFile({
-      fileId: file.id,
-      testId: result.test_id,
-      passingPct,
-      createdBy: user.id,
     });
 
     return NextResponse.json(
       {
         data: {
           test_id: result.test_id,
-          title: parsed.test.title || file.title,
+          title: result.title,
           created: result.created,
           reused: result.reused,
           pool_size: result.question_count,
-          serve: Math.min(serve, result.question_count),
+          serve: result.serve,
           dropped_ungrounded: droppedUngrounded,
           warnings: parsed.warnings.slice(0, 5),
         },

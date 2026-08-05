@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { AiBlockedError, generateGeminiText, hashClientKey, ipFromHeaders } from '@neram/ai';
 import { getActiveAintraKnowledgeBase } from '@neram/database';
 import {
   importantDates,
@@ -152,41 +152,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'AI service not configured' }, { status: 500 });
-    }
-
     const kbBlock = await getKbBlock();
     const systemContext = buildSystemPrompt(kbBlock);
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const chatHistory = history
       .slice(-MAX_HISTORY)
       .map((m: { role: string; content: string }) => ({
-        role: m.role === 'user' ? 'user' : 'model',
+        role: (m.role === 'user' ? 'user' : 'model') as 'user' | 'model',
         parts: [{ text: String(m.content || '') }],
       }));
 
-    const chat = model.startChat({
-      history: [
-        { role: 'user', parts: [{ text: systemContext }] },
-        {
-          role: 'model',
-          parts: [
-            {
-              text: 'Understood. I am Aintra, your KEAM B.Arch 2026 counselling guide. How can I help?',
-            },
-          ],
-        },
-        ...chatHistory,
-      ],
-    });
+    let reply: string;
+    try {
+      reply = await generateGeminiText({
+        feature: 'marketing.keam-aintra',
+        // No session id in this widget's payload, so the visitor key is the
+        // IP alone. Weaker than session plus IP, but it still stops one
+        // machine spending the whole cap.
+        clientKey: hashClientKey(ipFromHeaders(request.headers)),
+        systemInstruction: systemContext,
+        contents: [...chatHistory, { role: 'user', parts: [{ text: message }] }],
+        responseMimeType: 'text/plain',
+      });
+    } catch (err) {
+      // A visitor cannot be handed a prompt to run, so a refusal reads as an
+      // outage rather than an error with a workaround.
+      if (err instanceof AiBlockedError) {
+        return NextResponse.json(
+          { error: 'AI service temporarily unavailable' },
+          { status: 503 },
+        );
+      }
+      throw err;
+    }
 
-    const result = await chat.sendMessage(message);
-    const reply = result.response.text();
 
     return NextResponse.json({ reply });
   } catch (err) {

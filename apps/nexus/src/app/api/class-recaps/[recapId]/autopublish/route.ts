@@ -91,6 +91,7 @@ export async function POST(
     }
 
     const generated = await generateSectionsAndQuestions(transcript, recap.title, {
+      feature: 'nexus.recap-questions',
       targetSegmentSeconds,
       poolPerSegment,
       durationSeconds,

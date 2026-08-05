@@ -121,6 +121,110 @@ export type Database = {
           },
         ]
       }
+      ai_usage_daily: {
+        Row: {
+          app: string
+          blocked_calls: number
+          calls: number
+          cost_usd: number
+          day: string
+          feature_id: string
+          id: string
+          model: string
+          output_tokens: number
+          prompt_tokens: number
+          updated_at: string
+        }
+        Insert: {
+          app: string
+          blocked_calls?: number
+          calls?: number
+          cost_usd?: number
+          day: string
+          feature_id: string
+          id?: string
+          model?: string
+          output_tokens?: number
+          prompt_tokens?: number
+          updated_at?: string
+        }
+        Update: {
+          app?: string
+          blocked_calls?: number
+          calls?: number
+          cost_usd?: number
+          day?: string
+          feature_id?: string
+          id?: string
+          model?: string
+          output_tokens?: number
+          prompt_tokens?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ai_usage_events: {
+        Row: {
+          actor_id: string | null
+          app: string
+          client_key: string | null
+          created_at: string
+          error: string | null
+          estimated_cost_usd: number | null
+          feature_id: string
+          id: string
+          key_tier: string
+          latency_ms: number | null
+          model: string | null
+          output_tokens: number
+          prompt_tokens: number
+          status: string
+          total_tokens: number
+        }
+        Insert: {
+          actor_id?: string | null
+          app: string
+          client_key?: string | null
+          created_at?: string
+          error?: string | null
+          estimated_cost_usd?: number | null
+          feature_id: string
+          id?: string
+          key_tier?: string
+          latency_ms?: number | null
+          model?: string | null
+          output_tokens?: number
+          prompt_tokens?: number
+          status: string
+          total_tokens?: number
+        }
+        Update: {
+          actor_id?: string | null
+          app?: string
+          client_key?: string | null
+          created_at?: string
+          error?: string | null
+          estimated_cost_usd?: number | null
+          feature_id?: string
+          id?: string
+          key_tier?: string
+          latency_ms?: number | null
+          model?: string | null
+          output_tokens?: number
+          prompt_tokens?: number
+          status?: string
+          total_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       aintra_knowledge_base: {
         Row: {
           answer: string
@@ -16132,6 +16236,20 @@ export type Database = {
       }
     }
     Functions: {
+      record_ai_usage_daily: {
+        Args: {
+          p_app: string
+          p_blocked: number
+          p_calls: number
+          p_cost_usd: number
+          p_day: string
+          p_feature_id: string
+          p_model: string
+          p_output_tokens: number
+          p_prompt_tokens: number
+        }
+        Returns: undefined
+      }
       admin_bulk_delete_users: {
         Args: { admin_id: string; user_ids: string[] }
         Returns: {

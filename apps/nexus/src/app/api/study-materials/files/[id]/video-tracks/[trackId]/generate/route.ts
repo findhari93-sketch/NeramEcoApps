@@ -73,6 +73,7 @@ export async function POST(
     }
 
     const generated = await generateSectionsAndQuestions(transcript.entries, track.title, {
+      feature: 'nexus.video-checkpoints',
       targetSegmentSeconds: track.target_segment_seconds,
       poolPerSegment: track.question_pool_per_segment,
       durationSeconds: track.video_duration_seconds || 0,

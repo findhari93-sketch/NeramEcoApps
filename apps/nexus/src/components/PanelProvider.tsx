@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
@@ -191,12 +192,14 @@ const PANELS: PanelConfig[] = [
       { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
       { label: 'Features', path: '/teacher/admin/features', icon: <ToggleOnOutlinedIcon /> },
       { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
+      { label: 'AI usage', path: '/teacher/admin/ai-usage', icon: <InsightsOutlinedIcon /> },
       { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
     ],
     bottomNavItems: [
       { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
       { label: 'Features', path: '/teacher/admin/features', icon: <ToggleOnOutlinedIcon /> },
       { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
+      { label: 'AI usage', path: '/teacher/admin/ai-usage', icon: <InsightsOutlinedIcon /> },
       { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
     ],
     overflowItems: [],

@@ -37,7 +37,7 @@ import {
   type AllowedTag,
   type ClassVideoMetaData,
 } from './class-video-meta-schema';
-import { generateGeminiText } from './gemini-client';
+import { generateGeminiText } from '@neram/ai';
 import { readStoredTranscript } from './transcript-resolver';
 import {
   buildYouTubeDescription,
@@ -215,6 +215,7 @@ export async function generateVideoMetaForClass(
     let raw: string;
     try {
       raw = await generateGeminiText({
+        feature: 'nexus.video-meta',
         parts: [{ text: prompt }],
         temperature: 0.4,
         maxOutputTokens: 4096,

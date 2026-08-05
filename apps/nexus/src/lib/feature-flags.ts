@@ -198,6 +198,12 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.admin-review-platforms', label: 'Review URLs', surface: 'staff', group: 'Admin', paths: ['/teacher/admin/review-platforms'], defaultEnabled: true, core: true },
   { id: 'staff.admin-settings', label: 'Settings', surface: 'staff', group: 'Admin', paths: ['/teacher/admin/settings'], defaultEnabled: true, core: true },
   { id: 'staff.admin-features', label: 'Features', surface: 'staff', group: 'Admin', paths: ['/teacher/admin/features'], defaultEnabled: true, core: true },
+  /**
+   * Core, like the other Admin entries: the page that shows what the AI is
+   * costing and holds the kill switch must not be something you can lose by
+   * switching the wrong thing off.
+   */
+  { id: 'staff.admin-ai-usage', label: 'AI usage', surface: 'staff', group: 'Admin', paths: ['/teacher/admin/ai-usage'], defaultEnabled: true, core: true },
 
   // ── Parent ────────────────────────────────────────────────────────────────
   // Not a page: `paths: []` can never match in featureForPath, so this is a pure

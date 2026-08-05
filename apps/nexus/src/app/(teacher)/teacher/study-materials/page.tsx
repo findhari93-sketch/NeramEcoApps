@@ -202,7 +202,23 @@ function TeacherStudyMaterials() {
         headers: { ...(init?.headers || {}), ...(init?.body ? { 'Content-Type': 'application/json' } : {}) },
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error || 'Request failed');
+      if (!res.ok) {
+        const err = new Error(json?.error || 'Request failed');
+        /**
+         * Carry the manual-mode payload onto the error.
+         *
+         * A 409 from an AI route is not really a failure: the feature is in
+         * Manual, or the month's budget is spent, and the server has handed
+         * back the prompt to run by hand. Throwing a bare message here would
+         * drop the one thing that makes the refusal actionable.
+         */
+        if (res.status === 409 && json?.manualPrompt) {
+          (err as Error & { manualPrompt?: string; reason?: string }).manualPrompt =
+            json.manualPrompt;
+          (err as Error & { manualPrompt?: string; reason?: string }).reason = json.reason;
+        }
+        throw err;
+      }
       return json;
     },
     [authFetch],
@@ -689,7 +705,7 @@ function TeacherStudyMaterials() {
             </Box>
           </CardActionArea>
           {renderDragHandle('file', file.id, handleOverlaySx)}
-          <IconButton size="small" onClick={(e) => { e.stopPropagation(); setFileMenu({ el: e.currentTarget, file }); }} sx={{ position: 'absolute', top: 4, right: 4, bgcolor: alpha(theme.palette.background.paper, 0.85), '&:hover': { bgcolor: theme.palette.background.paper } }}>
+          <IconButton size="small" aria-label="File actions" onClick={(e) => { e.stopPropagation(); setFileMenu({ el: e.currentTarget, file }); }} sx={{ position: 'absolute', top: 4, right: 4, bgcolor: alpha(theme.palette.background.paper, 0.85), '&:hover': { bgcolor: theme.palette.background.paper } }}>
             <MoreVertIcon fontSize="small" />
           </IconButton>
         </Card>
@@ -986,7 +1002,12 @@ function TeacherStudyMaterials() {
             }}
           >
             <ListItemIcon><AutoAwesomeOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
-            <ListItemText>Generate test from this PDF</ListItemText>
+            <ListItemText
+              primary="Add a test"
+              secondary="Write it from this PDF, or upload JSON"
+              primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
           </MenuItem>
         )}
         <MenuItem onClick={() => { if (fileMenu) setTestFile({ id: fileMenu.file.id, title: fileMenu.file.title }); setFileMenu(null); }}>

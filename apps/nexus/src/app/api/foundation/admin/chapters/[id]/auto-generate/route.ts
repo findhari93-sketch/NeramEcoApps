@@ -223,7 +223,9 @@ export async function POST(
     }
 
     // Generate sections and questions via AI
-    const generated = await generateSectionsAndQuestions(transcript, chapterTitle);
+    const generated = await generateSectionsAndQuestions(transcript, chapterTitle, {
+      feature: 'nexus.foundation-autogen',
+    });
 
     return NextResponse.json({
       generated: {

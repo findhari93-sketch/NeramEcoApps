@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('./gemini-client', () => ({ generateGeminiText: vi.fn() }));
+// AiBlockedError has to be a real class: ai-generate checks `instanceof` on it
+// to tell a refusal (manual mode, budget spent) apart from a bad batch, and a
+// plain object would make that check silently false.
+vi.mock('@neram/ai', () => ({
+  generateGeminiText: vi.fn(),
+  AiBlockedError: class AiBlockedError extends Error {},
+}));
 
-import { generateGeminiText } from './gemini-client';
+import { generateGeminiText } from '@neram/ai';
 import { generateSectionsAndQuestions, MAX_CALLS_PER_RECAP } from './ai-generate';
 
 /**

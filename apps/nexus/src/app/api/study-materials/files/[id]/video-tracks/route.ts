@@ -4,16 +4,19 @@ import {
   listStudyVideoTracks,
   createStudyVideoTrack,
   TrackLanguageTakenError,
+  getSupabaseAdminClient,
 } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { extractYouTubeId } from '@/lib/youtube';
 import { normalizeRecordingUrl } from '@/lib/sharepoint-transcript';
+import { readTrackLanguages, trackLanguageOrder, labelForCode } from '@/lib/track-languages';
 
 /**
  * Language tracks on a Foundation chapter.
  *
  *   GET  -> every track, drafts and held ones included, so the editor can show
- *           what state each recording is in.
+ *           what state each recording is in, plus the languages on offer so the
+ *           editor can render a slot for each without a second round trip.
  *   POST -> attach a recording for one language. Body:
  *           { language, language_label?, title?, recording_url, transcript_url? }
  *
@@ -24,16 +27,20 @@ import { normalizeRecordingUrl } from '@/lib/sharepoint-transcript';
  * Only some recordings exist so far. That is deliberately fine: a chapter with
  * one track behaves exactly like a chapter with two, and the student picker only
  * ever shows what is actually there.
+ *
+ * WHICH LANGUAGES ARE OFFERED is nexus_settings.study_track_languages, read on
+ * every request rather than compiled in. This used to be a three-item const
+ * here and four more copies elsewhere, so offering a chapter in Hindi meant a
+ * migration and a deploy.
  */
-
-const LANGUAGES = ['en', 'ta', 'ta_en'] as const;
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await getRequestUser(request.headers.get('Authorization'));
     assertStaff(user);
-    const tracks = await listStudyVideoTracks(params.id);
-    return NextResponse.json({ tracks });
+    const languages = await readTrackLanguages(getSupabaseAdminClient());
+    const tracks = await listStudyVideoTracks(params.id, undefined, trackLanguageOrder(languages));
+    return NextResponse.json({ tracks, languages });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load tracks';
     return NextResponse.json({ error: message }, { status: message === 'Not authorized' ? 403 : 500 });
@@ -49,11 +56,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!file) return NextResponse.json({ error: 'Chapter not found' }, { status: 404 });
 
     const body = await request.json().catch(() => ({}));
-    const language = String(body.language || '').trim();
+    const language = String(body.language || '').trim().toLowerCase();
     const rawUrl = String(body.recording_url || '').trim();
 
-    if (!LANGUAGES.includes(language as (typeof LANGUAGES)[number])) {
-      return NextResponse.json({ error: 'Pick a language: en, ta or ta_en' }, { status: 400 });
+    const languages = await readTrackLanguages(getSupabaseAdminClient());
+    if (!languages.some((l) => l.code === language)) {
+      return NextResponse.json(
+        { error: `Pick one of the offered languages: ${languages.map((l) => l.code).join(', ')}` },
+        { status: 400 },
+      );
     }
     if (!rawUrl) {
       return NextResponse.json({ error: 'A recording link is required' }, { status: 400 });
@@ -69,18 +80,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // not be attached even though the embed route already served them.
     const videoSource = extractYouTubeId(recordingUrl) ? 'youtube' : 'sharepoint';
 
-    const track = await createStudyVideoTrack({
+    // Stamp the LABEL here, from the configured list. It used to be left to the
+    // query layer's fallback map, which only knew en, ta and ta_en, so a
+    // language an admin added would have shown up in the student picker as the
+    // bare code. Same for the title, which read "Ch:1 History (ta)".
+    const label = labelForCode(languages, language);
+    const result = await createStudyVideoTrack({
       studyFileId: params.id,
-      language: language as (typeof LANGUAGES)[number],
-      languageLabel: body.language_label ? String(body.language_label) : null,
-      title: body.title ? String(body.title) : `${file.title} (${language})`,
+      language,
+      languageLabel: body.language_label ? String(body.language_label) : label,
+      title: body.title ? String(body.title) : `${file.title} (${label})`,
       recordingUrl,
       videoSource,
       transcriptUrl: body.transcript_url ? String(body.transcript_url) : null,
       createdBy: user.id,
     });
 
-    return NextResponse.json({ track }, { status: 201 });
+    return NextResponse.json(result, { status: result.restored ? 200 : 201 });
   } catch (err) {
     if (err instanceof TrackLanguageTakenError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });

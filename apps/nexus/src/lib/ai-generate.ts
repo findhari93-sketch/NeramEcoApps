@@ -9,6 +9,8 @@
  *    caller a model fallback chain and one shared vocabulary for rate limits,
  *    and this file had never adopted it. Pinned to a single model with no
  *    fallback, one bad afternoon for gemini-2.0-flash meant no recaps at all.
+ *    That client now lives in @neram/ai and also meters what each call costs,
+ *    which is why every caller has to say which feature it is spending for.
  *
  * 2. Questions are asked for in small batches, not all at once. A single
  *    response holding a whole class of segments at fifteen questions each
@@ -22,7 +24,7 @@
  *    part it is actually good at.
  */
 
-import { generateGeminiText } from './gemini-client';
+import { AiBlockedError, generateGeminiText, type AiFeatureId } from '@neram/ai';
 import { planSegments, describeWindow } from './recap-segments';
 import type { TranscriptEntry } from '@neram/database';
 
@@ -55,6 +57,18 @@ export interface GenerateOptions {
   poolPerSegment?: number;
   /** Known video length, used to size the segment count and sanity-check ends. */
   durationSeconds?: number;
+  /**
+   * Which AI feature is spending, for metering and for the per-feature
+   * Auto/Manual/Off switch.
+   *
+   * Five routes and one cron share this function, and on the usage panel they
+   * are five different things: a teacher pressing Generate is worth knowing
+   * about separately from a nightly sweep. Defaults to the interactive recap
+   * id, so an unmigrated caller still lands somewhere real.
+   */
+  feature?: AiFeatureId;
+  /** users.id of the teacher who triggered this, when there is one. */
+  actorId?: string | null;
 }
 
 const DEFAULTS = {
@@ -254,6 +268,8 @@ async function draftSegments(
   transcript: TranscriptEntry[],
   itemTitle: string,
   poolPerSegment: number,
+  feature: AiFeatureId,
+  actorId: string | null,
 ): Promise<Record<number, SegmentDraft>> {
   const prompt = `Class: "${itemTitle}"
 
@@ -274,6 +290,8 @@ Return JSON:
 {"segments":[{"index":${batch[0]?.index ?? 0},"title":"...","description":"...","questions":[{"question_text":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct_option":"a","explanation":"..."}]}]}`;
 
   const raw = await generateGeminiText({
+    feature,
+    actorId,
     parts: [{ text: prompt }],
     systemInstruction: QUESTION_INSTRUCTION,
     temperature: 0.7,
@@ -331,6 +349,8 @@ export async function generateSectionsAndQuestions(
 ): Promise<GeneratedContent> {
   const targetSegmentSeconds = options.targetSegmentSeconds || DEFAULTS.targetSegmentSeconds;
   const poolPerSegment = options.poolPerSegment || DEFAULTS.poolPerSegment;
+  const feature = options.feature || 'nexus.recap-questions';
+  const actorId = options.actorId ?? null;
   const durationSeconds =
     options.durationSeconds || (transcript.length ? transcript[transcript.length - 1].end : 0);
 
@@ -361,7 +381,14 @@ export async function generateSectionsAndQuestions(
   ): Promise<boolean> => {
     callsUsed++;
     try {
-      const byIndex = await draftSegments(batch, transcript, itemTitle, poolPerSegment);
+      const byIndex = await draftSegments(
+        batch,
+        transcript,
+        itemTitle,
+        poolPerSegment,
+        feature,
+        actorId,
+      );
       let got = false;
       for (const b of batch) {
         const draft = byIndex[b.index];
@@ -373,6 +400,12 @@ export async function generateSectionsAndQuestions(
       }
       return got;
     } catch (err) {
+      // A refusal from the budget guard is not a bad batch. Swallowing it would
+      // spend the remaining nine attempts re-asking a question already answered
+      // with no, and hand the teacher an empty recap instead of telling them the
+      // feature is in manual mode or the cap is reached.
+      if (err instanceof AiBlockedError) throw err;
+
       // A rate limit is the caller's business, not this loop's: swallowing it
       // would spend the remaining budget on a key that has already said no, and
       // the sweep upstream stops its whole run on it.

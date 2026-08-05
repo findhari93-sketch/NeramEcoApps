@@ -6,11 +6,21 @@ import { extractCollegeSlug } from '@/lib/aintra/slug';
 import { buildSystemPrompt } from '@/lib/aintra/primer';
 import { TOOL_DECLARATIONS } from '@/lib/aintra/tools/declarations';
 import { dispatchTool } from '@/lib/aintra/tools/dispatch';
+import { AiBlockedError, generateGemini, hashClientKey, ipFromHeaders } from '@neram/ai';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'];
-const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MAX_TOOL_ITERATIONS = 3;
+/**
+ * Rounds of tool use before the model is forced to answer with text.
+ *
+ * Was 3, which meant up to four Gemini calls for one visitor message, each one
+ * resending the entire system prompt plus the knowledge base plus the whole
+ * conversation. That is the single most expensive thing in the ecosystem, and
+ * this endpoint is mounted on every page of the public site.
+ *
+ * Two rounds still lets the assistant look something up, read the result, and
+ * look up a second thing based on it, which covers every real question the tool
+ * declarations exist for. It caps a message at three calls instead of four.
+ */
+const MAX_TOOL_ITERATIONS = 2;
 
 const SYSTEM_PROMPT = `You are the Neram Classes Assistant — a friendly, helpful chatbot on neramclasses.com. You help prospective and current students with questions about Neram Classes courses, fees, timings, NATA exam, and related topics.
 
@@ -187,83 +197,55 @@ interface GeminiResult {
   toolCalls: ToolCallLog[];
 }
 
+/**
+ * One turn of the tool loop.
+ *
+ * The model cascade, the retired-model guard and the metering all live in
+ * @neram/ai now. What used to be here was a fourth private copy of that logic,
+ * with its own model list, which is how the ecosystem ended up calling models
+ * Google had switched off.
+ */
 async function callGemini(
-  model: string,
   contents: GeminiContent[],
   systemPrompt: string,
   tools: unknown[] | null,
-  errors: string[]
-): Promise<{ candidate: any; model: string; finishReason: string } | null> {
+  errors: string[],
+  clientKey: string | null
+) {
   try {
-    const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
-    const body: Record<string, unknown> = {
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents,
-      generationConfig: { temperature: 0.75, maxOutputTokens: 4096, topP: 0.9 },
+    return await generateGemini({
+      feature: 'marketing.site-chat',
+      clientKey,
+      systemInstruction: systemPrompt,
+      contents: contents as never,
+      ...(tools && tools.length > 0 ? { tools } : {}),
+      temperature: 0.75,
+      maxOutputTokens: 4096,
+      // Prose for a visitor to read, not JSON for a parser.
+      responseMimeType: 'text/plain',
       safetySettings: [
         { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
         { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
         { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
       ],
-    };
-    if (tools && tools.length > 0) body.tools = tools;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
     });
-
-    if (!response.ok) {
-      const status = response.status;
-      const errorText = await response.text().catch(() => 'unknown');
-      const detail = `${model}:HTTP${status}(${errorText.slice(0, 150)})`;
-      errors.push(detail);
-      console.error(`[GeneralChat] Gemini ${model} error: ${status}`, errorText);
-      return null;
-    }
-
-    const data = await response.json();
-    const candidate = data?.candidates?.[0];
-    if (!candidate) {
-      const blockReason = data?.promptFeedback?.blockReason || 'NO_CONTENT';
-      errors.push(`${model}:${blockReason}`);
-      console.error(`[GeneralChat] Gemini ${model}: no candidate (${blockReason})`);
-      return null;
-    }
-    return { candidate, model, finishReason: candidate.finishReason || 'UNKNOWN' };
   } catch (err) {
-    errors.push(`${model}:FETCH_ERROR(${err instanceof Error ? err.message : 'unknown'})`);
-    console.error(`[GeneralChat] Gemini ${model} fetch error:`, err);
+    // A refusal has to reach the handler so the visitor is told the assistant
+    // is unavailable, rather than the loop burning its remaining iterations
+    // re-asking a question that was already answered with no.
+    if (err instanceof AiBlockedError) throw err;
+    errors.push(err instanceof Error ? err.message : 'unknown');
+    console.error('[GeneralChat] Gemini error:', err);
     return null;
   }
-}
-
-function extractFunctionCalls(candidate: any): Array<{ name: string; args: Record<string, unknown> }> {
-  const parts = candidate?.content?.parts || [];
-  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
-  for (const p of parts) {
-    if (p.functionCall && p.functionCall.name) {
-      calls.push({ name: p.functionCall.name, args: p.functionCall.args || {} });
-    }
-  }
-  return calls;
-}
-
-function extractText(candidate: any): string {
-  const parts = candidate?.content?.parts || [];
-  const chunks: string[] = [];
-  for (const p of parts) {
-    if (typeof p.text === 'string' && p.text.length) chunks.push(p.text);
-  }
-  return chunks.join('\n').trim();
 }
 
 async function runGeminiLoop(
   initialContents: GeminiContent[],
   systemPrompt: string,
-  errors: string[]
+  errors: string[],
+  clientKey: string | null
 ): Promise<GeminiResult | null> {
   const contents: GeminiContent[] = [...initialContents];
   const toolCalls: ToolCallLog[] = [];
@@ -278,17 +260,16 @@ async function runGeminiLoop(
     // On the final iteration, disable tools to force a text answer.
     const tools = iteration < MAX_TOOL_ITERATIONS ? toolsWithGrounding : null;
 
-    let result: { candidate: any; model: string; finishReason: string } | null = null;
-    for (const model of GEMINI_MODELS) {
-      result = await callGemini(model, contents, systemPrompt, tools, errors);
-      if (result) break;
-    }
+    const result = await callGemini(contents, systemPrompt, tools, errors, clientKey);
     if (!result) return null;
 
-    const functionCalls = extractFunctionCalls(result.candidate);
+    const functionCalls = result.functionCalls.map((c) => ({
+      name: c.name,
+      args: (c.args || {}) as Record<string, unknown>,
+    }));
 
     if (functionCalls.length === 0) {
-      const reply = extractText(result.candidate);
+      const reply = result.text.trim();
       if (!reply) {
         errors.push(`${result.model}:EMPTY_TEXT`);
         return null;
@@ -345,16 +326,12 @@ async function runGeminiLoop(
     }
   }
 
-  // Hit the iteration cap; force one final text-only call without tools.
-  const finalResult = await callGemini(
-    GEMINI_MODELS[GEMINI_MODELS.length - 1],
-    contents,
-    systemPrompt,
-    null,
-    errors
-  );
+  // Unreachable in practice: the last iteration above runs with tools disabled,
+  // so the model has to answer with text and the loop returns. Kept as a
+  // backstop in case that invariant is ever edited away.
+  const finalResult = await callGemini(contents, systemPrompt, null, errors, clientKey);
   if (!finalResult) return null;
-  const finalReply = extractText(finalResult.candidate);
+  const finalReply = finalResult.text.trim();
   if (!finalReply) return null;
   return {
     reply: finalReply,
@@ -424,11 +401,6 @@ async function logConversation(params: {
 // ============================================
 
 export async function POST(request: NextRequest) {
-  if (!GEMINI_API_KEY) {
-    console.error('[GeneralChat] GEMINI_API_KEY is not set');
-    return NextResponse.json({ error: 'Chat service not configured' }, { status: 503 });
-  }
-
   try {
     const body = await request.json();
     const { message, history, sessionId, userId, userName, pageUrl } = body;
@@ -459,7 +431,39 @@ export async function POST(request: NextRequest) {
     });
 
     const errors: string[] = [];
-    const result = await runGeminiLoop(contents, effectivePrompt, errors);
+    let result: GeminiResult | null;
+    try {
+      result = await runGeminiLoop(
+        contents,
+        effectivePrompt,
+        errors,
+        // Session and IP together. Either alone is defeated by a script or
+        // punishes a shared connection; see packages/ai/src/client-key.ts.
+        hashClientKey(sessionId, ipFromHeaders(request.headers)),
+      );
+    } catch (err) {
+      // The AI budget is spent, or the assistant is switched off in the control
+      // panel. A visitor cannot run a prompt themselves, so this reads as a
+      // temporary outage. It is still logged, so the panel shows what the cap
+      // turned away.
+      if (err instanceof AiBlockedError) {
+        await logConversation({
+          sessionId: sessionId || 'unknown',
+          userMessage: message.trim(),
+          aiResponse: null,
+          userId,
+          userName,
+          pageUrl,
+          error: `AI_BLOCKED:${err.reason}`,
+          responseTimeMs: Date.now() - startTime,
+        });
+        return NextResponse.json(
+          { error: 'The assistant is taking a short break. Please try again later.' },
+          { status: 503 }
+        );
+      }
+      throw err;
+    }
     const responseTimeMs = Date.now() - startTime;
 
     if (!result) {

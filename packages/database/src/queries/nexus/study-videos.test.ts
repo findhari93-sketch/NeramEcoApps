@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { getStudyVideoState, listStudyVideoTracks, createStudyVideoTrack } from './study-videos';
+import {
+  getStudyVideoState,
+  listStudyVideoTracks,
+  createStudyVideoTrack,
+  TrackLanguageTakenError,
+} from './study-videos';
+import { createFakeDb } from './testing/fake-supabase';
 
 /**
  * Which recordings a student is shown, and which of them gate the chapter test.
@@ -222,60 +228,213 @@ describe('listStudyVideoTracks: the staff view', () => {
   });
 });
 
+describe('getStudyVideoState: a language nobody configured', () => {
+  it('sorts an unknown code last instead of crashing', async () => {
+    // The offered list is admin-editable now, so a chapter can hold a track in
+    // a language that was later removed from it. That must degrade to "listed
+    // last", never to a throw: the row is still published and a student is
+    // still watching it.
+    const state = await getStudyVideoState(
+      FILE,
+      STUDENT,
+      mockClient({
+        nexus_class_recaps: [
+          track({ id: 'track-xx', language: 'zz', language_label: 'Retired' }),
+          track({ id: 'track-en' }),
+        ],
+        nexus_study_file_reads: [],
+        nexus_class_recap_sections: [],
+        nexus_class_recap_progress: [],
+      }),
+    );
+    expect(state.tracks.map((t) => t.language)).toEqual(['en', 'zz']);
+  });
+
+  it('honours the order the admin arranged when one is passed', async () => {
+    const state = await getStudyVideoState(
+      FILE,
+      STUDENT,
+      mockClient({
+        nexus_class_recaps: [
+          track({ id: 'track-en' }),
+          track({ id: 'track-hi', language: 'hi', language_label: 'हिन्दी' }),
+        ],
+        nexus_study_file_reads: [],
+        nexus_class_recap_sections: [],
+        nexus_class_recap_progress: [],
+      }),
+      ['hi', 'en'],
+    );
+    expect(state.tracks.map((t) => t.language)).toEqual(['hi', 'en']);
+  });
+});
+
 /**
- * Which player a track gets.
+ * Attaching a recording, and getting a removed one back.
  *
- * This used to be hardcoded to 'sharepoint' on insert, which was a real bug
- * rather than a simplification: the serving side has always branched on this
- * column and can hand back a YouTube id, so a YouTube recording could be played
- * but never attached. The classification itself lives in the route, because the
- * YouTube id parser is an app module this package must not reach into.
+ * Two separate bugs converge on this function.
+ *
+ * The first: video_source was hardcoded to 'sharepoint' on insert, while the
+ * serving side has always branched on that exact column and can hand back a
+ * YouTube id. So a YouTube recording could be played but never attached. The
+ * classification itself lives in the route, because the YouTube id parser is an
+ * app module this package must not reach into.
+ *
+ * The second is worse, because it is a dead end with no way out of it. DELETE
+ * archives a track rather than deleting it, since the attempt rows cascade from
+ * its sections. But uq_class_recaps_study_file_language does not exclude
+ * archived rows and listStudyVideoTracks hides them, so removing the English
+ * recording left the slot held by a row nothing could see: the editor showed no
+ * recordings while every attempt to add English again answered "this chapter
+ * already has a en track". Two presses on the very first chapter and that
+ * language was locked out of it permanently.
  */
-function insertCapturingClient(captured: { payload?: Record<string, unknown> }) {
-  const chain: any = {
-    insert: (payload: Record<string, unknown>) => {
-      captured.payload = payload;
-      return chain;
-    },
-    select: () => chain,
-    single: async () => ({ data: { id: 'new-track', ...captured.payload }, error: null }),
-  };
-  return { from: () => chain } as never;
+function seedDb(extra: Record<string, unknown[]> = {}) {
+  return createFakeDb({
+    nexus_class_recaps: [],
+    nexus_class_recap_sections: [],
+    nexus_class_recap_questions: [],
+    nexus_class_recap_attempts: [],
+    nexus_test_placements: [],
+    nexus_test_questions: [],
+    nexus_tests: [],
+    nexus_qb_questions: [],
+    ...extra,
+  });
 }
 
+const SP_URL = 'https://example.sharepoint.com/:v:/s/CommonClasses/abc';
+
 describe('createStudyVideoTrack: the recording decides the player', () => {
-  const base = {
-    studyFileId: FILE,
-    language: 'en' as const,
-    recordingUrl: 'https://example.sharepoint.com/:v:/s/CommonClasses/abc',
-  };
+  const base = { studyFileId: FILE, language: 'en', recordingUrl: SP_URL };
 
   it('stores a YouTube track when the route classifies it as one', async () => {
-    const captured: { payload?: Record<string, unknown> } = {};
-    await createStudyVideoTrack(
+    const db = seedDb();
+    const { track: made } = await createStudyVideoTrack(
       { ...base, recordingUrl: 'https://youtu.be/dQw4w9WgXcQ', videoSource: 'youtube' },
-      insertCapturingClient(captured),
+      db.client,
     );
-    expect(captured.payload?.video_source).toBe('youtube');
+    expect((made as any).video_source).toBe('youtube');
   });
 
   it('stores a SharePoint track when told so', async () => {
-    const captured: { payload?: Record<string, unknown> } = {};
-    await createStudyVideoTrack({ ...base, videoSource: 'sharepoint' }, insertCapturingClient(captured));
-    expect(captured.payload?.video_source).toBe('sharepoint');
+    const db = seedDb();
+    const { track: made } = await createStudyVideoTrack({ ...base, videoSource: 'sharepoint' }, db.client);
+    expect((made as any).video_source).toBe('sharepoint');
   });
 
   it('defaults to sharepoint, preserving the old behaviour for any caller that omits it', async () => {
-    const captured: { payload?: Record<string, unknown> } = {};
-    await createStudyVideoTrack(base, insertCapturingClient(captured));
-    expect(captured.payload?.video_source).toBe('sharepoint');
+    const db = seedDb();
+    const { track: made } = await createStudyVideoTrack(base, db.client);
+    expect((made as any).video_source).toBe('sharepoint');
   });
 
   it('never claims a class parent, so a track cannot leak into the catch-up journey', async () => {
-    const captured: { payload?: Record<string, unknown> } = {};
-    await createStudyVideoTrack(base, insertCapturingClient(captured));
-    expect(captured.payload?.scheduled_class_id).toBeNull();
-    expect(captured.payload?.classroom_id).toBeNull();
-    expect(captured.payload?.study_file_id).toBe(FILE);
+    const db = seedDb();
+    await createStudyVideoTrack(base, db.client);
+    const row = db.tables.nexus_class_recaps[0];
+    expect(row.scheduled_class_id).toBeNull();
+    expect(row.classroom_id).toBeNull();
+    expect(row.study_file_id).toBe(FILE);
+  });
+
+  it('accepts a language the fallback label map has never heard of', async () => {
+    // The offered list lives in nexus_settings and the route passes the label
+    // down. Without that, an admin-added language would reach a student as the
+    // bare code.
+    const db = seedDb();
+    const { track: made } = await createStudyVideoTrack(
+      { ...base, language: 'hi', languageLabel: 'हिन्दी' },
+      db.client,
+    );
+    expect((made as any).language).toBe('hi');
+    expect((made as any).language_label).toBe('हिन्दी');
+  });
+});
+
+describe('createStudyVideoTrack: a language that was removed', () => {
+  const archived = (over: Record<string, unknown> = {}) => ({
+    id: 'old-en',
+    study_file_id: FILE,
+    language: 'en',
+    language_label: 'English',
+    title: 'English recording',
+    status: 'archived',
+    readiness: 'ready',
+    recording_url: SP_URL,
+    video_source: 'sharepoint',
+    ...over,
+  });
+
+  it('revives the archived row rather than dead-ending on the unique slot', async () => {
+    const db = seedDb({ nexus_class_recaps: [archived()] });
+    const res = await createStudyVideoTrack(
+      { studyFileId: FILE, language: 'en', recordingUrl: SP_URL },
+      db.client,
+    );
+    expect(res.restored).toBe(true);
+    expect(res.track.id).toBe('old-en');
+    expect((res.track as any).status).toBe('draft');
+    // One row, not two. A second would violate the unique index for real.
+    expect(db.tables.nexus_class_recaps).toHaveLength(1);
+  });
+
+  it('keeps the checkpoints when the same recording comes back, so an accidental delete costs nothing', async () => {
+    const db = seedDb({
+      nexus_class_recaps: [archived()],
+      nexus_class_recap_sections: [
+        { id: 'sec-a', recap_id: 'old-en', sort_order: 0, archived_at: null },
+      ],
+    });
+    const res = await createStudyVideoTrack(
+      { studyFileId: FILE, language: 'en', recordingUrl: SP_URL },
+      db.client,
+    );
+    expect(res.checkpointsCleared).toBe(false);
+    expect(db.tables.nexus_class_recap_sections).toHaveLength(1);
+    expect((res.track as any).readiness).toBe('ready');
+  });
+
+  it('clears the checkpoints when a DIFFERENT recording is attached', async () => {
+    // They were cut from the old recording's transcript. Against a different
+    // video their timestamps land mid-sentence, so the gate would stop the
+    // student at nothing in particular.
+    const db = seedDb({
+      nexus_class_recaps: [archived()],
+      nexus_class_recap_sections: [
+        { id: 'sec-a', recap_id: 'old-en', sort_order: 0, archived_at: null },
+      ],
+    });
+    const res = await createStudyVideoTrack(
+      { studyFileId: FILE, language: 'en', recordingUrl: 'https://youtu.be/other', videoSource: 'youtube' },
+      db.client,
+    );
+    expect(res.checkpointsCleared).toBe(true);
+    expect(db.tables.nexus_class_recap_sections).toHaveLength(0);
+    // Back to pending, so it cannot be published until a new transcript arrives.
+    expect((res.track as any).readiness).toBe('pending');
+    expect((res.track as any).video_source).toBe('youtube');
+  });
+
+  it('still refuses a language whose track is live', async () => {
+    const db = seedDb({ nexus_class_recaps: [archived({ status: 'draft' })] });
+    await expect(
+      createStudyVideoTrack({ studyFileId: FILE, language: 'en', recordingUrl: SP_URL }, db.client),
+    ).rejects.toThrow(TrackLanguageTakenError);
+  });
+
+  it('does not touch the other language while restoring one', async () => {
+    const db = seedDb({
+      nexus_class_recaps: [
+        archived(),
+        archived({ id: 'live-ta', language: 'ta', language_label: 'தமிழ்', status: 'published' }),
+      ],
+    });
+    await createStudyVideoTrack(
+      { studyFileId: FILE, language: 'en', recordingUrl: SP_URL },
+      db.client,
+    );
+    const ta = db.tables.nexus_class_recaps.find((r: any) => r.id === 'live-ta');
+    expect(ta.status).toBe('published');
   });
 });

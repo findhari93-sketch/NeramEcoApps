@@ -16,6 +16,15 @@
  * one and then the other published an empty recap and said "Published to
  * students." Publish now saves first, and reports the class test warning the API
  * has always returned and this screen has always discarded.
+ *
+ * A third was worse and silent. This screen used to hold its own copy of the
+ * checkpoint editor, and its loader dropped the section id. updateRecapSections
+ * decides update-in-place versus re-create on exactly that id, so pressing Save
+ * on a published recap archived every live checkpoint, inserted fresh ones, and
+ * left every student's passed attempt pointing at an invisible row. They were
+ * re-locked mid-recap by a teacher fixing a typo. The editor now comes from
+ * components/class-recap/RecapCheckpointsEditor, whose toEditableSections
+ * carries the id, and which the Foundation chapter tracks use as well.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -24,20 +33,14 @@ import {
   Typography,
   Stack,
   Button,
-  TextField,
-  MenuItem,
-  IconButton,
   Chip,
   Skeleton,
   Snackbar,
   Alert,
-  Divider,
   alpha,
 } from '@neram/ui';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import AddIcon from '@mui/icons-material/Add';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import PublishIcon from '@mui/icons-material/Publish';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -45,34 +48,10 @@ import TuneIcon from '@mui/icons-material/Tune';
 import { ToggleButtonGroup, ToggleButton } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import RecapSettingsSheet, { type RecapSettings } from '@/components/class-recap/RecapSettingsSheet';
-
-interface EditQuestion {
-  question_text: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  correct_option: 'a' | 'b' | 'c' | 'd';
-  explanation: string;
-}
-interface EditSection {
-  title: string;
-  description: string;
-  start_timestamp_seconds: number;
-  end_timestamp_seconds: number;
-  min_questions_to_pass: number | null;
-  questions: EditQuestion[];
-}
-
-const emptyQuestion = (): EditQuestion => ({
-  question_text: '',
-  option_a: '',
-  option_b: '',
-  option_c: '',
-  option_d: '',
-  correct_option: 'a',
-  explanation: '',
-});
+import RecapCheckpointsEditor, {
+  toEditableSections,
+  type EditableSection,
+} from '@/components/class-recap/RecapCheckpointsEditor';
 
 export default function TeacherClassRecapEditor() {
   const params = useParams();
@@ -83,7 +62,7 @@ export default function TeacherClassRecapEditor() {
   const [recap, setRecap] = useState<{ id: string; title: string; status: string; recording_url: string | null; video_source: string; video_duration_seconds: number | null } | null>(null);
   const [settings, setSettings] = useState<RecapSettings | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [sections, setSections] = useState<EditSection[]>([]);
+  const [sections, setSections] = useState<EditableSection[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' | 'info' } | null>(null);
   // The 85% paper a catch-up student sits after finishing this recap. Built
@@ -113,24 +92,6 @@ export default function TeacherClassRecapEditor() {
     [getTeacherToken],
   );
 
-  const toEdit = (secs: any[]): EditSection[] =>
-    (secs || []).map((s) => ({
-      title: s.title || '',
-      description: s.description || '',
-      start_timestamp_seconds: s.start_timestamp_seconds ?? 0,
-      end_timestamp_seconds: s.end_timestamp_seconds ?? 0,
-      min_questions_to_pass: s.min_questions_to_pass ?? null,
-      questions: (s.questions || []).map((q: any) => ({
-        question_text: q.question_text || '',
-        option_a: q.option_a || '',
-        option_b: q.option_b || '',
-        option_c: q.option_c || '',
-        option_d: q.option_d || '',
-        correct_option: (['a', 'b', 'c', 'd'].includes(q.correct_option) ? q.correct_option : 'a') as EditQuestion['correct_option'],
-        explanation: q.explanation || '',
-      })),
-    }));
-
   const load = useCallback(async () => {
     try {
       const res = await teacherFetch(`/api/class-recaps/${recapId}`);
@@ -151,7 +112,10 @@ export default function TeacherClassRecapEditor() {
         questions_per_segment: r.questions_per_segment ?? 10,
         pass_percentage: r.pass_percentage ?? 70,
       });
-      setSections(toEdit(r.sections));
+      // Through toEditableSections, never by hand: it carries the section id,
+      // and a save without ids re-creates every checkpoint and strands the
+      // attempts of every student who had already passed one.
+      setSections(toEditableSections(r.sections));
     } catch (err) {
       setSnack({ msg: err instanceof Error ? err.message : 'Failed to load', sev: 'error' });
     }
@@ -208,7 +172,8 @@ export default function TeacherClassRecapEditor() {
           setSnack({ msg: res.message || 'No transcript available. Upload a .vtt file.', sev: 'error' });
           return;
         }
-        setSections(toEdit(res.generated?.sections));
+        // Freshly generated, so these carry no ids and are meant to be new rows.
+        setSections(toEditableSections(res.generated?.sections));
         setSnack({ msg: 'Draft checkpoints generated. Review, edit, then save.', sev: 'success' });
       } catch (err) {
         setSnack({ msg: err instanceof Error ? err.message : 'Generation failed', sev: 'error' });
@@ -379,25 +344,6 @@ export default function TeacherClassRecapEditor() {
     },
     [teacherFetch, recapId],
   );
-
-  // ── section/question editing helpers ──
-  const patchSection = (i: number, patch: Partial<EditSection>) =>
-    setSections((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
-  const patchQuestion = (si: number, qi: number, patch: Partial<EditQuestion>) =>
-    setSections((prev) =>
-      prev.map((s, idx) =>
-        idx === si ? { ...s, questions: s.questions.map((q, j) => (j === qi ? { ...q, ...patch } : q)) } : s,
-      ),
-    );
-  const addSection = () =>
-    setSections((prev) => [
-      ...prev,
-      { title: `Checkpoint ${prev.length + 1}`, description: '', start_timestamp_seconds: 0, end_timestamp_seconds: 60, min_questions_to_pass: null, questions: [emptyQuestion()] },
-    ]);
-  const removeSection = (i: number) => setSections((prev) => prev.filter((_, idx) => idx !== i));
-  const addQuestion = (si: number) => patchSection(si, { questions: [...sections[si].questions, emptyQuestion()] });
-  const removeQuestion = (si: number, qi: number) =>
-    patchSection(si, { questions: sections[si].questions.filter((_, j) => j !== qi) });
 
   if (!recap) {
     return (
@@ -570,120 +516,17 @@ export default function TeacherClassRecapEditor() {
         </Box>
       )}
 
-      {sections.length === 0 && (
-        <Box sx={{ p: 3, borderRadius: 2, border: '1px dashed', borderColor: 'divider', textAlign: 'center', color: 'text.secondary' }}>
+      <RecapCheckpointsEditor
+        sections={sections}
+        disabled={!!busy}
+        onChange={setSections}
+        emptyState={
           <Typography variant="body2">
             No checkpoints yet. Press <strong>Generate and publish</strong> above and this fills
             itself in. Use <strong>Generate only</strong> if you want to read them before students do.
           </Typography>
-        </Box>
-      )}
-
-      <Stack spacing={2.5}>
-        {sections.map((s, si) => (
-          <Box key={si} sx={{ p: 2, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-              <Chip label={`Checkpoint ${si + 1}`} size="small" sx={{ fontWeight: 700 }} />
-              <Box sx={{ flex: 1 }} />
-              <IconButton size="small" onClick={() => removeSection(si)} aria-label="Remove checkpoint">
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </Box>
-            <TextField
-              fullWidth
-              size="small"
-              label="Checkpoint title"
-              value={s.title}
-              onChange={(e) => patchSection(si, { title: e.target.value })}
-              sx={{ mb: 1.5 }}
-            />
-            <Stack direction="row" spacing={1.5} sx={{ mb: 1.5 }}>
-              <TextField
-                size="small"
-                type="number"
-                label="Start (sec)"
-                value={s.start_timestamp_seconds}
-                onChange={(e) => patchSection(si, { start_timestamp_seconds: Number(e.target.value) })}
-              />
-              <TextField
-                size="small"
-                type="number"
-                label="End (sec)"
-                value={s.end_timestamp_seconds}
-                onChange={(e) => patchSection(si, { end_timestamp_seconds: Number(e.target.value) })}
-              />
-              <TextField
-                size="small"
-                type="number"
-                label="Min correct to pass"
-                placeholder="all"
-                value={s.min_questions_to_pass ?? ''}
-                onChange={(e) =>
-                  patchSection(si, { min_questions_to_pass: e.target.value === '' ? null : Number(e.target.value) })
-                }
-                helperText="Blank = all"
-              />
-            </Stack>
-
-            <Divider sx={{ my: 1.5 }} />
-
-            <Stack spacing={2}>
-              {s.questions.map((q, qi) => (
-                <Box key={qi} sx={{ p: 1.5, borderRadius: 2, bgcolor: alpha('#1A2027', 0.02), border: '1px solid', borderColor: 'divider' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                      Question {qi + 1}
-                    </Typography>
-                    <Box sx={{ flex: 1 }} />
-                    <IconButton size="small" onClick={() => removeQuestion(si, qi)} aria-label="Remove question">
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                  <TextField fullWidth size="small" label="Question" value={q.question_text} onChange={(e) => patchQuestion(si, qi, { question_text: e.target.value })} sx={{ mb: 1 }} multiline />
-                  <Stack spacing={1}>
-                    {(['a', 'b', 'c', 'd'] as const).map((opt) => (
-                      <TextField
-                        key={opt}
-                        fullWidth
-                        size="small"
-                        label={`Option ${opt.toUpperCase()}`}
-                        value={q[`option_${opt}` as keyof EditQuestion] as string}
-                        onChange={(e) => patchQuestion(si, qi, { [`option_${opt}`]: e.target.value } as Partial<EditQuestion>)}
-                      />
-                    ))}
-                  </Stack>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
-                    <TextField
-                      select
-                      size="small"
-                      label="Correct"
-                      value={q.correct_option}
-                      onChange={(e) => patchQuestion(si, qi, { correct_option: e.target.value as EditQuestion['correct_option'] })}
-                      sx={{ minWidth: 120 }}
-                    >
-                      {(['a', 'b', 'c', 'd'] as const).map((o) => (
-                        <MenuItem key={o} value={o}>
-                          Option {o.toUpperCase()}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                    <TextField fullWidth size="small" label="Explanation (optional)" value={q.explanation} onChange={(e) => patchQuestion(si, qi, { explanation: e.target.value })} />
-                  </Stack>
-                </Box>
-              ))}
-              <Button size="small" startIcon={<AddIcon />} onClick={() => addQuestion(si)} sx={{ alignSelf: 'flex-start', textTransform: 'none' }}>
-                Add question
-              </Button>
-            </Stack>
-          </Box>
-        ))}
-      </Stack>
-
-      {sections.length > 0 && (
-        <Button startIcon={<AddIcon />} onClick={addSection} sx={{ mt: 2, textTransform: 'none' }}>
-          Add checkpoint
-        </Button>
-      )}
+        }
+      />
 
       {settings && recap && (
         <RecapSettingsSheet

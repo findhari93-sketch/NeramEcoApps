@@ -86,6 +86,7 @@ export async function POST(
     // with no sign that the settings sheet had been ignored.
     const defaults = await readRecapDefaults(getSupabaseAdminClient());
     const generated = await generateSectionsAndQuestions(transcript, recap.title, {
+      feature: 'nexus.recap-questions',
       targetSegmentSeconds: recap.target_segment_seconds ?? defaults.target_segment_seconds,
       poolPerSegment: recap.question_pool_per_segment ?? defaults.question_pool_per_segment,
       durationSeconds:
