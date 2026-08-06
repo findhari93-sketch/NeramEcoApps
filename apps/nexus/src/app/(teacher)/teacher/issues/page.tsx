@@ -10,7 +10,6 @@ import {
   Button,
   TextField,
   Avatar,
-  UserAvatar,
   alpha,
   useTheme,
   Tabs,
@@ -65,6 +64,7 @@ import type {
   FoundationIssuePriority,
   NexusFoundationIssueActivity,
 } from '@neram/database/types';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   bug: { label: 'Bug', color: '#d32f2f' },
@@ -622,7 +622,8 @@ export default function TeacherIssuesPage() {
 
       {/* Student info */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-        <UserAvatar
+        <StudentAvatar
+          userId={selectedIssue.student_id}
           src={selectedIssue.student_avatar}
           name={selectedIssue.student_name}
           size={36}

@@ -68,6 +68,14 @@ export default function FocusRecapPage() {
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<StrippedQuestion[]>([]);
   const [furthest, setFurthest] = useState(0);
+  /**
+   * Where the quiz drawer portals: the player's container while it is genuinely
+   * fullscreen, null otherwise. In pseudo-fullscreen (an iPhone, where there is
+   * no element Fullscreen API) this stays null and the drawer lands on
+   * document.body, which is correct because the sheet sits below MUI's drawer
+   * layer. One rule covers both platforms.
+   */
+  const [quizHost, setQuizHost] = useState<HTMLElement | null>(null);
 
   const { onTick, flushNow } = useWatchHeartbeat({ recapId, token });
 
@@ -128,6 +136,20 @@ export default function FocusRecapPage() {
   );
 
   const passedCount = sections.filter((s) => s.passed).length;
+
+  /** Checkpoint positions drawn on the scrub bar. */
+  const marks = useMemo(
+    () =>
+      sections
+        .filter((s) => Number.isFinite(s.end_timestamp_seconds) && s.end_timestamp_seconds > 0)
+        .map((s) => ({
+          id: s.id,
+          at: s.end_timestamp_seconds,
+          label: s.title,
+          passed: s.passed,
+        })),
+    [sections],
+  );
 
   /** Tell the opener a checkpoint moved, so its list is not stale. */
   const broadcast = useCallback(() => {
@@ -208,14 +230,13 @@ export default function FocusRecapPage() {
   /**
    * The one gesture that starts playback. Autoplay is refused without it.
    *
-   * The Fullscreen API is deliberately NOT used, even though a kiosk feel is the
-   * goal. When an element is fullscreen the browser renders only that element's
-   * subtree, and MUI portals the quiz drawer to document.body, so the checkpoint
-   * quiz would simply not appear: the video would pause at a checkpoint and
-   * nothing would happen. The chromeless popup on desktop and the fixed
-   * full-viewport sheet on mobile already give the same result without breaking
-   * the one interaction the whole feature depends on. iOS Safari has no element
-   * fullscreen anyway, so this also keeps both platforms on one code path.
+   * The Fullscreen API used to be avoided here, because the browser paints only
+   * the fullscreen element's subtree and the quiz drawer portals to
+   * document.body, so a checkpoint would pause the video and show nothing. That
+   * is fixed rather than worked around: the player publishes its container
+   * through `onFullscreenChange` and the drawer portals into it. This sheet
+   * remains, because it is also what an iPhone gets, where there is no element
+   * Fullscreen API at all.
    */
   const begin = useCallback(() => {
     setStarted(true);
@@ -338,10 +359,14 @@ export default function FocusRecapPage() {
             gate={gate}
             videoRef={videoRef}
             watermark={watermark}
+            title={title}
+            marks={marks}
             resumeAt={resumeAt}
             onTimeUpdate={handleTick}
             onCheckpointReached={openQuiz}
             onLoadedMetadata={setDuration}
+            allowFullscreen
+            onFullscreenChange={setQuizHost}
           />
 
           <Button
@@ -372,6 +397,7 @@ export default function FocusRecapPage() {
           onSubmit={submitQuiz as any}
           onRetry={handleRewatch}
           onContinue={handleContinue}
+          container={quizHost}
         />
       )}
     </Shell>
@@ -402,7 +428,17 @@ function Shell({
         justifyContent: 'center',
         overscrollBehavior: 'none',
         WebkitTouchCallout: 'none',
-        zIndex: 1300,
+        // Below MUI's drawer layer (1200), above its app bar (1100).
+        //
+        // This was 1300, which is the MODAL layer, and it silently broke the one
+        // interaction the whole screen exists for. QuizModal renders a Drawer, and
+        // a Drawer sits at theme.zIndex.drawer = 1200, not at the modal layer. The
+        // drawer portals to document.body and the chromeless branch of the student
+        // layout wraps children in providers only, so this sheet and that drawer
+        // land in the same (root) stacking context and compare directly. An opaque
+        // black 1300 over a 1200 drawer meant a student reached a checkpoint, the
+        // video paused, and the mandatory quiz was painted underneath the sheet.
+        zIndex: 1150,
       }}
     >
       {children}

@@ -647,7 +647,10 @@ function StudyMaterialsBrowser() {
         </Box>
       )}
 
-      {/* View-only file viewer with a Google Classroom style comments panel. */}
+      {/* View-only file viewer with a Google Classroom style comments panel.
+          No onProgressChange: the test now opens in the full player, which
+          navigates away and back, so this page remounts and reloads from the
+          server rather than being told optimistically. */}
       <StudyFileViewer
         file={viewerFile}
         token={token}
@@ -655,7 +658,6 @@ function StudyMaterialsBrowser() {
         onClose={() => setViewerFile(null)}
         watermark={watermark}
         track
-        onProgressChange={load}
       />
     </Box>
   );

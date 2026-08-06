@@ -555,10 +555,14 @@ async function loadClassBadges(
       // isWatched keys off scheduled_class_id, and the absence row's own column
       // is the id, so pass it through under the name the helper expects.
       const watched = isWatched({ ...absence, scheduled_class_id: classId }, facts);
+      // The recap counts as proof only when it was actually finished. Reading it
+      // off "a recap exists" told a parent their child had completed the guided
+      // recap when the child had ticked a box, or in some cases done neither.
+      const recapDone = !!recap && facts.completedRecaps.has(recap.id);
       recording.set(classId, {
         watched,
         watchedAt: absence.recording_watched_at ?? null,
-        proof: recap ? 'recap_completed' : absence.recording_watched_at ? 'self_declared' : null,
+        proof: recapDone ? 'recap_completed' : absence.recording_watched_at ? 'self_declared' : null,
       });
 
       const outstanding = work.filter((a: { id: string }) => !facts.submitted.has(a.id)).length;

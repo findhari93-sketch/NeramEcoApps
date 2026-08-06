@@ -10,9 +10,9 @@ import {
   TextField,
   Button,
   Checkbox,
-  Avatar,
   Chip,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface ScheduledClass {
@@ -55,14 +55,6 @@ export default function TeacherAttendance() {
     return `${hour % 12 || 12}:${m} ${ampm}`;
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
 
   // Fetch classes for selected date
   useEffect(() => {
@@ -338,12 +330,14 @@ export default function TeacherAttendance() {
                               onChange={() => toggleStudentPresence(cls.id, student.id)}
                               sx={{ p: 0.5, '& .MuiSvgIcon-root': { fontSize: 28 } }}
                             />
-                            <Avatar
-                              src={student.avatar_url || undefined}
-                              sx={{ width: 36, height: 36, fontSize: '0.875rem' }}
-                            >
-                              {getInitials(student.name)}
-                            </Avatar>
+                            <StudentAvatar
+                              userId={student.id}
+                              src={student.avatar_url}
+                              name={student.name}
+                              size={36}
+                              tapToView={false}
+                              sx={{ fontSize: '0.875rem' }}
+                            />
                             <Typography variant="body2" sx={{ flex: 1 }}>
                               {student.name}
                             </Typography>

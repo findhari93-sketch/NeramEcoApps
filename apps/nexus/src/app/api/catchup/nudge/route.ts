@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, markJourneyNudged } from '@neram/database';
 import { canUser } from '@/lib/staff-capabilities';
-import { sendNudge, plainToHtml } from '@/lib/nudge-delivery';
+import { sendNudge, plainToHtmlWithLink } from '@/lib/nudge-delivery';
+import { shareBaseUrl } from '@/lib/class-share-links';
 
 /**
  * POST /api/catchup/nudge  (staff)
@@ -39,17 +40,22 @@ export async function POST(request: NextRequest) {
 
     const text =
       String(body?.message || '').trim() ||
-      'You have classes waiting on your catch-up list. Open Nexus and pick up where you left off.';
+      'You have classes waiting on your catch-up list. Pick up where you left off.';
     const subject = 'Your catch-up list';
+
+    // The backlog hub rather than a class page: this nudge is about the list as
+    // a whole and names no single class. Same reasoning as the per-class nudge,
+    // which see: a reminder with nothing to press mostly does not get acted on.
+    const catchUpUrl = `${shareBaseUrl(request.nextUrl.origin)}/student/catch-up`;
 
     const { results, counts } = await sendNudge({
       studentIds,
       subject,
-      plain: text,
-      html: plainToHtml(text),
+      plain: `${text}\n\nOpen it here: ${catchUpUrl}`,
+      html: plainToHtmlWithLink(text, catchUpUrl, 'Open my catch-up list'),
       teamsText: subject,
       eventType: 'catchup_behind_pace',
-      metadata: { sent_by: staff.id },
+      metadata: { sent_by: staff.id, url: catchUpUrl },
     });
 
     // Share the cron's cooldown clock, so a teacher nudging by hand on Sunday

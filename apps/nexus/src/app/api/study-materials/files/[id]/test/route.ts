@@ -51,6 +51,24 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ test: null, locked: true, reason: 'video_required' });
     }
 
+    /**
+     * `?meta=1`: which test this is, and nothing else.
+     *
+     * For a caller about to hand the chapter to the player, which needs the
+     * test id and the placement id and will fetch the paper itself. Kept
+     * separate from the branch below on purpose, because that one COMPOSES the
+     * whole paper and DECIDES AND STORES the draw for this sitting. Fixing a
+     * draw from a "which test is this" call would pin a paper the student may
+     * never open, and ship fifty questions to a caller that wants two ids.
+     */
+    if (request.nextUrl.searchParams.get('meta') === '1') {
+      const placed = await getPlacedChapterTest(params.id);
+      return NextResponse.json({
+        test: placed && placed.is_published ? placed : null,
+        locked: false,
+      });
+    }
+
     // Per student: a pooled chapter test draws its own subset for each sitting,
     // and the draw is fixed here so the paper they answer is the paper they are
     // graded against.

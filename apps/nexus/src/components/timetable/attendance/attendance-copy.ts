@@ -42,10 +42,11 @@ export function buildMissedList(insights: Insights, only?: Set<string>): string 
   const chosen = (s: StudentInsight) => (only && only.size > 0 ? only.has(s.id) : true);
   const silent = insights.students.filter((s) => s.bucket === 'missed_no_reason' && chosen(s));
   const explained = insights.students.filter((s) => s.bucket === 'missed_with_reason' && chosen(s));
+  const lateJoiners = insights.students.filter((s) => s.bucket === 'late_joiner' && chosen(s));
 
   const lines: string[] = [classHeading(insights)];
   lines.push(
-    `Not caught up (${silent.length + explained.length} of ${insights.summary.rosterSize})`,
+    `Not caught up (${silent.length + explained.length + lateJoiners.length} of ${insights.summary.rosterSize})`,
     '',
   );
 
@@ -62,6 +63,16 @@ export function buildMissedList(insights: Insights, only?: Set<string>): string 
         ? reasonShortLabel(s.absence.reason_code)
         : s.absence?.reason_note || 'reason given';
       lines.push(`  ${++n}. ${s.name}, ${why}, ${progress(s)}`);
+    }
+    lines.push('');
+  }
+  // Held apart in the pasted text for the same reason as on the screen: this
+  // list gets forwarded to a co-teacher or a parent, and a late joiner reading
+  // as somebody who skipped a class is the exact misunderstanding to avoid.
+  if (lateJoiners.length) {
+    lines.push(`Joined after this class (${lateJoiners.length})`);
+    for (const s of lateJoiners) {
+      lines.push(`  ${++n}. ${s.name}, enrolled later, ${progress(s)}`);
     }
   }
 

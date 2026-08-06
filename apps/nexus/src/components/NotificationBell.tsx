@@ -42,6 +42,7 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   assignment_reviewed: '#2E7D32',
   study_material_nudge: '#0ea5e9',
   catchup_digest: '#7c3aed',
+  catchup_behind_pace: '#ed6c02',
 };
 
 function getNavigationUrl(
@@ -93,6 +94,14 @@ function getNavigationUrl(
     // explained why they missed a class" is only useful next to what they said.
     case 'catchup_digest':
       return '/teacher/catch-up?tab=reasons';
+    // A teacher (or the weekly cron) asking a student to catch up. The per-class
+    // nudge stamps the class it is about, so land on that class's catch-up page;
+    // the pace nudge names no class and opens the backlog instead. Without this
+    // case the row was inert, and the message named a class with no way to reach it.
+    case 'catchup_behind_pace': {
+      const classId = notification.metadata?.scheduled_class_id as string | undefined;
+      return classId ? `/student/timetable/${classId}/catch-up` : '/student/catch-up';
+    }
     default:
       return null;
   }

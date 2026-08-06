@@ -41,6 +41,8 @@ import InlineQuestionEditor from '@/components/question-bank/InlineQuestionEdito
 import BulkVideoLinksDialog from '@/components/question-bank/BulkVideoLinksDialog';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import PaperStudentAccessPanel from '@/components/question-bank/PaperStudentAccessPanel';
 
 export default function PaperDetailPage() {
   const router = useRouter();
@@ -413,6 +415,12 @@ export default function PaperDetailPage() {
           iconPosition="start"
           sx={{ minHeight: 48 }}
         />
+        <Tab
+          label="Student access"
+          icon={<GroupsOutlinedIcon sx={{ fontSize: 18 }} />}
+          iconPosition="start"
+          sx={{ minHeight: 48 }}
+        />
       </Tabs>
 
       {/* Tab: Answer Key */}
@@ -447,6 +455,13 @@ export default function PaperDetailPage() {
           getToken={getToken}
           onQuestionsUpdated={() => fetchData(true)}
         />
+      )}
+
+      {/* Tab: Student access — the PDF, the test, and the publish switch.
+          Mounted only when open so its four server-side reads are not paid for
+          by a teacher who came here to fix an answer key. */}
+      {tab === 3 && (
+        <PaperStudentAccessPanel paperId={paperId} getToken={getToken} refreshKey={total} />
       )}
 
       {/* Delete confirmation dialog */}

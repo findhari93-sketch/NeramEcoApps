@@ -89,12 +89,20 @@ export type AttendanceBucket =
   | 'attended'
   | 'excused'
   | 'caught_up'
+  | 'late_joiner'
   | 'missed_with_reason'
   | 'missed_no_reason';
 
 interface Bucketable {
   attended?: boolean;
   rsvp?: string | null;
+  /**
+   * Their enrolment starts after this class ran, so they were never expected in
+   * the room. Computed server-side against the roster's enrolled_at, never
+   * guessed from the absence row: `kind` is stamped by the journey generator and
+   * is missing on every absence written before that existed.
+   */
+  joinedAfterClass?: boolean;
   absence?: {
     reason_code?: string | null;
     reason_note?: string | null;
@@ -104,21 +112,28 @@ interface Bucketable {
 }
 
 /**
- * Which of the five states a student is in for this class.
+ * Which of the six states a student is in for this class.
  *
  * Order is the whole design. `attended` wins first because a student who opted
  * out and then turned up anyway is present, not absent with a reason: reading
  * the RSVP ahead of the register would put someone who sat through the entire
  * class on a chase list. Then `excused`, because a teacher has already closed
- * it; then `caught_up`, because the work is done; then whether they said why.
+ * it; then `caught_up`, because the work is done.
+ *
+ * `late_joiner` comes next and outranks both reason checks, because a student
+ * who enrolled after the class ran has nothing to explain. They were counted as
+ * silent for months, which is both wrong and unfair: the row said "No reason
+ * given" about a class that happened before they existed here, and the student
+ * cannot clear it, since the per-class reason route deliberately 400s for them.
  *
  * What is left, missed with no reason and not caught up, is the only group that
- * needs a person to do something, which is why the panel opens on it.
+ * needs a person to make a phone call, which is why the panel opens on it.
  */
 export function bucketFor(student: Bucketable): AttendanceBucket {
   if (student.attended) return 'attended';
   if (student.absence?.excused_at) return 'excused';
   if (student.absence?.caught_up_at) return 'caught_up';
+  if (student.joinedAfterClass) return 'late_joiner';
   const explained =
     !!student.absence?.reason_code ||
     !!student.absence?.reason_note ||
@@ -132,9 +147,30 @@ export function tallyBuckets(students: Bucketable[]): Record<AttendanceBucket, n
     attended: 0,
     excused: 0,
     caught_up: 0,
+    late_joiner: 0,
     missed_with_reason: 0,
     missed_no_reason: 0,
   };
   for (const s of students) tally[bucketFor(s)]++;
   return tally;
+}
+
+/**
+ * Did this student's enrolment begin after the class had already run?
+ *
+ * IST end-of-day, matching loadClassroomRoster's `asOf` scoping, so the two
+ * agree about who was on the roster that day. Someone enrolled at 9 PM on the
+ * day of a 7 PM class is NOT a late joiner by this rule: they were on the books
+ * that day, and the sharper alternative (comparing against the class's start
+ * time) would flag people the roster itself counts as present-day members.
+ */
+export function joinedAfterClass(
+  enrolledAt: string | null | undefined,
+  scheduledDate: string | null | undefined,
+): boolean {
+  if (!enrolledAt || !scheduledDate) return false;
+  const enrolled = Date.parse(enrolledAt);
+  const cutoff = Date.parse(`${scheduledDate}T23:59:59+05:30`);
+  if (!Number.isFinite(enrolled) || !Number.isFinite(cutoff)) return false;
+  return enrolled > cutoff;
 }

@@ -10,9 +10,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Box, Typography, Paper, Stack, Chip, Badge, IconButton, TextField, Button, Tooltip,
-  UserAvatar, Skeleton, EmptyState, Drawer, SwipeableDrawer, Snackbar, Alert, CircularProgress,
+  Skeleton, EmptyState, Drawer, SwipeableDrawer, Snackbar, Alert, CircularProgress,
   alpha, useTheme, useMediaQuery,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
@@ -243,7 +244,16 @@ export default function MaterialsFeedbackPage() {
             <Stack spacing={1.75}>
               {threadComments.map((c) => (
                 <Box key={c.id} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                  <UserAvatar src={c.author?.avatar_url} name={c.author?.name} size={32} sx={{ mt: 0.25 }} />
+                  {/* Authors here are a mix of teachers and students. An id the
+                      lookup does not know renders plain, so only the students in
+                      the thread pick up a ring. */}
+                  <StudentAvatar
+                    userId={c.author?.id}
+                    src={c.author?.avatar_url}
+                    name={c.author?.name}
+                    size={32}
+                    sx={{ mt: 0.25 }}
+                  />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                       <Typography variant="caption" sx={{ fontWeight: 700 }}>{c.author?.name || 'User'}</Typography>
@@ -313,7 +323,12 @@ export default function MaterialsFeedbackPage() {
               }}
             >
               {t.visibility === 'private' ? (
-                <UserAvatar src={t.student?.avatar_url} name={t.student?.name} size={40} />
+                <StudentAvatar
+                  userId={t.student?.id}
+                  src={t.student?.avatar_url}
+                  name={t.student?.name}
+                  size={40}
+                />
               ) : (
                 <Box sx={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: alpha(theme.palette.text.secondary, 0.1) }}>
                   <GroupsOutlinedIcon sx={{ color: 'text.secondary' }} />

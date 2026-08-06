@@ -10,25 +10,27 @@ import {
   IconButton,
   Skeleton,
   Typography,
-  UserAvatar,
   alpha,
   useTheme,
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PhoneIcon from '@mui/icons-material/Phone';
+import StudentStageAvatar from '@/components/students/StudentStageAvatar';
+import { stageKeyOf } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
 import type { AttendanceTabProps, StudentInsight } from './types';
 
 /**
  * Who was not here, grouped by whether anything is being done about it.
  *
- * The order of the three groups is the whole design. A teacher opening this
- * after a class has one question, "who do I chase", and the answer is the first
- * group: away, said nothing, has not watched the recording. Students who
- * explained themselves come second because they need a look but not a call, and
- * anyone who has already caught up is collapsed, because they are finished and
- * showing them expanded buries the four names that matter under twelve that do
- * not.
+ * The order of the groups is the whole design. A teacher opening this after a
+ * class has one question, "who do I chase", and the answer is the first group:
+ * away, said nothing, has not watched the recording. Students who explained
+ * themselves come second because they need a look but not a call. Late joiners
+ * come third: the work is owed but nobody did anything wrong, so they must never
+ * sit in a list headed "No reason given". Anyone who has already caught up is
+ * collapsed, because they are finished and showing them expanded buries the four
+ * names that matter under twelve that do not.
  *
  * Everything here is a selection. The actions live in the shell's bar, so a
  * teacher can tick names across two groups and send one message.
@@ -65,6 +67,7 @@ function MissedRow({
   const reason = a?.reason_code ? reasonShortLabel(a.reason_code) : null;
   const said = shortDate(a?.reason_submitted_at ?? null);
   const nudged = shortDate(a?.followup_sent_at ?? null);
+  const joined = shortDate(student.enrolled_at ?? null);
 
   return (
     <Box
@@ -89,13 +92,28 @@ function MissedRow({
         sx={{ p: 1.25, mt: -0.5 }}
         inputProps={{ 'aria-label': `Select ${student.name}` }}
       />
-      <UserAvatar name={student.name} src={student.avatar_url} size={36} tapToView={false} />
+      <StudentStageAvatar
+        stage={stageKeyOf(student.study_stage)}
+        dormant={student.dormant}
+        name={student.name}
+        src={student.avatar_url}
+        size={36}
+        tapToView={false}
+      />
       <Box sx={{ flex: 1, minWidth: 0, ml: 1 }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
           {student.name}
         </Typography>
 
-        {reason || a?.reason_note ? (
+        {student.joinedAfterClass ? (
+          // Never "No reason given". They enrolled after this class ran, so the
+          // absence is an artefact of the calendar rather than a choice, and the
+          // per-class reason route refuses their answer anyway.
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+            Joined after this class
+            {joined && `, enrolled ${joined}`}
+          </Typography>
+        ) : reason || a?.reason_note ? (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
             {reason}
             {said && `, said ${said}`}
@@ -140,6 +158,66 @@ function MissedRow({
   );
 }
 
+/**
+ * Tick everyone who still owes work on this class, in one gesture.
+ *
+ * The group headers could already select a group each, which is not the same
+ * thing: chasing a whole class meant finding three separate checkboxes and
+ * remembering which ones existed today, and the tab label says "Missed 16" while
+ * nothing on the screen could produce 16 ticks. This is that control.
+ *
+ * It deliberately covers the outstanding groups only. Students who have already
+ * caught up are on this tab so a teacher can see the class is closing, not so
+ * they can be messaged again about work they have finished.
+ */
+function SelectAllBar({
+  ids,
+  selected,
+  onSelectMany,
+}: {
+  ids: string[];
+  selected: Set<string>;
+  onSelectMany: (ids: string[], next: boolean) => void;
+}) {
+  const chosen = ids.filter((id) => selected.has(id)).length;
+  const all = chosen === ids.length;
+  const label = `Select all ${ids.length} not caught up`;
+
+  return (
+    <Box
+      component="label"
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0.5,
+        mb: 1.5,
+        pr: 1,
+        borderRadius: 1,
+        minHeight: 48,
+        cursor: 'pointer',
+        bgcolor: 'action.hover',
+        '&:hover': { bgcolor: 'action.selected' },
+      }}
+    >
+      <Checkbox
+        checked={all}
+        indeterminate={chosen > 0 && !all}
+        onChange={() => onSelectMany(ids, !all)}
+        sx={{ p: 1.25 }}
+        inputProps={{ 'aria-label': label }}
+      />
+      <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>
+        {all ? `All ${ids.length} selected` : label}
+      </Typography>
+      {chosen > 0 && (
+        <Typography variant="caption" color="text.secondary">
+          {chosen} ticked
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 function Group({
   title,
   tone,
@@ -150,7 +228,7 @@ function Group({
   defaultOpen,
 }: {
   title: string;
-  tone: 'error' | 'warning' | 'success';
+  tone: 'error' | 'warning' | 'info' | 'success';
   students: StudentInsight[];
   selected: Set<string>;
   onSelect: (id: string, next: boolean) => void;
@@ -228,9 +306,20 @@ export default function MissedTab({
     return {
       silent: students.filter((s) => s.bucket === 'missed_no_reason'),
       explained: students.filter((s) => s.bucket === 'missed_with_reason'),
+      lateJoiners: students.filter((s) => s.bucket === 'late_joiner'),
       done: students.filter((s) => s.bucket === 'caught_up' || s.bucket === 'excused'),
     };
   }, [insights]);
+
+  /**
+   * Everyone the actions are for, in the order they are shown. Built from the
+   * same three arrays the groups render, so the count on the Select all control
+   * can never claim more people than are on the screen.
+   */
+  const outstandingIds = useMemo(
+    () => [...groups.silent, ...groups.explained, ...groups.lateJoiners].map((s) => s.id),
+    [groups],
+  );
 
   if (insightsLoading) {
     return (
@@ -244,8 +333,7 @@ export default function MissedTab({
 
   if (!insights) return <Alert severity="info">Could not load this class.</Alert>;
 
-  const nobodyMissed =
-    groups.silent.length === 0 && groups.explained.length === 0 && groups.done.length === 0;
+  const nobodyMissed = outstandingIds.length === 0 && groups.done.length === 0;
 
   if (nobodyMissed) {
     return (
@@ -257,6 +345,9 @@ export default function MissedTab({
 
   return (
     <>
+      {outstandingIds.length > 0 && (
+        <SelectAllBar ids={outstandingIds} selected={selected} onSelectMany={onSelectMany} />
+      )}
       <Group
         title="No reason given"
         tone="error"
@@ -270,6 +361,16 @@ export default function MissedTab({
         title="Told us why"
         tone="warning"
         students={groups.explained}
+        selected={selected}
+        onSelect={onSelect}
+        onSelectMany={onSelectMany}
+        defaultOpen
+      />
+      {/* Info, not error: they owe the recording, but nobody skipped anything. */}
+      <Group
+        title="Joined after this class"
+        tone="info"
+        students={groups.lateJoiners}
         selected={selected}
         onSelect={onSelect}
         onSelectMany={onSelectMany}

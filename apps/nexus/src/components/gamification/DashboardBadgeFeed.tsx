@@ -5,7 +5,6 @@ import {
   Box,
   Card,
   Typography,
-  UserAvatar,
   Skeleton,
   alpha,
 } from '@neram/ui';
@@ -16,6 +15,7 @@ import {
   neramFontFamilies,
 } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 // ── Types ──
 
@@ -226,7 +226,8 @@ export default function DashboardBadgeFeed({
                   }}
                 >
                   {/* Student avatar */}
-                  <UserAvatar
+                  <StudentAvatar
+                    userId={item.student_id}
                     src={item.avatar_url}
                     name={item.student_name}
                     size={32}

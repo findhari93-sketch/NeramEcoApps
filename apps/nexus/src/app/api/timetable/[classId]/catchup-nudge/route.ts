@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { canUser } from '@/lib/staff-capabilities';
-import { sendNudge, plainToHtml } from '@/lib/nudge-delivery';
+import { sendNudge, plainToHtml, plainToHtmlWithLink } from '@/lib/nudge-delivery';
+import { classShareLinks, shareBaseUrl } from '@/lib/class-share-links';
 import { emailParentsOfStudents } from '@/lib/parent-notify';
 import {
   buildMentions,
@@ -131,20 +132,41 @@ export async function POST(request: NextRequest, { params }: { params: { classId
       (absencesBefore || []).filter((a: any) => a.followup_sent_at).map((a: any) => a.student_id),
     );
 
+    // ONE tap from the message to the work.
+    //
+    // Every channel below carried the class name and nothing to press, so a
+    // student who wanted to comply had to find Nexus, find the timetable, find
+    // the right date and find the class. Most of them simply did not, and the
+    // teacher read that as being ignored. The link is appended to the teacher's
+    // own wording too: the point is that it is always there, not that it is
+    // something they have to remember to add.
+    const catchUpUrl = classShareLinks(shareBaseUrl(request.nextUrl.origin)).catchUp(cls.id);
+
     const custom = String(body?.message || '').trim();
-    const plain =
+    const body_ =
       custom ||
       `You missed ${title} on ${dateLabel}. Watch the recording in Nexus and take the short check so it clears from your catch-up list.`;
+    const plain = `${body_}\n\nOpen it here: ${catchUpUrl}`;
     const subject = `Catch up: ${title}`;
 
     const { results, counts } = await sendNudge({
       studentIds,
       subject,
       plain,
-      html: plainToHtml(plain),
+      // A real anchor, because plainToHtml escapes the URL into inert text and
+      // an email whose only call to action is an unclickable string is worse
+      // than one with no link at all.
+      html: plainToHtmlWithLink(body_, catchUpUrl, 'Open your catch-up page'),
       teamsText: subject,
       eventType: 'catchup_behind_pace',
-      metadata: { sent_by: staff.id, scheduled_class_id: cls.id, source: 'class_attendance' },
+      // scheduled_class_id is what NotificationBell routes on, so the in-app
+      // copy of this message opens the same page the link does.
+      metadata: {
+        sent_by: staff.id,
+        scheduled_class_id: cls.id,
+        source: 'class_attendance',
+        url: catchUpUrl,
+      },
     });
 
     // Stamp the absence rows. Nothing wrote these from a human path before, so
@@ -219,10 +241,14 @@ export async function POST(request: NextRequest, { params }: { params: { classId
           }),
         );
 
+        // `body_`, not `plain`: plain carries the URL as a trailing line for the
+        // channels that can only take text, and repeating it here would print
+        // the address twice, once dead and once beside a real anchor.
         const html =
           `<p><b>Catch up: ${escapeMessageHtml(title)}</b><br/>${escapeMessageHtml(dateLabel)}</p>` +
           `<p>${mentioned.html}</p>` +
-          `<p>${escapeMessageHtml(plain)}</p>`;
+          `<p>${escapeMessageHtml(body_)}</p>` +
+          `<p><a href="${escapeMessageHtml(catchUpUrl)}">Open your catch-up page</a></p>`;
 
         const failures: string[] = [];
 

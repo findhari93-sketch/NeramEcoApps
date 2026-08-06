@@ -5,7 +5,6 @@ import {
   Box,
   Card,
   Typography,
-  UserAvatar,
   Skeleton,
   alpha,
 } from '@neram/ui';
@@ -20,6 +19,7 @@ import {
   neramShadows,
 } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 // ── Types (from dashboard API) ──
 
@@ -221,7 +221,8 @@ export default function DashboardHallOfFame({
                   </Typography>
 
                   {/* Avatar */}
-                  <UserAvatar
+                  <StudentAvatar
+                    userId={performer.student_id}
                     src={performer.avatar_url}
                     name={performer.student_name}
                     size={36}

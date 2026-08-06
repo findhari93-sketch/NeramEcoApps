@@ -79,6 +79,30 @@ export function plainToHtml(text: string): string {
   ).replace(/\n/g, '<br/>')}</div>`;
 }
 
+/**
+ * The same shell with a button under it.
+ *
+ * plainToHtml escapes everything it is given, which is correct and is also why
+ * a URL pasted into the text arrives as inert characters. A reminder whose whole
+ * purpose is to get somebody to open a page has to give them something to press,
+ * so the link is passed separately and rendered as an anchor.
+ *
+ * The bare address is repeated in small type beneath, because a mail client that
+ * strips the styled anchor still leaves something a student can copy.
+ */
+export function plainToHtmlWithLink(text: string, url: string, label: string): string {
+  const safeUrl = escapeHtml(url);
+  return (
+    `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#111">` +
+    `${escapeHtml(text).replace(/\n/g, '<br/>')}` +
+    `<p style="margin:20px 0"><a href="${safeUrl}" ` +
+    `style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;` +
+    `padding:12px 20px;border-radius:8px;font-weight:600">${escapeHtml(label)}</a></p>` +
+    `<p style="font-size:12px;color:#666">Or paste this into your browser: ${safeUrl}</p>` +
+    `</div>`
+  );
+}
+
 export async function sendNudge(
   input: SendNudgeInput,
 ): Promise<{ results: NudgeResult[]; counts: NudgeCounts }> {

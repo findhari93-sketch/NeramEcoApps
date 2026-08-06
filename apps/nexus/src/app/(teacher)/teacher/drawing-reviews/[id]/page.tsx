@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
-  Box, IconButton, Skeleton, Typography, UserAvatar, Chip, Paper,
+  Box, IconButton, Skeleton, Typography, Chip, Paper,
   Button, useMediaQuery, useTheme, Switch, Snackbar, alpha,
   Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
   Breadcrumbs, Link as MuiLink,
@@ -33,6 +33,7 @@ import {
 import { useNavBadges } from '@/components/NavBadgeProvider';
 import type { DrawingSubmission, DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 export default function DrawingReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -636,7 +637,8 @@ export default function DrawingReviewDetailPage() {
             <IconButton onClick={() => router.push(backHref)} size="small" sx={{ p: 0.5 }}>
               <ArrowBackIcon fontSize="small" />
             </IconButton>
-            <UserAvatar
+            <StudentAvatar
+              userId={sub.student?.id}
               src={sub.student?.avatar_url}
               name={sub.student?.name}
               size={28}
@@ -815,7 +817,8 @@ export default function DrawingReviewDetailPage() {
           <IconButton onClick={() => router.push(backHref)} size="small">
             <ArrowBackIcon />
           </IconButton>
-          <UserAvatar
+          <StudentAvatar
+            userId={sub.student?.id}
             src={sub.student?.avatar_url}
             name={sub.student?.name}
             size={36}

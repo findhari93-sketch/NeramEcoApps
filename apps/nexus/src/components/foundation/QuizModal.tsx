@@ -51,6 +51,17 @@ interface QuizModalProps {
   onContinue: () => void;
   /** If true, the student can dismiss the quiz. Defaults to true. */
   dismissable?: boolean;
+  /**
+   * Where the drawer's portal lands. Undefined or null keeps MUI's default,
+   * document.body, which is right everywhere except one case.
+   *
+   * That case is fullscreen. The browser paints only the fullscreen element's
+   * subtree, so a quiz portalled to document.body while the video player is
+   * fullscreen does not render at all: the student reaches a checkpoint, playback
+   * pauses, and nothing appears. NeramVideoPlayer publishes its container through
+   * `onFullscreenChange` for exactly this, and the player's caller passes it here.
+   */
+  container?: HTMLElement | null;
 }
 
 export default function QuizModal({
@@ -63,6 +74,7 @@ export default function QuizModal({
   onRetryQuiz,
   onContinue,
   dismissable = true,
+  container,
 }: QuizModalProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -308,6 +320,24 @@ export default function QuizModal({
     </Box>
   );
 
+  /**
+   * Shared by both drawer variants so they cannot drift.
+   *
+   * `container` goes through ModalProps rather than as a top-level prop because
+   * that is the one path Drawer and SwipeableDrawer treat identically: Drawer
+   * spreads ModalProps last, so it wins, and SwipeableDrawer merges it into the
+   * ModalProps it forwards.
+   *
+   * The scroll lock has to go with it. MUI writes inline `overflow` and
+   * `padding-right` onto whatever container it is given. On <body> that is
+   * invisible; on a 16:9 player box it is a visible jolt.
+   */
+  const modalProps = {
+    disableEscapeKeyDown: !dismissable,
+    container: container ?? undefined,
+    disableScrollLock: !!container,
+  };
+
   if (isMobile) {
     return (
       <SwipeableDrawer
@@ -317,7 +347,7 @@ export default function QuizModal({
         onOpen={() => {}}
         disableSwipeToOpen={!dismissable}
         disableDiscovery={!dismissable}
-        ModalProps={{ disableEscapeKeyDown: !dismissable }}
+        ModalProps={modalProps}
         PaperProps={{
           sx: {
             borderTopLeftRadius: 20,

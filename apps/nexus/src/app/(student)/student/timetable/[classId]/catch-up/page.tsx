@@ -89,6 +89,18 @@ interface CatchUpData {
     testPassed: boolean;
     caughtUp: boolean;
   };
+  /**
+   * Whether the server will accept Mark caught up, decided by the same function
+   * that will decide it on the way back in.
+   *
+   * The button used to derive this itself from the three step flags, which is
+   * how a student came to face three green ticks and a refusal naming no cause:
+   * the steps describe the checklist, and a checklist cannot show a gate that
+   * has no step. Never reintroduce that derivation here.
+   */
+  canComplete: boolean;
+  /** What to say under the button while it is disabled. Null when it is not. */
+  blockedReason: string | null;
   /** False for someone who joined after the class ran: nothing to explain. */
   reasonRequired: boolean;
   hasRecording: boolean;
@@ -696,19 +708,22 @@ export default function CatchUpPage() {
           <Button
             fullWidth
             variant="contained"
-            disabled={busy || !steps.watched || !steps.workDone || !steps.testPassed}
+            disabled={busy || !data.canComplete}
             onClick={() => act({ action: 'mark_caught_up' }, 'Marked as caught up.')}
             sx={{ textTransform: 'none', minHeight: 48, fontWeight: 700, borderRadius: RADIUS.control }}
           >
             Mark as caught up
           </Button>
-          {(!steps.watched || !steps.workDone || !steps.testPassed) && (
+          {/* The server's own words for what is missing, rather than "finish the
+              steps above", which is no help at all when every step above is
+              already ticked. */}
+          {!data.canComplete && data.blockedReason && (
             <Typography
               variant="caption"
               color="text.secondary"
               sx={{ display: 'block', textAlign: 'center', mt: 0.75 }}
             >
-              Finish the steps above to enable this.
+              {data.blockedReason}
             </Typography>
           )}
         </Box>

@@ -87,6 +87,13 @@ export interface StudentInsight {
   name: string;
   avatar_url: string | null;
   phone?: string | null;
+  /** nexus_enrollments.current_standard, for the avatar's stage ring. */
+  study_stage?: string | null;
+  /** nexus_enrollments.participation_status === 'dormant'. Display only. */
+  dormant?: boolean;
+  enrolled_at?: string | null;
+  /** Their enrolment starts after this class ran. Computed server-side. */
+  joinedAfterClass?: boolean;
   rsvp: 'attending' | 'not_attending';
   reason: string | null;
   attended: boolean;
@@ -132,6 +139,8 @@ export interface Insights {
     missedWithReason: number;
     caughtUp: number;
     excused: number;
+    /** Enrolled after the class ran. Included in notCaughtUp. */
+    lateJoiners?: number;
     notCaughtUp: number;
   };
   buckets: {

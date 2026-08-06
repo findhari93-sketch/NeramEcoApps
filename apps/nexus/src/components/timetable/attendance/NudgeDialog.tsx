@@ -105,7 +105,7 @@ export default function NudgeDialog({
               minRows={3}
               // 16px stops iOS zooming the whole dialog on focus.
               inputProps={{ style: { fontSize: 16 } }}
-              helperText="Leave it blank to send the default, which names this class and its date."
+              helperText="Leave it blank to send the default, which names this class and its date. A link straight to this class in Nexus is added either way."
             />
 
             <FormControlLabel
@@ -125,8 +125,9 @@ export default function NudgeDialog({
 
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
               Each student gets a Teams ping and a Nexus notification, and an email if Teams cannot
-              reach them. A parent is copied only for anyone who has already been nudged about this
-              class once.
+              reach them. Every one of them carries a link that opens this class&rsquo;s catch-up page,
+              so they can start from the message. A parent is copied only for anyone who has already
+              been nudged about this class once.
             </Typography>
           </>
         )}

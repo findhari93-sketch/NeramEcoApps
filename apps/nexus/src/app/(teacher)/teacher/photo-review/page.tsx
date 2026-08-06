@@ -28,7 +28,6 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Typography,
-  UserAvatar,
   ImageViewerDialog,
   alpha,
 } from '@neram/ui';
@@ -43,6 +42,7 @@ import { useNavBadges } from '@/components/NavBadgeProvider';
 import RejectPhotoDialog from '@/components/photo-review/RejectPhotoDialog';
 import type { PhotoStatus } from '@/lib/photo-gate';
 import { photoOriginLabel, type PhotoOrigin } from '@/lib/photo-origin';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface ReviewRow {
   student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
@@ -478,7 +478,8 @@ export default function PhotoReviewPage() {
                         spacing={0.5}
                         sx={{ height: '100%', px: 1 }}
                       >
-                        <UserAvatar
+                        <StudentAvatar
+                          userId={r.student.id}
                           name={r.student.name}
                           size={56}
                           clickable={false}

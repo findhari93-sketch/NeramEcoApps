@@ -33,6 +33,12 @@ import AnswerInput from '@/components/tests/AnswerInput';
 import ExplanationPanel from '@/components/tests/ExplanationPanel';
 import OptionBody, { type TestOption } from '@/components/tests/OptionBody';
 import { optionKeyAt, sameChoice } from '@/lib/option-keys';
+import {
+  DEFAULT_TEST_RETURN,
+  DEFAULT_TEST_RETURN_LABEL,
+  safeReturnLabel,
+  safeReturnPath,
+} from '@/lib/test-return';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -114,6 +120,26 @@ export default function TakeTestPage() {
   const router = useRouter();
   const testId = searchParams.get('test_id');
   const placementId = searchParams.get('placement_id');
+
+  /**
+   * Where "back" goes, and what the button is called.
+   *
+   * This page used to be reachable only from the tests list, so both were
+   * hardcoded. A chapter test now opens here too, and dropping that student on
+   * /student/tests afterwards strands them: the chapter they were reading is
+   * two navigations away and nothing on screen says so.
+   *
+   * The path is sanitised because it arrives in a query string and is handed
+   * to router.push. The label falls back whenever the path did, so a rejected
+   * return can never leave a button reading "Back to the chapter" while
+   * pointing at the tests list.
+   */
+  const returnTo = safeReturnPath(searchParams.get('return'));
+  const returnLabel =
+    returnTo === DEFAULT_TEST_RETURN
+      ? DEFAULT_TEST_RETURN_LABEL
+      : safeReturnLabel(searchParams.get('return_label'));
+
   const [loadError, setLoadError] = useState<string | null>(null);
 
   /**
@@ -721,9 +747,9 @@ export default function TakeTestPage() {
             <Button
               variant="outlined"
               sx={{ textTransform: 'none', minHeight: 48, flex: 1 }}
-              onClick={() => router.push('/student/tests')}
+              onClick={() => router.push(returnTo)}
             >
-              Back to tests
+              {returnLabel}
             </Button>
           </Box>
         </Box>
@@ -770,10 +796,10 @@ export default function TakeTestPage() {
           </Typography>
           <Button
             variant="outlined"
-            onClick={() => router.push('/student/tests')}
+            onClick={() => router.push(returnTo)}
             sx={{ mt: 2, textTransform: 'none', minHeight: 48 }}
           >
-            Back to Tests
+            {returnLabel}
           </Button>
         </Box>
       </Box>

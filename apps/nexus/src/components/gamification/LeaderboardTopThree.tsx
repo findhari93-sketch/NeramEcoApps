@@ -1,9 +1,10 @@
 'use client';
 
-import { Box, Card, Typography, UserAvatar } from '@neram/ui';
+import { Box, Card, Typography } from '@neram/ui';
 import { neramTokens, neramFontFamilies, neramShadows } from '@neram/ui';
 import type { LeaderboardEntry } from '@neram/database/types';
 import StreakFlame from './StreakFlame';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 const RANK_COLORS: Record<number, { border: string; glow: string; label: string }> = {
   1: {
@@ -113,7 +114,8 @@ export default function LeaderboardTopThree({ entries }: LeaderboardTopThreeProp
             </Box>
 
             {/* Avatar */}
-            <UserAvatar
+            <StudentAvatar
+              userId={entry.student_id}
               src={entry.avatar_url}
               name={entry.student_name}
               size={56}

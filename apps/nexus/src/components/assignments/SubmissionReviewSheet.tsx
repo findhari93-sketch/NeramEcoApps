@@ -14,12 +14,12 @@ import {
   IconButton,
   TextField,
   Button,
-  Avatar,
   Chip,
   Divider,
   Rating,
   alpha,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import CloseIcon from '@mui/icons-material/Close';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -193,9 +193,13 @@ export default function SubmissionReviewSheet({
           <IconButton onClick={onPrev} disabled={!hasPrev} sx={{ minWidth: 44, minHeight: 44 }}>
             <ChevronLeftIcon />
           </IconButton>
-          <Avatar src={row?.student.avatar_url || undefined} sx={{ width: 36, height: 36, bgcolor: 'primary.dark' }}>
-            {(row?.student.name || '?').slice(0, 1).toUpperCase()}
-          </Avatar>
+          <StudentAvatar
+            userId={row?.student.id}
+            src={row?.student.avatar_url}
+            name={row?.student.name}
+            size={36}
+            tapToView={false}
+          />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ fontWeight: 700 }} noWrap>
               {row?.student.name || 'Student'}

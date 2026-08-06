@@ -1,0 +1,30 @@
+-- ============================================
+-- QUESTION BANK PAPERS: the placement context, and nothing else
+--
+-- Alone in its own migration on purpose. The Supabase CLI wraps a migration file
+-- in a transaction, and a value added by ALTER TYPE cannot be USED in the same
+-- transaction that added it. The very next migration names 'qb_paper' in an
+-- index predicate, so the two cannot share a file. Same reasoning as
+-- 20260823090000_nexus_class_test_enums.sql.
+-- ============================================
+
+-- context_id = nexus_qb_original_papers.id
+--
+-- An original paper is three things to a student: a PDF to read, a set of
+-- questions to practise, and a paper to sit. The first two already had a home.
+-- The third did not, which is why "take the 2025 paper as a test" could not be
+-- expressed at all: a test can only be reached through a placement, and no
+-- placement could point at a paper.
+--
+-- Not a reuse of 'study_file'. That context points at the PDF, and its side
+-- effect marks a chapter READ. A paper's linked PDF keeps its own study_file
+-- placement for exactly that purpose; sitting the paper is a different act with
+-- a different record, and collapsing the two would mean passing the mock marked
+-- the PDF as read without it ever being opened.
+--
+-- Not a reuse of 'student_practice' either. That context is a paper a student
+-- built for themselves, is created BY the student, and may hold many tests. This
+-- one is curated by staff, is the same paper for everyone, and holds exactly one
+-- active mock, which is what makes "how did the class do on NATA 2025"
+-- answerable.
+ALTER TYPE nexus_placement_context ADD VALUE IF NOT EXISTS 'qb_paper';

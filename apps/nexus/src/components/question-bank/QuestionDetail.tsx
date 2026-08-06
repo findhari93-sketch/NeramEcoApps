@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import { OPEN_GATE } from '@/lib/video-gate';
 import {
   Box,
   Typography,
@@ -580,23 +582,18 @@ export default function QuestionDetail({
                       bgcolor: '#000',
                     }}
                   >
-                    <Box
-                      component="iframe"
-                      src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&disablekb=0&fs=1&playsinline=1`}
-                      title="Solution video"
-                      loading="lazy"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                      referrerPolicy="strict-origin-when-cross-origin"
-                      sx={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        border: 0,
-                      }}
-                    />
+                    <Box sx={{ position: 'absolute', inset: 0 }}>
+                      {/* Nothing to gate on a solution the student has already
+                          reached, but the chrome is worth having: speed,
+                          keyboard and captions behave as they do everywhere
+                          else, rather than being YouTube's on this one screen. */}
+                      <NeramVideoPlayer
+                        source={{ kind: 'youtube', youtubeId: videoId }}
+                        gate={OPEN_GATE}
+                        title="Solution video"
+                        allowFullscreen
+                      />
+                    </Box>
                   </Box>
                 ) : isSharePointUrl(question.solution_video_url) ? (
                   <Box
@@ -608,19 +605,15 @@ export default function QuestionDetail({
                       bgcolor: '#000',
                     }}
                   >
-                    <Box
-                      component="video"
-                      src={getSharePointDownloadUrl(question.solution_video_url)}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      controlsList="nodownload"
-                      sx={{
-                        width: '100%',
-                        maxHeight: 480,
-                        display: 'block',
-                      }}
-                    />
+                    <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', maxHeight: 480 }}>
+                      <NeramVideoPlayer
+                        source={{ kind: 'html5', src: getSharePointDownloadUrl(question.solution_video_url) }}
+                        gate={OPEN_GATE}
+                        title="Solution video"
+                        allowFullscreen
+                        allowPictureInPicture
+                      />
+                    </Box>
                   </Box>
                 ) : (
                   <Box
@@ -632,18 +625,15 @@ export default function QuestionDetail({
                       bgcolor: '#000',
                     }}
                   >
-                    <Box
-                      component="video"
-                      src={question.solution_video_url}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      sx={{
-                        width: '100%',
-                        maxHeight: 480,
-                        display: 'block',
-                      }}
-                    />
+                    <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', maxHeight: 480 }}>
+                      <NeramVideoPlayer
+                        source={{ kind: 'html5', src: question.solution_video_url }}
+                        gate={OPEN_GATE}
+                        title="Solution video"
+                        allowFullscreen
+                        allowPictureInPicture
+                      />
+                    </Box>
                   </Box>
                 )}
               </Box>

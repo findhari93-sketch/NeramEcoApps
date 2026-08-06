@@ -21,10 +21,10 @@ import {
   IconButton,
   Stack,
   Typography,
-  UserAvatar,
   alpha,
   useTheme,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
@@ -142,7 +142,12 @@ function StudentRowBase({
           />
         )}
 
-        <UserAvatar src={row.student.avatar_url} name={row.student.name || ''} size={36} />
+        <StudentAvatar
+          userId={row.student.id}
+          src={row.student.avatar_url}
+          name={row.student.name || ''}
+          size={36}
+        />
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }} noWrap>

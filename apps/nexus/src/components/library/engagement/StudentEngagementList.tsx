@@ -16,12 +16,12 @@ import {
   TableRow,
   TableSortLabel,
   Paper,
-  UserAvatar,
   InputAdornment,
 } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
 import EngagementStatusDot from './EngagementStatusDot';
 import StudentEngagementCard from './StudentEngagementCard';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface StudentData {
   id: string;
@@ -247,7 +247,8 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <UserAvatar
+                        <StudentAvatar
+                          userId={student.id}
                           src={student.avatar_url}
                           name={`${student.first_name} ${student.last_name}`}
                           size={28}

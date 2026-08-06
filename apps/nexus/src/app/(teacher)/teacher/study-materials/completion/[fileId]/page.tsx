@@ -9,19 +9,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  Box, Typography, Card, Button, IconButton, TextField, InputAdornment, Chip, Avatar, Skeleton,
+  Box, Typography, Card, Button, IconButton, TextField, InputAdornment, Chip, Skeleton,
   Alert, Checkbox, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel,
   ToggleButton, ToggleButtonGroup, Paper, EmptyState, alpha, useTheme, useMediaQuery,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import SendIcon from '@mui/icons-material/Send';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudyNudgeDialog from '@/components/study-materials/StudyNudgeDialog';
+import {
+  ChapterStatusChip,
+  WatchHonesty,
+  type ChapterStatus,
+} from '@/components/study-materials/chapter-status';
+import { summariseWatchLanguages, type WorkspaceTrack } from '@/lib/chapter-workspace';
 
 /**
  * The two halves of a chapter are named separately.
@@ -29,8 +33,12 @@ import StudyNudgeDialog from '@/components/study-materials/StudyNudgeDialog';
  * Everything between "opened" and "done" used to read as "studying", which told
  * a tutor nothing about which nudge to send. "Needs the video" and "needs the
  * test" are different conversations with different students.
+ *
+ * The names and the chip itself now come from chapter-status.tsx. This page
+ * carried its own copy of both, which meant two definitions of what "Needs the
+ * test" looks like, free to drift apart with nothing to catch it.
  */
-type Status = 'not_opened' | 'studying' | 'video_pending' | 'test_pending' | 'completed';
+type Status = ChapterStatus;
 
 interface Row {
   student_id: string;
@@ -67,13 +75,6 @@ interface CompletionData {
   };
 }
 
-const STATUS_META: Record<Status, { label: string; icon: any; color: string }> = {
-  completed: { label: 'Completed', icon: CheckCircleIcon, color: 'success' },
-  test_pending: { label: 'Needs the test', icon: AutoStoriesOutlinedIcon, color: 'warning' },
-  video_pending: { label: 'Needs the video', icon: AutoStoriesOutlinedIcon, color: 'warning' },
-  studying: { label: 'Studying', icon: AutoStoriesOutlinedIcon, color: 'warning' },
-  not_opened: { label: 'Not opened', icon: RadioButtonUncheckedIcon, color: 'default' },
-};
 // Sorted by how far along they are, so "sort by status" surfaces the students
 // who need chasing rather than the ones who are finished.
 const STATUS_ORDER: Record<Status, number> = {
@@ -102,6 +103,14 @@ export default function CompletionDashboardPage() {
   const { getToken, activeClassroom, isTeacher, loading: authLoading } = useNexusAuthContext();
 
   const [data, setData] = useState<CompletionData | null>(null);
+  /**
+   * Only for the language LABELS.
+   *
+   * The report returns video_language as a code, and a tally reading "en 4,
+   * ta 2" makes a tutor translate. One extra read on a low-traffic teacher page
+   * buys "English 4, தமிழ் 2".
+   */
+  const [tracks, setTracks] = useState<WorkspaceTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,6 +136,17 @@ export default function CompletionDashboardPage() {
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error || 'Failed to load');
       setData({ ...body, students: body.rows || [] });
+
+      // Labels only, and never allowed to fail the page: without them the tally
+      // falls back to bare codes, which is worse but still correct.
+      try {
+        const tr = await fetch(`/api/study-materials/files/${fileId}/video-tracks`, {
+          headers: { Authorization: `Bearer ${t}` },
+        });
+        if (tr.ok) setTracks((await tr.json())?.tracks || []);
+      } catch {
+        setTracks([]);
+      }
     } catch (e: any) {
       setError(e?.message || 'Failed to load completion');
     } finally {
@@ -178,23 +198,6 @@ export default function CompletionDashboardPage() {
     .filter((s) => selected.has(s.student_id))
     .map((s) => ({ id: s.student_id, name: s.name }));
 
-  const StatusChip = ({ status }: { status: Status }) => {
-    const m = STATUS_META[status];
-    const Icon = m.icon;
-    return (
-      <Chip
-        size="small"
-        icon={<Icon sx={{ fontSize: '0.85rem !important' }} />}
-        label={m.label}
-        sx={{
-          height: 22, fontSize: '0.65rem', fontWeight: 600,
-          bgcolor: m.color === 'default' ? alpha(theme.palette.text.secondary, 0.1) : alpha((theme.palette as any)[m.color].main, 0.14),
-          color: m.color === 'default' ? 'text.secondary' : `${m.color}.main`,
-        }}
-      />
-    );
-  };
-
   if (!authLoading && !isTeacher) {
     return <Box sx={{ p: 3 }}><Alert severity="error">This page is for teachers only.</Alert></Box>;
   }
@@ -234,6 +237,37 @@ export default function CompletionDashboardPage() {
           ))}
         </Box>
       ) : null}
+
+      {/* Which language the cohort actually finished in.
+          The report has returned video_language since the tracks shipped and
+          nothing has ever drawn it, so "how many watched the English one" has
+          never appeared on a screen despite being one count away. */}
+      {data && data.students.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>
+            Watched in
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+            {(() => {
+              const watch = summariseWatchLanguages(data.students, tracks);
+              return (
+                <>
+                  {watch.languages.map((l) => (
+                    <Chip
+                      key={l.code}
+                      size="small"
+                      variant="outlined"
+                      color={l.count > 0 ? 'success' : 'default'}
+                      label={`${l.label} ${l.count}`}
+                    />
+                  ))}
+                  <Chip size="small" variant="outlined" label={`not watched ${watch.notWatched}`} />
+                </>
+              );
+            })()}
+          </Box>
+        </Box>
+      )}
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -277,14 +311,31 @@ export default function CompletionDashboardPage() {
           {rows.map((r) => (
             <Card key={r.student_id} elevation={0} sx={{ p: 1.25, border: `1px solid ${theme.palette.divider}`, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
               <Checkbox checked={selected.has(r.student_id)} onChange={() => toggleOne(r.student_id)} size="small" />
-              <Avatar src={r.avatar_url || undefined} sx={{ width: 34, height: 34 }}>{(r.name || '?').charAt(0)}</Avatar>
+              <StudentAvatar userId={r.student_id} src={r.avatar_url} name={r.name} size={34} tapToView={false} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" fontWeight={700} noWrap>{r.name || 'Student'}</Typography>
                 <Box sx={{ display: 'flex', gap: 0.75, mt: 0.25, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <StatusChip status={r.status} />
+                  <ChapterStatusChip status={r.status} />
                   {r.best_score_pct != null && <Typography variant="caption" color="text.secondary">{Math.round(r.best_score_pct)}%</Typography>}
+                  {r.video_language && (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color="success"
+                      label={tracks.find((t) => t.language === r.video_language)?.language_label || r.video_language}
+                    />
+                  )}
                   <Typography variant="caption" color="text.secondary">· {fmtTime(r.active_seconds)}</Typography>
                 </Box>
+                {(r.watched_seconds || r.blocked_seeks || r.checkpoint_attempts) ? (
+                  <Box sx={{ mt: 0.5 }}>
+                    <WatchHonesty
+                      watchedSeconds={r.watched_seconds || 0}
+                      blockedSeeks={r.blocked_seeks || 0}
+                      attempts={r.checkpoint_attempts || 0}
+                    />
+                  </Box>
+                ) : null}
               </Box>
             </Card>
           ))}
@@ -300,6 +351,7 @@ export default function CompletionDashboardPage() {
                 </TableCell>
                 <TableCell><TableSortLabel active={sort.key === 'name'} direction={sort.dir} onClick={() => toggleSort('name')}>Student</TableSortLabel></TableCell>
                 <TableCell><TableSortLabel active={sort.key === 'status'} direction={sort.dir} onClick={() => toggleSort('status')}>Status</TableSortLabel></TableCell>
+                <TableCell>Watched</TableCell>
                 <TableCell align="right"><TableSortLabel active={sort.key === 'score'} direction={sort.dir} onClick={() => toggleSort('score')}>Score</TableSortLabel></TableCell>
                 <TableCell align="right"><TableSortLabel active={sort.key === 'time'} direction={sort.dir} onClick={() => toggleSort('time')}>Time</TableSortLabel></TableCell>
                 <TableCell align="right"><TableSortLabel active={sort.key === 'days'} direction={sort.dir} onClick={() => toggleSort('days')}>Days</TableSortLabel></TableCell>
@@ -313,14 +365,35 @@ export default function CompletionDashboardPage() {
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar src={r.avatar_url || undefined} sx={{ width: 30, height: 30 }}>{(r.name || '?').charAt(0)}</Avatar>
+                      <StudentAvatar userId={r.student_id} src={r.avatar_url} name={r.name} size={30} tapToView={false} />
                       <Box sx={{ minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={600} noWrap>{r.name || 'Student'}</Typography>
                         {r.email && <Typography variant="caption" color="text.secondary" noWrap>{r.email}</Typography>}
                       </Box>
                     </Box>
                   </TableCell>
-                  <TableCell><StatusChip status={r.status} /></TableCell>
+                  <TableCell><ChapterStatusChip status={r.status} /></TableCell>
+                  <TableCell>
+                    {r.video_language ? (
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color="success"
+                        label={tracks.find((t) => t.language === r.video_language)?.language_label || r.video_language}
+                      />
+                    ) : (
+                      <Typography variant="caption" color="text.secondary">-</Typography>
+                    )}
+                    {(r.watched_seconds || r.blocked_seeks || r.checkpoint_attempts) ? (
+                      <Box sx={{ mt: 0.5 }}>
+                        <WatchHonesty
+                          watchedSeconds={r.watched_seconds || 0}
+                          blockedSeeks={r.blocked_seeks || 0}
+                          attempts={r.checkpoint_attempts || 0}
+                        />
+                      </Box>
+                    ) : null}
+                  </TableCell>
                   <TableCell align="right">{r.best_score_pct != null ? `${Math.round(r.best_score_pct)}%` : '-'}</TableCell>
                   <TableCell align="right">{fmtTime(r.active_seconds)}</TableCell>
                   <TableCell align="right">{r.days_since_started != null ? r.days_since_started : '-'}</TableCell>

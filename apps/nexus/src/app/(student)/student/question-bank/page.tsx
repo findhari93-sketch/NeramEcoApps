@@ -1,404 +1,262 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+/**
+ * The Question Bank home, as a student meets it.
+ *
+ * WHAT THIS SCREEN IS FOR
+ *
+ * A student arrives wanting one of two things: a specific paper, or practice
+ * across everything. The papers grid answers the first and is therefore the body
+ * of the page; the search bar answers the second and is one row above it.
+ *
+ * It used to be the other way round: a full-width "Browse Full Question Bank"
+ * button over a panel that said "No papers available yet". That panel was not
+ * empty because there were no papers. It was empty because this page asked
+ * /stats and /exam-tree without a classroom_id, and verifyQBAccess answers a
+ * student with no classroom with a 400. Three requests failed, three states
+ * stayed null, and a bank of 3297 questions rendered as "All 0 Questions".
+ *
+ * Hence: every request here is keyed on the active classroom and skipped until
+ * it resolves, and an empty grid now has to say WHICH empty it is.
+ */
+
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
-  Typography,
-  Paper,
   Button,
+  Paper,
   Skeleton,
-  Chip,
+  Tab,
+  Tabs,
+  Typography,
   alpha,
   useTheme,
-  useMediaQuery,
-  LinearProgress,
 } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
+import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import StatsRow from '@/components/question-bank/StatsRow';
 import PresetChips from '@/components/question-bank/PresetChips';
+import StudentPaperCard, {
+  StudentPaperCardSkeleton,
+} from '@/components/question-bank/StudentPaperCard';
 import type {
+  NexusQBPaperCard,
+  NexusQBPaperGroup,
   NexusQBSavedPreset,
   QBProgressStats,
-  QBExamTree,
-  QBExamTreeExam,
-  QBExamTreeYear,
-  QBExamTreeSession,
 } from '@neram/database';
-import { QB_EXAM_TYPE_LABELS } from '@neram/database';
 
-/** Exam badge colors */
-const EXAM_COLORS: Record<string, { bg: string; text: string }> = {
-  JEE_PAPER_2: { bg: '#e3f2fd', text: '#1565c0' },
-  NATA: { bg: '#f3e5f5', text: '#7b1fa2' },
-};
-
-const DEFAULT_EXAM_COLOR = { bg: '#f5f5f5', text: '#616161' };
-
-/** Build a flat list of paper cards from the exam tree */
-interface PaperCard {
-  key: string;
-  examType: string;
-  examLabel: string;
-  year: number;
-  session: string | null;
-  sessionLabel: string | null;
-  title: string;
-  count: number;
-  href: string;
-}
-
-function buildPaperCards(examTree: QBExamTree): PaperCard[] {
-  const cards: PaperCard[] = [];
-
-  for (const exam of examTree.exams) {
-    const label = QB_EXAM_TYPE_LABELS[exam.exam_type] || exam.label;
-    const sortedYears = [...exam.years].sort((a, b) => b.year - a.year);
-
-    for (const yearEntry of sortedYears) {
-      if (yearEntry.sessions.length > 0) {
-        for (const sess of yearEntry.sessions) {
-          const sessionDisplay = sess.session.charAt(0).toUpperCase() + sess.session.slice(1).toLowerCase();
-          cards.push({
-            key: `${exam.exam_type}-${yearEntry.year}-${sess.session}`,
-            examType: exam.exam_type,
-            examLabel: label,
-            year: yearEntry.year,
-            session: sess.session,
-            sessionLabel: sessionDisplay,
-            title: `${label} ${yearEntry.year} ${sessionDisplay}`,
-            count: sess.count,
-            href: `/student/question-bank/questions?exam=${exam.exam_type}&year=${yearEntry.year}&session=${sess.session}`,
-          });
-        }
-      } else {
-        cards.push({
-          key: `${exam.exam_type}-${yearEntry.year}`,
-          examType: exam.exam_type,
-          examLabel: label,
-          year: yearEntry.year,
-          session: null,
-          sessionLabel: null,
-          title: `${label} ${yearEntry.year}`,
-          count: yearEntry.count,
-          href: `/student/question-bank/questions?exam=${exam.exam_type}&year=${yearEntry.year}`,
-        });
-      }
-    }
-  }
-
-  return cards;
-}
+/** The grid, at every width. 2 up at 375px, filling out from there. */
+const GRID = {
+  display: 'grid',
+  gridTemplateColumns: {
+    xs: 'repeat(auto-fill, minmax(150px, 1fr))',
+    sm: 'repeat(auto-fill, minmax(200px, 1fr))',
+  },
+  gap: 1.5,
+} as const;
 
 export default function QuestionBankHome() {
   const router = useRouter();
   const theme = useTheme();
-  const { getToken } = useNexusAuthContext();
+  const { activeClassroom, loading: authLoading } = useNexusAuthContext();
+  const [examIndex, setExamIndex] = useState(0);
 
-  const [checkingAccess, setCheckingAccess] = useState(true);
-  const [stats, setStats] = useState<QBProgressStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [examTree, setExamTree] = useState<QBExamTree | null>(null);
-  const [examTreeLoading, setExamTreeLoading] = useState(true);
-  const [presets, setPresets] = useState<NexusQBSavedPreset[]>([]);
-  const [presetsLoading, setPresetsLoading] = useState(true);
+  /**
+   * The key is null until the classroom resolves, so SWR skips the request
+   * rather than firing one that is certain to 400. This is the whole of the bug
+   * described at the top of the file.
+   */
+  const classroomId = activeClassroom?.id ?? null;
+  const scoped = (path: string) =>
+    !authLoading && classroomId ? `${path}?classroom_id=${classroomId}` : null;
 
-  // QB is globally available, no classroom gating needed
-  useEffect(() => {
-    setCheckingAccess(false);
-    fetchStats();
-    fetchExamTree();
-    fetchPresets();
-  }, []);
+  const { data: statsRes, isLoading: statsLoading } = useAuthSWR<
+    { data?: QBProgressStats } & QBProgressStats
+  >(scoped('/api/question-bank/stats'));
+  const { data: papersRes, isLoading: papersLoading } = useAuthSWR<{
+    data: { groups: NexusQBPaperGroup[] };
+  }>(scoped('/api/question-bank/student-papers'));
+  const { data: presetsRes, isLoading: presetsLoading } = useAuthSWR<{
+    data?: NexusQBSavedPreset[];
+  }>(scoped('/api/question-bank/presets'));
 
-  async function fetchStats() {
-    setStatsLoading(true);
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/stats`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setStats(json.data || json);
-      }
-    } catch (err) {
-      console.error('Failed to fetch stats:', err);
-    } finally {
-      setStatsLoading(false);
-    }
-  }
+  const stats = (statsRes?.data ?? statsRes ?? null) as QBProgressStats | null;
+  const groups = useMemo(() => papersRes?.data?.groups ?? [], [papersRes]);
+  const presets = useMemo(() => presetsRes?.data ?? [], [presetsRes]);
 
-  async function fetchExamTree() {
-    setExamTreeLoading(true);
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/exam-tree`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setExamTree(json.data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch exam tree:', err);
-    } finally {
-      setExamTreeLoading(false);
-    }
-  }
+  const totalQuestions = stats?.total_questions ?? 0;
+  // Clamped rather than trusted: the tab index survives a refetch that returns
+  // fewer exams, and an out-of-range index would render a blank body.
+  const activeGroup = groups[Math.min(examIndex, Math.max(groups.length - 1, 0))];
 
-  async function fetchPresets() {
-    setPresetsLoading(true);
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/presets`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setPresets(json.data || json || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch presets:', err);
-    } finally {
-      setPresetsLoading(false);
-    }
-  }
+  const waitingForClassroom = authLoading || (!classroomId && !papersRes);
+  const loading = waitingForClassroom || papersLoading;
 
-  function handlePresetSelect(preset: NexusQBSavedPreset) {
-    router.push(`/student/question-bank/questions?preset=${preset.id}`);
-  }
+  const openPaper = (paper: NexusQBPaperCard) =>
+    router.push(`/student/question-bank/papers/${paper.id}`);
 
-  function handleSessionClick(examType: string, year: number, session: string) {
-    router.push(
-      `/student/question-bank/questions?exam=${examType}&year=${year}&session=${session}`,
-    );
-  }
-
-  function handleYearClick(examType: string, year: number) {
-    router.push(
-      `/student/question-bank/questions?exam=${examType}&year=${year}`,
-    );
-  }
-
-  const paperCards = useMemo(
-    () => (examTree ? buildPaperCards(examTree) : []),
-    [examTree],
-  );
-
-  const totalQuestions = stats?.total_questions ?? examTree?.exams.reduce((s, e) => s + e.total_count, 0) ?? 0;
-
-  // ====== LOADING STATE ======
-  if (checkingAccess) {
-    return (
-      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 900, mx: 'auto' }}>
-        <Skeleton variant="text" width={180} height={36} sx={{ mb: 1 }} />
-        <Skeleton variant="text" width={260} height={20} sx={{ mb: 2 }} />
-        <Skeleton variant="rounded" height={56} sx={{ mb: 3 }} />
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-            gap: 1.5,
-          }}
-        >
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Skeleton key={i} variant="rounded" height={140} />
-          ))}
-        </Box>
-      </Box>
-    );
-  }
-
-  // ====== MAIN LAYOUT ======
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 900, mx: 'auto' }}>
-      {/* Header */}
       <Typography variant="h5" fontWeight={700} sx={{ mb: 0.5 }}>
         Question Bank
       </Typography>
 
-      {/* Compact stats line */}
       <Box sx={{ mb: 2 }}>
-        <StatsRow stats={stats} loading={statsLoading} compact />
+        <StatsRow stats={stats} loading={statsLoading || waitingForClassroom} compact />
       </Box>
 
-      {/* Browse Full Question Bank CTA */}
+      {/*
+        Search is an outlined row, not a filled button. It is the secondary path
+        now that papers carry the page, and a full-width contained button here
+        outranked the entire grid below it.
+      */}
       <Button
-        variant="contained"
+        variant="outlined"
         size="large"
         fullWidth
         startIcon={<SearchIcon />}
         onClick={() => router.push('/student/question-bank/questions')}
         sx={{
-          mb: 1,
+          mb: 3,
           py: 1.5,
-          fontWeight: 700,
-          fontSize: '1rem',
+          minHeight: 52,
+          justifyContent: 'flex-start',
+          fontWeight: 600,
           borderRadius: 2,
           textTransform: 'none',
+          color: 'text.primary',
+          borderColor: 'divider',
+          '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
         }}
       >
-        Browse Full Question Bank
+        <Box sx={{ textAlign: 'left', minWidth: 0 }}>
+          <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+            Search every question
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+            {totalQuestions > 0
+              ? `${totalQuestions.toLocaleString()} questions by subject, chapter, year, difficulty`
+              : 'By subject, chapter, year, difficulty'}
+          </Typography>
+        </Box>
       </Button>
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ mb: 3, textAlign: 'center' }}
-      >
-        All {totalQuestions} Questions — Filter by Subject, Chapter, Year, Difficulty
-      </Typography>
 
-      {/* Saved Presets */}
       {(presetsLoading || presets.length > 0) && (
         <Box sx={{ mb: 3 }}>
           <PresetChips
             presets={presets}
             loading={presetsLoading}
-            onSelect={handlePresetSelect}
+            onSelect={(preset) =>
+              router.push(`/student/question-bank/questions?preset=${preset.id}`)
+            }
           />
         </Box>
       )}
 
-      {/* Practice by Year Paper */}
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
-        Practice by Year Paper
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
+        Past papers
       </Typography>
 
-      {examTreeLoading ? (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-            gap: 1.5,
-          }}
-        >
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Skeleton key={i} variant="rounded" height={140} />
-          ))}
-        </Box>
-      ) : paperCards.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            No papers available yet.
-          </Typography>
-        </Paper>
+      {loading ? (
+        <PapersSkeleton />
+      ) : groups.length === 0 ? (
+        <PapersEmpty hasClassroom={!!classroomId} />
       ) : (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-            gap: 1.5,
-          }}
-        >
-          {paperCards.map((card) => {
-            const colors = EXAM_COLORS[card.examType] || DEFAULT_EXAM_COLOR;
-            // Progress: use stats per-paper if available, otherwise 0
-            const attempted = 0; // TODO: wire per-paper progress when API supports it
-            const progressPct = card.count > 0 ? (attempted / card.count) * 100 : 0;
-            const isComplete = attempted >= card.count && card.count > 0;
+        <>
+          {/* One tab per exam, mirroring the teacher's own paper browser so the
+              two screens describe the same library the same way. Hidden with a
+              single exam, where a lone tab is decoration. */}
+          {groups.length > 1 && (
+            <Tabs
+              value={Math.min(examIndex, groups.length - 1)}
+              onChange={(_, v: number) => setExamIndex(v)}
+              variant="fullWidth"
+              sx={{
+                mb: 2,
+                minHeight: 48,
+                borderBottom: 1,
+                borderColor: 'divider',
+                '& .MuiTab-root': { minHeight: 48, textTransform: 'none', fontWeight: 700 },
+              }}
+            >
+              {groups.map((g) => (
+                <Tab key={g.exam_type} label={`${g.exam_label} (${g.paper_count})`} />
+              ))}
+            </Tabs>
+          )}
 
-            return (
-              <Paper
-                key={card.key}
-                variant="outlined"
-                onClick={() => router.push(card.href)}
-                sx={{
-                  p: 1.5,
-                  borderRadius: 2,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 1,
-                  transition: 'box-shadow 150ms, border-color 150ms',
-                  '&:hover': {
-                    borderColor: theme.palette.primary.main,
-                    boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.15)}`,
-                  },
-                  '&:focus-visible': {
-                    outline: `2px solid ${theme.palette.primary.main}`,
-                    outlineOffset: -2,
-                  },
-                }}
-                tabIndex={0}
-                role="button"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    router.push(card.href);
-                  }
-                }}
+          {activeGroup?.years.map(({ year, papers }) => (
+            <Box key={year} sx={{ mb: 3 }}>
+              <Typography
+                variant="overline"
+                sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 0.8 }}
               >
-                {/* Exam badge */}
-                <Chip
-                  label={card.examLabel}
-                  size="small"
-                  sx={{
-                    alignSelf: 'flex-start',
-                    height: 22,
-                    fontSize: '0.65rem',
-                    fontWeight: 700,
-                    bgcolor: colors.bg,
-                    color: colors.text,
-                    borderRadius: 1,
-                  }}
-                />
-
-                {/* Title */}
-                <Typography variant="subtitle2" fontWeight={700} sx={{ lineHeight: 1.3 }}>
-                  {card.sessionLabel
-                    ? `${card.year} ${card.sessionLabel}`
-                    : `${card.year}`}
-                </Typography>
-
-                {/* Question count */}
-                <Typography variant="caption" color="text.secondary">
-                  {card.count} questions
-                </Typography>
-
-                {/* Progress bar */}
-                <LinearProgress
-                  variant="determinate"
-                  value={progressPct}
-                  sx={{
-                    height: 6,
-                    borderRadius: 3,
-                    bgcolor: alpha(theme.palette.success.main, 0.12),
-                    '& .MuiLinearProgress-bar': {
-                      bgcolor: isComplete
-                        ? theme.palette.success.main
-                        : theme.palette.success.light,
-                      borderRadius: 3,
-                    },
-                  }}
-                />
-
-                {/* Progress text */}
-                <Typography
-                  variant="caption"
-                  sx={{
-                    fontWeight: 600,
-                    color: isComplete
-                      ? theme.palette.success.main
-                      : 'text.secondary',
-                    fontSize: '0.7rem',
-                  }}
-                >
-                  {isComplete
-                    ? '\u2713 Complete'
-                    : attempted > 0
-                      ? `${attempted}/${card.count} done`
-                      : 'Not started'}
-                </Typography>
-              </Paper>
-            );
-          })}
-        </Box>
+                {year}
+              </Typography>
+              <Box sx={{ ...GRID, mt: 0.5 }}>
+                {papers.map((paper) => (
+                  <StudentPaperCard key={paper.id} paper={paper} onOpen={openPaper} />
+                ))}
+              </Box>
+            </Box>
+          ))}
+        </>
       )}
     </Box>
+  );
+}
+
+function PapersSkeleton() {
+  return (
+    <Box>
+      <Skeleton variant="rounded" height={48} sx={{ mb: 2, borderRadius: 1 }} />
+      <Skeleton variant="text" width={60} height={20} sx={{ mb: 0.5 }} />
+      <Box sx={GRID}>
+        {[0, 1, 2, 3].map((i) => (
+          <StudentPaperCardSkeleton key={i} />
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Which empty this is.
+ *
+ * The old copy said "No papers available yet" whether the bank was empty, the
+ * classroom was not linked, or the request had failed, which is how a 400 came
+ * to read as an editorial statement about the library.
+ */
+function PapersEmpty({ hasClassroom }: { hasClassroom: boolean }) {
+  const theme = useTheme();
+  return (
+    <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 3 }}>
+      <Box
+        sx={{
+          width: 72,
+          height: 72,
+          borderRadius: '50%',
+          mx: 'auto',
+          mb: 2,
+          display: 'grid',
+          placeItems: 'center',
+          bgcolor: alpha(theme.palette.primary.main, 0.08),
+        }}
+      >
+        <LibraryBooksOutlinedIcon sx={{ fontSize: 32, color: 'primary.main' }} />
+      </Box>
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
+        {hasClassroom ? 'No past papers yet' : 'No classroom yet'}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {hasClassroom
+          ? 'Your teachers publish papers here once they have been checked. The full question search above works in the meantime.'
+          : 'Past papers appear once you have been added to a classroom.'}
+      </Typography>
+    </Paper>
   );
 }

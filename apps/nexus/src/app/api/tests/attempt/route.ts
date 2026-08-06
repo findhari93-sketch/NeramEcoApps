@@ -5,6 +5,7 @@ import {
   getSupabaseAdminClient,
   getComposedTestQuestions,
   getPlacementById,
+  getStudyVideoState,
   getTestMeta,
   saveAttemptAnswers,
   startOrResumeAttempt,
@@ -73,6 +74,12 @@ export async function GET(request: NextRequest) {
     const placementId = request.nextUrl.searchParams.get('placement_id');
     if (!testId) return NextResponse.json({ error: 'Missing test_id' }, { status: 400 });
 
+    // Practice on something already finished. Only 'revision' is honoured and
+    // anything else is an official attempt, because the mode is stamped on the
+    // attempt row here and read back off it at submit: a client cannot decide
+    // after the fact that the paper it just failed was only practice.
+    const mode = request.nextUrl.searchParams.get('mode') === 'revision' ? 'revision' : 'official';
+
     const test = await getTestMeta(testId);
     if (!test || !test.is_active || !test.is_published) {
       return NextResponse.json({ error: 'Test not found or not available' }, { status: 404 });
@@ -110,10 +117,49 @@ export async function GET(request: NextRequest) {
         if (placement.available_until && new Date(placement.available_until) < now) {
           return NextResponse.json({ error: 'This test has closed' }, { status: 403 });
         }
+
+        /**
+         * A chapter test is gated on its recording, and the gate has to be
+         * asserted here as well as on the chapter's own route.
+         *
+         * class_prep and catchup_class are refused outright above precisely
+         * because opening them through this engine skipped their unlock check.
+         * study_file only escaped that list because it had no gate of its own
+         * until the language tracks shipped. Now that a chapter can require a
+         * recording, and now that the chapter test opens in this player rather
+         * than in its old dialog, this URL would otherwise be the way past it.
+         *
+         * The chapter's own POST re-asserts the same thing. A GET refusing is
+         * a hint to the UI; keeping the attempt row out of the database is the
+         * part that counts.
+         */
+        if (placement.context_type === 'study_file') {
+          const video = await getStudyVideoState(placement.context_id, user.id);
+          if (video.requires_video && !video.video_completed_at) {
+            return NextResponse.json(
+              {
+                error: 'Watch one of the class recordings before taking this test.',
+                code: 'VIDEO_REQUIRED',
+              },
+              { status: 403 },
+            );
+          }
+          // Refused rather than quietly downgraded to an official attempt: a
+          // client that got this wrong would cost the student a real one.
+          if (mode === 'revision' && !video.completed_at) {
+            return NextResponse.json(
+              {
+                error: 'Revision opens once you have completed this chapter.',
+                code: 'NOT_COMPLETED',
+              },
+              { status: 403 },
+            );
+          }
+        }
       }
     }
 
-    const started = await startOrResumeAttempt({ testId, studentId: user.id, placementId });
+    const started = await startOrResumeAttempt({ testId, studentId: user.id, placementId, mode });
     // Cut to this sitting's draw when the test is a pool: the drawn questions,
     // in the drawn order, with their options permuted and relabelled. A test
     // without a pool comes back whole, which is what all of them did before.

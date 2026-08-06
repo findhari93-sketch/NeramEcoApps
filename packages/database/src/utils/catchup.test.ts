@@ -115,6 +115,35 @@ describe('catchupItemStep', () => {
     expect(isCatchupItemComplete(open({ excused: true }))).toBe(true);
     expect(isCatchupItemComplete(cleared({ excluded: true }))).toBe(false);
   });
+
+  /**
+   * The dead end this feature shipped with.
+   *
+   * `notReady` is exactly the state "there is a recording but no published
+   * recap", which is the same state in which `isWatched` accepts a student's own
+   * "I have watched it" and the screen offers the button to say it. So a student
+   * could clear every step the screen showed them, watch the recording, submit
+   * the work, see three green ticks, and be refused by the server with the one
+   * message that names no cause: "This class cannot be completed yet."
+   *
+   * Seen in production on 2026-08-06: a student on "Coordinate Geometry Basics
+   * and Formulas" (28 Jul) with reason given, recording watched on 1 Aug and the
+   * assignment in, whose recap had been drafted but not published.
+   *
+   * A recap nobody published is the teacher's outstanding work, not the
+   * student's. `pending_teacher` is documented as blocking nothing, and this is
+   * where it blocked the only thing that mattered.
+   */
+  it('lets a student finish a class whose recap was never published', () => {
+    expect(isCatchupItemComplete(cleared({ notReady: true }))).toBe(true);
+    expect(catchupItemStep(cleared({ notReady: true }))).toBe('done');
+  });
+
+  it('still holds an unprepared class open when the student has work left', () => {
+    // Only the finished ones move. Nothing here excuses the steps themselves.
+    expect(isCatchupItemComplete(open({ notReady: true }))).toBe(false);
+    expect(catchupItemStep(open({ notReady: true }))).toBe('watch');
+  });
 });
 
 describe('resolveCatchupBacklog', () => {
@@ -162,6 +191,20 @@ describe('resolveCatchupBacklog', () => {
     expect(r.map((i) => i.status)).toEqual(['pending_teacher', 'waiting']);
     expect(r[0].countsTowardPace).toBe(false);
     expect(r[0].order).toBeNull();
+  });
+
+  it('reads a finished class as done even if its recap never arrived', () => {
+    // Waiting on the teacher is a state for work the student still owes. Once
+    // they have finished it, calling it pending_teacher would tell them the
+    // class is unfinished and hold the journey open behind it.
+    const r = resolveCatchupBacklog([cleared({ notReady: true }), open()], ctx());
+    expect(r.map((i) => i.status)).toEqual(['done', 'waiting']);
+    expect(r[0].countsTowardPace).toBe(true);
+    expect(summariseCatchupBacklog(r)).toMatchObject({
+      total: 2,
+      completed: 1,
+      pendingTeacher: 0,
+    });
   });
 
   it('steps over an excused class without recommending it', () => {

@@ -9,7 +9,6 @@ import {
   Skeleton,
   Button,
   Avatar,
-  UserAvatar,
   TextField,
   ToggleButtonGroup,
   ToggleButton,
@@ -21,6 +20,7 @@ import GradeOutlinedIcon from '@mui/icons-material/GradeOutlined';
 import CreateOutlinedIcon from '@mui/icons-material/CreateOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import SketchOverCanvas from '@/components/drawings/SketchOverCanvas';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface SubmissionForReview {
   id: string;
@@ -253,7 +253,7 @@ export default function TeacherEvaluate() {
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <UserAvatar src={selected.student.avatar_url} name={selected.student.name} size={36} />
+              <StudentAvatar userId={selected.student.id} src={selected.student.avatar_url} name={selected.student.name} size={36} />
               <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" fontWeight={600}>{selected.student.name}</Typography>
                 <Typography variant="caption" color="text.secondary">

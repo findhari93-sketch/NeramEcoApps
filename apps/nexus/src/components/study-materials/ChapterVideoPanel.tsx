@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Typography, Button, Chip, Skeleton, alpha, useTheme } from '@neram/ui';
+import { Box, Typography, Button, Chip, Skeleton, CircularProgress, alpha, useTheme } from '@neram/ui';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
@@ -43,6 +43,12 @@ interface Props {
   hasTest: boolean;
   bestScorePct: number | null;
   getToken: () => Promise<string | null>;
+  /**
+   * The caller is resolving this chapter's test and navigating to the player.
+   * A press here now leaves the page, so the wait has to be visible: a button
+   * that looks idle for a second on 3G gets pressed twice.
+   */
+  busy?: boolean;
   onTakeTest: () => void;
   onPractise?: () => void;
 }
@@ -52,6 +58,7 @@ export default function ChapterVideoPanel({
   hasTest,
   bestScorePct,
   getToken,
+  busy,
   onTakeTest,
   onPractise,
 }: Props) {
@@ -162,9 +169,10 @@ export default function ChapterVideoPanel({
                 size="small"
                 variant="text"
                 onClick={onPractise}
+                disabled={busy}
                 sx={{ textTransform: 'none', flexShrink: 0, minHeight: 44 }}
               >
-                Practise the questions
+                {busy ? 'Opening...' : 'Practise the questions'}
               </Button>
             )}
           </>
@@ -192,11 +200,12 @@ export default function ChapterVideoPanel({
             </Box>
             <Button
               variant="contained"
-              startIcon={<QuizOutlinedIcon />}
+              startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <QuizOutlinedIcon />}
               onClick={onTakeTest}
+              disabled={busy}
               sx={{ textTransform: 'none', flexShrink: 0, minHeight: 44 }}
             >
-              Take test
+              {busy ? 'Opening...' : 'Take test'}
             </Button>
           </>
         ) : (

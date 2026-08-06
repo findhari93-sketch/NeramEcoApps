@@ -72,6 +72,8 @@ export default function FoundationLearningContent({
   const [loading, setLoading] = useState(true);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [quizOpen, setQuizOpen] = useState(false);
+  /** The player's container while it is fullscreen, so the quiz renders inside it. */
+  const [quizHost, setQuizHost] = useState<HTMLElement | null>(null);
   const [quizSectionIndex, setQuizSectionIndex] = useState(0);
   const [quizPendingSectionIndex, setQuizPendingSectionIndex] = useState<number | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>('watch');
@@ -571,6 +573,7 @@ export default function FoundationLearningContent({
             sections={sections}
             onSectionEnd={handleSectionEnd}
             onTimeUpdate={handleTimeUpdate}
+            onFullscreenChange={setQuizHost}
           />
         ) : (
           <VideoPlayer
@@ -580,6 +583,7 @@ export default function FoundationLearningContent({
             resumePosition={progress?.last_video_position_seconds}
             onSectionEnd={handleSectionEnd}
             onTimeUpdate={handleTimeUpdate}
+            onFullscreenChange={setQuizHost}
           />
         )}
       </Box>
@@ -871,6 +875,7 @@ export default function FoundationLearningContent({
           onRetry={handleQuizRetryWithRewatch}
           onRetryQuiz={handleQuizRetryInPlace}
           onContinue={handleQuizContinue}
+          container={quizHost}
         />
       )}
 

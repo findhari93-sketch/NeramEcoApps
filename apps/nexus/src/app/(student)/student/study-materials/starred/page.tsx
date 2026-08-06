@@ -209,7 +209,10 @@ export default function StarredPage() {
         </Box>
       )}
 
-      <StudyFileViewer file={viewerFile} token={token} getToken={getToken} onClose={() => setViewerFile(null)} watermark={watermark} track onProgressChange={load} />
+      {/* No onProgressChange: the test now opens in the full player, which
+          navigates away and back, so this page remounts and reloads from the
+          server rather than being told optimistically. */}
+      <StudyFileViewer file={viewerFile} token={token} getToken={getToken} onClose={() => setViewerFile(null)} watermark={watermark} track />
     </Box>
   );
 }

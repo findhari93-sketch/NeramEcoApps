@@ -9,9 +9,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Box, Typography, Stack, Chip, Button, Skeleton, IconButton, TextField, MenuItem, Checkbox, Avatar,
+  Box, Typography, Stack, Chip, Button, Skeleton, IconButton, TextField, MenuItem, Checkbox,
   ToggleButton, ToggleButtonGroup, alpha, Snackbar, Alert,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SendIcon from '@mui/icons-material/Send';
 import SearchIcon from '@mui/icons-material/Search';
@@ -215,9 +216,13 @@ export default function AssignmentsOverviewPage() {
                 }}
               >
                 <Checkbox checked={selected.has(r.student.id)} onChange={() => toggle(r.student.id)} sx={{ p: 0.5 }} />
-                <Avatar src={r.student.avatar_url || undefined} sx={{ width: 34, height: 34, bgcolor: 'primary.dark' }}>
-                  {(r.student.name || '?').slice(0, 1).toUpperCase()}
-                </Avatar>
+                <StudentAvatar
+                  userId={r.student.id}
+                  src={r.student.avatar_url}
+                  name={r.student.name}
+                  size={34}
+                  tapToView={false}
+                />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Stack direction="row" spacing={0.75} alignItems="center">
                     <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>

@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Box, Typography, Paper, Skeleton, Tabs, Tab, Avatar, Chip,
+  Box, Typography, Paper, Skeleton, Tabs, Tab, Chip,
   IconButton, Button, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
@@ -173,12 +174,14 @@ export default function DrawingReviewsPage() {
                   />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
-                      <Avatar
-                        src={s.student?.avatar_url || undefined}
-                        sx={{ width: isCompact ? 20 : 24, height: isCompact ? 20 : 24, fontSize: '0.7rem' }}
-                      >
-                        {s.student?.name?.charAt(0) || '?'}
-                      </Avatar>
+                      <StudentAvatar
+                        userId={s.student?.id}
+                        src={s.student?.avatar_url}
+                        name={s.student?.name}
+                        size={isCompact ? 20 : 24}
+                        tapToView={false}
+                        sx={{ fontSize: '0.7rem' }}
+                      />
                       <Typography variant="body2" fontWeight={600} noWrap>{s.student?.name || 'Student'}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 0.5, mb: 0.25, flexWrap: 'wrap' }}>

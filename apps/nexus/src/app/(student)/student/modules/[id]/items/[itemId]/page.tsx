@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   Box,
@@ -25,6 +25,8 @@ import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import VideoPlayer from '@/components/foundation/VideoPlayer';
+import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import { computeGate, OPEN_GATE } from '@/lib/video-gate';
 import SectionTimer from '@/components/foundation/SectionTimer';
 import SectionList from '@/components/foundation/SectionList';
 import QuizModal from '@/components/foundation/QuizModal';
@@ -90,6 +92,10 @@ export default function StudentItemLearningPage() {
 
   // SharePoint streaming
   const [spStreamUrl, setSpStreamUrl] = useState<string | null>(null);
+  const [spDuration, setSpDuration] = useState(0);
+  const [spFurthest, setSpFurthest] = useState(0);
+  /** The player's container while it is fullscreen, so the quiz renders inside it. */
+  const [quizHost, setQuizHost] = useState<HTMLElement | null>(null);
   const [spStreamLoading, setSpStreamLoading] = useState(false);
 
   // PDF streaming (fresh download URL)
@@ -257,6 +263,41 @@ export default function StudentItemLearningPage() {
   useEffect(() => {
     currentSectionRef.current = currentSectionIndex;
   }, [currentSectionIndex]);
+
+  /**
+   * How far the SharePoint video may be played, from the one definition of it.
+   *
+   * This screen previously had no bounds at all: the native scrubber let a
+   * student drag straight past a checkpoint, and the quiz opened over content
+   * they had never watched.
+   */
+  const spGate = useMemo(
+    () =>
+      computeGate({
+        checkpoints: (data?.sections ?? []).map((s) => ({
+          id: s.id,
+          endSeconds: s.end_timestamp_seconds,
+          passed: !!s.quiz_attempt?.passed,
+        })),
+        duration: spDuration,
+        furthestSeconds: spFurthest,
+        mode: 'gated',
+      }),
+    [data?.sections, spDuration, spFurthest],
+  );
+
+  const spMarks = useMemo(
+    () =>
+      (data?.sections ?? [])
+        .filter((s) => Number.isFinite(s.end_timestamp_seconds) && s.end_timestamp_seconds > 0)
+        .map((s, i) => ({
+          id: s.id,
+          at: s.end_timestamp_seconds,
+          label: `Checkpoint ${i + 1}`,
+          passed: !!s.quiz_attempt?.passed,
+        })),
+    [data?.sections],
+  );
 
   // ─── SharePoint video time tracking ────────────────────────────────
 
@@ -832,19 +873,27 @@ export default function StudentItemLearningPage() {
                     </Typography>
                   </Box>
                 ) : spStreamUrl ? (
-                  <video
-                    ref={spVideoRef}
-                    src={spStreamUrl}
-                    controls
-                    controlsList="nodownload"
-                    playsInline
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      backgroundColor: '#000',
-                    }}
+                  // Was a bare <video controls>: native scrubber, native speed
+                  // menu, and a download item, on a screen with mandatory
+                  // checkpoints. The shared player brings the gate with it.
+                  //
+                  // The page keeps its own timeupdate handler for opening the
+                  // quiz and tracking the current section, and it still drives
+                  // spVideoRef directly in a few places. Both keep working: this
+                  // is the same element, and any seek those writes produce is
+                  // caught by the player's snap-back.
+                  <NeramVideoPlayer
+                    source={{ kind: 'html5', src: spStreamUrl }}
+                    gate={spGate}
+                    videoRef={spVideoRef}
+                    marks={spMarks}
                     title={data.title}
+                    onLoadedMetadata={setSpDuration}
+                    onTimeUpdate={(seconds) =>
+                      setSpFurthest((f) => (seconds > f ? seconds : f))
+                    }
+                    allowFullscreen
+                    onFullscreenChange={setQuizHost}
                   />
                 ) : (
                   <Box
@@ -1047,22 +1096,18 @@ export default function StudentItemLearningPage() {
                     bgcolor: '#000',
                   }}
                 >
-                  <Box
-                    component="iframe"
-                    src={`https://www.youtube-nocookie.com/embed/${data.solution_youtube_video_id}`}
-                    title="Solution video"
-                    loading="lazy"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    sx={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      border: 0,
-                    }}
-                  />
+                  <Box sx={{ position: 'absolute', inset: 0 }}>
+                    {/* A solution video has nothing to gate: the student has
+                        already reached the answer. OPEN_GATE, but still our
+                        chrome, so speed, captions and keyboard work the same
+                        way here as on every other video in the app. */}
+                    <NeramVideoPlayer
+                      source={{ kind: 'youtube', youtubeId: data.solution_youtube_video_id }}
+                      gate={OPEN_GATE}
+                      title="Solution video"
+                      allowFullscreen
+                    />
+                  </Box>
                 </Box>
               )}
               {data.solution_video_source === 'sharepoint' && data.solution_sharepoint_video_url && (
@@ -1077,21 +1122,15 @@ export default function StudentItemLearningPage() {
                       bgcolor: '#000',
                     }}
                   >
-                    <video
-                      src={solutionStreamUrl}
-                      controls
-                      controlsList="nodownload"
-                      playsInline
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'contain',
-                      }}
-                      title="Solution video"
-                    />
+                    <Box sx={{ position: 'absolute', inset: 0 }}>
+                      <NeramVideoPlayer
+                        source={{ kind: 'html5', src: solutionStreamUrl }}
+                        gate={OPEN_GATE}
+                        title="Solution video"
+                        allowFullscreen
+                        allowPictureInPicture
+                      />
+                    </Box>
                   </Box>
                 ) : (
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 3 }}>
@@ -1125,6 +1164,7 @@ export default function StudentItemLearningPage() {
           onRetry={handleQuizRetry}
           onContinue={handleQuizContinue}
           dismissable={!!sections[quizSectionIndex].quiz_attempt?.passed}
+          container={quizHost}
         />
       )}
 

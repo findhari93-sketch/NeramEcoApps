@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Tooltip, UserAvatar, alpha, useTheme } from '@neram/ui';
+import { Box, Tooltip, UserAvatar, alpha, useTheme, type SxProps, type Theme } from '@neram/ui';
 import GraphAvatar from '@/components/GraphAvatar';
 import {
   DORMANT_EXPLAINER,
@@ -62,6 +62,14 @@ export interface StudentStageAvatarProps {
   /** Force the glyph off, e.g. where the adjacent chip already says it. */
   showGlyph?: boolean;
   useGraph?: boolean;
+  /**
+   * Styles for the avatar INSIDE the ring, merged after the dormant treatment so
+   * a caller's colour cannot undo the greyscale. Call sites that already carried
+   * their own look (the gold hall-of-fame border, a leaderboard's serif initials)
+   * keep it when they adopt the ring, which is what makes adopting it a one-line
+   * change rather than a restyle.
+   */
+  sx?: SxProps<Theme>;
 }
 
 export default function StudentStageAvatar({
@@ -78,6 +86,7 @@ export default function StudentStageAvatar({
   tapToView,
   showGlyph = true,
   useGraph,
+  sx,
 }: StudentStageAvatarProps) {
   const theme = useTheme();
   const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
@@ -91,8 +100,12 @@ export default function StudentStageAvatar({
   const withGlyph = showGlyph && size >= MIN_GLYPH_SIZE;
   const Glyph = dormant ? DormantIcon : stageIconFor(stage);
 
-  // Dormant reads as switched off before you have parsed a single word.
-  const avatarSx = dormant ? { filter: 'grayscale(1)', opacity: 0.75 } : undefined;
+  // Dormant reads as switched off before you have parsed a single word. The
+  // caller's own styles come first so the filter always has the last word.
+  const avatarSx = {
+    ...((sx as object) || {}),
+    ...(dormant ? { filter: 'grayscale(1)', opacity: 0.75 } : {}),
+  };
 
   const graph = useGraph ?? msOid !== undefined;
 

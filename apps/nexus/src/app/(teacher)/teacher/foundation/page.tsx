@@ -11,12 +11,12 @@ import {
   Chip,
   alpha,
   useTheme,
-  UserAvatar,
   LinearProgress,
 } from '@neram/ui';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface StudentProgress {
   student: { id: string; name: string; email: string; avatar_url: string | null };
@@ -203,7 +203,8 @@ export default function TeacherFoundationDashboard() {
                   }}
                 >
                   {/* Avatar */}
-                  <UserAvatar
+                  <StudentAvatar
+                    userId={sp.student.id}
                     src={sp.student.avatar_url}
                     name={sp.student.name}
                     size={40}

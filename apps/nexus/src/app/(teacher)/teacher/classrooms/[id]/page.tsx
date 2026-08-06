@@ -46,7 +46,7 @@ import AddStudentDialog from '@/components/AddStudentDialog';
 import AvailableStudentsSection from '@/components/AvailableStudentsSection';
 import RemoveStudentDialog from '@/components/RemoveStudentDialog';
 import HistoricalStudentsTab from '@/components/HistoricalStudentsTab';
-import GraphAvatar from '@/components/GraphAvatar';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import SortIcon from '@mui/icons-material/Sort';
 import ChecklistIcon from '@mui/icons-material/Checklist';
@@ -1101,7 +1101,8 @@ export default function ClassroomDetailPage() {
                     minHeight: 48,
                   }}
                 >
-                  <GraphAvatar
+                  <StudentAvatar
+                    userId={enrollment.user.id}
                     msOid={enrollment.user.ms_oid}
                     name={enrollment.user.name}
                     size={40}
@@ -1310,7 +1311,8 @@ export default function ClassroomDetailPage() {
                       sx={{ p: 0.5 }}
                     />
                   )}
-                  <GraphAvatar
+                  <StudentAvatar
+                    userId={enrollment.user.id}
                     msOid={enrollment.user.ms_oid}
                     name={enrollment.user.name}
                     size={40}
@@ -1479,6 +1481,7 @@ export default function ClassroomDetailPage() {
           .filter((e) => selectedIds.has(e.id))
           .map((e) => ({
             enrollmentId: e.id,
+            userId: e.user.id,
             name: e.user.name,
             email: e.user.email,
             avatar_url: e.user.avatar_url,

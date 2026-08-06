@@ -81,6 +81,8 @@ export default function StudyTrackWatchPage() {
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<StrippedQuestion[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
+  /** The player's container while it is fullscreen, so the quiz renders inside it. */
+  const [quizHost, setQuizHost] = useState<HTMLElement | null>(null);
 
   const { onTick, onBlockedSeek, flushNow } = useVideoProgress({
     endpoint: trackId ? `/api/student/study-videos/tracks/${trackId}/progress` : null,
@@ -139,6 +141,22 @@ export default function StudyTrackWatchPage() {
       }),
     [sections, duration, furthest, mode],
   );
+
+  /** Checkpoint positions drawn on the scrub bar. */
+  const marks = useMemo(
+    () =>
+      sections
+        .filter((s) => Number.isFinite(s.end_timestamp_seconds) && s.end_timestamp_seconds > 0)
+        .map((s) => ({
+          id: s.id,
+          at: s.end_timestamp_seconds,
+          label: s.title,
+          passed: s.passed,
+        })),
+    [sections],
+  );
+
+  const title = track?.title ?? '';
 
   const handleTick = useCallback(
     (seconds: number, dur: number) => {
@@ -261,15 +279,18 @@ export default function StudyTrackWatchPage() {
           source={source}
           gate={gate}
           watermark={watermark}
+          title={title}
+          marks={marks}
           resumeAt={resumeAt}
           onTimeUpdate={handleTick}
           onBlockedSeek={onBlockedSeek}
           onCheckpointReached={openQuiz}
           onLoadedMetadata={setDuration}
-          // No fullscreen while checkpoints bind: the quiz is portalled to
-          // document.body and would not render inside a fullscreen subtree, so
-          // the student would hit a boundary and see nothing happen.
-          allowFullscreen={mode === 'revision'}
+          // Fullscreen is no longer restricted to revision. The quiz portals
+          // into the player's container while it is fullscreen, so a checkpoint
+          // reached in fullscreen now actually shows one.
+          allowFullscreen
+          onFullscreenChange={setQuizHost}
         />
       </Box>
 
@@ -320,6 +341,7 @@ export default function StudyTrackWatchPage() {
           onContinue={() => setActiveIdx(null)}
           // The whole point of a checkpoint. Dismissing it would be the skip.
           dismissable={false}
+          container={quizHost}
         />
       )}
     </Box>

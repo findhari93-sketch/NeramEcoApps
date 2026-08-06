@@ -8,10 +8,11 @@ import {
   Chip,
   Skeleton,
   Typography,
-  UserAvatar,
   alpha,
   useTheme,
 } from '@neram/ui';
+import StudentStageAvatar from '@/components/students/StudentStageAvatar';
+import { stageKeyOf } from '@/lib/student-stage';
 import { rankByTimeInRoom } from '@/lib/attendance-quality';
 import type { AttendanceTabProps, StudentInsight } from './types';
 
@@ -104,7 +105,14 @@ function AttendedRow({
         sx={{ p: 1.25 }}
         inputProps={{ 'aria-label': `Select ${student.name}` }}
       />
-      <UserAvatar name={student.name} src={student.avatar_url} size={32} tapToView={false} />
+      <StudentStageAvatar
+        stage={stageKeyOf(student.study_stage)}
+        dormant={student.dormant}
+        name={student.name}
+        src={student.avatar_url}
+        size={32}
+        tapToView={false}
+      />
       <Box sx={{ flex: 1, minWidth: 0, ml: 1 }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
           {student.name}

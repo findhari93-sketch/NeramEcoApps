@@ -13,6 +13,7 @@ export * from './foundation-admin';
 export * from './question-bank';
 export * from './qb-tags';
 export * from './qb-category-proposals';
+export * from './qb-papers';
 export * from './test-repository';
 export * from './test-provenance';
 export * from './question-draw';

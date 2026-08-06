@@ -10,6 +10,7 @@ const CONTEXTS: NexusPlacementContext[] = [
   'foundation_section',
   'module_item',
   'student_practice',
+  'qb_paper',
 ];
 
 /** GET /api/question-bank/tests/[id]/placements — where this test is used. */

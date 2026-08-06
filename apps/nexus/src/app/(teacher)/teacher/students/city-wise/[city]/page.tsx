@@ -20,7 +20,7 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
-import GraphAvatar from '@/components/GraphAvatar';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import StudentsBreadcrumb, { type Crumb } from '@/components/students/StudentsBreadcrumb';
 import EmailDomainFlag from '@/components/students/EmailDomainFlag';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -188,7 +188,13 @@ function CityStudentsPage() {
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <GraphAvatar msOid={student.ms_oid} name={student.name} size={isMobile ? 44 : 48} tapToView={false} />
+                <StudentAvatar
+                  userId={student.id}
+                  msOid={student.ms_oid}
+                  name={student.name}
+                  size={isMobile ? 44 : 48}
+                  tapToView={false}
+                />
 
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography

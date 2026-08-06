@@ -10,11 +10,11 @@ import {
   TextField,
   Box,
   Typography,
-  Avatar,
   Chip,
   CircularProgress,
   Checkbox,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface SearchUser {
@@ -162,9 +162,6 @@ export default function AddStudentDialog({
     onClose();
   };
 
-  const getInitials = (name: string) =>
-    name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
-
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>{defaultRole === 'teacher' ? 'Add Teacher to Classroom' : 'Add Student to Classroom'}</DialogTitle>
@@ -284,12 +281,14 @@ export default function AddStudentDialog({
                     size="small"
                     sx={{ p: 0 }}
                   />
-                  <Avatar
-                    src={user.avatar_url || undefined}
-                    sx={{ width: 36, height: 36, fontSize: '0.85rem' }}
-                  >
-                    {getInitials(user.name)}
-                  </Avatar>
+                  <StudentAvatar
+                    userId={user.id}
+                    src={user.avatar_url}
+                    name={user.name}
+                    size={36}
+                    tapToView={false}
+                    sx={{ fontSize: '0.85rem' }}
+                  />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>

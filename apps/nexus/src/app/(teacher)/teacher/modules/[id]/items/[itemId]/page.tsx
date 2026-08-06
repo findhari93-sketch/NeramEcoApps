@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import { OPEN_GATE } from '@/lib/video-gate';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
@@ -853,13 +855,16 @@ export default function ModuleItemEditorPage() {
           {form.solution_video_source === 'youtube' && form.solution_youtube_video_id && (
             <Box sx={{ borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.palette.divider}`, maxWidth: 400 }}>
               <Box sx={{ position: 'relative', width: '100%', pt: '56.25%', bgcolor: '#000' }}>
-                <iframe
-                  src={`https://www.youtube-nocookie.com/embed/${form.solution_youtube_video_id}`}
-                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  title="Solution Video Preview"
-                />
+                <Box sx={{ position: 'absolute', inset: 0 }}>
+                  {/* A teacher's own preview, so nothing to gate. Through the
+                      shared player anyway, so what they check here is what the
+                      student will actually get. */}
+                  <NeramVideoPlayer
+                    source={{ kind: 'youtube', youtubeId: form.solution_youtube_video_id }}
+                    gate={OPEN_GATE}
+                    allowFullscreen
+                  />
+                </Box>
               </Box>
             </Box>
           )}

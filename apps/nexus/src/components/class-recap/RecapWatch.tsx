@@ -95,6 +95,15 @@ export default function RecapWatch({
   /** Separate from errorMsg: a quiz that will not load must not kill the player. */
   const [quizError, setQuizError] = useState<string | null>(null);
   const [loadingQuiz, setLoadingQuiz] = useState(false);
+  /**
+   * Where the quiz drawer portals. Non-null only while the player is genuinely
+   * fullscreen, because the browser paints nothing outside the fullscreen
+   * element's subtree and a quiz on document.body would simply not appear.
+   *
+   * State rather than a ref: a ref mutation does not re-render, so the drawer
+   * would keep whatever container it was first given.
+   */
+  const [quizHost, setQuizHost] = useState<HTMLElement | null>(null);
 
   const onProgressRef = useRef(onProgress);
   onProgressRef.current = onProgress;
@@ -341,6 +350,8 @@ export default function RecapWatch({
           sections={playerSections}
           onSectionEnd={openQuiz}
           onTimeUpdate={onTick}
+          title={recap.title}
+          onFullscreenChange={setQuizHost}
         />
       </Box>
 
@@ -457,6 +468,7 @@ export default function RecapWatch({
           onSubmit={submitQuiz}
           onRetry={handleRewatch}
           onContinue={handleContinue}
+          container={quizHost}
         />
       )}
     </Box>

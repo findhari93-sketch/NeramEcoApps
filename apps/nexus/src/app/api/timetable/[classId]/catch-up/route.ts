@@ -51,6 +51,37 @@ interface Ctx {
   params: { classId: string };
 }
 
+/**
+ * Why this class cannot be finished, in words a student can act on, or null when
+ * it can.
+ *
+ * One function, called by both verbs. The GET sends the sentence and the button
+ * disables off it; the POST refuses with the same sentence. That is the only way
+ * the promise at the top of this file holds, and it did not: the screen decided
+ * "can I press this" from four step booleans while the server decided it from
+ * `isCatchupItemComplete`, so any gate the booleans did not cover produced an
+ * enabled button, a 400, and a sentence naming no cause. Seen in production on
+ * 2026-08-06: three green ticks and "This class cannot be completed yet."
+ *
+ * The last line can now only be reached if `isCatchupItemComplete` grows a gate
+ * nobody wrote a sentence for, which is a bug in this function, not a state a
+ * student can get into.
+ */
+function whyNotComplete(f: ReturnType<typeof toFacts>, recap: unknown): string | null {
+  if (isCatchupItemComplete(f)) return null;
+  if (f.excluded) {
+    return 'There is no recording of this class, so there is nothing here to finish. Ask your teacher to add one or to excuse you from it.';
+  }
+  if (!f.watched) {
+    return recap ? 'Finish the guided recap first.' : 'Watch the recording first.';
+  }
+  if (f.assignmentsOutstanding > 0) return 'Finish the assignment from this class first.';
+  if (f.hasTest && f.testRequired !== false && !f.testPassed) {
+    return 'Pass the class test to clear this class.';
+  }
+  return 'This class cannot be completed yet.';
+}
+
 async function resolveStudent(supabase: any, msOid: string, classId: string) {
   const { data: user } = await supabase.from('users').select('id').eq('ms_oid', msOid).single();
   if (!user) return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
@@ -220,6 +251,15 @@ export async function GET(request: NextRequest, { params }: Ctx) {
           !itemFacts.hasTest || itemFacts.testRequired === false || itemFacts.testPassed,
         caughtUp: !!item?.caught_up_at,
       },
+      /**
+       * Whether Mark caught up will be accepted, decided by the same function
+       * that will decide it on the way back in. The screen must disable off this
+       * and not off the step flags above: those describe the checklist, and a
+       * checklist cannot see a gate that has no step.
+       */
+      canComplete: isCatchupItemComplete(itemFacts),
+      /** What to say under the button while it is disabled. Null when it is not. */
+      blockedReason: whyNotComplete(itemFacts, recap),
       step: catchupItemStep(itemFacts),
       due_on: dueOn,
       overdue: isOverdue(dueOn, today),
@@ -441,34 +481,11 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
       case 'mark_caught_up': {
         // The gate. Enforced here and not only in the UI, because a disabled
-        // button is a suggestion, not a rule.
-        if (!itemFacts.watched) {
-          return NextResponse.json(
-            { error: recap ? 'Finish the guided recap first.' : 'Watch the recording first.' },
-            { status: 400 },
-          );
-        }
-        if (itemFacts.assignmentsOutstanding > 0) {
-          return NextResponse.json(
-            { error: 'Finish the assignment from this class first.' },
-            { status: 400 },
-          );
-        }
-        // An OPTIONAL class test is not a gate. isCatchupItemComplete already
-        // says so; this early branch has to agree, or a student would be refused
-        // here with a sentence the checklist below contradicts.
-        if (itemFacts.hasTest && itemFacts.testRequired !== false && !itemFacts.testPassed) {
-          return NextResponse.json(
-            { error: 'Pass the class test to clear this class.' },
-            { status: 400 },
-          );
-        }
-        if (!isCatchupItemComplete(itemFacts)) {
-          return NextResponse.json(
-            { error: 'This class cannot be completed yet.' },
-            { status: 400 },
-          );
-        }
+        // button is a suggestion, not a rule. The refusal is worded once, in
+        // whyNotComplete, which is also what disabled the button, so the two can
+        // no longer disagree about whether this class is finishable.
+        const why = whyNotComplete(itemFacts, recap);
+        if (why) return NextResponse.json({ error: why }, { status: 400 });
         patch.caught_up_at = new Date().toISOString();
         // Finishing frees the clock so the next class can take it. Banked, not
         // zeroed, so a teacher who later resets the test does not hand back a

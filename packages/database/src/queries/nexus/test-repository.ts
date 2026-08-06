@@ -1408,6 +1408,15 @@ async function dispatchPlacementSideEffect(
     // module, so a top-level import here would close the cycle.
     const { recomputeClassPrep } = await import('./class-prep');
     await recomputeClassPrep(args.studentId, placement.context_id, supabase);
+  } else if (placement.context_type === 'qb_paper') {
+    // Nothing to do, and written out rather than left to fall through the end of
+    // the chain, so the next person adding a context can see this one was
+    // considered rather than forgotten.
+    //
+    // The attempt row IS the record here. Everything the paper's three faces
+    // report is derived from nexus_test_attempts on the read (see
+    // summariseAttempts in qb-papers.ts), so there is no denormalised counter to
+    // keep in step and no second place for the two to disagree.
   }
 }
 

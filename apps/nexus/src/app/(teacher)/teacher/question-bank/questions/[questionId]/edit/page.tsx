@@ -21,6 +21,7 @@ import type {
 } from '@neram/database';
 import QuestionFormWizard from '@/components/question-bank/QuestionFormWizard';
 import TagPicker from '@/components/question-bank/TagPicker';
+import QuestionOriginNote from '@/components/question-bank/QuestionOriginNote';
 
 export default function EditQuestionPage() {
   const router = useRouter();
@@ -51,7 +52,10 @@ export default function EditQuestionPage() {
         if (!token || cancelled) return;
 
         const [questionRes, topicsRes] = await Promise.all([
-          fetch(`/api/question-bank/questions/${questionId}`, {
+          // origin=1: which upload produced this question. Staff only, and
+          // asked for explicitly because the list views that share this
+          // endpoint have no use for it.
+          fetch(`/api/question-bank/questions/${questionId}?origin=1`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
           fetch('/api/question-bank/topics', {
@@ -139,6 +143,15 @@ export default function EditQuestionPage() {
           Edit Question
         </Typography>
       </Box>
+
+      {/* Where this question came from, and what else is using it.
+          Renders nothing when no import produced it, which is the case for
+          every hand-authored question and everything older than the archive. */}
+      {!loading && question && (
+        <Box sx={{ mb: 2.5 }}>
+          <QuestionOriginNote origin={(question as any).origin} />
+        </Box>
+      )}
 
       {/* Content */}
       {loading ? (

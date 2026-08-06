@@ -16,7 +16,7 @@ import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
-import GraphAvatar from '@/components/GraphAvatar';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import EmailDomainFlag from '@/components/students/EmailDomainFlag';
 import type { EmailDomainStatus } from '@/lib/classroom-email';
 
@@ -106,7 +106,13 @@ export default function StudentSearchResults({
             }}
           >
             <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-              <GraphAvatar msOid={student.ms_oid} name={student.name} size={44} tapToView={false} />
+              <StudentAvatar
+                userId={student.id}
+                msOid={student.ms_oid}
+                name={student.name}
+                size={44}
+                tapToView={false}
+              />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
                   {student.name}

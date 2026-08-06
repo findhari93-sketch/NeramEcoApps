@@ -42,7 +42,8 @@ const INSIGHTS = {
     missedWithReason: 1,
     caughtUp: 0,
     excused: 0,
-    notCaughtUp: 2,
+    lateJoiners: 1,
+    notCaughtUp: 3,
   },
   buckets: { attendingAttended: 2, attendingAbsent: 1, declinedAbsent: 1, declinedAttended: 0 },
   reasonTally: {},
@@ -129,6 +130,27 @@ const INSIGHTS = {
       barelyAttended: false,
       absence: null,
       bucket: 'attended',
+    },
+    {
+      // Enrolled three weeks after this class ran. Nothing for her to explain.
+      id: 'e',
+      name: 'Nithya Raman',
+      avatar_url: null,
+      phone: null,
+      enrolled_at: '2026-08-20T06:00:00Z',
+      joinedAfterClass: true,
+      rsvp: 'attending',
+      reason: null,
+      attended: false,
+      joined_at: null,
+      left_at: null,
+      duration_minutes: null,
+      joinedLate: false,
+      leftEarly: false,
+      droppedMidClass: false,
+      barelyAttended: false,
+      absence: null,
+      bucket: 'late_joiner',
     },
   ],
 };
@@ -246,6 +268,44 @@ describe('ClassAttendancePanel', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: /Select everyone in Told us why/i }));
     expect(screen.getByText('2 selected')).toBeTruthy();
+  });
+
+  it('ticks every outstanding student from one control, and unticks them again', async () => {
+    // The gap this closes: the tab said "Missed 3" and no single gesture on the
+    // screen could produce three ticks.
+    renderPanel();
+    await screen.findByText('Abhitha Saravanan');
+
+    const selectAll = screen.getByRole('checkbox', { name: /Select all 3 not caught up/i });
+    fireEvent.click(selectAll);
+    expect(screen.getByText('3 selected')).toBeTruthy();
+    // Reads back the state rather than repeating the invitation.
+    expect(screen.getByText('All 3 selected')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Select all 3 not caught up/i }));
+    expect(screen.queryByText(/selected/)).toBeNull();
+  });
+
+  it('counts only outstanding students in Select all, never the ones already done', async () => {
+    renderPanel();
+    await screen.findByText('Abhitha Saravanan');
+
+    // Four students are absent-or-done in the fixture; three still owe work.
+    // Messaging somebody again about a class they have finished is the bug.
+    fireEvent.click(screen.getByRole('checkbox', { name: /Select all 3 not caught up/i }));
+    expect(screen.getByText('3 selected')).toBeTruthy();
+  });
+
+  it('calls a late joiner a late joiner, not silent', async () => {
+    renderPanel();
+    await screen.findByText('Nithya Raman');
+
+    expect(
+      screen.getByRole('checkbox', { name: /Select everyone in Joined after this class/i }),
+    ).toBeTruthy();
+    expect(screen.getByText(/Joined after this class, enrolled 20 Aug/)).toBeTruthy();
+    // Still exactly one row saying "No reason given", and it is not hers.
+    expect(screen.getAllByText('No reason given').length).toBe(2);
   });
 
   it('offers no Teams sync for a class with no meeting', async () => {

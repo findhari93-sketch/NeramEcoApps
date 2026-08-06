@@ -15,7 +15,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Alert,
-  Avatar,
   Box,
   Button,
   Checkbox,
@@ -33,6 +32,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SyncIcon from '@mui/icons-material/Sync';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -346,9 +346,13 @@ export default function ClassReconciliationPage() {
                 flexWrap: 'wrap',
               }}
             >
-              <Avatar src={s.avatar_url || undefined} sx={{ width: 34, height: 34 }}>
-                {s.name.charAt(0)}
-              </Avatar>
+              <StudentAvatar
+                userId={s.id}
+                src={s.avatar_url}
+                name={s.name}
+                size={34}
+                tapToView={false}
+              />
               <Box sx={{ flex: 1, minWidth: 140 }}>
                 <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }} noWrap>
                   {s.name}

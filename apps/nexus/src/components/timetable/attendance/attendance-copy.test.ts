@@ -112,6 +112,23 @@ describe('buildMissedList', () => {
     expect(text).toMatch(/2\. Humaira/);
   });
 
+  it('holds late joiners in their own group, never under "No reason given"', () => {
+    // This list gets forwarded. A student who enrolled last week reading as
+    // somebody who skipped a class in July is the misunderstanding to avoid.
+    const withLate = [
+      ...roster,
+      student({ id: 'e', name: 'New Arrival', bucket: 'late_joiner', joinedAfterClass: true }),
+    ];
+    const text = buildMissedList(insights(withLate));
+    expect(text).toContain('Joined after this class (1)');
+    expect(text).toContain('New Arrival, enrolled later, recording not watched');
+    expect(text).toContain('Not caught up (3 of 5)');
+    // Numbered continuously through all three groups, so a teacher reading it
+    // aloud counts the same total the screen shows.
+    expect(text).toMatch(/3\. New Arrival/);
+    expect(text).toContain('No reason given (1)');
+  });
+
   it('carries what each one has actually done', () => {
     const text = buildMissedList(insights(roster));
     expect(text).toContain('never joined, recording not watched');

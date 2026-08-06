@@ -13,7 +13,6 @@ import {
   Stack,
   Chip,
   Button,
-  Avatar,
   Skeleton,
   Snackbar,
   Alert,
@@ -25,6 +24,7 @@ import {
   Link as MuiLink,
   alpha,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import NextLink from 'next/link';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
@@ -602,9 +602,13 @@ export default function AssignmentReviewPage() {
                           '&:hover': clickable ? { borderColor: 'primary.light', bgcolor: 'action.hover' } : {},
                         }}
                       >
-                        <Avatar src={row.student.avatar_url || undefined} sx={{ width: 36, height: 36, bgcolor: 'primary.dark' }}>
-                          {(row.student.name || '?').slice(0, 1).toUpperCase()}
-                        </Avatar>
+                        <StudentAvatar
+                          userId={row.student.id}
+                          src={row.student.avatar_url}
+                          name={row.student.name}
+                          size={36}
+                          tapToView={false}
+                        />
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
                             {row.student.name || row.student.email}
@@ -771,9 +775,13 @@ export default function AssignmentReviewPage() {
                           '&:hover': clickable ? { borderColor: 'primary.light', bgcolor: 'action.hover' } : {},
                         }}
                       >
-                        <Avatar src={row.student.avatar_url || undefined} sx={{ width: 36, height: 36, bgcolor: 'primary.dark' }}>
-                          {(row.student.name || '?').slice(0, 1).toUpperCase()}
-                        </Avatar>
+                        <StudentAvatar
+                          userId={row.student.id}
+                          src={row.student.avatar_url}
+                          name={row.student.name}
+                          size={36}
+                          tapToView={false}
+                        />
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
                             {row.student.name || row.student.email}

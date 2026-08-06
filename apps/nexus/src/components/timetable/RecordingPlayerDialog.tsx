@@ -184,6 +184,10 @@ export default function RecordingPlayerDialog({
                 source={{ kind: 'html5', src: streamUrl }}
                 gate={OPEN_GATE}
                 allowFullscreen
+                // Safe here and only here: no checkpoints to escape and no
+                // watermark to leave behind. The player refuses this anyway if
+                // either of those stops being true.
+                allowPictureInPicture
                 onError={handleVideoError}
               />
             </Box>

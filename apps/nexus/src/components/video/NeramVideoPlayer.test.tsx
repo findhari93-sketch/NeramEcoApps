@@ -1,4 +1,4 @@
-import { render, act } from '@testing-library/react';
+import { render, act, screen, fireEvent } from '@testing-library/react';
 import { createRef } from 'react';
 import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import NeramVideoPlayer from './NeramVideoPlayer';
@@ -68,6 +68,20 @@ function fire(video: HTMLVideoElement, type: string) {
   });
 }
 
+/** The scrub bar reads a real rect. jsdom lays nothing out, so supply one. */
+const RAIL_WIDTH = 600;
+function railAt(): HTMLElement {
+  const rail = screen.getByTestId('seek-rail');
+  rail.getBoundingClientRect = () =>
+    ({ left: 0, width: RAIL_WIDTH, top: 0, height: 44, right: RAIL_WIDTH, bottom: 44, x: 0, y: 0 }) as DOMRect;
+  return rail;
+}
+
+/** clientX for a given time, given the stubbed rect and a 600s video. */
+function xForSeconds(seconds: number, duration = 600): number {
+  return (seconds / duration) * RAIL_WIDTH;
+}
+
 beforeAll(() => {
   // Referenced by the controls-fade timer and the nudge toast.
   vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
@@ -77,6 +91,16 @@ beforeAll(() => {
     addListener: vi.fn(),
     removeListener: vi.fn(),
   }));
+  // jsdom implements neither, and the scrub bar captures the pointer so a drag
+  // that leaves the element keeps tracking.
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
+  // jsdom has no PointerEvent either, and without it testing-library falls back
+  // to a bare Event, so clientX never reaches the handler and every pointer test
+  // silently seeks to zero. MouseEvent carries the coordinates.
+  if (!(window as unknown as { PointerEvent?: unknown }).PointerEvent) {
+    (window as unknown as { PointerEvent: unknown }).PointerEvent = window.MouseEvent;
+  }
 });
 
 beforeEach(() => {
@@ -110,16 +134,39 @@ function setup(
 }
 
 describe('NeramVideoPlayer: the scrub track cannot express a skip', () => {
-  it('bounds the slider at the unlocked checkpoint, not the duration', () => {
-    const { container, video } = setup({ unlocked: 120 });
+  /**
+   * These two replace a pair that asserted `slider.max === 120` on the MUI
+   * Slider this bar grew out of. That Slider ended AT the boundary, which made
+   * the skip unexpressible but also hid the rest of the lecture: a student saw a
+   * bar that stopped early with no explanation.
+   *
+   * The bar now spans the whole video and draws the lock, so `max` is the real
+   * duration and is no longer where the guarantee lives. These assert the
+   * guarantee itself instead: the playhead does not move past the boundary. That
+   * is what the original bug actually was, so this is the stronger test.
+   */
+  it('shows the whole video and says where the lock is', () => {
+    const { video } = setup({ unlocked: 120 });
     fire(video, 'loadedmetadata'); // duration 600
-    const slider = container.querySelector('input[type="range"]') as HTMLInputElement;
-    expect(slider).toBeTruthy();
-    expect(Number(slider.max)).toBe(120);
+    const bar = screen.getByRole('slider', { name: /seek/i });
+    expect(Number(bar.getAttribute('aria-valuemax'))).toBe(600);
+    expect(bar.getAttribute('aria-valuetext')).toContain('Locked after 2 minutes');
+    expect(screen.getByTestId('seek-locked-region')).toBeTruthy();
   });
 
-  it('grows the track only as far as the next checkpoint when one is passed', () => {
-    const { container, video, rerender, ref } = setup({ unlocked: 120 });
+  it('refuses to move the playhead past the boundary, however it is asked', () => {
+    const { video, ctl, onBlockedSeek } = setup({ unlocked: 120 });
+    fire(video, 'loadedmetadata');
+    act(() => {
+      fireEvent.keyDown(railAt(), { key: 'End' });
+    });
+    expect(ctl.now()).toBe(120);
+    expect(ctl.now()).toBeLessThan(600);
+    expect(onBlockedSeek).toHaveBeenCalledTimes(1);
+  });
+
+  it('grows the reachable stretch when a checkpoint is passed, but no further', () => {
+    const { video, ctl, rerender, ref } = setup({ unlocked: 120 });
     fire(video, 'loadedmetadata');
     rerender(
       <NeramVideoPlayer
@@ -129,9 +176,75 @@ describe('NeramVideoPlayer: the scrub track cannot express a skip', () => {
         watermark={WATERMARK}
       />,
     );
-    const slider = container.querySelector('input[type="range"]') as HTMLInputElement;
-    expect(Number(slider.max)).toBe(300);
-    expect(Number(slider.max)).toBeLessThan(600);
+    act(() => {
+      fireEvent.keyDown(railAt(), { key: 'End' });
+    });
+    expect(ctl.now()).toBe(300);
+    expect(ctl.now()).toBeLessThan(600);
+  });
+
+  it('lands a pointer press in the locked region on the boundary, not past it', () => {
+    const { video, ctl, onBlockedSeek } = setup({ unlocked: 120 });
+    fire(video, 'loadedmetadata');
+    const rail = railAt();
+    act(() => {
+      fireEvent.pointerDown(rail, { pointerId: 1, clientX: xForSeconds(500) });
+      fireEvent.pointerUp(rail, { pointerId: 1, clientX: xForSeconds(500) });
+    });
+    expect(ctl.now()).toBe(120);
+    expect(onBlockedSeek).toHaveBeenCalled();
+  });
+
+  it('honours a press inside the unlocked stretch', () => {
+    const { video, ctl, onBlockedSeek } = setup({ unlocked: 300 });
+    fire(video, 'loadedmetadata');
+    const rail = railAt();
+    act(() => {
+      fireEvent.pointerDown(rail, { pointerId: 1, clientX: xForSeconds(60) });
+      fireEvent.pointerUp(rail, { pointerId: 1, clientX: xForSeconds(60) });
+    });
+    expect(ctl.now()).toBe(60);
+    expect(onBlockedSeek).not.toHaveBeenCalled();
+  });
+
+  it('counts one refusal for a whole drag, not one per pointermove', () => {
+    // useVideoProgress treats refusals as a watch-honesty signal. Committing on
+    // every move would post them in the dozens for a single gesture, which is
+    // why pointermove updates a local value and only pointerup commits.
+    const { video, onBlockedSeek } = setup({ unlocked: 120 });
+    fire(video, 'loadedmetadata');
+    const rail = railAt();
+    act(() => {
+      fireEvent.pointerDown(rail, { pointerId: 1, clientX: xForSeconds(100) });
+      fireEvent.pointerMove(rail, { pointerId: 1, clientX: xForSeconds(200) });
+      fireEvent.pointerMove(rail, { pointerId: 1, clientX: xForSeconds(350) });
+      fireEvent.pointerMove(rail, { pointerId: 1, clientX: xForSeconds(500) });
+      fireEvent.pointerUp(rail, { pointerId: 1, clientX: xForSeconds(500) });
+    });
+    expect(onBlockedSeek).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the ceiling live, so a drag cannot outrun a gate that just changed', () => {
+    // The gateRef discipline exists for exactly this. A commit that closed over
+    // the gate at pointerdown would use a stale boundary.
+    const { video, ctl, rerender, ref } = setup({ unlocked: 120 });
+    fire(video, 'loadedmetadata');
+    const rail = railAt();
+    act(() => {
+      fireEvent.pointerDown(rail, { pointerId: 1, clientX: xForSeconds(100) });
+    });
+    rerender(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream' }}
+        gate={gateFor({ unlocked: 300 })}
+        videoRef={ref}
+        watermark={WATERMARK}
+      />,
+    );
+    act(() => {
+      fireEvent.pointerUp(railAt(), { pointerId: 1, clientX: xForSeconds(500) });
+    });
+    expect(ctl.now()).toBe(300);
   });
 
   it('never offers native controls, download, or picture in picture', () => {
@@ -141,6 +254,22 @@ describe('NeramVideoPlayer: the scrub track cannot express a skip', () => {
     expect(video.hasAttribute('controls')).toBe(false);
     expect(video.getAttribute('controlslist')).toContain('nodownload');
     expect(video.hasAttribute('disablepictureinpicture')).toBe(true);
+  });
+
+  it('keeps picture in picture off even when a caller asks for it on a gated video', () => {
+    // The caller does not get the final say. A PiP window is drawn by the OS:
+    // the watermark does not travel into it and the control bar is gone.
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream' }}
+        gate={gateFor({ unlocked: 120 })}
+        videoRef={ref}
+        watermark={WATERMARK}
+        allowPictureInPicture
+      />,
+    );
+    expect(ref.current!.hasAttribute('disablepictureinpicture')).toBe(true);
   });
 });
 
@@ -239,6 +368,90 @@ describe('NeramVideoPlayer: resuming', () => {
     const { video } = setup({ onLoadedMetadata });
     fire(video, 'loadedmetadata');
     expect(onLoadedMetadata).toHaveBeenCalledWith(600);
+  });
+});
+
+describe('NeramVideoPlayer: keyboard', () => {
+  it('clamps a forward jump to the boundary and reports the refusal', () => {
+    const { video, ctl, onBlockedSeek, container } = setup({ unlocked: 120 });
+    fire(video, 'loadedmetadata');
+    ctl.seekTo(115);
+    const player = container.firstElementChild as HTMLElement;
+    act(() => {
+      fireEvent.keyDown(player, { key: 'l' }); // forward 10s, would reach 125
+    });
+    expect(ctl.now()).toBe(120);
+    expect(onBlockedSeek).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bind percentage jumps while a checkpoint binds', () => {
+    // 9 would cross a whole lecture in one keystroke. The clamp would catch it,
+    // but a shortcut whose only outcome is a refusal is not a shortcut.
+    const { video, ctl, container } = setup({ unlocked: 120 });
+    fire(video, 'loadedmetadata');
+    ctl.seekTo(30);
+    act(() => {
+      fireEvent.keyDown(container.firstElementChild as HTMLElement, { key: '9' });
+    });
+    expect(ctl.now()).toBe(30);
+  });
+
+  it('is reachable by keyboard at all', () => {
+    // With controls={false} the <video> is not focusable, which is why there
+    // were no shortcuts before this. The container carries the tabindex.
+    const { container } = setup();
+    expect((container.firstElementChild as HTMLElement).getAttribute('tabindex')).toBe('0');
+  });
+});
+
+describe('NeramVideoPlayer: fullscreen host', () => {
+  it('publishes nothing while it is not fullscreen', () => {
+    const onFullscreenChange = vi.fn();
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream' }}
+        gate={gateFor({ unlocked: 120 })}
+        videoRef={ref}
+        watermark={WATERMARK}
+        allowFullscreen
+        onFullscreenChange={onFullscreenChange}
+      />,
+    );
+    // The quiz must portal to document.body until there is a fullscreen subtree
+    // to portal into. null is how the caller is told that.
+    expect(onFullscreenChange).toHaveBeenCalledWith(null);
+  });
+
+  it('clears the host on unmount, so a caller cannot portal into a dead node', () => {
+    const onFullscreenChange = vi.fn();
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    const { unmount } = render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream' }}
+        gate={gateFor({ unlocked: 120 })}
+        videoRef={ref}
+        watermark={WATERMARK}
+        allowFullscreen
+        onFullscreenChange={onFullscreenChange}
+      />,
+    );
+    onFullscreenChange.mockClear();
+    unmount();
+    expect(onFullscreenChange).toHaveBeenCalledWith(null);
+  });
+});
+
+describe('NeramVideoPlayer: buffering', () => {
+  it('shows a spinner while the proxy stalls, and clears it when data arrives', () => {
+    // The byte proxy answers at most 4MB per request, so a weak connection
+    // stalls often. With nothing on screen a stall looked like a freeze, and a
+    // reload throws away the buffer and starts the stall again.
+    const { video } = setup();
+    fire(video, 'waiting');
+    expect(screen.getByRole('status', { name: /buffering/i })).toBeTruthy();
+    fire(video, 'playing');
+    expect(screen.queryByRole('status', { name: /buffering/i })).toBeNull();
   });
 });
 

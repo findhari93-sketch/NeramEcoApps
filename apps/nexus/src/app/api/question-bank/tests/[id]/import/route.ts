@@ -29,17 +29,37 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: 'Only staff can edit a test' }, { status: 403 });
     }
 
+    /**
+     * `?meta=1`: the provenance without the document.
+     *
+     * A caller drawing "uploaded from history_of_architecture_ch1.json" needs
+     * six small fields, and shipping a hundred and fifty questions to render
+     * one sentence is the kind of cost that gets a panel removed later for
+     * being slow.
+     */
+    const metaOnly = request.nextUrl.searchParams.get('meta') === '1';
+
     const record = await getTestImportRecord(params.id);
     if (record) {
       return NextResponse.json({
         data: {
-          payload: record.payload,
+          // Omitted rather than nulled, so a caller cannot mistake "not asked
+          // for" for "this test has no questions".
+          ...(metaOnly ? {} : { payload: record.payload }),
           source: record.source,
           source_file_id: record.source_file_id,
           prompt_meta: record.prompt_meta,
+          created_at: record.created_at,
           updated_at: record.updated_at,
         },
       });
+    }
+
+    // Nothing archived and only the provenance was wanted. Say so plainly
+    // rather than rebuilding the whole payload to answer a question about
+    // where it came from.
+    if (metaOnly) {
+      return NextResponse.json({ data: null });
     }
 
     // Nothing archived. Read the test back into the same shape so it is still

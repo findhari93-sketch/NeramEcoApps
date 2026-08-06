@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { verifyQBStaff } from '@/lib/qb-auth';
 import {
-  getSupabaseAdminClient,
   listOriginalPapers,
   getOrCreateOriginalPaper,
   bulkCreateDraftQuestions,
@@ -13,19 +12,8 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const msUser = await verifyMsToken(authHeader);
-    const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const access = await verifyQBStaff(authHeader);
+    if (!access.ok) return access.response;
 
     const papers = await listOriginalPapers();
     return NextResponse.json({ data: papers }, { status: 200 });
@@ -41,19 +29,9 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const msUser = await verifyMsToken(authHeader);
-    const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const access = await verifyQBStaff(authHeader);
+    if (!access.ok) return access.response;
+    const caller = access.caller;
 
     const body = await request.json();
     const { exam_type, year, session, shift, parsed_questions } = body as {

@@ -38,6 +38,7 @@ import TestHealthPanel from '@/components/tests/TestHealthPanel';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
@@ -45,6 +46,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import MathText from '@/components/common/MathText';
 import QuestionPreviewText from '@/components/question-bank/QuestionPreviewText';
 import TestQuestionEditorDialog from '@/components/tests/TestQuestionEditorDialog';
+import { describeTestOrigin, type TestOriginFacts } from '@/lib/test-origin';
 
 interface DetailTest {
   id: string;
@@ -132,6 +134,8 @@ export default function TestDetailPage() {
   const { getToken, isTeacher, activeClassroom } = useNexusAuthContext();
 
   const [test, setTest] = useState<DetailTest | null>(null);
+  /** The archived import row, or null for a test built before it existed. */
+  const [origin, setOrigin] = useState<TestOriginFacts | null>(null);
   const [kindDraft, setKindDraft] = useState<NexusTestKind>('classroom_assigned');
   const [questions, setQuestions] = useState<DetailQuestion[]>([]);
   const [placements, setPlacements] = useState<DetailPlacement[]>([]);
@@ -185,6 +189,16 @@ export default function TestDetailPage() {
       setQuestions(json.data.questions || []);
       setPlacements(json.data.placements || []);
       setAttemptsCount(json.data.attempts_count || 0);
+
+      // Provenance, without the document. Never allowed to fail the page: a
+      // test whose origin was never archived is an ordinary state, and every
+      // test built before that table existed is in it.
+      try {
+        const o = await authFetch(`/api/question-bank/tests/${testId}/import?meta=1`);
+        setOrigin(o?.data ?? null);
+      } catch {
+        setOrigin(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load test');
     } finally {
@@ -402,6 +416,58 @@ export default function TestDetailPage() {
           inside Foundation, Modules or Class Recaps.
         </Alert>
       )}
+
+      {/*
+        Where this test came from.
+
+        Every fact below has been archived since nexus_test_imports shipped and
+        none of it has ever been on a screen, so a teacher who uploaded 150
+        questions could not answer "which file was that" or "did any rows get
+        dropped". `origin` is null for tests built before the archive existed,
+        and the describer says that rather than guessing.
+      */}
+      {(() => {
+        const o = describeTestOrigin(origin);
+        return (
+          <Box
+            sx={{
+              mb: 2,
+              p: 1.5,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: o.hasLoss ? 'warning.main' : 'divider',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              {/* The icon carries the warning as well as the border, so dropped
+                  rows are not signalled by colour alone. */}
+              <HistoryOutlinedIcon
+                sx={{
+                  fontSize: 18,
+                  mt: '2px',
+                  color: o.hasLoss ? 'warning.main' : 'text.secondary',
+                  flexShrink: 0,
+                }}
+              />
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {o.headline}
+                </Typography>
+                {o.details.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                    {o.details.join(' ')}
+                  </Typography>
+                )}
+                {/* The questions went into the shared bank, which is the thing
+                    most often assumed and never stated. */}
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                  Its questions live in the question bank and can be reused by any other test.
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+        );
+      })()}
 
       {/* Actions */}
       <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>

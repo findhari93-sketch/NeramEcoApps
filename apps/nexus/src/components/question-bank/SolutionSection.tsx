@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import { OPEN_GATE } from '@/lib/video-gate';
 import {
   Box,
   Typography,
@@ -123,22 +125,14 @@ export default function SolutionSection({
                   bgcolor: 'grey.900',
                 }}
               >
-                <Box
-                  component="iframe"
-                  src={`https://www.youtube-nocookie.com/embed/${videoId}`}
-                  title="Solution video"
-                  loading="lazy"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  sx={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    border: 0,
-                  }}
-                />
+                <Box sx={{ position: 'absolute', inset: 0 }}>
+                  <NeramVideoPlayer
+                    source={{ kind: 'youtube', youtubeId: videoId }}
+                    gate={OPEN_GATE}
+                    title="Solution video"
+                    allowFullscreen
+                  />
+                </Box>
               </Box>
             ) : question.solution_video_url && isSharePointUrl(question.solution_video_url) ? (
               <Box

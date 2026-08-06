@@ -4,7 +4,6 @@ import { useState } from 'react';
 import {
   Box,
   Typography,
-  Avatar,
   Chip,
   Dialog,
   DialogTitle,
@@ -23,6 +22,7 @@ import WbTwilightOutlinedIcon from '@mui/icons-material/WbTwilightOutlined';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import CheckOutlinedIcon from '@mui/icons-material/CheckOutlined';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import type { StudentSummary, ExamIntentBuckets } from '@/types/exam-schedule';
 
 interface StudentsPopupProps {
@@ -37,19 +37,6 @@ interface StudentsPopupProps {
 }
 
 type BucketFilter = 'all' | 'date_booked' | 'applied_no_date' | 'planning' | 'not_this_year' | 'no_response';
-
-function getInitials(name: string): string {
-  const parts = name.split(' ').filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return (name[0] || '?').toUpperCase();
-}
-
-function getAvatarColor(name: string): string {
-  const colors = ['#6C63FF', '#FF6584', '#43AA8B', '#F9C74F', '#4CC9F0', '#F77F00', '#9B5DE5', '#00BBF9'];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-}
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
@@ -90,18 +77,19 @@ function StudentRow({ student, bucket }: { student: StudentSummary; bucket: Buck
         '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.04) },
       }}
     >
-      <Avatar
+      <StudentAvatar
+        userId={student.student_id}
+        name={student.name}
+        size={36}
+        tapToView={false}
         sx={{
-          width: 36,
-          height: 36,
           fontSize: '0.8rem',
-          fontWeight: 700,
-          bgcolor: isNotThisYear ? alpha(theme.palette.text.primary, 0.15) : getAvatarColor(student.name),
           flexShrink: 0,
+          // Somebody sitting the exam another year is greyed here the same way
+          // their row text is, so the two do not disagree.
+          ...(isNotThisYear ? { bgcolor: alpha(theme.palette.text.primary, 0.15) } : {}),
         }}
-      >
-        {getInitials(student.name)}
-      </Avatar>
+      />
 
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography

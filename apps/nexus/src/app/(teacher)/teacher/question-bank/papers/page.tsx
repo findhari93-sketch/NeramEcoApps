@@ -25,6 +25,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import TranslateIcon from '@mui/icons-material/Translate';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { QB_EXAM_TYPE_LABELS, QB_CATEGORY_LABELS } from '@neram/database';
 import type { NexusQBOriginalPaper } from '@neram/database';
@@ -208,6 +209,16 @@ export default function PapersListPage() {
         <Typography variant="h5" component="h1" fontWeight={700} sx={{ flex: 1 }}>
           Uploaded Papers
         </Typography>
+        {/* The other axis: this list is papers, that page is students. */}
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<InsightsOutlinedIcon />}
+          onClick={() => router.push('/teacher/question-bank/papers/overview')}
+          sx={{ textTransform: 'none' }}
+        >
+          Progress
+        </Button>
         <Button
           variant="contained"
           size="small"

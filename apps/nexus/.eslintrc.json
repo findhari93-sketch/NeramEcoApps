@@ -13,6 +13,14 @@
         "message": "Embed YouTube through NeramVideoPlayer (src/components/video) so the checkpoint gate, the watermark and the progress telemetry come with it."
       },
       {
+        "selector": "JSXAttribute[name.name='src'] TemplateLiteral > TemplateElement[value.raw=/youtube.*embed/]",
+        "message": "Embed YouTube through NeramVideoPlayer (src/components/video) so the checkpoint gate, the watermark and the progress telemetry come with it. A template literal is the usual way an embed URL slipped past this rule, since the video id is interpolated."
+      },
+      {
+        "selector": "JSXAttribute[name.name='component'][value.value='video']",
+        "message": "Play video through NeramVideoPlayer (src/components/video). `component=\"video\"` on a MUI Box renders the same bare <video> the rule above bans, with the same native scrubber, download item and picture-in-picture."
+      },
+      {
         "selector": "Literal[value=/generativelanguage\\.googleapis\\.com/]",
         "message": "Call Gemini through @neram/ai rather than building the URL by hand, so the call is metered and the budget guard can refuse it."
       }
@@ -40,11 +48,32 @@
     },
     {
       "files": [
-        "src/components/foundation/**",
-        "src/app/(student)/student/modules/**"
+        "src/components/video/controls/**",
+        "src/components/video/hooks/**"
       ],
       "rules": {
-        "no-restricted-syntax": "off"
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "MemberExpression[property.name='seek']",
+            "message": "Do not drive the transport from a control or a hook. Take an `onSeek(seconds)` prop; NeramVideoPlayer passes one that clamps to gate.seekCeiling first."
+          },
+          {
+            "selector": "MemberExpression[property.name='setRate']",
+            "message": "Do not drive the transport from a control or a hook. Take a callback; NeramVideoPlayer caps the rate at gate.maxRate."
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/lib/video-gate", "@/lib/video-gate"],
+                "message": "Controls and hooks receive the two numbers they need (seekCeiling, maxRate) as props. Importing the gate here invites a second, drifting copy of the rule."
+              }
+            ]
+          }
+        ]
       }
     }
   ]

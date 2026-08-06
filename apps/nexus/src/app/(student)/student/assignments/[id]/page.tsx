@@ -7,6 +7,8 @@
  * shows marks and feedback. Reuses the shared submit sheet + file viewer.
  */
 import { useCallback, useEffect, useState } from 'react';
+import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import { OPEN_GATE } from '@/lib/video-gate';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box, Typography, Stack, Chip, Button, Skeleton, Divider, IconButton, alpha, Snackbar, Alert,
@@ -334,14 +336,19 @@ export default function StudentAssignmentDetailPage() {
                 )}
                 {youtubeId ? (
                   <Box sx={{ position: 'relative', pt: '56.25%', borderRadius: 2, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
-                    <Box
-                      component="iframe"
-                      src={`https://www.youtube.com/embed/${youtubeId}`}
-                      title="Class recording"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
-                    />
+                    <Box sx={{ position: 'absolute', inset: 0 }}>
+                      {/* Was a plain youtube.com/embed, not even the nocookie
+                          host, on a student-facing screen. Nothing to gate on a
+                          reference recording attached to an assignment, but it
+                          gets the same chrome and the same no-cookie host as
+                          every other video the student meets. */}
+                      <NeramVideoPlayer
+                        source={{ kind: 'youtube', youtubeId }}
+                        gate={OPEN_GATE}
+                        title="Class recording"
+                        allowFullscreen
+                      />
+                    </Box>
                   </Box>
                 ) : (
                   <Button

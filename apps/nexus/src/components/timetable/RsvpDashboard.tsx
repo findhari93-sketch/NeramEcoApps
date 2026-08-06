@@ -9,7 +9,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  UserAvatar,
   LinearProgress,
   Accordion,
   AccordionSummary,
@@ -27,6 +26,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { RSVP_REASONS, describeReason, reasonShortLabel, type RsvpReasonCode } from '@/lib/rsvp-reasons';
 import { tagSx } from './timetable-theme';
 import { formatTime } from './date-utils';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface StudentInfo {
   id: string;
@@ -148,7 +148,7 @@ function ClassRsvpCard({ breakdown }: { breakdown: ClassBreakdown }) {
               {optedOut.map((s) => (
                 <ListItem key={s.id} sx={{ px: 0, alignItems: 'flex-start' }}>
                   <ListItemAvatar sx={{ minWidth: 40 }}>
-                    <UserAvatar src={s.avatar_url} name={s.name} size={28} />
+                    <StudentAvatar userId={s.id} src={s.avatar_url} name={s.name} size={28} />
                   </ListItemAvatar>
                   <ListItemText
                     primary={

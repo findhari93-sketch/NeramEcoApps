@@ -6,7 +6,6 @@ import {
   Box,
   Typography,
   IconButton,
-  UserAvatar,
   Skeleton,
   Divider,
   alpha,
@@ -30,6 +29,7 @@ import StudentStatsRow from './StudentStatsRow';
 import BadgeGrid from './BadgeGrid';
 import ActivityFeed from './ActivityFeed';
 import AttendanceHeatmap from './AttendanceHeatmap';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 // ── Points breakdown (self-view only) ──
 
@@ -184,7 +184,8 @@ function StudentProfileHeader({
         pb: 2,
       }}
     >
-      <UserAvatar
+      <StudentAvatar
+        userId={profile.student_id}
         src={profile.avatar_url}
         name={profile.student_name}
         size={96}

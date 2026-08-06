@@ -1,10 +1,11 @@
 'use client';
 
-import { Box, Typography, UserAvatar } from '@neram/ui';
+import { Box, Typography } from '@neram/ui';
 import { neramTokens, neramFontFamilies } from '@neram/ui';
 import type { LeaderboardEntry } from '@neram/database/types';
 import StreakFlame from './StreakFlame';
 import RankChangeIndicator from './RankChangeIndicator';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#8B9DAF',
@@ -78,7 +79,8 @@ export default function LeaderboardRow({ entry, onClick }: LeaderboardRowProps) 
       </Typography>
 
       {/* Avatar */}
-      <UserAvatar
+      <StudentAvatar
+        userId={entry.student_id}
         src={entry.avatar_url}
         name={entry.student_name}
         size={32}

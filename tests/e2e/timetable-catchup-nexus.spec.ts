@@ -77,6 +77,26 @@ test.describe('Catch-up loop', () => {
     });
     expect(create.ok()).toBe(true);
     classId = (await create.json()).class.id;
+
+    // The class has a recording, and no guided recap built from it.
+    //
+    // Not decoration. Without a recording the class is "no recording, cannot be
+    // caught up", which is a different feature: AC5 cannot be refused for not
+    // watching something that does not exist, and AC10's "watching is the last
+    // step" was never true of the class this suite was seeding.
+    //
+    // Recording present, recap absent is also the exact shape that stranded a
+    // student in production on 2026-08-06: watchable, declarable, and then
+    // refused at the last step with a sentence that named no cause.
+    const recorded = await request.patch(`${NEXUS}/api/timetable`, {
+      headers: authed(teacherToken),
+      data: {
+        id: classId,
+        classroom_id: classroomId,
+        recording_url: 'https://example.invalid/e2e-missed-class.mp4',
+      },
+    });
+    expect(recorded.ok()).toBe(true);
   });
 
   test('AC1: the cron drafts the no-show list and messages no students', async ({ request }) => {

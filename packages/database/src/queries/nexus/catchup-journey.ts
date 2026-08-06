@@ -894,13 +894,23 @@ export async function loadClassFacts(
 }
 
 /**
- * Watched means the gated recap is finished. The self-declared timestamp only
- * counts when there is no recap to gate on, which is the legacy absence case:
- * a class with nothing but a raw link, where a checkbox was all we ever had.
+ * Watched means the gated recap is finished, or the student declared it back
+ * when there was no recap to gate on.
+ *
+ * That second clause does not weaken the first. `recording_watched_at` is
+ * written in exactly one place, the `mark_watched` action, which refuses while a
+ * published recap exists, and the button that sends it is only rendered when
+ * there is none. So a stamped timestamp is a fact about the past: at the moment
+ * the student pressed it, the raw recording was all this class had.
+ *
+ * It used to stop counting the day a recap was finally published, which took a
+ * green tick away from someone who had done what was asked, re-opened a class
+ * they had finished, and contradicted the promise on the screen itself: "Watch
+ * the recording now and it will be here next time."
  */
 export function isWatched(item: any, facts: ClassFacts): boolean {
   const recap = facts.recapByClass.get(item.scheduled_class_id);
-  if (recap) return facts.completedRecaps.has(recap.id);
+  if (recap && facts.completedRecaps.has(recap.id)) return true;
   return !!item.recording_watched_at;
 }
 

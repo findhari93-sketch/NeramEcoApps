@@ -1,9 +1,10 @@
 'use client';
 
-import { Box, Typography, Chip, UserAvatar, alpha, useTheme } from '@neram/ui';
+import { Box, Typography, Chip, alpha, useTheme } from '@neram/ui';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
 import WbTwilightOutlinedIcon from '@mui/icons-material/WbTwilightOutlined';
 import type { StudentOnDate } from '@/types/exam-schedule';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface StudentChipProps {
   student: StudentOnDate;
@@ -48,7 +49,8 @@ export default function StudentChip({ student, isMe }: StudentChipProps) {
         },
       }}
     >
-      <UserAvatar
+      <StudentAvatar
+        userId={student.student_id}
         name={student.name}
         size={28}
         sx={{

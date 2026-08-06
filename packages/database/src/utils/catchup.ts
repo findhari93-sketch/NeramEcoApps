@@ -302,9 +302,22 @@ function testBlocks(f: CatchupItemFacts): boolean {
   return f.hasTest && f.testRequired !== false && !f.testPassed;
 }
 
-/** Is every gate on this class cleared? */
+/**
+ * Is every gate on this class cleared?
+ *
+ * `notReady` is deliberately NOT a gate, and used to be. It means "there is a
+ * recording but the guided recap is not published", which is precisely the state
+ * in which the screen offers "I have watched it" and `isWatched` accepts it. So
+ * a student could clear every step they were shown, see three green ticks, press
+ * the button and be refused with the one message that names no cause. An
+ * unpublished recap is the teacher's outstanding work, not the student's, and
+ * `pending_teacher` is documented everywhere else as blocking nothing.
+ *
+ * `excluded` still blocks, because there it is true: no recording exists, so
+ * there is genuinely nothing for the student to have watched.
+ */
 export function isCatchupItemComplete(f: CatchupItemFacts): boolean {
-  if (f.excluded || f.notReady) return false;
+  if (f.excluded) return false;
   if (f.excused) return true;
   if (!f.watched) return false;
   if (f.assignmentsOutstanding > 0) return false;
@@ -423,7 +436,13 @@ export function resolveCatchupBacklog(
 
     if (f.excluded) return { ...base, status: 'blocked' as const };
     if (f.excused) return { ...base, status: 'excused' as const, step: 'done' as const };
-    if (f.notReady) return { ...base, status: 'pending_teacher' as const };
+    // Waiting on the teacher is a state for work the student still owes. Once
+    // they have finished the class off the raw recording, saying they are
+    // waiting on us would tell them it is unfinished, keep it out of their
+    // progress bar, and hold the journey open behind a class that is done.
+    if (f.notReady && !isCatchupItemComplete(f)) {
+      return { ...base, status: 'pending_teacher' as const };
+    }
 
     // Position and pace are the late joiner's quota, untouched by this change.
     if (chained) {

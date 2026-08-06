@@ -10,7 +10,6 @@ import {
   Chip,
   IconButton,
   Skeleton,
-  UserAvatar,
   Snackbar,
   Alert,
   LinearProgress,
@@ -32,6 +31,7 @@ import PendingOutlinedIcon from '@mui/icons-material/PendingOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface Campaign {
   id: string;
@@ -428,7 +428,8 @@ export default function CampaignDetailPage() {
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <UserAvatar
+                <StudentAvatar
+                  userId={s.student_id}
                   src={s.student_avatar}
                   name={s.student_name}
                   size={36}

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
-  UserAvatar,
   Chip,
   Paper,
   TextField,
@@ -22,6 +21,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import RestoreIcon from '@mui/icons-material/Restore';
 import PersonOffIcon from '@mui/icons-material/PersonOff';
 import type { HistoricalStudent, RemovalReasonCategory } from '@neram/database';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 const REASON_LABELS: Record<RemovalReasonCategory, string> = {
   fee_nonpayment: 'Fee Non-payment',
@@ -225,7 +225,7 @@ export default function HistoricalStudentsTab({
             expandIcon={<ExpandMoreIcon />}
             sx={{ minHeight: 64, '& .MuiAccordionSummary-content': { alignItems: 'center', gap: 1.5 } }}
           >
-            <UserAvatar src={student.user.avatar_url} name={student.user.name} size={40} tapToView={false} />
+            <StudentAvatar userId={student.user.id} src={student.user.avatar_url} name={student.user.name} size={40} tapToView={false} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" fontWeight={600} noWrap>
                 {student.user.name}

@@ -10,6 +10,7 @@ import DesktopSidebar from '@/components/DesktopSidebar';
 import { useSidebarContext } from '@/components/SidebarProvider';
 import PanelProvider, { usePanelContext } from '@/components/PanelProvider';
 import NavBadgeProvider from '@/components/NavBadgeProvider';
+import StudentStageFactsProvider from '@/components/students/StudentStageFactsProvider';
 import FeatureGate from '@/components/FeatureGate';
 
 function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
@@ -60,7 +61,12 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     <RoleGuard allowedRoles={['teacher', 'admin']}>
       <PanelProvider>
         <NavBadgeProvider>
-          <TeacherLayoutInner>{children}</TeacherLayoutInner>
+          {/* Staff only, and only here. Every student avatar under this layout can
+              wear its cohort ring; the student layout never mounts this, so the
+              same components render plain faces there. */}
+          <StudentStageFactsProvider>
+            <TeacherLayoutInner>{children}</TeacherLayoutInner>
+          </StudentStageFactsProvider>
         </NavBadgeProvider>
       </PanelProvider>
     </RoleGuard>

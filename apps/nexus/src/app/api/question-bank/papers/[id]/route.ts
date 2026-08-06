@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { verifyQBStaff } from '@/lib/qb-auth';
 import {
   getSupabaseAdminClient,
   getOriginalPaperWithStats,
@@ -15,19 +15,9 @@ export async function GET(
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const msUser = await verifyMsToken(authHeader);
+    const access = await verifyQBStaff(authHeader);
+    if (!access.ok) return access.response;
     const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
     const paper = await getOriginalPaperWithStats(params.id);
     if (!paper) {
@@ -54,19 +44,9 @@ export async function PATCH(
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const msUser = await verifyMsToken(authHeader);
+    const access = await verifyQBStaff(authHeader);
+    if (!access.ok) return access.response;
     const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
     const body = await request.json();
     const allowedFields = ['pdf_url', 'total_marks', 'duration_minutes'];
@@ -104,19 +84,9 @@ export async function DELETE(
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const msUser = await verifyMsToken(authHeader);
+    const access = await verifyQBStaff(authHeader);
+    if (!access.ok) return access.response;
     const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
     const result = await deletePaperWithQuestions(params.id);
 

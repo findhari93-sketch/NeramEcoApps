@@ -7,6 +7,7 @@ import { ATTENDANCE_FAILURE_MESSAGES, type AttendanceSyncFailure } from '@/lib/a
 import {
   barelyAttendedCutoff,
   bucketFor,
+  joinedAfterClass,
   scheduledMinutes as spanMinutes,
   tallyBuckets,
 } from '@/lib/attendance-quality';
@@ -119,6 +120,14 @@ export async function GET(request: NextRequest) {
         // Carried so the teacher can ring somebody straight off the missed list
         // rather than going to the student page for a number.
         phone: r.user?.phone || null,
+        // The classification, carried so every avatar on this panel can wear the
+        // stage ring. It costs nothing: the roster already selects both columns.
+        study_stage: r.current_standard ?? null,
+        dormant: r.participation_status === 'dormant',
+        enrolled_at: r.enrolled_at ?? null,
+        // Enrolled after this class ran, so there was never anything for them to
+        // explain. Read by bucketFor below, which is why it is set before it.
+        joinedAfterClass: joinedAfterClass(r.enrolled_at, cls.scheduled_date),
         rsvp: opt ? 'not_attending' : 'attending',
         reason: opt ? (opt.reason_code || opt.reason || null) : null,
         attended,
@@ -209,7 +218,12 @@ export async function GET(request: NextRequest) {
         missedWithReason: stateTally.missed_with_reason,
         caughtUp: stateTally.caught_up,
         excused: stateTally.excused,
-        notCaughtUp: stateTally.missed_no_reason + stateTally.missed_with_reason,
+        // Enrolled after the class ran. Counted in notCaughtUp because the work
+        // is genuinely still owed, but held apart everywhere it is labelled: a
+        // late joiner needs the recording, not a phone call asking where they were.
+        lateJoiners: stateTally.late_joiner,
+        notCaughtUp:
+          stateTally.missed_no_reason + stateTally.missed_with_reason + stateTally.late_joiner,
       },
       buckets,
       reasonTally: tallyReasons(optOuts || []),

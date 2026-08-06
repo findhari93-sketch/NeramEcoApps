@@ -27,11 +27,11 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Typography,
-  UserAvatar,
   alpha,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import GridOnOutlinedIcon from '@mui/icons-material/GridOnOutlined';
@@ -481,7 +481,12 @@ function MatrixView({
                   }}
                 >
                   <Stack direction="row" spacing={1} alignItems="center">
-                    <UserAvatar src={s.student.avatar_url} name={s.student.name || ''} size={28} />
+                    <StudentAvatar
+                      userId={s.student.id}
+                      src={s.student.avatar_url}
+                      name={s.student.name || ''}
+                      size={28}
+                    />
                     <Box sx={{ minWidth: 0 }}>
                       <Typography sx={{ fontWeight: 700, fontSize: '0.82rem' }} noWrap>
                         {s.student.name || s.student.email || 'Student'}

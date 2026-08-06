@@ -29,7 +29,6 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Typography,
-  UserAvatar,
   alpha,
 } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
@@ -52,6 +51,7 @@ import {
   type WatchlistAction,
   type WatchlistStage,
 } from '@/lib/watchlist-templates';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface WatchRow {
   student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
@@ -357,7 +357,8 @@ export default function StudentWatchlistPage() {
                 '&:hover': { bgcolor: alpha(TIER_COLOR[r.tier], 0.04) },
               }}
             >
-              <UserAvatar
+              <StudentAvatar
+                userId={r.student.id}
                 src={r.student.avatar_url}
                 name={r.student.name}
                 size={40}
@@ -413,7 +414,8 @@ export default function StudentWatchlistPage() {
         {open && (
           <Box sx={{ p: 2.5 }}>
             <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-              <UserAvatar
+              <StudentAvatar
+                userId={open.student.id}
                 src={open.student.avatar_url}
                 name={open.student.name}
                 size={48}
@@ -571,6 +573,7 @@ export default function StudentWatchlistPage() {
           students={[
             {
               enrollmentId: removing.enrollment_id,
+              userId: removing.student.id,
               name: removing.student.name || removing.student.email || 'Student',
               email: removing.student.email,
               avatar_url: removing.student.avatar_url,

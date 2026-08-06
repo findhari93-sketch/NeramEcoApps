@@ -15,7 +15,8 @@
  * on a phone must not push the whole layout sideways.
  */
 import { useMemo } from 'react';
-import { Box, Stack, Typography, Chip, Avatar, Tooltip, alpha, useTheme } from '@neram/ui';
+import { Box, Stack, Typography, Chip, Tooltip, alpha, useTheme } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -230,12 +231,14 @@ export default function AssignmentResultsGrid({ questions, rows }: AssignmentRes
                   alignItems="center"
                   sx={{ width: 180, flexShrink: 0, px: 1, minWidth: 0 }}
                 >
-                  <Avatar
-                    src={row.student.avatar_url || undefined}
-                    sx={{ width: 24, height: 24, fontSize: '0.7rem', bgcolor: 'primary.dark' }}
-                  >
-                    {(row.student.name || '?').slice(0, 1).toUpperCase()}
-                  </Avatar>
+                  <StudentAvatar
+                    userId={row.student.id}
+                    src={row.student.avatar_url}
+                    name={row.student.name}
+                    size={24}
+                    tapToView={false}
+                    sx={{ fontSize: '0.7rem' }}
+                  />
                   <Typography variant="caption" noWrap sx={{ flex: 1, minWidth: 0 }}>
                     {row.student.name || row.student.email || 'Student'}
                   </Typography>

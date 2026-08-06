@@ -9,7 +9,8 @@
  * sees on their own screen, and the two drifting apart would mean a teacher and
  * a student disagreeing about whether a class is finished.
  */
-import { Box, Chip, Stack, Typography, UserAvatar, alpha, useTheme } from '@neram/ui';
+import { Box, Chip, Stack, Typography, alpha, useTheme } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import { RADIUS } from '@/components/timetable/timetable-theme';
 import type { Item, StudentCard } from './types';
 
@@ -182,7 +183,12 @@ export function StudentIdentity({
 }) {
   return (
     <>
-      <UserAvatar src={student.avatar_url} name={student.name || ''} size={size} />
+      <StudentAvatar
+        userId={student.id}
+        src={student.avatar_url}
+        name={student.name || ''}
+        size={size}
+      />
       <Box sx={{ flex: 1, minWidth: 120 }}>
         <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }} noWrap>
           {student.name || student.email || 'Student'}

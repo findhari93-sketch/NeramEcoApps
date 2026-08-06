@@ -80,6 +80,26 @@ async function resolveQBCaller(authHeader: string | null): Promise<ResolvedCalle
 }
 
 /**
+ * Verify the caller is staff, for a Question Bank resource only staff may touch:
+ * original papers, answer keys, activation, the tag registry.
+ *
+ * Exists because the routes it replaces each hand-rolled the same check as
+ * `['teacher','admin'].includes(caller.user_type)`, which refuses a manager: a
+ * manager row is user_type='student' carrying staff_role='manager'. Every
+ * paper route was therefore closed to the very people who curate papers.
+ * resolveStaffRole is the one function that knows what staff means, so asking
+ * it here means the answer cannot drift route by route again.
+ */
+export async function verifyQBStaff(authHeader: string | null): Promise<QBAccessResult> {
+  const resolved = await resolveQBCaller(authHeader);
+  if (!resolved.ok) return resolved;
+  if (!resolved.isStaff) {
+    return { ok: false, response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+  return { ok: true, caller: resolved.caller };
+}
+
+/**
  * Verify access to a Question Bank resource that is NOT scoped to a classroom:
  * the global tag registry, a student's own folder tree, a student's own paper.
  *

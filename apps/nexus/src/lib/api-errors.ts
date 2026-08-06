@@ -24,7 +24,17 @@ export class ApiError extends Error {
 const AUTH_FAILURE =
   /^(Missing or invalid Authorization header|Invalid Microsoft token|Invalid or expired impersonation token|Impersonation target is no longer valid|User not found|Test user not found|Invalid or expired parent session|Parent access has been revoked|Parent session is no longer valid|Parent account is no longer valid)/;
 
-function messageOf(err: unknown, fallback: string): string {
+/**
+ * The text of a thrown thing, whatever it turned out to be.
+ *
+ * Exported because `err instanceof Error ? err.message : 'Internal server error'`
+ * is the idiom most route catch blocks reach for, and it is wrong here: a
+ * PostgrestError is a plain object carrying message, details, hint and code, so
+ * that ternary discards the entire explanation and logs the fallback. Every
+ * Supabase failure then reads as one indistinguishable "Internal server error",
+ * which is exactly how a constraint violation can look like a crash.
+ */
+export function messageOf(err: unknown, fallback = 'Request failed'): string {
   if (err instanceof Error) return err.message;
   if (err && typeof err === 'object' && 'message' in err) {
     return String((err as { message?: unknown }).message ?? fallback);

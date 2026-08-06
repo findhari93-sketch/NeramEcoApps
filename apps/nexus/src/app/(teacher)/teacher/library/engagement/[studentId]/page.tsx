@@ -7,7 +7,6 @@ import {
   Typography,
   Paper,
   Skeleton,
-  UserAvatar,
   Chip,
   IconButton,
   LinearProgress,
@@ -21,6 +20,7 @@ import PeriodToggle from '@/components/library/engagement/PeriodToggle';
 import EngagementStatusDot from '@/components/library/engagement/EngagementStatusDot';
 import WatchTimeChart from '@/components/library/engagement/WatchTimeChart';
 import StreakDisplay from '@/components/library/engagement/StreakDisplay';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface StudentEngagement {
   student: {
@@ -162,7 +162,8 @@ export default function StudentEngagementDetailPage() {
         <IconButton onClick={() => router.back()} size="small">
           <ArrowBackIcon />
         </IconButton>
-        <UserAvatar
+        <StudentAvatar
+          userId={studentId}
           src={student.avatar_url}
           name={`${student.first_name} ${student.last_name}`}
           size={40}

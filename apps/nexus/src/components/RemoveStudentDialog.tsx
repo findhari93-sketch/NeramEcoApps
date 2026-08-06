@@ -9,7 +9,6 @@ import {
   Button,
   Box,
   Typography,
-  UserAvatar,
   FormControl,
   InputLabel,
   Select,
@@ -21,6 +20,7 @@ import {
   ListItemText,
   Alert,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import type { RemovalReasonCategory } from '@neram/database';
 
 const REASON_LABELS: Record<RemovalReasonCategory, string> = {
@@ -34,6 +34,8 @@ const REASON_LABELS: Record<RemovalReasonCategory, string> = {
 
 interface StudentToRemove {
   enrollmentId: string;
+  /** users.id, so the row can wear the student's cohort ring. */
+  userId?: string | null;
   name: string;
   email: string | null;
   avatar_url: string | null;
@@ -149,7 +151,13 @@ export default function RemoveStudentDialog({
           {students.map((student) => (
             <ListItem key={student.enrollmentId} sx={{ minHeight: 48 }}>
               <ListItemAvatar>
-                <UserAvatar src={student.avatar_url} name={student.name} size={36} />
+                <StudentAvatar
+                  userId={student.userId}
+                  src={student.avatar_url}
+                  name={student.name}
+                  size={36}
+                  tapToView={false}
+                />
               </ListItemAvatar>
               <ListItemText
                 primary={student.name}

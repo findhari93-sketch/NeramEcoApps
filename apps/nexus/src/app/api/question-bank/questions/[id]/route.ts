@@ -10,6 +10,8 @@ import {
   setQuestionTags,
 } from '@neram/database';
 import { getLinkedDrawingQuestionId } from '@neram/database/queries/nexus';
+import { resolveStaffRole } from '@/lib/staff-capabilities';
+import { getQuestionOrigin } from '@/lib/test-import-store';
 
 export async function GET(
   request: NextRequest,
@@ -38,7 +40,22 @@ export async function GET(
 
     const tag_ids = await getQuestionTagIds(id);
 
-    return NextResponse.json({ data: { ...data, drawing_question_id, tag_ids } }, { status: 200 });
+    /**
+     * `?origin=1`: which upload produced this question.
+     *
+     * Answered here rather than from a route of its own so the detail view
+     * still costs one invocation, and asked for explicitly because the list
+     * views that also read this endpoint have no use for it.
+     *
+     * Staff only. A student browsing the bank has no business knowing which
+     * teacher uploaded which file.
+     */
+    let origin = null;
+    if (request.nextUrl.searchParams.get('origin') === '1' && resolveStaffRole(caller) !== null) {
+      origin = await getQuestionOrigin(id).catch(() => null);
+    }
+
+    return NextResponse.json({ data: { ...data, drawing_question_id, tag_ids, origin } }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[QB API] Error:', message);

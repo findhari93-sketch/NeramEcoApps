@@ -55,6 +55,16 @@ interface RecapPlayerProps {
   onSectionEnd: (sectionIndex: number) => void;
   /** Fires on every playback tick. `duration` is 0 until metadata has loaded. */
   onTimeUpdate?: (seconds: number, duration: number) => void;
+  /** Shown over the picture in fullscreen, where the page around it is gone. */
+  title?: string;
+  /**
+   * A pure pass-through to NeramVideoPlayer, deliberately not state held here.
+   *
+   * The quiz lives in RecapWatch, two levels above this component, so this file
+   * has nothing useful to do with the element. Holding it here would mean
+   * threading it back up again, and a second copy that can go stale.
+   */
+  onFullscreenChange?: (el: HTMLElement | null) => void;
 }
 
 interface Watermark {
@@ -68,6 +78,8 @@ export default function RecapPlayer({
   sections,
   onSectionEnd,
   onTimeUpdate,
+  title,
+  onFullscreenChange,
 }: RecapPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Whichever surface is live. The checkpoint list drives playback through this,
@@ -116,6 +128,46 @@ export default function RecapPlayer({
       }),
     [sections, duration, furthest],
   );
+  /**
+   * Checkpoint positions for the scrub bar.
+   *
+   * Position only, no question counts: a label on a checkpoint the student has
+   * not reached describes content that is deliberately locked. SeekBar drops the
+   * label for any mark past the boundary; not sending one at all would also lose
+   * it for the checkpoints they have already earned.
+   */
+  const marks = useMemo(
+    () =>
+      sections
+        .filter((s) => Number.isFinite(s.end_timestamp_seconds) && s.end_timestamp_seconds > 0)
+        .map((s, i) => ({
+          id: s.id,
+          at: s.end_timestamp_seconds,
+          label: `Checkpoint ${i + 1}`,
+          passed: s.passed,
+        })),
+    [sections],
+  );
+
+  /**
+   * Subtitles, riding the grant the video already holds.
+   *
+   * Derived from the stream URL rather than fetched separately, because the two
+   * are authorised by the same signed token and minting a second one would just
+   * be a second chance to get out of step. When the grant is re-minted mid-class
+   * this changes with it, and the <track> reloads against the fresh token.
+   *
+   * A recording with no stored transcript answers 404 and the browser reports no
+   * usable track, so the captions entry simply never appears in the menu. That is
+   * the desired behaviour: there is nothing to offer.
+   */
+  const captions = useMemo(() => {
+    if (!streamUrl) return null;
+    const vt = streamUrl.split('vt=')[1];
+    if (!vt) return null;
+    return { src: `/api/media/captions?vt=${vt}`, label: 'English', lang: 'en' };
+  }, [streamUrl]);
+
   // Read inside the __recapPlayer handle, which is registered once per source.
   const gateRef = useRef(gate);
   gateRef.current = gate;
@@ -259,10 +311,14 @@ export default function RecapPlayer({
         gate={gate}
         transportRef={transportRef}
         watermark={watermark}
+        title={title}
+        marks={marks}
         resumeAt={resumeAt}
         onTimeUpdate={handleTick}
         onCheckpointReached={handleBoundary}
         onLoadedMetadata={setDuration}
+        allowFullscreen
+        onFullscreenChange={onFullscreenChange}
       />
     );
   }
@@ -293,11 +349,16 @@ export default function RecapPlayer({
       videoRef={videoRef}
       transportRef={transportRef}
       watermark={watermark}
+      title={title}
+      marks={marks}
+      captions={captions}
       resumeAt={resumeAt}
       onTimeUpdate={handleTick}
       onCheckpointReached={handleBoundary}
       onLoadedMetadata={handleLoadedMetadata}
       onError={handleVideoError}
+      allowFullscreen
+      onFullscreenChange={onFullscreenChange}
     />
   );
 }

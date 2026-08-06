@@ -10,7 +10,6 @@ import {
   InputAdornment,
   Box,
   Typography,
-  Avatar,
   Chip,
   CircularProgress,
   IconButton,
@@ -19,6 +18,7 @@ import {
   SearchIcon,
   CloseIcon,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -36,14 +36,6 @@ interface ViewAsStudentDialogProps {
   open: boolean;
   onClose: () => void;
 }
-
-const getInitials = (name: string) =>
-  name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
 
 /**
  * Searchable single-select student picker for "View as Student". Opened from the
@@ -273,12 +265,14 @@ export default function ViewAsStudentDialog({ open, onClose }: ViewAsStudentDial
                       opacity: startingId && !starting ? 0.5 : 1,
                     }}
                   >
-                    <Avatar
-                      src={student.avatar_url || undefined}
-                      sx={{ width: 40, height: 40, fontSize: '0.9rem', flexShrink: 0 }}
-                    >
-                      {getInitials(student.name)}
-                    </Avatar>
+                    <StudentAvatar
+                      userId={student.id}
+                      src={student.avatar_url}
+                      name={student.name}
+                      size={40}
+                      tapToView={false}
+                      sx={{ fontSize: '0.9rem', flexShrink: 0 }}
+                    />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
                         {student.name}

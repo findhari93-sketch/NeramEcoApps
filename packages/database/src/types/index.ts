@@ -6588,6 +6588,18 @@ export interface NexusQBOriginalPaper {
   questions_answer_keyed: number;
   questions_complete: number;
   created_at: string;
+  /**
+   * The view-only original PDF, held as a Study Materials file so it keeps that
+   * subsystem's watermarking, download grants and SharePoint streaming. NULL
+   * when the questions were parsed from a paper we hold no file for.
+   */
+  study_file_id: string | null;
+  /**
+   * Staff decision to publish this paper to students. Deliberately separate from
+   * upload_status, which describes how far the PARSE got: a fully parsed paper is
+   * not automatically one anybody meant to hand out.
+   */
+  is_student_visible: boolean;
   // Recalled paper fields
   paper_source: QBPaperSource;
   exam_date: string | null;
@@ -6669,6 +6681,123 @@ export interface QBCategoryCountsPayload {
   tree: NexusQBTagNode[];         // subject-group roots, ordered by sort_order
 }
 
+// ============================================================================
+// Original papers, as a student meets them
+//
+// One paper, three faces. The names below are the ones used on screen, in the
+// API and in the database branch that dispatches a placement, so a reader can
+// follow "practice" from a pip on a card all the way to the query that counts
+// it.
+// ============================================================================
+
+/** What a student can do with a paper. */
+export type QBPaperFace = 'read' | 'practice' | 'test';
+
+/**
+ * How far a student has got with one face.
+ *
+ * 'unavailable' is not the same as 'available': the first means staff have not
+ * provided this face at all (no PDF linked, no mock placed) and the card hides
+ * it, the second means it is there and untouched. Collapsing the two would show
+ * a student a Read button that opens nothing.
+ */
+export type QBPaperFaceState = 'unavailable' | 'available' | 'in_progress' | 'done';
+
+export interface QBPaperFaceStates {
+  read: QBPaperFaceState;
+  practice: QBPaperFaceState;
+  test: QBPaperFaceState;
+}
+
+/** A paper as it appears in the student grid. */
+export interface NexusQBPaperCard {
+  id: string;
+  exam_type: QBExamType;
+  exam_label: string;
+  year: number;
+  session: string | null;
+  shift: QBShift | null;
+  /** "NATA 2025 Session 1 (Forenoon)", assembled once server-side. */
+  title: string;
+  /** "2025 Session 1", for use under an exam heading that already says NATA. */
+  short_title: string;
+  /** Active questions carried by this paper, via nexus_qb_question_sources. */
+  question_count: number;
+  attempted_count: number;
+  practice_pct: number;
+  has_pdf: boolean;
+  has_test: boolean;
+  best_test_pct: number | null;
+  faces: QBPaperFaceStates;
+}
+
+/** The placed mock, as the paper detail screen needs it. */
+export interface NexusQBPaperTest {
+  test_id: string;
+  placement_id: string;
+  title: string;
+  question_count: number;
+  duration_minutes: number | null;
+  passing_pct: number | null;
+  attempts_used: number;
+  /**
+   * The one scored sitting is spent. The button stays, but switches to
+   * mode='revision', which the engine already keeps off the record.
+   */
+  official_attempt_done: boolean;
+  best_pct: number | null;
+}
+
+export interface NexusQBPaperDetail extends NexusQBPaperCard {
+  duration_minutes: number | null;
+  total_marks: number | null;
+  /** NULL when no PDF is linked; the Read card is hidden rather than disabled. */
+  study_file: NexusStudyFileDTO | null;
+  test: NexusQBPaperTest | null;
+}
+
+/** Papers grouped the way the grid draws them: exam tab, then year heading. */
+export interface NexusQBPaperGroup {
+  exam_type: QBExamType;
+  exam_label: string;
+  paper_count: number;
+  years: Array<{ year: number; papers: NexusQBPaperCard[] }>;
+}
+
+export interface NexusQBStudentPapersPayload {
+  groups: NexusQBPaperGroup[];
+}
+
+// ── Teacher: students down, papers across ───────────────────────────────────
+
+export interface NexusQBPaperMatrixCell extends QBPaperFaceStates {
+  best_test_pct: number | null;
+  attempted_count: number;
+}
+
+export interface NexusQBPaperMatrixRow {
+  student_id: string;
+  student_name: string;
+  avatar_url: string | null;
+  /** paper_id -> cell. Sparse: a paper the student has not touched is absent. */
+  cells: Record<string, NexusQBPaperMatrixCell>;
+  /** Papers where all three provided faces are done. */
+  papers_completed: number;
+}
+
+export interface NexusQBPaperMatrix {
+  papers: Array<{
+    id: string;
+    title: string;
+    short_title: string;
+    exam_type: QBExamType;
+    question_count: number;
+    has_pdf: boolean;
+    has_test: boolean;
+  }>;
+  rows: NexusQBPaperMatrixRow[];
+}
+
 // Unified test engine: a test is placed into one or more contexts
 //
 // Keep this in step with the nexus_placement_context enum in the database. It
@@ -6692,7 +6821,14 @@ export type NexusPlacementContext =
    * withholds nothing on the day. The after-class counterpart of
    * 'class_prep_test'.
    */
-  | 'class_test';
+  | 'class_test'
+  /**
+   * context_id = nexus_qb_original_papers.id. "Sit the 2025 paper." The third
+   * face of an original paper, beside reading its PDF and practising its
+   * questions one at a time. Holds at most one active test, enforced by
+   * uq_placement_single_test, so "best score on this paper" means one thing.
+   */
+  | 'qb_paper';
 
 /**
  * What a test IS, stored on nexus_tests.test_kind rather than inferred from its

@@ -33,6 +33,23 @@ interface YouTubeSurfaceProps extends VideoSurfaceProps {
   rawPlayerRef?: React.MutableRefObject<any>;
 }
 
+/**
+ * The one place in the video stack that sniffs the user agent, because there is
+ * nothing else to go on.
+ *
+ * On the proxied path `isVolumeSettable` probes the real <video> element and
+ * believes the answer. Here the element lives inside someone else's iframe: the
+ * IFrame API's getVolume() reports the value we asked for whether or not iOS
+ * acted on it, so a probe always says yes. Hiding a dead slider is worth one
+ * narrow check.
+ */
+function isIosLike(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) return true;
+  // iPadOS 13+ reports itself as a Mac. Touch points are the only tell.
+  return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1;
+}
+
 let apiReadyPromise: Promise<void> | null = null;
 
 /** Load the IFrame API once per page and resolve when window.YT is usable. */
@@ -73,6 +90,9 @@ export default function YouTubeSurface({
   useEffect(() => {
     let cancelled = false;
     let poll: ReturnType<typeof setInterval> | null = null;
+    // Volume has no event on this path, so it is a state diff rather than a
+    // notification. Seeded null so the first read does not report a change.
+    let lastVolume: { value: number; muted: boolean } | null = null;
 
     const tick = () => {
       const player = playerRef.current;
@@ -80,6 +100,14 @@ export default function YouTubeSurface({
       const time = player.getCurrentTime() || 0;
       const dur = typeof player.getDuration === 'function' ? player.getDuration() || 0 : 0;
       eventsRef.current.onTick(time, dur);
+
+      const value = (player.getVolume?.() ?? 100) / 100;
+      const muted = !!player.isMuted?.();
+      if (!lastVolume || lastVolume.value !== value || lastVolume.muted !== muted) {
+        const first = !lastVolume;
+        lastVolume = { value, muted };
+        if (!first) eventsRef.current.onVolumeChange(value, muted);
+      }
     };
 
     loadYouTubeApi().then(() => {
@@ -110,14 +138,46 @@ export default function YouTubeSurface({
               seek: (seconds) => playerRef.current?.seekTo?.(seconds, true),
               getTime: () => playerRef.current?.getCurrentTime?.() ?? 0,
               getDuration: () => playerRef.current?.getDuration?.() ?? 0,
-              // YouTube honours this, but only up to its own menu of rates. It
-              // is a ceiling we ask for, not one we can enforce, which is part
-              // of why this path is the fallback.
+              // YouTube honours this, but only up to its own menu of rates, and
+              // there is no ratechange equivalent to tell us when something else
+              // moved it. So the rate CEILING is not enforceable on this path at
+              // all: a console setPlaybackRate(2) here is undetectable. That is a
+              // known gap of the fallback, not an oversight. It is also why the
+              // proxied path is the one every real recap uses.
               setRate: (rate) => playerRef.current?.setPlaybackRate?.(rate),
               isPaused: () => {
                 const YT = (window as any).YT;
                 return playerRef.current?.getPlayerState?.() !== YT?.PlayerState?.PLAYING;
               },
+
+              // getVideoLoadedFraction is one fraction of the WHOLE video with no
+              // start offset, so after a seek the real buffered region is not
+              // [0, f*d] and this overstates what is ready. It is a cosmetic hint
+              // that feeds no decision; nothing may branch on it.
+              getBuffered: () => {
+                const f = playerRef.current?.getVideoLoadedFraction?.() ?? 0;
+                const d = playerRef.current?.getDuration?.() ?? 0;
+                return f > 0 && d > 0 ? [[0, f * d] as const] : [];
+              },
+
+              // YouTube's scale is 0..100. Convert at the boundary so the player
+              // above only ever handles 0..1.
+              setVolume: (value) => playerRef.current?.setVolume?.(Math.round(value * 100)),
+              getVolume: () => (playerRef.current?.getVolume?.() ?? 100) / 100,
+              setMuted: (muted) =>
+                muted ? playerRef.current?.mute?.() : playerRef.current?.unMute?.(),
+              isMuted: () => !!playerRef.current?.isMuted?.(),
+              // The iframe is a <video> underneath, so iOS ignores programmatic
+              // volume here exactly as it does on the proxied path.
+              isVolumeSettable: () => !isIosLike(),
+
+              supportsPictureInPicture: () => false,
+              enterPictureInPicture: () => Promise.resolve(),
+              exitPictureInPicture: () => Promise.resolve(),
+
+              getTextTracks: () => [],
+              setTextTrack: () => {},
+              getActiveTextTrack: () => null,
             };
             transportRef.current = transport;
             if (rawPlayerRef) rawPlayerRef.current = playerRef.current;
@@ -133,6 +193,10 @@ export default function YouTubeSurface({
             // past the file would never be reached, so the last quiz would
             // never open.
             if (e?.data === YT?.PlayerState?.ENDED) eventsRef.current.onEnded();
+            // The one capability this surface gets as a real event rather than
+            // as a poll.
+            if (e?.data === YT?.PlayerState?.BUFFERING) eventsRef.current.onWaiting();
+            else eventsRef.current.onPlayable();
           },
           onError: () => eventsRef.current.onError(),
         },

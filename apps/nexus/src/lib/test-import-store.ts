@@ -230,6 +230,89 @@ export async function getTestImportRecord(testId: string): Promise<TestImportRec
   return (data as TestImportRecord) || null;
 }
 
+export interface QuestionOriginRecord {
+  test_id: string;
+  test_title: string;
+  source: TestImportSource | null;
+  prompt_meta: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+  /** How many tests currently draw on this question. Reuse is the point of a bank. */
+  used_in_tests: number;
+}
+
+/**
+ * Which import a question came from, when it is in more than one.
+ *
+ * The EARLIEST, because that is the one that created it: every later test
+ * holding the same question found it in the bank and reused it, and naming a
+ * reuse as the origin would credit the wrong upload. Ties and unparseable
+ * timestamps fall back to the first row given, which keeps this total rather
+ * than letting a bad date drop the answer entirely.
+ *
+ * Pure, so the choice is testable without a database.
+ */
+export function pickEarliestImport<T extends { created_at?: string | null }>(
+  rows: T[],
+): T | null {
+  if (!rows.length) return null;
+  let best = rows[0];
+  let bestTime = Date.parse(String(best.created_at ?? ''));
+  for (const row of rows.slice(1)) {
+    const t = Date.parse(String(row.created_at ?? ''));
+    if (Number.isNaN(t)) continue;
+    if (Number.isNaN(bestTime) || t < bestTime) {
+      best = row;
+      bestTime = t;
+    }
+  }
+  return best;
+}
+
+/**
+ * Where a bank question came from.
+ *
+ * The reverse of the test page's panel, and the half a teacher asks for while
+ * standing in the bank: this question exists, which upload produced it. Returns
+ * null for a question nobody imported, which includes everything authored by
+ * hand and everything that predates the archive.
+ */
+export async function getQuestionOrigin(questionId: string): Promise<QuestionOriginRecord | null> {
+  const supabase = adminDb();
+
+  const { data: links } = await supabase
+    .from('nexus_test_questions')
+    .select('test_id')
+    .eq('qb_question_id', questionId);
+
+  const testIds = [...new Set((links || []).map((l: any) => l.test_id).filter(Boolean))] as string[];
+  if (testIds.length === 0) return null;
+
+  const { data: imports } = await supabase
+    .from('nexus_test_imports')
+    .select('test_id, source, prompt_meta, created_at, updated_at')
+    .in('test_id', testIds);
+
+  const earliest = pickEarliestImport((imports || []) as any[]);
+  if (!earliest) return null;
+
+  const { data: test } = await supabase
+    .from('nexus_tests')
+    .select('title')
+    .eq('id', earliest.test_id)
+    .maybeSingle();
+
+  return {
+    test_id: earliest.test_id,
+    test_title: String(test?.title || 'Untitled test'),
+    source: (earliest.source as TestImportSource) ?? null,
+    prompt_meta: (earliest.prompt_meta as Record<string, unknown>) || {},
+    created_at: earliest.created_at ?? null,
+    updated_at: earliest.updated_at ?? null,
+    used_in_tests: testIds.length,
+  };
+}
+
 /** Which of these study files already carry a generated test. Drives what a folder run skips. */
 export async function studyFilesWithGeneratedTests(fileIds: string[]): Promise<Set<string>> {
   if (fileIds.length === 0) return new Set();

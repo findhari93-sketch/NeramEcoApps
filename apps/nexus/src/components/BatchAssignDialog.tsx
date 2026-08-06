@@ -10,7 +10,6 @@ import {
   Box,
   Typography,
   Checkbox,
-  Avatar,
   FormControl,
   InputLabel,
   Select,
@@ -20,6 +19,7 @@ import {
   ListItemAvatar,
   ListItemText,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface Student {
   enrollmentId: string;
@@ -84,9 +84,6 @@ export default function BatchAssignDialog({
       setSubmitting(false);
     }
   };
-
-  const getInitials = (name: string) =>
-    name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
 
   return (
     <Dialog
@@ -154,9 +151,13 @@ export default function BatchAssignDialog({
                 sx={{ mr: 1 }}
               />
               <ListItemAvatar>
-                <Avatar src={student.avatar_url || undefined} sx={{ width: 36, height: 36 }}>
-                  {getInitials(student.name)}
-                </Avatar>
+                <StudentAvatar
+                  userId={student.userId}
+                  src={student.avatar_url}
+                  name={student.name}
+                  size={36}
+                  tapToView={false}
+                />
               </ListItemAvatar>
               <ListItemText
                 primary={student.name}

@@ -4,6 +4,7 @@ import {
   scheduledMinutes,
   rankByTimeInRoom,
   bucketFor,
+  joinedAfterClass,
   tallyBuckets,
   BARELY_ATTENDED_FLOOR_MIN,
 } from './attendance-quality';
@@ -108,6 +109,50 @@ describe('bucketFor', () => {
     expect(bucketFor({ attended: false })).toBe('missed_no_reason');
     expect(bucketFor({ attended: false, rsvp: 'attending', absence: null })).toBe('missed_no_reason');
   });
+
+  it('never calls a late joiner silent', () => {
+    // The bug this replaces: somebody who enrolled in August was listed under
+    // "No reason given" for a class in July, with no way to clear it.
+    expect(bucketFor({ attended: false, joinedAfterClass: true })).toBe('late_joiner');
+    expect(bucketFor({ attended: false, joinedAfterClass: true, rsvp: 'attending' })).toBe(
+      'late_joiner',
+    );
+  });
+
+  it('lets finished work outrank the late-joiner label, but not a reason', () => {
+    // Done is done, whenever they joined.
+    expect(
+      bucketFor({ attended: false, joinedAfterClass: true, absence: { caught_up_at: 'x' } }),
+    ).toBe('caught_up');
+    expect(
+      bucketFor({ attended: false, joinedAfterClass: true, absence: { excused_at: 'x' } }),
+    ).toBe('excused');
+    // A stray reason on a late joiner's row does not make them an absentee.
+    expect(
+      bucketFor({ attended: false, joinedAfterClass: true, absence: { reason_code: 'exam' } }),
+    ).toBe('late_joiner');
+  });
+});
+
+describe('joinedAfterClass', () => {
+  it('is true only once the enrolment starts after the class day ends', () => {
+    expect(joinedAfterClass('2026-08-01T04:00:00Z', '2026-07-03')).toBe(true);
+    expect(joinedAfterClass('2026-06-01T04:00:00Z', '2026-07-03')).toBe(false);
+  });
+
+  it('does not flag somebody enrolled later on the day of the class', () => {
+    // 9 PM IST on the day of a 7 PM class. The roster counts them as a member
+    // that day, so the two must not disagree.
+    expect(joinedAfterClass('2026-07-03T15:30:00Z', '2026-07-03')).toBe(false);
+    // One minute past IST midnight is the next day, and does flag.
+    expect(joinedAfterClass('2026-07-03T18:31:00Z', '2026-07-03')).toBe(true);
+  });
+
+  it('says no when either side is missing or unparseable', () => {
+    expect(joinedAfterClass(null, '2026-07-03')).toBe(false);
+    expect(joinedAfterClass('2026-08-01T00:00:00Z', null)).toBe(false);
+    expect(joinedAfterClass('not a date', '2026-07-03')).toBe(false);
+  });
 });
 
 describe('tallyBuckets', () => {
@@ -117,6 +162,7 @@ describe('tallyBuckets', () => {
       { attended: true, rsvp: 'not_attending' },
       { attended: false, absence: { reason_code: 'exam' } },
       { attended: false, absence: { caught_up_at: 'x' } },
+      { attended: false, joinedAfterClass: true },
       { attended: false },
       { attended: false },
     ]);
@@ -124,9 +170,10 @@ describe('tallyBuckets', () => {
       attended: 2,
       excused: 0,
       caught_up: 1,
+      late_joiner: 1,
       missed_with_reason: 1,
       missed_no_reason: 2,
     });
-    expect(Object.values(tally).reduce((a, b) => a + b, 0)).toBe(6);
+    expect(Object.values(tally).reduce((a, b) => a + b, 0)).toBe(7);
   });
 });
