@@ -45,6 +45,9 @@ import type { NexusTestOverviewGroup, NexusTestOverviewGroupKey, NexusOverviewTe
 const GROUP_META: Record<NexusTestOverviewGroupKey, { icon: React.ReactNode; color: string }> = {
   // Amber: the only group whose tests hold a student out of a class.
   class_prep: { icon: <LockClockOutlinedIcon />, color: '#D97706' },
+  // The other half of the same conversation, in the same family of colours: set
+  // by a class, owed by its students, just on the far side of it.
+  class_test: { icon: <FactCheckOutlinedIcon />, color: '#EA580C' },
   study_materials: { icon: <MenuBookOutlinedIcon />, color: '#0EA5E9' },
   class_recaps: { icon: <VideoLibraryOutlinedIcon />, color: '#8B5CF6' },
   foundation: { icon: <SchoolOutlinedIcon />, color: '#10B981' },

@@ -2,6 +2,7 @@
 // nexus_qb_apply_category_proposals RPC are not yet in the generated Supabase
 // types. Regenerate with pnpm supabase:gen:types after 20260801091000.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { fetchAllRows } from '../../utils/paged-rows';
 
 const PROPOSALS = 'nexus_qb_category_proposals';
 
@@ -125,9 +126,11 @@ export async function getQBProposalSummary(
   client?: TypedSupabaseClient,
 ): Promise<Record<QBProposalStatus, number>> {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase.from(PROPOSALS).select('status').range(0, 99999);
-  if (error) throw error;
+  // Read to exhaustion. A `.range()` above 1000 does not lift PostgREST's own
+  // ceiling, so this header would start under-reporting the moment the table
+  // passed a thousand proposals, without any error to say so.
+  const data = await fetchAllRows<{ status: string }>(() => supabase.from(PROPOSALS).select('status'));
   const out: Record<string, number> = { pending: 0, approved: 0, rejected: 0, applied: 0, stale: 0 };
-  for (const row of data || []) out[(row as any).status] = (out[(row as any).status] || 0) + 1;
+  for (const row of data) out[(row as any).status] = (out[(row as any).status] || 0) + 1;
   return out as Record<QBProposalStatus, number>;
 }

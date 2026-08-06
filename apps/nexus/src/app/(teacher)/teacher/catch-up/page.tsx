@@ -27,6 +27,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import { StatTile } from '@/components/catchup/shared';
+import { emptyTally } from '@/lib/catchup-buckets';
 import NeedsActionTab from '@/components/catchup/NeedsActionTab';
 import ReasonsTab from '@/components/catchup/ReasonsTab';
 import CaughtUpTab from '@/components/catchup/CaughtUpTab';
@@ -54,6 +55,8 @@ const EMPTY: Payload = {
     clearedThisMonth: 0,
     explained: 0,
     unexplained: 0,
+    byBucket: emptyTally(),
+    hiddenDormant: 0,
   },
 };
 
@@ -172,13 +175,43 @@ function TeacherCatchUpWorkspace() {
     [authFetch],
   );
 
+  /**
+   * The same endpoint, which has always accepted arrays. Kept separate from
+   * `onNudge` because it reports differently: one student is "Nudge sent", a
+   * selection has to say how many actually went out, since sendNudge drops any
+   * id that resolves to a dormant student.
+   */
+  const onNudgeMany = useCallback(
+    async (studentIds: string[], journeyIds: string[]) => {
+      setBusy('bulk');
+      try {
+        await authFetch('/api/catchup/nudge', {
+          method: 'POST',
+          body: JSON.stringify({ studentIds, journeyIds }),
+        });
+        setSnack({
+          msg:
+            studentIds.length === 1
+              ? 'Nudge sent.'
+              : `Nudge sent to ${studentIds.length} students.`,
+          sev: 'success',
+        });
+      } catch (err) {
+        setSnack({ msg: err instanceof Error ? err.message : 'Could not send', sev: 'error' });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [authFetch],
+  );
+
   const onReload = useCallback(async () => {
     await mutate();
   }, [mutate]);
 
   const tabProps: TabProps | null = useMemo(
-    () => (data ? { data, busy, onAct, onNudge, onReload } : null),
-    [data, busy, onAct, onNudge, onReload],
+    () => (data ? { data, busy, onAct, onNudge, onNudgeMany, onReload } : null),
+    [data, busy, onAct, onNudge, onNudgeMany, onReload],
   );
 
   if (data === null || tabProps === null) {
@@ -209,6 +242,16 @@ function TeacherCatchUpWorkspace() {
         was away belongs here, not only students who joined late.
       </Typography>
 
+      {/*
+        All four tiles count STUDENTS now. They used to mix units: one counted
+        people and three counted absence rows, so "8 need attention" sat beside
+        "91 unexplained" and read as though they were the same kind of thing.
+        The row counts moved to the line underneath, where a per-absence number
+        is not being silently compared with a per-student one.
+
+        Every number here comes from totals.byBucket, which is a tally of the
+        rows the tab renders. The tile and the group beneath it cannot disagree.
+      */}
       <Box
         sx={{
           display: 'grid',
@@ -217,11 +260,17 @@ function TeacherCatchUpWorkspace() {
           mb: 1,
         }}
       >
-        <StatTile n={data.totals.studentsBehind} label="need attention" tone="bad" />
-        <StatTile n={data.totals.unexplained} label="unexplained absences" tone="warn" />
-        <StatTile n={data.totals.outstanding} label="classes outstanding" />
-        <StatTile n={data.totals.clearedThisMonth} label="cleared this month" tone="good" />
+        <StatTile n={data.totals.byBucket.run_over} label="run over" tone="bad" />
+        <StatTile n={data.totals.byBucket.not_started} label="not started" tone="warn" />
+        <StatTile n={data.totals.byBucket.waiting_on_us} label="waiting on us" />
+        <StatTile n={data.totals.clearedThisMonth} label="classes cleared this month" tone="good" />
       </Box>
+
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+        {data.totals.outstanding} classes outstanding across {data.totals.studentsCatchingUp}{' '}
+        students · {data.totals.unexplained} absences with no reason given
+        {data.totals.hiddenDormant > 0 ? ` · ${data.totals.hiddenDormant} dormant hidden` : ''}
+      </Typography>
 
       <Tabs
         value={tab}

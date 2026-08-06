@@ -41,6 +41,8 @@ export interface ClassPrepSummary {
   assignments_required: number;
   assignments_submitted: number;
   reason_given: boolean;
+  /** A Required test from the previous class is riding on this one. */
+  carried_over_test: boolean;
 }
 
 /**
@@ -88,6 +90,8 @@ export async function applyClassPrepGate(
     passingByClass.set(p.context_id, p.passing_pct ?? 70);
   }
 
+  const carriedOver = await loadCarriedOverClassTests(supabase, studentId, classes);
+
   for (const cls of classes) {
     const role = opts.roleByClassroom.get(cls.classroom_id) || 'student';
     const state = states.get(cls.id);
@@ -109,6 +113,7 @@ export async function applyClassPrepGate(
         required: state?.assignments_required ?? 0,
         submitted: state?.assignments_submitted ?? 0,
       },
+      previousClassTest: carriedOver.get(cls.id) ?? null,
       reasonGiven: !!state?.test_reason_at,
       classStatus: cls.status,
       classStartIso: classStartIso(cls.scheduled_date, cls.start_time || '00:00'),
@@ -131,12 +136,111 @@ export async function applyClassPrepGate(
       assignments_required: state?.assignments_required ?? 0,
       assignments_submitted: state?.assignments_submitted ?? 0,
       reason_given: !!state?.test_reason_at,
+      carried_over_test: carriedOver.has(cls.id),
     };
 
     if (!decision.open) {
       cls.teams_meeting_join_url = null;
       cls.teams_meeting_url = null;
     }
+  }
+
+  return out;
+}
+
+/**
+ * "Did the class before this one set a Required test you have not passed?"
+ *
+ * Only the IMMEDIATELY preceding class, deliberately. Carrying every outstanding
+ * paper forward would mean one bad fortnight locks a student out of every
+ * remaining class in the term, which is exactly the "homework problem becomes an
+ * attendance problem" failure this gate was written to avoid. One class of
+ * consequence is enough to be taken seriously; the reason escape hatch still
+ * opens the door either way.
+ *
+ * Cost: three batched queries, none of which grow with the class count, and all
+ * three are skipped the moment a cheaper one comes back empty. The caller has
+ * already checked the feature flag, so classrooms with the gate switched off pay
+ * nothing at all.
+ */
+export async function loadCarriedOverClassTests(
+  supabase: any,
+  studentId: string,
+  classes: GateableClass[],
+): Promise<Map<string, { passed: boolean }>> {
+  const out = new Map<string, { passed: boolean }>();
+
+  const classroomIds = [...new Set(classes.map((c) => c.classroom_id))].filter(Boolean);
+  if (classroomIds.length === 0) return out;
+
+  // Every published class in the classrooms involved, so "the one before" can be
+  // resolved without a query per class.
+  const { data: siblings } = await supabase
+    .from('nexus_scheduled_classes')
+    .select('id, classroom_id, scheduled_date, start_time')
+    .in('classroom_id', classroomIds)
+    .neq('status', 'cancelled');
+
+  const byClassroom = new Map<string, any[]>();
+  for (const c of (siblings || []) as any[]) {
+    const list = byClassroom.get(c.classroom_id) || [];
+    list.push(c);
+    byClassroom.set(c.classroom_id, list);
+  }
+  const sortKey = (c: any) => `${String(c.scheduled_date).slice(0, 10)}T${c.start_time || '00:00'}`;
+  for (const list of byClassroom.values()) list.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+
+  const previousOf = new Map<string, string>();
+  for (const cls of classes) {
+    const list = byClassroom.get(cls.classroom_id) || [];
+    const idx = list.findIndex((c) => c.id === cls.id);
+    if (idx > 0) previousOf.set(cls.id, list[idx - 1].id);
+  }
+  if (previousOf.size === 0) return out;
+
+  const { data: placements } = await supabase
+    .from('nexus_test_placements')
+    .select('test_id, context_id, passing_pct, gating')
+    .eq('context_type', 'class_test')
+    .in('context_id', [...new Set(previousOf.values())])
+    .eq('is_active', true);
+
+  // Required only. An optional test is a suggestion, and a suggestion that
+  // withholds a Join button is not a suggestion.
+  const required = ((placements || []) as any[]).filter(
+    (p) => ((p.gating || {}) as Record<string, unknown>).required !== false,
+  );
+  if (required.length === 0) return out;
+
+  const { data: attempts } = await supabase
+    .from('nexus_test_attempts')
+    .select('test_id, percentage')
+    .eq('student_id', studentId)
+    .eq('mode', 'official')
+    .eq('status', 'submitted')
+    .in('test_id', [...new Set(required.map((p) => p.test_id))]);
+
+  const bestByTest = new Map<string, number>();
+  for (const a of (attempts || []) as any[]) {
+    const pct = a.percentage == null ? null : Number(a.percentage);
+    if (pct == null) continue;
+    const prev = bestByTest.get(a.test_id);
+    if (prev == null || pct > prev) bestByTest.set(a.test_id, pct);
+  }
+
+  const byPrevClass = new Map<string, any>();
+  for (const p of required) byPrevClass.set(p.context_id, p);
+
+  for (const [classId, prevId] of previousOf) {
+    const p = byPrevClass.get(prevId);
+    if (!p) continue;
+    const best = bestByTest.get(p.test_id) ?? null;
+    // Same comparison as resolvePassingPct and the grader: a null bar means
+    // sitting it is passing it.
+    const passed = p.passing_pct == null ? best != null : best != null && best >= p.passing_pct;
+    // Only an OUTSTANDING one is carried. A class whose predecessor's test is
+    // already passed produces no entry, so it stays ungated exactly as before.
+    if (!passed) out.set(classId, { passed: false });
   }
 
   return out;

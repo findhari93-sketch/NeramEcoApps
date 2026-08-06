@@ -15,7 +15,10 @@ import type { QBQuestionStatus } from '@neram/database';
 export async function GET(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
-    const classroomId = params.get('classroom_id') || null;
+    // Both spellings, for the same reason the filter names below accept two: the
+    // student builder sent `classroom` while this read `classroom_id`, so every
+    // one of its requests was rejected as if no classroom had been named.
+    const classroomId = params.get('classroom_id') || params.get('classroom') || null;
 
     // Verify QB access (enrollment + QB enabled for students)
     const access = await verifyQBAccess(request.headers.get('Authorization'), classroomId);

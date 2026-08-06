@@ -101,12 +101,24 @@ export async function loadChildCatchup(
     const outstanding = work.filter(
       (a: { id: string }) => !facts.submitted.has(a.id)
     ).length;
-    const hasTest = facts.testByClass.has(row.scheduled_class_id);
     const watched = isWatched(row, facts);
 
-    const finished =
-      !!row.caught_up_at ||
-      (watched && outstanding === 0 && (!hasTest || !!row.test_passed_at));
+    // Mirrors isCatchupItemComplete's test clause exactly. Written out rather
+    // than delegated because that helper also needs the class row (for "is there
+    // a recording"), which this query deliberately does not fetch.
+    //
+    // Two sources of truth, chosen by which paper it is: the auto-generated
+    // catch-up test stamps test_passed_at on this very row, while a teacher-set
+    // class test is graded by the ordinary engine and its pass is derived from
+    // the attempts. Reading test_passed_at for a class test would report every
+    // child as behind forever.
+    const test = facts.testByClass.get(row.scheduled_class_id) ?? null;
+    const testCleared =
+      !test ||
+      test.required === false ||
+      (test.source === 'class_test' ? test.passed : !!row.test_passed_at);
+
+    const finished = !!row.caught_up_at || (watched && outstanding === 0 && testCleared);
 
     if (finished) done += 1;
     else open += 1;

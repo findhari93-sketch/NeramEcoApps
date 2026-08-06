@@ -1,8 +1,9 @@
 'use client';
 
 import { cloneElement, isValidElement, type ReactElement } from 'react';
-import { Box, Typography, alpha, useTheme } from '@neram/ui';
+import { Badge, Box, Typography, alpha, useTheme } from '@neram/ui';
 import { useStudentZoneContext } from '@/components/StudentZoneProvider';
+import { useNavBadges } from '@/components/NavBadgeProvider';
 
 /**
  * Compact segmented control for switching student zones
@@ -23,6 +24,7 @@ const SEGMENT = 34;
 export default function ZoneSwitcher({ accent }: { accent?: string }) {
   const theme = useTheme();
   const { activeZone, setActiveZone, availableZones } = useStudentZoneContext();
+  const { getBadgeCount } = useNavBadges();
 
   const roleAccent = accent || theme.palette.primary.main;
 
@@ -46,6 +48,11 @@ export default function ZoneSwitcher({ accent }: { accent?: string }) {
       {availableZones.map((zone) => {
         const isActive = zone.id === activeZone;
 
+        // Work waiting in the OTHER zone. Only on the inactive segment: once a
+        // student is in that zone the bottom bar's "More" already carries the
+        // same number, and two counts for one thing reads as two things.
+        const waiting = !isActive && zone.badgePath ? getBadgeCount(zone.badgePath) : 0;
+
         // Normalize the configured icon to one consistent size and strip its
         // baseline gap (display:block) so it centers cleanly with the label.
         const icon = isValidElement(zone.icon)
@@ -63,8 +70,8 @@ export default function ZoneSwitcher({ accent }: { accent?: string }) {
               if (!isActive) setActiveZone(zone.id);
             }}
             aria-pressed={isActive}
-            aria-label={zone.label}
-            title={zone.label}
+            aria-label={waiting > 0 ? `${zone.label}, ${waiting} to catch up` : zone.label}
+            title={waiting > 0 ? `${zone.label} (${waiting} to catch up)` : zone.label}
             sx={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -89,7 +96,25 @@ export default function ZoneSwitcher({ accent }: { accent?: string }) {
           >
             {/* lineHeight:0 flex wrapper removes the SVG line-box gap, so the
                 icon sits on the true vertical center of the segment. */}
-            <Box sx={{ display: 'flex', lineHeight: 0 }}>{icon}</Box>
+            <Badge
+              badgeContent={waiting}
+              color="error"
+              max={9}
+              sx={{
+                display: 'flex',
+                lineHeight: 0,
+                '& .MuiBadge-badge': {
+                  fontSize: '0.55rem',
+                  height: 14,
+                  minWidth: 14,
+                  padding: '0 3px',
+                  top: 1,
+                  right: 1,
+                },
+              }}
+            >
+              {icon}
+            </Badge>
             {isActive && (
               <Typography
                 component="span"

@@ -86,6 +86,8 @@ export interface ClassPanelProps {
   onCreateAssignment?: (cls: ClassCardData) => void;
   /** Opens the prep-test dialog. The page owns it, like the assignment picker. */
   onSetPrepTest?: (cls: ClassCardData) => void;
+  /** Opens the same dialog in after-class mode: the test this class sets. */
+  onSetClassTest?: (cls: ClassCardData) => void;
 
   /**
    * This class's entry from the `prep` map the student class routes return.

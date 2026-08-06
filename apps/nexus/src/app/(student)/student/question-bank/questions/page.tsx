@@ -44,6 +44,7 @@ import type {
   QBDifficulty,
   QBQuestionFormat,
 } from '@neram/database';
+import { MAX_STUDENT_TEST_QUESTIONS } from '@/lib/test-limits';
 
 const PAGE_SIZE = 20;
 
@@ -119,17 +120,26 @@ export default function QuestionListPage() {
   // Selection mode state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
+  /**
+   * Whether this selection came from "select all matching" rather than taps.
+   * Stored on the test as part of source_filters, because it changes what the
+   * paper means: a sweep of the filters is a student exploring, the same size
+   * assembled by hand is a student working through something specific.
+   */
+  const [selectedViaSelectAll, setSelectedViaSelectAll] = useState(false);
   const [createTestOpen, setCreateTestOpen] = useState(false);
 
   // Create test dialog state
   const [testTitle, setTestTitle] = useState('');
+  /** Set once the student edits the name, which stops the suggestion overwriting it. */
+  const [titleTouched, setTitleTouched] = useState(false);
   const [timerType, setTimerType] = useState<'none' | 'full' | 'per_question'>('none');
   const [durationMinutes, setDurationMinutes] = useState<number>(60);
   const [perQuestionSeconds, setPerQuestionSeconds] = useState<number>(120);
   const [creatingTest, setCreatingTest] = useState(false);
 
   // Snackbar
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
     open: false,
     message: '',
     severity: 'success',
@@ -198,17 +208,23 @@ export default function QuestionListPage() {
   // Total pages for pagination
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  // Auto-suggest test title when create dialog opens
+  // Auto-suggest the test title.
+  //
+  // Recomputed from the live selection every time the dialog opens, and left
+  // alone the moment the student types. The old version ran once per mount with
+  // a `!testTitle` guard and no selection in its deps, so a title minted while
+  // nothing was selected stuck: that is where "Practice - 0 questions" on a
+  // 544-question paper came from.
   useEffect(() => {
-    if (createTestOpen && !testTitle) {
-      const parts: string[] = [];
-      if (selectedExam) parts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
-      if (selectedYear) parts.push(String(selectedYear));
-      parts.push('Practice');
-      parts.push(`- ${selectedQuestionIds.size} questions`);
-      setTestTitle(parts.join(' '));
-    }
-  }, [createTestOpen]);
+    if (!createTestOpen || titleTouched) return;
+    const parts: string[] = [];
+    if (selectedExam) parts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
+    if (selectedYear) parts.push(String(selectedYear));
+    parts.push('Practice');
+    const n = selectedQuestionIds.size;
+    parts.push(`- ${n} question${n === 1 ? '' : 's'}`);
+    setTestTitle(parts.join(' '));
+  }, [createTestOpen, titleTouched, selectedExam, selectedYear, selectedQuestionIds]);
 
   // ─── Fetch functions ──────────────────────────────────────────────────────
 
@@ -595,13 +611,26 @@ export default function QuestionListPage() {
   // ─── Selection mode helpers ───────────────────────────────────────────────
 
   function toggleQuestionSelection(questionId: string) {
+    const alreadyOn = selectedQuestionIds.has(questionId);
+    // Read the size outside the updater: a setState call inside one is a side
+    // effect React is entitled to run twice.
+    if (!alreadyOn && selectedQuestionIds.size >= MAX_STUDENT_TEST_QUESTIONS) {
+      setSnackbar({
+        open: true,
+        message: `A practice test tops out at ${MAX_STUDENT_TEST_QUESTIONS} questions.`,
+        severity: 'info',
+      });
+      return;
+    }
+    // Any hand-toggle means this is no longer a clean sweep of the filters, so
+    // the paper stops claiming it was. A 50-question paper built by "select all"
+    // is a student exploring; the same size picked one by one is a student
+    // working through something, and the teacher's read of the two differs.
+    setSelectedViaSelectAll(false);
     setSelectedQuestionIds((prev) => {
       const next = new Set(prev);
-      if (next.has(questionId)) {
-        next.delete(questionId);
-      } else {
-        next.add(questionId);
-      }
+      if (alreadyOn) next.delete(questionId);
+      else next.add(questionId);
       return next;
     });
   }
@@ -626,17 +655,32 @@ export default function QuestionListPage() {
         const json = await res.json();
         const payload = json.data || json;
         const items: NexusQBQuestionListItem[] = payload?.questions || (Array.isArray(payload) ? payload : []);
-        setSelectedQuestionIds(new Set(items.map((q) => q.id)));
+        // Capped, and said out loud. Selecting every one of 544 matches and then
+        // being refused at Create is worse than being told here how many were
+        // taken. The server enforces the same ceiling either way.
+        const capped = items.slice(0, MAX_STUDENT_TEST_QUESTIONS);
+        setSelectedViaSelectAll(true);
+        setSelectedQuestionIds(new Set(capped.map((q) => q.id)));
+        if (items.length > capped.length) {
+          setSnackbar({
+            open: true,
+            message: `Selected the first ${capped.length} of ${items.length} matches. A practice test tops out at ${MAX_STUDENT_TEST_QUESTIONS}.`,
+            severity: 'info',
+          });
+        }
       }
     } catch {
-      // Fallback: select only current page
-      setSelectedQuestionIds(new Set(questions.map((q) => q.id)));
+      // Fallback: select only current page. NOT recorded as a clean sweep, since
+      // it is a page rather than the filter set the student asked for.
+      setSelectedViaSelectAll(false);
+      setSelectedQuestionIds(new Set(questions.slice(0, MAX_STUDENT_TEST_QUESTIONS).map((q) => q.id)));
     }
   }
 
   function exitSelectionMode() {
     setSelectionMode(false);
     setSelectedQuestionIds(new Set());
+    setSelectedViaSelectAll(false);
   }
 
   // ─── Create test handler ─────────────────────────────────────────────────
@@ -660,6 +704,28 @@ export default function QuestionListPage() {
           duration_minutes: timerType === 'full' ? durationMinutes : undefined,
           per_question_seconds: timerType === 'per_question' ? perQuestionSeconds : undefined,
           classroom_id: activeClassroom.id,
+          // What this paper was built from. Sent so a teacher can later see how a
+          // student went looking, which is the signal the Student tests tab was
+          // missing entirely: every paper created before this shipped stores
+          // nothing but a title, and the titles collide.
+          //
+          // Categories are sent COLLAPSED (a parent slug standing in for its
+          // children), matching what the chip row, the URL and saved presets
+          // store. The expanded form is a network detail, and expanding it here
+          // would make a teacher read twenty slugs where the student picked one.
+          source_filters: {
+            exam_type: selectedExam,
+            year: selectedYear,
+            session: selectedSession,
+            categories: filters.categories,
+            difficulty: filters.difficulty,
+            question_format: filters.question_format,
+            topic_ids: filters.topic_ids,
+            attempt_status: filters.attempt_status,
+            search_text: filters.search_text,
+            selection: selectedViaSelectAll ? 'select_all' : 'manual',
+            matched_count: totalCount,
+          },
         }),
       });
 
@@ -672,6 +738,7 @@ export default function QuestionListPage() {
       setCreateTestOpen(false);
       exitSelectionMode();
       setTestTitle('');
+      setTitleTouched(false);
       setTimerType('none');
       setDurationMinutes(60);
       setPerQuestionSeconds(120);
@@ -937,7 +1004,10 @@ export default function QuestionListPage() {
             <TextField
               label="Test Name"
               value={testTitle}
-              onChange={(e) => setTestTitle(e.target.value)}
+              onChange={(e) => {
+                setTitleTouched(true);
+                setTestTitle(e.target.value);
+              }}
               fullWidth
               required
               inputProps={{ maxLength: 200 }}

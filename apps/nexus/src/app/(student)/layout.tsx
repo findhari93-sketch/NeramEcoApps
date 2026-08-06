@@ -24,7 +24,7 @@ import { installErrorCapture } from '@/lib/error-buffer';
  */
 function StudentShell({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
-  const { currentNavGroups, currentBottomNavItems, currentOverflowItems, currentHomePath } =
+  const { currentNavGroups, currentBottomNavItems, currentOverflowGroups, currentHomePath } =
     useStudentZoneContext();
   const pathname = usePathname();
   const fullBleed = isFullBleedRoute(pathname);
@@ -82,7 +82,7 @@ function StudentShell({ children }: { children: React.ReactNode }) {
             </DeviceRegistrationProvider>
           </Container>
         </Box>
-        <BottomNav items={currentBottomNavItems} overflowItems={currentOverflowItems} />
+        <BottomNav items={currentBottomNavItems} overflowGroups={currentOverflowGroups} />
       </Box>
       <ReportIssueFab />
     </Box>

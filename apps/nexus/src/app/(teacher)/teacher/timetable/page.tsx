@@ -116,6 +116,11 @@ export default function TeacherTimetable() {
   const [assignmentMenuClass, setAssignmentMenuClass] = useState<ClassCardData | null>(null);
   const [linkDialogClass, setLinkDialogClass] = useState<ClassCardData | null>(null);
   const [prepTestClass, setPrepTestClass] = useState<ClassCardData | null>(null);
+  // A separate piece of state rather than one "which test" variable: the two
+  // dialogs differ in their defaults, their question ceiling and their reusable
+  // kinds, and a single variable would make "which one is open" a second thing
+  // to keep in step with "which class".
+  const [classTestClass, setClassTestClass] = useState<ClassCardData | null>(null);
   const [newAssignmentClass, setNewAssignmentClass] = useState<ClassCardData | null>(null);
   /** Preselects Before class when the dialog is opened from "Add pre-class work". */
   const [newAssignmentTiming, setNewAssignmentTiming] = useState<'prework' | 'homework'>('homework');
@@ -1309,6 +1314,7 @@ export default function TeacherTimetable() {
     onReschedule: handleOpenReschedule,
     onRepairMeeting: handleRepairMeeting,
     onSetPrepTest: setPrepTestClass,
+    onSetClassTest: setClassTestClass,
     onLinkAssignment: (cls: ClassCardData) => {
       setPanelOpen(false);
       setLinkDialogClass(cls);
@@ -1632,6 +1638,25 @@ export default function TeacherTimetable() {
         onClose={() => setPrepTestClass(null)}
         // Reuses the assignment refresh key: both live in the same rail and both
         // need the panel to reload after the dialog writes.
+        onSaved={(message) => {
+          refreshAssignments();
+          setSnackbar({ open: true, message, severity: 'success' });
+        }}
+        onNotify={(message, severity = 'success') =>
+          setSnackbar({ open: true, message, severity })
+        }
+      />
+
+      {/* The same dialog in after-class mode: a due date, a Required switch and a
+          larger question ceiling. A second instance rather than one with a
+          timing prop toggled, so opening one can never leave the other holding
+          a half-reset form. */}
+      <LinkPrepTestDialog
+        open={!!classTestClass}
+        cls={classTestClass}
+        timing="after"
+        getToken={getToken}
+        onClose={() => setClassTestClass(null)}
         onSaved={(message) => {
           refreshAssignments();
           setSnackbar({ open: true, message, severity: 'success' });

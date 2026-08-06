@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyQBAccess } from '@/lib/qb-auth';
+import { verifyQBAccessAnyClassroom } from '@/lib/qb-auth';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { createTestFolder, listTestFolderTree, moveTestsToFolder } from '@neram/database';
 import type { NexusTestFolderScope } from '@neram/database';
@@ -37,7 +37,7 @@ function resolveScope(
  */
 export async function GET(request: NextRequest) {
   try {
-    const access = await verifyQBAccess(request.headers.get('Authorization'), null);
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
 
     const isStaff = resolveStaffRole(access.caller) !== null;
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const access = await verifyQBAccess(request.headers.get('Authorization'), null);
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
 
     const isStaff = resolveStaffRole(access.caller) !== null;
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const access = await verifyQBAccess(request.headers.get('Authorization'), null);
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
 
     const body = await request.json();

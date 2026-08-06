@@ -4,6 +4,7 @@ import { Box, Divider, Typography } from '@neram/ui';
 import ClassPrepRoster from '../ClassPrepRoster';
 import ClassAssignmentsSection from '../ClassAssignmentsSection';
 import ClassPrepTestSection from '../ClassPrepTestSection';
+import ClassTestStudentCard from '../ClassTestStudentCard';
 import ClassResourcesSection from '../ClassResourcesSection';
 import StudentAssignmentList from './StudentAssignmentList';
 import RecordingSyncToggle from './RecordingSyncToggle';
@@ -13,6 +14,22 @@ import type { ClassPanelTabProps } from './types';
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <Typography sx={SECTION_LABEL_SX}>{children}</Typography>;
+}
+
+/**
+ * A quieter label for the two halves of the Tests block, so "Before class" and
+ * "After class" read as slots inside one section rather than as two more
+ * top-level sections competing with Assignment and Reference material.
+ */
+function SlotLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Typography
+      variant="caption"
+      sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.75 }}
+    >
+      {children}
+    </Typography>
+  );
 }
 
 /**
@@ -35,6 +52,7 @@ export default function PrepTab(props: ClassPanelTabProps) {
     onLinkAssignment,
     onCreateAssignment,
     onSetPrepTest,
+    onSetClassTest,
     onNotify,
     onChanged,
   } = props;
@@ -43,6 +61,10 @@ export default function PrepTab(props: ClassPanelTabProps) {
   // Staff flags, so they default on per the registry invariant. Switch them off
   // from /teacher/admin/features to hide a section without a deploy.
   const prepTestEnabled = featureFlags?.['staff.class-prep-test'] !== false;
+  // Read by BOTH branches below, which is why it is not nested inside the staff
+  // one: switching it off has to take the student's card away too, or students
+  // keep being shown a paper their teacher can no longer manage.
+  const classTestEnabled = featureFlags?.['staff.class-test'] !== false;
   // Switching this off hides the editor but leaves what a teacher already
   // shared visible to students, which is the right way round for material they
   // have been pointed at.
@@ -57,7 +79,12 @@ export default function PrepTab(props: ClassPanelTabProps) {
           it" is the more actionable question ten minutes before a class than
           "what was it". Self-hiding when nothing was asked of anybody. */}
       {isTeacher && (
-        <ClassPrepRoster classId={cls.id} getToken={getToken} refreshKey={refreshKey} />
+        <ClassPrepRoster
+          classId={cls.id}
+          getToken={getToken}
+          refreshKey={refreshKey}
+          onNotify={onNotify}
+        />
       )}
 
       {teacherEditable && (
@@ -85,21 +112,58 @@ export default function PrepTab(props: ClassPanelTabProps) {
       )}
 
       {/* Sits directly under Assignment because the two together are what a
-          student owes before they may join, and a teacher setting one almost
-          always wants to check the other. */}
+          student owes around this class, and a teacher setting one almost always
+          wants to check the other.
+
+          Two slots under one heading, deliberately. A teacher who wanted to set
+          the test for a class they had just taught found only "Test before
+          class", read it as the only kind of test a class can carry, and
+          concluded the feature did not exist. Both halves being visible is the
+          answer to that, so the after slot renders its empty state rather than
+          hiding. */}
       {isTeacher && prepTestEnabled && (
         <>
           <Divider />
-          <ClassPrepTestSection
-            cls={cls}
-            getToken={getToken}
-            editable
-            refreshKey={refreshKey}
-            onSetTest={onSetPrepTest}
-            onNotify={onNotify}
-            header={<SectionLabel>Test before class</SectionLabel>}
-          />
+          <Box>
+            <SectionLabel>Tests</SectionLabel>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75, mt: 1 }}>
+              <ClassPrepTestSection
+                cls={cls}
+                getToken={getToken}
+                editable
+                refreshKey={refreshKey}
+                onSetTest={onSetPrepTest}
+                onNotify={onNotify}
+                header={<SlotLabel>Before class</SlotLabel>}
+              />
+              {classTestEnabled && (
+                <ClassPrepTestSection
+                  cls={cls}
+                  getToken={getToken}
+                  editable
+                  timing="after"
+                  refreshKey={refreshKey}
+                  onSetTest={onSetClassTest}
+                  onNotify={onNotify}
+                  header={<SlotLabel>After class</SlotLabel>}
+                />
+              )}
+            </Box>
+          </Box>
         </>
+      )}
+
+      {/* The student's side of the after-class test. Self-hiding when there is
+          none, unlike the teacher's slot above: a student has no control to
+          find, so an empty box would be pure noise. The prep test is absent here
+          on purpose, because PrepGateCard already owns that conversation. */}
+      {!isTeacher && classTestEnabled && (
+        <ClassTestStudentCard
+          cls={cls}
+          getToken={getToken}
+          refreshKey={refreshKey}
+          header={<SectionLabel>Test for this class</SectionLabel>}
+        />
       )}
 
       {/* After the two things a student owes and before the recording, because

@@ -221,3 +221,92 @@ describe('ordering and copy', () => {
     expect(copy?.primaryAction).toBe('do_prework');
   });
 });
+
+/**
+ * A Required test from the previous class, carried on to this one.
+ *
+ * Reusing this gate rather than building a second lock is what keeps one idea
+ * with one set of rules: the same reason escape hatch, the same lead window, the
+ * same roster. These tests exist to stop that reuse quietly changing what the
+ * gate does to classes that carry nothing.
+ */
+describe('the previous class\'s required test', () => {
+  it('leaves a class with nothing else asked completely ungated', () => {
+    // The overwhelmingly common case. It must stay byte-identical to a world
+    // where this feature does not exist.
+    const d = decideClassPrepGate(input());
+    expect(d.gated).toBe(false);
+    expect(d.via).toBe('not_required');
+    expect(d.readiness).toBeNull();
+  });
+
+  it('shuts the door when it is outstanding, even with nothing else asked', () => {
+    const d = decideClassPrepGate(input({ previousClassTest: { passed: false } }));
+    expect(d.gated).toBe(true);
+    expect(d.open).toBe(false);
+    expect(d.blockers).toEqual(['class_test_pending']);
+  });
+
+  it('opens on a reason, exactly like every other blocker', () => {
+    // Locking a student out of a class over a paper converts a homework problem
+    // into an attendance problem. The escape hatch is the whole design.
+    const d = decideClassPrepGate(
+      input({ previousClassTest: { passed: false }, reasonGiven: true }),
+    );
+    expect(d.open).toBe(true);
+    expect(d.via).toBe('reason');
+    // Still on the record for the teacher.
+    expect(d.blockers).toContain('class_test_pending');
+  });
+
+  it('is not yet a lock outside the lead window', () => {
+    const d = decideClassPrepGate(
+      input({
+        previousClassTest: { passed: false },
+        nowMs: START_MS - (PREP_GATE_LEAD_MINUTES + 60) * 60_000,
+      }),
+    );
+    expect(d.open).toBe(true);
+    expect(d.via).toBe('not_yet_armed');
+  });
+
+  it('counts towards readiness rather than being invisible in it', () => {
+    const d = decideClassPrepGate(
+      input({
+        prework: { required: 1, submitted: 1 },
+        previousClassTest: { passed: false },
+      }),
+    );
+    // One of two done: the prework is in, the carried-over test is not.
+    expect(d.readiness).toBe(0.5);
+  });
+
+  it('is cleared once passed, and reports full readiness', () => {
+    const d = decideClassPrepGate(input({ previousClassTest: { passed: true } }));
+    expect(d.open).toBe(true);
+    expect(d.via).toBe('earned');
+    expect(d.readiness).toBe(1);
+  });
+
+  it('is listed last, after tonight\'s own work', () => {
+    const d = decideClassPrepGate(
+      input({
+        test: { bestPct: null, passingPct: 70, attempts: 0 },
+        prework: { required: 1, submitted: 0 },
+        previousClassTest: { passed: false },
+      }),
+    );
+    expect(d.blockers).toEqual(['test_not_passed', 'prework_missing', 'class_test_pending']);
+    const copy = prepBlockerCopy(d);
+    // Three, counted rather than hard-coded to the old two.
+    expect(copy?.title).toBe('3 things before you join');
+    expect(copy?.lines[2]).toBe('Finish the test from the last class');
+  });
+
+  it('points a student at a test when that is all that is left', () => {
+    const copy = prepBlockerCopy(
+      decideClassPrepGate(input({ previousClassTest: { passed: false } })),
+    );
+    expect(copy?.primaryAction).toBe('take_test');
+  });
+});

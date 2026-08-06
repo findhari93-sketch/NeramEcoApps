@@ -22,7 +22,19 @@ export interface FakeDb {
   tables: FakeTables;
 }
 
-export function createFakeDb(seed: FakeTables): FakeDb {
+/**
+ * Column defaults, per table, applied to inserted rows.
+ *
+ * Postgres fills these in; a fake that does not will make code that inserts a row
+ * and reads it straight back look broken when it is not. `is_active BOOLEAN NOT
+ * NULL DEFAULT true` is the one that bites: the insert omits it on purpose, and
+ * every read filters on it.
+ */
+export interface FakeDefaults {
+  [table: string]: Record<string, unknown>;
+}
+
+export function createFakeDb(seed: FakeTables, defaults: FakeDefaults = {}): FakeDb {
   const tables: FakeTables = JSON.parse(JSON.stringify(seed));
   let autoId = 0;
 
@@ -40,7 +52,11 @@ export function createFakeDb(seed: FakeTables): FakeDb {
     const run = () => {
       if (op === 'insert') {
         const arr = Array.isArray(payload) ? payload : [payload];
-        const created = arr.map((r) => ({ id: r.id ?? `${table}-${++autoId}`, ...r }));
+        const created = arr.map((r) => ({
+          id: r.id ?? `${table}-${++autoId}`,
+          ...(defaults[table] || {}),
+          ...r,
+        }));
         rows().push(...created);
         return { data: created, error: null, count: created.length };
       }
@@ -103,6 +119,32 @@ export function createFakeDb(seed: FakeTables): FakeDb {
       },
       limit(n: number) {
         rowLimit = n;
+        return chain;
+      },
+      neq(col: string, val: any) {
+        filters.push((r) => r[col] !== val);
+        return chain;
+      },
+      gte(col: string, val: any) {
+        filters.push((r) => r[col] != null && r[col] >= val);
+        return chain;
+      },
+      /**
+       * PostgREST's row window. Callers use it to lift the default 1000-row cap
+       * on a tally query, so the honest fake is an inclusive slice.
+       */
+      range(from: number, to: number) {
+        rowLimit = null;
+        const slice = { from, to };
+        const prev = chain.then;
+        chain.then = (resolve: any) =>
+          prev((res: any) =>
+            resolve(
+              Array.isArray(res.data)
+                ? { ...res, data: res.data.slice(slice.from, slice.to + 1) }
+                : res,
+            ),
+          );
         return chain;
       },
       single: async () => {

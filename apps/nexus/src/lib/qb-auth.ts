@@ -36,20 +36,15 @@ export type QBAccessResult =
   | { ok: true; caller: QBCaller }
   | { ok: false; response: NextResponse };
 
+type ResolvedCaller =
+  | { ok: true; caller: QBCaller; isStaff: boolean }
+  | { ok: false; response: NextResponse };
+
 /**
- * Verify that the caller has access to the Question Bank for the given classroom.
- *
- * - Staff (admin/manager/teacher): always allowed, no enrollment check.
- * - Students: must be enrolled in the classroom AND the classroom must have QB
- *   enabled.
- * - A student request with no classroomId is a 400: without a classroom there is
- *   nothing to authorise against, and defaulting to "allow" is what caused the
- *   original hole.
+ * Who is asking. Shared by both verifiers so the token check, the users lookup
+ * and the staff-tier resolution cannot drift apart between them.
  */
-export async function verifyQBAccess(
-  authHeader: string | null,
-  classroomId: string | null | undefined,
-): Promise<QBAccessResult> {
+async function resolveQBCaller(authHeader: string | null): Promise<ResolvedCaller> {
   if (!authHeader) {
     return { ok: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
@@ -72,18 +67,99 @@ export async function verifyQBAccess(
     return { ok: false, response: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
   }
 
-  const asCaller: QBCaller = {
-    id: caller.id,
-    user_type: caller.user_type ?? 'student',
-    staff_role: caller.staff_role ?? null,
-    can_teach: caller.can_teach ?? null,
+  return {
+    ok: true,
+    isStaff: resolveStaffRole(caller) !== null,
+    caller: {
+      id: caller.id,
+      user_type: caller.user_type ?? 'student',
+      staff_role: caller.staff_role ?? null,
+      can_teach: caller.can_teach ?? null,
+    },
   };
+}
+
+/**
+ * Verify access to a Question Bank resource that is NOT scoped to a classroom:
+ * the global tag registry, a student's own folder tree, a student's own paper.
+ *
+ * Staff pass exactly as they do in verifyQBAccess. A student passes when they
+ * hold at least one active enrolment in a classroom with the Question Bank
+ * switched on, which is the real question for these resources. Asking them for
+ * a classroom_id they have no way to supply is what produced the developer
+ * message a student ended up reading on screen.
+ */
+export async function verifyQBAccessAnyClassroom(
+  authHeader: string | null,
+): Promise<QBAccessResult> {
+  const resolved = await resolveQBCaller(authHeader);
+  if (!resolved.ok) return resolved;
+  const { caller, isStaff } = resolved;
+
+  if (isStaff) return { ok: true, caller };
+
+  const refused = NextResponse.json(
+    { error: 'The Question Bank is not open for your classroom yet.' },
+    { status: 403 },
+  );
+
+  const supabase = getSupabaseAdminClient() as any;
+  const { data: enrolments } = await supabase
+    .from('nexus_enrollments')
+    .select('classroom_id')
+    .eq('user_id', caller.id)
+    .eq('role', 'student')
+    .eq('is_active', true);
+
+  const classroomIds = [
+    ...new Set(((enrolments || []) as { classroom_id: string }[]).map((e) => e.classroom_id)),
+  ].filter(Boolean);
+  if (classroomIds.length === 0) return { ok: false, response: refused };
+
+  // One query for the whole set rather than isQBEnabledForClassroom per row: a
+  // student on several term cohorts would otherwise cost a round trip each.
+  const { data: links } = await supabase
+    .from('nexus_qb_classroom_links')
+    .select('classroom_id, is_active')
+    .in('classroom_id', classroomIds)
+    .eq('is_active', true)
+    .limit(1);
+
+  if (!links || links.length === 0) return { ok: false, response: refused };
+
+  return { ok: true, caller };
+}
+
+/**
+ * Verify that the caller has access to the Question Bank for the given classroom.
+ *
+ * - Staff (admin/manager/teacher): always allowed, no enrollment check.
+ * - Students: must be enrolled in the classroom AND the classroom must have QB
+ *   enabled.
+ * - A student request with no classroomId is a 400: without a classroom there is
+ *   nothing to authorise against, and defaulting to "allow" is what caused the
+ *   original hole.
+ *
+ * WHICH HELPER TO REACH FOR
+ *
+ * Use this one when the request names a classroom and the data it returns is
+ * scoped to that classroom. Use verifyQBAccessAnyClassroom below when the
+ * resource is not classroom scoped at all: the global tag registry, a student's
+ * own folder tree, a student's own paper. Passing a hardcoded `null` here for
+ * those was a 400 for every student, and it is what took the whole student test
+ * builder off the air (NXS-0114).
+ */
+export async function verifyQBAccess(
+  authHeader: string | null,
+  classroomId: string | null | undefined,
+): Promise<QBAccessResult> {
+  const resolved = await resolveQBCaller(authHeader);
+  if (!resolved.ok) return resolved;
+  const { caller, isStaff } = resolved;
 
   // Any staff tier reaches the Question Bank without an enrollment check: they
   // author and review its content.
-  if (resolveStaffRole(caller) !== null) {
-    return { ok: true, caller: asCaller };
-  }
+  if (isStaff) return { ok: true, caller };
 
   // ── Students ───────────────────────────────────────────────────────────────
   if (!classroomId) {
@@ -115,7 +191,7 @@ export async function verifyQBAccess(
     };
   }
 
-  return { ok: true, caller: asCaller };
+  return { ok: true, caller };
 }
 
 /**

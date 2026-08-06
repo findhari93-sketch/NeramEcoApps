@@ -1,210 +1,34 @@
 'use client';
 
+/**
+ * Which staff panel is active (Teaching / Management / Admin), and the nav lists
+ * that panel hands to the sidebar and the bottom bar.
+ *
+ * The lists themselves live in `@/lib/nav-config`, as plain data. This file only
+ * decides which panel is showing and applies the two gates: the feature flag
+ * ("is this switched on yet") and the capability ("may this person use it").
+ *
+ * The bottom bar and the "More" sheet are DERIVED from the same array the
+ * sidebar renders, so a new nav item is reachable on a phone the moment it is
+ * added. See the header of nav-config.tsx for why that matters.
+ */
+
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
-import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
-import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
-import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
-import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
-import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
-import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
-import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
-import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
-import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
-import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
-import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import ViewModuleOutlinedIcon from '@mui/icons-material/ViewModuleOutlined';
-import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
-import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined';
-import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
-import DevicesOutlinedIcon from '@mui/icons-material/DevicesOutlined';
-import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
-import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
-import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
-import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
-import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
-import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
-import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
-import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined';
-import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
-import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
-import FaceRetouchingNaturalOutlinedIcon from '@mui/icons-material/FaceRetouchingNaturalOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
-import type { Capability } from '@/lib/staff-capabilities';
+import {
+  PANELS,
+  groupNavItems,
+  panelBottomNav,
+  panelOverflow,
+  type NavGroup,
+  type NavItem,
+  type PanelId,
+} from '@/lib/nav-config';
 
-export type PanelId = 'teaching' | 'management' | 'admin';
-
-/** Root of the Course Plans section (its sidebar item + sub-nav are special-cased). */
-export const COURSE_PLANS_PATH = '/teacher/course-plans';
-
-/**
- * The Course Plans left-rail sub-navigation. "Overview" is the plans list;
- * the rest are the screens of the currently open plan (a `[planId]` route).
- * `suffix` is appended to `/teacher/course-plans/{planId}`.
- */
-export const COURSE_PLAN_SUBNAV: {
-  key: string;
-  label: string;
-  planScreen: boolean;
-  suffix: string;
-}[] = [
-  { key: 'overview', label: 'Overview', planScreen: false, suffix: '' },
-  { key: 'builder', label: 'Builder', planScreen: true, suffix: '' },
-  { key: 'schedule', label: 'Schedule', planScreen: true, suffix: '/schedule' },
-  { key: 'classday', label: 'Class Day', planScreen: true, suffix: '/class-day' },
-  { key: 'health', label: 'Health', planScreen: true, suffix: '/health' },
-  // "Topic plan", not "Catch-up": this is the plan-scoped TOPIC track a teacher
-  // curates and shares. The class-by-class catch-up journey now owns the
-  // "Catch-up" name in Management, and two things under one label is how a
-  // teacher ends up on the wrong screen.
-  { key: 'catchup', label: 'Topic plan', planScreen: true, suffix: '/catchup' },
-];
-
-interface NavItem {
-  label: string;
-  path: string;
-  icon: React.ReactNode;
-  /**
-   * Capability required to see this item. Composes with the feature flag: a flag
-   * answers "is this feature switched on yet", a capability answers "may this
-   * person use it". Omit for items every staff tier may see.
-   *
-   * Panel-level `requiredRoles` is too coarse for this. Cohort management sits in
-   * the same panel as the teaching tools an external teacher genuinely needs.
-   */
-  capability?: Capability;
-}
-
-interface PanelConfig {
-  id: PanelId;
-  label: string;
-  title: string;
-  icon: React.ReactNode;
-  requiredRoles: string[];
-  sidebarItems: NavItem[];
-  bottomNavItems: NavItem[];
-  overflowItems: NavItem[];
-  defaultPath: string;
-}
-
-const PANELS: PanelConfig[] = [
-  {
-    id: 'teaching',
-    label: 'Teaching',
-    title: 'Classroom Teaching',
-    icon: <SchoolOutlinedIcon sx={{ fontSize: '1.15rem' }} />,
-    requiredRoles: ['teacher', 'admin'],
-    defaultPath: '/teacher/dashboard',
-    sidebarItems: [
-      { label: 'Dashboard', path: '/teacher/dashboard', icon: <DashboardOutlinedIcon /> },
-      { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
-      { label: 'Repository', path: '/teacher/curriculum', icon: <AutoStoriesOutlinedIcon /> },
-      { label: 'Course Plans', path: '/teacher/course-plans', icon: <PlaylistAddCheckOutlinedIcon /> },
-      { label: 'Assignments', path: '/teacher/assignments', icon: <AssignmentTurnedInOutlinedIcon /> },
-      { label: 'Drawing Reviews', path: '/teacher/drawing-reviews', icon: <BrushOutlinedIcon /> },
-      { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
-      { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon /> },
-      { label: 'Exams', path: '/teacher/exams', icon: <DateRangeOutlinedIcon /> },
-      { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
-    ],
-    bottomNavItems: [
-      { label: 'Dashboard', path: '/teacher/dashboard', icon: <DashboardOutlinedIcon /> },
-      { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
-      { label: 'Drawings', path: '/teacher/drawing-reviews', icon: <BrushOutlinedIcon /> },
-      { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
-    ],
-    overflowItems: [
-      { label: 'Assignments', path: '/teacher/assignments', icon: <AssignmentTurnedInOutlinedIcon /> },
-      { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon /> },
-      { label: 'Exams', path: '/teacher/exams', icon: <DateRangeOutlinedIcon /> },
-      { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
-    ],
-  },
-  {
-    id: 'management',
-    label: 'Management',
-    title: 'Management Panel',
-    icon: <AutoStoriesOutlinedIcon sx={{ fontSize: '1.15rem' }} />,
-    requiredRoles: ['teacher', 'admin'],
-    defaultPath: '/teacher/classrooms',
-    sidebarItems: [
-      // Cohort structure: create classrooms, batches, enrolments, Teams links.
-      // Internal team only; an external teacher has no business in here and the
-      // matching API routes already refuse them.
-      { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon />, capability: 'structure.enrollment.add' },
-      { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
-      { label: 'Photo Review', path: '/teacher/photo-review', icon: <FaceRetouchingNaturalOutlinedIcon /> },
-      { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
-      { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
-      { label: 'Study Materials', path: '/teacher/study-materials', icon: <FolderOutlinedIcon /> },
-      { label: 'Materials Feedback', path: '/teacher/study-materials/feedback', icon: <RateReviewOutlinedIcon /> },
-      // Class Recaps used to sit here as its own item. It was half of this one:
-      // a list of recorded classes with a Create recap button, next to a screen
-      // that knew which of those missing recaps were blocking real students.
-      // Both live under Catch-up now, in the Classes and recaps tab.
-      { label: 'Catch-up', path: '/teacher/catch-up', icon: <HistoryToggleOffOutlinedIcon /> },
-      { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
-      { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
-      { label: 'Question Bank', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
-      { label: 'Tests', path: '/teacher/tests', icon: <FactCheckOutlinedIcon /> },
-      { label: 'Recall', path: '/teacher/exam-recall', icon: <HistoryEduOutlinedIcon /> },
-      { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon /> },
-      { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
-      { label: 'Devices', path: '/teacher/devices', icon: <DevicesOutlinedIcon /> },
-      { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
-      { label: 'Guide', path: '/teacher/management-guide', icon: <HelpOutlineOutlinedIcon /> },
-    ],
-    bottomNavItems: [
-      // Cohort structure: create classrooms, batches, enrolments, Teams links.
-      // Internal team only; an external teacher has no business in here and the
-      // matching API routes already refuse them.
-      { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon />, capability: 'structure.enrollment.add' },
-      { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
-      { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon /> },
-      { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
-    ],
-    overflowItems: [
-      { label: 'Photo Review', path: '/teacher/photo-review', icon: <FaceRetouchingNaturalOutlinedIcon /> },
-      { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
-      { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
-      { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
-      { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
-      { label: 'Question Bank', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
-      { label: 'Tests', path: '/teacher/tests', icon: <FactCheckOutlinedIcon /> },
-      { label: 'Recall', path: '/teacher/exam-recall', icon: <HistoryEduOutlinedIcon /> },
-      { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
-      { label: 'Guide', path: '/teacher/management-guide', icon: <HelpOutlineOutlinedIcon /> },
-    ],
-  },
-  {
-    id: 'admin',
-    label: 'Admin',
-    title: 'Admin Panel',
-    icon: <SettingsOutlinedIcon sx={{ fontSize: '1.15rem' }} />,
-    requiredRoles: ['admin'],
-    defaultPath: '/teacher/admin/users',
-    sidebarItems: [
-      { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
-      { label: 'Features', path: '/teacher/admin/features', icon: <ToggleOnOutlinedIcon /> },
-      { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
-      { label: 'AI usage', path: '/teacher/admin/ai-usage', icon: <InsightsOutlinedIcon /> },
-      { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
-    ],
-    bottomNavItems: [
-      { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
-      { label: 'Features', path: '/teacher/admin/features', icon: <ToggleOnOutlinedIcon /> },
-      { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
-      { label: 'AI usage', path: '/teacher/admin/ai-usage', icon: <InsightsOutlinedIcon /> },
-      { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
-    ],
-    overflowItems: [],
-  },
-];
+export type { PanelId } from '@/lib/nav-config';
+export { COURSE_PLANS_PATH, COURSE_PLAN_SUBNAV } from '@/lib/nav-config';
 
 // Map paths to panels for URL-based auto-sync
 const PATH_TO_PANEL: Record<string, PanelId> = {};
@@ -249,11 +73,14 @@ const STORAGE_KEY = 'nexus_active_panel';
 interface PanelContextValue {
   activePanel: PanelId;
   setActivePanel: (panelId: PanelId) => void;
-  availablePanels: PanelConfig[];
+  availablePanels: { id: PanelId; label: string; icon: React.ReactNode }[];
   currentPanelTitle: string;
   currentSidebarItems: NavItem[];
   currentBottomNavItems: NavItem[];
+  /** Flattened "More" sheet, for anything that wants a plain list. */
   currentOverflowItems: NavItem[];
+  /** The same items under their headings, which is what BottomNav renders. */
+  currentOverflowGroups: NavGroup[];
 }
 
 const PanelContext = createContext<PanelContextValue>({
@@ -264,6 +91,7 @@ const PanelContext = createContext<PanelContextValue>({
   currentSidebarItems: [],
   currentBottomNavItems: [],
   currentOverflowItems: [],
+  currentOverflowGroups: [],
 });
 
 export function usePanelContext() {
@@ -343,16 +171,22 @@ export default function PanelProvider({ children }: { children: React.ReactNode 
       filterItems(currentPanel.sidebarItems).length > 0
         ? currentPanel
         : availablePanels[0] || currentPanel;
+
+    // Filter first, group second, so a heading whose every item is switched off
+    // does not render over an empty section.
+    const overflow = filterItems(panelOverflow(resolvedPanel));
+
     return {
       activePanel: resolvedPanel.id,
       setActivePanel,
-      availablePanels,
+      availablePanels: availablePanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon })),
       currentPanelTitle: resolvedPanel.title,
       currentSidebarItems: filterItems(resolvedPanel.sidebarItems),
-      currentBottomNavItems: filterItems(resolvedPanel.bottomNavItems),
-      currentOverflowItems: filterItems(resolvedPanel.overflowItems),
+      currentBottomNavItems: filterItems(panelBottomNav(resolvedPanel)),
+      currentOverflowItems: overflow,
+      currentOverflowGroups: groupNavItems(overflow),
     };
-  }, [activePanel, setActivePanel, availablePanels, currentPanel, isItemVisible]);
+  }, [setActivePanel, availablePanels, currentPanel, isItemVisible]);
 
   return (
     <PanelContext.Provider value={value}>

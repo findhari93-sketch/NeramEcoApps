@@ -69,7 +69,19 @@ interface CatchUpData {
   assignments: Array<{ id: string; title: string; assignment_type: string; submitted: boolean }>;
   recap: { id: string; status: string } | null;
   /** Null until a teacher has built the class test for this class. */
-  test: { placement_id: string; test_id: string; passing_pct: number; unlocked: boolean; passed: boolean } | null;
+  test: {
+    placement_id: string;
+    test_id: string;
+    passing_pct: number;
+    unlocked: boolean;
+    passed: boolean;
+    /** Which paper this is: the backlog's own, or one the teacher set for all. */
+    source?: 'catchup' | 'class_test';
+    /** False only for a teacher-set class test marked Optional. */
+    required?: boolean;
+    /** Where to open it. The two kinds have different players. */
+    href?: string;
+  } | null;
   steps: {
     reasonGiven: boolean;
     watched: boolean;
@@ -632,15 +644,25 @@ export default function CatchUpPage() {
           assignments.length > 0 && !steps.watched,
         )}
 
-        {/* The class test. Only a newcomer gets one: for them the question is
+        {/* The class test. Two different papers can stand here.
+
+            The auto-generated catch-up paper is for a newcomer: the question is
             not "were you here", it is whether they know what everyone else
             already covered. It stays locked until the guided recap is finished,
             and a score under the pass mark locks it again, so a retry always
-            means going back through the material rather than guessing twice. */}
+            means going back through the material rather than guessing twice.
+
+            A teacher-set class test replaces it. That paper was set for the
+            whole class, so an absent student sits exactly what their classmates
+            sat, through the ordinary take engine, with no unlock and no rewatch
+            rule. And when the teacher marked it Optional it is offered here and
+            blocks nothing. */}
         {test && stepBox(
           stepNo.test,
           test.passed,
-          `Pass the class test (${test.passing_pct}% to clear)`,
+          test.required === false
+            ? `Class test (optional, ${test.passing_pct}% to pass)`
+            : `Pass the class test (${test.passing_pct}% to clear)`,
           test.passed ? (
             <Typography variant="body2" color="text.secondary">
               Passed. This class is done.
@@ -650,13 +672,20 @@ export default function CatchUpPage() {
               Finish the guided recap to unlock the test.
             </Typography>
           ) : (
-            <Button
-              variant="contained"
-              onClick={() => router.push(`/student/catch-up/${cls.id}/test`)}
-              sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
-            >
-              Take the class test
-            </Button>
+            <Stack spacing={1} alignItems="flex-start">
+              {test.required === false && (
+                <Typography variant="body2" color="text.secondary">
+                  Your teacher set this as optional, so it will not hold this class open.
+                </Typography>
+              )}
+              <Button
+                variant={test.required === false ? 'outlined' : 'contained'}
+                onClick={() => router.push(test.href || `/student/catch-up/${cls.id}/test`)}
+                sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
+              >
+                Take the class test
+              </Button>
+            </Stack>
           ),
           !test.unlocked && !test.passed,
         )}

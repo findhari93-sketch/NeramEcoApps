@@ -34,6 +34,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import TestResultsPanel from '@/components/tests/TestResultsPanel';
+import TestHealthPanel from '@/components/tests/TestHealthPanel';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
@@ -42,6 +43,7 @@ import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import MathText from '@/components/common/MathText';
+import QuestionPreviewText from '@/components/question-bank/QuestionPreviewText';
 import TestQuestionEditorDialog from '@/components/tests/TestQuestionEditorDialog';
 
 interface DetailTest {
@@ -481,6 +483,11 @@ export default function TestDetailPage() {
 
       <Box sx={{ display: tab === 'overview' ? 'block' : 'none' }}>
 
+      {/* Above everything else on purpose. If this paper is broken, that is the
+          first thing a teacher needs to know, before where it is placed or what
+          is in it. Renders nothing when nothing is wrong. */}
+      <TestHealthPanel testId={test.id} getToken={getToken} />
+
       {/* Placements */}
       <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
         Where it is used
@@ -556,12 +563,32 @@ export default function TestDetailPage() {
         <Box sx={{ mb: 4 }}>
           {questions.map((q, idx) => (
             <Accordion key={q.test_question_id} disableGutters variant="outlined" sx={{ borderRadius: 1.5, mb: 0.75, '&:before': { display: 'none' } }}>
-              <AccordionSummary expandIcon={<ExpandMoreOutlinedIcon />} sx={{ minHeight: 48 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, pr: 1 }}>
+              <AccordionSummary
+                expandIcon={<ExpandMoreOutlinedIcon />}
+                // MUI's summary content is a flex child with no min-width, so a
+                // long stem grew the row past the viewport and took the page's
+                // horizontal scroll with it on a phone.
+                sx={{ minHeight: 48, '& .MuiAccordionSummary-content': { minWidth: 0, overflow: 'hidden' } }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, pr: 1, flex: 1 }}>
                   <Chip size="small" label={idx + 1} sx={{ height: 22, fontWeight: 700, flexShrink: 0 }} />
-                  <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
-                    {q.question_text || '(image-based question)'}
-                  </Typography>
+                  {q.question_image_url && (
+                    <Box
+                      component="img"
+                      src={q.question_image_url}
+                      alt=""
+                      loading="lazy"
+                      sx={{
+                        width: 32,
+                        height: 32,
+                        flexShrink: 0,
+                        objectFit: 'contain',
+                        borderRadius: 0.5,
+                        bgcolor: 'common.white',
+                      }}
+                    />
+                  )}
+                  <QuestionPreviewText text={q.question_text} sx={{ flex: 1 }} />
                 </Box>
               </AccordionSummary>
               <AccordionDetails sx={{ pt: 0 }}>
@@ -601,9 +628,31 @@ export default function TestDetailPage() {
                           ) : (
                             <Box sx={{ width: 18, flexShrink: 0 }} />
                           )}
-                          <Typography variant="body2" component="div" sx={{ minWidth: 0 }}>
-                            <MathText text={opt.text || opt.label || ''} />
-                          </Typography>
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <MathText text={opt.text || opt.label || ''} variant="body2" />
+                            {/* An image-only paper is unreviewable without this:
+                                every option reads "Option figure (1)" and a
+                                teacher cannot tell which one they are marking
+                                correct. */}
+                            {opt.image_url && (
+                              <Box
+                                component="img"
+                                src={opt.image_url}
+                                alt={`Option ${opt.label || oi + 1}`}
+                                loading="lazy"
+                                sx={{
+                                  display: 'block',
+                                  mt: 0.5,
+                                  maxWidth: '100%',
+                                  maxHeight: 140,
+                                  objectFit: 'contain',
+                                  objectPosition: 'left',
+                                  borderRadius: 1,
+                                  bgcolor: 'common.white',
+                                }}
+                              />
+                            )}
+                          </Box>
                         </Box>
                       );
                     })}

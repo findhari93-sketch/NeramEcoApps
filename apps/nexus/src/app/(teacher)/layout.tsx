@@ -14,7 +14,7 @@ import FeatureGate from '@/components/FeatureGate';
 
 function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
-  const { currentSidebarItems, currentBottomNavItems, currentOverflowItems } = usePanelContext();
+  const { currentSidebarItems, currentBottomNavItems, currentOverflowGroups } = usePanelContext();
   const fullBleed = isFullBleedRoute(usePathname());
 
   return (
@@ -49,7 +49,7 @@ function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
             <FeatureGate surface="staff">{children}</FeatureGate>
           </Container>
         </Box>
-        <BottomNav items={currentBottomNavItems} overflowItems={currentOverflowItems} />
+        <BottomNav items={currentBottomNavItems} overflowGroups={currentOverflowGroups} />
       </Box>
     </Box>
   );

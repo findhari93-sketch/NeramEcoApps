@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyQBAccess } from '@/lib/qb-auth';
+import { verifyQBAccessAnyClassroom } from '@/lib/qb-auth';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { listLibraryTests } from '@neram/database';
 import type { NexusTestKind } from '@neram/database';
@@ -33,7 +33,7 @@ const KINDS: NexusTestKind[] = [
  */
 export async function GET(request: NextRequest) {
   try {
-    const access = await verifyQBAccess(request.headers.get('Authorization'), null);
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
 
     const isStaff = resolveStaffRole(access.caller) !== null;

@@ -29,6 +29,14 @@ const PATH_TO_BADGE_KEY: Record<string, string> = {
   '/teacher/drawing-reviews': 'drawing_reviews',
   '/teacher/photo-review': 'photo_review',
   '/teacher/catch-up': 'catchup',
+  // The student's own count, not the staff one. Both read `catchup` because the
+  // route answers for whoever is asking, and a student never sees a staff path.
+  //
+  // It matters more here than most badges: Catch-up lives in the "More" sheet,
+  // and in the Study Zone it is not in the navigation at all. Without a number
+  // rolled up onto More (and onto the zone pill), owed work is invisible until
+  // a student goes looking for it.
+  '/student/catch-up': 'catchup',
 };
 
 const POLL_INTERVAL = 60_000; // 60 seconds

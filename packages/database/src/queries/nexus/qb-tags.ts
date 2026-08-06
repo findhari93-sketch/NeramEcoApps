@@ -2,6 +2,7 @@
 // nexus_qb_tag_counts RPCs are not yet in the generated Supabase types.
 // Regenerate with pnpm supabase:gen:types after 20260713180000 is applied.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { fetchAllRows } from '../../utils/paged-rows';
 import type { NexusQBTag, NexusQBTagGroup, NexusQBTagWithCount, NexusQBTagNode } from '../../types';
 
 const TAGS = 'nexus_qb_tags';
@@ -482,19 +483,25 @@ export async function getUntaggedQuestionsPage(
   client?: TypedSupabaseClient,
 ): Promise<{ questions: Array<{ id: string; question_text: string | null; options: unknown }>; total: number }> {
   const supabase = client || getSupabaseAdminClient();
-  const [allRes, taggedRes] = await Promise.all([
-    supabase
-      .from('nexus_qb_questions')
-      .select('id')
-      .eq('is_active', true)
-      .order('created_at', { ascending: true })
-      .range(0, 99999),
-    supabase.from(QUESTION_TAGS).select('question_id').range(0, 99999),
+
+  // Both sides are read to exhaustion. `.range(0, 99999)` does NOT mean "all":
+  // PostgREST caps a response at 1000 rows and reports neither an error nor the
+  // truncation. nexus_qb_question_tags holds 6,309 rows on production, so the
+  // old read saw 1,000 of them and handed this assistant 5,309 already-tagged
+  // questions to tag again, while the question scan beside it only ever
+  // considered the thousand oldest. See utils/paged-rows.ts.
+  const [allRows, taggedRows] = await Promise.all([
+    fetchAllRows<{ id: string }>(() =>
+      supabase
+        .from('nexus_qb_questions')
+        .select('id')
+        .eq('is_active', true)
+        .order('created_at', { ascending: true }),
+    ),
+    fetchAllRows<{ question_id: string }>(() => supabase.from(QUESTION_TAGS).select('question_id')),
   ]);
-  if (allRes.error) throw allRes.error;
-  if (taggedRes.error) throw taggedRes.error;
-  const tagged = new Set((taggedRes.data || []).map((r: any) => r.question_id));
-  const untaggedIds = (allRes.data || []).map((r: any) => r.id).filter((id: string) => !tagged.has(id));
+  const tagged = new Set(taggedRows.map((r: any) => r.question_id));
+  const untaggedIds = allRows.map((r: any) => r.id).filter((id: string) => !tagged.has(id));
   const total = untaggedIds.length;
   const pageIds = untaggedIds.slice((page - 1) * pageSize, page * pageSize);
   if (pageIds.length === 0) return { questions: [], total };

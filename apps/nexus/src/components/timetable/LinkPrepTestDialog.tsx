@@ -14,6 +14,8 @@ import {
   Tab,
   Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
   useMediaQuery,
   useTheme,
@@ -22,15 +24,22 @@ import QuestionPickerList from '@/components/question-bank/QuestionPickerList';
 import TestBrowser, { type PickableTest } from '@/components/tests/TestBrowser';
 import type { NexusQBQuestionListItem } from '@neram/database';
 import type { ClassCardData } from './ClassCard';
+import type { ClassTestTiming } from './ClassPrepTestSection';
 
 /** A prep test is meant to be short. Beyond this it stops being pre-class work. */
-const MAX_QUESTIONS = 15;
+const MAX_PREP_QUESTIONS = 15;
+/**
+ * A class test is a whole class's worth of questions. Still capped: past this it
+ * is a mock, and a mock belongs in the library rather than bolted to one class.
+ * Kept in step with CLASS_TEST_MAX_QUESTIONS, which the server enforces.
+ */
+const MAX_CLASS_TEST_QUESTIONS = 40;
 
 /**
  * Which library tests may gate a class. A content gate belongs to its chapter and
  * a catch-up paper belongs to the class it clears, so neither is offered here.
  */
-const REUSABLE_KINDS = [
+const REUSABLE_PREP_KINDS = [
   'classroom_assigned',
   'practice_pool',
   'class_prep',
@@ -40,6 +49,14 @@ const REUSABLE_KINDS = [
   'chapter',
 ];
 
+/**
+ * The after-class list additionally drops 'class_prep'. Reusing a prep paper here
+ * would either hand a student a gated test through the ordinary take engine, or
+ * force us to rewrite its kind and so unlock the door of the class it was gating.
+ * The server refuses it either way; this keeps it off the menu.
+ */
+const REUSABLE_CLASS_TEST_KINDS = REUSABLE_PREP_KINDS.filter((k) => k !== 'class_prep');
+
 interface LinkPrepTestDialogProps {
   open: boolean;
   cls: ClassCardData | null;
@@ -47,10 +64,30 @@ interface LinkPrepTestDialogProps {
   onClose: () => void;
   onSaved: (message: string) => void;
   onNotify: (message: string, severity?: 'success' | 'error') => void;
+  /** Defaults to 'before', so every existing call site keeps its meaning. */
+  timing?: ClassTestTiming;
+}
+
+/** YYYY-MM-DD in IST, which is what a date input wants. */
+function toDateInput(ms: number): string {
+  return new Date(ms + 5.5 * 3600_000).toISOString().slice(0, 10);
 }
 
 /**
- * Set the short test a student must pass before this class.
+ * A due DATE becomes the end of that day in IST.
+ *
+ * A teacher picking "12 Aug" means "by the end of the 12th", not midnight at its
+ * start. The +05:30 is load-bearing for the same reason it is everywhere else
+ * here: a bare date string is parsed as UTC on Vercel and lands 5.5 hours early.
+ */
+function dueDateToIso(date: string): string | null {
+  if (!date) return null;
+  const ms = Date.parse(`${date}T23:59:00+05:30`);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+/**
+ * Set the test attached to this class, on either side of it.
  *
  * Two ways in, because teachers arrive from two different places: build a paper
  * from the bank now, or reuse one they already made. Modelled on
@@ -64,15 +101,21 @@ export default function LinkPrepTestDialog({
   onClose,
   onSaved,
   onNotify,
+  timing = 'before',
 }: LinkPrepTestDialogProps) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const after = timing === 'after';
+  const endpoint = after ? 'class-test' : 'prep-test';
+  const maxQuestions = after ? MAX_CLASS_TEST_QUESTIONS : MAX_PREP_QUESTIONS;
 
   const [tab, setTab] = useState<'build' | 'reuse'>('build');
   const [selected, setSelected] = useState<Map<string, NexusQBQuestionListItem>>(new Map());
   const [reusePick, setReusePick] = useState<PickableTest | null>(null);
-  const [passingPct, setPassingPct] = useState(70);
+  const [passingPct, setPassingPct] = useState(after ? 60 : 70);
   const [title, setTitle] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [required, setRequired] = useState(true);
   const [busy, setBusy] = useState(false);
 
   // The class topic is the best search seed we have. There is no join from a
@@ -88,29 +131,47 @@ export default function LinkPrepTestDialog({
     setTab('build');
     setSelected(new Map());
     setReusePick(null);
-    setPassingPct(70);
-    setTitle(`${cls.title || 'Class'}: before you join`);
+    setPassingPct(after ? 60 : 70);
+    setRequired(true);
+    setDueDate('');
+    setTitle(after ? `${cls.title || 'Class'}: test` : `${cls.title || 'Class'}: before you join`);
 
     let cancelled = false;
     (async () => {
       try {
         const token = await getToken();
         if (!token) return;
-        const res = await fetch(`/api/timetable/${cls.id}/prep-test`, {
+        const res = await fetch(`/api/timetable/${cls.id}/${endpoint}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.ok && !cancelled) {
-          const d = await res.json();
-          if (d.default_passing_pct) setPassingPct(d.default_passing_pct);
+        if (!res.ok || cancelled) return;
+        const d = await res.json();
+        if (d.default_passing_pct) setPassingPct(d.default_passing_pct);
+        // Seed the deadline from the class the server knows about rather than
+        // from today, so a test set weeks later still reads as "three days after
+        // the class" the way the empty state promises.
+        if (after) {
+          const existing = d.class_test;
+          if (existing?.due_at) {
+            setDueDate(toDateInput(Date.parse(existing.due_at)));
+          } else {
+            const startMs = d.class_start ? Date.parse(d.class_start) : Date.now();
+            const days = Number(d.default_due_days) || 3;
+            setDueDate(toDateInput((Number.isFinite(startMs) ? startMs : Date.now()) + days * 86_400_000));
+          }
+          if (existing) {
+            setRequired(existing.required !== false);
+            if (existing.passing_pct) setPassingPct(existing.passing_pct);
+          }
         }
       } catch {
-        // Only the default pass mark comes from here; the browser loads its own list.
+        // Only the defaults come from here; the browser loads its own list.
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, cls?.id, cls?.title, getToken]);
+  }, [open, cls?.id, cls?.title, getToken, after, endpoint]);
 
   // The library reports a real question count. The old reuse list used
   // total_marks as a stand-in, which silently lied about "5 of 6" whenever a
@@ -124,24 +185,25 @@ export default function LinkPrepTestDialog({
     setBusy(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/timetable/${cls.id}/prep-test`, {
+      const extras = after ? { due_at: dueDateToIso(dueDate), required } : {};
+      const res = await fetch(`/api/timetable/${cls.id}/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(
           tab === 'build'
-            ? { question_ids: [...selected.keys()], title: title.trim(), passing_pct: passingPct }
-            : { test_id: reusePick?.id, passing_pct: passingPct },
+            ? { question_ids: [...selected.keys()], title: title.trim(), passing_pct: passingPct, ...extras }
+            : { test_id: reusePick?.id, passing_pct: passingPct, ...extras },
         ),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        onNotify(d.error || 'Could not set the prep test', 'error');
+        onNotify(d.error || 'Could not set the test', 'error');
         return;
       }
-      onSaved('Prep test set for this class');
+      onSaved(after ? 'Test set for this class' : 'Prep test set for this class');
       onClose();
     } catch {
-      onNotify('Could not set the prep test', 'error');
+      onNotify('Could not set the test', 'error');
     } finally {
       setBusy(false);
     }
@@ -150,7 +212,9 @@ export default function LinkPrepTestDialog({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" fullScreen={fullScreen}>
       <DialogTitle sx={{ pb: 0.5 }}>
-        <Typography sx={{ fontWeight: 800, fontSize: '1.0625rem' }}>Test before this class</Typography>
+        <Typography sx={{ fontWeight: 800, fontSize: '1.0625rem' }}>
+          {after ? 'Test for this class' : 'Test before this class'}
+        </Typography>
         <Typography variant="caption" color="text.secondary">
           {cls?.title || 'Class'}
         </Typography>
@@ -177,11 +241,11 @@ export default function LinkPrepTestDialog({
               getToken={getToken}
               selected={selected}
               onChange={setSelected}
-              // The grader can only mark these two, and a prep test must never
-              // contain a question that needs a human before the class starts.
+              // The grader can only mark these two, and a paper with a pass mark
+              // must never contain a question that needs a human.
               formats={['MCQ', 'NUMERICAL']}
               initialSearch={topicSeed}
-              maxSelected={MAX_QUESTIONS}
+              maxSelected={maxQuestions}
             />
           </>
         ) : (
@@ -192,10 +256,56 @@ export default function LinkPrepTestDialog({
             getToken={getToken}
             value={reusePick}
             onChange={setReusePick}
-            kinds={REUSABLE_KINDS}
+            kinds={after ? REUSABLE_CLASS_TEST_KINDS : REUSABLE_PREP_KINDS}
             resetToken={open ? cls?.id : null}
             maxListHeight={280}
           />
+        )}
+
+        {/* When it is due, and whether it is a rule or a suggestion. Only the
+            after-class test has either: a prep test's deadline is the class
+            start, and it is always required or it is not a gate. */}
+        {after && (
+          <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              type="date"
+              label="Due by"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              helperText="Late is late, not locked. Students can still finish it afterwards."
+              inputProps={{ style: { fontSize: 16 } }}
+              sx={{ '& .MuiInputBase-root': { minHeight: 48 } }}
+            />
+
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.75 }}>
+                Does everyone have to do it?
+              </Typography>
+              <ToggleButtonGroup
+                exclusive
+                fullWidth
+                size="small"
+                value={required ? 'required' : 'optional'}
+                onChange={(_e, v) => {
+                  // Null arrives when the active button is tapped again. Ignored,
+                  // because "neither" is not one of the two answers.
+                  if (v) setRequired(v === 'required');
+                }}
+                sx={{ '& .MuiToggleButton-root': { minHeight: 44, textTransform: 'none' } }}
+              >
+                <ToggleButton value="required">Required</ToggleButton>
+                <ToggleButton value="optional">Optional</ToggleButton>
+              </ToggleButtonGroup>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                {required
+                  ? 'Reminders go out, and anyone who missed the class has to pass it to clear their catch-up.'
+                  : 'Offered, never chased. It blocks nothing.'}
+              </Typography>
+            </Box>
+          </Box>
         )}
 
         {/* The pass mark, stated twice. Teachers set 80% meaning "most of it" and

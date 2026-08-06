@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, recordAssignmentReminder } from '@neram/database';
+import {
+  getSupabaseAdminClient,
+  recordAssignmentReminder,
+  getClassTestRoster,
+  recordClassTestReminder,
+  loadRecentClassTestReminders,
+} from '@neram/database';
 import { assertCronRequest } from '@/lib/cron-auth';
 import { sendNudge } from '@/lib/nudge-delivery';
 import { classifyPrework, classEndIso, formatIstTime } from '@/lib/prework';
@@ -15,12 +21,18 @@ export const dynamic = 'force-dynamic';
  * that a student who wants to do the work still can. Nothing else in the cron
  * list runs in that window.
  *
- * Two jobs, in order:
+ * Three jobs, in order:
  *   1. Nudge students whose pre-class work is due tonight and is not done.
  *      Once per assignment, ever. A second ping about the same piece of work is
  *      how a useful reminder becomes something students mute.
- *   2. Refresh the chronic-non-completion queue and tell each classroom's
+ *   2. Nudge students whose REQUIRED class test falls due today or tomorrow and
+ *      is not passed. Same one-nudge rule, keyed on the placement.
+ *   3. Refresh the chronic-non-completion queue and tell each classroom's
  *      teachers how many need a word.
+ *
+ * MAX_NUDGES_PER_RUN is shared across passes 1 and 2, not applied per pass. Two
+ * caps of 300 is a cap of 600, and the number exists to bound what one run can
+ * send to one student body in one afternoon.
  *
  * It sends NOTHING to any parent, ever. That is a person's decision, made from
  * the queue, and it matches the contract class-followups states in its own
@@ -36,6 +48,16 @@ const NUDGE_COOLDOWN_HOURS = 20;
 const MAX_NUDGES_PER_RUN = 300;
 /** Recorded on nexus_assignment_reminders so the teacher can tell ours from theirs. */
 const NUDGE_TEMPLATE = 'prework_prompt';
+/** The class-test equivalent, on nexus_class_test_reminders. */
+const CLASS_TEST_TEMPLATE = 'class_test_due_soon';
+/**
+ * How far back to look for class-test placements.
+ *
+ * A placement due tomorrow was created recently, so this bounds a query that
+ * would otherwise grow with every class the school has ever run. Generous enough
+ * that a teacher setting a long deadline is still swept.
+ */
+const CLASS_TEST_PLACEMENT_LOOKBACK_DAYS = 90;
 
 /** Today in IST as YYYY-MM-DD. */
 function istToday(): string {
@@ -55,12 +77,17 @@ export async function GET(request: NextRequest) {
     dueToday: 0,
     nudged: 0,
     skippedRecentlyNudged: 0,
+    classTestsDue: 0,
+    classTestNudged: 0,
     flagged: 0,
     cleared: 0,
     teachersNotified: 0,
     capped: false,
     errors: [] as string[],
   };
+
+  /** One budget for every automated nudge this run sends. */
+  const nudgeBudget = () => MAX_NUDGES_PER_RUN - stats.nudged - stats.classTestNudged;
 
   try {
     // ── 1. Tonight's prework ────────────────────────────────────────────────
@@ -86,7 +113,7 @@ export async function GET(request: NextRequest) {
     stats.dueToday = todayPrework.length;
 
     for (const p of todayPrework) {
-      if (stats.nudged >= MAX_NUDGES_PER_RUN) {
+      if (nudgeBudget() <= 0) {
         stats.capped = true;
         break;
       }
@@ -144,7 +171,7 @@ export async function GET(request: NextRequest) {
 
         const at = formatIstTime(p.due_at || '') || cls.start_time?.slice(0, 5);
         const { results } = await sendNudge({
-          studentIds: targets.slice(0, MAX_NUDGES_PER_RUN - stats.nudged),
+          studentIds: targets.slice(0, nudgeBudget()),
           subject: 'Work due before your class tonight',
           plain:
             `${p.title} is due before ${cls.title} starts at ${at}.\n\n` +
@@ -174,7 +201,131 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── 2. The chronic queue ────────────────────────────────────────────────
+    // ── 2. Class tests falling due ──────────────────────────────────────────
+    //
+    // The deadline lives in the placement's gating.due_at rather than in
+    // available_until, deliberately: a class test that has closed would be
+    // unfinishable, and a required one has to stay clearable from a catch-up
+    // backlog weeks later. So the window is filtered here in JS over a bounded
+    // set of placements rather than pushed into the query.
+    try {
+      const placementCutoff = new Date(
+        Date.now() - CLASS_TEST_PLACEMENT_LOOKBACK_DAYS * 86_400_000,
+      ).toISOString();
+
+      const { data: classTestPlacements } = await supabase
+        .from('nexus_test_placements')
+        .select('id, test_id, context_id, passing_pct, gating')
+        .eq('context_type', 'class_test')
+        .eq('is_active', true)
+        .gte('created_at', placementCutoff);
+
+      // Today or tomorrow, in IST. One day of warning plus the day itself: the
+      // afternoon a thing is due is too late to start it, and any earlier is a
+      // reminder about something that is not yet a problem.
+      const tomorrow = new Date(Date.now() + 5.5 * 3600_000 + 86_400_000).toISOString().slice(0, 10);
+      const dueSoon = ((classTestPlacements || []) as any[]).filter((p) => {
+        const gating = (p.gating || {}) as Record<string, unknown>;
+        // Optional tests are never chased. That is the whole meaning of the
+        // switch, and a reminder about something that blocks nothing is exactly
+        // the noise that teaches students to mute us.
+        if (gating.required === false) return false;
+        const dueAt = typeof gating.due_at === 'string' ? gating.due_at : null;
+        if (!dueAt) return false;
+        const dueDay = new Date(Date.parse(dueAt) + 5.5 * 3600_000).toISOString().slice(0, 10);
+        return dueDay === today || dueDay === tomorrow;
+      });
+      stats.classTestsDue = dueSoon.length;
+
+      for (const p of dueSoon) {
+        if (nudgeBudget() <= 0) {
+          stats.capped = true;
+          break;
+        }
+        try {
+          const { data: cls } = await supabase
+            .from('nexus_scheduled_classes')
+            .select('id, title, classroom_id, status')
+            .eq('id', p.context_id)
+            .maybeSingle();
+          // A cancelled class asks nothing of anyone, including afterwards.
+          if (!cls || cls.status === 'cancelled') continue;
+
+          const { data: enrolments } = await supabase
+            .from('nexus_enrollments')
+            .select('user_id')
+            .eq('classroom_id', cls.classroom_id)
+            .eq('role', 'student')
+            .eq('is_active', true);
+          const studentIds = ((enrolments || []) as any[]).map((e) => e.user_id as string);
+          if (!studentIds.length) continue;
+
+          const [standing, alreadyNudged] = await Promise.all([
+            getClassTestRoster(cls.id, studentIds, supabase),
+            loadRecentClassTestReminders(
+              p.id,
+              CLASS_TEST_TEMPLATE,
+              new Date(Date.now() - NUDGE_COOLDOWN_HOURS * 3600_000).toISOString(),
+              supabase,
+            ),
+          ]);
+
+          const targets = studentIds.filter((id) => {
+            if (standing.get(id)?.passed_at) return false;
+            if (alreadyNudged.has(id)) {
+              stats.skippedRecentlyNudged += 1;
+              return false;
+            }
+            return true;
+          });
+          if (!targets.length) continue;
+
+          const { data: test } = await supabase
+            .from('nexus_tests')
+            .select('title')
+            .eq('id', p.test_id)
+            .maybeSingle();
+          const title = test?.title || 'the class test';
+
+          const { results } = await sendNudge({
+            studentIds: targets.slice(0, nudgeBudget()),
+            subject: `Test to finish: ${title}`,
+            plain:
+              `${title} from ${cls.title || 'your class'} is due.\n\n` +
+              'Open Nexus and finish it. You can retry it as many times as you need, ' +
+              'and it stays open if you are late.',
+            teamsText: 'A test from your class is due',
+            eventType: 'class_test_due',
+            metadata: { class_id: cls.id, test_id: p.test_id, placement_id: p.id },
+          });
+
+          for (const r of results) {
+            stats.classTestNudged += 1;
+            await recordClassTestReminder(
+              {
+                placement_id: p.id,
+                student_id: r.studentId,
+                // Null marks it as ours, so a teacher's own Remind is
+                // distinguishable in the same log.
+                sent_by: null,
+                channel: r.channel,
+                template: CLASS_TEST_TEMPLATE,
+              },
+              supabase,
+            ).catch(() => {
+              /* the nudge went out; a missing log row must not stop the run */
+            });
+          }
+        } catch (err) {
+          stats.errors.push(`class test ${p.id}: ${err instanceof Error ? err.message : 'unknown'}`);
+        }
+      }
+    } catch (err) {
+      // A failure here must not cost the chronic queue its run.
+      stats.errors.push(`class tests: ${err instanceof Error ? err.message : 'unknown'}`);
+    }
+
+    // ── 3. The chronic queue ────────────────────────────────────────────────
     // Every published prework that fell due inside the window.
     const { data: windowPrework } = await supabase
       .from('nexus_class_assignments')

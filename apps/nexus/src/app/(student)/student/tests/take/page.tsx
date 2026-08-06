@@ -26,21 +26,19 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import CloseIcon from '@mui/icons-material/Close';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useTestErrorReporter } from '@/hooks/useTestErrorReporter';
 import { useSearchParams, useRouter } from 'next/navigation';
 import MathText from '@/components/common/MathText';
 import AnswerInput from '@/components/tests/AnswerInput';
 import ExplanationPanel from '@/components/tests/ExplanationPanel';
+import OptionBody, { type TestOption } from '@/components/tests/OptionBody';
+import { optionKeyAt, sameChoice } from '@/lib/option-keys';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface Option {
-  id?: string;
-  label?: string;
-  text: string;
-  image_url?: string;
-}
+type Option = TestOption;
 
 interface Question {
   id: string;
@@ -73,6 +71,7 @@ interface AttemptInfo {
 // Side panel width
 const SIDE_PANEL_W = 280;
 
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -81,7 +80,13 @@ const SIDE_PANEL_W = 280;
 interface GradedReviewItem {
   question_id: string;
   question_text: string | null;
-  options: Array<{ id: string; text: string }> | null;
+  /**
+   * The same option shape the paper was served with, image and all. Typed as
+   * `{ id, text }` it silently dropped `image_url`, so a student reviewing a
+   * "pick the correct top view" question saw four blank rows where the figures
+   * they had just chosen between should be.
+   */
+  options: Option[] | null;
   correct_answer: string | null;
   selected: string | null;
   is_correct: boolean;
@@ -110,6 +115,20 @@ export default function TakeTestPage() {
   const testId = searchParams.get('test_id');
   const placementId = searchParams.get('placement_id');
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  /**
+   * What broke while this student was sitting this paper.
+   *
+   * Never awaited and never allowed to throw: see useTestErrorReporter. The
+   * whole point is that a teacher can open a test and see the failures that made
+   * students walk away, which was previously unknowable, because a paper that
+   * would not load never created an attempt row and so showed as "0 attempts".
+   */
+  const { report: reportTestError } = useTestErrorReporter({
+    testId,
+    classroomId: activeClassroom?.id ?? null,
+    getToken,
+  });
 
   // Core state
   const [test, setTest] = useState<TestInfo | null>(null);
@@ -170,6 +189,14 @@ export default function TakeTestPage() {
         console.error('Failed to load test:', res.status);
         const j = await res.json().catch(() => ({}));
         if (j?.error) setLoadError(j.error);
+        // A paper that will not open never creates an attempt row, so this
+        // failure was previously invisible to everyone: the student saw an
+        // error, walked away, and the teacher's screen said "0 attempts".
+        reportTestError({
+          phase: 'load',
+          message: j?.error || `Test failed to load (HTTP ${res.status})`,
+          detail: { status: res.status, placement_id: placementId },
+        });
         return;
       }
 
@@ -189,6 +216,10 @@ export default function TakeTestPage() {
       }
     } catch (err) {
       console.error('Failed to load test:', err);
+      reportTestError({
+        phase: 'load',
+        message: err instanceof Error ? err.message : 'Test failed to load',
+      });
     } finally {
       setLoading(false);
     }
@@ -332,16 +363,39 @@ export default function TakeTestPage() {
             action,
           }),
         });
-        if (!res.ok) return null;
+        if (!res.ok) {
+          // A failed SUBMIT is the worst failure in the product: the student did
+          // the work and the answers did not land. Reported even though the UI
+          // also surfaces it, because the teacher needs to see it on the paper.
+          // A failed autosave is noisier and less severe, so only submits are
+          // recorded here.
+          if (action === 'submit') {
+            const j = await res.json().catch(() => ({}));
+            reportTestError({
+              phase: 'submit',
+              attempt_id: attempt.id,
+              message: j?.error || `Submit failed (HTTP ${res.status})`,
+              detail: { status: res.status, answered: Object.keys(currentAnswers).length },
+            });
+          }
+          return null;
+        }
         // The submit response carries the graded result and the per-question
         // review, which is what the result screen renders.
         return (await res.json().catch(() => ({}))) as Record<string, any>;
       } catch (err) {
         console.error('Failed to save answers:', err);
+        if (action === 'submit') {
+          reportTestError({
+            phase: 'submit',
+            attempt_id: attempt.id,
+            message: err instanceof Error ? err.message : 'Submit failed',
+          });
+        }
         return null;
       }
     },
-    [attempt, getToken],
+    [attempt, getToken, reportTestError],
   );
 
   function handleAnswer(questionId: string, value: string) {
@@ -562,9 +616,13 @@ export default function TakeTestPage() {
                           <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
                             {i + 1}
                           </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
-                            {r.question_text || 'Question'}
-                          </Typography>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <MathText
+                              text={r.question_text || 'Question'}
+                              variant="body2"
+                              sx={{ fontWeight: 600 }}
+                            />
+                          </Box>
                           <Chip
                             size="small"
                             label={!r.is_gradable ? 'Not marked' : r.is_correct ? 'Correct' : 'Wrong'}
@@ -575,14 +633,20 @@ export default function TakeTestPage() {
 
                         {options.length > 0 ? (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, mb: 1 }}>
-                            {options.map((o: any) => {
-                              const isCorrect = o.id === r.correct_answer;
-                              const isChosen = o.id === r.selected;
+                            {options.map((o: Option, oi: number) => {
+                              // The same key the paper was answered with, matched
+                              // the way the grader matches it (case-insensitive).
+                              // Comparing o.id alone marked the right answer wrong
+                              // on every question whose options carry a label.
+                              const key = optionKeyAt(o, oi);
+                              const isCorrect = sameChoice(key, r.correct_answer);
+                              const isChosen = sameChoice(key, r.selected);
                               return (
                                 <Box
-                                  key={o.id}
+                                  key={key}
                                   sx={{
                                     display: 'flex',
+                                    alignItems: 'flex-start',
                                     gap: 1,
                                     px: 1,
                                     py: 0.5,
@@ -595,11 +659,11 @@ export default function TakeTestPage() {
                                   }}
                                 >
                                   <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
-                                    {o.id}
+                                    {key}
                                   </Typography>
-                                  <Typography variant="body2" sx={{ flex: 1 }}>
-                                    {o.text}
-                                  </Typography>
+                                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <OptionBody option={o} letter={String(key)} compact />
+                                  </Box>
                                   {isCorrect && (
                                     <Typography variant="caption" sx={{ fontWeight: 700, color: 'success.dark' }}>
                                       Correct
@@ -839,14 +903,26 @@ export default function TakeTestPage() {
   const optionCards = currentQuestion ? (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 0.75, md: 1 } }}>
       {(currentQuestion.question.options || []).map((option, optIdx) => {
-        const optionKey = option.label || option.id || String(optIdx);
+        const optionKey = optionKeyAt(option, optIdx);
         const displayLetter = option.label || String.fromCharCode(65 + optIdx);
         const isSelected = selectedAnswer === optionKey;
+        // A figure needs the full width of a 375px screen, so the letter badge
+        // moves above it instead of sitting beside it and stealing 40px.
+        const isFigure = Boolean(option.image_url);
         return (
           <Paper
             key={optionKey}
             elevation={0}
             onClick={() => handleAnswer(currentQuestion.question.id, optionKey)}
+            role="radio"
+            aria-checked={isSelected}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleAnswer(currentQuestion.question.id, optionKey);
+              }
+            }}
             sx={{
               cursor: 'pointer',
               transition: 'all 120ms ease',
@@ -857,7 +933,8 @@ export default function TakeTestPage() {
                 : 'background.paper',
               borderRadius: 1.5,
               display: 'flex',
-              alignItems: 'center',
+              flexDirection: isFigure ? 'column' : 'row',
+              alignItems: isFigure ? 'stretch' : 'center',
               px: { xs: 1.5, md: 2 },
               py: { xs: 1, md: 1.25 },
               minHeight: { xs: 48, md: 52 },
@@ -881,6 +958,7 @@ export default function TakeTestPage() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
+                alignSelf: isFigure ? 'flex-start' : 'auto',
                 fontWeight: 700,
                 fontSize: '0.8rem',
                 transition: 'all 120ms ease',
@@ -891,9 +969,9 @@ export default function TakeTestPage() {
               {displayLetter}
             </Box>
 
-            {/* Option text */}
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <MathText text={option.text} variant="body2" sx={{ fontSize: { xs: '0.875rem', md: '0.95rem' } }} />
+            {/* Option text and figure */}
+            <Box sx={{ flex: isFigure ? 'none' : 1, minWidth: 0 }}>
+              <OptionBody option={option} letter={displayLetter} />
             </Box>
           </Paper>
         );
@@ -1114,6 +1192,20 @@ export default function TakeTestPage() {
                       src={currentQuestion.question.question_image_url}
                       alt="Question"
                       style={{ width: '100%', height: 'auto', display: 'block' }}
+                      // A figure that does not load makes a spatial-reasoning
+                      // question unanswerable, and the student has no way to say
+                      // so beyond giving up. This is the single most common and
+                      // most fixable failure a paper can have, and until now it
+                      // was completely silent.
+                      onError={() =>
+                        reportTestError({
+                          phase: 'image',
+                          attempt_id: attempt?.id ?? null,
+                          question_id: currentQuestion.question.id,
+                          message: 'Question image failed to load',
+                          detail: { url: currentQuestion.question.question_image_url },
+                        })
+                      }
                     />
                   </Box>
                 )}

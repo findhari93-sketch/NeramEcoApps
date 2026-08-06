@@ -6685,7 +6685,14 @@ export type NexusPlacementContext =
   /** context_id = nexus_scheduled_classes.id. "You missed it, prove you caught up." Re-locks on a fail. */
   | 'catchup_class'
   /** context_id = nexus_scheduled_classes.id. "Pass this before you attend." Retry until pass, never re-locks. */
-  | 'class_prep_test';
+  | 'class_prep_test'
+  /**
+   * context_id = nexus_scheduled_classes.id. "Here is the test for this class."
+   * Set from the class a teacher has just taught, carries its own due date, and
+   * withholds nothing on the day. The after-class counterpart of
+   * 'class_prep_test'.
+   */
+  | 'class_test';
 
 /**
  * What a test IS, stored on nexus_tests.test_kind rather than inferred from its
@@ -6862,6 +6869,8 @@ export type NexusTestOverviewGroupKey =
   | 'practice'
   /** Short tests gating entry to a class. */
   | 'class_prep'
+  /** Tests a class sets for afterwards, with their own deadline. */
+  | 'class_test'
   /** Whole-class tests that clear a missed class off a backlog. */
   | 'catchup'
   /** Teacher-offered optional practice, distinct from mandatory classroom work. */

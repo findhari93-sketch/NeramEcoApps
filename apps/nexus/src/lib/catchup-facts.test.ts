@@ -123,6 +123,13 @@ describe('loadClassFactsForStudents', () => {
       id: 'place-a',
       test_id: 'test-1',
       passing_pct: 60,
+      // A class can now carry either the auto-generated catch-up paper or a
+      // teacher-set class test, so the fact says which. The catch-up paper has
+      // never had an Optional switch, and its pass lives on the absence row
+      // rather than here.
+      source: 'catchup',
+      required: true,
+      passed: false,
     });
   });
 
@@ -191,5 +198,85 @@ describe('loadClassFactsForStudents', () => {
     // 450 ids over a 200 chunk is 3 requests, for each of the 3 class-level tables.
     // The student-level wave is skipped because nothing matched.
     expect(db.queries).toBe(9);
+  });
+});
+
+/**
+ * A teacher-set class test, across a whole cohort.
+ *
+ * Two things separate it from the auto-generated catch-up paper, and both are
+ * easy to lose in a loader whose whole point is that class-level facts are shared
+ * by reference:
+ *
+ *   1. It WINS. Asking an absent student to pass a second, machine-built paper on
+ *      top of the one their teacher set is asking them to do more than the
+ *      students who were in the room.
+ *   2. Whether it is passed is a PER STUDENT fact, derived from the attempts,
+ *      because it is sat through the ordinary take engine and nothing writes
+ *      test_passed_at for it. Sharing that by reference would hand one student's
+ *      result to the whole class.
+ */
+describe('loadClassFactsForStudents: teacher-set class tests', () => {
+  const withClassTest: Partial<Rows> = {
+    ...baseRows,
+    nexus_test_placements: [
+      {
+        id: 'place-a',
+        test_id: 'test-1',
+        context_id: CLASSES.a,
+        passing_pct: 60,
+        context_type: 'catchup_class',
+        is_active: true,
+      },
+      {
+        id: 'place-a-class',
+        test_id: 'test-class',
+        context_id: CLASSES.a,
+        passing_pct: 50,
+        context_type: 'class_test',
+        gating: { required: false, due_at: '2026-08-23T18:29:00.000Z' },
+        is_active: true,
+      },
+    ],
+    nexus_test_attempts: [
+      { test_id: 'test-class', student_id: 's1', mode: 'official', status: 'submitted', percentage: 80 },
+      { test_id: 'test-class', student_id: 's2', mode: 'official', status: 'submitted', percentage: 20 },
+    ],
+  } as Partial<Rows>;
+
+  it('prefers the class test over the auto-generated catch-up paper', async () => {
+    const db = fakeSupabase(withClassTest);
+    const facts = await loadClassFactsForStudents(db, new Map([['s1', [CLASSES.a]]]));
+
+    const test = facts.get('s1')!.testByClass.get(CLASSES.a)!;
+    expect(test.source).toBe('class_test');
+    expect(test.test_id).toBe('test-class');
+    expect(test.required).toBe(false);
+  });
+
+  it('keeps each student pass to themselves', async () => {
+    const db = fakeSupabase(withClassTest);
+    const facts = await loadClassFactsForStudents(
+      db,
+      new Map([
+        ['s1', [CLASSES.a]],
+        ['s2', [CLASSES.a]],
+      ]),
+    );
+
+    // s1 cleared the 50% bar, s2 did not. Sharing the map by reference here would
+    // report both of them the same way.
+    expect(facts.get('s1')!.testByClass.get(CLASSES.a)!.passed).toBe(true);
+    expect(facts.get('s2')!.testByClass.get(CLASSES.a)!.passed).toBe(false);
+  });
+
+  it('costs nothing extra for a classroom that uses no class tests', async () => {
+    const without = fakeSupabase(baseRows);
+    await loadClassFactsForStudents(without, new Map([['s1', [CLASSES.a]]]));
+    const withOne = fakeSupabase(withClassTest);
+    await loadClassFactsForStudents(withOne, new Map([['s1', [CLASSES.a]]]));
+
+    // Exactly one more query, and only when there is something to ask about.
+    expect(withOne.queries).toBe(without.queries + 1);
   });
 });

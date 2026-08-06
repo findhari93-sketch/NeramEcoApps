@@ -193,15 +193,31 @@ export async function GET(request: NextRequest, { params }: Ctx) {
             placement_id: test.id,
             test_id: test.test_id,
             passing_pct: test.passing_pct ?? 85,
-            unlocked: !!item?.test_unlocked_at,
-            passed: !!item?.test_passed_at,
+            // A teacher-set class test has no unlock and no rewatch rule: it was
+            // set for the whole class, so an absent student sits exactly the
+            // paper their classmates sat, through the ordinary take engine.
+            unlocked: test.source === 'class_test' ? true : !!item?.test_unlocked_at,
+            passed: itemFacts.testPassed,
+            source: test.source,
+            required: test.required,
+            // Where to send them. The catch-up paper has its own gated player;
+            // a class test does not, and routing it there would ask for an
+            // unlock that will never be granted.
+            href:
+              test.source === 'class_test'
+                ? `/student/tests/take?test_id=${test.test_id}&placement_id=${test.id}`
+                : `/student/catch-up/${access.cls.id}/test`,
           }
         : null,
       steps: {
         reasonGiven: !!item?.reason_code,
         watched: itemFacts.watched,
         workDone: itemFacts.assignmentsOutstanding === 0,
-        testPassed: !itemFacts.hasTest || itemFacts.testPassed,
+        // "Is this step cleared", not "did they pass it". An optional test is
+        // cleared by existing, because it blocks nothing, and the Mark caught up
+        // button below is disabled off exactly this flag.
+        testPassed:
+          !itemFacts.hasTest || itemFacts.testRequired === false || itemFacts.testPassed,
         caughtUp: !!item?.caught_up_at,
       },
       step: catchupItemStep(itemFacts),
@@ -438,7 +454,10 @@ export async function POST(request: NextRequest, { params }: Ctx) {
             { status: 400 },
           );
         }
-        if (itemFacts.hasTest && !itemFacts.testPassed) {
+        // An OPTIONAL class test is not a gate. isCatchupItemComplete already
+        // says so; this early branch has to agree, or a student would be refused
+        // here with a sentence the checklist below contradicts.
+        if (itemFacts.hasTest && itemFacts.testRequired !== false && !itemFacts.testPassed) {
           return NextResponse.json(
             { error: 'Pass the class test to clear this class.' },
             { status: 400 },

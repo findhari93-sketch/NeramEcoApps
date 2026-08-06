@@ -39,6 +39,7 @@ import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
 import { NEXUS_TEST_KIND_LABELS, type NexusTestKind } from '@neram/database';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import UnfinishedTestSheet, { type UnfinishedAttempt } from '@/components/tests/UnfinishedTestSheet';
 
 type TestStatus = 'open' | 'upcoming' | 'closed' | 'done';
 
@@ -61,6 +62,15 @@ interface StudentTest {
   best_percentage: number | null;
   last_submitted_at: string | null;
   status?: TestStatus;
+  /**
+   * Class tests only. A SOFT deadline: past it the paper is late, never shut,
+   * which is why it is a field of its own rather than available_until. Putting it
+   * there would disable the button on the one card a student most needs to open.
+   */
+  due_at?: string | null;
+  required?: boolean | null;
+  class_id?: string | null;
+  class_title?: string | null;
 }
 
 interface Overview {
@@ -78,6 +88,12 @@ interface Overview {
     passed: boolean | null;
     submitted_at: string | null;
   }>;
+  /**
+   * Sittings this student walked away from and has not explained. Asked about
+   * here because abandoning happens on page unload, where there is no UI to ask
+   * anything. At most three, newest first.
+   */
+  needs_reason?: UnfinishedAttempt[];
 }
 
 const STATUS_FILTERS: Array<{ key: TestStatus | 'all'; label: string }> = [
@@ -104,6 +120,20 @@ function formatWhen(iso: string | null): string {
 /** The one line that tells a student what to do with this card. */
 function windowChip(t: StudentTest): { label: string; color: 'error' | 'warning' | 'default' | 'success' } | null {
   const now = Date.now();
+  // A class test's own deadline comes first, and reads "Overdue" rather than
+  // "Closed": the door is still open and the student can still finish it. Saying
+  // Closed there would be a lie the Start button immediately contradicts.
+  if (t.due_at) {
+    const due = new Date(t.due_at).getTime();
+    if (!Number.isNaN(due)) {
+      if (due < now) return { label: 'Overdue', color: 'error' };
+      const hoursLeft = (due - now) / 3600000;
+      return {
+        label: `Due ${formatWhen(t.due_at)}`,
+        color: hoursLeft < 24 ? 'error' : hoursLeft < 72 ? 'warning' : 'default',
+      };
+    }
+  }
   if (t.available_from && new Date(t.available_from).getTime() > now) {
     return { label: `Opens ${formatWhen(t.available_from)}`, color: 'default' };
   }
@@ -149,11 +179,21 @@ function TestCard({
           <Typography variant={emphasis ? 'subtitle1' : 'body2'} sx={{ fontWeight: 700, lineHeight: 1.3 }}>
             {test.title}
           </Typography>
-          {test.folder_label && (
+          {/* The class it came from, when it came from one. A student who owes
+              three papers needs to know which lesson each belongs to before they
+              can decide what to open. */}
+          {test.class_title ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-              <FolderOutlinedIcon sx={{ fontSize: 13 }} />
-              {test.folder_label}
+              <ClassOutlinedIcon sx={{ fontSize: 13 }} />
+              {test.class_title}
             </Typography>
+          ) : (
+            test.folder_label && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                <FolderOutlinedIcon sx={{ fontSize: 13 }} />
+                {test.folder_label}
+              </Typography>
+            )
           )}
         </Box>
         {chip && <Chip size="small" label={chip.label} color={chip.color} sx={{ height: 24, flexShrink: 0 }} />}
@@ -170,6 +210,12 @@ function TestCard({
             label={NEXUS_TEST_KIND_LABELS[test.test_kind as NexusTestKind] || test.test_kind}
             sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700 }}
           />
+        )}
+        {/* Only said for a class test, and only when it is optional. "Required"
+            on everything else would be noise; "Optional" is the fact that
+            changes what a student does next. */}
+        {test.required === false && (
+          <Chip size="small" variant="outlined" label="Optional" sx={{ height: 22, fontSize: '0.7rem' }} />
         )}
         <Chip size="small" variant="outlined" label={`${test.question_count} questions`} sx={{ height: 22, fontSize: '0.7rem' }} />
         {test.duration_minutes && (
@@ -270,6 +316,16 @@ export default function StudentTestsPage() {
   const [buildingMistakes, setBuildingMistakes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TestStatus | 'all'>('all');
+  /**
+   * Attempts the student has waved away this visit.
+   *
+   * Held in component state rather than written to the server, deliberately.
+   * "Not now" means not now, not never: the question comes back next visit,
+   * which is the right cadence for something worth asking but not worth
+   * demanding. Persisting a dismissal would silently turn one skipped tap into
+   * permanent silence about a test that may well be broken.
+   */
+  const [dismissedReasons, setDismissedReasons] = useState<Set<string>>(new Set());
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -300,7 +356,7 @@ export default function StudentTestsPage() {
       setData(json.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load your tests');
-      setData({ due: [], all: [], practice_groups: [], mine: [], recent: [] });
+      setData({ due: [], all: [], practice_groups: [], mine: [], recent: [], needs_reason: [] });
     }
     try {
       const m = await authFetch(`/api/student/tests/mistakes${classroomParam}`);
@@ -337,6 +393,37 @@ export default function StudentTestsPage() {
       setBuildingMistakes(false);
     }
   }
+
+  /**
+   * The one unexplained abandon we ask about right now.
+   *
+   * One at a time, newest first. The server sends up to three, but presenting
+   * three sheets in a row to a student who has had a bad week is an
+   * interrogation, not a question. Answering or dismissing this one reveals the
+   * next on the following visit.
+   */
+  const askAbout = useMemo(
+    () => (data?.needs_reason || []).find((a) => !dismissedReasons.has(a.attempt_id)) ?? null,
+    [data, dismissedReasons],
+  );
+
+  const submitReason = useCallback(
+    async (input: { attempt_id: string; reason_code: string; reason_note: string }) => {
+      await authFetch('/api/student/tests/reasons', {
+        method: 'POST',
+        body: JSON.stringify({ ...input, classroom_id: activeClassroom?.id ?? null }),
+      });
+      // Drop it locally rather than reloading the whole page: the answer changes
+      // nothing else on screen, and a full refetch would cost a student on a
+      // phone a visible flash for no gain.
+      setData((prev) =>
+        prev
+          ? { ...prev, needs_reason: (prev.needs_reason || []).filter((a) => a.attempt_id !== input.attempt_id) }
+          : prev,
+      );
+    },
+    [authFetch, activeClassroom?.id],
+  );
 
   const totalPractice = useMemo(
     () => (data?.practice_groups || []).reduce((n, g) => n + g.tests.length, 0),
@@ -579,6 +666,22 @@ export default function StudentTestsPage() {
           </Button>
         </Section>
       )}
+
+      {/* Asked once per visit, one paper at a time, and always skippable. See
+          UnfinishedTestSheet for why this lives here rather than at the moment
+          the test was abandoned. */}
+      <UnfinishedTestSheet
+        attempt={askAbout}
+        onDismiss={() =>
+          setDismissedReasons((prev) => {
+            if (!askAbout) return prev;
+            const next = new Set(prev);
+            next.add(askAbout.attempt_id);
+            return next;
+          })
+        }
+        onSubmit={submitReason}
+      />
 
       <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
         <Alert severity="error" variant="filled" onClose={() => setError(null)}>

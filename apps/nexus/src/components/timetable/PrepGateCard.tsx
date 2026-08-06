@@ -22,6 +22,8 @@ export interface ClassPrepSummaryClient {
   assignments_required: number;
   assignments_submitted: number;
   reason_given: boolean;
+  /** A Required test from the PREVIOUS class is still outstanding. */
+  carried_over_test?: boolean;
 }
 
 interface PrepGateCardProps {
@@ -54,6 +56,7 @@ export default function PrepGateCard({ classId, prep, getToken, onChanged }: Pre
 
   const testDone = !prep.blockers.includes('test_not_passed');
   const preworkDone = !prep.blockers.includes('prework_missing');
+  const carriedOverDone = !prep.blockers.includes('class_test_pending');
 
   const submitReason = async ({ reasonCode, note }: PreworkReasonPayload) => {
     setBusy(true);
@@ -113,7 +116,11 @@ export default function PrepGateCard({ classId, prep, getToken, onChanged }: Pre
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
           <LockOutlinedIcon sx={{ fontSize: 20, color: 'warning.dark' }} />
           <Typography sx={{ fontWeight: 800, fontSize: '0.9375rem', color: 'warning.dark' }}>
-            {prep.blockers.length > 1 ? 'Two things before you join' : 'One thing before you join'}
+            {prep.blockers.length > 2
+              ? `${prep.blockers.length} things before you join`
+              : prep.blockers.length > 1
+                ? 'Two things before you join'
+                : 'One thing before you join'}
           </Typography>
         </Box>
 
@@ -143,6 +150,12 @@ export default function PrepGateCard({ classId, prep, getToken, onChanged }: Pre
               'Hand in the pre-class work',
               `${prep.assignments_submitted} of ${prep.assignments_required} handed in`,
             )}
+          {prep.carried_over_test &&
+            line(
+              carriedOverDone,
+              'Finish the test from the last class',
+              'Your teacher set it as required, so it carries over to tonight.',
+            )}
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -166,6 +179,21 @@ export default function PrepGateCard({ classId, prep, getToken, onChanged }: Pre
               sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}
             >
               Open the pre-class work
+            </Button>
+          )}
+          {/* Sends them to their Tests list rather than straight into the paper.
+              The card knows a test from the previous class is outstanding, not
+              which one, and the list already shows it at the top with its
+              deadline and the class it came from. */}
+          {!carriedOverDone && (
+            <Button
+              variant="outlined"
+              color="warning"
+              fullWidth
+              onClick={() => router.push('/student/tests')}
+              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+            >
+              Open the last class's test
             </Button>
           )}
           {/* Never hidden, never buried behind a menu. A student who cannot do the

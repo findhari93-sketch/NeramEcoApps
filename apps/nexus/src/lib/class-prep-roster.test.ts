@@ -221,3 +221,89 @@ describe('the summary', () => {
     expect(headline).not.toContain('0');
   });
 });
+
+/**
+ * The after-class test, on the same roster.
+ *
+ * The rule being protected here is that "to go" keeps meaning what it meant. Ten
+ * minutes before a class, "28 to go" tells a teacher twenty-eight people are
+ * about to arrive unprepared. If the same number could also mean "have not done
+ * the follow-up test yet", the number stops being worth reading.
+ */
+describe('the class test never masks the pre-class question', () => {
+  const passed = () => new Map([['a', { best_pct: 90, attempts: 1, passed: true }]]);
+  const failed = () => new Map([['a', { best_pct: 30, attempts: 2, passed: false }]]);
+
+  it('is only reached once everything asked BEFORE the class is done', () => {
+    const rows = buildPrepRoster(
+      input({
+        // Prep test outstanding AND the class test outstanding.
+        states: [state({ student_id: 'a', test_attempts: 1, test_best_pct: 40 })],
+        hasClassTest: true,
+        classTest: failed(),
+      }),
+    );
+    // The pre-class blocker wins, because that is the one that decides whether
+    // they walk into tonight's class ready.
+    expect(rows[0].status).toBe('test_pending');
+  });
+
+  it('reports the class test once the prep half is settled', () => {
+    const rows = buildPrepRoster(
+      input({
+        states: [state({ student_id: 'a', test_passed_at: 'x' })],
+        hasClassTest: true,
+        classTest: failed(),
+      }),
+    );
+    expect(rows[0].status).toBe('class_test_pending');
+    expect(rows[0].class_test_attempts).toBe(2);
+    expect(rows[0].class_test_best_pct).toBe(30);
+  });
+
+  it('is ready once both are cleared', () => {
+    const rows = buildPrepRoster(
+      input({
+        states: [state({ student_id: 'a', test_passed_at: 'x' })],
+        hasClassTest: true,
+        classTest: passed(),
+      }),
+    );
+    expect(rows[0].status).toBe('ready');
+  });
+
+  it('does not call a student "not started" over work that was never set', () => {
+    // A class whose ONLY requirement is the test it set for afterwards has no
+    // pre-class state row to find. Reading that absence as "not started" would
+    // report on prework nobody was asked for.
+    const rows = buildPrepRoster(
+      input({ hasTest: false, preworkRequired: 0, hasClassTest: true, classTest: failed() }),
+    );
+    expect(rows[0].status).toBe('class_test_pending');
+  });
+
+  it('counts it apart from "to go", and says so in the headline', () => {
+    const rows = buildPrepRoster(
+      input({
+        students: [student('a'), student('b')],
+        states: [state({ student_id: 'a', test_passed_at: 'x' })],
+        hasClassTest: true,
+        classTest: failed(),
+      }),
+    );
+    const summary = summarisePrepRoster(rows);
+    expect(summary.classTestPending).toBe(1);
+    // 'b' has no row at all, so they are still the pre-class problem.
+    expect(summary.pending).toBe(1);
+    expect(prepRosterHeadline(summary)).toBe('0 ready, 1 to go, 1 owe the test');
+  });
+
+  it('changes nothing at all on a class with no class test', () => {
+    const rows = buildPrepRoster(
+      input({ states: [state({ student_id: 'a', test_passed_at: 'x' })] }),
+    );
+    expect(rows[0].status).toBe('ready');
+    expect(rows[0].class_test_passed).toBe(false);
+    expect(summarisePrepRoster(rows).classTestPending).toBe(0);
+  });
+});

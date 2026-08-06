@@ -5,6 +5,7 @@
  * than in whichever tab happened to need them first. If a field is added to the
  * route it is added here, and every tab picks it up.
  */
+import type { BucketTally, CatchupBucket } from '@/lib/catchup-buckets';
 
 /**
  * `current`, `locked` and `open` are gone.
@@ -72,6 +73,21 @@ export type FeedRow = Item & { student: StudentCard };
 export interface Row {
   journey_id: string | null;
   student: StudentCard;
+  /**
+   * What is wrong with this student, decided once on the server by
+   * `catchupBucket`. The page groups by it and the tiles count it, so the number
+   * on a tile and the length of the group under it cannot disagree.
+   */
+  bucket: CatchupBucket;
+  /** Work they can act on right now. Drives the bucket and the owed line. */
+  openCount: number;
+  /**
+   * Items stuck at `blocked` or `pending_teacher`. Nothing the student can do:
+   * we owe a recording or an unpublished recap. Counted separately because these
+   * never reach the pace denominator, which is why students in this state used
+   * to be missing from the screen altogether.
+   */
+  blockedOnUs: number;
   totals: { total: number; completed: number; blocked: number; pendingTeacher: number };
   missedTotals: {
     total: number;
@@ -128,6 +144,14 @@ export interface Payload {
     clearedThisMonth: number;
     explained: number;
     unexplained: number;
+    /** The tiles read this. A count of the buckets on `students`, nothing else. */
+    byBucket: BucketTally;
+    /**
+     * Dormant students who still have open work, excluded from every number
+     * above. Stated on the page rather than dropped in silence, so a missing
+     * student is explained instead of looking like a bug.
+     */
+    hiddenDormant: number;
   };
 }
 
@@ -139,5 +163,12 @@ export interface TabProps {
   busy: string | null;
   onAct: (itemId: string, action: ItemAction) => void;
   onNudge: (studentId: string, journeyId: string | null) => void;
+  /**
+   * Chase a selection in one request. Separate from `onNudge` rather than a
+   * widening of it, because the two have different confirmation rules: one
+   * student is a button press, many students is an outward-facing send that has
+   * to be confirmed and counted first.
+   */
+  onNudgeMany: (studentIds: string[], journeyIds: string[]) => Promise<void>;
   onReload: () => void;
 }

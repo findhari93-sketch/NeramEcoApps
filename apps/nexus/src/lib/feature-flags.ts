@@ -182,6 +182,15 @@ export const FEATURES: FeatureDef[] = [
   // is ready long before anyone's Join button is withheld. Defaults ON per the
   // registry invariant for staff features.
   { id: 'staff.class-prep-test', label: 'Attach a prep test to a class', surface: 'staff', group: 'Teaching', paths: [], defaultEnabled: true },
+  // Not a page (`paths: []`). Shows the "After class" slot in the timetable
+  // planning rail, so a teacher can set the test a class has to complete, with a
+  // due date and reminders.
+  //
+  // Read by the STUDENT branch of PrepTab as well, which is why it is a staff
+  // flag doing double duty: switching it off has to take the student's card away
+  // too, or students keep being shown a paper their teacher can no longer manage.
+  // Defaults ON per the registry invariant for staff features.
+  { id: 'staff.class-test', label: 'Set a test for a class, due after it', surface: 'staff', group: 'Teaching', paths: [], defaultEnabled: true },
   // Not a page (`paths: []`). Shows the Reference material section in the
   // timetable planning rail. Switching it off hides the editor but leaves what
   // was already added visible to students, which is the right failure mode for

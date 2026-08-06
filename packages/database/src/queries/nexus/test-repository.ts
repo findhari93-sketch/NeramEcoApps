@@ -1,6 +1,8 @@
 // @ts-nocheck — nexus_test_placements + nexus_tests.is_repository/created_from are not
 // yet in the generated Supabase types. Regenerate after 20260713190000 is applied.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { countRowsByKey } from '../../utils/paged-rows';
+import { storeContentSummary, type NexusTestSourceFilters } from './test-provenance';
 import { recordCatchupTestAttempt } from './catchup-journey';
 import { gradeQBAnswerStrict, normaliseQuestionFormat } from './question-bank';
 import {
@@ -78,6 +80,13 @@ export interface ComposeTestInput {
    * own window, so a retry is mostly questions the student has not seen.
    */
   questionsToServe?: number | null;
+  /**
+   * What the author had filtered when they pressed Create. Stored verbatim, never
+   * derived: a null here means "nobody recorded this", which is a different and
+   * stronger statement than "they had no filters set". See
+   * test-provenance.ts and migration 20260824090000.
+   */
+  sourceFilters?: NexusTestSourceFilters | null;
 }
 
 /**
@@ -138,6 +147,7 @@ export async function composeTest(
         typeof input.questionsToServe === 'number' && input.questionsToServe > 0
           ? Math.min(Math.floor(input.questionsToServe), ids.length)
           : null,
+      source_filters: input.sourceFilters ?? null,
     })
     .select('id')
     .single();
@@ -152,6 +162,13 @@ export async function composeTest(
   }));
   const { error: tqErr } = await supabase.from(TEST_QUESTIONS).insert(rows);
   if (tqErr) throw tqErr;
+
+  // Describe the paper now that its questions exist. Best-effort on purpose:
+  // storeContentSummary swallows its own failure, because a paper the author
+  // successfully built must never fail to be created just because a description
+  // could not be written for it. The column is nullable and recomputable
+  // exactly so this can be the trade.
+  await storeContentSummary(test.id, client);
 
   return { id: test.id };
 }
@@ -372,9 +389,12 @@ export async function listLibraryTests(
   if (rows.length === 0) return { tests: [], total: count || 0 };
   const testIds = rows.map((t: any) => t.id);
 
-  const [{ data: tqRows }, { data: atRows }, { data: placementRows }] = await Promise.all([
-    supabase.from(TEST_QUESTIONS).select('test_id').in('test_id', testIds).range(0, 100000),
-    supabase.from(ATTEMPTS).select('test_id').in('test_id', testIds).range(0, 100000),
+  // Paged to exhaustion, never `.range(0, 100000)`: PostgREST caps a response at
+  // 1000 rows regardless of the range asked for, so the old one-shot read tallied
+  // a page and called it a count. See utils/paged-rows.ts.
+  const [qCount, aCount, { data: placementRows }] = await Promise.all([
+    countRowsByKey(() => supabase.from(TEST_QUESTIONS).select('test_id').in('test_id', testIds), 'test_id'),
+    countRowsByKey(() => supabase.from(ATTEMPTS).select('test_id').in('test_id', testIds), 'test_id'),
     supabase
       .from(PLACEMENTS)
       .select('test_id, context_type, context_id, sort_order')
@@ -382,11 +402,6 @@ export async function listLibraryTests(
       .eq('is_active', true)
       .order('sort_order', { ascending: true }),
   ]);
-
-  const qCount = new Map<string, number>();
-  for (const r of tqRows || []) qCount.set(r.test_id, (qCount.get(r.test_id) || 0) + 1);
-  const aCount = new Map<string, number>();
-  for (const r of atRows || []) aCount.set(r.test_id, (aCount.get(r.test_id) || 0) + 1);
 
   const labels = await resolvePlacementLabels(placementRows || [], supabase);
   const placementsByTest = new Map<string, NexusLibraryTest['placements']>();
@@ -454,21 +469,17 @@ export async function listTestsGroupedByContext(
     if (!placementByTest.has(p.test_id)) placementByTest.set(p.test_id, p);
   }
 
-  // 3. Question + attempt counts (single column pulls, tallied in memory).
-  const qCount = new Map<string, number>();
-  const { data: tqRows } = await supabase
-    .from(TEST_QUESTIONS)
-    .select('test_id')
-    .in('test_id', testIds)
-    .range(0, 100000);
-  for (const r of tqRows || []) qCount.set(r.test_id, (qCount.get(r.test_id) || 0) + 1);
-  const aCount = new Map<string, number>();
-  const { data: atRows } = await supabase
-    .from(ATTEMPTS)
-    .select('test_id')
-    .in('test_id', testIds)
-    .range(0, 100000);
-  for (const r of atRows || []) aCount.set(r.test_id, (aCount.get(r.test_id) || 0) + 1);
+  // 3. Question + attempt counts. Read to exhaustion rather than in one 100k
+  // range: PostgREST truncates at 1000 rows and reports no error, which turned
+  // this hub's counts into a tally of whichever page happened to arrive.
+  const qCount = await countRowsByKey(
+    () => supabase.from(TEST_QUESTIONS).select('test_id').in('test_id', testIds),
+    'test_id',
+  );
+  const aCount = await countRowsByKey(
+    () => supabase.from(ATTEMPTS).select('test_id').in('test_id', testIds),
+    'test_id',
+  );
 
   // 4. Resolve context names. study_file -> file title + folder; classroom_assignment / legacy -> name.
   const studyFileIds = [
@@ -501,13 +512,15 @@ export async function listTestsGroupedByContext(
     for (const c of crs || []) classroomNameMap.set(c.id, c.name);
   }
 
-  // class_prep_test and catchup_class both point context_id at a scheduled class,
-  // so both label as "{title}, {date}". Before test_kind these two contexts
-  // matched no branch and were silently filed as generic classroom tests.
+  // class_prep_test, class_test and catchup_class all point context_id at a
+  // scheduled class, so all three label as "{title}, {date}". Before test_kind
+  // these contexts matched no branch and were silently filed as generic
+  // classroom tests.
+  const CLASS_SCOPED_CONTEXTS = new Set(['class_prep_test', 'class_test', 'catchup_class']);
   const classCtxIds = [
     ...new Set(
       (placements || [])
-        .filter((p: any) => p.context_type === 'class_prep_test' || p.context_type === 'catchup_class')
+        .filter((p: any) => CLASS_SCOPED_CONTEXTS.has(p.context_type))
         .map((p: any) => p.context_id),
     ),
   ];
@@ -621,6 +634,7 @@ export async function listTestsGroupedByContext(
   //    teacher needs to know which.
   const GROUP_ORDER: { key: NexusTestOverviewGroupKey; label: string }[] = [
     { key: 'class_prep', label: 'Before class' },
+    { key: 'class_test', label: 'After class' },
     { key: 'study_materials', label: 'Study Materials' },
     { key: 'class_recaps', label: 'Class Recaps' },
     { key: 'foundation', label: 'Foundation' },
@@ -683,6 +697,16 @@ export async function listTestsGroupedByContext(
     if (ctx === 'module_item') {
       base.context_label = sectionLabelMap.get(p.context_id) || null;
       pushFlat(flat, 'modules', base);
+      continue;
+    }
+
+    // A class test files by its CONTEXT rather than its kind, the way the four
+    // content contexts do. Its kind is deliberately the ordinary
+    // 'classroom_assigned' so the normal take engine serves it, which means the
+    // kind alone cannot tell it apart from a plain classroom test.
+    if (ctx === 'class_test') {
+      base.context_label = classLabelMap.get(p.context_id) || 'A class';
+      pushFlat(flat, 'class_test', base);
       continue;
     }
 

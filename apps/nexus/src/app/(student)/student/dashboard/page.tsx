@@ -25,6 +25,7 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import PlayCircleOutlinedIcon from '@mui/icons-material/PlayCircleOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useNavBadges } from '@/components/NavBadgeProvider';
 import StatCard from '@/components/StatCard';
 import FoundationOverviewCard from '@/components/foundation/FoundationOverviewCard';
 import RecordingPlayerDialog from '@/components/timetable/RecordingPlayerDialog';
@@ -92,6 +93,15 @@ export default function StudentDashboard() {
   // SharePoint link only works for whoever Microsoft happened to share the file
   // with, which for a non-channel meeting is just the meeting's invitees.
   const [playingClass, setPlayingClass] = useState<CompletedClass | null>(null);
+  const { getBadgeCount } = useNavBadges();
+
+  // Reuses the badge NavBadgeProvider already polls, so the card costs no
+  // request. Gated on the flag itself: this page is core and can never be
+  // switched off, so there is no route here for FeatureGate to match, the same
+  // trap the Foundation card below fell into.
+  const catchupOwed = isFeatureEnabled('student.catchup')
+    ? getBadgeCount('/student/catch-up')
+    : 0;
 
   const noClassrooms = !authLoading && classrooms.length === 0;
 
@@ -298,6 +308,56 @@ export default function StudentDashboard() {
             sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 600, flexShrink: 0 }}
           >
             Complete
+          </Button>
+        </Paper>
+      )}
+
+      {/* ── Classes to catch up on ──
+          Catch-up lives in the bottom bar's "More" sheet, and not in the Study
+          Zone's navigation at all, so a student can owe five classes and never
+          pass a screen that says so. This is the one place every student lands.
+
+          The count is the badge already polled by NavBadgeProvider, not a fetch
+          of its own: one more request on the busiest route in the app to render
+          a single number would not be worth it. Renders nothing at zero. */}
+      {catchupOwed > 0 && (
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 2,
+            p: 2,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: alpha(theme.palette.info.main, 0.4),
+            bgcolor: alpha(theme.palette.info.main, 0.06),
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <HistoryOutlinedIcon sx={{ fontSize: 32, color: 'info.main', flexShrink: 0 }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={700}>
+              {catchupOwed === 1 ? '1 class to catch up on' : `${catchupOwed} classes to catch up on`}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Nothing is due until you start one, and you take them one at a time.
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            size="small"
+            color="info"
+            onClick={() => router.push('/student/catch-up')}
+            sx={{
+              textTransform: 'none',
+              borderRadius: 1.5,
+              fontWeight: 600,
+              flexShrink: 0,
+              minHeight: 40,
+            }}
+          >
+            Open
           </Button>
         </Paper>
       )}

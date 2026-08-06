@@ -31,7 +31,19 @@
 /** How long before the class the lock appears. */
 export const PREP_GATE_LEAD_MINUTES = 180;
 
-export type PrepBlocker = 'test_not_passed' | 'prework_missing';
+export type PrepBlocker =
+  | 'test_not_passed'
+  | 'prework_missing'
+  /**
+   * The PREVIOUS class set a Required test and this student has not passed it.
+   *
+   * Reusing this gate rather than building a second one is deliberate: a student
+   * meets it in the surface they already know, with the same reason escape hatch
+   * and the same retry-until-pass rule, and their teacher sees it in the same
+   * roster. A second lock with its own copy and its own unlock path would be two
+   * different rules for one idea.
+   */
+  | 'class_test_pending';
 
 export type PrepUnlockVia =
   /** They did the work. */
@@ -60,6 +72,13 @@ export interface ClassPrepGateInput {
     attempts: number;
   } | null;
   prework: { required: number; submitted: number };
+  /**
+   * The REQUIRED test set by the class immediately before this one, if it has
+   * one and this student has not passed it. Null in every other case, including
+   * an optional test and a test they have already cleared, so a class that
+   * carries no consequence produces no entry.
+   */
+  previousClassTest?: { passed: boolean } | null;
   reasonGiven: boolean;
   /** nexus_scheduled_classes.status. A cancelled class asks nothing. */
   classStatus?: string | null;
@@ -121,11 +140,12 @@ export function decideClassPrepGate(input: ClassPrepGateInput): ClassPrepGateDec
 
   const testRequired = input.test != null;
   const preworkRequired = input.prework.required > 0;
+  const carriedOver = input.previousClassTest != null;
 
-  // The overwhelmingly common case: no test, no prework. The response for these
-  // classes has to stay byte-identical to today, so nothing is gated and nothing
-  // is reported.
-  if (!testRequired && !preworkRequired) return openUngated('not_required');
+  // The overwhelmingly common case: no test, no prework, nothing carried over.
+  // The response for these classes has to stay byte-identical to today, so
+  // nothing is gated and nothing is reported.
+  if (!testRequired && !preworkRequired && !carriedOver) return openUngated('not_required');
 
   // Outside the lead window there is no lock yet. One threshold for the whole
   // product: the same 180 minutes prework already uses to decide when to ask.
@@ -147,11 +167,17 @@ export function decideClassPrepGate(input: ClassPrepGateInput): ClassPrepGateDec
   if (preworkRequired && input.prework.submitted < input.prework.required) {
     blockers.push('prework_missing');
   }
+  // Last, because it is about the previous class rather than this one. A student
+  // reading a list of what they owe should see this evening's work first.
+  if (carriedOver && !input.previousClassTest!.passed) {
+    blockers.push('class_test_pending');
+  }
 
-  const requiredCount = (testRequired ? 1 : 0) + input.prework.required;
+  const requiredCount = (testRequired ? 1 : 0) + input.prework.required + (carriedOver ? 1 : 0);
   const doneCount =
     (testRequired && !blockers.includes('test_not_passed') ? 1 : 0) +
-    Math.min(input.prework.submitted, input.prework.required);
+    Math.min(input.prework.submitted, input.prework.required) +
+    (carriedOver && input.previousClassTest!.passed ? 1 : 0);
   const readiness = requiredCount > 0 ? doneCount / requiredCount : null;
 
   if (blockers.length === 0) {
@@ -186,10 +212,23 @@ export function prepBlockerCopy(decision: ClassPrepGateDecision): PrepBlockerCop
   const lines: string[] = [];
   if (decision.blockers.includes('test_not_passed')) lines.push('Pass the short test');
   if (decision.blockers.includes('prework_missing')) lines.push('Hand in the pre-class work');
+  if (decision.blockers.includes('class_test_pending')) {
+    lines.push('Finish the test from the last class');
+  }
 
   return {
-    title: lines.length > 1 ? 'Two things before you join' : 'One thing before you join',
+    // Counted rather than hard-coded to two, now that a third blocker exists.
+    title:
+      lines.length > 2
+        ? `${lines.length} things before you join`
+        : lines.length > 1
+          ? 'Two things before you join'
+          : 'One thing before you join',
     lines,
-    primaryAction: decision.blockers.includes('test_not_passed') ? 'take_test' : 'do_prework',
+    primaryAction:
+      decision.blockers.includes('test_not_passed') ||
+      decision.blockers.includes('class_test_pending')
+        ? 'take_test'
+        : 'do_prework',
   };
 }

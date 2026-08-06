@@ -4,6 +4,8 @@ import { errorResponse } from '@/lib/api-errors';
 import {
   getSupabaseAdminClient,
   getClassPrepTest,
+  getClassTest,
+  getClassTestRoster,
   loadClassPrepRoster,
   loadClassroomRoster,
 } from '@neram/database';
@@ -54,13 +56,14 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     // previously counted graduated students, and it counted students who joined
     // after the class was scheduled. Both dragged the readiness rate down. It
     // also drops dormant students, who cannot meaningfully be "not ready".
-    const [rosterRes, states, prepTest, preworkRes, attendanceRes] = await Promise.all([
+    const [rosterRes, states, prepTest, classTest, preworkRes, attendanceRes] = await Promise.all([
       loadClassroomRoster(access.cls.classroom_id, {
         asOf: access.cls.scheduled_date,
         client: supabase,
       }),
       loadClassPrepRoster(params.classId, supabase),
       getClassPrepTest(params.classId, supabase),
+      getClassTest(params.classId, supabase),
       supabase
         .from('nexus_class_assignments')
         .select('id')
@@ -87,12 +90,31 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       attendance.set(a.student_id, !!a.attended);
     }
 
+    // Only read when a class test exists, so the overwhelming majority of
+    // classes pay nothing for this feature.
+    const classTestStanding = classTest
+      ? await getClassTestRoster(
+          params.classId,
+          students.map((s) => s.student_id),
+          supabase,
+        )
+      : null;
+
     const rows = buildPrepRoster({
       students,
       states: states as any,
       hasTest: !!prepTest,
       preworkRequired: (preworkRes.data || []).length,
       attendance,
+      hasClassTest: !!classTest,
+      classTest: classTestStanding
+        ? new Map(
+            [...classTestStanding.entries()].map(([id, r]) => [
+              id,
+              { best_pct: r.best_pct, attempts: r.attempts, passed: !!r.passed_at },
+            ]),
+          )
+        : undefined,
     });
 
     const summary = summarisePrepRoster(rows);
@@ -100,6 +122,17 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     return NextResponse.json({
       class_title: access.cls.title,
       has_test: !!prepTest,
+      has_class_test: !!classTest,
+      class_test: classTest
+        ? {
+            title: classTest.title,
+            passing_pct: classTest.passing_pct,
+            question_count: classTest.question_count,
+            must_get_right: classTest.must_get_right,
+            due_at: classTest.due_at,
+            required: classTest.required,
+          }
+        : null,
       test: prepTest
         ? {
             title: prepTest.title,

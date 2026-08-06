@@ -121,6 +121,7 @@ export type { YearTier, PairStatus } from './utils/academic-year';
 // Utils
 export { rewriteStorageUrl } from './utils/storage-url';
 export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscribe-token';
+export { fetchAllRows, countRowsByKey, countRowsForIds } from './utils/paged-rows';
 export {
   classifyCatchupCandidate,
   catchupItemStep,

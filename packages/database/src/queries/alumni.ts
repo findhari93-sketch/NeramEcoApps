@@ -8,6 +8,7 @@
  */
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../client';
+import { fetchAllRows } from '../utils/paged-rows';
 import { getUserJourneyDetail } from './crm';
 import { listColleges } from './colleges';
 
@@ -721,15 +722,22 @@ export async function findAlumniDuplicates(
   const out: Record<number, DuplicateMatch> = {};
   if (!candidates.length) return out;
 
-  const { data: users } = await supabase
-    .from('users')
-    .select('id, name, email, phone, is_alumni')
-    .range(0, 49999);
+  // Every user, read to exhaustion. `.range(0, 49999)` asked for 50,000 and
+  // PostgREST returned 1,000, silently, so this duplicate check was comparing
+  // an import against a fraction of the directory and reporting "no duplicate"
+  // for people who are already in it. See utils/paged-rows.ts.
+  const users = await fetchAllRows<{
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    is_alumni: boolean | null;
+  }>(() => supabase.from('users').select('id, name, email, phone, is_alumni'));
 
   const byEmail = new Map<string, any>();
   const byPhone = new Map<string, any>();
   const byName = new Map<string, any>();
-  for (const u of users || []) {
+  for (const u of users) {
     const e = normEmail(u.email);
     const p = normPhone(u.phone);
     const n = normName(u.name);

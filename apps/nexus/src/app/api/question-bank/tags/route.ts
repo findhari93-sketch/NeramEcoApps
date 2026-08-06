@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyQBAccess } from '@/lib/qb-auth';
+import { verifyQBAccess, verifyQBAccessAnyClassroom } from '@/lib/qb-auth';
 import { listQBTags, getQBTagsWithCounts, createQBTag, findOrCreateQBTag } from '@neram/database';
 import type { NexusQBTagGroup } from '@neram/database';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
@@ -13,7 +13,10 @@ const GROUPS: NexusQBTagGroup[] = ['exam', 'subject', 'theme'];
  */
 export async function GET(request: NextRequest) {
   try {
-    const access = await verifyQBAccess(request.headers.get('Authorization'), null);
+    // The registry is global, so there is no classroom to scope it to. Asking a
+    // student for a classroom_id here 400d every one of them, which is what
+    // emptied the topic filter on the student test builder.
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
 
     const { searchParams } = new URL(request.url);

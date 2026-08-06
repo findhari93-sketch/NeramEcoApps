@@ -46,6 +46,7 @@ export default function TagPicker({
   const [loading, setLoading] = useState(true);
   const [inputValue, setInputValue] = useState('');
   const [creating, setCreating] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   const loadTags = useCallback(async () => {
     setLoading(true);
@@ -146,7 +147,13 @@ export default function TagPicker({
         <TextField
           {...params}
           label={label}
-          placeholder={selected.length === 0 ? placeholder : undefined}
+          // Only once the label has floated. An empty, unfocused MUI field paints
+          // the label inside the box, and a placeholder there lands on top of it:
+          // that is the "Search by tags" over "Difficulty" smudge on the student
+          // test builder.
+          placeholder={focused && selected.length === 0 ? placeholder : undefined}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           size="small"
           InputProps={{
             ...params.InputProps,

@@ -11,6 +11,7 @@ import {
 } from '@neram/database';
 import { resolveFlags, isFeatureEnabled } from '@/lib/feature-flags';
 import { decideClassPrepGate } from '@/lib/class-prep-gate';
+import { loadCarriedOverClassTests } from '@/lib/class-prep-server';
 import { classStartIso } from '@/lib/prework';
 
 /**
@@ -110,6 +111,15 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       };
     }
 
+    // A Required test set by the class before this one, still outstanding. Read
+    // here as well as in the payload strippers, because this route is the actual
+    // door: a client-side lock the server does not enforce is a suggestion.
+    // Skipped entirely when the gate is disarmed, so nothing changes for a school
+    // that has the feature switched off.
+    const carriedOver = gateArmed
+      ? await loadCarriedOverClassTests(supabase, user.id, [cls])
+      : new Map();
+
     const decision = decideClassPrepGate({
       flagEnabled: gateArmed,
       role: enrollment.role === 'student' ? 'student' : 'teacher',
@@ -121,6 +131,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
         required: state?.assignments_required ?? 0,
         submitted: state?.assignments_submitted ?? 0,
       },
+      previousClassTest: carriedOver.get(cls.id) ?? null,
       reasonGiven: !!state?.test_reason_at,
       classStatus: cls.status,
       classStartIso: classStartIso(cls.scheduled_date, cls.start_time || '00:00'),

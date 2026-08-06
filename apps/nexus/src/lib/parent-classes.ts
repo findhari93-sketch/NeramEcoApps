@@ -562,14 +562,21 @@ async function loadClassBadges(
       });
 
       const outstanding = work.filter((a: { id: string }) => !facts.submitted.has(a.id)).length;
-      const hasTest = facts.testByClass.has(classId);
       // Mirrors isCatchupItemComplete: watched, nothing outstanding, and the
-      // test passed where one exists. Derived rather than trusting caught_up_at
-      // alone, because that column is only ever written when the student presses
-      // the button, so a child who has finished everything but not pressed it
-      // should not read as still behind.
-      const finished =
-        watched && outstanding === 0 && (!hasTest || !!absence.test_passed_at);
+      // test passed where a REQUIRED one exists. Derived rather than trusting
+      // caught_up_at alone, because that column is only ever written when the
+      // student presses the button, so a child who has finished everything but
+      // not pressed it should not read as still behind.
+      //
+      // The two test kinds keep their pass in different places: the catch-up
+      // paper stamps test_passed_at on this absence row, a teacher-set class
+      // test is graded by the ordinary engine and derived from the attempts.
+      const test = facts.testByClass.get(classId) ?? null;
+      const testCleared =
+        !test ||
+        test.required === false ||
+        (test.source === 'class_test' ? test.passed : !!absence.test_passed_at);
+      const finished = watched && outstanding === 0 && testCleared;
       catchup.set(classId, {
         open: !absence.caught_up_at && !absence.excused_at && !finished,
         caughtUpAt: absence.caught_up_at ?? null,

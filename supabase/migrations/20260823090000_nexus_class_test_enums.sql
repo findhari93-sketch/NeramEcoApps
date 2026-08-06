@@ -1,0 +1,43 @@
+-- ============================================
+-- CLASS TEST: the two enum values, and nothing else
+--
+-- Alone in its own migration on purpose. The Supabase CLI wraps a migration file
+-- in a transaction, and a value added by ALTER TYPE cannot be USED in the same
+-- transaction that added it. The very next migration names 'class_test' in an
+-- index predicate, so the two cannot share a file. Same reasoning as
+-- 20260801092000_nexus_placement_context_class_prep.sql.
+-- ============================================
+
+-- 1. The placement context --------------------------------------------------
+--
+-- The other half of class_prep_test. A teacher sets a paper FOR a class that the
+-- students have to complete, usually after it has been taught, with a due date
+-- and reminders, exactly the way a homework assignment already works. Until now a
+-- class could only carry a test due BEFORE it, which is why a teacher looking for
+-- "set a test for this class" found only "Test before class" and reasonably
+-- assumed the feature did not exist.
+--
+-- Not a reuse of 'class_prep_test'. That context means "prepare before you
+-- attend": it is refused once the class has started, it withholds the Join
+-- button, and it needs no due date because the class start IS the deadline. This
+-- one is set from the class a teacher has just taught, carries its own deadline,
+-- and withholds nothing on the day.
+--
+-- Not a reuse of 'catchup_class' either. That means "you missed this class, prove
+-- you caught up": its consumer refuses any student without a nexus_class_absences
+-- row, and a fail RE-LOCKS the paper until the recording has been rewatched. A
+-- class test is set for everyone on the roster and simply retries until passed.
+--
+-- Not a reuse of 'classroom_assignment'. That points at a CLASSROOM and holds
+-- many tests with no deadline of their own. context_id here is one scheduled
+-- class, which is what makes "who on this class has not done it" answerable.
+ALTER TYPE nexus_placement_context ADD VALUE IF NOT EXISTS 'class_test';
+
+-- 2. The notification event type ---------------------------------------------
+--
+-- user_notifications.event_type is an enum, so a reminder about a class test
+-- needs its own value. The nudge could have borrowed 'assignment_nudge', which is
+-- what the photo queue and the watchlist do, but a student's notification list
+-- and every future report would then be unable to tell "hand in your drawing"
+-- from "sit Tuesday's test", and those need different responses.
+ALTER TYPE notification_event_type ADD VALUE IF NOT EXISTS 'class_test_due';

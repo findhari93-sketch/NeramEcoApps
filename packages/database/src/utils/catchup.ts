@@ -266,6 +266,18 @@ export interface CatchupItemFacts {
   /** A class test is placed on this class. */
   hasTest: boolean;
   testPassed: boolean;
+  /**
+   * Must it be passed to finish this class?
+   *
+   * Defaults to true when omitted, which keeps every existing caller's meaning:
+   * the auto-generated catch-up paper has always been compulsory.
+   *
+   * False only for a teacher-set class test marked Optional. Such a test is still
+   * offered and still shown, it simply never blocks "caught up". A student who
+   * missed a class must not be held on a backlog by a paper their own classmates
+   * were told they could skip.
+   */
+  testRequired?: boolean;
   /** The stopwatch. Absent means never started. */
   clock?: CatchupClock;
 }
@@ -285,26 +297,33 @@ function kindOf(f: CatchupItemFacts): CatchupKind {
 /** The one thing standing between the student and finishing this class. */
 export type CatchupStep = 'watch' | 'assignment' | 'test' | 'done';
 
+/** Does this item's test stand between the student and finishing? */
+function testBlocks(f: CatchupItemFacts): boolean {
+  return f.hasTest && f.testRequired !== false && !f.testPassed;
+}
+
 /** Is every gate on this class cleared? */
 export function isCatchupItemComplete(f: CatchupItemFacts): boolean {
   if (f.excluded || f.notReady) return false;
   if (f.excused) return true;
   if (!f.watched) return false;
   if (f.assignmentsOutstanding > 0) return false;
-  if (f.hasTest && !f.testPassed) return false;
+  if (testBlocks(f)) return false;
   return true;
 }
 
 /**
  * The next step, in the order the gates are enforced: watch it, do the work,
  * then prove it. A class with no test placed on it finishes at the assignment,
- * so a teacher who has not built the test yet does not strand anyone.
+ * so a teacher who has not built the test yet does not strand anyone. An
+ * OPTIONAL test behaves the same way: it is offered on the screen, but it is not
+ * what the student is waiting on.
  */
 export function catchupItemStep(f: CatchupItemFacts): CatchupStep {
   if (isCatchupItemComplete(f)) return 'done';
   if (!f.watched) return 'watch';
   if (f.assignmentsOutstanding > 0) return 'assignment';
-  if (f.hasTest && !f.testPassed) return 'test';
+  if (testBlocks(f)) return 'test';
   return 'done';
 }
 

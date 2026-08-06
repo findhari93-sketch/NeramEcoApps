@@ -21,7 +21,17 @@ export type PrepRosterStatus =
   | 'prework_pending'
   | 'not_started'
   | 'reason_given'
-  | 'attended_unprepared';
+  | 'attended_unprepared'
+  /**
+   * Everything asked BEFORE the class is done, and the test the class set for
+   * afterwards is not.
+   *
+   * Ranked below every pre-class status on purpose: it is only ever reached once
+   * the prep half is fully satisfied, so it can never mask a student who has not
+   * done the prework. A teacher reading this list ten minutes before the class
+   * cares about the pre-class blockers first, and this row is a follow-up.
+   */
+  | 'class_test_pending';
 
 export interface PrepStateRow {
   student_id: string;
@@ -66,6 +76,10 @@ export interface PrepRosterRow {
   reason_code: string | null;
   blocked_attempts: number;
   last_activity_at: string | null;
+  /** Best score on the after-class test, null when there is none or none sat. */
+  class_test_best_pct: number | null;
+  class_test_attempts: number;
+  class_test_passed: boolean;
 }
 
 export interface BuildPrepRosterInput {
@@ -76,6 +90,14 @@ export interface BuildPrepRosterInput {
   preworkRequired: number;
   /** student_id -> attended. Absent id means not measured. */
   attendance?: Map<string, boolean>;
+  /** Whether this class also sets a test for afterwards. */
+  hasClassTest?: boolean;
+  /**
+   * student_id -> their standing on the after-class test. A missing id means
+   * they have not sat it, never that they failed, for the same reason a missing
+   * prep-state row is 'not_started'.
+   */
+  classTest?: Map<string, { best_pct: number | null; attempts: number; passed: boolean }>;
 }
 
 export function buildPrepRoster(input: BuildPrepRosterInput): PrepRosterRow[] {
@@ -84,6 +106,8 @@ export function buildPrepRoster(input: BuildPrepRosterInput): PrepRosterRow[] {
   return input.students.map((student) => {
     const s = stateById.get(student.student_id);
     const attended = input.attendance?.get(student.student_id);
+    const ct = input.classTest?.get(student.student_id);
+    const classTestOutstanding = !!input.hasClassTest && !ct?.passed;
 
     const base = {
       student_id: student.student_id,
@@ -97,6 +121,9 @@ export function buildPrepRoster(input: BuildPrepRosterInput): PrepRosterRow[] {
       reason_code: s?.test_reason_code ?? null,
       blocked_attempts: s?.blocked_attempts ?? 0,
       last_activity_at: s?.updated_at ?? null,
+      class_test_best_pct: ct?.best_pct ?? null,
+      class_test_attempts: ct?.attempts ?? 0,
+      class_test_passed: !!ct?.passed,
     };
 
     // The honest record first, and deliberately ahead of 'ready'. A student who
@@ -107,12 +134,31 @@ export function buildPrepRoster(input: BuildPrepRosterInput): PrepRosterRow[] {
       return { ...base, status: 'attended_unprepared' as const };
     }
 
-    if (!s) return { ...base, status: 'not_started' as const };
+    // No prep-state row means nothing was recorded before the class. That is
+    // still 'not_started' when anything WAS asked before it, but a class whose
+    // only requirement is the test it set for afterwards has no pre-class row to
+    // find, and calling those students "not started" would be reporting on work
+    // that was never set.
+    if (!s) {
+      const nothingAskedBefore = !input.hasTest && input.preworkRequired === 0;
+      if (nothingAskedBefore && input.hasClassTest) {
+        return {
+          ...base,
+          status: classTestOutstanding ? ('class_test_pending' as const) : ('ready' as const),
+        };
+      }
+      return { ...base, status: 'not_started' as const };
+    }
 
     const testDone = !input.hasTest || !!s.test_passed_at;
     const preworkDone = base.assignments_submitted >= base.assignments_required;
 
-    if (testDone && preworkDone) return { ...base, status: 'ready' as const };
+    if (testDone && preworkDone) {
+      // The pre-class half is settled, so the after-class test is the only thing
+      // left to say about them.
+      if (classTestOutstanding) return { ...base, status: 'class_test_pending' as const };
+      return { ...base, status: 'ready' as const };
+    }
 
     // A reason outranks the individual blockers in the teacher's list, because
     // "they told us why" needs a different response from "they have not started".
@@ -135,6 +181,8 @@ export interface PrepRosterSummary {
   pending: number;
   reasonGiven: number;
   unprepared: number;
+  /** Owe the after-class test and nothing else. Counted apart from `pending`. */
+  classTestPending: number;
   total: number;
   /** Null when the roster is empty. Never 0 in that case. */
   readyRate: number | null;
@@ -147,12 +195,19 @@ export function summarisePrepRoster(rows: PrepRosterRow[]): PrepRosterSummary {
   const pending = rows.filter(
     (r) => r.status === 'test_pending' || r.status === 'prework_pending' || r.status === 'not_started',
   ).length;
+  // Deliberately NOT folded into `pending`. "28 to go" ten minutes before a class
+  // means twenty-eight people are about to arrive unprepared; the same number
+  // meaning "have not yet done the follow-up test" is a different problem with a
+  // different urgency, and merging them would make the pre-class number
+  // untrustworthy.
+  const classTestPending = rows.filter((r) => r.status === 'class_test_pending').length;
 
   return {
     ready,
     pending,
     reasonGiven,
     unprepared,
+    classTestPending,
     total: rows.length,
     // Null, not 0. An empty roster has no ready rate, and showing "0% ready" for
     // a class nobody is enrolled in is a bug report waiting to happen.
@@ -168,5 +223,6 @@ export function prepRosterHeadline(summary: PrepRosterSummary): string {
   if (summary.pending > 0) parts.push(`${summary.pending} to go`);
   if (summary.reasonGiven > 0) parts.push(`${summary.reasonGiven} explained`);
   if (summary.unprepared > 0) parts.push(`${summary.unprepared} joined unprepared`);
+  if (summary.classTestPending > 0) parts.push(`${summary.classTestPending} owe the test`);
   return parts.join(', ');
 }

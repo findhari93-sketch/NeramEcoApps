@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyQBAccess } from '@/lib/qb-auth';
+import { verifyQBAccessAnyClassroom } from '@/lib/qb-auth';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { getTestFolderById, moveTestFolder, renameTestFolder, softDeleteTestFolder } from '@neram/database';
 
@@ -52,7 +52,7 @@ function folderError(message: string): NextResponse | null {
 /** PATCH /api/test-folders/[id]  Body: { name? } and/or { parent_id?: string|null } */
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const access = await verifyQBAccess(request.headers.get('Authorization'), null);
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
     const guard = await assertCanEdit(params.id, access.caller);
     if (!guard.ok) return guard.response;
@@ -86,7 +86,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
  */
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const access = await verifyQBAccess(request.headers.get('Authorization'), null);
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
     const guard = await assertCanEdit(params.id, access.caller);
     if (!guard.ok) return guard.response;

@@ -11,8 +11,11 @@ import {
   missedClassDueOn,
   isOverdue,
   istTodayYmd,
+  loadClassroomRoster,
+  isTracked,
 } from '@neram/database';
 import { canUser } from '@/lib/staff-capabilities';
+import { BUCKET_ORDER, catchupBucket, emptyTally, tallyBuckets } from '@/lib/catchup-buckets';
 import { loadClassFactsForStudents } from '@/lib/catchup-facts';
 import { computeCatchupPace } from '@/lib/catchup-pace';
 import { tallyReasons } from '@/lib/rsvp-reasons';
@@ -114,6 +117,8 @@ export async function GET(request: NextRequest) {
           clearedThisMonth: 0,
           explained: 0,
           unexplained: 0,
+          byBucket: emptyTally(),
+          hiddenDormant: 0,
         },
       });
     }
@@ -132,18 +137,50 @@ export async function GET(request: NextRequest) {
       .eq('classroom_id', classroomId)
       .limit(MAX_ITEMS);
 
-    const items = (rows || []).filter((r: any) => r.class);
+    const allItems = (rows || []).filter((r: any) => r.class);
+
+    // ── Who counts towards this classroom's numbers ─────────────────────────
+    //
+    // This screen was the last monitoring surface in Nexus reading absence rows
+    // straight off the table, so it never applied the roster rule. Writing
+    // absences already gets it right (lib/class-absences.ts loads the roster,
+    // which drops dormant students by default), but every row written BEFORE a
+    // student went quiet stayed here forever, in the list and in all four
+    // headline numbers. Removed enrolments and graduated alumni leaked the same
+    // way.
+    //
+    // `includeDormant: true` then splitting on isTracked is deliberate: loading
+    // them is the only way to say how many were hidden, and a student who
+    // silently disappears reads as a bug. isTracked is the ONE written-down
+    // definition of the predicate, so do not inline a participation_status check
+    // here; that is exactly the drift the helper exists to end.
+    const roster = await loadClassroomRoster<any>(classroomId, {
+      includeDormant: true,
+      userColumns: 'phone',
+      client: supabase,
+    });
+    const trackedIds = new Set<string>();
+    const untrackedIds = new Set<string>();
+    for (const member of roster.members) {
+      (isTracked(member) ? trackedIds : untrackedIds).add(member.user_id);
+    }
+
+    const items = allItems.filter((i: any) => trackedIds.has(i.student_id));
+
+    // Only the ones who would otherwise have been on the screen. A dormant
+    // student with nothing outstanding is not being hidden from anybody.
+    const hiddenDormant = new Set(
+      allItems
+        .filter((i: any) => untrackedIds.has(i.student_id) && !i.caught_up_at && !i.excused_at)
+        .map((i: any) => i.student_id as string),
+    ).size;
 
     // Deliberately no early return on an empty absence list. A classroom where
     // nobody has missed anything can still owe recaps, and that is exactly what
     // the Classes and recaps tab exists to show.
-    const studentIds = [...new Set(items.map((i: any) => i.student_id))] as string[];
     const classIds = [...new Set(items.map((i: any) => i.scheduled_class_id))] as string[];
 
-    const [{ data: users }, { data: journeys }, { data: termClasses }] = await Promise.all([
-      studentIds.length
-        ? supabase.from('users').select('id, name, email, avatar_url, phone').in('id', studentIds)
-        : Promise.resolve({ data: [] as any[] }),
+    const [{ data: journeys }, { data: termClasses }] = await Promise.all([
       supabase
         .from('nexus_catchup_journeys')
         .select('id, student_id, started_on, weekly_quota, status')
@@ -180,7 +217,11 @@ export async function GET(request: NextRequest) {
       attendanceIds.length
         ? supabase
             .from('nexus_attendance')
-            .select('scheduled_class_id, attended')
+            // student_id rides along so the present count can be held to the
+            // same roster as the missed count beside it. Without it a dormant
+            // student inflates "present" while being excluded from "missed",
+            // and the two numbers on one row stop adding up.
+            .select('scheduled_class_id, attended, student_id')
             .in('scheduled_class_id', attendanceIds)
         : Promise.resolve({ data: [] as any[] }),
       recentPastIds.length
@@ -198,7 +239,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const userById = new Map<string, any>((users || []).map((u: any) => [u.id, u]));
+    // Straight off the roster embed, which already carries phone via
+    // userColumns. The separate users select this replaces was a second read of
+    // rows we now have in hand.
+    const userById = new Map<string, any>(roster.members.map((m: any) => [m.user_id, m.user]));
     const journeyByStudent = new Map<string, any>(
       (journeys || []).map((j: any) => [j.student_id, j]),
     );
@@ -211,6 +255,7 @@ export async function GET(request: NextRequest) {
     const presentByClass = new Map<string, number>();
     for (const a of attendance || []) {
       if (!a.attended) continue;
+      if (!trackedIds.has(a.student_id)) continue;
       presentByClass.set(a.scheduled_class_id, (presentByClass.get(a.scheduled_class_id) || 0) + 1);
     }
 
@@ -402,16 +447,32 @@ export async function GET(request: NextRequest) {
       const openCount = missedTotals.open + (totals.total - totals.completed);
       outstandingTotal += openCount;
 
+      // Work the student cannot move: no recording at all, or a recap nobody has
+      // published. Counted off `resolved` rather than the two summaries because
+      // neither of them reports it. summariseCatchupBacklog only looks at chained
+      // items, and summariseMissedClasses skips these statuses outright, which is
+      // why a student stuck entirely behind our own unpublished recap had an open
+      // count of zero and fell through the `continue` below. They were not merely
+      // sorted low on this screen, they were absent from it.
+      const blockedOnUs = resolved.filter(
+        (r) => r.status === 'blocked' || r.status === 'pending_teacher',
+      ).length;
+
       // A student with nothing left is not a work item, so they stay out of the
       // chase list rather than padding it with rows that read as green noise.
-      // They are NOT dropped from the payload any more: their finished items are
-      // already in `completed`, which is how the Caught up tab can answer "who
-      // actually made it up" instead of showing an empty screen.
-      if (openCount === 0) continue;
+      // They are NOT dropped from the payload: their finished items are already
+      // in `completed`, which is how the Caught up tab can answer "who actually
+      // made it up" instead of showing an empty screen.
+      if (openCount === 0 && blockedOnUs === 0) continue;
 
       students.push({
         journey_id: journey?.id ?? null,
         student: studentCard,
+        // Decided here, once, so the tile and the group under it are the same
+        // number by construction. See lib/catchup-buckets.ts.
+        bucket: catchupBucket({ openCount, blockedOnUs, clock: clockSummary, pace }),
+        openCount,
+        blockedOnUs,
         started_on: journey?.started_on ?? null,
         weekly_quota: journey?.weekly_quota ?? null,
         totals,
@@ -422,15 +483,14 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Sorted as a work queue, not a register. Overdue still leads, but it can
-    // only ever be one item now, so the second key does the real work: a student
-    // who has not started anything at all is the one a teacher most needs to
-    // see, and under the old model they looked identical to someone mid-class.
+    // Sorted as a work queue, not a register. Bucket leads so the client can
+    // group by simply walking the array, and the tie-breaks then order the rows
+    // within a group: whoever owes the most, first.
     students.sort(
       (a, b) =>
-        Number(b.clock.overdue) - Number(a.clock.overdue) ||
-        Number(b.clock.stalled) - Number(a.clock.stalled) ||
+        BUCKET_ORDER.indexOf(a.bucket) - BUCKET_ORDER.indexOf(b.bucket) ||
         b.pace.deficit - a.pace.deficit ||
+        b.openCount - a.openCount ||
         b.missedTotals.open - a.missedTotals.open,
     );
 
@@ -484,12 +544,17 @@ export async function GET(request: NextRequest) {
         String(a.scheduled_date).localeCompare(String(b.scheduled_date)),
       ),
       totals: {
-        studentsBehind: students.filter(
-          (s) => s.clock.overdue || s.pace.state === 'behind',
-        ).length,
-        // Work owed and no clock running on any of it. The replacement for
-        // counting overdue items, which under one clock tops out at one.
-        studentsStalled: students.filter((s) => s.clock.stalled).length,
+        // A count of the buckets on the rows above, and the only thing the tiles
+        // read. studentsBehind used to be computed here with its own predicate,
+        // which omitted `stalled` while the list under it included it, so the
+        // headline and the rows it summarised disagreed. There is one rule now.
+        byBucket: tallyBuckets(students.map((s) => s.bucket)),
+        hiddenDormant,
+        // Kept for anything still reading the old shape. Derived from the same
+        // tally rather than recomputed, so they cannot drift back apart.
+        studentsBehind: students.filter((s) => s.bucket !== 'in_progress' && s.bucket !== 'waiting_on_us')
+          .length,
+        studentsStalled: students.filter((s) => s.bucket === 'not_started').length,
         studentsCatchingUp: students.length,
         outstanding: outstandingTotal,
         clearedThisMonth,

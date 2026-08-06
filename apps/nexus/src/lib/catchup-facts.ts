@@ -17,7 +17,17 @@ function chunked<T>(items: T[]): T[][] {
   return out;
 }
 
-/** Run one `.in()` query per chunk and flatten, so callers see a single list. */
+/**
+ * Run one `.in()` query per chunk and flatten, so callers see a single list.
+ *
+ * Surfaces the error rather than flattening it to an empty list. Every read this
+ * helper performs decides something a teacher acts on: which recaps exist, which
+ * assignments are in, which classes carry a test. A silent empty is
+ * indistinguishable from "there are none", so a failed query would report a whole
+ * cohort as finished. That became a live risk when 'class_test' joined the
+ * placement filter below, because an enum value the database has not been
+ * migrated to know is exactly the kind of error PostgREST returns with no rows.
+ */
 async function selectIn(
   supabase: any,
   table: string,
@@ -36,6 +46,9 @@ async function selectIn(
     }),
   );
 
+  for (const r of results as any[]) {
+    if (r?.error) throw r.error;
+  }
   return results.flatMap((r: any) => r?.data || []);
 }
 
@@ -86,8 +99,10 @@ export async function loadClassFactsForStudents(
       (q) => q.eq('status', 'published')),
     selectIn(supabase, 'nexus_class_assignments', 'id, scheduled_class_id', 'scheduled_class_id', allClassIds,
       (q) => q.eq('status', 'published')),
-    selectIn(supabase, 'nexus_test_placements', 'id, test_id, context_id, passing_pct', 'context_id', allClassIds,
-      (q) => q.eq('context_type', 'catchup_class').eq('is_active', true)),
+    // Both kinds of end-of-class paper, matching loadClassFacts. The pick between
+    // them happens below.
+    selectIn(supabase, 'nexus_test_placements', 'id, test_id, context_id, context_type, passing_pct, gating', 'context_id', allClassIds,
+      (q) => q.in('context_type', ['catchup_class', 'class_test']).eq('is_active', true)),
   ]);
 
   const recapByClass = new Map<string, { id: string }>();
@@ -100,9 +115,55 @@ export async function loadClassFactsForStudents(
     assignmentsByClass.set(a.scheduled_class_id, list);
   }
 
-  const testByClass = new Map<string, { id: string; test_id: string; passing_pct: number | null }>();
+  // A teacher's class test wins over the auto-generated catch-up paper, exactly
+  // as loadClassFacts decides it for one student. Explicit precedence rather than
+  // iteration order, because the query returns both kinds interleaved.
+  type ClassTest = ClassFacts['testByClass'] extends Map<string, infer V> ? V : never;
+  const testByClass = new Map<string, ClassTest>();
   for (const p of placements) {
-    testByClass.set(p.context_id, { id: p.id, test_id: p.test_id, passing_pct: p.passing_pct });
+    const isClassTest = p.context_type === 'class_test';
+    const existing = testByClass.get(p.context_id);
+    if (existing && existing.source === 'class_test' && !isClassTest) continue;
+    const gating = (p.gating || {}) as Record<string, unknown>;
+    testByClass.set(p.context_id, {
+      id: p.id,
+      test_id: p.test_id,
+      passing_pct: p.passing_pct,
+      source: isClassTest ? 'class_test' : 'catchup',
+      required: isClassTest ? gating.required !== false : true,
+      // Per student, so it is filled in per student below.
+      passed: false,
+    });
+  }
+
+  // Whether a CLASS test is passed lives in the attempts rather than on the
+  // absence row, and unlike everything else in wave 1 it differs per student. One
+  // query for the whole cohort; the grouping happens in memory.
+  const classTests = [...testByClass.values()].filter((t) => t.source === 'class_test');
+  const passedByStudent = new Map<string, Set<string>>();
+  if (classTests.length > 0) {
+    const barByTest = new Map<string, number | null>(
+      classTests.map((t) => [t.test_id, t.passing_pct]),
+    );
+    const attempts = await selectIn(
+      supabase,
+      'nexus_test_attempts',
+      'student_id, test_id, percentage',
+      'test_id',
+      [...barByTest.keys()],
+      (q) => q.in('student_id', studentIds).eq('mode', 'official').eq('status', 'submitted'),
+    );
+    for (const a of attempts) {
+      const pct = a.percentage == null ? null : Number(a.percentage);
+      if (pct == null) continue;
+      const bar = barByTest.get(a.test_id);
+      // A null bar means no pass mark was set, so sitting it is passing it. Same
+      // rule as resolvePassingPct, deliberately.
+      if (bar != null && pct < bar) continue;
+      const set = passedByStudent.get(a.student_id) || new Set<string>();
+      set.add(a.test_id);
+      passedByStudent.set(a.student_id, set);
+    }
   }
 
   const recapIds = [...recapByClass.values()].map((r) => r.id);
@@ -140,12 +201,25 @@ export async function loadClassFactsForStudents(
   }
 
   for (const studentId of studentIds) {
+    // Shared by reference while every paper is a catch-up one, which is the case
+    // for every classroom that has not used class tests: callers only read these
+    // maps and they hold the same answer for everyone. A class test breaks that,
+    // because `passed` is this student's fact, so the map is copied only then.
+    let testsForStudent = testByClass;
+    if (classTests.length > 0) {
+      const passed = passedByStudent.get(studentId) || new Set<string>();
+      testsForStudent = new Map(
+        [...testByClass.entries()].map(([classId, t]) => [
+          classId,
+          t.source === 'class_test' ? { ...t, passed: passed.has(t.test_id) } : t,
+        ]),
+      );
+    }
+
     out.set(studentId, {
-      // The class-level maps are shared by reference on purpose. Callers only ever
-      // read them, and they hold the same answer for everyone.
       recapByClass,
       assignmentsByClass,
-      testByClass,
+      testByClass: testsForStudent,
       completedRecaps: completedByStudent.get(studentId) || new Set<string>(),
       submitted: submittedByStudent.get(studentId) || new Set<string>(),
     });

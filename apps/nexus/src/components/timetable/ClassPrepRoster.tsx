@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   Box,
+  Button,
   Chip,
   CircularProgress,
   Collapse,
@@ -12,6 +13,7 @@ import {
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import { stageKeyOf } from '@/lib/student-stage';
 import type { PrepRosterRow, PrepRosterSummary } from '@/lib/class-prep-roster';
@@ -24,13 +26,15 @@ interface PrepRosterResponse {
   headline?: string;
 }
 
-type Filter = 'all' | 'pending' | 'unprepared';
+type Filter = 'all' | 'pending' | 'unprepared' | 'class_test';
 
 interface ClassPrepRosterProps {
   classId: string;
   getToken: () => Promise<string | null>;
   /** Bump to refetch, e.g. after the prep test changes. */
   refreshKey?: number;
+  /** Toast for the Remind action. Silent when the host does not want one. */
+  onNotify?: (message: string, severity?: 'success' | 'error') => void;
 }
 
 /**
@@ -41,10 +45,16 @@ interface ClassPrepRosterProps {
  * phone ten minutes before the class starts and need one glance, not a grid that
  * scrolls sideways.
  */
-export default function ClassPrepRoster({ classId, getToken, refreshKey }: ClassPrepRosterProps) {
+export default function ClassPrepRoster({
+  classId,
+  getToken,
+  refreshKey,
+  onNotify,
+}: ClassPrepRosterProps) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [filter, setFilter] = useState<Filter>('pending');
+  const [reminding, setReminding] = useState(false);
 
   const { data, isLoading, mutate } = useNexusSWR<PrepRosterResponse>(
     classId ? `/api/timetable/${classId}/prep-roster` : null,
@@ -69,13 +79,51 @@ export default function ClassPrepRoster({ classId, getToken, refreshKey }: Class
   const visible = rows.filter((r) => {
     if (filter === 'all') return true;
     if (filter === 'unprepared') return r.status === 'attended_unprepared';
-    return r.status !== 'ready' && r.status !== 'attended_unprepared';
+    if (filter === 'class_test') return r.status === 'class_test_pending';
+    // 'pending' is the PRE-class question, so the after-class test is not in it.
+    // Folding the two together would make "28 to go" mean two different things
+    // depending on the class, which is how a number stops being trusted.
+    return (
+      r.status !== 'ready' &&
+      r.status !== 'attended_unprepared' &&
+      r.status !== 'class_test_pending'
+    );
   });
+
+  const remindClassTest = async () => {
+    setReminding(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/timetable/${classId}/class-test/nudge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        // No ids: the server chases everyone on the roster who still owes it,
+        // which is the same set this filter is showing. Sending the ids would
+        // make a stale tab able to chase someone who has since passed.
+        body: JSON.stringify({}),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        onNotify?.(d.error || 'Could not send the reminder', 'error');
+        return;
+      }
+      const sent = d?.counts?.total ?? 0;
+      onNotify?.(sent === 1 ? 'Reminded 1 student' : `Reminded ${sent} students`);
+    } catch {
+      onNotify?.('Could not send the reminder', 'error');
+    } finally {
+      setReminding(false);
+    }
+  };
 
   const statusLine = (r: PrepRosterRow): string => {
     switch (r.status) {
       case 'ready':
         return 'Ready';
+      case 'class_test_pending':
+        return r.class_test_attempts === 0
+          ? 'Has not started the class test'
+          : `Class test: best ${Math.round(r.class_test_best_pct ?? 0)}% over ${r.class_test_attempts} ${r.class_test_attempts === 1 ? 'try' : 'tries'}`;
       case 'reason_given':
         return `Told us why: ${preworkReasonShortLabel(r.reason_code)}`;
       case 'attended_unprepared':
@@ -95,8 +143,15 @@ export default function ClassPrepRoster({ classId, getToken, refreshKey }: Class
     if (r.status === 'ready') return theme.palette.success.main;
     if (r.status === 'attended_unprepared') return theme.palette.error.main;
     if (r.status === 'reason_given') return theme.palette.info.main;
+    // Follow-up work outstanding, not a student about to walk in unprepared, so
+    // it reads as information rather than as an alarm.
+    if (r.status === 'class_test_pending') return theme.palette.info.main;
     return theme.palette.warning.main;
   };
+
+  /** The score worth showing on this row, given what it is about. */
+  const rowScore = (r: PrepRosterRow): number | null =>
+    r.status === 'class_test_pending' ? r.class_test_best_pct : r.test_best_pct;
 
   const chip = (label: string, value: Filter, count: number, color: 'default' | 'warning' | 'error') => (
     <Chip
@@ -146,17 +201,36 @@ export default function ClassPrepRoster({ classId, getToken, refreshKey }: Class
 
       <Collapse in={expanded}>
         {summary && (
-          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', px: 1, pb: 1.25, pt: 0.5 }}>
+          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', px: 1, pb: 1.25, pt: 0.5, alignItems: 'center' }}>
             {chip('to go', 'pending', summary.pending + summary.reasonGiven, 'warning')}
             {summary.unprepared > 0 && chip('unprepared', 'unprepared', summary.unprepared, 'error')}
+            {(summary.classTestPending ?? 0) > 0 &&
+              chip('owe the test', 'class_test', summary.classTestPending, 'default')}
             {chip('all', 'all', summary.total, 'default')}
+            {/* Only while that filter is showing, so a teacher cannot chase a
+                list they are not looking at. */}
+            {filter === 'class_test' && visible.length > 0 && (
+              <Button
+                size="small"
+                startIcon={<NotificationsActiveOutlinedIcon />}
+                onClick={remindClassTest}
+                disabled={reminding}
+                sx={{ textTransform: 'none', minHeight: 36 }}
+              >
+                Remind {visible.length}
+              </Button>
+            )}
           </Box>
         )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column' }}>
           {visible.length === 0 ? (
             <Typography variant="caption" color="text.secondary" sx={{ px: 1, py: 1.5 }}>
-              {filter === 'pending' ? 'Everyone is ready.' : 'Nobody in this group.'}
+              {filter === 'pending'
+                ? 'Everyone is ready.'
+                : filter === 'class_test'
+                  ? 'Everyone has passed the class test.'
+                  : 'Nobody in this group.'}
             </Typography>
           ) : (
             visible.map((r) => (
@@ -191,7 +265,7 @@ export default function ClassPrepRoster({ classId, getToken, refreshKey }: Class
                 </Box>
                 {/* The best score, right aligned, so a column of them scans
                     vertically without a table. */}
-                {r.test_best_pct != null && (
+                {rowScore(r) != null && (
                   <Typography
                     sx={{
                       fontWeight: 800,
@@ -203,7 +277,7 @@ export default function ClassPrepRoster({ classId, getToken, refreshKey }: Class
                       py: 0.25,
                     }}
                   >
-                    {Math.round(r.test_best_pct)}%
+                    {Math.round(rowScore(r) as number)}%
                   </Typography>
                 )}
               </Box>

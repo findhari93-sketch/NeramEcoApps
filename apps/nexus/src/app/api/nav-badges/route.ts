@@ -82,14 +82,34 @@ export async function GET(request: NextRequest) {
       badges.photo_review = typeof photoCount.data === 'number' ? photoCount.data : 0;
       badges.catchup = freshReasons.count ?? 0;
     } else {
-      // Student: count their own open + in_progress issues
-      const { count } = await supabase
-        .from('nexus_foundation_issues')
-        .select('id', { count: 'exact', head: true })
-        .eq('student_id', user.id)
-        .in('status', ['open', 'in_progress']);
+      const [issues, catchup] = await Promise.all([
+        // Student: count their own open + in_progress issues
+        supabase
+          .from('nexus_foundation_issues')
+          .select('id', { count: 'exact', head: true })
+          .eq('student_id', user.id)
+          .in('status', ['open', 'in_progress']),
 
-      badges.issues = count ?? 0;
+        // Classes this student still owes. Not a rolling window like the staff
+        // count above: this is a debt, and it does not stop being one because it
+        // is a fortnight old.
+        //
+        // The predicate has to be the same one getCatchupBacklog treats as open
+        // (not caught up, not excused), or the number on the tab disagrees with
+        // the list behind it, which is worse than no number.
+        //
+        // Cast because nexus_class_absences is absent from database.generated.ts,
+        // the same reason catchup-journey.ts carries @ts-nocheck.
+        (supabase as any)
+          .from('nexus_class_absences')
+          .select('id', { count: 'exact', head: true })
+          .eq('student_id', user.id)
+          .is('caught_up_at', null)
+          .is('excused_at', null),
+      ]);
+
+      badges.issues = issues.count ?? 0;
+      badges.catchup = catchup.count ?? 0;
     }
 
     // Badge counts are a nudge, not a ledger, so a slightly old number is fine and a

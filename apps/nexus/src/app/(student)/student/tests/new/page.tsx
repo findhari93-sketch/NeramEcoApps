@@ -42,9 +42,12 @@ import RadioButtonUncheckedOutlinedIcon from '@mui/icons-material/RadioButtonUnc
 import CreateNewFolderOutlinedIcon from '@mui/icons-material/CreateNewFolderOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import TagPicker from '@/components/question-bank/TagPicker';
+import QuestionPreviewText from '@/components/question-bank/QuestionPreviewText';
+import { MAX_STUDENT_TEST_QUESTIONS } from '@/lib/test-limits';
 
 const PAGE_SIZE = 20;
-const MAX_QUESTIONS = 50;
+/** The one ceiling, shared with the question bank's builder and with the API. */
+const MAX_QUESTIONS = MAX_STUDENT_TEST_QUESTIONS;
 
 interface BankQuestion {
   id: string;
@@ -142,7 +145,10 @@ export default function StudentTestBuilderPage() {
         if (debounced) params.set('search', debounced);
         if (difficulty.length) params.set('difficulty', difficulty.join(','));
         if (tagIds.length) params.set('tag_ids', tagIds.join(','));
-        if (activeClassroom?.id) params.set('classroom', activeClassroom.id);
+        // classroom_id, not classroom. The route reads the long name, so the
+        // short one meant every request arrived with no classroom at all and
+        // came back 400 "classroom_id is required" (NXS-0114).
+        if (activeClassroom?.id) params.set('classroom_id', activeClassroom.id);
 
         const json = await authFetch(`/api/question-bank/questions?${params.toString()}`);
         if (cancelled) return;
@@ -215,6 +221,16 @@ export default function StudentTestBuilderPage() {
           duration_minutes: timer === 'full' ? minutes : null,
           classroom_id: activeClassroom?.id ?? null,
           folder_id: folderId || null,
+          // How this paper was found. This builder only offers search, difficulty
+          // and topic, so the other keys stay absent rather than being sent as
+          // nulls: a teacher reading the row should see what was set, not a form
+          // full of blanks. Selection is always manual here, there is no sweep.
+          source_filters: {
+            difficulty,
+            topic_ids: tagIds,
+            search_text: debounced || null,
+            selection: 'manual',
+          },
         }),
       });
       router.push(`/student/tests/take?test_id=${json.data.test_id}`);
@@ -336,9 +352,7 @@ export default function StudentTestBuilderPage() {
                   {isSelected ? <CheckCircleOutlinedIcon /> : <RadioButtonUncheckedOutlinedIcon />}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ mb: 0.5 }}>
-                    {q.question_text}
-                  </Typography>
+                  <QuestionPreviewText text={q.question_text} sx={{ mb: 0.5 }} />
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     <Chip size="small" variant="outlined" label={q.difficulty} sx={{ height: 20, fontSize: '0.68rem' }} />
                     {(q.tags || []).slice(0, 3).map((t) => (

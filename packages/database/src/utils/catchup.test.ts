@@ -622,3 +622,47 @@ describe('day one after deploy', () => {
   });
 });
 
+
+/**
+ * An OPTIONAL class test.
+ *
+ * A teacher can now attach the test for a class and mark it Optional. When they
+ * do, a student who missed that class must not be held on a backlog by a paper
+ * their own classmates were told they could skip. The test is still offered; it
+ * simply is not what anyone is waiting on.
+ */
+describe('an optional test blocks nothing', () => {
+  const base = {
+    kind: 'no_show' as const,
+    watched: true,
+    assignmentsOutstanding: 0,
+    hasTest: true,
+    testPassed: false,
+  };
+
+  it('finishes the class even though the test is unpassed', () => {
+    expect(isCatchupItemComplete({ ...base, testRequired: false })).toBe(true);
+    expect(catchupItemStep({ ...base, testRequired: false })).toBe('done');
+  });
+
+  it('still blocks when the test is required', () => {
+    expect(isCatchupItemComplete({ ...base, testRequired: true })).toBe(false);
+    expect(catchupItemStep({ ...base, testRequired: true })).toBe('test');
+  });
+
+  it('defaults to required when the caller says nothing', () => {
+    // The auto-generated catch-up paper has always been compulsory, so every
+    // existing caller has to keep meaning what it meant.
+    expect(isCatchupItemComplete(base)).toBe(false);
+    expect(catchupItemStep(base)).toBe('test');
+  });
+
+  it('does not let an optional test skip the steps before it', () => {
+    const notWatched = { ...base, watched: false, testRequired: false };
+    expect(catchupItemStep(notWatched)).toBe('watch');
+    expect(isCatchupItemComplete(notWatched)).toBe(false);
+
+    const workLeft = { ...base, assignmentsOutstanding: 1, testRequired: false };
+    expect(catchupItemStep(workLeft)).toBe('assignment');
+  });
+});

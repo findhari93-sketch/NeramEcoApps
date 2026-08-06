@@ -325,6 +325,10 @@ export interface CatchupBacklogItem {
   has_test: boolean;
   test_unlocked: boolean;
   test_passed: boolean;
+  /** False only for a teacher-set class test marked Optional. */
+  test_required: boolean;
+  /** Which kind of paper it is, so the screen sends the student to the right one. */
+  test_source: 'catchup' | 'class_test' | null;
   excused: boolean;
   recap_id: string | null;
   caught_up_at: string | null;
@@ -533,8 +537,16 @@ export async function getCatchupBacklog(
         assignments_outstanding: work.filter((a: any) => !facts.submitted.has(a.id)).length,
         assignments_total: work.length,
         has_test: facts.testByClass.has(i.scheduled_class_id),
-        test_unlocked: !!i.test_unlocked_at,
-        test_passed: !!i.test_passed_at,
+        // A class test has no unlock step: there is no recording to finish
+        // first, because the paper was set for the whole class, not for the
+        // backlog. Reporting it as locked would render a step nobody can clear.
+        test_unlocked:
+          facts.testByClass.get(i.scheduled_class_id)?.source === 'class_test'
+            ? true
+            : !!i.test_unlocked_at,
+        test_passed: toFacts(i, facts).testPassed,
+        test_required: facts.testByClass.get(i.scheduled_class_id)?.required ?? true,
+        test_source: facts.testByClass.get(i.scheduled_class_id)?.source ?? null,
         excused: !!i.excused_at,
         recap_id: recap ? recap.id : null,
         caught_up_at: i.caught_up_at,
@@ -689,12 +701,43 @@ export async function loadNextClassDates(
 // The per-class facts both the backlog and the single-class route need
 // ---------------------------------------------------------------------------
 
+export interface CatchupClassTest {
+  id: string;
+  test_id: string;
+  passing_pct: number | null;
+  /**
+   * Which kind of paper this is.
+   *
+   * 'catchup' is the auto-generated one: it belongs to the backlog, it is
+   * unlocked by finishing the recap, it re-locks on a fail, and whether it is
+   * passed is recorded on the absence row.
+   *
+   * 'class_test' is a paper the teacher set for the whole class. It has no
+   * unlock, never re-locks, and whether it is passed is derived from the
+   * attempts, because the student sits it through the ordinary take engine along
+   * with everybody who was actually in the class.
+   */
+  source: 'catchup' | 'class_test';
+  /** Only a class test can be optional. The catch-up paper is always required. */
+  required: boolean;
+  /** Only meaningful for a class test. The catch-up paper reads test_passed_at. */
+  passed: boolean;
+}
+
 export interface ClassFacts {
   recapByClass: Map<string, { id: string }>;
   completedRecaps: Set<string>;
   assignmentsByClass: Map<string, { id: string }[]>;
   submitted: Set<string>;
-  testByClass: Map<string, { id: string; test_id: string; passing_pct: number | null }>;
+  /**
+   * The one test that stands at the end of each class, whichever kind it is.
+   *
+   * A teacher-set class test WINS over the auto-generated catch-up paper: when a
+   * teacher has decided what this class's test is, asking an absent student to
+   * pass a second, machine-built one as well is asking them to do more than the
+   * students who were there.
+   */
+  testByClass: Map<string, CatchupClassTest>;
 }
 
 /**
@@ -717,7 +760,8 @@ export async function loadClassFacts(
   };
   if (classIds.length === 0) return empty;
 
-  const [{ data: recaps }, { data: assignments }, { data: placements }] = await Promise.all([
+  const [{ data: recaps }, { data: assignments }, { data: placements, error: placementErr }] =
+    await Promise.all([
     supabase
       .from('nexus_class_recaps')
       .select('id, scheduled_class_id')
@@ -728,13 +772,23 @@ export async function loadClassFacts(
       .select('id, scheduled_class_id')
       .in('scheduled_class_id', classIds)
       .eq('status', 'published'),
+    // Both kinds in ONE query rather than two. The pick between them happens
+    // below, in one place, so no caller can end up holding both.
     supabase
       .from('nexus_test_placements')
-      .select('id, test_id, context_id, passing_pct')
-      .eq('context_type', 'catchup_class')
+      .select('id, test_id, context_id, context_type, passing_pct, gating')
+      .in('context_type', ['catchup_class', 'class_test'])
       .in('context_id', classIds)
       .eq('is_active', true),
-  ]);
+    ]);
+
+  // Checked, and the check earned its place the moment 'class_test' joined the
+  // filter above. Those are enum values: on a database where the migration has
+  // not landed, PostgREST answers with an error and no rows, and reading `data`
+  // alone would quietly report that NO class has a test. Every catch-up item
+  // would then say the student is finished. A 500 is recoverable; a screen that
+  // tells a class they are done when they are not is not.
+  if (placementErr) throw placementErr;
 
   const recapByClass = new Map<string, { id: string }>();
   for (const r of recaps || []) recapByClass.set(r.scheduled_class_id, { id: r.id });
@@ -746,9 +800,60 @@ export async function loadClassFacts(
     assignmentsByClass.set(a.scheduled_class_id, list);
   }
 
-  const testByClass = new Map<string, { id: string; test_id: string; passing_pct: number | null }>();
+  // A teacher's class test wins over the auto-generated catch-up paper. Written
+  // as an explicit precedence rather than relying on iteration order, because the
+  // query returns both context types interleaved.
+  const testByClass = new Map<string, CatchupClassTest>();
   for (const p of placements || []) {
-    testByClass.set(p.context_id, { id: p.id, test_id: p.test_id, passing_pct: p.passing_pct });
+    const isClassTest = p.context_type === 'class_test';
+    const existing = testByClass.get(p.context_id);
+    if (existing && existing.source === 'class_test' && !isClassTest) continue;
+    const gating = (p.gating || {}) as Record<string, unknown>;
+    testByClass.set(p.context_id, {
+      id: p.id,
+      test_id: p.test_id,
+      passing_pct: p.passing_pct,
+      source: isClassTest ? 'class_test' : 'catchup',
+      // The catch-up paper has never had a switch; only a class test can be
+      // optional, and only when the teacher said so.
+      required: isClassTest ? gating.required !== false : true,
+      // Filled in below for class tests only.
+      passed: false,
+    });
+  }
+
+  // Whether a CLASS test is passed lives in the attempts, not on the absence row.
+  // A class test is sat through the ordinary take engine along with everyone who
+  // was actually in the class, so nothing writes test_passed_at for it, and
+  // reading that column would report every one of them as outstanding forever.
+  const classTests = [...testByClass.values()].filter((t) => t.source === 'class_test');
+  if (classTests.length > 0) {
+    const barByTest = new Map<string, number | null>(
+      classTests.map((t) => [t.test_id, t.passing_pct]),
+    );
+    const { data: attempts, error } = await supabase
+      .from('nexus_test_attempts')
+      .select('test_id, percentage')
+      .eq('student_id', studentId)
+      .eq('mode', 'official')
+      .eq('status', 'submitted')
+      .in('test_id', [...barByTest.keys()]);
+
+    // Checked rather than ignored: an unread error here means "you have not
+    // passed", which holds a student on a backlog they have already cleared and
+    // says nothing about why.
+    if (error) throw error;
+
+    const passedTests = new Set<string>();
+    for (const a of attempts || []) {
+      const pct = a.percentage == null ? null : Number(a.percentage);
+      if (pct == null) continue;
+      const bar = barByTest.get(a.test_id);
+      // A null bar means no pass mark was set, so sitting it is passing it. Same
+      // rule as resolvePassingPct, deliberately.
+      if (bar == null || pct >= bar) passedTests.add(a.test_id);
+    }
+    for (const t of classTests) t.passed = passedTests.has(t.test_id);
   }
 
   const recapIds = [...recapByClass.values()].map((r) => r.id);
@@ -812,6 +917,7 @@ export function toFacts(item: any, facts: ClassFacts) {
       : null,
   );
   const work = facts.assignmentsByClass.get(item.scheduled_class_id) || [];
+  const test = facts.testByClass.get(item.scheduled_class_id) ?? null;
   const kind =
     item.kind === 'late_joiner' || item.kind === 'opted_out' || item.kind === 'no_show'
       ? item.kind
@@ -831,8 +937,13 @@ export function toFacts(item: any, facts: ClassFacts) {
     excused: !!item.excused_at,
     watched: isWatched(item, facts),
     assignmentsOutstanding: work.filter((a) => !facts.submitted.has(a.id)).length,
-    hasTest: facts.testByClass.has(item.scheduled_class_id),
-    testPassed: !!item.test_passed_at,
+    hasTest: !!test,
+    // Two different sources of truth, chosen by which paper this is. The
+    // catch-up paper stamps test_passed_at on the absence row when it is graded;
+    // a class test is graded by the ordinary engine, which knows nothing about
+    // backlogs, so its pass is derived from the attempts in loadClassFacts.
+    testPassed: test?.source === 'class_test' ? test.passed : !!item.test_passed_at,
+    testRequired: test ? test.required : true,
   };
 }
 

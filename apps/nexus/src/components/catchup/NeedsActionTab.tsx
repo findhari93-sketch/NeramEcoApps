@@ -1,24 +1,28 @@
 'use client';
 
 /**
- * Who to call today, and where each of them is stuck.
+ * Who to call today, at a size a real cohort actually reaches.
  *
- * The chase list is unchanged in spirit: overdue and behind-pace pinned to the
- * top, phone number one tap away.
+ * This tab used to draw the same array three times: a red chase list, an
+ * "everyone else" list, and then a "where each one is stuck" list that repeated
+ * every student from both. Sections one and two were by construction the whole
+ * cohort, so every person appeared exactly twice. At a hundred students that is
+ * two hundred rows and roughly thirteen thousand pixels of scroll, with the
+ * actions split across the two copies: Call and Nudge on the first, the gates
+ * and Excuse on the second.
  *
- * What changed is underneath it. The per-student breakdown used to render as an
- * expandable card on mobile and a student x class matrix on desktop, and only
- * the card carried the reason line. So a teacher on a laptop, which is where
- * most of this work happens, saw three dots and never learned that the student
- * had already explained themselves. The cards are now the default at every
- * width and the matrix is an opt-in density, not a breakpoint accident.
+ * Now there is one row per student, in a group named for what is actually wrong,
+ * and the big groups start collapsed. The sixty-eight who have not started
+ * anything are one line until you ask for them.
+ *
+ * Nothing here fetches. The payload is already in memory, so the search and the
+ * filter pills cost no requests and no function invocations.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
   Button,
-  Collapse,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
@@ -29,372 +33,494 @@ import {
   useTheme,
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import GridOnOutlinedIcon from '@mui/icons-material/GridOnOutlined';
-import { describeReason, reasonShortLabel } from '@/lib/rsvp-reasons';
-import { RADIUS } from '@/components/timetable/timetable-theme';
-import { Gates, SECTION_HEADING_SX, owedLine, shortDate } from './shared';
-import type { Item, Row, TabProps } from './types';
+import { reasonShortLabel } from '@/lib/rsvp-reasons';
+import { BUCKET_META, BUCKET_ORDER, type CatchupBucket } from '@/lib/catchup-buckets';
+import { Gates, shortDate } from './shared';
+import StudentRow, { itemLine } from './StudentRow';
+import CatchupFilterBar from './CatchupFilterBar';
+import BulkNudgeBar, { MAX_BULK_NUDGE } from './BulkNudgeBar';
+import type { Row, TabProps } from './types';
 
 const VIEW_STORAGE_KEY = 'nexus:catchup:view';
+const GROUPS_STORAGE_KEY = 'nexus:catchup:groups';
 
 /**
- * Everything worth saying out loud on the call: when it was, what they said in
- * their own words, and how late it is. `describeReason` prefers the typed note
- * over the category, because "Hospital visit" says more than "Family".
+ * How many rows an open group renders before it offers to show the rest.
+ *
+ * The cap, not virtualization: there is no virtual-list library anywhere in this
+ * monorepo, and pulling one in to solve a list that is already grouped, filtered
+ * and searchable would cost every page in the app some bundle for one screen's
+ * worst case.
  */
-function itemLine(item: Item): string {
-  const bits = [shortDate(item.class.scheduled_date)];
-  if (item.reason_code) {
-    const said = describeReason(item.reason_code, item.reason_note);
-    bits.push(item.reason_note ? `"${said}"` : said);
-  }
-  // Only the class they actually started has a clock. Saying "due" about one
-  // they have not touched was how every card ended up looking late.
-  if (item.overdue) {
-    bits.push(`ran over ${item.due_on ? shortDate(item.due_on) : ''}`.trim());
-  } else if (item.active && item.due_on) {
-    bits.push(
-      typeof item.days_left === 'number'
-        ? `${item.days_left === 1 ? '1 day' : `${item.days_left} days`} left`
-        : `due ${shortDate(item.due_on)}`,
-    );
-  } else {
-    bits.push('not started');
-  }
-  return bits.join(' · ');
+const GROUP_PAGE = 15;
+
+/** Above this the grid stops being readable and starts being a rendering cost. */
+const MATRIX_LIMIT = 30;
+
+function matches(row: Row, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    (row.student.name || '').toLowerCase().includes(q) ||
+    (row.student.email || '').toLowerCase().includes(q)
+  );
 }
 
-export default function NeedsActionTab({ data, busy, onAct, onNudge }: TabProps) {
+export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany }: TabProps) {
   const theme = useTheme();
   const canShowMatrix = useMediaQuery(theme.breakpoints.up('md'));
+
+  const [query, setQuery] = useState('');
+  const [bucketFilter, setBucketFilter] = useState<CatchupBucket | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [view, setView] = useState<'cards' | 'matrix'>('cards');
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [showAll, setShowAll] = useState<Record<string, boolean>>({});
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(VIEW_STORAGE_KEY);
-    if (saved === 'matrix' || saved === 'cards') setView(saved);
+    const savedView = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    if (savedView === 'matrix' || savedView === 'cards') setView(savedView);
+    try {
+      const savedGroups = window.localStorage.getItem(GROUPS_STORAGE_KEY);
+      if (savedGroups) setOpenGroups(JSON.parse(savedGroups));
+    } catch {
+      // A corrupt preference is not worth failing a page over.
+    }
   }, []);
 
-  // Run over, or stalled: work owed with no clock running on any of it. The
-  // second one is the important addition. Counting overdue items used to surface
-  // whoever had the most, but with one clock at a time that count tops out at 1,
-  // and a student who has started nothing would otherwise look identical to one
-  // who is halfway through.
-  const needsAttention = useMemo(
+  const filtered = useMemo(
     () =>
       data.students.filter(
-        (s) => s.clock?.overdue || s.clock?.stalled || s.pace.state === 'behind',
+        (s) => (bucketFilter === null || s.bucket === bucketFilter) && matches(s, query),
       ),
-    [data.students],
+    [data.students, bucketFilter, query],
   );
-  const rest = useMemo(
-    () => data.students.filter((s) => !needsAttention.includes(s)),
-    [data.students, needsAttention],
+
+  const groups = useMemo(
+    () =>
+      BUCKET_ORDER.map((bucket) => ({
+        bucket,
+        rows: filtered.filter((r) => r.bucket === bucket),
+      })).filter((g) => g.rows.length > 0),
+    [filtered],
   );
+
+  // Once you have narrowed the list yourself, being made to open a group as well
+  // is one interaction too many: you already said what you wanted to see.
+  const narrowing = bucketFilter !== null || query.trim() !== '';
+
+  const isOpen = useCallback(
+    (bucket: CatchupBucket, index: number) =>
+      narrowing || (openGroups[bucket] ?? index === 0),
+    [narrowing, openGroups],
+  );
+
+  const toggleGroup = useCallback(
+    (bucket: CatchupBucket, index: number) => {
+      setOpenGroups((prev) => {
+        const next = { ...prev, [bucket]: !(prev[bucket] ?? index === 0) };
+        try {
+          window.localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+          // Private browsing. The preference is cosmetic.
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const clearSelection = useCallback(() => {
+    setSelected(new Set());
+    setSelectMode(false);
+  }, []);
+
+  const selectGroup = useCallback((rows: Row[]) => {
+    setSelectMode(true);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const everyOneAlready = rows.every((r) => next.has(r.student.id));
+      for (const r of rows) {
+        if (everyOneAlready) next.delete(r.student.id);
+        else next.add(r.student.id);
+      }
+      return next;
+    });
+  }, []);
+
+  const sendBulk = useCallback(async () => {
+    // Capped here as well as described in the dialog, so the limit holds even if
+    // the confirmation is ever bypassed.
+    const ids = [...selected].slice(0, MAX_BULK_NUDGE);
+    const journeyIds = data.students
+      .filter((s) => ids.includes(s.student.id) && s.journey_id)
+      .map((s) => s.journey_id as string);
+    setSending(true);
+    try {
+      await onNudgeMany(ids, journeyIds);
+      clearSelection();
+    } finally {
+      setSending(false);
+    }
+  }, [selected, data.students, onNudgeMany, clearSelection]);
 
   const showMatrix = canShowMatrix && view === 'matrix';
+  const matrixTooBig = showMatrix && filtered.length > MATRIX_LIMIT;
 
-  const studentRow = (s: Row, flagged: boolean) => (
-    <Box
-      key={s.student.id}
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        p: 1.5,
-        borderRadius: RADIUS.control,
-        border: '1px solid',
-        borderColor: flagged ? alpha(theme.palette.error.main, 0.4) : 'divider',
-        bgcolor: flagged ? alpha(theme.palette.error.main, 0.05) : 'background.paper',
-        flexWrap: 'wrap',
-      }}
-    >
-      <UserAvatar src={s.student.avatar_url} name={s.student.name || ''} size={38} />
-      <Box sx={{ flex: 1, minWidth: 140 }}>
-        <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }} noWrap>
-          {s.student.name || s.student.email || 'Student'}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {owedLine(s)}
-        </Typography>
-      </Box>
-      <Stack direction="row" spacing={0.75}>
-        {s.student.phone && (
-          <Button
-            size="small"
-            variant="outlined"
-            href={`tel:${s.student.phone}`}
-            startIcon={<PhoneOutlinedIcon />}
-            sx={{ minHeight: 40, textTransform: 'none' }}
-          >
-            Call
-          </Button>
-        )}
-        <Button
-          size="small"
-          variant="contained"
-          disabled={busy === s.student.id}
-          onClick={() => onNudge(s.student.id, s.journey_id)}
-          sx={{ minHeight: 40, textTransform: 'none' }}
-        >
-          Nudge
-        </Button>
-      </Stack>
-    </Box>
-  );
-
-  return (
-    <>
-      {data.students.length === 0 && (
+  if (data.students.length === 0) {
+    return (
+      <>
         <Alert severity="success" sx={{ borderRadius: 2 }}>
           Nobody is behind. Every student has cleared the classes they missed.
         </Alert>
-      )}
+        <HiddenDormantNote count={data.totals.hiddenDormant} />
+      </>
+    );
+  }
 
-      {needsAttention.length > 0 && (
-        <Box sx={{ mb: 3.5 }}>
-          <Typography sx={{ ...SECTION_HEADING_SX, color: 'error.main' }}>Call these first</Typography>
-          <Stack spacing={1}>{needsAttention.map((s) => studentRow(s, true))}</Stack>
-        </Box>
-      )}
+  return (
+    <>
+      <CatchupFilterBar
+        query={query}
+        onQuery={setQuery}
+        bucket={bucketFilter}
+        onBucket={setBucketFilter}
+        tally={data.totals.byBucket}
+        total={data.students.length}
+      />
 
-      {rest.length > 0 && (
-        <Box sx={{ mb: 3.5 }}>
-          <Typography sx={SECTION_HEADING_SX}>Everyone else catching up</Typography>
-          <Stack spacing={1}>{rest.map((s) => studentRow(s, false))}</Stack>
-        </Box>
-      )}
-
-      {data.students.length > 0 && (
-        <Box sx={{ mb: 3.5 }}>
-          <Stack
-            direction="row"
-            alignItems="center"
-            justifyContent="space-between"
-            sx={{ mb: 1, gap: 1 }}
+      {data.students.length > 0 && canShowMatrix && (
+        <Stack direction="row" alignItems="center" justifyContent="flex-end" sx={{ mb: 1 }}>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={view}
+            onChange={(_e, v) => {
+              if (!v) return;
+              setView(v);
+              window.localStorage.setItem(VIEW_STORAGE_KEY, v);
+            }}
+            aria-label="How to show the students"
           >
-            <Typography sx={{ ...SECTION_HEADING_SX, mb: 0 }}>Where each one is stuck</Typography>
-            {canShowMatrix && (
-              <ToggleButtonGroup
-                size="small"
-                exclusive
-                value={view}
-                onChange={(_e, v) => {
-                  if (!v) return;
-                  setView(v);
-                  window.localStorage.setItem(VIEW_STORAGE_KEY, v);
-                }}
-                aria-label="How to show the breakdown"
-              >
-                <ToggleButton value="cards" aria-label="One card per student" sx={{ px: 1.25 }}>
-                  <ViewAgendaOutlinedIcon sx={{ fontSize: 18 }} />
-                </ToggleButton>
-                <ToggleButton value="matrix" aria-label="Grid of every class" sx={{ px: 1.25 }}>
-                  <GridOnOutlinedIcon sx={{ fontSize: 18 }} />
-                </ToggleButton>
-              </ToggleButtonGroup>
-            )}
-          </Stack>
+            <ToggleButton value="cards" aria-label="One row per student" sx={{ px: 1.25 }}>
+              <ViewAgendaOutlinedIcon sx={{ fontSize: 18 }} />
+            </ToggleButton>
+            <ToggleButton value="matrix" aria-label="Grid of every class" sx={{ px: 1.25 }}>
+              <GridOnOutlinedIcon sx={{ fontSize: 18 }} />
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Stack>
+      )}
 
-          {!showMatrix ? (
-            <Stack spacing={1}>
-              {data.students.map((s) => {
-                const open = expanded === s.student.id;
-                return (
+      {filtered.length === 0 ? (
+        <Box sx={{ textAlign: 'center', py: 5 }}>
+          <Typography sx={{ fontWeight: 700, mb: 0.5 }}>
+            {query.trim() ? `No student matches "${query.trim()}"` : 'Nobody is in that state'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Try a different name, or clear the filter to see everyone still catching up.
+          </Typography>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setQuery('');
+              setBucketFilter(null);
+            }}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Show everyone
+          </Button>
+        </Box>
+      ) : showMatrix ? (
+        <MatrixView data={data} rows={filtered} tooBig={matrixTooBig} />
+      ) : (
+        <Stack spacing={2.5}>
+          {groups.map(({ bucket, rows }, index) => {
+            const meta = BUCKET_META[bucket];
+            const open = isOpen(bucket, index);
+            const expandedAll = !!showAll[bucket];
+            const visible = expandedAll ? rows : rows.slice(0, GROUP_PAGE);
+            const allSelected = rows.every((r) => selected.has(r.student.id));
+            const tint =
+              meta.tone === 'bad'
+                ? theme.palette.error.main
+                : meta.tone === 'warn'
+                  ? theme.palette.warning.dark
+                  : theme.palette.text.secondary;
+
+            return (
+              <Box key={bucket}>
+                <Stack direction="row" alignItems="flex-start" sx={{ gap: 1, mb: open ? 1 : 0 }}>
                   <Box
-                    key={s.student.id}
+                    component="button"
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => toggleGroup(bucket, index)}
                     sx={{
-                      borderRadius: RADIUS.control,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      bgcolor: 'background.paper',
+                      flex: 1,
+                      minWidth: 0,
+                      minHeight: 48,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.75,
+                      px: 0.5,
+                      border: 'none',
+                      bgcolor: 'transparent',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      borderRadius: 1,
+                      color: 'inherit',
+                      font: 'inherit',
+                      '&:focus-visible': {
+                        outline: `2px solid ${theme.palette.primary.main}`,
+                        outlineOffset: 2,
+                      },
                     }}
                   >
-                    <Box
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setExpanded(open ? null : s.student.id)}
-                      onKeyDown={(e) => e.key === 'Enter' && setExpanded(open ? null : s.student.id)}
+                    <ExpandMoreIcon
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1.25,
-                        p: 1.5,
-                        minHeight: 56,
-                        cursor: 'pointer',
+                        fontSize: 20,
+                        color: tint,
+                        transform: open ? 'none' : 'rotate(-90deg)',
+                        transition: 'transform 200ms ease',
+                        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
                       }}
-                    >
-                      <UserAvatar src={s.student.avatar_url} name={s.student.name || ''} size={32} />
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 700, fontSize: '0.88rem' }} noWrap>
-                          {s.student.name || s.student.email || 'Student'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {owedLine(s)}
-                        </Typography>
-                      </Box>
-                      <ExpandMoreIcon
+                    />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography
                         sx={{
-                          color: 'text.disabled',
-                          transform: open ? 'rotate(180deg)' : 'none',
-                          transition: 'transform 200ms ease',
+                          fontSize: '0.6875rem',
+                          fontWeight: 800,
+                          letterSpacing: '.1em',
+                          textTransform: 'uppercase',
+                          color: tint,
                         }}
-                      />
+                      >
+                        {meta.label} · {rows.length}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        {meta.hint}
+                      </Typography>
                     </Box>
-                    <Collapse in={open} unmountOnExit>
-                      <Stack spacing={0.5} sx={{ px: 1.5, pb: 1.5 }}>
-                        {s.items.map((item) => (
-                          <Box
-                            key={item.id}
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1,
-                              py: 0.75,
-                              borderTop: '1px solid',
-                              borderColor: 'divider',
-                              flexWrap: 'wrap',
-                            }}
-                          >
-                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                                {item.class.title || 'Class'}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color={item.overdue ? 'error.main' : 'text.disabled'}
-                                sx={{ display: 'block' }}
-                              >
-                                {itemLine(item)}
-                              </Typography>
-                            </Box>
-                            <Gates item={item} />
-                            <Button
-                              size="small"
-                              disabled={busy === item.id}
-                              onClick={() => onAct(item.id, item.excused ? 'restore' : 'excuse')}
-                              sx={{ textTransform: 'none', minHeight: 40, minWidth: 72 }}
-                            >
-                              {item.excused ? 'Restore' : 'Excuse'}
-                            </Button>
-                          </Box>
-                        ))}
-                      </Stack>
-                    </Collapse>
                   </Box>
-                );
-              })}
-            </Stack>
-          ) : (
-            <Box sx={{ overflowX: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-              <Box component="table" sx={{ borderCollapse: 'collapse', minWidth: '100%' }}>
-                <Box component="thead">
-                  <Box component="tr">
+
+                  {meta.nudgeable && rows.length > 1 && (
+                    <Button
+                      size="small"
+                      onClick={() => selectGroup(rows)}
+                      sx={{ textTransform: 'none', minHeight: 44, flexShrink: 0 }}
+                    >
+                      {allSelected ? 'Clear' : 'Select all'}
+                    </Button>
+                  )}
+                </Stack>
+
+                {open && (
+                  <Stack spacing={1}>
+                    {visible.map((row) => (
+                      <StudentRow
+                        key={row.student.id}
+                        row={row}
+                        expanded={expanded === row.student.id}
+                        onToggle={() =>
+                          setExpanded(expanded === row.student.id ? null : row.student.id)
+                        }
+                        selected={selectMode ? selected.has(row.student.id) : null}
+                        onSelect={(next) =>
+                          setSelected((prev) => {
+                            const s = new Set(prev);
+                            if (next) s.add(row.student.id);
+                            else s.delete(row.student.id);
+                            return s;
+                          })
+                        }
+                        nudgeable={meta.nudgeable}
+                        busy={busy}
+                        onAct={onAct}
+                        onNudge={onNudge}
+                      />
+                    ))}
+
+                    {rows.length > visible.length && (
+                      <Button
+                        onClick={() => setShowAll((prev) => ({ ...prev, [bucket]: true }))}
+                        sx={{ textTransform: 'none', minHeight: 44, alignSelf: 'flex-start' }}
+                      >
+                        Show all {rows.length}
+                      </Button>
+                    )}
+                  </Stack>
+                )}
+              </Box>
+            );
+          })}
+        </Stack>
+      )}
+
+      {selectMode && selected.size > 0 && (
+        <BulkNudgeBar
+          count={selected.size}
+          onClear={clearSelection}
+          onConfirm={sendBulk}
+          sending={sending}
+        />
+      )}
+
+      <HiddenDormantNote count={data.totals.hiddenDormant} />
+    </>
+  );
+}
+
+/**
+ * A student who vanishes without explanation reads as a bug, so the count that
+ * left the screen is stated rather than dropped in silence.
+ */
+function HiddenDormantNote({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <Typography
+      variant="caption"
+      color="text.disabled"
+      sx={{ display: 'block', mt: 3, textAlign: 'center' }}
+    >
+      {count === 1 ? '1 dormant student is' : `${count} dormant students are`} hidden here and left
+      out of the counts above. Dormant students keep their Nexus access; they are only excluded from
+      chasing. Manage them in Students.
+    </Typography>
+  );
+}
+
+/**
+ * The student-by-class grid, kept because it genuinely reads well for a small
+ * group, but held to the filtered set and capped. A hundred students against
+ * sixty classes is six thousand cells, which is not a view of anything.
+ */
+function MatrixView({
+  data,
+  rows,
+  tooBig,
+}: {
+  data: TabProps['data'];
+  rows: Row[];
+  tooBig: boolean;
+}) {
+  const theme = useTheme();
+
+  if (tooBig) {
+    return (
+      <Alert severity="info" sx={{ borderRadius: 2 }}>
+        The grid reads well up to {MATRIX_LIMIT} students and there are {rows.length} here. Search a
+        name or pick one of the filters above, and the grid will come back.
+      </Alert>
+    );
+  }
+
+  return (
+    <>
+      <Box sx={{ overflowX: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Box component="table" sx={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+          <Box component="thead">
+            <Box component="tr">
+              <Box
+                component="th"
+                sx={{
+                  position: 'sticky',
+                  left: 0,
+                  zIndex: 2,
+                  bgcolor: 'background.paper',
+                  textAlign: 'left',
+                  p: 1.25,
+                  minWidth: 190,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  fontSize: '0.75rem',
+                }}
+              >
+                Student
+              </Box>
+              {data.classes.map((c) => (
+                <Box
+                  key={c.id}
+                  component="th"
+                  title={c.title || ''}
+                  sx={{
+                    p: 1.25,
+                    minWidth: 92,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    color: 'text.secondary',
+                    whiteSpace: 'nowrap',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {shortDate(c.scheduled_date)}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {rows.map((s) => (
+              <Box component="tr" key={s.student.id}>
+                <Box
+                  component="td"
+                  sx={{
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 1,
+                    bgcolor: 'background.paper',
+                    p: 1.25,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <UserAvatar src={s.student.avatar_url} name={s.student.name || ''} size={28} />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.82rem' }} noWrap>
+                        {s.student.name || s.student.email || 'Student'}
+                      </Typography>
+                      <Typography variant="caption" color="text.disabled">
+                        {s.missedTotals.completed + s.totals.completed}/
+                        {s.missedTotals.total + s.totals.total}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Box>
+                {data.classes.map((c) => {
+                  const item = s.items.find((i) => i.scheduled_class_id === c.id);
+                  return (
                     <Box
-                      component="th"
+                      key={c.id}
+                      component="td"
+                      title={item ? itemLine(item) : ''}
                       sx={{
-                        position: 'sticky',
-                        left: 0,
-                        zIndex: 2,
-                        bgcolor: 'background.paper',
-                        textAlign: 'left',
                         p: 1.25,
-                        minWidth: 190,
+                        textAlign: 'center',
                         borderBottom: '1px solid',
                         borderColor: 'divider',
-                        fontSize: '0.75rem',
+                        bgcolor: item?.overdue ? alpha(theme.palette.error.main, 0.06) : 'transparent',
                       }}
                     >
-                      Student
+                      {item ? <Gates item={item} /> : null}
                     </Box>
-                    {data.classes.map((c) => (
-                      <Box
-                        key={c.id}
-                        component="th"
-                        title={c.title || ''}
-                        sx={{
-                          p: 1.25,
-                          minWidth: 92,
-                          borderBottom: '1px solid',
-                          borderColor: 'divider',
-                          fontSize: '0.7rem',
-                          fontWeight: 700,
-                          color: 'text.secondary',
-                          whiteSpace: 'nowrap',
-                          fontVariantNumeric: 'tabular-nums',
-                        }}
-                      >
-                        {shortDate(c.scheduled_date)}
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-                <Box component="tbody">
-                  {data.students.map((s) => (
-                    <Box component="tr" key={s.student.id}>
-                      <Box
-                        component="td"
-                        sx={{
-                          position: 'sticky',
-                          left: 0,
-                          zIndex: 1,
-                          bgcolor: 'background.paper',
-                          p: 1.25,
-                          borderBottom: '1px solid',
-                          borderColor: 'divider',
-                        }}
-                      >
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <UserAvatar src={s.student.avatar_url} name={s.student.name || ''} size={28} />
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography sx={{ fontWeight: 700, fontSize: '0.82rem' }} noWrap>
-                              {s.student.name || s.student.email || 'Student'}
-                            </Typography>
-                            <Typography variant="caption" color="text.disabled">
-                              {s.missedTotals.completed + s.totals.completed}/
-                              {s.missedTotals.total + s.totals.total}
-                            </Typography>
-                          </Box>
-                        </Stack>
-                      </Box>
-                      {data.classes.map((c) => {
-                        const item = s.items.find((i) => i.scheduled_class_id === c.id);
-                        return (
-                          <Box
-                            key={c.id}
-                            component="td"
-                            title={item ? itemLine(item) : ''}
-                            sx={{
-                              p: 1.25,
-                              textAlign: 'center',
-                              borderBottom: '1px solid',
-                              borderColor: 'divider',
-                              bgcolor: item?.overdue
-                                ? alpha(theme.palette.error.main, 0.06)
-                                : 'transparent',
-                            }}
-                          >
-                            {item ? <Gates item={item} /> : null}
-                          </Box>
-                        );
-                      })}
-                    </Box>
-                  ))}
-                </Box>
+                  );
+                })}
               </Box>
-            </Box>
-          )}
-
-          {showMatrix && (
-            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
-              The grid shows progress only. Switch back to cards to read what each student said,
-              including anyone who chose {reasonShortLabel('other').toLowerCase()}.
-            </Typography>
-          )}
+            ))}
+          </Box>
         </Box>
-      )}
+      </Box>
+      <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
+        The grid shows progress only. Switch back to rows to read what each student said, including
+        anyone who chose {reasonShortLabel('other').toLowerCase()}.
+      </Typography>
     </>
   );
 }

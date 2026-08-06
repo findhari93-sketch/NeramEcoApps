@@ -25,7 +25,7 @@ import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { IMPERSONATION_BANNER_HEIGHT } from './ImpersonationBanner';
 import { useSidebarContext, SIDEBAR_EXPANDED, SIDEBAR_ICONS } from './SidebarProvider';
-import { COURSE_PLANS_PATH, COURSE_PLAN_SUBNAV } from './PanelProvider';
+import { COURSE_PLANS_PATH, COURSE_PLAN_SUBNAV } from '@/lib/nav-config';
 import { useNavBadges } from './NavBadgeProvider';
 
 // Re-export for backward compat (layouts import this)

@@ -10,6 +10,12 @@ import { gradeTestOneShot } from '@neram/database';
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    // Deliberately the classroom-scoped verifier, and deliberately still strict.
+    // gradeTestOneShot performs no authorisation of its own: it grades whatever
+    // test id it is handed, gated class_prep and catchup_class papers included,
+    // which the take engine refuses on purpose. Nothing calls this route today,
+    // so loosening it to "any enrolled student" would open a path round that
+    // gate to buy nothing.
     const access = await verifyQBAccess(request.headers.get('Authorization'), null);
     if (!access.ok) return access.response;
 
