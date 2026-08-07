@@ -23,7 +23,6 @@ import {
   Snackbar,
   Alert,
   Drawer,
-  Avatar,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -39,6 +38,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import { PLAN_STATUS, fmtShort, type PlanData } from './common';
 import type { UsePlanData } from './usePlanData';
 
@@ -81,12 +81,14 @@ export function HistoryFeed({ audit }: { audit: PlanData['audit'] }) {
             key={a.id}
             sx={{ display: 'flex', gap: 1.5, py: 1.5, borderBottom: '1px solid', borderColor: alpha('#000', 0.05) }}
           >
-            <Avatar
-              src={a.performer?.avatar_url || undefined}
-              sx={{ width: 30, height: 30, fontSize: '0.7rem', bgcolor: 'primary.dark' }}
-            >
-              {(a.performer?.name || '?').slice(0, 2).toUpperCase()}
-            </Avatar>
+            {/* Usually a teacher, who falls back to a plain face. Not always,
+                so it resolves through StudentAvatar like every other face. */}
+            <StudentAvatar
+              userId={a.performer?.id}
+              src={a.performer?.avatar_url}
+              name={a.performer?.name}
+              size={30}
+            />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2">
                 <strong>{a.performer?.name || 'Someone'}</strong> {md.summary || a.action}

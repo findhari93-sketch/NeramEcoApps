@@ -23,6 +23,18 @@
       {
         "selector": "Literal[value=/generativelanguage\\.googleapis\\.com/]",
         "message": "Call Gemini through @neram/ai rather than building the URL by hand, so the call is metered and the budget guard can refuse it."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='UserAvatar']",
+        "message": "Show a person through StudentAvatar (src/components/students/StudentAvatar). It resolves the cohort ring from the user id, and falls back to exactly this plain avatar for staff, alumni and anyone else it does not recognise, so it is safe in a mixed list. Two adoption passes were lost to hunting for screens one at a time; if this face genuinely must stay plain, add the file to the allowlist in the overrides block below and say why."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='GraphAvatar']",
+        "message": "Show a person through StudentAvatar (src/components/students/StudentAvatar) and pass msOid to keep the live Microsoft Graph photo. Calling GraphAvatar directly is how a screen ends up with faces that carry no cohort."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Avatar']:has(JSXAttribute[name.name='src'])",
+        "message": "An Avatar carrying a src is a photograph of a person, so it belongs to StudentAvatar (src/components/students/StudentAvatar). A bare Avatar with no src is an icon badge and stays legal. StudentAvatar also brings the shared initials, the deterministic fallback colour and the long-press photo viewer, which hand-written initials do not."
       }
     ],
     "no-restricted-imports": [
@@ -75,6 +87,71 @@
           }
         ]
       }
+    },
+    // ---------------------------------------------------------------------
+    // Faces that may stay plain. Every entry below carries its reason, and a
+    // unit test (src/components/students/avatar-allowlist.test.ts) fails if one
+    // of these paths stops existing, because a dead exception reads as a
+    // considered decision when it is really just drift.
+    // ---------------------------------------------------------------------
+
+    // The three components the avatar rules point everyone at. They are the
+    // ones allowed to render a bare face.
+    {
+      "files": [
+        "src/components/students/StudentAvatar.tsx",
+        "src/components/students/StudentStageAvatar.tsx",
+        "src/components/GraphAvatar.tsx"
+      ],
+      "rules": { "no-restricted-syntax": "off" }
+    },
+    // The signed-in person's own face. You do not need a ring to tell you what
+    // you are.
+    {
+      "files": [
+        "src/components/TopBar.tsx",
+        "src/components/DesktopSidebar.tsx",
+        "src/components/profile/ProfileHero.tsx",
+        "src/components/PhotoRequiredGate.tsx",
+        "src/components/WelcomeOrientation.tsx",
+        "src/components/NoClassroomWelcome.tsx",
+        "src/components/AlumniAccessEnded.tsx",
+        "src/app/(teacher)/teacher/course-plans/page.tsx"
+      ],
+      "rules": { "no-restricted-syntax": "off" }
+    },
+    // Stacked AvatarGroup strips. MUI needs bare Avatar children for its
+    // overlap margins, and StudentAvatar's size + 8 wrapper breaks them. A ring
+    // is illegible at 24px under a stack anyway.
+    {
+      "files": [
+        "src/components/exam-schedule/RecentlyCompletedStrip.tsx",
+        "src/components/question-bank/ContributorAvatars.tsx",
+        "src/components/exam-recall/ThreadCard.tsx"
+      ],
+      "rules": { "no-restricted-syntax": "off" }
+    },
+    // Always a staff face, and the payload carries no user id. Threading one in
+    // would buy nothing.
+    {
+      "files": [
+        "src/components/timetable/views/UpNextHero.tsx",
+        "src/components/timetable/class-panel/ClassTab.tsx"
+      ],
+      "rules": { "no-restricted-syntax": "off" }
+    },
+    // Entra directory entries, not users. These people have no users.id yet, so
+    // there is nothing to look up.
+    {
+      "files": ["src/components/AvailableStudentsSection.tsx"],
+      "rules": { "no-restricted-syntax": "off" }
+    },
+    // No StudentStageFactsProvider is mounted in these zones, deliberately:
+    // dormancy is a staff judgement and a classmate must never see it. A ring
+    // could never render here, so the rule would only make noise.
+    {
+      "files": ["src/app/(student)/**", "src/app/(parent)/**"],
+      "rules": { "no-restricted-syntax": "off" }
     }
   ]
 }
