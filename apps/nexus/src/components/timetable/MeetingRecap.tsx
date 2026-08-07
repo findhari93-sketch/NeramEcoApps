@@ -7,7 +7,6 @@ import {
   Button,
   LinearProgress,
   Rating,
-  UserAvatar,
   List,
   ListItem,
   ListItemAvatar,
@@ -17,6 +16,7 @@ import {
 } from '@neram/ui';
 import DescriptionIcon from '@mui/icons-material/Description';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface RecapData {
   recording_url: string | null;
@@ -164,9 +164,12 @@ export default function MeetingRecap({ classId, classroomId, getToken, role }: M
           <List dense disablePadding>
             {data.reviews.map((review, idx) => (
               <ListItem key={idx} sx={{ px: 0, alignItems: 'flex-start' }}>
+                {/* 36 fits a bare 28px face. The cohort ring makes the box 36,
+                    so the slot needs 44 or the name loses its gap. */}
                 {review.student && (
-                  <ListItemAvatar sx={{ minWidth: 36 }}>
-                    <UserAvatar
+                  <ListItemAvatar sx={{ minWidth: 44 }}>
+                    <StudentAvatar
+                      userId={review.student.id}
                       src={review.student.avatar_url}
                       name={review.student.name}
                       size={28}

@@ -29,15 +29,16 @@ import {
   alpha,
   useMediaQuery,
   useTheme,
-  UserAvatar,
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { NexusQBPaperMatrix, NexusQBPaperMatrixCell } from '@neram/database';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import PaperFacePips from './PaperFacePips';
 
 /** Wide enough for three 24px pips plus their gaps, and no wider. */
 const CELL_W = 104;
-const NAME_W = 180;
+/** 180 for the name, plus the 8px the cohort ring adds to the avatar box. */
+const NAME_W = 188;
 
 export interface PaperProgressMatrixProps {
   matrix: NexusQBPaperMatrix;
@@ -97,7 +98,7 @@ export default function PaperProgressMatrix({ matrix }: PaperProgressMatrixProps
             >
               <HeaderCell sticky width={NAME_W}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                  <UserAvatar name={row.student_name} src={row.avatar_url} size={28} />
+                  <StudentAvatar userId={row.student_id} name={row.student_name} src={row.avatar_url} size={28} />
                   <Box sx={{ minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={600} noWrap>
                       {row.student_name}
@@ -226,7 +227,7 @@ function MobileList({ matrix }: { matrix: NexusQBPaperMatrix }) {
                 cursor: 'pointer',
               }}
             >
-              <UserAvatar name={row.student_name} src={row.avatar_url} size={36} />
+              <StudentAvatar userId={row.student_id} name={row.student_name} src={row.avatar_url} size={36} />
               <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Typography variant="body2" fontWeight={700} noWrap>
                   {row.student_name}
