@@ -135,8 +135,12 @@ export default function ExamRecallModerationDashboard() {
       if (!res2.ok) throw new Error('Failed to fetch under-review threads');
       const data2 = await res2.json();
 
-      // Merge and sort by confirm_count desc
-      const merged = [...(data.threads || []), ...(data2.threads || [])];
+      // Merge and sort by confirm_count desc.
+      // The route answers { data, total }, not { threads }. Reading `.threads`
+      // here found undefined, fell through to [], and rendered "All caught up"
+      // over a queue that was never empty. `.ok` was true and nothing threw, so
+      // the screen looked like an editorial fact rather than a bug.
+      const merged = [...(data.data || []), ...(data2.data || [])];
       merged.sort((a: ExamRecallThreadListItem, b: ExamRecallThreadListItem) => b.confirm_count - a.confirm_count);
       setThreads(merged);
       setThreadsTotal(merged.length);
