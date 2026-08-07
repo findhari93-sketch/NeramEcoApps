@@ -6,13 +6,13 @@ import {
   Typography,
   Stack,
   Chip,
-  UserAvatar,
   Box,
   IconButton,
   Tooltip,
   alpha,
   useTheme,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
 import type {
@@ -70,7 +70,8 @@ export default function TipCard({ tip, onUpvote }: TipCardProps) {
       <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
         {/* Author row */}
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-          <UserAvatar
+          <StudentAvatar
+            userId={tip.user.id}
             src={tip.user.avatar_url}
             name={tip.user.name}
             size={32}

@@ -17,12 +17,12 @@ import {
   MenuItem,
   TextField,
   Divider,
-  Avatar,
   alpha,
   useTheme,
   IconButton,
   Tooltip,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import PendingActionsOutlinedIcon from '@mui/icons-material/PendingActionsOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -510,13 +510,12 @@ export default function ExamRecallModerationDashboard() {
                 onClick={() => router.push(`/teacher/exam-recall/thread/${thread.id}`)}
               >
                 {thread.contributors[0] && (
-                  <Avatar
-                    src={thread.contributors[0].avatar_url || undefined}
-                    alt={thread.contributors[0].name || 'User'}
-                    sx={{ width: 32, height: 32, fontSize: '0.8rem' }}
-                  >
-                    {thread.contributors[0].name?.[0] || '?'}
-                  </Avatar>
+                  <StudentAvatar
+                    userId={thread.contributors[0].id}
+                    src={thread.contributors[0].avatar_url}
+                    name={thread.contributors[0].name}
+                    size={32}
+                  />
                 )}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" noWrap>

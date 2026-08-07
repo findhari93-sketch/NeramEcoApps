@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react';
 import {
   Box,
-  UserAvatar,
   Typography,
   Stack,
   TextField,
@@ -13,6 +12,7 @@ import {
   alpha,
   useTheme,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import SendIcon from '@mui/icons-material/Send';
 import ReplyIcon from '@mui/icons-material/Reply';
 import type { ExamRecallThreadDetail } from '@neram/database';
@@ -53,7 +53,8 @@ function CommentItem({
   return (
     <Box sx={{ pl: depth > 0 ? { xs: 2, md: 3 } : 0 }}>
       <Stack direction="row" spacing={1} sx={{ mb: 0.5 }}>
-        <UserAvatar
+        <StudentAvatar
+          userId={comment.user.id}
           src={comment.user.avatar_url}
           name={comment.user.name}
           size={28}

@@ -15,7 +15,6 @@ import {
   MenuItem,
   TextField,
   Divider,
-  UserAvatar,
   AvatarGroup,
   Dialog,
   DialogTitle,
@@ -28,6 +27,7 @@ import {
   useTheme,
   ImageUploadField,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
@@ -595,7 +595,8 @@ export default function ThreadModerationPage() {
                           size="small"
                           sx={{ bgcolor: 'grey.800', color: '#fff', fontWeight: 700, fontSize: '0.7rem', height: 22 }}
                         />
-                        <UserAvatar
+                        <StudentAvatar
+                          userId={version.author.id}
                           src={version.author.avatar_url}
                           name={version.author.name}
                           size={28}
@@ -805,7 +806,8 @@ export default function ThreadModerationPage() {
             ) : (
               thread.confirms.map((confirm) => (
                 <Stack key={confirm.id} direction="row" spacing={1.5} alignItems="center" sx={{ py: 0.5 }}>
-                  <UserAvatar
+                  <StudentAvatar
+                    userId={confirm.user.id}
                     src={confirm.user.avatar_url}
                     name={confirm.user.name}
                     size={32}

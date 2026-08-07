@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import {
   Box,
-  UserAvatar,
   Typography,
   Stack,
   Chip,
@@ -12,6 +11,7 @@ import {
   alpha,
   useTheme,
 } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import StarIcon from '@mui/icons-material/Star';
@@ -116,7 +116,8 @@ function VersionCard({
             minWidth: 32,
           }}
         />
-        <UserAvatar
+        <StudentAvatar
+          userId={version.author.id}
           src={version.author.avatar_url}
           name={version.author.name}
           size={28}
