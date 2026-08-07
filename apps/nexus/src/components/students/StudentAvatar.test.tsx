@@ -52,6 +52,18 @@ describe('StudentAvatar', () => {
     expect(container.textContent).toContain('SE');
   });
 
+  it('passes sx through to a ringed avatar, and the dormant treatment still wins', () => {
+    // The catch-up screens are gold throughout and pass bgcolor through this
+    // prop. StudentStageAvatar must merge it BEFORE the dormant greyscale, or a
+    // caller's colour could quietly undo the "switched off" signal.
+    stub({ 's3': { stage: '12th', dormant: true } });
+    const { container } = render(
+      <StudentAvatar userId="s3" name="Gold Person" sx={{ bgcolor: '#F9A825' }} />
+    );
+    const avatar = container.querySelector('.MuiAvatar-root') as HTMLElement;
+    expect(getComputedStyle(avatar).filter).toContain('grayscale');
+  });
+
   it('reserves the ring’s space when unringed, so a list does not reflow', () => {
     vi.restoreAllMocks();
     const { container } = render(<StudentAvatar userId="nobody" name="X Y" size={40} />);

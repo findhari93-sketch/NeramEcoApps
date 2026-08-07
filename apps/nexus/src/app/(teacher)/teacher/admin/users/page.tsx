@@ -9,7 +9,6 @@ import {
   Select,
   MenuItem,
   Chip,
-  UserAvatar,
   IconButton,
   Pagination,
   Skeleton,
@@ -28,6 +27,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useRouter } from 'next/navigation';
 import { STAFF_ROLE_DESCRIPTIONS, STAFF_ROLE_LABELS } from '@/lib/staff-capabilities';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 const STAFF_ROLE_DESCRIPTIONS_NONE =
   'Cannot open the staff side of Nexus. Use this for students, and to revoke staff access.';
@@ -348,14 +348,13 @@ export default function AdminUsersPage() {
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
-                  <UserAvatar
+                  {/* Staff and students share this list. Anyone who is not a
+                      tracked student falls back to the plain face they had. */}
+                  <StudentAvatar
+                    userId={user.id}
                     src={user.avatar_url}
                     name={user.name}
                     size={40}
-                    sx={{
-                      color: 'primary.main',
-                      fontWeight: 600,
-                    }}
                   />
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>

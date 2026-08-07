@@ -8,7 +8,6 @@ import {
   Chip,
   Skeleton,
   Button,
-  Avatar,
   TextField,
   ToggleButtonGroup,
   ToggleButton,
@@ -201,12 +200,12 @@ export default function TeacherEvaluate() {
                 borderColor: selected?.id === sub.id ? 'primary.main' : 'divider',
               }}
             >
-              <Avatar
-                src={sub.student.avatar_url || undefined}
-                sx={{ width: 40, height: 40, fontSize: '0.875rem' }}
-              >
-                {sub.student.name?.charAt(0) || '?'}
-              </Avatar>
+              <StudentAvatar
+                userId={sub.student.id}
+                src={sub.student.avatar_url}
+                name={sub.student.name}
+                size={40}
+              />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
                   {sub.student.name}

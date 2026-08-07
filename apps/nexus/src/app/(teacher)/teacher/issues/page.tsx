@@ -1064,9 +1064,7 @@ export default function TeacherIssuesPage() {
       renderOption={(props, option) => (
         <li {...props} key={option.id}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Avatar src={option.avatar_url || undefined} sx={{ width: 28, height: 28, fontSize: '0.7rem' }}>
-              {option.name?.charAt(0) || '?'}
-            </Avatar>
+            <StudentAvatar userId={option.id} src={option.avatar_url} name={option.name} size={28} />
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
                 {option.name}
@@ -1175,12 +1173,13 @@ export default function TeacherIssuesPage() {
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                <Avatar
-                  src={issue.student_avatar || undefined}
-                  sx={{ width: 32, height: 32, fontSize: '0.75rem', mt: 0.25 }}
-                >
-                  {issue.student_name?.charAt(0) || 'S'}
-                </Avatar>
+                <StudentAvatar
+                  userId={issue.student_id}
+                  src={issue.student_avatar}
+                  name={issue.student_name}
+                  size={32}
+                  sx={{ mt: 0.25 }}
+                />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
                     <Typography variant="caption" sx={{ color: 'text.disabled', fontWeight: 600, fontSize: '0.7rem' }}>

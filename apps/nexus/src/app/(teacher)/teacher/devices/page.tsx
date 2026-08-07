@@ -7,8 +7,6 @@ import {
   Card,
   CardContent,
   Chip,
-  Avatar,
-  UserAvatar,
   Skeleton,
   TextField,
   InputAdornment,
@@ -29,6 +27,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import type { DeviceDistributionStats, StudentDeviceSummary } from '@neram/database';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 function formatTime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -124,12 +123,12 @@ function StudentDeviceCard({
     >
       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar
-            src={student.user_avatar || undefined}
-            sx={{ width: 40, height: 40, fontSize: 16 }}
-          >
-            {student.user_name?.[0]?.toUpperCase()}
-          </Avatar>
+          <StudentAvatar
+            userId={student.user_id}
+            src={student.user_avatar}
+            name={student.user_name}
+            size={40}
+          />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" fontWeight={600} noWrap>
               {student.user_name}
@@ -230,7 +229,7 @@ function StudentDetailSheet({
         ) : detail ? (
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-              <UserAvatar src={detail.user_avatar} name={detail.user_name} size={48} />
+              <StudentAvatar userId={detail.user_id} src={detail.user_avatar} name={detail.user_name} size={48} />
               <Box>
                 <Typography variant="subtitle1" fontWeight={600}>{detail.user_name}</Typography>
                 <Typography variant="caption" color="text.secondary">{detail.user_email}</Typography>

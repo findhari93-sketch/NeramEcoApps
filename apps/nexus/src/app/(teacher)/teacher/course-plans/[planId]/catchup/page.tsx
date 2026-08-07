@@ -7,13 +7,14 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Box, Typography, Stack, Button, Skeleton, Avatar, alpha } from '@neram/ui';
+import { Box, Typography, Stack, Button, Skeleton, alpha } from '@neram/ui';
 import RefreshOutlinedIcon from '@mui/icons-material/RefreshOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import CheckIcon from '@mui/icons-material/Check';
 import PlanShell from '@/components/course-plan/PlanShell';
 import { usePlanData } from '@/components/course-plan/usePlanData';
 import CatchupTrack from '@/components/course-plan/CatchupTrack';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import { fmtShort } from '@/components/course-plan/common';
 import type { NexusCatchupTrackDetail } from '@neram/database';
 
@@ -148,9 +149,16 @@ export default function PlanCatchupPage() {
                       '&:hover': { borderColor: alpha('#7C3AED', 0.5) },
                     }}
                   >
-                    <Avatar src={j.user?.avatar_url || undefined} sx={{ width: 38, height: 38, fontSize: '0.85rem', bgcolor: '#F9A825' }}>
-                      {(j.user?.name || '?').slice(0, 2).toUpperCase()}
-                    </Avatar>
+                    <StudentAvatar
+                      userId={j.user_id}
+                      src={j.user?.avatar_url}
+                      name={j.user?.name}
+                      size={38}
+                      // This screen is gold throughout. StudentStageAvatar merges
+                      // caller sx before the dormant treatment, so the colour
+                      // cannot defeat the greyscale.
+                      sx={{ bgcolor: '#F9A825' }}
+                    />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }} noWrap>
                         {j.user?.name || j.user?.email || 'Student'}
@@ -183,9 +191,13 @@ export default function PlanCatchupPage() {
                     {/* Header card */}
                     <Box sx={{ p: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: '0 2px 8px rgba(26,32,39,0.05)', mb: 2 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-                        <Avatar src={selectedJoiner?.user?.avatar_url || undefined} sx={{ width: 44, height: 44, bgcolor: '#F9A825', fontWeight: 800 }}>
-                          {(selectedJoiner?.user?.name || '?').slice(0, 2).toUpperCase()}
-                        </Avatar>
+                        <StudentAvatar
+                          userId={selectedJoiner?.user_id}
+                          src={selectedJoiner?.user?.avatar_url}
+                          name={selectedJoiner?.user?.name}
+                          size={44}
+                          sx={{ bgcolor: '#F9A825', fontWeight: 800 }}
+                        />
                         <Box sx={{ flex: 1, minWidth: 160 }}>
                           <Typography sx={{ fontWeight: 800, fontSize: '0.95rem' }}>
                             {selectedJoiner?.user?.name || 'Student'}
