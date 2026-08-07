@@ -36,6 +36,15 @@ async function askAintra(page: Page, text: string): Promise<string> {
 }
 
 test.describe('Aintra college hub Q&A @marketing', () => {
+  // Every test below drives the real Gemini backend. apps/marketing/.env.local is
+  // gitignored, so a runner without the GEMINI_API_KEY secret answered all seven
+  // with a missing-key error, which reads as a broken chatbot rather than an
+  // absent credential. Skip with a reason instead, and say so out loud.
+  test.skip(
+    !process.env.GEMINI_API_KEY,
+    'GEMINI_API_KEY is not set, so the chat backend cannot answer'
+  );
+
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       try {

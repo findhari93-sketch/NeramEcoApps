@@ -3,6 +3,23 @@ import { createPersistentCache, clearPersistentCache } from './swr-cache';
 
 const PREFIX = 'nexus_swr_cache_v1';
 
+/** What buildStamp() falls back to when nothing set NEXT_PUBLIC_BUILD_STAMP, as here. */
+const DEV_BUILD = 'dev';
+
+/** A bucket belongs to one build and one account, in that order. */
+const keyFor = (namespace: string, build = DEV_BUILD) => `${PREFIX}:${build}:${namespace}`;
+
+/** Pretend the bundle running right now came out of a particular build. */
+function buildAs(stamp: string) {
+  process.env.NEXT_PUBLIC_BUILD_STAMP = stamp;
+}
+
+function storedKeys(): string[] {
+  return Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter(
+    (k): k is string => k !== null,
+  );
+}
+
 /** SWR stores entries in this shape; only settled successes should be persisted. */
 const ok = (data: unknown) => ({ data, isValidating: false, isLoading: false });
 const failed = (error: unknown) => ({ error, isValidating: false, isLoading: false });
@@ -21,6 +38,7 @@ describe('persistent SWR cache', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    delete process.env.NEXT_PUBLIC_BUILD_STAMP;
   });
 
   it('starts empty when nothing was stored', () => {
@@ -138,7 +156,7 @@ describe('persistent SWR cache', () => {
   });
 
   it('survives a corrupt stored value rather than throwing on boot', () => {
-    localStorage.setItem(`${PREFIX}:oid-1`, '{{not json');
+    localStorage.setItem(keyFor('oid-1'), '{{not json');
 
     expect(() => createPersistentCache('oid-1')).not.toThrow();
     expect(createPersistentCache('oid-1').size).toBe(0);
@@ -182,5 +200,73 @@ describe('persistent SWR cache', () => {
     expect(Array.from(cache.keys())).toEqual(['k']);
     cache.delete('k');
     expect(cache.has('k')).toBe(false);
+  });
+
+  /**
+   * The shape of every entry in here belongs to the deploy that wrote it, and this
+   * cache replays for a day. So a deploy that changes any payload hands the new
+   * components an older program's data on their very first frame.
+   *
+   * That is not a theoretical concern, it is the crash: /api/catchup/overview
+   * started returning `totals.byBucket` in the same deploy whose tiles read
+   * `totals.byBucket.run_over`, and a teacher who had opened that screen the day
+   * before got `undefined.run_over` during render. No error boundary covers the
+   * teacher segment, so the whole app was replaced by the crash page, and reloading
+   * replayed the same entry into the same crash.
+   */
+  describe('across deploys', () => {
+    it('replays what the same build wrote', () => {
+      buildAs('build-a');
+      const first = createPersistentCache('oid-1');
+      first.set('/api/catchup/overview', ok({ totals: { byBucket: { run_over: 3 } } }));
+      hideTab();
+
+      const second = createPersistentCache('oid-1');
+
+      expect((second.get('/api/catchup/overview') as any).data).toEqual({
+        totals: { byBucket: { run_over: 3 } },
+      });
+    });
+
+    it('ignores what an earlier build wrote', () => {
+      buildAs('build-a');
+      const before = createPersistentCache('oid-1');
+      before.set('/api/catchup/overview', ok({ totals: { studentsBehind: 4 } }));
+      hideTab();
+
+      buildAs('build-b');
+
+      expect(createPersistentCache('oid-1').size).toBe(0);
+    });
+
+    it('leaves nothing on the device from a build it will never read', () => {
+      buildAs('build-a');
+      const before = createPersistentCache('oid-1');
+      before.set('/api/catchup/overview', ok({ ok: true }));
+      hideTab();
+      expect(storedKeys()).toContain(keyFor('oid-1', 'build-a'));
+
+      buildAs('build-b');
+      createPersistentCache('oid-1');
+
+      // Otherwise one bucket per deploy accumulates against a 5MB origin quota, and
+      // the first thing squeezed out is the auth cache the app boots from.
+      expect(storedKeys()).not.toContain(keyFor('oid-1', 'build-a'));
+    });
+
+    it('keeps a second account on the same build', () => {
+      buildAs('build-a');
+      const mine = createPersistentCache('oid-teacher');
+      mine.set('/api/students', ok([1]));
+      hideTab();
+
+      // A staffroom laptop: two live buckets on one build, neither of them stale.
+      const theirs = createPersistentCache('oid-parent');
+      theirs.set('/api/students', ok([2]));
+      hideTab();
+
+      expect(createPersistentCache('oid-teacher').has('/api/students')).toBe(true);
+      expect(createPersistentCache('oid-parent').has('/api/students')).toBe(true);
+    });
   });
 });

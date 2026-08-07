@@ -12,6 +12,13 @@
  * Only recordings that actually exist appear. Chapters are being filled in one
  * language at a time, so a chapter with a single track has to read as normal
  * rather than as half-broken: the picker simply shows one button.
+ *
+ * NOT EVERY RECORDING UNLOCKS THE TEST. One with no checkpoints is open: it
+ * plays freely and finishing it proves nothing, so it cannot satisfy the video
+ * half. The gate sentence therefore names the recordings that actually count
+ * rather than saying "either language counts", which on a chapter with one
+ * checkpointed recording and one open one would send a student to the wrong
+ * video and leave them stuck with no way to tell why.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -93,6 +100,9 @@ export default function ChapterVideoPanel({
   const videoDone = !!state?.video_completed_at;
   const chapterDone = !!state?.completed_at;
   const needsVideo = !!state?.requires_video && !videoDone;
+  // The recordings that can satisfy the gate. Never empty when needsVideo is
+  // true: requires_video is computed from this same rule server-side.
+  const gating = (state?.tracks || []).filter((t) => t.section_count > 0);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
@@ -104,11 +114,15 @@ export default function ChapterVideoPanel({
           </Typography>
           {state.tracks.map((t) => {
             const done = t.progress_status === 'completed';
+            // An open recording is a plain watch: no checkpoints to earn, and
+            // finishing it does not move the chapter on. Drawn quieter than the
+            // ones that do, so the button that matters is the obvious one.
+            const open = t.section_count === 0;
             return (
               <Button
                 key={t.id}
                 size="small"
-                variant={done ? 'outlined' : 'contained'}
+                variant={done || open ? 'outlined' : 'contained'}
                 color={done ? 'success' : 'primary'}
                 startIcon={done ? <ReplayRoundedIcon /> : <SmartDisplayOutlinedIcon />}
                 onClick={() => router.push(`/student/study-materials/watch/${t.id}`)}
@@ -181,10 +195,14 @@ export default function ChapterVideoPanel({
             <LockOutlinedIcon sx={{ color: 'text.disabled' }} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" fontWeight={700}>
-                Watch a recording to unlock the test
+                {gating.length === 1
+                  ? `Watch the ${gating[0].language_label} recording to unlock the test`
+                  : 'Watch a recording to unlock the test'}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Either language counts. You only need to watch one.
+                {gating.length > 1
+                  ? `${gating.map((t) => t.language_label).join(' or ')} counts. You only need to watch one.`
+                  : 'You only need to watch it once, all the way through.'}
               </Typography>
             </Box>
           </>

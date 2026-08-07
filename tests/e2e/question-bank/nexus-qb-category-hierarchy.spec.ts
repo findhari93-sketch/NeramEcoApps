@@ -235,6 +235,18 @@ function activeCategoryChips(page: Page) {
 }
 
 test.describe('QB Category Hierarchy', () => {
+  /**
+   * The whole test, not just its assertions, has to outlast a cold compile.
+   *
+   * beforeEach calls gotoQuestions, which waits up to 45s for the Filters
+   * button, inside a hook whose own budget was the 30s default. On a dev server
+   * that has not served /student/question-bank/questions yet, the first compile
+   * runs past 30s and the FIRST test in this file dies in its hook every time,
+   * while AC2 onward pass on the warm route. That reads as a flaky feature and
+   * is really a clock.
+   */
+  test.describe.configure({ timeout: 120_000 });
+
   test.beforeEach(async ({ page }) => {
     const authed = await injectAuthForPage(page, 'student');
     if (!authed) {

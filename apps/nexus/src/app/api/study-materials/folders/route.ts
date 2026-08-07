@@ -21,6 +21,7 @@ import {
   hasPlacedTestForFiles,
   listFavoriteFileIds,
   getCommentCounts,
+  getStudyVideoSummaryMap,
   type FileProgress,
 } from '@neram/database';
 import { getRequestUser, isStaff, assertStaff, getStudentExamSet } from '@/lib/study-materials';
@@ -98,7 +99,12 @@ export async function GET(request: NextRequest) {
       const fileIds = rawFiles.map((f) => f.id);
       // Per-user + shared computed extras. Students also get their study progress (status + time)
       // and active download grants; teachers see the file's own setting only.
-      const [progress, favSet, commentCounts, grants, testSet] = await Promise.all([
+      // One more batched read for the whole folder, not one per card: which
+      // languages each chapter is recorded in. getStudyVideoSummaryMap was
+      // written for exactly this and had never been called, so a student
+      // browsing Foundation Books could not tell a chapter with two recordings
+      // from one with none until they opened it.
+      const [progress, favSet, commentCounts, grants, testSet, videoLanguages] = await Promise.all([
         staff
           ? Promise.resolve(new Map<string, FileProgress>())
           : getFileProgressMap(user.id, fileIds),
@@ -106,6 +112,11 @@ export async function GET(request: NextRequest) {
         getCommentCounts(fileIds),
         staff ? Promise.resolve([]) : listActiveGrantsForStudent(user.id),
         hasPlacedTestForFiles(fileIds),
+        // The admin's configured language order is deliberately NOT read here.
+        // It would cost a nexus_settings round trip on every folder browse, the
+        // hottest path a student has, to decide the order of at most two chips.
+        // The built-in fallback covers the languages that exist.
+        getStudyVideoSummaryMap(fileIds),
       ]);
       const now = Date.now();
       files = rawFiles.map((file) => {
@@ -123,6 +134,11 @@ export async function GET(request: NextRequest) {
             effectiveDownloadable(file, currentFolder) || (!staff && grantCoversFile(grants, file)),
           has_test: testSet.has(file.id),
           recording: fileRecording(file),
+          // The languages a student can actually watch, each saying whether
+          // finishing it unlocks the test. Empty on a chapter with nothing
+          // published, which is what lets a card stay silent rather than
+          // promising a video that is still a draft.
+          video_languages: videoLanguages.get(file.id)?.languages ?? [],
           sort_order: file.sort_order,
           created_at: file.created_at,
           is_new: isNewFile(file.created_at, now),

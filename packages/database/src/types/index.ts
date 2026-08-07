@@ -4664,8 +4664,19 @@ export interface NexusStudyFileDTO {
   best_score_pct?: number | null;
   /** Whether this file has a linked test (completion requires passing it). */
   has_test?: boolean;
-  /** Optional linked class recording (YouTube embeds inline; other links open externally). */
+  /**
+   * The chapter's OLD ungated video link.
+   *
+   * Retired: no student screen ever rendered it, so a teacher who set one
+   * reached nobody. Kept readable so the chapters that still hold one can be
+   * flagged and moved into a language recording. Never populated for new work.
+   */
   recording?: NexusStudyFileRecording | null;
+  /**
+   * The languages this chapter is published in, each saying whether finishing
+   * it unlocks the chapter test. Empty when nothing is published yet.
+   */
+  video_languages?: { code: string; label: string; gates: boolean }[];
 }
 
 /** Per-student progress status for a study-material file. */

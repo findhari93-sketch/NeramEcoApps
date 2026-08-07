@@ -38,6 +38,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
+import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
 import { FileThumb, FileIcon } from '@/components/study-materials/FileThumb';
@@ -265,6 +266,27 @@ function StudyMaterialsBrowser() {
           sx={{ height: 20, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' }, bgcolor: alpha(theme.palette.warning.main, 0.16), color: 'warning.dark' }}
         />
       )}
+      {/* Which languages this chapter's class was recorded in. The data has been
+          available per chapter since the tracks shipped and was never drawn on a
+          card, so the only way to find out a chapter had a Tamil recording was
+          to open it. Only published recordings appear, so a card promises
+          nothing a student cannot press. */}
+      {(file.video_languages || []).map((l) => (
+        <Chip
+          key={l.code}
+          size="small"
+          icon={<SmartDisplayOutlinedIcon />}
+          label={l.label}
+          sx={{
+            height: 20,
+            fontSize: '0.6rem',
+            fontWeight: 600,
+            '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' },
+            bgcolor: alpha(theme.palette.info.main, 0.14),
+            color: 'info.main',
+          }}
+        />
+      ))}
       {!!file.comment_count && (
         <Chip
           size="small"

@@ -86,11 +86,19 @@ async function watchFacts(
     .in('study_file_id', fileIds);
 
   const fileByTrack = new Map<string, string>();
+  /**
+   * Servable, which is only half of what gates a chapter.
+   *
+   * The other half is whether the recording can be FINISHED, and it is settled
+   * below once the sections are known. An open recording (published, ready, no
+   * checkpoints) is watchable and unlocks nothing, so counting it here would
+   * park every student on 'video_pending' for a video that was never going to
+   * move them on, and send a tutor chasing the wrong thing.
+   */
+  const servable: string[] = [];
   for (const t of tracks || []) {
     fileByTrack.set(t.id, t.study_file_id);
-    if (t.status === 'published' && (t.readiness ?? 'ready') === 'ready') {
-      requiresVideo.add(t.study_file_id);
-    }
+    if (t.status === 'published' && (t.readiness ?? 'ready') === 'ready') servable.push(t.id);
   }
   const trackIds = [...fileByTrack.keys()];
   if (!trackIds.length) return { byPair, requiresVideo };
@@ -115,9 +123,25 @@ async function watchFacts(
   // section table to be attributed to a chapter.
   const { data: sections } = await supabase
     .from('nexus_class_recap_sections')
-    .select('id, recap_id')
+    .select('id, recap_id, archived_at')
     .in('recap_id', trackIds);
   const trackBySection = new Map((sections || []).map((s: any) => [s.id, s.recap_id]));
+
+  /**
+   * Now the gate can be settled, and it matches sectionCounts in study-videos:
+   * live checkpoints only. An archived checkpoint is soft-deleted so student
+   * attempts survive, and counting it would report a gate on a recording whose
+   * live checkpoints have all been archived away.
+   */
+  const hasLiveCheckpoint = new Set<string>();
+  for (const s of sections || []) {
+    if (!(s as any).archived_at) hasLiveCheckpoint.add((s as any).recap_id);
+  }
+  for (const trackId of servable) {
+    if (!hasLiveCheckpoint.has(trackId)) continue;
+    const fileId = fileByTrack.get(trackId);
+    if (fileId) requiresVideo.add(fileId);
+  }
 
   if (trackBySection.size) {
     const { data: attempts } = await supabase

@@ -54,7 +54,6 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
-import InsertLinkOutlinedIcon from '@mui/icons-material/InsertLinkOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
 import StudyUploadDialog from '@/components/study-materials/StudyUploadDialog';
@@ -62,7 +61,6 @@ import DownloadGrantDialog, { type GrantTarget } from '@/components/study-materi
 import StudyTestAuthorDialog from '@/components/study-materials/StudyTestAuthorDialog';
 import GenerateChapterTestSheet from '@/components/study-materials/GenerateChapterTestSheet';
 import GenerateFolderTestsDialog from '@/components/study-materials/GenerateFolderTestsDialog';
-import StudyVideoLinkDialog from '@/components/study-materials/StudyVideoLinkDialog';
 import StudyVideoTracksDialog from '@/components/study-materials/StudyVideoTracksDialog';
 import FolderMovePicker, { type MoveItem } from '@/components/study-materials/FolderMovePicker';
 import { FileThumb, FileIcon } from '@/components/study-materials/FileThumb';
@@ -125,14 +123,10 @@ function TeacherStudyMaterials() {
   // Generate a test straight from a chapter PDF, one file or the whole folder.
   const [generateFile, setGenerateFile] = useState<{ id: string; title: string } | null>(null);
   const [folderGenOpen, setFolderGenOpen] = useState(false);
-  // Class-recording link dialog (per file).
-  const [videoFile, setVideoFile] = useState<FileDTO | null>(null);
-  // The gated bilingual recordings, as opposed to the single ungated quick link
-  // above. Kept as separate menu items because they are different promises: one
-  // is "here is the class", the other is "watch this to finish the chapter".
-  // `recording` rides along so the tracks dialog can offer the chapter's existing
-  // quick link as the first track, rather than making a teacher fetch the same
-  // SharePoint URL twice.
+  // Every video on a chapter, one dialog. `recording` rides along so it can
+  // offer the chapter's old ungated link as the first recording's URL and then
+  // move it across, rather than making a teacher fetch the same SharePoint URL
+  // twice and leaving two copies of it behind.
   const [tracksFile, setTracksFile] = useState<
     { id: string; title: string; recording?: NexusStudyFileRecording | null } | null
   >(null);
@@ -609,7 +603,6 @@ function TeacherStudyMaterials() {
         recording: viewerFile.recording ?? null,
       });
     },
-    onQuickLink: () => viewerFile && setVideoFile(viewerFile as FileDTO),
     onDownloadAccess: () =>
       viewerFile &&
       setGrantTarget({
@@ -677,17 +670,37 @@ function TeacherStudyMaterials() {
           color: file.has_test ? 'success.main' : 'warning.dark',
         }}
       />
-      {file.recording && (
+      {/* What a student can actually watch, which is not the same question as
+          "does this row hold a URL". The chip here used to read `file.recording`,
+          the old ungated link no student screen ever rendered, so a chapter with
+          two published recordings and no link showed nothing and a chapter with
+          a link nobody could see showed "Video". */}
+      {(file.video_languages || []).map((l) => (
         <Chip
+          key={l.code}
           size="small"
           icon={<SmartDisplayOutlinedIcon />}
-          label="Video"
+          label={l.gates ? l.label : `${l.label} (open)`}
           sx={{
             height: 20,
             fontSize: '0.6rem',
             '& .MuiChip-icon': { fontSize: '0.78rem' },
             bgcolor: alpha(theme.palette.info.main, 0.14),
             color: 'info.main',
+          }}
+        />
+      ))}
+      {file.recording && (
+        <Chip
+          size="small"
+          icon={<ErrorOutlineIcon />}
+          label="Old link"
+          sx={{
+            height: 20,
+            fontSize: '0.6rem',
+            '& .MuiChip-icon': { fontSize: '0.78rem' },
+            bgcolor: alpha(theme.palette.warning.main, 0.18),
+            color: 'warning.dark',
           }}
         />
       )}
@@ -1087,15 +1100,6 @@ function TeacherStudyMaterials() {
             secondaryTypographyProps={{ variant: 'caption' }}
           />
         </MenuItem>
-        <MenuItem onClick={() => { if (fileMenu) setVideoFile(fileMenu.file); setFileMenu(null); }}>
-          <ListItemIcon><InsertLinkOutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText
-            primary="Quick video link"
-            secondary="Just a link, no checkpoints"
-            primaryTypographyProps={{ variant: 'body2' }}
-            secondaryTypographyProps={{ variant: 'caption' }}
-          />
-        </MenuItem>
         <MenuItem onClick={() => { if (fileMenu) router.push(`/teacher/study-materials/completion/${fileMenu.file.id}`); setFileMenu(null); }}>
           <ListItemIcon><GroupsOutlinedIcon fontSize="small" /></ListItemIcon>
           <ListItemText>View completion</ListItemText>
@@ -1221,16 +1225,17 @@ function TeacherStudyMaterials() {
         onFinished={load}
       />
 
-      {/* Per-file class-recording link */}
-      <StudyVideoLinkDialog
-        open={!!videoFile}
-        file={videoFile}
-        authFetch={authFetch}
-        onClose={() => setVideoFile(null)}
-        onSaved={load}
-      />
+      {/*
+        Every video on a chapter, one dialog.
 
-      {/* The gated Tamil and English recordings for a Foundation chapter */}
+        "Quick video link" used to sit beside this one: an ungated URL with no
+        checkpoints, stored on the file itself. It was retired because no
+        student screen ever rendered it, so a teacher who used it reached
+        nobody, and because the reason to reach for it (a recording with no
+        transcript could not be published) no longer exists: such a recording is
+        now published open, from here. Chapters that still hold an old link are
+        flagged in the Setup checklist and move it across from this dialog.
+      */}
       <StudyVideoTracksDialog
         open={!!tracksFile}
         file={tracksFile}

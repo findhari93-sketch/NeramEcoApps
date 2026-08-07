@@ -321,14 +321,23 @@ export async function getTestResults(
 
   const rows = [...byStudent.values()];
   if (rows.length > 0) {
-    const { data: users } = await supabase
+    // `name` is the display column on users; there is no full_name. Asking for
+    // one makes PostgREST reject the whole request, and because this call used
+    // to destructure `data` alone the rejection went nowhere: every row rendered
+    // as "Unknown student" beside a perfectly correct score, which reads as a
+    // class nobody has names for rather than as a broken query.
+    const { data: users, error: userError } = await supabase
       .from('users')
-      .select('id, full_name, avatar_url')
+      .select('id, name, avatar_url')
       .in('id', rows.map((r) => r.student_id));
+    // Loud rather than degraded, matching the student-tests route. Whose score
+    // this is happens to be the entire point of the results tab.
+    if (userError) throw userError;
+
     const userMap = new Map((users || []).map((u: any) => [u.id, u]));
     for (const r of rows) {
       const u = userMap.get(r.student_id);
-      r.student_name = u?.full_name ?? null;
+      r.student_name = u?.name ?? null;
       r.avatar_url = u?.avatar_url ?? null;
       r.passed = bar == null ? null : r.best_percentage != null && r.best_percentage >= bar;
     }

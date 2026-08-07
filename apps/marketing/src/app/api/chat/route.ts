@@ -6,6 +6,7 @@ import { extractCollegeSlug } from '@/lib/aintra/slug';
 import { buildSystemPrompt } from '@/lib/aintra/primer';
 import { TOOL_DECLARATIONS } from '@/lib/aintra/tools/declarations';
 import { dispatchTool } from '@/lib/aintra/tools/dispatch';
+import { isE2ETestRun } from '@/lib/e2e-mode';
 import { AiBlockedError, generateGemini, hashClientKey, ipFromHeaders } from '@neram/ai';
 
 /**
@@ -357,6 +358,10 @@ async function logConversation(params: {
   error?: string;
   toolCalls?: ToolCallLog[];
 }) {
+  // The nightly E2E suite talks to the production database, so without this its
+  // scripted questions arrive in admin Chat History looking like real leads.
+  if (isE2ETestRun()) return;
+
   try {
     const supabase = createAdminClient();
 

@@ -101,6 +101,27 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (err instanceof TrackLanguageTakenError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
     }
+    /**
+     * A language the database has not been told about yet.
+     *
+     * chk_class_recaps_language still pins the vocabulary to en, ta and ta_en
+     * until 20260822090000 is applied, so an admin who adds Hindi under Manage
+     * languages gets a 23514 from Postgres the moment a teacher pastes a link.
+     * The API accepted it and the constraint refused it, which surfaces as a
+     * 500 with no hint of the cause. This does not fix the mismatch, it names
+     * it, and the message stays true after the migration lands because it can
+     * only be reached when the constraint actually rejects the code.
+     */
+    if ((err as { code?: string })?.code === '23514') {
+      return NextResponse.json(
+        {
+          error:
+            'The database has not been told about this language yet. It is on the offered list, but the pending language migration has not been applied to this environment.',
+          code: 'LANGUAGE_NOT_MIGRATED',
+        },
+        { status: 409 },
+      );
+    }
     const message = err instanceof Error ? err.message : 'Failed to add the track';
     return NextResponse.json({ error: message }, { status: message === 'Not authorized' ? 403 : 500 });
   }

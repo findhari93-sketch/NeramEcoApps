@@ -109,9 +109,31 @@ describe('chapterReadiness', () => {
   });
 
   it('names what a student sees when a recording is published and ready', () => {
-    const line = byKey(chapterReadiness(file(), [track()]), 'recordings');
+    const line = byKey(chapterReadiness(file(), [track({ section_count: 6 })]), 'recordings');
     expect(line.state).toBe('ready');
     expect(line.detail).toContain('English');
+    expect(line.detail).toMatch(/unlocks the test/i);
+  });
+
+  it('says an open recording does not gate, because it does not', () => {
+    // Published with no checkpoints: watchable, and the chapter still completes
+    // on the test alone. Reporting it the same way as a checkpointed recording
+    // would tell a teacher the video half is handled when nothing is.
+    const line = byKey(chapterReadiness(file(), [track()]), 'recordings');
+    expect(line.state).toBe('ready');
+    expect(line.detail).toMatch(/not gated/i);
+  });
+
+  it('separates the gating recordings from the open ones when a chapter has both', () => {
+    const line = byKey(
+      chapterReadiness(file(), [
+        track({ section_count: 6 }),
+        track({ language: 'ta', language_label: 'தமிழ்' }),
+      ]),
+      'recordings',
+    );
+    expect(line.detail).toMatch(/English, which unlocks the test/);
+    expect(line.detail).toMatch(/தமிழ், which does not/);
   });
 
   it('separates "held back" from "never added", because they need different actions', () => {
@@ -129,6 +151,18 @@ describe('chapterReadiness', () => {
     // Only the video gate makes a recording mandatory, and a chapter with no
     // track has no gate: the test is simply open.
     expect(byKey(chapterReadiness(file(), []), 'recordings').optional).toBe(true);
+  });
+
+  it('flags an old video link as something to move, and says nothing when there is none', () => {
+    // Quick video link is retired: it was stored, chipped on the teacher's grid
+    // and rendered to a student nowhere, so a chapter that still holds one is
+    // showing a video to nobody.
+    const withLink = chapterReadiness(file({ recording: { source: 'link', url: 'https://x' } }), []);
+    const line = byKey(withLink, 'quick_link');
+    expect(line.state).toBe('attention');
+    expect(line.detail).toMatch(/no student can see it/i);
+
+    expect(chapterReadiness(file(), []).some((l) => l.key === 'quick_link')).toBe(false);
   });
 
   it('reports the download setting as information, never as a fault', () => {
@@ -181,13 +215,17 @@ describe('chapterReadiness', () => {
     expect(byKey(chapterReadiness(file({ has_test: true }), [], null), 'test').state).toBe('ready');
   });
 
-  it('always returns every line, so the checklist does not change shape', () => {
+  it('keeps its shape between chapters, bar the one-off cleanup line', () => {
     expect(chapterReadiness(file(), []).map((l) => l.key)).toEqual([
       'test',
       'recordings',
-      'quick_link',
       'download',
     ]);
+    expect(
+      chapterReadiness(file({ recording: { source: 'link', url: 'https://x' } }), []).map(
+        (l) => l.key,
+      ),
+    ).toEqual(['test', 'recordings', 'quick_link', 'download']);
   });
 });
 

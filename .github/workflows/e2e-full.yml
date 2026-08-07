@@ -93,7 +93,17 @@ jobs:
           E2E_TEST_PARENT_LOGIN_ID: ${{ secrets.E2E_TEST_PARENT_LOGIN_ID }}
           E2E_TEST_PARENT_PASSWORD: ${{ secrets.E2E_TEST_PARENT_PASSWORD }}
           E2E_STAFF_SECRET: ${{ secrets.E2E_STAFF_SECRET }}
+          # The Aintra chat specs drive the real /api/chat backend, and
+          # apps/marketing/.env.local is gitignored, so without this the runner
+          # started a keyless server and every chat spec failed at the
+          # @neram/ai chokepoint. Optional: leave the secret unset and the
+          # specs skip themselves rather than failing.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NEXT_PUBLIC_E2E_TEST_MODE: 'true'
+          # Server-only twin of the flag above. Next inlines every NEXT_PUBLIC_*
+          # read at build time, so the public name cannot mute conversation
+          # logging on a prebuilt server. See apps/marketing/src/lib/e2e-mode.ts.
+          E2E_TEST_MODE: 'true'
 
       - name: Upload blob report
         uses: actions/upload-artifact@v4

@@ -36,9 +36,23 @@ const withPWA = require('next-pwa')({
   runtimeCaching: [apiNetworkOnly, ...runtimeCachingWithoutApis],
 });
 
+// Identifies the bundle this build produces, so nothing on a device outlives the
+// code that wrote it. lib/swr-cache.ts keys its localStorage buckets on this: a
+// payload cached before a deploy is never handed to the components that ship in
+// it, which is how `totals.byBucket` arrived undefined on /teacher/catch-up and
+// crashed the app for a teacher who had the screen open the day before.
+//
+// Evaluated once per build. A Turbo cache hit restores a .next that already has
+// its own stamp inside, which is correct: identical code, identical shapes, so
+// the device keeps its warm cache. Anything that actually rebuilds gets a new one.
+const BUILD_STAMP = Date.now().toString(36);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  env: {
+    NEXT_PUBLIC_BUILD_STAMP: BUILD_STAMP,
+  },
   typescript: {
     // Drawing feature gamification types not yet in generated DB types
     ignoreBuildErrors: true,

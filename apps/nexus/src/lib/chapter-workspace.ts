@@ -23,6 +23,12 @@ export interface WorkspaceTrack {
   language_label: string;
   status: string;
   readiness?: string | null;
+  /**
+   * Live checkpoints. Zero means the recording is OPEN: watchable, ungated, and
+   * it does not unlock the chapter test. Optional because callers that only ask
+   * "is anything published" predate the distinction.
+   */
+  section_count?: number;
 }
 
 /** One student's row, as /api/study-materials/reports/chapter/[fileId] returns it. */
@@ -144,8 +150,9 @@ export interface ReadinessLine {
 /**
  * The chapter, line by line, in the order a teacher would fix it.
  *
- * Always returns all four keys so the checklist never changes shape between
- * chapters, which is what lets a teacher scan a folder of them.
+ * Test, recordings and download are always present, so the checklist keeps its
+ * shape between chapters and a teacher can scan a folder of them. The old video
+ * link appears only on the chapters that still have one to move.
  */
 export function chapterReadiness(
   file: WorkspaceFile,
@@ -203,46 +210,73 @@ export function chapterReadiness(
    * A chapter with no track has no video gate, so its test is simply open and
    * the chapter completes on the test alone. Marking that as a blocker would
    * put a red line on nine chapters that are working exactly as intended.
+   *
+   * Which of them GATES is the distinction the line has to carry now. A
+   * recording with no checkpoints is watchable and unlocks nothing, and calling
+   * it the same thing as a checkpointed one would tell a teacher the chapter
+   * completes itself when it does not.
    */
-  const recordings: ReadinessLine = servable.length
-    ? {
-        key: 'recordings',
-        title: 'Recordings',
-        detail: `Students see: ${servable.map((t) => t.language_label).join(', ')}.`,
-        state: 'ready',
-        optional: true,
-      }
-    : tracks.length
-      ? {
-          key: 'recordings',
-          title: 'Recordings',
-          detail: `${tracks.length} added, students see nothing yet.`,
-          state: 'attention',
-          optional: true,
-        }
-      : {
-          key: 'recordings',
-          title: 'Recordings',
-          detail: 'None. The test is open without one.',
-          state: 'missing',
-          optional: true,
-        };
+  const gating = servable.filter((t) => (t.section_count ?? 0) > 0);
+  const open = servable.filter((t) => !(t.section_count ?? 0));
+  const names = (list: WorkspaceTrack[]) => list.map((t) => t.language_label).join(', ');
 
-  const quickLink: ReadinessLine = file.recording
+  let recordings: ReadinessLine;
+  if (gating.length) {
+    recordings = {
+      key: 'recordings',
+      title: 'Recordings',
+      detail: open.length
+        ? `Students see ${names(gating)}, which unlocks the test, and ${names(open)}, which does not.`
+        : `Students see ${names(gating)}. Finishing one unlocks the test.`,
+      state: 'ready',
+      optional: true,
+    };
+  } else if (open.length) {
+    recordings = {
+      key: 'recordings',
+      title: 'Recordings',
+      detail: `Students see ${names(open)}, open. The test is not gated behind it.`,
+      state: 'ready',
+      optional: true,
+    };
+  } else if (tracks.length) {
+    recordings = {
+      key: 'recordings',
+      title: 'Recordings',
+      detail: `${tracks.length} added, students see nothing yet.`,
+      state: 'attention',
+      optional: true,
+    };
+  } else {
+    recordings = {
+      key: 'recordings',
+      title: 'Recordings',
+      detail: 'None. The test is open without one.',
+      state: 'missing',
+      optional: true,
+    };
+  }
+
+  /**
+   * The old ungated link, and the one line in this checklist that is a cleanup
+   * rather than a state.
+   *
+   * Quick video link is retired: no student screen ever rendered it, so a
+   * teacher who used one reached nobody, and the reason to reach for it (an
+   * un-transcribed recording could not be published) is gone. A chapter that
+   * still holds one gets an amber line until it is moved. A chapter that never
+   * had one gets no line at all, which is why this list no longer always
+   * returns four keys.
+   */
+  const quickLink: ReadinessLine | null = file.recording
     ? {
         key: 'quick_link',
-        title: 'Quick video link',
-        detail: 'A link is attached, ungated.',
-        state: 'info',
+        title: 'Old video link',
+        detail: 'Attached, and no student can see it. Move it into a recording.',
+        state: 'attention',
         optional: true,
       }
-    : {
-        key: 'quick_link',
-        title: 'Quick video link',
-        detail: 'None.',
-        state: 'info',
-        optional: true,
-      };
+    : null;
 
   // Never a fault in either direction: view-only is the deliberate default and
   // allowing downloads is a deliberate choice. Stated so it is not a surprise.
@@ -254,7 +288,10 @@ export function chapterReadiness(
     optional: true,
   };
 
-  return [test, recordings, quickLink, download];
+  // quickLink is dropped when there is nothing to clean up, so the usual
+  // chapter reads test, recordings, download and nothing about a feature that
+  // no longer exists.
+  return [test, recordings, ...(quickLink ? [quickLink] : []), download];
 }
 
 /** The lines that actually stop a student finishing. Usually none, or the test. */

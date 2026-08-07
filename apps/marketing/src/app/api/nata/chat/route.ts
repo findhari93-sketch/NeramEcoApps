@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database';
+import { isE2ETestRun } from '@/lib/e2e-mode';
 import { AiBlockedError, generateGemini, hashClientKey, ipFromHeaders } from '@neram/ai';
 
 const NATA_SYSTEM_PROMPT = `You are Aintra, the friendly NATA Assistant by Neram Classes. You ONLY answer questions about NATA (National Aptitude Test in Architecture), B.Arch admissions, and architecture education. If a question is not related to these topics, politely decline and redirect to NATA topics.
@@ -432,6 +433,10 @@ async function logConversation(params: {
   responseTimeMs?: number;
   error?: string;
 }) {
+  // The nightly E2E suite talks to the production database, so without this its
+  // scripted questions arrive in admin Chat History looking like real leads.
+  if (isE2ETestRun()) return;
+
   try {
     const supabase = createAdminClient();
 

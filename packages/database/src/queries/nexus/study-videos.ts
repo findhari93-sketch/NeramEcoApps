@@ -96,8 +96,29 @@ export interface StudyVideoState {
   video_language: string | null;
   test_passed_at: string | null;
   completed_at: string | null;
-  /** True when the chapter has a servable track, so the test is gated behind it. */
+  /**
+   * True when the chapter has a servable recording the student can actually
+   * FINISH, so the test is gated behind it.
+   *
+   * Not "a recording exists". A recording with no checkpoints has nothing to
+   * earn, and markStudyVideoCompleted only ever fires when a checkpoint quiz
+   * passes, so gating on one would shut the test permanently. That is precisely
+   * why a checkpoint-less track could not be published at all, and it is what
+   * made an un-transcribed recording unreachable by any student.
+   */
   requires_video: boolean;
+}
+
+/**
+ * Can a student complete this recording, or is it only watchable?
+ *
+ * The whole open-recording rule, in one place, derived rather than stored: a
+ * track with zero live checkpoints is OPEN. Watchable, ungated, and it does not
+ * count towards finishing the chapter. Upload its transcript later and it turns
+ * into a gate by itself, with nothing to migrate.
+ */
+export function trackGatesChapter(sectionCount: number): boolean {
+  return sectionCount > 0;
 }
 
 function labelFor(language: string, stored: string | null): string {
@@ -408,38 +429,76 @@ export async function getStudyVideoState(
     video_language: read?.video_language ?? null,
     test_passed_at: read?.test_passed_at ?? null,
     completed_at: read?.completed_at ?? null,
-    requires_video: servable.length > 0,
+    // Only the recordings with checkpoints hold the test shut. A chapter whose
+    // one recording is open behaves exactly like a chapter with no recording:
+    // watchable, and completed on the test alone.
+    requires_video: servable.some((row) => trackGatesChapter(counts.get(row.id) || 0)),
   };
+}
+
+/** One language a chapter is available in, ready to draw as a chip. */
+export interface StudyVideoLanguage {
+  code: TrackLanguage;
+  /** The label stored on the track, so a language nobody offers any more still reads. */
+  label: string;
+  /** Finishing this one unlocks the chapter test. False for an open recording. */
+  gates: boolean;
+}
+
+export interface StudyVideoSummary {
+  languages: StudyVideoLanguage[];
+  requires_video: boolean;
 }
 
 /**
  * Batched form of the above for the folder grid, so browsing a chapter list is
  * one query rather than one per card.
+ *
+ * Carries the LABEL as well as the code. A chip drawn from a bare code would
+ * either need a second lookup per card or would print 'ta' at a student, and
+ * the label is already on the row for exactly this reason.
  */
 export async function getStudyVideoSummaryMap(
   fileIds: string[],
   client?: TypedSupabaseClient,
   /** The admin's configured language order. Falls back to en, ta, ta_en. */
   languageOrder?: string[],
-): Promise<Map<string, { languages: TrackLanguage[]; requires_video: boolean }>> {
-  const out = new Map<string, { languages: TrackLanguage[]; requires_video: boolean }>();
+): Promise<Map<string, StudyVideoSummary>> {
+  const out = new Map<string, StudyVideoSummary>();
   if (!fileIds.length) return out;
   const supabase = client || getSupabaseAdminClient();
 
   const { data } = await supabase
     .from(RECAPS)
-    .select('study_file_id, language, status, readiness')
+    .select('id, study_file_id, language, language_label, status, readiness')
     .in('study_file_id', fileIds);
 
-  for (const row of data || []) {
-    if (!isServable(row)) continue;
-    const entry = out.get(row.study_file_id) || { languages: [], requires_video: true };
-    if (!entry.languages.includes(row.language)) entry.languages.push(row.language);
+  const servable = (data || []).filter(isServable);
+  // One more query for the whole grid, not one per card: which of these
+  // recordings has checkpoints decides whether its chapter is gated, and a card
+  // that promised a gate the chapter does not have would be a lie in the
+  // direction that costs a student time.
+  const counts = await sectionCounts(
+    servable.map((r: { id: string }) => r.id),
+    supabase,
+  );
+
+  for (const row of servable) {
+    const entry = out.get(row.study_file_id) || { languages: [], requires_video: false };
+    const gates = trackGatesChapter(counts.get(row.id) || 0);
+    if (!entry.languages.some((l) => l.code === row.language)) {
+      entry.languages.push({
+        code: row.language,
+        label: labelFor(row.language, row.language_label),
+        gates,
+      });
+    }
+    if (gates) entry.requires_video = true;
     out.set(row.study_file_id, entry);
   }
   const cmp = makeByLanguage(languageOrder);
   for (const entry of out.values()) {
-    entry.languages.sort((a, b) => cmp({ language: a }, { language: b }));
+    entry.languages.sort((a, b) => cmp({ language: a.code }, { language: b.code }));
   }
   return out;
 }

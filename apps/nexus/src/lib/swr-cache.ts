@@ -22,8 +22,34 @@
  * The price is the ~5MB origin quota, handled by the caps below.
  */
 
-/** Bumped when the persisted shape changes, so old entries are ignored not misread. */
+/** Bumped when the persisted envelope changes, so old entries are ignored not misread. */
 const PREFIX = 'nexus_swr_cache_v1';
+
+/**
+ * The build that wrote an entry is the only build allowed to read it back.
+ *
+ * The envelope above is not the shape that actually moves. Every entry in here is
+ * an API payload, and those change with the feature that ships them: the day
+ * /api/catchup/overview started returning `totals.byBucket`, the tiles that read
+ * `totals.byBucket.run_over` shipped in the same deploy. A teacher who had opened
+ * that screen the day before still had the old `totals` on their device, this
+ * cache handed it to the new page on the very first frame, and the page took the
+ * whole app down with it before the revalidation could arrive. Reloading replayed
+ * the same entry into the same crash, for the 24 hours the entry stays fresh.
+ *
+ * Versioning by hand cannot hold that line, because the thing to bump on is every
+ * payload change anywhere in the app. Keying on the build does hold it: new code
+ * never sees an older program's data. The price is one cold screen per device per
+ * deploy, which is a skeleton, against the alternative, which is a crash screen.
+ *
+ * Read lazily rather than at module scope so a test can pretend to be a different
+ * build. Next inlines `process.env.NEXT_PUBLIC_*` textually at build time, so this
+ * is still a constant in the browser bundle. See `env` in next.config.js for where
+ * the value comes from; `dev` is the fallback when nothing set it.
+ */
+function buildStamp(): string {
+  return process.env.NEXT_PUBLIC_BUILD_STAMP || 'dev';
+}
 
 /**
  * Total budget for the serialised cache. Comfortably under the usual 5MB origin quota,
@@ -52,7 +78,34 @@ interface PersistedShape {
 }
 
 function storageKey(namespace: string): string {
-  return `${PREFIX}:${namespace}`;
+  return `${PREFIX}:${buildStamp()}:${namespace}`;
+}
+
+/**
+ * Drop every bucket written by a build that is no longer running.
+ *
+ * Without this the keys would simply accumulate, one per deploy per account, and
+ * each one holds up to 2MB of a 5MB origin quota. The very first eviction would
+ * then fall on the auth cache, which is what the app boots from.
+ *
+ * Deliberately keyed on the build segment and not on the account: two people who
+ * share a staffroom laptop are two live buckets under the same build, and neither
+ * one is stale. Sign-out is what clears those, via clearPersistentCache.
+ */
+function evictOtherBuilds(): void {
+  try {
+    const current = `${PREFIX}:${buildStamp()}:`;
+    const doomed: string[] = [];
+
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(`${PREFIX}:`) && !key.startsWith(current)) doomed.push(key);
+    }
+
+    doomed.forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    /* storage blocked; the cache is optional and hydrate will simply come back empty */
+  }
 }
 
 /**
@@ -149,6 +202,9 @@ function serialise(map: Map<string, unknown>): string | null {
  */
 export function createPersistentCache(namespace: string | null): Map<string, unknown> {
   const bucket = namespace || 'anon';
+  // Before hydrating, not after: the whole point is that an older build's entries
+  // are gone by the time anything can read one back.
+  if (typeof window !== 'undefined') evictOtherBuilds();
   const map = new Map<string, unknown>(hydrate(bucket) as [string, unknown][]);
 
   if (typeof window === 'undefined') return map;

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   getStudyVideoState,
+  getStudyVideoSummaryMap,
   listStudyVideoTracks,
   createStudyVideoTrack,
   TrackLanguageTakenError,
@@ -116,11 +117,78 @@ describe('getStudyVideoState: only a servable recording reaches a student', () =
       mockClient({
         nexus_class_recaps: [track({ readiness: null })],
         nexus_study_file_reads: [],
+        nexus_class_recap_sections: [{ recap_id: 'track-en' }],
+        nexus_class_recap_progress: [],
+      }),
+    );
+    expect(state.tracks).toHaveLength(1);
+    expect(state.requires_video).toBe(true);
+  });
+});
+
+/**
+ * An OPEN recording: published, watchable, and with no checkpoints to earn.
+ *
+ * This is the recording a teacher has but no transcript for, which until now
+ * could not be published at all and so reached nobody. The rule that makes
+ * publishing it safe is here: it must never gate the chapter test, because
+ * markStudyVideoCompleted only fires when a checkpoint quiz passes, so a gate
+ * held by a checkpoint-less recording is a gate with no key.
+ */
+describe('getStudyVideoState: an open recording is watchable, never a gate', () => {
+  it('shows a published recording with no checkpoints and leaves the test open', async () => {
+    const state = await getStudyVideoState(
+      FILE,
+      STUDENT,
+      mockClient({
+        nexus_class_recaps: [track()],
+        nexus_study_file_reads: [],
         nexus_class_recap_sections: [],
         nexus_class_recap_progress: [],
       }),
     );
+    // Visible, unlike a draft. That is the whole difference.
+    expect(state.tracks).toHaveLength(1);
+    expect(state.tracks[0].section_count).toBe(0);
+    expect(state.requires_video).toBe(false);
+  });
+
+  it('still gates when a chapter holds one open and one checkpointed recording', async () => {
+    // sectionCounts keys by recap_id, so only the Tamil one has checkpoints
+    // here. The chapter is gated, and the gate is Tamil.
+    const state = await getStudyVideoState(
+      FILE,
+      STUDENT,
+      mockClient({
+        nexus_class_recaps: [
+          track(),
+          track({ id: 'track-ta', language: 'ta', language_label: 'தமிழ்' }),
+        ],
+        nexus_study_file_reads: [],
+        nexus_class_recap_sections: [{ recap_id: 'track-ta' }, { recap_id: 'track-ta' }],
+        nexus_class_recap_progress: [],
+      }),
+    );
     expect(state.requires_video).toBe(true);
+    expect(state.tracks.find((t) => t.language === 'en')!.section_count).toBe(0);
+    expect(state.tracks.find((t) => t.language === 'ta')!.section_count).toBe(2);
+  });
+
+  it('does not count a DRAFT recording that has checkpoints', async () => {
+    // Both halves have to hold: servable, and finishable. A draft with
+    // checkpoints is invisible, so gating on it would trap the cohort exactly
+    // as gating on an open one would.
+    const state = await getStudyVideoState(
+      FILE,
+      STUDENT,
+      mockClient({
+        nexus_class_recaps: [track({ status: 'draft' })],
+        nexus_study_file_reads: [],
+        nexus_class_recap_sections: [{ recap_id: 'track-en' }],
+        nexus_class_recap_progress: [],
+      }),
+    );
+    expect(state.requires_video).toBe(false);
   });
 });
 
@@ -193,6 +261,75 @@ describe('getStudyVideoState: the picker', () => {
     );
     expect(state.tracks[0].progress_status).toBe('in_progress');
     expect(state.tracks[0].resume_at).toBe(412);
+  });
+});
+
+/**
+ * The chapter cards on a folder screen.
+ *
+ * Built for exactly this and never called by anything until now, so a student
+ * browsing Foundation Books had no way to tell a chapter with two recordings
+ * from a chapter with none until they opened it.
+ */
+describe('getStudyVideoSummaryMap: what a chapter card can say', () => {
+  it('carries the stored label, so a chip never prints a bare code at a student', async () => {
+    const map = await getStudyVideoSummaryMap(
+      [FILE],
+      mockClient({
+        nexus_class_recaps: [track({ id: 'track-ta', language: 'ta', language_label: 'தமிழ்' })],
+        nexus_class_recap_sections: [{ recap_id: 'track-ta' }],
+      }),
+    );
+    expect(map.get(FILE)!.languages).toEqual([{ code: 'ta', label: 'தமிழ்', gates: true }]);
+    expect(map.get(FILE)!.requires_video).toBe(true);
+  });
+
+  it('marks an open recording as not gating, and the chapter with it', async () => {
+    const map = await getStudyVideoSummaryMap(
+      [FILE],
+      mockClient({
+        nexus_class_recaps: [track()],
+        nexus_class_recap_sections: [],
+      }),
+    );
+    expect(map.get(FILE)!.languages[0].gates).toBe(false);
+    expect(map.get(FILE)!.requires_video).toBe(false);
+  });
+
+  it('lists an open language beside a gating one and still reports the chapter gated', async () => {
+    const map = await getStudyVideoSummaryMap(
+      [FILE],
+      mockClient({
+        nexus_class_recaps: [
+          track({ id: 'track-ta', language: 'ta', language_label: 'தமிழ்' }),
+          track(),
+        ],
+        nexus_class_recap_sections: [{ recap_id: 'track-ta' }],
+      }),
+    );
+    const entry = map.get(FILE)!;
+    // English first: the configured order, not the row order.
+    expect(entry.languages.map((l) => l.code)).toEqual(['en', 'ta']);
+    expect(entry.languages.map((l) => l.gates)).toEqual([false, true]);
+    expect(entry.requires_video).toBe(true);
+  });
+
+  it('leaves a chapter out entirely when nothing is servable', async () => {
+    // Absent, not present-and-empty: a card must be able to tell "no recordings"
+    // from "recordings a student cannot see yet" without a second field.
+    const map = await getStudyVideoSummaryMap(
+      [FILE],
+      mockClient({
+        nexus_class_recaps: [track({ status: 'draft' })],
+        nexus_class_recap_sections: [{ recap_id: 'track-en' }],
+      }),
+    );
+    expect(map.has(FILE)).toBe(false);
+  });
+
+  it('asks nothing at all for an empty folder', async () => {
+    const map = await getStudyVideoSummaryMap([], mockClient({}));
+    expect(map.size).toBe(0);
   });
 });
 

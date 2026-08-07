@@ -53,10 +53,8 @@ export interface ChapterManageActions {
    * question editor, the JSON download, publish, and where it came from.
    */
   onOpenTest: (testId: string) => void;
-  /** The gated per-language recordings board. */
+  /** Every video on this chapter, per language. Also where an old link is moved. */
   onRecordings: () => void;
-  /** The single ungated link. */
-  onQuickLink: () => void;
   /** Time-limited download grants. */
   onDownloadAccess: () => void;
   /** The full completion page, with filters, sorting and Message. */
@@ -120,7 +118,15 @@ function stateColour(state: ReadinessState, optional: boolean): string {
 function ReadinessRow({ line, onAction }: { line: ReadinessLine; onAction: () => void }) {
   const Icon = STATE_ICON[line.state];
   const label =
-    line.key === 'test' ? 'Test' : line.key === 'recordings' ? 'Recordings' : line.key === 'quick_link' ? 'Link' : 'Access';
+    line.key === 'test'
+      ? 'Test'
+      : line.key === 'recordings'
+        ? 'Recordings'
+        : line.key === 'quick_link'
+          ? // The only thing left to do with an old link is move it, so the
+            // button says that rather than offering to edit it.
+            'Move it'
+          : 'Access';
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, py: 1 }}>
       <Icon sx={{ fontSize: 20, mt: '2px', color: stateColour(line.state, line.optional), flexShrink: 0 }} />
@@ -259,7 +265,10 @@ export default function ChapterWorkspaceRail({
       // authoring surface from the chapter is how there came to be four.
       test: placedTest ? () => actions.onOpenTest(placedTest.test_id) : actions.onTest,
       recordings: actions.onRecordings,
-      quick_link: actions.onQuickLink,
+      // The old ungated link is cleared by moving it into a recording, so its
+      // line leads to the same dialog rather than to an editor for a feature
+      // that no longer exists.
+      quick_link: actions.onRecordings,
       download: actions.onDownloadAccess,
     };
 

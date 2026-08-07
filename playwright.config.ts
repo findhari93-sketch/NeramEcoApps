@@ -49,7 +49,16 @@ const WEB_SERVER_APPS: ReadonlyArray<{
   port: number;
   env?: Record<string, string>;
 }> = [
-  { name: 'marketing', dir: 'apps/marketing', port: 3010 },
+  {
+    name: 'marketing',
+    dir: 'apps/marketing',
+    port: 3010,
+    // Mutes chatbot_conversations logging so the scripted questions in the
+    // Aintra specs never land in the production admin Chat History, which reads
+    // that table as real leads to rate and train on. Unlike NEXT_PUBLIC_*, this
+    // name survives a prebuilt server; see apps/marketing/src/lib/e2e-mode.ts.
+    env: { E2E_TEST_MODE: 'true' },
+  },
   {
     name: 'app',
     dir: 'apps/app',

@@ -27,38 +27,20 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import { StatTile } from '@/components/catchup/shared';
-import { emptyTally } from '@/lib/catchup-buckets';
+import {
+  EMPTY_PAYLOAD,
+  withPayloadDefaults,
+  type CachedPayload,
+} from '@/components/catchup/payload';
 import NeedsActionTab from '@/components/catchup/NeedsActionTab';
 import ReasonsTab from '@/components/catchup/ReasonsTab';
 import CaughtUpTab from '@/components/catchup/CaughtUpTab';
 import ClassesRecapsTab from '@/components/catchup/ClassesRecapsTab';
-import type { ItemAction, Payload, TabProps } from '@/components/catchup/types';
+import type { ItemAction, TabProps } from '@/components/catchup/types';
 
 type TabKey = 'students' | 'reasons' | 'caught-up' | 'classes';
 
 const TAB_KEYS: TabKey[] = ['students', 'reasons', 'caught-up', 'classes'];
-
-const EMPTY: Payload = {
-  classroomId: null,
-  students: [],
-  classes: [],
-  classStats: [],
-  reasons: [],
-  reasonTally: {},
-  completed: [],
-  noRecording: [],
-  pendingRecap: [],
-  totals: {
-    studentsBehind: 0,
-    studentsCatchingUp: 0,
-    outstanding: 0,
-    clearedThisMonth: 0,
-    explained: 0,
-    unexplained: 0,
-    byBucket: emptyTally(),
-    hiddenDormant: 0,
-  },
-};
 
 function TeacherCatchUpWorkspace() {
   const searchParams = useSearchParams();
@@ -108,14 +90,27 @@ function TeacherCatchUpWorkspace() {
     ? null
     : `/api/catchup/overview${activeClassroom?.id ? `?classroomId=${activeClassroom.id}` : ''}`;
 
-  const { data: fetched, error, mutate } = useAuthSWR<Payload>(key);
+  const { data: fetched, error, mutate } = useAuthSWR<CachedPayload>(key);
 
   // On a revisit `fetched` is already populated from the persisted cache, so the
   // skeleton below is never reached and the teacher lands on real rows.
   //
-  // Falling back to EMPTY on an error keeps the previous behaviour: the page shows its
-  // empty state next to the error snackbar, rather than a skeleton that never resolves.
-  const data = fetched ?? (error ? EMPTY : null);
+  // Which is also why it goes through withPayloadDefaults rather than straight into
+  // the render. That first frame can be a payload the previous deploy wrote, and this
+  // page reads `totals.byBucket.run_over` on it before any revalidation can land. It
+  // did exactly that: an older `totals` had no `byBucket`, the tiles threw mid-render,
+  // and a teacher got the crash screen instead of the app. See components/catchup/payload.ts.
+  //
+  // Falling back to the empty payload on an error keeps the previous behaviour: the page
+  // shows its empty state next to the error snackbar, rather than a skeleton that never
+  // resolves.
+  //
+  // Memoised because the merge builds a new object: unmemoised it would hand every tab a
+  // fresh `data` identity on every render and re-render all of them for nothing.
+  const data = useMemo(
+    () => withPayloadDefaults(fetched) ?? (error ? EMPTY_PAYLOAD : null),
+    [fetched, error],
+  );
 
   useEffect(() => {
     if (error) {

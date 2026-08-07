@@ -49,9 +49,20 @@ export async function PATCH(
     }
 
     if (body.status === 'published' || body.status === 'draft') {
-      // Publishing a track with no checkpoints would hand the student a video
-      // with nothing to earn and no way to finish it, so the chapter could never
-      // complete. Refused here rather than discovered by a student.
+      /**
+       * Publishing without checkpoints is a decision, not an accident.
+       *
+       * It used to be refused outright, and for a real reason: the chapter test
+       * was gated on any published recording, and markStudyVideoCompleted only
+       * fires when a checkpoint quiz passes, so a checkpoint-less recording was
+       * a gate with no key. The gate now counts only recordings a student can
+       * actually finish (trackGatesChapter), which makes an OPEN recording safe:
+       * watchable, ungated, and it does not complete the chapter.
+       *
+       * The refusal stays as the default anyway. A teacher who meant to publish
+       * a checkpointed recording and forgot the transcript should still be
+       * stopped, so the open path needs `allow_open` said out loud.
+       */
       if (body.status === 'published') {
         const supabase = getSupabaseAdminClient() as any;
         const { count } = await supabase
@@ -59,9 +70,13 @@ export async function PATCH(
           .select('id', { count: 'exact', head: true })
           .eq('recap_id', params.trackId)
           .is('archived_at', null);
-        if (!count) {
+        if (!count && body.allow_open !== true) {
           return NextResponse.json(
-            { error: 'Add checkpoints before publishing this recording.', code: 'NO_SECTIONS' },
+            {
+              error:
+                'This recording has no checkpoints. Upload its transcript, or publish it as an open recording that does not unlock the test.',
+              code: 'NO_SECTIONS',
+            },
             { status: 400 },
           );
         }
