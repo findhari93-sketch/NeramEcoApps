@@ -18,12 +18,19 @@
  * See StudentStageChip for the full reasoning, and student-stage.ts for why the
  * axes are stored separately in the first place.
  *
+ * The avatar carries the same two facts as a ring, which is deliberate
+ * duplication. A chip is a label you read; a ring is a shape you scan, and on a
+ * list of thirty students a teacher scans. Both densities here (24px and 30px)
+ * sit below the size where the ring's glyph is legible, so the chip is what
+ * makes the state readable once you stop scanning and start reading.
+ *
  * This is a thin composition over what already exists rather than new chip work,
  * so a change to how a stage reads lands everywhere at once.
  */
 
-import { Box, Typography, UserAvatar } from '@neram/ui';
+import { Box, Typography } from '@neram/ui';
 import { stageKeyOf, type StageKey } from '@/lib/student-stage';
+import StudentAvatar from './StudentAvatar';
 import { DormantChip, StudentStageChip, type ChipDensity } from './StudentStageChip';
 
 export interface StudentIdentity {
@@ -61,13 +68,11 @@ export default function StudentIdentityLine({
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, width: '100%' }}>
-      <UserAvatar
+      <StudentAvatar
+        userId={student.id}
         name={name}
         src={student.avatar_url || undefined}
         size={density === 'compact' ? 24 : 30}
-        // A dormant student's avatar is dimmed to match their chip, so the row
-        // reads as paused at a glance on a phone where chips are small.
-        sx={{ flexShrink: 0, opacity: dormant ? 0.6 : 1 }}
       />
 
       <Typography
