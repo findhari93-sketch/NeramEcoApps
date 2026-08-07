@@ -21,13 +21,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Box, Typography, Button, Chip, Avatar, Skeleton, Alert, Divider, alpha, useTheme,
+  Box, Typography, Button, Chip, Skeleton, Alert, Divider, alpha, useTheme,
 } from '@neram/ui';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import StudyCommentPanel from '@/components/study-materials/StudyCommentPanel';
 import { ChapterStatusChip, WatchHonesty, type ChapterStatus } from '@/components/study-materials/chapter-status';
 import {
@@ -367,9 +368,7 @@ export default function ChapterWorkspaceRail({
                 borderBottom: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
               }}
             >
-              <Avatar src={r.avatar_url || undefined} sx={{ width: 32, height: 32, flexShrink: 0 }}>
-                {(r.name || '?').charAt(0)}
-              </Avatar>
+              <StudentAvatar userId={r.student_id} src={r.avatar_url} name={r.name} size={32} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" fontWeight={600} noWrap>
                   {r.name || 'Student'}

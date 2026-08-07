@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, Paper, UserAvatar, Chip, Skeleton, IconButton, Link, ImageViewerDialog } from '@neram/ui';
+import { Box, Typography, Paper, Chip, Skeleton, IconButton, Link, ImageViewerDialog } from '@neram/ui';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
@@ -133,7 +134,7 @@ export default function FeaturedSeniors({ getToken, academicYear, collegeId }: F
             >
               {/* Identity */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                <UserAvatar src={s.avatar_url} name={s.name} sx={{ width: 48, height: 48 }} />
+                <StudentAvatar userId={s.user_id} src={s.avatar_url} name={s.name} size={48} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" fontWeight={800} noWrap>
                     {s.name || 'Neram senior'}

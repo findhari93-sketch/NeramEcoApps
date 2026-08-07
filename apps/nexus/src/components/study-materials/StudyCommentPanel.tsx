@@ -13,12 +13,13 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Box, Typography, UserAvatar, TextField, IconButton, Chip, Tabs, Tab, Skeleton, Stack, CircularProgress,
+  Box, Typography, TextField, IconButton, Chip, Tabs, Tab, Skeleton, Stack, CircularProgress,
 } from '@neram/ui';
 import SendIcon from '@mui/icons-material/Send';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import type { NexusStudyFileCommentWithAuthor, NexusStudyCommentVisibility } from '@neram/database/types';
 
 interface StudyCommentPanelProps {
@@ -148,7 +149,7 @@ export default function StudyCommentPanel({ fileId, getToken, canComment = true 
           <Stack spacing={1.75}>
             {shown.map((c) => (
               <Box key={c.id} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                <UserAvatar src={c.author?.avatar_url} name={c.author?.name} size={32} sx={{ mt: 0.25 }} />
+                <StudentAvatar userId={c.author?.id} src={c.author?.avatar_url} name={c.author?.name} size={32} sx={{ mt: 0.25 }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                     <Typography variant="caption" sx={{ fontWeight: 700 }}>

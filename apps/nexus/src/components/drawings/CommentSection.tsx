@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, UserAvatar, TextField, IconButton, Paper, Chip,
+  Box, Typography, TextField, IconButton, Paper, Chip,
   CircularProgress,
 } from '@neram/ui';
 import SendIcon from '@mui/icons-material/Send';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import type { DrawingSubmissionCommentWithAuthor } from '@neram/database/types';
 
 interface CommentSectionProps {
@@ -87,7 +88,8 @@ export default function CommentSection({
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: canComment ? 1.5 : 0 }}>
         {comments.map((c) => (
           <Box key={c.id} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-            <UserAvatar
+            <StudentAvatar
+              userId={c.author?.id}
               src={c.author?.avatar_url}
               name={c.author?.name}
               size={28}

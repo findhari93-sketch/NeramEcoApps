@@ -1,12 +1,13 @@
 'use client';
 
-import { Box, Typography, Paper, UserAvatar, Rating, IconButton, Chip } from '@neram/ui';
+import { Box, Typography, Paper, Rating, IconButton, Chip } from '@neram/ui';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import CommentSection from './CommentSection';
 import GalleryImageViewer from './GalleryImageViewer';
 import type { GalleryPost, GalleryReactionType, DrawingTag } from '@neram/database/types';
@@ -137,10 +138,11 @@ export default function GalleryCard({
 
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1 }}>
-        <UserAvatar
+        <StudentAvatar
+          userId={post.student?.id}
           src={post.student?.avatar_url}
           name={post.student?.name}
-          sx={{ width: isCompact ? 26 : 32, height: isCompact ? 26 : 32 }}
+          size={isCompact ? 26 : 32}
         />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
