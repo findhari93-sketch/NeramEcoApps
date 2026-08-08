@@ -62,6 +62,9 @@ function parsed(questions: ImportQuestion[], folderPath: string[] = []): ImportV
     proposedTags: [],
     errors: [],
     warnings: [],
+    // The AI reply this stands in for never labels itself, so it parses as
+    // unlabelled. Chapter-test building does not read this field either way.
+    schema: { name: null, version: null, recognised: false },
   };
 }
 
