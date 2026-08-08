@@ -34,6 +34,7 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import CompareArrowsOutlinedIcon from '@mui/icons-material/CompareArrowsOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import MoreVertOutlinedIcon from '@mui/icons-material/MoreVertOutlined';
 import type { ImportQuestion } from '@/lib/qb-import-schema';
 
 export type RowAction = 'create' | 'reuse' | 'merge' | 'replace' | 'keep_both' | 'skip';
@@ -118,6 +119,12 @@ const DIFFICULTY_COLOR: Record<string, 'success' | 'warning' | 'error'> = {
   HARD: 'error',
 };
 
+/** A problem with this row that the wizard found without asking the server. */
+export interface ReviewRowWarning {
+  kind: string;
+  message: string;
+}
+
 export default function ImportReviewCard({
   row,
   index,
@@ -126,6 +133,10 @@ export default function ImportReviewCard({
   onUseInTestChange,
   onCompare,
   onEditTags,
+  warnings,
+  onEdit,
+  onRegenerate,
+  onDelete,
 }: {
   row: ReviewRow;
   index: number;
@@ -135,9 +146,27 @@ export default function ImportReviewCard({
   onUseInTestChange: (which: 'new' | 'existing') => void;
   onCompare: () => void;
   onEditTags: () => void;
+  /**
+   * Draft-only problems, computed locally: an intra-batch duplicate, a missing
+   * answer, an image the reply named but did not carry. Distinct from the
+   * `candidates` warning above, which is about the BANK already holding
+   * something similar.
+   */
+  warnings?: ReviewRowWarning[];
+  /**
+   * Row actions, all optional. The import wizard renders this card with none of
+   * them; the test wizard's review step passes all three. They collapse into
+   * one overflow button rather than three icons, because three 20px targets in
+   * a row is the classic way a card becomes unusable on a phone.
+   */
+  onEdit?: () => void;
+  onRegenerate?: () => void;
+  onDelete?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [rowMenuAnchor, setRowMenuAnchor] = useState<HTMLElement | null>(null);
+  const hasRowActions = Boolean(onEdit || onRegenerate || onDelete);
   const { question, candidates, action } = row;
 
   // The teacher may have switched candidates in the compare dialog, so the
@@ -168,9 +197,71 @@ export default function ImportReviewCard({
         </Typography>
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.75 }}>
-            {question.question_text}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, mb: 0.75 }}>
+            <Typography variant="body2" sx={{ fontWeight: 500, flex: 1, minWidth: 0 }}>
+              {question.question_text}
+            </Typography>
+            {hasRowActions && (
+              <IconButton
+                size="small"
+                aria-label={`Actions for question ${index + 1}`}
+                onClick={(e) => setRowMenuAnchor(e.currentTarget)}
+                sx={{ minWidth: 40, minHeight: 40, mt: -0.5, mr: -0.5 }}
+              >
+                <MoreVertOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            )}
+          </Box>
+
+          <Menu
+            anchorEl={rowMenuAnchor}
+            open={Boolean(rowMenuAnchor)}
+            onClose={() => setRowMenuAnchor(null)}
+          >
+            {onEdit && (
+              <MenuItem
+                onClick={() => {
+                  onEdit();
+                  setRowMenuAnchor(null);
+                }}
+                sx={{ minHeight: 48 }}
+              >
+                Edit this question
+              </MenuItem>
+            )}
+            {onRegenerate && (
+              <MenuItem
+                onClick={() => {
+                  onRegenerate();
+                  setRowMenuAnchor(null);
+                }}
+                sx={{ minHeight: 48 }}
+              >
+                Ask the AI to rewrite it
+              </MenuItem>
+            )}
+            {onDelete && (
+              <MenuItem
+                onClick={() => {
+                  onDelete();
+                  setRowMenuAnchor(null);
+                }}
+                sx={{ minHeight: 48, color: 'error.main' }}
+              >
+                Remove from this test
+              </MenuItem>
+            )}
+          </Menu>
+
+          {(warnings || []).map((w) => (
+            <Typography
+              key={`${w.kind}-${w.message}`}
+              variant="caption"
+              sx={{ display: 'block', color: 'warning.dark', fontWeight: 600, mb: 0.5 }}
+            >
+              {w.message}
+            </Typography>
+          ))}
 
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', mb: 0.75 }}>
             <Chip

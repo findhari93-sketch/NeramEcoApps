@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
 import { findSimilarQuestions } from '@neram/database';
+import { dedupeVerdict } from '@/lib/qb-dedupe-bands';
 
 /**
  * POST /api/question-bank/dedupe-check   (teacher/admin only)
@@ -31,10 +32,12 @@ export async function POST(request: NextRequest) {
 
     const candidates = await findSimilarQuestions({ text, examRelevance, tagIds });
 
-    // Classify for the UI: >=0.9 very likely duplicate, >=0.75 near-identical.
+    // Classify for the UI. The bands come from qb-dedupe-bands so this route,
+    // the import service and the wizard's step 3 rail cannot disagree about
+    // what counts as a duplicate on the same screen.
     const enriched = candidates.map((c) => ({
       ...c,
-      verdict: c.similarity >= 0.9 ? 'likely_duplicate' : c.similarity >= 0.75 ? 'near_identical' : 'similar',
+      verdict: dedupeVerdict(c.similarity),
     }));
 
     return NextResponse.json({ data: { candidates: enriched } });

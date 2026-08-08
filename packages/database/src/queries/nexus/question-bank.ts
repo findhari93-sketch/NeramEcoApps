@@ -1748,7 +1748,7 @@ export async function bulkActivateQuestions(
  * Get teacher-view questions for a paper (all statuses, for management).
  */
 export async function getTeacherQBQuestions(
-  filters: QBFilterState & { status?: QBQuestionStatus[] },
+  filters: QBFilterState & { status?: QBQuestionStatus[]; includeUsage?: boolean },
   page: number,
   pageSize: number,
   client?: TypedSupabaseClient
@@ -1884,12 +1884,37 @@ export async function getTeacherQBQuestions(
     tagsByQuestion.get(link.question_id)!.push(tag);
   }
 
+  // How many tests already use each question on this page. One batched query
+  // scoped to the page, never the whole bank: the chip only has to be right for
+  // the rows a teacher can actually see.
+  //
+  // Counted from nexus_test_questions rather than from a column, because no
+  // counter column exists. That also means "unused first" cannot be an ORDER BY
+  // and is deliberately not offered: sorting a page by data fetched after the
+  // page would reorder within the page only, which reads as a working sort and
+  // is not one.
+  const usageMap = new Map<string, number>();
+  if (filters.includeUsage) {
+    const { data: usageRows, error: usageErr } = await supabase
+      .from('nexus_test_questions')
+      .select('qb_question_id')
+      .in('qb_question_id', questionIds);
+    if (usageErr) throw usageErr;
+    for (const row of (usageRows || []) as any[]) {
+      const id = row.qb_question_id as string | null;
+      if (id) usageMap.set(id, (usageMap.get(id) || 0) + 1);
+    }
+  }
+
   const result: NexusQBQuestionListItem[] = questions.map((q) => ({
     ...q,
     sources: sourcesMap.get(q.id) || [],
     topic: q.topic_id ? topicMap.get(q.topic_id) || null : null,
     attempt_summary: null,
     tags: tagsByQuestion.get(q.id) || [],
+    // Absent, not zero, when nobody asked. Zero is a real answer meaning
+    // "unused", and a caller that did not request usage must not read one.
+    ...(filters.includeUsage ? { used_in_tests: usageMap.get(q.id) || 0 } : {}),
   }));
 
   return { questions: result, total: count || 0 };

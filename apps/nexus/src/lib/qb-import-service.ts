@@ -26,10 +26,11 @@ import type { TimerType } from '@neram/database';
 
 /* ────────────────────────────── DEDUPE ──────────────────────────────────── */
 
-/** Above this, the two questions are the same question wearing different words. */
-export const REUSE_THRESHOLD = 0.9;
-/** Between this and REUSE_THRESHOLD, close enough that a human should look. */
-export const REVIEW_THRESHOLD = 0.75;
+// The bands live in their own import-free module because the wizard's step 3
+// rail needs them in the browser, and this file reaches the Supabase admin
+// client. Re-exported so every existing caller keeps its import path.
+export { REUSE_THRESHOLD, REVIEW_THRESHOLD, dedupeVerdict } from './qb-dedupe-bands';
+import { REUSE_THRESHOLD, REVIEW_THRESHOLD } from './qb-dedupe-bands';
 
 export type ImportAction = 'create' | 'reuse' | 'review';
 

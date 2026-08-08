@@ -42,6 +42,17 @@ interface QuestionPickerListProps {
   initialSearch?: string;
   /** Cap on how many may be picked. Prep tests are meant to be short. */
   maxSelected?: number;
+  /**
+   * Show "unused" / "used in 2 tests" on each row.
+   *
+   * Off by default because it costs an extra query per page. On in the test
+   * wizard, where the whole argument for picking from the bank is reuse, and a
+   * teacher cannot judge reuse without seeing it: handing a class the same
+   * question for the third time is invisible until a student says so.
+   */
+  showUsage?: boolean;
+  /** Reports the filtered match count, for a caller drawing its own "238 match" line. */
+  onTotalChange?: (total: number) => void;
 }
 
 /**
@@ -50,9 +61,9 @@ interface QuestionPickerListProps {
  * Mobile-first: at 375px this is a single column of tappable rows with a 48px
  * checkbox, not a table. Teachers set these on a phone between classes.
  *
- * NOTE: /teacher/tests/new still carries its own older copy of this picker. That
- * page works and is not on the critical path for this feature, so consolidating
- * the two is a follow-up rather than a same-change refactor.
+ * This is the only copy. /teacher/tests/new carried an older fork of it for a
+ * while; the test wizard replaced that page and uses this one, so the two
+ * pickers can no longer disagree about what the bank contains.
  */
 export default function QuestionPickerList({
   getToken,
@@ -61,6 +72,8 @@ export default function QuestionPickerList({
   formats,
   initialSearch,
   maxSelected,
+  showUsage,
+  onTotalChange,
 }: QuestionPickerListProps) {
   const theme = useTheme();
 
@@ -91,9 +104,10 @@ export default function QuestionPickerList({
       if (difficulty.length) p.set('difficulty', difficulty.join(','));
       if (tagIds.length) p.set('tag_ids', tagIds.join(','));
       if (debouncedSearch.trim()) p.set('search', debouncedSearch.trim());
+      if (showUsage) p.set('include_usage', '1');
       return p.toString();
     },
-    [formats, difficulty, tagIds, debouncedSearch],
+    [formats, difficulty, tagIds, debouncedSearch, showUsage],
   );
 
   const fetchPage = useCallback(
@@ -113,7 +127,9 @@ export default function QuestionPickerList({
         }
         const json = await res.json();
         const list: NexusQBQuestionListItem[] = json.data?.questions || [];
-        setTotal(json.data?.total || 0);
+        const nextTotal = json.data?.total || 0;
+        setTotal(nextTotal);
+        onTotalChange?.(nextTotal);
         setQuestions((prev) => (append ? [...prev, ...list] : list));
         setPage(pageNum);
       } catch (err) {
@@ -123,6 +139,10 @@ export default function QuestionPickerList({
         setLoadingMore(false);
       }
     },
+    // onTotalChange is deliberately not a dependency: a caller passing an
+    // inline arrow would otherwise rebuild the fetcher on every render and
+    // refetch the bank in a loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [getToken, buildQuery],
   );
 
@@ -252,6 +272,25 @@ export default function QuestionPickerList({
                           size="small"
                           label={q.difficulty[0] + q.difficulty.slice(1).toLowerCase()}
                           color={DIFF_COLOR[q.difficulty] ?? 'default'}
+                          variant="outlined"
+                        />
+                      )}
+                      {/* A previous-year question is worth reusing and worth
+                          knowing about, so the year is a chip of its own. */}
+                      {q.sources?.[0]?.year && (
+                        <Chip size="small" label={`PYQ ${q.sources[0].year}`} variant="outlined" />
+                      )}
+                      {/* Undefined when the caller did not ask for usage. Zero
+                          is a real answer and reads as "unused". */}
+                      {typeof q.used_in_tests === 'number' && (
+                        <Chip
+                          size="small"
+                          label={
+                            q.used_in_tests === 0
+                              ? 'unused'
+                              : `used in ${q.used_in_tests} test${q.used_in_tests === 1 ? '' : 's'}`
+                          }
+                          color={q.used_in_tests === 0 ? 'success' : 'default'}
                           variant="outlined"
                         />
                       )}

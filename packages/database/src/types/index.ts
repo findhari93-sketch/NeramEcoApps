@@ -7199,6 +7199,15 @@ export interface NexusQBQuestionListItem extends NexusQBQuestion {
   attempt_summary: QBAttemptSummary | null;
   /** Managed registry tags (teacher lists only; absent in student payloads). */
   tags?: NexusQBQuestionTagChip[];
+  /**
+   * How many tests already use this question. Only populated when the caller
+   * asks for it, hence optional: it costs an extra query per page.
+   *
+   * The point is the test builder's "used in 2 tests" chip. A teacher picking
+   * questions cannot otherwise see that they are handing a class the same
+   * question for the third time, and reuse is invisible until a student says so.
+   */
+  used_in_tests?: number;
 }
 
 export interface NexusQBQuestionDetail extends NexusQBQuestionWithSources {

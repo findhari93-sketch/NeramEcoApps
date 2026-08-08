@@ -75,7 +75,14 @@ export async function GET(request: NextRequest) {
       const statusFilter = params.get('question_status')
         ? params.get('question_status')!.split(',') as QBQuestionStatus[]
         : undefined;
-      data = await getTeacherQBQuestions({ ...filters, status: statusFilter }, page, pageSize);
+      // Opt-in: the test wizard's picker wants the "used in N tests" chip, the
+      // browse list does not and should not pay for the extra query.
+      const includeUsage = params.get('include_usage') === '1';
+      data = await getTeacherQBQuestions(
+        { ...filters, status: statusFilter, includeUsage },
+        page,
+        pageSize,
+      );
     } else {
       data = await getQBQuestions(filters, page, pageSize, caller.id);
     }

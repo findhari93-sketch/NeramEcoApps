@@ -278,6 +278,41 @@ export const AI_FEATURES = [
     dailyCallCap: 40,
   },
   /**
+   * The test wizard's Generate step, split in two by what it reads.
+   *
+   * Two ids rather than one because the spend differs by an order of magnitude:
+   * a topic prompt is a few hundred input tokens, a 42-page PDF is eleven
+   * thousand. Collapsed into one row, the control panel could not show which of
+   * the two actually emptied the month, and switching the expensive one to
+   * manual would have taken the cheap one down with it.
+   */
+  {
+    id: 'nexus.test-wizard-generate',
+    label: 'Generate test questions from a topic or class recording',
+    app: 'nexus',
+    group: 'Study materials',
+    trigger: 'staff',
+    tier: 'standard',
+    defaultMode: 'auto',
+    supportsManual: true,
+    // The recording branch sends a class transcript, which is students talking.
+    // Free-tier inputs train Google's models, so this can never use that key.
+    allowFreeKey: false,
+    dailyCallCap: 60,
+  },
+  {
+    id: 'nexus.test-wizard-generate-doc',
+    label: 'Generate test questions from a chapter PDF in the wizard',
+    app: 'nexus',
+    group: 'Study materials',
+    trigger: 'staff',
+    tier: 'document',
+    defaultMode: 'auto',
+    supportsManual: true,
+    allowFreeKey: false,
+    dailyCallCap: 40,
+  },
+  /**
    * The only student-triggered feature that scales with the student body.
    * Already caches its answer onto the question row, so the second student to
    * ask about the same question costs nothing.

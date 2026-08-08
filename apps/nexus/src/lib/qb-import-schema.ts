@@ -47,6 +47,15 @@ export interface ImportQuestion {
    * and the PDF generator drops it. The paste flow only records it.
    */
   source_quote: string | null;
+  /**
+   * A figure the reply named but did not carry. Optional because a question
+   * usually has none, and because the shape predates this field.
+   *
+   * Deliberately not treated as "this question has an image": nothing has been
+   * attached yet, so the review step has to ask for it. That is what the
+   * "Q7 references an image, attach it in review" line is built from.
+   */
+  image_ref?: string | null;
   /** Registry tag ids resolved from known slugs. */
   tag_ids: string[];
   /** Every slug kept for this question, including ones still pending creation. */
@@ -71,6 +80,13 @@ export interface ImportValidationResult {
   errors: string[];
   /** Recoverable issues (unknown slugs dropped, defaults applied, duplicates merged). */
   warnings: string[];
+  /**
+   * What the payload announced itself as. A reply that names no schema is not
+   * rejected: every reply before v2 named none, and an external tool that emits
+   * the right shape without the label is still useful. It is reported so the
+   * upload screen can say "nexus-test v2" rather than guessing.
+   */
+  schema: { name: string | null; version: number | null; recognised: boolean };
 }
 
 export interface BuildImportPromptOptions {
@@ -93,6 +109,17 @@ export interface BuildImportPromptOptions {
   fromDocument?: boolean;
 }
 
+/**
+ * What the payload calls itself.
+ *
+ * The wizard shows "Schema valid, nexus-test v2" on upload, and the same pair
+ * is embedded in the prompt sample, so a teacher who generates elsewhere gets a
+ * reply that identifies itself. Bump the version only when a change would make
+ * an older reply parse WRONG rather than merely parse without a new field.
+ */
+export const SCHEMA_NAME = 'nexus-test';
+export const SCHEMA_VERSION = 2;
+
 /** Dense tagging is the point, so this sits well above the tagging assistant's 5. */
 export const MAX_TAGS_PER_QUESTION = 8;
 const MAX_QUESTIONS_PER_PASTE = 200;
@@ -110,6 +137,60 @@ export function importSlugify(input: string): string {
     .replace(/^_+|_+$/g, '')
     .slice(0, 60);
 }
+
+/**
+ * The reply shape, as an object.
+ *
+ * Extracted so the prompt and the published format spec are literally the same
+ * value. They used to be one inline JSON.stringify inside the prompt, which
+ * meant the "copy the JSON format spec" button in the wizard would have been a
+ * second, hand-maintained copy: the exact way a contract and its documentation
+ * drift apart.
+ */
+export function importSampleObject(exam: ImportExam = 'BOTH', folder = ''): Record<string, unknown> {
+  return {
+    schema: SCHEMA_NAME,
+    version: SCHEMA_VERSION,
+    test: {
+      title: 'The chapter name, read from the document',
+      suggested_folder: folder || 'Foundation / The chapter name',
+    },
+    questions: [
+      {
+        question: 'The question stem.',
+        options: { a: 'first option', b: 'second option', c: 'third option', d: 'fourth option' },
+        answer: 'b',
+        explanation: 'Why b is right.',
+        source_quote: 'The sentence from the document that makes b the answer.',
+        difficulty: 'MEDIUM',
+        exam,
+        image_ref: null,
+        tag_slugs: ['history_of_architecture', 'indian_architecture'],
+        new_tags: [{ slug: 'mughal_architecture', label: 'Mughal Architecture', group: 'theme' }],
+      },
+    ],
+  };
+}
+
+/**
+ * The format spec, for the wizard's "Copy JSON format spec" button.
+ *
+ * Same sample the prompt carries, plus the rules a human reader needs that the
+ * model gets in prose. One source, so a teacher pasting this into an external
+ * tool gets a reply this parser accepts.
+ */
+export const TEST_JSON_SPEC: string = [
+  `// ${SCHEMA_NAME} v${SCHEMA_VERSION} — the reply format Neram accepts`,
+  '//',
+  '// Reply with ONLY this JSON. No commentary, no markdown fences.',
+  '// "answer" must be an option key (a, b, c, d), not the option text.',
+  '// Omit "options" for a numerical-answer question and put the number in "answer".',
+  '// "source_quote" is the sentence the answer rests on. Never omit it.',
+  '// "image_ref" names a figure the question needs; attach it during review.',
+  '// "new_tags" is only for genuinely new THEME topics, and can be omitted.',
+  '',
+  JSON.stringify(importSampleObject(), null, 2),
+].join('\n');
 
 /**
  * The full prompt. Two callers: the wizard, where the teacher attaches the PDF
@@ -165,34 +246,13 @@ export function buildImportPrompt(
     '',
     'REPLY FORMAT',
     'Reply with ONLY this JSON. No commentary, no markdown fences.',
-    JSON.stringify(
-      {
-        test: {
-          title: 'The chapter name, read from the document',
-          suggested_folder: folder || 'Foundation / The chapter name',
-        },
-        questions: [
-          {
-            question: 'The question stem.',
-            options: { a: 'first option', b: 'second option', c: 'third option', d: 'fourth option' },
-            answer: 'b',
-            explanation: 'Why b is right.',
-            source_quote: 'The sentence from the document that makes b the answer.',
-            difficulty: 'MEDIUM',
-            exam: exam,
-            tag_slugs: ['history_of_architecture', 'indian_architecture'],
-            new_tags: [{ slug: 'mughal_architecture', label: 'Mughal Architecture', group: 'theme' }],
-          },
-        ],
-      },
-      null,
-      2,
-    ),
+    JSON.stringify(importSampleObject(exam, folder), null, 2),
     '',
     'RULES',
     '"answer" must be one of the option keys (a, b, c, d), not the option text.',
     'Omit "options" only for a numerical-answer question, and then put the number in "answer".',
     'Omit "new_tags" when every tag you need already exists.',
+    'Set "image_ref" to a short name when the question needs a figure, otherwise null.',
     'Never omit "source_quote".',
     'Do not repeat the same question twice.',
   ].join('\n');
@@ -288,12 +348,14 @@ export function validateImportJSON(
 ): ImportValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const unlabelled = { name: null, version: null, recognised: false };
   const empty: ImportValidationResult = {
     test: { title: '', folder_path: [] },
     questions: [],
     proposedTags: [],
     errors,
     warnings,
+    schema: unlabelled,
   };
 
   let parsed: unknown;
@@ -306,11 +368,23 @@ export function validateImportJSON(
 
   let rows: unknown[];
   let testMeta: Record<string, unknown> = {};
+  let schema = unlabelled as ImportValidationResult['schema'];
   if (Array.isArray(parsed)) {
     rows = parsed;
   } else if (parsed && typeof parsed === 'object') {
     const obj = parsed as Record<string, unknown>;
     testMeta = (obj.test as Record<string, unknown>) || {};
+    const name = typeof obj.schema === 'string' ? obj.schema.trim() : null;
+    const version = Number.isFinite(Number(obj.version)) ? Number(obj.version) : null;
+    schema = { name, version, recognised: name === SCHEMA_NAME && version === SCHEMA_VERSION };
+    // A newer payload is a warning, not a rejection: the parser only ever reads
+    // fields it knows, so the worst case is that something new is ignored, and
+    // refusing the whole file would be a harsher answer than the risk deserves.
+    if (name === SCHEMA_NAME && version !== null && version > SCHEMA_VERSION) {
+      warnings.push(
+        `This file says ${name} v${version} and this version of Neram reads v${SCHEMA_VERSION}. Anything newer is ignored.`,
+      );
+    }
     if (Array.isArray(obj.questions)) rows = obj.questions;
     else {
       errors.push('Expected a "questions" array. Ask the AI to reply in the exact format from the prompt.');
@@ -469,6 +543,14 @@ export function validateImportJSON(
           : null,
       difficulty: difficulty || 'MEDIUM',
       exam_relevance: exam || 'BOTH',
+      // Named but not carried. Kept so review can ask for the file rather than
+      // letting a question that needs a figure reach a student without one.
+      image_ref:
+        typeof r.image_ref === 'string' && r.image_ref.trim()
+          ? r.image_ref.trim()
+          : typeof r.image === 'string' && r.image.trim()
+            ? r.image.trim()
+            : null,
       tag_ids: tagIds.slice(0, MAX_TAGS_PER_QUESTION),
       tag_slugs: tagSlugs.slice(0, MAX_TAGS_PER_QUESTION),
       new_tag_slugs: newTagSlugs.slice(0, MAX_TAGS_PER_QUESTION),
@@ -495,5 +577,73 @@ export function validateImportJSON(
     proposedTags,
     errors,
     warnings,
+    schema,
   };
+}
+
+export type ValidationCheckLevel = 'ok' | 'warning' | 'error';
+
+export interface ValidationCheck {
+  level: ValidationCheckLevel;
+  message: string;
+}
+
+/**
+ * The VALIDATION list on the upload screen, as data.
+ *
+ * Ordered so the two structural questions ("is this the right shape", "did the
+ * questions survive") are answered before the per-row nitpicks. A teacher who
+ * pasted the wrong thing entirely should learn that on the first line, not
+ * after reading eight tag warnings.
+ *
+ * The passing checks are included on purpose. "15 questions found, all have a
+ * correct answer" is the line that makes the upload feel safe, and a screen
+ * that only ever shows problems cannot tell a clean file from an unchecked one.
+ */
+export function validationReport(result: ImportValidationResult): ValidationCheck[] {
+  const checks: ValidationCheck[] = [];
+  const n = result.questions.length;
+
+  if (result.schema.recognised) {
+    checks.push({ level: 'ok', message: `Schema valid, ${SCHEMA_NAME} v${SCHEMA_VERSION}` });
+  } else if (result.schema.name) {
+    checks.push({
+      level: 'warning',
+      message: `File says ${result.schema.name} v${result.schema.version ?? '?'}, read as ${SCHEMA_NAME} v${SCHEMA_VERSION}`,
+    });
+  } else if (n > 0) {
+    // The common case for anything pasted out of a chat window, and not a
+    // problem: the shape is what matters, the label is a convenience.
+    checks.push({ level: 'ok', message: 'Readable, though the file does not name a schema' });
+  }
+
+  if (n === 0) {
+    checks.push({ level: 'error', message: 'No usable questions in this file' });
+  } else {
+    const missingAnswer = result.questions.filter((q) => !String(q.correct_answer ?? '').trim()).length;
+    checks.push(
+      missingAnswer === 0
+        ? { level: 'ok', message: `${n} question${n === 1 ? '' : 's'} found, all have a correct answer` }
+        : {
+            level: 'error',
+            message: `${n} question${n === 1 ? '' : 's'} found, ${missingAnswer} with no correct answer`,
+          },
+    );
+
+    const images = result.questions.filter((q) => q.image_ref);
+    if (images.length > 0) {
+      const which = images
+        .map((q) => `Q${result.questions.indexOf(q) + 1}`)
+        .slice(0, 3)
+        .join(', ');
+      checks.push({
+        level: 'warning',
+        message: `${which}${images.length > 3 ? ' and others' : ''} reference an image, attach it in review`,
+      });
+    }
+  }
+
+  for (const message of result.errors) checks.push({ level: 'error', message });
+  for (const message of result.warnings) checks.push({ level: 'warning', message });
+  return checks;
 }

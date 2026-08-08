@@ -202,7 +202,7 @@ export default function StudyTestAuthorDialog({
               onChange={setPicked}
               resetToken={open ? file?.id : null}
               maxListHeight={260}
-              onBuildNew={() => router.push('/teacher/tests/new/import')}
+              onBuildNew={() => router.push('/teacher/tests/new?src=json')}
             />
 
             <Divider sx={{ my: 2 }} />

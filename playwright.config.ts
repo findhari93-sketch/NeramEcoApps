@@ -41,6 +41,21 @@ const TEACHER_AUTH_FILE = path.join(__dirname, 'tests/.auth/teacher.json');
 const NEXUS_URL = process.env.E2E_NEXUS_URL || 'http://localhost:3012';
 
 /**
+ * Limit which dev servers Playwright waits for, e.g. PW_APPS=nexus.
+ *
+ * Empty (the default) means all of them, so CI and a normal local run are
+ * unchanged. It exists because the gate is all-or-nothing: one app failing to
+ * serve its root holds up a run that never touches that app, and Playwright
+ * reports only "Timed out waiting from config.webServer" with no clue which app
+ * or why. Running one app's specs should not require the other three to be
+ * healthy.
+ */
+const ONLY_APPS = (process.env.PW_APPS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+/**
  * Apps that Playwright starts itself. See the `webServer` block at the bottom.
  */
 const WEB_SERVER_APPS: ReadonlyArray<{
@@ -293,7 +308,9 @@ export default defineConfig({
    * what hid a missing generated module for three months. With piping, the real
    * Next.js error lands in the CI log within seconds.
    */
-  webServer: WEB_SERVER_APPS.map((app) => ({
+  webServer: WEB_SERVER_APPS.filter(
+    (app) => ONLY_APPS.length === 0 || ONLY_APPS.includes(app.name),
+  ).map((app) => ({
     command: `pnpm run ${PROD_SERVERS.has(app.name) ? 'start' : 'dev'}`,
     cwd: path.resolve(__dirname, app.dir),
     url: `http://localhost:${app.port}`,

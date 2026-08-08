@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_TAGS_PER_QUESTION,
+  SCHEMA_NAME,
+  SCHEMA_VERSION,
+  TEST_JSON_SPEC,
   buildImportPrompt,
+  importSampleObject,
   importSlugify,
   validateImportJSON,
+  validationReport,
   type ImportRegistryTag,
 } from './qb-import-schema';
 
@@ -325,12 +330,95 @@ describe('buildImportPrompt', () => {
   it('produces an example the validator itself accepts', () => {
     // Guards the contract drifting: the sample embedded in the prompt is the
     // single clearest instruction a model gets, so it has to stay valid.
-    const prompt = buildImportPrompt(REGISTRY, { chapter: 'History of Architecture' });
-    const start = prompt.indexOf('{\n  "test"');
-    const sample = prompt.slice(start, prompt.indexOf('\n\nRULES'));
-    const result = validateImportJSON(sample, REGISTRY);
+    const result = validateImportJSON(JSON.stringify(importSampleObject()), REGISTRY);
     expect(result.errors).toEqual([]);
     expect(result.questions).toHaveLength(1);
+    expect(result.schema.recognised).toBe(true);
+  });
+
+  it('embeds that exact sample, so the prompt and the spec cannot drift apart', () => {
+    const prompt = buildImportPrompt(REGISTRY, { chapter: 'History of Architecture' });
+    expect(prompt).toContain(JSON.stringify(importSampleObject('BOTH', ''), null, 2));
+    expect(TEST_JSON_SPEC).toContain(JSON.stringify(importSampleObject(), null, 2));
+  });
+
+  it('the published spec is itself a valid payload once the comments are stripped', () => {
+    const json = TEST_JSON_SPEC.split('\n').filter((l) => !l.startsWith('//')).join('\n');
+    const result = validateImportJSON(json, REGISTRY);
+    expect(result.errors).toEqual([]);
+    expect(result.schema.recognised).toBe(true);
+  });
+});
+
+describe('schema labelling', () => {
+  it('recognises a labelled v2 payload', () => {
+    const result = validateImportJSON(JSON.stringify(importSampleObject()), REGISTRY);
+    expect(result.schema).toEqual({ name: SCHEMA_NAME, version: SCHEMA_VERSION, recognised: true });
+  });
+
+  it('accepts an unlabelled payload, because the shape is what matters', () => {
+    const raw = JSON.stringify({
+      test: { title: 'X' },
+      questions: [{ question: 'A perfectly fine question stem', options: { a: 'one', b: 'two' }, answer: 'a' }],
+    });
+    const result = validateImportJSON(raw, REGISTRY);
+    expect(result.questions).toHaveLength(1);
+    expect(result.schema.recognised).toBe(false);
+    expect(result.schema.name).toBeNull();
+  });
+
+  it('warns about a newer schema rather than refusing the file', () => {
+    const sample = importSampleObject();
+    const raw = JSON.stringify({ ...sample, version: SCHEMA_VERSION + 1 });
+    const result = validateImportJSON(raw, REGISTRY);
+    expect(result.questions).toHaveLength(1);
+    expect(result.warnings.some((w) => /newer|ignored/i.test(w))).toBe(true);
+  });
+});
+
+describe('image_ref', () => {
+  it('is captured but does NOT count as the question having an image', () => {
+    const sample = importSampleObject() as any;
+    sample.questions[0].image_ref = 'fig-7.png';
+    const result = validateImportJSON(JSON.stringify(sample), REGISTRY);
+    expect(result.questions[0].image_ref).toBe('fig-7.png');
+  });
+
+  it('accepts the shorter "image" key some tools emit', () => {
+    const sample = importSampleObject() as any;
+    sample.questions[0].image = '  diagram-2.png ';
+    const result = validateImportJSON(JSON.stringify(sample), REGISTRY);
+    expect(result.questions[0].image_ref).toBe('diagram-2.png');
+  });
+
+  it('is null when absent', () => {
+    const result = validateImportJSON(JSON.stringify(importSampleObject()), REGISTRY);
+    expect(result.questions[0].image_ref).toBeNull();
+  });
+});
+
+describe('validationReport, the upload screen list', () => {
+  it('leads with the schema line then the question count', () => {
+    const checks = validationReport(validateImportJSON(JSON.stringify(importSampleObject()), REGISTRY));
+    expect(checks[0]).toEqual({ level: 'ok', message: `Schema valid, ${SCHEMA_NAME} v${SCHEMA_VERSION}` });
+    expect(checks[1].message).toBe('1 question found, all have a correct answer');
+  });
+
+  it('states the passing checks, so a clean file is distinguishable from an unchecked one', () => {
+    const checks = validationReport(validateImportJSON(JSON.stringify(importSampleObject()), REGISTRY));
+    expect(checks.every((c) => c.level === 'ok')).toBe(true);
+  });
+
+  it('names the questions that need an image attached', () => {
+    const sample = importSampleObject() as any;
+    sample.questions[0].image_ref = 'fig-7.png';
+    const checks = validationReport(validateImportJSON(JSON.stringify(sample), REGISTRY));
+    expect(checks.some((c) => c.level === 'warning' && /Q1 reference/.test(c.message))).toBe(true);
+  });
+
+  it('reports an unusable file as an error', () => {
+    const checks = validationReport(validateImportJSON('not json at all', REGISTRY));
+    expect(checks.some((c) => c.level === 'error')).toBe(true);
   });
 });
 

@@ -12,12 +12,9 @@ import {
   Collapse,
   Tabs,
   Tab,
-  Menu,
-  MenuItem,
 } from '@neram/ui';
 import AddTaskOutlinedIcon from '@mui/icons-material/AddTaskOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
-import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import TestLibraryView from '@/components/tests/TestLibraryView';
 import StudentTestsView from '@/components/tests/StudentTestsView';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
@@ -236,7 +233,6 @@ export default function TeacherTestsHubPage() {
   const [tab, setTab] = useState<HubTab>('library');
   const [groups, setGroups] = useState<NexusTestOverviewGroup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [newMenu, setNewMenu] = useState<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -277,37 +273,19 @@ export default function TeacherTestsHubPage() {
             Build a test once, then link it wherever it is needed
           </Typography>
         </Box>
+        {/* One button, not a menu of two. Choosing between "import from AI" and
+            "pick from the bank" before seeing either was the old split, and it
+            forced a decision at the point a teacher knows least. The wizard's
+            first step asks the same question with all four answers visible. */}
         <Button
           variant="contained"
           size="small"
           startIcon={<AddTaskOutlinedIcon />}
-          onClick={(e) => setNewMenu(e.currentTarget)}
+          onClick={() => router.push('/teacher/tests/new')}
           sx={{ textTransform: 'none', flexShrink: 0, minHeight: 44 }}
         >
           New test
         </Button>
-        <Menu open={Boolean(newMenu)} anchorEl={newMenu} onClose={() => setNewMenu(null)}>
-          <MenuItem
-            onClick={() => {
-              setNewMenu(null);
-              router.push('/teacher/tests/new/import');
-            }}
-            sx={{ minHeight: 44 }}
-          >
-            <AutoAwesomeOutlinedIcon sx={{ fontSize: 18, mr: 1 }} />
-            Import from AI
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              setNewMenu(null);
-              router.push('/teacher/tests/new');
-            }}
-            sx={{ minHeight: 44 }}
-          >
-            <TuneOutlinedIcon sx={{ fontSize: 18, mr: 1 }} />
-            Pick from the question bank
-          </MenuItem>
-        </Menu>
       </Box>
 
       <Tabs
@@ -358,7 +336,7 @@ export default function TeacherTestsHubPage() {
               variant="contained"
               size="small"
               startIcon={<AutoAwesomeOutlinedIcon />}
-              onClick={() => router.push('/teacher/tests/new/import')}
+              onClick={() => router.push('/teacher/tests/new')}
               sx={{ textTransform: 'none', minHeight: 44 }}
             >
               Import from AI

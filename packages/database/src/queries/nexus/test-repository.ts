@@ -60,6 +60,16 @@ export interface ComposeTestInput {
   testKind: NexusTestKind;
   /** Per-question marks (aligned with questionIds) or a single value for all. Defaults to 1. */
   marks?: number[] | number;
+  /**
+   * Per-question negative marks, same shape as `marks`. Defaults to 0.
+   *
+   * The column has existed since the table was created but nothing ever wrote
+   * to it, so every paper in the database is unpenalised. It matters for the
+   * exam-faithful import: a JEE Paper 2 mock that does not deduct for a wrong
+   * answer is not the exam, and the whole point of importing the real paper is
+   * that sitting it feels like sitting the real one.
+   */
+  negativeMarks?: number[] | number;
   timerType?: TimerType;
   durationMinutes?: number | null;
   perQuestionSeconds?: number | null;
@@ -117,6 +127,15 @@ export async function composeTest(
     if (typeof input.marks === 'number') return input.marks;
     return 1;
   };
+  // Zero by default, which is what every existing caller gets and what every
+  // existing row already holds. A negative value is normalised to its
+  // magnitude: the column is the size of the penalty, and storing -1 here would
+  // make a wrong answer ADD a mark at grading time.
+  const negativeFor = (i: number): number => {
+    const raw = Array.isArray(input.negativeMarks) ? input.negativeMarks[i] : input.negativeMarks;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.abs(n) : 0;
+  };
   const totalMarks = ids.reduce((sum, _id, i) => sum + marksFor(i), 0);
 
   const { data: test, error: testErr } = await supabase
@@ -158,7 +177,7 @@ export async function composeTest(
     qb_question_id: qId,
     sort_order: i,
     marks: marksFor(i),
-    negative_marks: 0,
+    negative_marks: negativeFor(i),
   }));
   const { error: tqErr } = await supabase.from(TEST_QUESTIONS).insert(rows);
   if (tqErr) throw tqErr;

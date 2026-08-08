@@ -3,9 +3,11 @@ import { verifyQBStaff } from '@/lib/qb-auth';
 import {
   getSupabaseAdminClient,
   getOriginalPaperWithStats,
+  getPaperSectionBreakdown,
   getQuestionsByPaper,
   deletePaperWithQuestions,
 } from '@neram/database';
+import { buildPaperBlueprint } from '@/lib/paper-blueprint';
 
 export async function GET(
   request: NextRequest,
@@ -22,6 +24,17 @@ export async function GET(
     const paper = await getOriginalPaperWithStats(params.id);
     if (!paper) {
       return NextResponse.json({ error: 'Paper not found' }, { status: 404 });
+    }
+
+    // ?structure=1 is the test wizard's PYQ step asking what the paper is
+    // shaped like. It deliberately does NOT return the questions: the year grid
+    // shows a section summary for a paper the teacher has not chosen yet, and
+    // shipping 82 full question rows to draw three lines is most of the reason
+    // that grid would feel slow.
+    if (new URL(request.url).searchParams.get('structure') === '1') {
+      const breakdown = await getPaperSectionBreakdown(params.id);
+      const blueprint = buildPaperBlueprint(breakdown, (paper as any).exam_type);
+      return NextResponse.json({ data: { paper, blueprint } }, { status: 200 });
     }
 
     const questions = await getQuestionsByPaper(params.id);
