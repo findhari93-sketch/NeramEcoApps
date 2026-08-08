@@ -118,21 +118,36 @@ export async function PATCH(request: NextRequest) {
     }
     const folderId = typeof body?.folder_id === 'string' ? body.folder_id : null;
 
-    // A student may only re-file their OWN papers. Without this a student could
-    // move a teacher's assigned test into a private folder and take it off the
-    // library for everyone.
+    // Both directions of the same rule: a paper may only be re-filed by whoever
+    // owns the tree it lives in.
+    //
+    // Student side: without this a student could move a teacher's assigned test
+    // into a private folder and take it off the library for everyone.
+    //
+    // Staff side: staff may DELETE a student's practice paper (see
+    // /api/question-bank/tests/bulk-delete) but never MOVE one. Deleting clutter
+    // is housekeeping the teacher was asked for; silently rearranging a
+    // student's folders is reaching into their workspace, and the student would
+    // have no way to tell it had happened.
+    const { getSupabaseAdminClient } = await import('@neram/database');
+    const supabase = getSupabaseAdminClient();
+    const { data: rows, error: lookupError } = await supabase
+      .from('nexus_tests')
+      .select('id, created_by_student')
+      .in('id', testIds);
+    if (lookupError) throw lookupError;
+
     if (resolveStaffRole(access.caller) === null) {
-      const { getSupabaseAdminClient } = await import('@neram/database');
-      const supabase = getSupabaseAdminClient();
-      const { data: owned } = await supabase
-        .from('nexus_tests')
-        .select('id')
-        .in('id', testIds)
-        .eq('created_by_student', access.caller.id);
-      const ownedIds = new Set((owned || []).map((t: { id: string }) => t.id));
+      const mine = (rows || []).filter((t: any) => t.created_by_student === access.caller.id);
+      const ownedIds = new Set(mine.map((t: any) => t.id as string));
       if (testIds.some((id: string) => !ownedIds.has(id))) {
         return NextResponse.json({ error: 'You can only move your own tests' }, { status: 403 });
       }
+    } else if ((rows || []).some((t: any) => t.created_by_student)) {
+      return NextResponse.json(
+        { error: "A student's own practice papers can only be moved by the student." },
+        { status: 403 },
+      );
     }
 
     const moved = await moveTestsToFolder(testIds, folderId);

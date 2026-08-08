@@ -11,6 +11,7 @@ import {
   Tooltip,
 } from '@neram/ui';
 import DownloadIcon from '@mui/icons-material/Download';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface ChapterStudentScore {
   student_id: string;
@@ -313,17 +314,29 @@ export default function StudentScoresTable({
                     bgcolor: 'background.paper',
                     zIndex: 1,
                     fontWeight: 500,
-                    maxWidth: 200,
+                    // 200 + the 32px face + its 8px ring + the 8px gap. Sizing the
+                    // column for a bare name would clip the ring, which is the
+                    // one part of the avatar drawn outside its own box.
+                    maxWidth: 248,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                   }}
                 >
-                  <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.8rem' }} noWrap>
-                    {student.student_name}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }} noWrap>
-                    {student.student_email}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                    <StudentAvatar
+                      userId={student.student_id}
+                      name={student.student_name}
+                      size={32}
+                    />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.8rem' }} noWrap>
+                        {student.student_name}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'block' }} noWrap>
+                        {student.student_email}
+                      </Typography>
+                    </Box>
+                  </Box>
                 </Box>
                 {student.sections.map((sec) => (
                   <td key={sec.section_id}>

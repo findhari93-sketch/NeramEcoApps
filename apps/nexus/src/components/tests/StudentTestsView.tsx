@@ -3,12 +3,27 @@
 /**
  * Papers students built for themselves, grouped by student.
  *
- * Read only. What a student chooses to drill is a genuine signal (and a
- * "Fix my mistakes" paper is a different signal from a chosen topic), but a
- * student's own workspace is not the teacher's to reorganise.
+ * What a student chooses to drill is a genuine signal (and a "Fix my mistakes"
+ * paper is a different signal from a chosen topic). Two things make that signal
+ * readable rather than merely present:
+ *
+ *   GROUPING. Nine near-identical rows all titled "Practice - 25 questions" hide
+ *   the only fact worth having, which is that all nine are Perspective. The
+ *   Topic axis is derived from the tags on the questions the student picked; the
+ *   Folder axis is the student's own names for things, and answers a different
+ *   question, whether they are organising at all.
+ *
+ *   DELETE. Staff can now clear a student's practice papers, singly or in bulk.
+ *   This was refused until the papers piled up faster than anyone could use
+ *   them. Soft, so the student keeps every score; silent, so nobody is told off
+ *   for practising.
+ *
+ * What staff still cannot do here is MOVE a student's paper. Deleting clutter is
+ * housekeeping; rearranging someone's folders behind their back is not, and
+ * /api/test-folders enforces that.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Typography,
@@ -21,6 +36,16 @@ import {
   Collapse,
   IconButton,
   InputAdornment,
+  Button,
+  Checkbox,
+  ToggleButton,
+  ToggleButtonGroup,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress,
+  Snackbar,
 } from '@neram/ui';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
@@ -28,10 +53,15 @@ import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined
 import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
+import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutline';
 import type { NexusTestContentSummary, NexusTestSourceFilters } from '@neram/database';
 import { describeTestContent, examLabel, isGeneratedTitle } from '@/lib/test-provenance';
 import { describeTestReason, looksBroken, testReasonShortLabel } from '@/lib/test-reasons';
+import { groupByDominantCategory, groupByFolder, hasAnyFolder } from '@/lib/student-test-grouping';
 import StudentIdentityLine from '@/components/students/StudentIdentityLine';
+
+/** How the papers inside one student are bucketed. */
+type GroupBy = 'topic' | 'folder' | 'date';
 
 interface TestReasonRow {
   reason_code: string | null;
@@ -200,6 +230,21 @@ export default function StudentTestsView({
   const [openBuild, setOpenBuild] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
+  const [groupBy, setGroupBy] = useState<GroupBy>('topic');
+  /**
+   * Selection belongs to ONE student at a time.
+   *
+   * A set spanning several collapsed panels would let a teacher press
+   * "Delete 14" while looking at four of them, which is exactly the accident
+   * this feature is most likely to cause. Opening selection on another student
+   * clears the previous one.
+   */
+  const [selectingFor, setSelectingFor] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<StudentTest[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 300);
     return () => clearTimeout(t);
@@ -231,6 +276,96 @@ export default function StudentTestsView({
     load();
   }, [load]);
 
+  /**
+   * Offer the Folder axis only when at least one paper anywhere is filed.
+   *
+   * A toggle that files every paper on screen under one "Unfiled" heading is a
+   * grouping that groups nothing, and reads as a broken control rather than as
+   * an honest answer to "is this student organising".
+   */
+  const foldersInUse = useMemo(() => hasAnyFolder((groups || []).flatMap((g) => g.tests)), [groups]);
+
+  useEffect(() => {
+    if (groupBy === 'folder' && groups !== null && !foldersInUse) setGroupBy('topic');
+  }, [groupBy, groups, foldersInUse]);
+
+  const exitSelection = useCallback(() => {
+    setSelectingFor(null);
+    setSelected(new Set());
+  }, []);
+
+  /**
+   * Collapsing a student ends any selection inside them.
+   *
+   * The rows unmount but the ticks would not, so re-opening the panel later
+   * would show a selection the teacher had visibly walked away from, with a
+   * Delete button already armed against it.
+   */
+  const togglePanel = useCallback(
+    (studentId: string) => {
+      setOpen((prev) => {
+        const next = new Set(prev);
+        if (next.has(studentId)) {
+          next.delete(studentId);
+          if (selectingFor === studentId) exitSelection();
+        } else {
+          next.add(studentId);
+        }
+        return next;
+      });
+    },
+    [selectingFor, exitSelection],
+  );
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const deletePending = useCallback(async () => {
+    if (!pendingDelete || pendingDelete.length === 0) return;
+    setBusy(true);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Not signed in');
+      const res = await fetch('/api/question-bank/tests/bulk-delete', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test_ids: pendingDelete.map((t) => t.id) }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || 'Could not delete');
+      }
+      const json = await res.json();
+      const n = json.data?.deleted ?? pendingDelete.length;
+      setPendingDelete(null);
+      exitSelection();
+      await load();
+      setNotice(`Deleted ${n} test${n !== 1 ? 's' : ''}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete those tests');
+    } finally {
+      setBusy(false);
+    }
+  }, [pendingDelete, getToken, exitSelection, load]);
+
+  /**
+   * Papers in the pending selection that somebody has actually sat.
+   *
+   * Deleting one is not destructive (the attempts survive), but it IS the
+   * difference between clearing junk and removing work a student did, so the
+   * dialog says which of the two is about to happen.
+   */
+  const pendingWithAttempts = useMemo(
+    () => (pendingDelete || []).filter((t) => t.attempts_started > 0).length,
+    [pendingDelete],
+  );
+
   return (
     <Box>
       <TextField
@@ -239,7 +374,7 @@ export default function StudentTestsView({
         label="Search student tests"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        sx={{ mb: 2 }}
+        sx={{ mb: 1.5 }}
         InputProps={{
           startAdornment: (
             <InputAdornment position="start">
@@ -248,6 +383,34 @@ export default function StudentTestsView({
           ),
         }}
       />
+
+      {/* One control for every student rather than one per panel. A teacher
+          comparing two students wants them bucketed the same way, and eight
+          copies of the same toggle is eight chances to have them disagree. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+          Group by
+        </Typography>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={groupBy}
+          onChange={(_e, v) => v && setGroupBy(v as GroupBy)}
+          aria-label="Group each student's tests by"
+        >
+          <ToggleButton value="topic" sx={{ textTransform: 'none', minHeight: 36, px: 1.5 }}>
+            Topic
+          </ToggleButton>
+          {foldersInUse && (
+            <ToggleButton value="folder" sx={{ textTransform: 'none', minHeight: 36, px: 1.5 }}>
+              Folder
+            </ToggleButton>
+          )}
+          <ToggleButton value="date" sx={{ textTransform: 'none', minHeight: 36, px: 1.5 }}>
+            Date
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -274,28 +437,26 @@ export default function StudentTestsView({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {groups.map((g) => {
             const isOpen = open.has(g.student_id);
+            const selecting = selectingFor === g.student_id;
+            // Date keeps the server's newest-first order and renders as one
+            // unlabelled run, which is what this view has always been.
+            const buckets =
+              groupBy === 'topic'
+                ? groupByDominantCategory(g.tests, categoryLabels)
+                : groupBy === 'folder'
+                  ? groupByFolder(g.tests)
+                  : [{ key: '__date__', label: '', tests: g.tests }];
+            const selectedHere = g.tests.filter((t) => selected.has(t.id));
             return (
               <Paper key={g.student_id} variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
                 <Box
                   role="button"
                   tabIndex={0}
-                  onClick={() =>
-                    setOpen((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(g.student_id)) next.delete(g.student_id);
-                      else next.add(g.student_id);
-                      return next;
-                    })
-                  }
+                  onClick={() => togglePanel(g.student_id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setOpen((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(g.student_id)) next.delete(g.student_id);
-                        else next.add(g.student_id);
-                        return next;
-                      });
+                      togglePanel(g.student_id);
                     }
                   }}
                   sx={{
@@ -340,7 +501,86 @@ export default function StudentTestsView({
 
                 <Collapse in={isOpen} unmountOnExit>
                   <Divider />
-                  {g.tests.map((t, i) => {
+
+                  {/* Selection lives inside the student it applies to, so
+                      "Delete 6" can never mean six papers belonging to four
+                      different people. */}
+                  <Box
+                    sx={{
+                      px: 1.5,
+                      py: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      flexWrap: 'wrap',
+                      bgcolor: selecting ? 'action.hover' : undefined,
+                    }}
+                  >
+                    {selecting ? (
+                      <>
+                        <Typography variant="caption" sx={{ fontWeight: 700, flex: 1 }}>
+                          {selectedHere.length} selected
+                        </Typography>
+                        <Button
+                          size="small"
+                          onClick={() => setSelected(new Set(g.tests.map((t) => t.id)))}
+                          sx={{ textTransform: 'none', minHeight: 40 }}
+                        >
+                          Select all
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          variant="contained"
+                          disabled={selectedHere.length === 0}
+                          startIcon={<DeleteOutlineOutlinedIcon />}
+                          onClick={() => setPendingDelete(selectedHere)}
+                          sx={{ textTransform: 'none', minHeight: 40 }}
+                        >
+                          Delete
+                        </Button>
+                        <Button size="small" onClick={exitSelection} sx={{ textTransform: 'none', minHeight: 40 }}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setSelectingFor(g.student_id);
+                          setSelected(new Set());
+                        }}
+                        sx={{ textTransform: 'none', minHeight: 40 }}
+                      >
+                        Select to clear out
+                      </Button>
+                    )}
+                  </Box>
+
+                  {buckets.map((bucket) => (
+                    <Box key={bucket.key}>
+                      {bucket.label && (
+                        <Box
+                          sx={{
+                            px: 2.5,
+                            py: 0.75,
+                            bgcolor: 'action.hover',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                          }}
+                        >
+                          <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                            {bucket.label}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label={bucket.tests.length}
+                            sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700 }}
+                          />
+                        </Box>
+                      )}
+                      {bucket.tests.map((t, i) => {
                     // The auto-generated titles are near-identical across papers
                     // and sometimes contradict the contents outright, so the
                     // derived description leads and the stored title drops to a
@@ -354,22 +594,44 @@ export default function StudentTestsView({
                     const reasons = t.reasons || [];
                     const broken = looksBroken(reasons);
 
+                    const isSelected = selected.has(t.id);
+
                     return (
                       <Box key={t.id}>
                         {i > 0 && <Divider />}
                         <Box
-                          role="button"
+                          role={selecting ? 'checkbox' : 'button'}
+                          aria-checked={selecting ? isSelected : undefined}
                           tabIndex={0}
-                          onClick={() => onOpenTest(t.id)}
+                          // While selecting, the row ticks rather than navigates.
+                          // Leaving it navigating would throw the teacher onto a
+                          // detail page mid-selection and lose everything ticked.
+                          onClick={() => (selecting ? toggleSelect(t.id) : onOpenTest(t.id))}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
-                              onOpenTest(t.id);
+                              if (selecting) toggleSelect(t.id);
+                              else onOpenTest(t.id);
                             }
                           }}
-                          sx={{ p: 1.5, pl: 2.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                          sx={{
+                            p: 1.5,
+                            pl: selecting ? 1 : 2.5,
+                            cursor: 'pointer',
+                            bgcolor: isSelected ? 'action.selected' : undefined,
+                            '&:hover': { bgcolor: isSelected ? 'action.selected' : 'action.hover' },
+                          }}
                         >
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                            {selecting && (
+                              <Checkbox
+                                checked={isSelected}
+                                onChange={() => toggleSelect(t.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                inputProps={{ 'aria-label': `Select ${t.title}` }}
+                                sx={{ p: 0.5 }}
+                              />
+                            )}
                             {t.from_mistakes && <AutoFixHighOutlinedIcon sx={{ fontSize: 16, color: 'warning.main' }} />}
                             <Typography variant="body2" sx={{ fontWeight: 600, flex: 1, minWidth: 0 }} noWrap>
                               {heading}
@@ -405,6 +667,21 @@ export default function StudentTestsView({
                                 color={t.best_percentage >= 70 ? 'success' : 'default'}
                                 sx={{ height: 22, fontWeight: 700, flexShrink: 0 }}
                               />
+                            )}
+                            {/* A direct button rather than a kebab hiding one
+                                item. Hidden while selecting, where the bulk
+                                Delete is the only sensible way to press it. */}
+                            {!selecting && (
+                              <IconButton
+                                aria-label={`Delete ${t.title}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPendingDelete([t]);
+                                }}
+                                sx={{ width: 44, height: 44, flexShrink: 0, color: 'text.secondary' }}
+                              >
+                                <DeleteOutlineOutlinedIcon fontSize="small" />
+                              </IconButton>
                             )}
                           </Box>
 
@@ -503,13 +780,70 @@ export default function StudentTestsView({
                         </Collapse>
                       </Box>
                     );
-                  })}
+                      })}
+                    </Box>
+                  ))}
                 </Collapse>
               </Paper>
             );
           })}
         </Box>
       )}
+
+      <Dialog
+        open={Boolean(pendingDelete)}
+        onClose={() => !busy && setPendingDelete(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Delete {pendingDelete?.length ?? 0} test{(pendingDelete?.length ?? 0) !== 1 ? 's' : ''}?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            {(pendingDelete?.length ?? 0) === 1 ? 'It disappears' : 'They disappear'} from the student&apos;s Tests
+            page. Their attempts and scores stay in their history, and they are not told.
+          </Typography>
+          {pendingWithAttempts > 0 && (
+            // The line between clearing junk and removing work somebody did.
+            <Alert severity="warning" sx={{ mt: 1.5 }}>
+              {pendingWithAttempts} of these {pendingWithAttempts === 1 ? 'has' : 'have'} been sat at least once.
+            </Alert>
+          )}
+          {(pendingDelete?.length ?? 0) > 1 && (
+            <Box
+              sx={{ mt: 1.5, maxHeight: 200, overflowY: 'auto', bgcolor: 'action.hover', borderRadius: 1, p: 1 }}
+            >
+              {(pendingDelete || []).map((t) => (
+                <Typography key={t.id} variant="caption" sx={{ display: 'block', py: 0.25 }} noWrap>
+                  {t.title}
+                </Typography>
+              ))}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPendingDelete(null)} disabled={busy} sx={{ textTransform: 'none', minHeight: 44 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={deletePending}
+            disabled={busy}
+            startIcon={busy ? <CircularProgress size={16} color="inherit" /> : undefined}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar open={Boolean(notice)} autoHideDuration={4000} onClose={() => setNotice(null)}>
+        <Alert severity="success" variant="filled" onClose={() => setNotice(null)}>
+          {notice}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

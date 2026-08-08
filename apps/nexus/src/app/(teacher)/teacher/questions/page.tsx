@@ -20,10 +20,12 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface StudentSubmission {
   id: string;
-  student: { name: string };
+  /** `id` is the users.id the cohort ring resolves from, not the submission's. */
+  student: { id: string; name: string; avatar_url: string | null };
   question_text: string;
   exam_name: string;
   exam_date: string;
@@ -247,6 +249,12 @@ export default function TeacherQuestions() {
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <StudentAvatar
+                      userId={sub.student?.id}
+                      name={sub.student?.name}
+                      src={sub.student?.avatar_url}
+                      size={28}
+                    />
                     <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }} noWrap>
                       {sub.student.name}
                     </Typography>
@@ -303,6 +311,12 @@ export default function TeacherQuestions() {
 
                 {/* Header */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <StudentAvatar
+                    userId={selectedSub.student?.id}
+                    name={selectedSub.student?.name}
+                    src={selectedSub.student?.avatar_url}
+                    size={32}
+                  />
                   <Box sx={{ flex: 1 }}>
                     <Typography variant="body2" fontWeight={600}>
                       {selectedSub.student.name}

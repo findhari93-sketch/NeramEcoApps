@@ -16,11 +16,20 @@
  * Whatever the mix, exactly one thing is named as the next thing to do, in a
  * card at the top you cannot miss.
  *
+ * A second tab, "Watch again", holds the classes they DID attend. It used to be
+ * a separate "Class Recaps" item over in the Study Zone, listing every recap in
+ * the classroom whether it was owed or not. Two doors to the same recording is
+ * confusing on its own, but the harm was concrete: only this one starts the
+ * clock, so a student who watched through the other door stayed "not started"
+ * to their teacher and got chased for work they were actually doing. One door
+ * now, and the server decides which tab a class belongs in so the two lists can
+ * never both claim it.
+ *
  * Built at 375px first. On a phone everything stacks in one column; from md up
  * the hero and pace pin to a left rail so the lists can be read alongside them.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Alert,
   Box,
@@ -30,6 +39,8 @@ import {
   Skeleton,
   Snackbar,
   Stack,
+  Tab,
+  Tabs,
   Typography,
   alpha,
   useTheme,
@@ -42,9 +53,12 @@ import VideocamOffOutlinedIcon from '@mui/icons-material/VideocamOffOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
-import { useAuthFetch } from '@/components/curriculum/shared';
 import CatchupTrack, { TrackStep, TrackStepStatus } from '@/components/course-plan/CatchupTrack';
 import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
+import WatchAgainList from '@/components/class-recap/WatchAgainList';
+import { isPathEnabled } from '@/lib/feature-flags';
+import { CLASS_RECAP_PATH } from '@/lib/nav-config';
+import type { RewatchableRecap } from '@/lib/rewatchable-recaps';
 
 interface BacklogItem {
   id: string;
@@ -93,7 +107,12 @@ interface Payload {
   missed: BacklogItem[];
   items: BacklogItem[];
   excluded: Array<{ id: string; class: { title: string | null; scheduled_date: string } }>;
+  /** Classes they attended, so nothing here is owed. Optional: see the read below. */
+  rewatchable?: RewatchableRecap[];
+  rewatchableTruncated?: boolean;
 }
+
+type TabKey = 'todo' | 'watch-again';
 
 const STEP_COPY: Record<
   BacklogItem['step'],
@@ -200,15 +219,39 @@ const EMPTY_PAYLOAD: Payload = {
   missed: [],
   items: [],
   excluded: [],
+  rewatchable: [],
+  rewatchableTruncated: false,
 };
 
-export default function StudentCatchUpPage() {
+function StudentCatchUpWorkspace() {
   const router = useRouter();
   const theme = useTheme();
-  const { loading: authLoading } = useNexusAuthContext();
-  const authFetch = useAuthFetch();
+  const searchParams = useSearchParams();
+  const { loading: authLoading, featureFlags } = useNexusAuthContext();
 
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
+
+  /**
+   * The tab lives in the URL so the recap player can send a rewatcher back to
+   * the shelf they came from rather than to the list of what they owe.
+   *
+   * Kept in step with history.replaceState, not router.replace, for the reason
+   * the teacher screen documents: router.replace treats a query change as a
+   * navigation and fetches an RSC payload for a page that is entirely client
+   * rendered. A server round trip per tap that renders nothing new, and one that
+   * throws fetchServerResponse under test.
+   */
+  const [tab, setTabState] = useState<TabKey>(
+    searchParams?.get('tab') === 'watch-again' ? 'watch-again' : 'todo',
+  );
+  const setTab = useCallback((next: TabKey) => {
+    setTabState(next);
+    window.history.replaceState(
+      null,
+      '',
+      next === 'todo' ? '/student/catch-up' : '/student/catch-up?tab=watch-again',
+    );
+  }, []);
 
   const {
     data: fetched,
@@ -222,10 +265,6 @@ export default function StudentCatchUpPage() {
   const data = fetched ?? (error ? EMPTY_PAYLOAD : null);
 
   const offline = !!error && typeof navigator !== 'undefined' && navigator.onLine === false;
-
-  const load = useCallback(async () => {
-    await mutate();
-  }, [mutate]);
 
   useEffect(() => {
     // A genuine failure still deserves a message. Being offline does not: that is what
@@ -251,11 +290,6 @@ export default function StudentCatchUpPage() {
     [router],
   );
 
-  const missedOpen = useMemo(
-    () => (data?.missed || []).filter((i) => i.status !== 'done' && i.status !== 'excused'),
-    [data],
-  );
-
   if (data === null) {
     return (
       <Box sx={{ maxWidth: 1100, mx: 'auto' }}>
@@ -271,6 +305,21 @@ export default function StudentCatchUpPage() {
   }
 
   const { items, missed, pace, totals, excluded } = data;
+  /**
+   * Defensive read. A payload cached by a build that predates this key would
+   * otherwise blow up the whole screen on `.length`, which is the failure the
+   * teacher shell's payload module was written to stop happening twice.
+   */
+  const rewatchable = data.rewatchable ?? [];
+  /**
+   * The tab is offered only when there is something in it AND the recap player
+   * is switched on for this classroom. The flag defaults to off, so without the
+   * second half most students would get a shelf of cards that all lead to a
+   * blocked page.
+   */
+  const canRewatch = rewatchable.length > 0 && isPathEnabled(CLASS_RECAP_PATH, featureFlags);
+  // A stale ?tab=watch-again must not strand anyone on an empty tab.
+  const activeTab: TabKey = canRewatch ? tab : 'todo';
 
   // The server picks this now, across both lists at once, and it already knows
   // the rules: the running clock first if there is one, then a class they were
@@ -284,8 +333,11 @@ export default function StudentCatchUpPage() {
   const nothingAtAll =
     missed.length === 0 && items.length === 0 && excluded.length === 0;
 
-  if (nothingAtAll) {
-    return (
+  // Deliberately NOT an early return any more. It used to be one, and moving the
+  // tabs above it is the whole point: a student who owes nothing but has a term
+  // of classes to revise is exactly who the second tab is for, and an early
+  // return would have shown them this and nothing else.
+  const nothingToDo = (
       <Box sx={{ maxWidth: 720, mx: 'auto', textAlign: 'center', py: 8, px: 2 }}>
         <CheckCircleIcon sx={{ fontSize: 44, color: 'success.main', mb: 1.5 }} />
         <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.5 }}>
@@ -297,8 +349,7 @@ export default function StudentCatchUpPage() {
             : 'You have not missed anything. Anything you do miss will show up here on its own.'}
         </Typography>
       </Box>
-    );
-  }
+  );
 
   const steps: TrackStep[] = items.map((i) => ({
     id: i.id,
@@ -433,251 +484,279 @@ export default function StudentCatchUpPage() {
       <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.25, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
         Catch-up
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Classes you were not in. Watch, finish the work, pass the quiz, and you are level again.
-      </Typography>
 
-      {offline && (
-        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
-          You appear to be offline. This is the last list we loaded.
-        </Alert>
+      {/* Two short labels, so fullWidth beats the scrollable strip the teacher
+          screen needs. Absent entirely when there is nothing to rewatch, which
+          leaves this page exactly as it was. */}
+      {canRewatch && (
+        <Tabs
+          value={activeTab}
+          onChange={(_e, v) => setTab(v as TabKey)}
+          variant="fullWidth"
+          sx={{ borderBottom: '1px solid', borderColor: 'divider', mb: 2, mt: 1, minHeight: 48 }}
+        >
+          <Tab value="todo" label="To do" sx={{ textTransform: 'none', fontWeight: 700, minHeight: 48 }} />
+          <Tab
+            value="watch-again"
+            label="Watch again"
+            sx={{ textTransform: 'none', fontWeight: 700, minHeight: 48 }}
+          />
+        </Tabs>
       )}
 
-      <Box
-        sx={{
-          display: 'grid',
-          gap: { xs: 2, md: 3 },
-          gridTemplateColumns: { xs: '1fr', md: '380px 1fr' },
-          alignItems: 'start',
-        }}
-      >
-        {/* Left rail on desktop, top of the page on a phone. */}
-        <Stack spacing={2} sx={{ position: { md: 'sticky' }, top: { md: 16 } }}>
-          {current ? (
-            <Box
-              sx={{
-                p: 2.25,
-                borderRadius: RADIUS.card,
-                border: '1.5px solid',
-                borderColor: current.overdue ? 'error.main' : 'primary.main',
-                bgcolor: alpha(
-                  current.overdue ? theme.palette.error.main : theme.palette.primary.main,
-                  0.04,
-                ),
-                boxShadow: SHADOW.card,
-              }}
-            >
-              <Typography
+      {activeTab === 'watch-again' ? (
+        <WatchAgainList items={rewatchable} truncated={!!data.rewatchableTruncated} />
+      ) : nothingAtAll ? (
+        nothingToDo
+      ) : (
+        <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Classes you were not in. Watch, finish the work, pass the quiz, and you are level again.
+        </Typography>
+
+        {offline && (
+          <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+            You appear to be offline. This is the last list we loaded.
+          </Alert>
+        )}
+
+        <Box
+          sx={{
+            display: 'grid',
+            gap: { xs: 2, md: 3 },
+            gridTemplateColumns: { xs: '1fr', md: '380px 1fr' },
+            alignItems: 'start',
+          }}
+        >
+          {/* Left rail on desktop, top of the page on a phone. */}
+          <Stack spacing={2} sx={{ position: { md: 'sticky' }, top: { md: 16 } }}>
+            {current ? (
+              <Box
                 sx={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 800,
-                  letterSpacing: '.1em',
-                  textTransform: 'uppercase',
-                  color: current.overdue ? 'error.main' : 'primary.main',
-                  mb: 0.75,
+                  p: 2.25,
+                  borderRadius: RADIUS.card,
+                  border: '1.5px solid',
+                  borderColor: current.overdue ? 'error.main' : 'primary.main',
+                  bgcolor: alpha(
+                    current.overdue ? theme.palette.error.main : theme.palette.primary.main,
+                    0.04,
+                  ),
+                  boxShadow: SHADOW.card,
                 }}
               >
-                {current.overdue
-                  ? 'Running late'
-                  : current.active
-                    ? 'You are on this one'
-                    : 'We suggest starting here'}
-              </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.25, mb: 0.25 }}>
-                {current.class.title || 'Class'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                {formatDay(current.class.scheduled_date)}
-                {current.chained && totals ? ` · class ${current.position} of ${totals.total}` : ''}
-                {/* The clock, only once they have actually started it. Before
-                    that the card says what they will get rather than what they
-                    have already lost. */}
-                {current.active
-                  ? ` · ${dueLabel(current)?.toLowerCase() ?? ''}`
-                  : ` · ${offerLabel(current)}`}
-              </Typography>
-
-              {/* Three steps, always in this order, so the shape of the work is
-                  the same on every class. */}
-              <Stack direction="row" spacing={0.75} sx={{ mb: 1.75, flexWrap: 'wrap' }} useFlexGap>
-                {(['watch', 'assignment', 'test'] as const).map((s, idx) => {
-                  const order = ['watch', 'assignment', 'test'];
-                  const currentIdx = order.indexOf(current.step);
-                  const isDone = current.step === 'done' || idx < currentIdx;
-                  const isNow = current.step === s;
-                  if (s === 'test' && !current.has_test) return null;
-                  return (
-                    <Chip
-                      key={s}
-                      size="small"
-                      label={`${idx + 1}. ${STEP_COPY[s].label}`}
-                      sx={{
-                        fontWeight: isNow ? 700 : 500,
-                        bgcolor: isDone
-                          ? alpha(theme.palette.success.main, 0.12)
-                          : isNow
-                            ? alpha(theme.palette.primary.main, 0.12)
-                            : alpha('#1A2027', 0.06),
-                        color: isDone ? 'success.dark' : isNow ? 'primary.dark' : 'text.secondary',
-                      }}
-                    />
-                  );
-                })}
-              </Stack>
-
-              <Button
-                fullWidth
-                variant="contained"
-                color={current.overdue ? 'error' : 'primary'}
-                startIcon={<CurrentIcon />}
-                onClick={() => openItem(current)}
-                sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, borderRadius: RADIUS.control }}
-              >
-                {current.active ? STEP_COPY[current.step].cta : 'Start this class'}
-              </Button>
-            </Box>
-          ) : (
-            <Alert severity="success" sx={{ borderRadius: 2 }}>
-              Every class on your list is done. Nice work.
-            </Alert>
-          )}
-
-          {totals && totals.total > 0 && (
-            <Box>
-              <LinearProgress
-                variant="determinate"
-                value={Math.round((totals.completed / totals.total) * 100)}
-                sx={{ height: 8, borderRadius: 99, mb: 0.75 }}
-              />
-              <Typography variant="caption" color="text.secondary">
-                {totals.completed} of {totals.total} classes done
-                {pace?.finish_by && pace.remaining > 0 ? ` · finish by ${formatDay(pace.finish_by)}` : ''}
-              </Typography>
-            </Box>
-          )}
-
-          {pace && pace.state !== 'done' && (
-            <Box
-              sx={{
-                px: 1.75,
-                py: 1.25,
-                borderRadius: RADIUS.control,
-                border: '1px solid',
-                borderColor: behind ? alpha(theme.palette.warning.main, 0.4) : 'divider',
-                bgcolor: behind
-                  ? alpha(theme.palette.warning.main, 0.08)
-                  : alpha(theme.palette.success.main, 0.06),
-              }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: behind ? 700 : 500 }}>
-                {pace.message}
-              </Typography>
-            </Box>
-          )}
-        </Stack>
-
-        <Box>
-          {/* One list, not two.
-              It used to split into "Overdue" and "Classes you missed", which
-              with a timetable deadline meant everything older than a week piled
-              into the red section and the second heading was usually empty.
-              With one clock at a time there is at most one urgent card, and the
-              hero above already points at it. */}
-          {missed.length > 0 && (
-            <>
-              <Typography
-                sx={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 800,
-                  letterSpacing: '.1em',
-                  textTransform: 'uppercase',
-                  color: 'text.secondary',
-                  mb: 1,
-                }}
-              >
-                Classes you missed
-              </Typography>
-              <Stack spacing={1} sx={{ mb: 3 }}>
-                {missed.map(missedCard)}
-              </Stack>
-            </>
-          )}
-
-          {/* The backlog. Shown in full: hiding it would feel like being managed. */}
-          {items.length > 0 && (
-            <>
-              <Typography
-                sx={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 800,
-                  letterSpacing: '.1em',
-                  textTransform: 'uppercase',
-                  color: 'text.secondary',
-                  mb: 1,
-                }}
-              >
-                Before you joined
-              </Typography>
-
-              {/* No padlocks. The order is a suggestion, and any of these can be
-                  started. Locking them meant one unprepared recap in the middle
-                  stalled the whole backlog, and it decided for the student where
-                  to begin. */}
-              <CatchupTrack
-                steps={steps}
-                lockFuture={false}
-                onStepClick={(_s, i) => openItem(items[i])}
-                currentAction={() => (
-                  <Button
-                    size="small"
-                    variant="contained"
-                    onClick={() => current && openItem(current)}
-                    sx={{ minHeight: 40, textTransform: 'none', borderRadius: RADIUS.control }}
-                  >
-                    {current?.active ? 'Continue' : 'Start'}
-                  </Button>
-                )}
-                trailing={(_s, i) => {
-                  const item = items[i];
-                  // Only the one with the clock on it says anything about time.
-                  if (!item.active) return null;
-                  return (
-                    <Typography
-                      variant="caption"
-                      color={item.overdue ? 'error.main' : 'text.secondary'}
-                      sx={{ whiteSpace: 'nowrap', fontWeight: 700 }}
-                    >
-                      {dueLabel(item)}
-                    </Typography>
-                  );
-                }}
-              />
-            </>
-          )}
-
-          {excluded.length > 0 && (
-            <Box
-              sx={{
-                mt: 2,
-                p: 1.75,
-                borderRadius: RADIUS.control,
-                border: '1px dashed',
-                borderColor: 'divider',
-              }}
-            >
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                <VideocamOffOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
-                <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                  {excluded.length} {excluded.length === 1 ? 'class has' : 'classes have'} no recording
+                <Typography
+                  sx={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    letterSpacing: '.1em',
+                    textTransform: 'uppercase',
+                    color: current.overdue ? 'error.main' : 'primary.main',
+                    mb: 0.75,
+                  }}
+                >
+                  {current.overdue
+                    ? 'Running late'
+                    : current.active
+                      ? 'You are on this one'
+                      : 'We suggest starting here'}
                 </Typography>
-              </Stack>
-              <Typography variant="caption" color="text.disabled">
-                Nothing to do here, and they do not count against you. Your teacher can see them too.
-              </Typography>
-            </Box>
-          )}
+                <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.25, mb: 0.25 }}>
+                  {current.class.title || 'Class'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  {formatDay(current.class.scheduled_date)}
+                  {current.chained && totals ? ` · class ${current.position} of ${totals.total}` : ''}
+                  {/* The clock, only once they have actually started it. Before
+                      that the card says what they will get rather than what they
+                      have already lost. */}
+                  {current.active
+                    ? ` · ${dueLabel(current)?.toLowerCase() ?? ''}`
+                    : ` · ${offerLabel(current)}`}
+                </Typography>
+
+                {/* Three steps, always in this order, so the shape of the work is
+                    the same on every class. */}
+                <Stack direction="row" spacing={0.75} sx={{ mb: 1.75, flexWrap: 'wrap' }} useFlexGap>
+                  {(['watch', 'assignment', 'test'] as const).map((s, idx) => {
+                    const order = ['watch', 'assignment', 'test'];
+                    const currentIdx = order.indexOf(current.step);
+                    const isDone = current.step === 'done' || idx < currentIdx;
+                    const isNow = current.step === s;
+                    if (s === 'test' && !current.has_test) return null;
+                    return (
+                      <Chip
+                        key={s}
+                        size="small"
+                        label={`${idx + 1}. ${STEP_COPY[s].label}`}
+                        sx={{
+                          fontWeight: isNow ? 700 : 500,
+                          bgcolor: isDone
+                            ? alpha(theme.palette.success.main, 0.12)
+                            : isNow
+                              ? alpha(theme.palette.primary.main, 0.12)
+                              : alpha('#1A2027', 0.06),
+                          color: isDone ? 'success.dark' : isNow ? 'primary.dark' : 'text.secondary',
+                        }}
+                      />
+                    );
+                  })}
+                </Stack>
+
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color={current.overdue ? 'error' : 'primary'}
+                  startIcon={<CurrentIcon />}
+                  onClick={() => openItem(current)}
+                  sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, borderRadius: RADIUS.control }}
+                >
+                  {current.active ? STEP_COPY[current.step].cta : 'Start this class'}
+                </Button>
+              </Box>
+            ) : (
+              <Alert severity="success" sx={{ borderRadius: 2 }}>
+                Every class on your list is done. Nice work.
+              </Alert>
+            )}
+
+            {totals && totals.total > 0 && (
+              <Box>
+                <LinearProgress
+                  variant="determinate"
+                  value={Math.round((totals.completed / totals.total) * 100)}
+                  sx={{ height: 8, borderRadius: 99, mb: 0.75 }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  {totals.completed} of {totals.total} classes done
+                  {pace?.finish_by && pace.remaining > 0 ? ` · finish by ${formatDay(pace.finish_by)}` : ''}
+                </Typography>
+              </Box>
+            )}
+
+            {pace && pace.state !== 'done' && (
+              <Box
+                sx={{
+                  px: 1.75,
+                  py: 1.25,
+                  borderRadius: RADIUS.control,
+                  border: '1px solid',
+                  borderColor: behind ? alpha(theme.palette.warning.main, 0.4) : 'divider',
+                  bgcolor: behind
+                    ? alpha(theme.palette.warning.main, 0.08)
+                    : alpha(theme.palette.success.main, 0.06),
+                }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: behind ? 700 : 500 }}>
+                  {pace.message}
+                </Typography>
+              </Box>
+            )}
+          </Stack>
+
+          <Box>
+            {/* One list, not two.
+                It used to split into "Overdue" and "Classes you missed", which
+                with a timetable deadline meant everything older than a week piled
+                into the red section and the second heading was usually empty.
+                With one clock at a time there is at most one urgent card, and the
+                hero above already points at it. */}
+            {missed.length > 0 && (
+              <>
+                <Typography
+                  sx={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    letterSpacing: '.1em',
+                    textTransform: 'uppercase',
+                    color: 'text.secondary',
+                    mb: 1,
+                  }}
+                >
+                  Classes you missed
+                </Typography>
+                <Stack spacing={1} sx={{ mb: 3 }}>
+                  {missed.map(missedCard)}
+                </Stack>
+              </>
+            )}
+
+            {/* The backlog. Shown in full: hiding it would feel like being managed. */}
+            {items.length > 0 && (
+              <>
+                <Typography
+                  sx={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    letterSpacing: '.1em',
+                    textTransform: 'uppercase',
+                    color: 'text.secondary',
+                    mb: 1,
+                  }}
+                >
+                  Before you joined
+                </Typography>
+
+                {/* No padlocks. The order is a suggestion, and any of these can be
+                    started. Locking them meant one unprepared recap in the middle
+                    stalled the whole backlog, and it decided for the student where
+                    to begin. */}
+                <CatchupTrack
+                  steps={steps}
+                  lockFuture={false}
+                  onStepClick={(_s, i) => openItem(items[i])}
+                  currentAction={() => (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => current && openItem(current)}
+                      sx={{ minHeight: 40, textTransform: 'none', borderRadius: RADIUS.control }}
+                    >
+                      {current?.active ? 'Continue' : 'Start'}
+                    </Button>
+                  )}
+                  trailing={(_s, i) => {
+                    const item = items[i];
+                    // Only the one with the clock on it says anything about time.
+                    if (!item.active) return null;
+                    return (
+                      <Typography
+                        variant="caption"
+                        color={item.overdue ? 'error.main' : 'text.secondary'}
+                        sx={{ whiteSpace: 'nowrap', fontWeight: 700 }}
+                      >
+                        {dueLabel(item)}
+                      </Typography>
+                    );
+                  }}
+                />
+              </>
+            )}
+
+            {excluded.length > 0 && (
+              <Box
+                sx={{
+                  mt: 2,
+                  p: 1.75,
+                  borderRadius: RADIUS.control,
+                  border: '1px dashed',
+                  borderColor: 'divider',
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <VideocamOffOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                    {excluded.length} {excluded.length === 1 ? 'class has' : 'classes have'} no recording
+                  </Typography>
+                </Stack>
+                <Typography variant="caption" color="text.disabled">
+                  Nothing to do here, and they do not count against you. Your teacher can see them too.
+                </Typography>
+              </Box>
+            )}
+          </Box>
         </Box>
-      </Box>
+        </>
+      )}
 
       <Snackbar
         open={!!snack}
@@ -690,5 +769,30 @@ export default function StudentCatchUpPage() {
         </Alert>
       </Snackbar>
     </Box>
+  );
+}
+
+/**
+ * useSearchParams opts the whole route out of static generation unless it sits
+ * under a boundary, so the tab key costs this wrapper. Same shape as the
+ * teacher catch-up page.
+ */
+export default function StudentCatchUpPage() {
+  return (
+    <Suspense
+      fallback={
+        <Box sx={{ maxWidth: 1100, mx: 'auto' }}>
+          <Skeleton variant="rounded" height={40} sx={{ borderRadius: 2, mb: 2, maxWidth: 220 }} />
+          <Skeleton variant="rounded" height={190} sx={{ borderRadius: 3, mb: 2 }} />
+          <Stack spacing={1}>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} variant="rounded" height={56} sx={{ borderRadius: 3 }} />
+            ))}
+          </Stack>
+        </Box>
+      }
+    >
+      <StudentCatchUpWorkspace />
+    </Suspense>
   );
 }

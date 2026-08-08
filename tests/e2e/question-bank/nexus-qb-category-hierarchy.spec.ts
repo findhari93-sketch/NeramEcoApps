@@ -416,6 +416,11 @@ test.describe('QB Category Hierarchy', () => {
 });
 
 test.describe('QB Category Hierarchy - teacher authoring', () => {
+  // Same cold-compile budget as the student describe above. The teacher question
+  // list is a separate route, so this test pays its own first-load compile, and
+  // the 30s default expires before the assertion below gets to start waiting.
+  test.describe.configure({ timeout: 120_000 });
+
   test('the five new coordinate geometry chips are available when authoring', async ({ page }) => {
     const authed = await injectAuthForPage(page, 'teacher');
     if (!authed) {

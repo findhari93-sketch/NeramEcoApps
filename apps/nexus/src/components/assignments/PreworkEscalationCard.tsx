@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Box, Button, Chip, Stack, Typography, alpha, useTheme } from '@neram/ui';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface Escalation {
   id: string;
@@ -104,9 +105,13 @@ export default function PreworkEscalationCard({
               borderColor: 'divider',
             }}
           >
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {r.student_name}
-            </Typography>
+            {/* key={r.id} is the escalation, not the person: the ring needs student_id. */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <StudentAvatar userId={r.student_id} name={r.student_name} size={28} />
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {r.student_name}
+              </Typography>
+            </Box>
             <Stack direction="row" spacing={0.75} sx={{ mt: 0.5, mb: 1.25, flexWrap: 'wrap' }} useFlexGap>
               <Chip size="small" label={r.label} color="warning" variant="outlined" />
               {r.notes.map((n) => (

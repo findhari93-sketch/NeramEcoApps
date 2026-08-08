@@ -165,9 +165,14 @@ describe('featureForPath (longest-prefix match)', () => {
     expect(featureForPath('/student/exams')?.id).toBe('student.exams');
   });
 
-  it('matches both the class-recaps list and the single-recap player', () => {
-    expect(featureForPath('/student/class-recaps')?.id).toBe('student.class-recaps');
+  it('gates the recap player and Focus Mode, and no longer a list', () => {
+    // The id is deliberately unchanged: it is persisted per classroom, so
+    // renaming it would silently reset whatever a teacher had switched on.
     expect(featureForPath('/student/class-recap/xyz')?.id).toBe('student.class-recaps');
+    expect(featureForPath('/student/focus/recap/xyz')?.id).toBe('student.class-recaps');
+    // The list is gone and redirects to /student/catch-up, which is gated by
+    // its own flag rather than this one.
+    expect(featureForPath('/student/class-recaps')).toBeUndefined();
   });
 
   it('returns undefined for ungated routes', () => {

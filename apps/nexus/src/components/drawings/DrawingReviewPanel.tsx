@@ -8,6 +8,7 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import SketchOverCanvas from './SketchOverCanvas';
 import ResourceLinkSearch from './ResourceLinkSearch';
 import CategoryBadge from './CategoryBadge';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
 
 interface DrawingReviewPanelProps {
@@ -89,6 +90,12 @@ export default function DrawingReviewPanel({
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <StudentAvatar
+          userId={submission.student?.id}
+          name={submission.student?.name}
+          src={submission.student?.avatar_url}
+          size={32}
+        />
         <Typography variant="subtitle1" fontWeight={600}>
           {submission.student?.name || 'Student'}
         </Typography>

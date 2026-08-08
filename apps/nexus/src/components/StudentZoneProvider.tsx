@@ -44,12 +44,16 @@ const STORAGE_KEY = 'nexus_student_zone';
 function detectZoneFromPath(pathname: string): StudentZoneId | null {
   if (
     pathname.startsWith(STUDY_MATERIALS_PATH) ||
-    pathname.startsWith(SELF_LEARNING_PATH) ||
-    pathname.startsWith(CLASS_RECAP_PATH)
+    pathname.startsWith(SELF_LEARNING_PATH)
   )
     return 'study';
   const classroomExclusive = [
     '/student/dashboard',
+    // The recap player is a Catch-up surface, not a Study Zone one. It used to
+    // force the Study Zone, which has no Catch-up item by design, so a student
+    // following a recap link landed in a sidebar with no route back to the list
+    // that sent them.
+    CLASS_RECAP_PATH,
     '/student/timetable',
     COURSE_PLAN_PATH,
     ASSIGNMENTS_PATH,

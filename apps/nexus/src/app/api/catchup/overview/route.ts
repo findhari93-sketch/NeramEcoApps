@@ -16,6 +16,7 @@ import {
 } from '@neram/database';
 import { canUser } from '@/lib/staff-capabilities';
 import { BUCKET_ORDER, catchupBucket, emptyTally, tallyBuckets } from '@/lib/catchup-buckets';
+import { catchupStanding } from '@/lib/catchup-standing';
 import { loadClassFactsForStudents } from '@/lib/catchup-facts';
 import { computeCatchupPace } from '@/lib/catchup-pace';
 import { tallyReasons } from '@/lib/rsvp-reasons';
@@ -458,12 +459,25 @@ export async function GET(request: NextRequest) {
         (r) => r.status === 'blocked' || r.status === 'pending_teacher',
       ).length;
 
-      // A student with nothing left is not a work item, so they stay out of the
-      // chase list rather than padding it with rows that read as green noise.
-      // They are NOT dropped from the payload: their finished items are already
-      // in `completed`, which is how the Caught up tab can answer "who actually
-      // made it up" instead of showing an empty screen.
-      if (openCount === 0 && blockedOnUs === 0) continue;
+      // A student with nothing left used to be dropped here, on the grounds that
+      // they are not a work item. That was true of the chase list and wrong of
+      // the payload: it meant the one group worth congratulating was the only
+      // group the screen deleted, and there was no way anywhere in Nexus to ask
+      // "who is completely clear". They now stay, carrying `bucket: 'all_clear'`,
+      // which keeps them out of the chase groups (those iterate BUCKET_ORDER,
+      // and all_clear is deliberately not in it) while making them countable.
+      const standing = catchupStanding(
+        studentItems.map((i: any, idx: number) => ({
+          kind: i.kind ?? null,
+          status: resolved[idx].status,
+          scheduledDate: String(i.class.scheduled_date),
+          caughtUpAt: i.caught_up_at ?? null,
+          followupSentAt: i.followup_sent_at ?? null,
+          recordingWatchedAt: i.recording_watched_at ?? null,
+          activatedOn: i.activated_on ?? null,
+        })),
+        today,
+      );
 
       students.push({
         journey_id: journey?.id ?? null,
@@ -479,6 +493,7 @@ export async function GET(request: NextRequest) {
         missedTotals,
         clock: clockSummary,
         pace,
+        standing,
         items: shaped,
       });
     }
@@ -486,9 +501,17 @@ export async function GET(request: NextRequest) {
     // Sorted as a work queue, not a register. Bucket leads so the client can
     // group by simply walking the array, and the tie-breaks then order the rows
     // within a group: whoever owes the most, first.
+    //
+    // `all_clear` is not in BUCKET_ORDER, so indexOf returns -1 for it and the
+    // finished students would float to the very top of a chase queue. Ranking
+    // them explicitly last is what keeps the work at the top of the array.
+    const chaseRank = (b: (typeof students)[number]['bucket']) => {
+      const i = BUCKET_ORDER.indexOf(b);
+      return i === -1 ? BUCKET_ORDER.length : i;
+    };
     students.sort(
       (a, b) =>
-        BUCKET_ORDER.indexOf(a.bucket) - BUCKET_ORDER.indexOf(b.bucket) ||
+        chaseRank(a.bucket) - chaseRank(b.bucket) ||
         b.pace.deficit - a.pace.deficit ||
         b.openCount - a.openCount ||
         b.missedTotals.open - a.missedTotals.open,
@@ -552,10 +575,18 @@ export async function GET(request: NextRequest) {
         hiddenDormant,
         // Kept for anything still reading the old shape. Derived from the same
         // tally rather than recomputed, so they cannot drift back apart.
-        studentsBehind: students.filter((s) => s.bucket !== 'in_progress' && s.bucket !== 'waiting_on_us')
-          .length,
+        //
+        // All three exclude `all_clear` explicitly. Finished students used to be
+        // absent from `students` altogether, so every one of these counted them
+        // out for free; now that they stay in the payload, the omission has to be
+        // written down or the sub-line jumps from "across 27 students" to "across
+        // 29" on the day this ships, describing the same cohort.
+        studentsBehind: students.filter(
+          (s) =>
+            s.bucket !== 'in_progress' && s.bucket !== 'waiting_on_us' && s.bucket !== 'all_clear',
+        ).length,
         studentsStalled: students.filter((s) => s.bucket === 'not_started').length,
-        studentsCatchingUp: students.length,
+        studentsCatchingUp: students.filter((s) => s.bucket !== 'all_clear').length,
         outstanding: outstandingTotal,
         clearedThisMonth,
         explained: explainedTotal,

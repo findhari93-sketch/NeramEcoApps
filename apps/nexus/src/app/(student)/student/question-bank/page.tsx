@@ -77,9 +77,13 @@ export default function QuestionBankHome() {
   const { data: statsRes, isLoading: statsLoading } = useAuthSWR<
     { data?: QBProgressStats } & QBProgressStats
   >(scoped('/api/question-bank/stats'));
-  const { data: papersRes, isLoading: papersLoading } = useAuthSWR<{
-    data: { groups: NexusQBPaperGroup[] };
-  }>(scoped('/api/question-bank/student-papers'));
+  const {
+    data: papersRes,
+    isLoading: papersLoading,
+    error: papersError,
+  } = useAuthSWR<{ data: { groups: NexusQBPaperGroup[] } }>(
+    scoped('/api/question-bank/student-papers'),
+  );
   const { data: presetsRes, isLoading: presetsLoading } = useAuthSWR<{
     data?: NexusQBSavedPreset[];
   }>(scoped('/api/question-bank/presets'));
@@ -163,6 +167,17 @@ export default function QuestionBankHome() {
 
       {loading ? (
         <PapersSkeleton />
+      ) : papersError ? (
+        /*
+          A failed request is not an empty library.
+          This page already made exactly this mistake once: /stats and
+          /exam-tree were 400ing and the screen reported "All 0 Questions" as
+          though it were a fact about the bank. Falling back to the empty state
+          on an error here would rebuild the same lie one level down, and it
+          would be even harder to spot, because "no past papers yet" is a
+          perfectly ordinary thing for this screen to say.
+        */
+        <PapersError message={papersError.message} />
       ) : groups.length === 0 ? (
         <PapersEmpty hasClassroom={!!classroomId} />
       ) : (
@@ -221,6 +236,43 @@ function PapersSkeleton() {
         ))}
       </Box>
     </Box>
+  );
+}
+
+/**
+ * The request did not come back.
+ *
+ * Says so plainly, and offers the one thing that helps, rather than dressing a
+ * failure up as an answer. The question search above still works, because it
+ * asks a different route.
+ */
+function PapersError({ message }: { message?: string }) {
+  const theme = useTheme();
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 3,
+        borderRadius: 3,
+        textAlign: 'center',
+        borderColor: alpha(theme.palette.warning.main, 0.4),
+        bgcolor: alpha(theme.palette.warning.main, 0.04),
+      }}
+    >
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
+        Past papers could not be loaded
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {message || 'Something went wrong on our side.'}
+      </Typography>
+      <Button
+        variant="outlined"
+        onClick={() => window.location.reload()}
+        sx={{ minHeight: 44, borderRadius: 2, textTransform: 'none' }}
+      >
+        Try again
+      </Button>
+    </Paper>
   );
 }
 

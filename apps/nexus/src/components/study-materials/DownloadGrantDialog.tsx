@@ -16,7 +16,7 @@ import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import LockClockOutlinedIcon from '@mui/icons-material/LockClockOutlined';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 export interface GrantTarget {
   kind: 'file' | 'folder';
@@ -33,7 +33,10 @@ interface StudentRow {
 }
 
 interface GrantRow {
+  /** The GRANT's id, which is what revoke() needs. Not the person. */
   id: string;
+  /** DownloadGrantWithStudent has always carried this; the dialog never asked. */
+  student_id: string;
   student_name: string | null;
   scope: 'file' | 'folder' | 'all';
   reason: string | null;
@@ -309,9 +312,10 @@ export default function DownloadGrantDialog({
                     }}
                   >
                     <Checkbox checked={selected.has(s.id)} tabIndex={-1} size="small" />
+                    <StudentAvatar userId={s.id} name={s.name} size={28} />
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="body2" fontWeight={600} noWrap>{s.name}</Typography>
-                      {s.email && <Typography variant="caption" color="text.secondary" noWrap>{s.email}</Typography>}
+                      {s.email && <Typography variant="caption" color="text.secondary" noWrap display="block">{s.email}</Typography>}
                     </Box>
                   </Box>
                 ))
@@ -343,7 +347,7 @@ export default function DownloadGrantDialog({
                   key={g.id}
                   sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
                 >
-                  <LockClockOutlinedIcon fontSize="small" color="action" />
+                  <StudentAvatar userId={g.student_id} name={g.student_name} size={28} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={600} noWrap>{g.student_name || 'Student'}</Typography>
                     <Typography variant="caption" color="text.secondary">

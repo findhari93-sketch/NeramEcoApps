@@ -13,6 +13,7 @@ import {
 } from '@neram/ui';
 import { STAGE_LABEL, examYearOf, stageColor, stageKeyOf } from '@/lib/student-stage';
 import { StudentStageChip } from './StudentStageChip';
+import StudentAvatar from './StudentAvatar';
 
 /**
  * Review sheet for what the students already told us on their application form.
@@ -160,6 +161,12 @@ export default function PrefillReviewSheet({
                   tabIndex={-1}
                   inputProps={{ 'aria-label': `Apply suggestion for ${suggestion.name}` }}
                   sx={{ p: 1 }}
+                />
+                <StudentAvatar
+                  userId={suggestion.studentId}
+                  name={suggestion.name}
+                  size={28}
+                  sx={{ mt: 0.5 }}
                 />
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }} noWrap>

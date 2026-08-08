@@ -63,15 +63,34 @@ describe('nav-config: every desktop item is reachable on a phone', () => {
 
     const study = ZONES.find((z) => z.id === 'study')!;
     expect(paths(zoneOverflow(study))).toEqual(
-      expect.arrayContaining([
-        '/student/class-recaps',
-        '/student/study-materials/starred',
-        '/student/resources',
-      ]),
+      expect.arrayContaining(['/student/study-materials/starred', '/student/resources']),
     );
   });
 
   it('keeps Catch-up in the student Classroom More sheet', () => {
+    const classroom = ZONES.find((z) => z.id === 'classroom')!;
+    expect(paths(zoneOverflow(classroom))).toContain('/student/catch-up');
+  });
+
+  /**
+   * The guard that would have caught the second door the day it shipped.
+   *
+   * The Study Zone used to carry a "Class Recaps" item beside Catch-up in the
+   * Classroom zone. Both led to the same recordings, but only the Catch-up
+   * route starts the clock, so a student who used the Study Zone one did the
+   * work and still read as "not started" to their teacher. There must be
+   * exactly one way in, and this asserts it by path rather than by label so a
+   * rename cannot quietly reopen it.
+   */
+  it('offers no second door to a class recording outside Catch-up', () => {
+    const study = ZONES.find((z) => z.id === 'study')!;
+    const everywhere = [
+      ...paths(zoneOverflow(study)),
+      ...paths(study.bottomNavItems),
+      ...study.navGroups.flatMap((g) => paths(g.items)),
+    ];
+    expect(everywhere.filter((p) => p.startsWith('/student/class-recap'))).toEqual([]);
+
     const classroom = ZONES.find((z) => z.id === 'classroom')!;
     expect(paths(zoneOverflow(classroom))).toContain('/student/catch-up');
   });

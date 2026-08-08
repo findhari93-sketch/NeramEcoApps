@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyQBAccess } from '@/lib/qb-auth';
+import { verifyQBAccessAnyClassroom } from '@/lib/qb-auth';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { getSupabaseAdminClient, softDeleteTests } from '@neram/database';
 
@@ -20,7 +20,16 @@ const MAX_BATCH = 200;
  */
 export async function POST(request: NextRequest) {
   try {
-    const access = await verifyQBAccess(request.headers.get('Authorization'), null);
+    // ANY classroom, not verifyQBAccess(..., null).
+    //
+    // A test id is not classroom scoped, and a student deleting their own paper
+    // has no classroom to name. verifyQBAccess answers a null classroom with
+    // "classroom_id is required", 400, for every student, every time, which
+    // meant the ownership branch below had never once executed: the route was
+    // staff-only in practice while reading as though it were not. That is the
+    // same mistake NXS-0114 recorded when it took the student test builder off
+    // the air, and the reason verifyQBAccessAnyClassroom exists.
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
 
     const body = await request.json().catch(() => ({}));
@@ -51,16 +60,17 @@ export async function POST(request: NextRequest) {
 
     let deletable: string[];
     if (isStaff) {
-      // Staff own the shared library, but a student's own practice papers are
-      // theirs. The Student tests tab is deliberately read only for the same
-      // reason, and a bulk action must not be the back door around it.
-      const someoneElses = found.filter((t: any) => t.created_by_student);
-      if (someoneElses.length > 0) {
-        return NextResponse.json(
-          { error: "Student practice papers cannot be deleted here. They belong to the student." },
-          { status: 403 },
-        );
-      }
+      // Staff may clear student practice papers as well as the shared library.
+      // This route used to refuse them on the grounds that a student's workspace
+      // is their own, but the single-test route never carried that guard, so a
+      // teacher could already delete one by opening its detail page: the rule was
+      // enforced in exactly one of the two places it applied. It is now settled
+      // the other way, because the papers students abandon by the dozen are the
+      // clutter teachers are actually being asked to clear.
+      //
+      // The narrower rule still stands and is enforced in /api/test-folders:
+      // staff may DELETE a student's paper, never RE-FILE it into a folder the
+      // student did not make.
       deletable = found.map((t: any) => t.id);
     } else {
       const notMine = found.filter((t: any) => t.created_by_student !== access.caller.id);
@@ -70,7 +80,7 @@ export async function POST(request: NextRequest) {
       deletable = found.map((t: any) => t.id);
     }
 
-    const deleted = await softDeleteTests(deletable);
+    const deleted = await softDeleteTests(deletable, access.caller.id);
 
     return NextResponse.json({
       data: {

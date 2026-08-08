@@ -17,6 +17,17 @@
  * Now every language is on screen with its state beside it, and the language a
  * teacher is looking for cannot be the one they cannot find.
  *
+ * THE VIDEO IS A STEP, AND IT USED TO BE MISSING. Attaching a recording meant
+ * pasting a URL into a box that only appeared after pressing Add, so a teacher
+ * had to leave Nexus, find the file in SharePoint and copy its link before this
+ * dialog could do anything at all. Once attached the video disappeared again:
+ * no file name, no link, no way to change it. The row that should have led with
+ * the recording was the only part of the screen that never mentioned it, which
+ * is why "where do I actually search and add the recording" was the question
+ * this dialog kept provoking. Each language is now three visible steps, video
+ * first, and the video can be SEARCHED for out of SharePoint and the teacher's
+ * own OneDrive. Pasting a link is still there, demoted to the fallback it is.
+ *
  * OPEN RECORDINGS. Publishing used to require checkpoints, which meant a
  * recording with no transcript reached nobody at all. That was the real reason
  * the ungated "Quick video link" existed and, since no student screen ever
@@ -25,36 +36,27 @@
  * unlock the test. The gate counts only recordings a student can finish, so an
  * open one cannot trap anybody.
  *
- * UPLOAD IS THE PRIMARY PATH. This dialog used to lead with "Draft
- * checkpoints", which tries to pull the transcript out of SharePoint. For these
- * recordings that always fails: lib/sharepoint-transcript.ts can only find a
- * .vtt somebody placed by hand next to the .mp4, and these files were uploaded
- * to a plain document library with no Teams meeting behind them. So the first
- * press a teacher ever made hit a dead end, and the feature went unused with
- * zero tracks created. Fetching is still offered, because a stored transcript
- * makes it free, but it is secondary.
+ * UPLOAD IS THE PRIMARY TRANSCRIPT PATH. Fetching tries to pull the transcript
+ * out of SharePoint, and for these recordings that usually fails:
+ * lib/sharepoint-transcript.ts can only find a .vtt somebody placed by hand next
+ * to the .mp4, and these files were uploaded to a plain document library with no
+ * Teams meeting behind them. Fetching is still offered, because a stored
+ * transcript makes it free, but it is secondary.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Box, Typography, Button,
-  IconButton, TextField, Chip, Alert, CircularProgress, Collapse, useMediaQuery,
+  IconButton, Alert, CircularProgress, useMediaQuery,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import PublishRoundedIcon from '@mui/icons-material/PublishRounded';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import TuneIcon from '@mui/icons-material/Tune';
-import EditNoteIcon from '@mui/icons-material/EditNote';
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
-import { extractYouTubeId } from '@/lib/youtube';
 import { FALLBACK_TRACK_LANGUAGES, type TrackLanguageOption } from '@/lib/track-languages';
 import { buildLanguageRows, type RecordingTrack, type TrackRow } from '@/lib/chapter-recordings';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import DriveFilePickerDialog, { type DriveItem } from '../shared/DriveFilePickerDialog';
+import LanguageTrackRow from './LanguageTrackRow';
 import ManageTrackLanguagesDialog from './ManageTrackLanguagesDialog';
 
 interface Props {
@@ -75,15 +77,26 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [showVttHelp, setShowVttHelp] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
 
   /** The chapter's old ungated link, until it has been moved into a recording. */
   const [legacyLink, setLegacyLink] = useState<string | null>(null);
 
-  /** The language code currently being filled in, or null when none is. */
-  const [adding, setAdding] = useState<string | null>(null);
+  /** The language code whose paste field is open, or null when none is. */
+  const [pasting, setPasting] = useState<string | null>(null);
   const [recordingUrl, setRecordingUrl] = useState('');
+
+  /** The language code the file picker was opened for, or null when it is shut. */
+  const [pickingFor, setPickingFor] = useState<string | null>(null);
+
+  /**
+   * The language whose last save was refused as unplayable.
+   *
+   * Held so the row can offer "Attach it anyway" only after the server has
+   * actually said no. Offering the override up front would turn a check that
+   * exists to protect students into one more button to click past.
+   */
+  const [unreachable, setUnreachable] = useState<string | null>(null);
 
   const authed = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -97,7 +110,11 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
         },
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || 'Request failed');
+      if (!res.ok) {
+        const err = new Error(body.error || 'Request failed') as Error & { code?: string };
+        err.code = body.code;
+        throw err;
+      }
       return body;
     },
     [getToken],
@@ -121,16 +138,17 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
   useEffect(() => {
     if (open) {
       load();
-      setAdding(null);
+      setPasting(null);
+      setPickingFor(null);
       setRecordingUrl('');
       setNotice(null);
-      setShowVttHelp(false);
+      setUnreachable(null);
       setLegacyLink(file?.recording?.url || null);
     }
   }, [open, load, file]);
 
   /**
-   * Open the slot for one language.
+   * Open the paste field for one language.
    *
    * The chapter's old quick link is offered as the FIRST recording's URL, and
    * SAYS so. It has always been pre-filled here and never explained, so a
@@ -140,17 +158,12 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
    * holds. Only for the first: the second is the other language, a different
    * recording.
    */
-  const startAdding = (code: string) => {
+  const openPaste = (code: string) => {
     setRecordingUrl(!tracks.length && legacyLink ? legacyLink : '');
-    setAdding(code);
+    setPasting(code);
+    setUnreachable(null);
     setError(null);
   };
-
-  const detected = recordingUrl.trim()
-    ? extractYouTubeId(recordingUrl.trim())
-      ? 'youtube'
-      : 'sharepoint'
-    : null;
 
   /**
    * Move the old link rather than leave a copy of it behind.
@@ -175,44 +188,96 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
     }
   }, [authed, file, onChanged]);
 
-  const addTrack = async () => {
-    if (!file || !adding || !recordingUrl.trim()) return;
-    const url = recordingUrl.trim();
-    const label = languages.find((l) => l.code === adding)?.label || adding;
-    const movedTheLink = !!legacyLink && url === legacyLink;
-    setBusyId('new');
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await authed(`/api/study-materials/files/${file.id}/video-tracks`, {
-        method: 'POST',
-        body: JSON.stringify({ language: adding, recording_url: url }),
-      });
-      // Say which happened. A revived track that kept its checkpoints looks
-      // identical to a new one that somehow already had some, and a teacher who
-      // just re-added a language deserves to know their work came back.
-      if (res.restored) {
-        setNotice(
-          res.checkpointsCleared
-            ? `Restored the ${label} recording. Its old checkpoints were cut from the previous video, so upload the transcript for this one.`
-            : `Restored the ${label} recording, checkpoints and all.`,
-        );
-      } else if (movedTheLink) {
-        setNotice(
-          `Moved the chapter's old video link into the ${label} recording. Publish it to make it visible to students.`,
-        );
+  /**
+   * Attach or replace one language's video.
+   *
+   * Two endpoints, because they are two different operations to the database. A
+   * language with no track POSTs and creates one. A language that already has a
+   * track PATCHes it, which keeps the track's identity and, when the video
+   * actually changed, clears checkpoints that were cut from the old recording's
+   * timings and could only land mid-sentence in the new one.
+   */
+  const saveVideo = useCallback(
+    async (code: string, url: string, opts?: { force?: boolean }) => {
+      if (!file || !url.trim()) return;
+      const clean = url.trim();
+      const label = languages.find((l) => l.code === code)?.label || code;
+      const existing = tracks.find((t) => t.language === code);
+      const movedTheLink = !!legacyLink && clean === legacyLink;
+
+      // Keyed by language when there is no track id yet, so the row being saved
+      // is the only one that goes busy. A bare 'new' could not say which.
+      setBusyId(existing ? existing.id : `new:${code}`);
+      setError(null);
+      setNotice(null);
+      try {
+        const base = `/api/study-materials/files/${file.id}/video-tracks`;
+        const res = existing
+          ? await authed(`${base}/${existing.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ recording_url: clean, ...(opts?.force ? { force: true } : {}) }),
+            })
+          : await authed(base, {
+              method: 'POST',
+              body: JSON.stringify({
+                language: code,
+                recording_url: clean,
+                ...(opts?.force ? { force: true } : {}),
+              }),
+            });
+
+        // Say which happened. A revived track that kept its checkpoints looks
+        // identical to a new one that somehow already had some, and a teacher who
+        // just re-added a language deserves to know their work came back.
+        if (res.clearedCheckpoints) {
+          setNotice(
+            `Changed the ${label} video. Its checkpoints were cut from the old recording, so they have been cleared: upload this video's transcript to make new ones.`,
+          );
+        } else if (existing) {
+          setNotice(`Changed the ${label} video.`);
+        } else if (res.restored) {
+          setNotice(
+            res.checkpointsCleared
+              ? `Restored the ${label} recording. Its old checkpoints were cut from the previous video, so upload the transcript for this one.`
+              : `Restored the ${label} recording, checkpoints and all.`,
+          );
+        } else if (movedTheLink) {
+          setNotice(
+            `Moved the chapter's old video link into the ${label} recording. Publish it to make it visible to students.`,
+          );
+        }
+
+        if (movedTheLink) await clearLegacyLink();
+        setRecordingUrl('');
+        setPasting(null);
+        setUnreachable(null);
+        await load();
+        onChanged?.();
+      } catch (err) {
+        const code_ = (err as { code?: string })?.code;
+        // Keep the field open on an unplayable link. Closing it would throw away
+        // what the teacher typed and hide the override in the same motion.
+        if (code_ === 'RECORDING_UNREACHABLE') {
+          setUnreachable(code);
+          if (!existing) setPasting(code);
+        }
+        setError(err instanceof Error ? err.message : 'Could not save the recording');
+      } finally {
+        setBusyId(null);
       }
-      if (movedTheLink) await clearLegacyLink();
-      setRecordingUrl('');
-      setAdding(null);
-      await load();
-      onChanged?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not add the recording');
-    } finally {
-      setBusyId(null);
-    }
-  };
+    },
+    [authed, file, languages, tracks, legacyLink, clearLegacyLink, load, onChanged],
+  );
+
+  /** A file chosen out of SharePoint or OneDrive. Its webUrl is the recording. */
+  const onPick = useCallback(
+    (item: DriveItem) => {
+      const code = pickingFor;
+      setPickingFor(null);
+      if (code && item.webUrl) saveVideo(code, item.webUrl);
+    },
+    [pickingFor, saveVideo],
+  );
 
   /**
    * Draft and save in one press. The preview step exists so a teacher can edit
@@ -247,7 +312,7 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
         // to pass. Said at the moment it happens rather than discovered.
         track.status === 'published'
           ? `Drafted ${sections.length} checkpoints for ${row.label}. This recording was open, so finishing it now unlocks the chapter test, and anyone part-way through has these checkpoints to pass.`
-          : `Drafted ${sections.length} checkpoints for ${row.label}. Open Edit checkpoints to read them, then publish.`,
+          : `Drafted ${sections.length} checkpoints for ${row.label}. Open Edit to read them, then publish.`,
       );
       await load();
       onChanged?.();
@@ -325,6 +390,7 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
 
   const rows = buildLanguageRows(languages, tracks);
   const servable = rows.filter((r) => r.state.live);
+  const pickingLabel = languages.find((l) => l.code === pickingFor)?.label || '';
 
   const actionSx = { textTransform: 'none' as const, minHeight: 48 };
 
@@ -364,22 +430,13 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
             </Box>
           ) : (
             <>
-              {/* The order of work, stated up front. Without it the dialog offers
-                  four buttons with no hint that they are a sequence, and the one
-                  that must come first is not the obvious one. */}
-              <Box sx={{ mb: 2, p: 1.5, bgcolor: 'action.hover', borderRadius: 1.5 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75 }}>
-                  Students choose from the languages you publish and watch inside Nexus. Every
-                  language on this chapter is listed below, whether it has a recording or not.
-                </Typography>
-                <Typography variant="caption" color="text.secondary" component="div">
-                  A recording with checkpoints stops the video to ask a question, cannot be skipped,
-                  and finishing it unlocks the chapter test.
-                  <br />
-                  An open recording has none of that: students can watch it freely, and it does not
-                  unlock the test.
-                </Typography>
-              </Box>
+              {/* One line. The steps inside each language now carry the order
+                  that four unlabelled buttons used to need a paragraph to
+                  explain. */}
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Each language takes three steps: add the video, add its transcript, publish it.
+                Students choose from the languages you publish and watch inside Nexus.
+              </Typography>
 
               {/*
                 The old ungated link, named rather than silently borrowed.
@@ -411,222 +468,42 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
                   <Typography variant="caption" color="text.secondary">
                     {tracks.length
                       ? 'The recordings below are what students get. Remove the old link once you are sure it is already one of them.'
-                      : 'Add it below as a recording in the language it was taught in. It moves across, it is not copied.'}
+                      : 'Paste it in below as a recording in the language it was taught in. It moves across, it is not copied.'}
                   </Typography>
                 </Alert>
               )}
 
-              {/* ── One row per language, recording or not ──────────────────── */}
-              {rows.map((row) => {
-                const track = row.track;
-                const busy = !!track && busyId === track.id;
-                const isAdding = adding === row.code;
-                const needsTranscript = !!track && track.section_count === 0;
-                return (
-                  <Box
-                    key={row.code}
-                    sx={{
-                      mb: 1.5,
-                      p: 1.5,
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: row.state.live ? 'success.light' : 'divider',
-                      bgcolor: 'background.paper',
-                    }}
-                  >
-                    <Box
-                      sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75, flexWrap: 'wrap' }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {row.label}
-                      </Typography>
-                      {/* The state in words, not only in colour. */}
-                      <Chip size="small" color={row.state.colour} label={row.state.label} />
-                      {!!track && (
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          label={track.video_source === 'youtube' ? 'YouTube' : 'SharePoint'}
-                        />
-                      )}
-                    </Box>
-
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      display="block"
-                      sx={{ mb: 1 }}
-                    >
-                      {/* Every sentence names its own language, so a card read
-                          halfway down a scrolled dialog still says what it is. */}
-                      {row.state.detail(row.label)}
-                    </Typography>
-
-                    {!track ? (
-                      !isAdding && (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<AddRoundedIcon />}
-                          onClick={() => startAdding(row.code)}
-                          sx={actionSx}
-                        >
-                          Add {row.label}
-                        </Button>
-                      )
-                    ) : (
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <Button
-                          size="small"
-                          variant={needsTranscript ? 'contained' : 'outlined'}
-                          startIcon={busy ? <CircularProgress size={14} /> : <UploadFileIcon />}
-                          onClick={() => uploadVtt(row)}
-                          disabled={busy}
-                          sx={actionSx}
-                        >
-                          {needsTranscript ? 'Upload transcript (.vtt)' : 'Replace transcript'}
-                        </Button>
-
-                        {/* The half of "generate, then review" that had no screen
-                            behind it until now. */}
-                        {!needsTranscript && (
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<EditNoteIcon />}
-                            onClick={() =>
-                              router.push(`/teacher/study-materials/checkpoints/${file?.id}/${track.id}`)
-                            }
-                            disabled={busy}
-                            sx={actionSx}
-                          >
-                            Edit checkpoints
-                          </Button>
-                        )}
-
-                        {/* Two live paths where there used to be one dead button.
-                            A disabled control carrying its own instruction is
-                            the thing that made this dialog unusable without a
-                            transcript. */}
-                        {track.status === 'published' ? (
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="inherit"
-                            startIcon={<PublishRoundedIcon />}
-                            onClick={() => setStatus(row, 'draft')}
-                            disabled={busy}
-                            sx={actionSx}
-                          >
-                            Unpublish
-                          </Button>
-                        ) : needsTranscript ? (
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<VisibilityOutlinedIcon />}
-                            onClick={() => setStatus(row, 'published', true)}
-                            disabled={busy}
-                            sx={actionSx}
-                          >
-                            Publish as open
-                          </Button>
-                        ) : (
-                          <Button
-                            size="small"
-                            variant="contained"
-                            startIcon={<PublishRoundedIcon />}
-                            onClick={() => setStatus(row, 'published')}
-                            disabled={busy}
-                            sx={actionSx}
-                          >
-                            Publish
-                          </Button>
-                        )}
-
-                        {/* Kept, but demoted. Worth one press only when a
-                            transcript was stored on an earlier attempt, and
-                            pointless for a YouTube track, which has no
-                            SharePoint folder to search. */}
-                        {needsTranscript && track.video_source !== 'youtube' && (
-                          <Button
-                            size="small"
-                            variant="text"
-                            startIcon={<AutoAwesomeIcon />}
-                            onClick={() => draftCheckpoints(row)}
-                            disabled={busy}
-                            sx={actionSx}
-                          >
-                            Try fetching it
-                          </Button>
-                        )}
-
-                        {/* Out of the header row it used to share with nothing
-                            but a title: a one-way door does not belong a
-                            thumb-width from the language name. */}
-                        <Box sx={{ flex: 1 }} />
-                        <Button
-                          size="small"
-                          variant="text"
-                          color="error"
-                          startIcon={<DeleteOutlineIcon />}
-                          onClick={() => removeTrack(row)}
-                          disabled={busy}
-                          aria-label={`Remove the ${row.label} recording`}
-                          sx={actionSx}
-                        >
-                          Remove
-                        </Button>
-                      </Box>
-                    )}
-
-                    {/* The link field opens inside its own language's row, so
-                        the language being filled in is never in doubt. */}
-                    <Collapse in={isAdding} unmountOnExit>
-                      <Box
-                        sx={{
-                          mt: 1.5,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 1.5,
-                        }}
-                      >
-                        <TextField
-                          size="small"
-                          label={`${row.label} recording link`}
-                          placeholder="A SharePoint or YouTube link"
-                          value={recordingUrl}
-                          onChange={(e) => setRecordingUrl(e.target.value)}
-                          fullWidth
-                          autoFocus
-                          helperText={
-                            legacyLink && recordingUrl.trim() === legacyLink
-                              ? "Using the video link already on this chapter. Adding it here moves it across."
-                              : detected === 'youtube'
-                                ? 'YouTube recording: plays in the gated player, transcript must be uploaded.'
-                                : detected === 'sharepoint'
-                                  ? 'SharePoint recording: plays in the gated player through the byte proxy.'
-                                  : `Paste the link to this chapter's ${row.label} class recording.`
-                          }
-                        />
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Button
-                            variant="contained"
-                            onClick={addTrack}
-                            disabled={busyId === 'new' || !recordingUrl.trim()}
-                            sx={actionSx}
-                          >
-                            {busyId === 'new' ? 'Adding...' : `Add ${row.label}`}
-                          </Button>
-                          <Button onClick={() => setAdding(null)} sx={actionSx}>
-                            Cancel
-                          </Button>
-                        </Box>
-                      </Box>
-                    </Collapse>
-                  </Box>
-                );
-              })}
+              {/* ── One row per language, recording or not ────────────────── */}
+              {rows.map((row) => (
+                <LanguageTrackRow
+                  key={row.code}
+                  row={row}
+                  busy={busyId === (row.track?.id ?? `new:${row.code}`)}
+                  isPasting={pasting === row.code}
+                  recordingUrl={recordingUrl}
+                  onRecordingUrlChange={setRecordingUrl}
+                  unreachable={unreachable === row.code}
+                  onSearchVideo={() => {
+                    setPasting(null);
+                    setPickingFor(row.code);
+                  }}
+                  onOpenPaste={() => openPaste(row.code)}
+                  onCancelPaste={() => {
+                    setPasting(null);
+                    setUnreachable(null);
+                  }}
+                  onSubmitVideo={(opts) => saveVideo(row.code, recordingUrl, opts)}
+                  onUploadVtt={() => uploadVtt(row)}
+                  onFetchTranscript={() => draftCheckpoints(row)}
+                  onEditCheckpoints={() =>
+                    router.push(`/teacher/study-materials/checkpoints/${file?.id}/${row.track!.id}`)
+                  }
+                  onPublish={() => setStatus(row, 'published')}
+                  onPublishOpen={() => setStatus(row, 'published', true)}
+                  onUnpublish={() => setStatus(row, 'draft')}
+                  onRemove={() => removeTrack(row)}
+                />
+              ))}
 
               {/* The one consequence of publishing, stated. Every other line in
                   this dialog is about the teacher's own work; this is the only
@@ -641,21 +518,11 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
                   : 'Students see nothing yet. Publish a recording to make it visible to them.'}
               </Typography>
 
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mt: 2.5 }}>
-                <Button
-                  size="small"
-                  variant="text"
-                  startIcon={<HelpOutlineIcon />}
-                  onClick={() => setShowVttHelp((v) => !v)}
-                  sx={actionSx}
-                >
-                  Where do I get a .vtt file?
-                </Button>
-                <Box sx={{ flex: 1 }} />
-                {/* Admin only, the same gate as the feature flags. A teacher can
-                    use every language on the list; deciding what is on it is a
-                    different kind of decision. */}
-                {can('system.settings') && (
+              {/* Admin only, the same gate as the feature flags. A teacher can
+                  use every language on the list; deciding what is on it is a
+                  different kind of decision. */}
+              {can('system.settings') && (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
                   <Button
                     size="small"
                     variant="text"
@@ -665,19 +532,8 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
                   >
                     Manage languages
                   </Button>
-                )}
-              </Box>
-              <Collapse in={showVttHelp}>
-                <Box sx={{ mb: 1, pl: 1 }}>
-                  <Typography variant="caption" color="text.secondary" component="div">
-                    Open the recording in Teams or Stream, open the <strong>Transcript</strong> panel,
-                    then choose <strong>Download</strong> and pick the <strong>.vtt</strong> format.
-                    If the class was never recorded through Teams there is no transcript to download.
-                    You can still publish the recording as open, and add checkpoints later.
-                    Each language needs its own: they are different recordings.
-                  </Typography>
                 </Box>
-              </Collapse>
+              )}
             </>
           )}
         </DialogContent>
@@ -688,6 +544,20 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* The answer to "where do I actually search for the recording". Scoped to
+          both drives, because a teacher should not have to know or remember
+          which of the two their own recording was saved to. */}
+      <DriveFilePickerDialog
+        open={!!pickingFor}
+        onClose={() => setPickingFor(null)}
+        getToken={getToken}
+        onPick={onPick}
+        kind="video"
+        scope="both"
+        title={pickingLabel ? `Find the ${pickingLabel} recording` : 'Find the recording'}
+        subtitle="Search the Neram library and your own OneDrive for the video file, then pick it."
+      />
 
       <ManageTrackLanguagesDialog
         open={manageOpen}

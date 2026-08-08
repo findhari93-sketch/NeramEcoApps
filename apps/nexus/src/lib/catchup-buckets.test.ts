@@ -13,6 +13,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  ALL_BUCKETS,
   BUCKET_META,
   BUCKET_ORDER,
   catchupBucket,
@@ -34,6 +35,45 @@ function student(over: Partial<BucketInput> = {}): BucketInput {
 }
 
 describe('catchupBucket', () => {
+  it('calls a student with nothing left all_clear', () => {
+    // The bug this closes: there was no bucket for finishing, so the route
+    // dropped these students before the page saw them and the one group worth
+    // celebrating was the only one nobody could look at.
+    expect(
+      catchupBucket(
+        student({
+          openCount: 0,
+          blockedOnUs: 0,
+          clock: { active: false, overdue: false, stalled: false },
+          pace: { state: 'done' },
+        }),
+      ),
+    ).toBe('all_clear');
+  });
+
+  it('does not call them all_clear while we are still holding something up', () => {
+    // Nothing for them to do and something for us to publish is waiting_on_us,
+    // not finished. Putting them on a wall of people who cleared everything
+    // would credit them for work that has not been offered to them yet.
+    expect(
+      catchupBucket(
+        student({
+          openCount: 0,
+          blockedOnUs: 2,
+          clock: { active: false, overdue: false, stalled: false },
+          pace: { state: 'done' },
+        }),
+      ),
+    ).toBe('waiting_on_us');
+  });
+
+  it('keeps all_clear out of the chase order, so no group can chase them', () => {
+    // BUCKET_ORDER is what the needs-action list iterates. Being absent from it
+    // is the whole mechanism keeping finished students off a chase screen.
+    expect(BUCKET_ORDER).not.toContain('all_clear');
+    expect(ALL_BUCKETS).toContain('all_clear');
+  });
+
   it('sends a student with nothing but blocked work to waiting_on_us', () => {
     // These students were not on the screen at all before. Blocked and
     // pending_teacher items never reach the pace denominator, so their open count
@@ -103,7 +143,7 @@ describe('catchupBucket', () => {
                   clock: { active, overdue, stalled },
                   pace: { state },
                 });
-                expect(BUCKET_ORDER).toContain(bucket);
+                expect(ALL_BUCKETS).toContain(bucket);
                 seen.add(bucket);
               }
             }
@@ -112,17 +152,17 @@ describe('catchupBucket', () => {
       }
     }
     // Every bucket is reachable, so none of them is dead code on a screen.
-    expect([...seen].sort()).toEqual([...BUCKET_ORDER].sort());
+    expect([...seen].sort()).toEqual([...ALL_BUCKETS].sort());
   });
 });
 
 describe('the buckets as a set', () => {
   it('gives every bucket a heading, a hint and a tone', () => {
-    for (const bucket of BUCKET_ORDER) {
+    for (const bucket of ALL_BUCKETS) {
       expect(BUCKET_META[bucket]?.label, bucket).toBeTruthy();
       expect(BUCKET_META[bucket]?.hint, bucket).toBeTruthy();
     }
-    expect(Object.keys(BUCKET_META).sort()).toEqual([...BUCKET_ORDER].sort());
+    expect(Object.keys(BUCKET_META).sort()).toEqual([...ALL_BUCKETS].sort());
   });
 
   it('offers a nudge only where a nudge would be honest', () => {
@@ -130,6 +170,7 @@ describe('the buckets as a set', () => {
     // for is the one thing this screen must not make easy.
     expect(BUCKET_META.waiting_on_us.nudgeable).toBe(false);
     expect(BUCKET_META.in_progress.nudgeable).toBe(false);
+    expect(BUCKET_META.all_clear.nudgeable).toBe(false);
     expect(BUCKET_META.run_over.nudgeable).toBe(true);
     expect(BUCKET_META.not_started.nudgeable).toBe(true);
   });
@@ -155,6 +196,6 @@ describe('tallyBuckets', () => {
   it('starts from zero on every bucket, not from undefined', () => {
     // A missing key renders as "NaN need attention" rather than "0".
     expect(Object.values(emptyTally()).every((n) => n === 0)).toBe(true);
-    expect(Object.keys(emptyTally()).sort()).toEqual([...BUCKET_ORDER].sort());
+    expect(Object.keys(emptyTally()).sort()).toEqual([...ALL_BUCKETS].sort());
   });
 });

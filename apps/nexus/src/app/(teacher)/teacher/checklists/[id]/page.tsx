@@ -48,11 +48,11 @@ import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
-import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import React from 'react';
 import { LinearProgress } from '@neram/ui';
 
@@ -1214,27 +1214,23 @@ export default function ChecklistDetailPage() {
                     bgcolor: student.isStale ? alpha(theme.palette.warning.main, 0.03) : 'background.paper',
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                    <Box
-                      sx={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: '50%',
-                        bgcolor: student.isStale
-                          ? alpha(theme.palette.warning.main, 0.1)
-                          : alpha(theme.palette.primary.main, 0.08),
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                        mt: 0.25,
-                      }}
-                    >
-                      {student.isStale ? (
-                        <WarningAmberIcon sx={{ fontSize: '1.1rem', color: 'warning.main' }} />
-                      ) : (
-                        <PersonOutlineIcon sx={{ fontSize: '1.1rem', color: 'primary.main' }} />
-                      )}
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                    {/* This was a 36px circle holding a generic person icon: an
+                        avatar slot with no avatar in it. The stale case kept its
+                        warning colour as a ring-coloured backdrop rather than
+                        replacing the face, so a teacher still recognises who has
+                        gone quiet. */}
+                    <Box sx={{ mt: 0.25, flexShrink: 0 }}>
+                      <StudentAvatar
+                        userId={student.id}
+                        name={student.name}
+                        size={32}
+                        sx={
+                          student.isStale
+                            ? { boxShadow: `0 0 0 2px ${alpha(theme.palette.warning.main, 0.45)}` }
+                            : undefined
+                        }
+                      />
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>

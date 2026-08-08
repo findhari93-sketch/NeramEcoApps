@@ -132,11 +132,20 @@ export default function PaperDetailPage() {
   if (isLoading || authLoading) return <PaperDetailSkeleton />;
 
   if (loadError || !paper) {
+    /*
+      A 404 and a 500 are different answers and must not share a sentence.
+      "Not published yet" is a statement about the paper; a failed request is a
+      statement about us, and reporting the first when the second happened is
+      how this feature's original bug worked.
+    */
+    const missing = loadError?.status === 404 || (!loadError && !paper);
     return (
       <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: 'auto' }}>
         <BackButton onClick={() => router.push('/student/question-bank')} />
-        <Alert severity="info" sx={{ borderRadius: 2 }}>
-          This paper is not available. It may not have been published yet.
+        <Alert severity={missing ? 'info' : 'warning'} sx={{ borderRadius: 2 }}>
+          {missing
+            ? 'This paper is not available. It may not have been published yet.'
+            : `This paper could not be loaded. ${loadError?.message ?? ''}`}
         </Alert>
       </Box>
     );

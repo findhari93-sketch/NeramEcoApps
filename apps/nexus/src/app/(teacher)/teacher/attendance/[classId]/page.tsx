@@ -461,7 +461,14 @@ export default function ClassReconciliationPage() {
             {students
               .filter((s) => selected.includes(s.id))
               .map((s) => (
-                <Box key={s.id} component="span" sx={tagSx(theme, 'neutral')}>
+                <Box
+                  key={s.id}
+                  component="span"
+                  sx={{ ...tagSx(theme, 'neutral'), display: 'inline-flex', alignItems: 'center', gap: 0.5, pl: 0.25 }}
+                >
+                  {/* 20px: the glyph is suppressed below 28, but the ring itself
+                      still reads at pill size and that is the part being scanned. */}
+                  <StudentAvatar userId={s.id} name={s.name} size={20} />
                   {s.name}
                 </Box>
               ))}

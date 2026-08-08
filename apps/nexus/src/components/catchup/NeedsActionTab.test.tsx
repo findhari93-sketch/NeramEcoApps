@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import NeedsActionTab from './NeedsActionTab';
 import { emptyTally, tallyBuckets, type CatchupBucket } from '@/lib/catchup-buckets';
+import { EMPTY_STANDING } from '@/lib/catchup-standing';
 import type { Item, Payload, Row, TabProps } from './types';
 
 /**
@@ -87,6 +88,7 @@ function row(name: string, bucket: CatchupBucket, over: Partial<Row> = {}): Row 
       stalled: bucket === 'not_started',
     },
     pace: { state: bucket === 'behind' ? 'behind' : 'on_track', deficit: 0, remaining: 2 },
+    standing: { ...EMPTY_STANDING, ownOpen: bucket === 'waiting_on_us' ? 0 : 2 },
     items: [item({ id: '1' })],
     ...over,
   };
@@ -145,6 +147,80 @@ describe('NeedsActionTab', () => {
     onAct.mockClear();
     onNudge.mockClear();
     onNudgeMany.mockClear();
+  });
+
+  it('keeps a student who owes nothing off the chase screen entirely', () => {
+    // The route stopped dropping finished students so the Standing tab could
+    // count them, which put them into `data.students` for the first time. This
+    // tab must not show them: it answers "who do I call today".
+    openAllGroups();
+    renderTab([...THREE, row('Inaya Nizamudeen', 'all_clear')]);
+
+    expect(screen.queryByText('Inaya Nizamudeen')).toBeNull();
+    expect(screen.getByText('Anuvika Stalin')).toBeTruthy();
+  });
+
+  it('shows its empty state when everyone is clear, not an empty list', () => {
+    // `data.students.length === 0` used to be the emptiness test. With finished
+    // students in the payload that check passes while every group is empty, so
+    // a classroom where nobody owes anything rendered a blank panel.
+    renderTab([row('Inaya Nizamudeen', 'all_clear')]);
+
+    expect(screen.getByText(/Nobody is behind/i)).toBeTruthy();
+  });
+
+  it('pins the students who were chased and went quiet', () => {
+    renderTab([
+      row('Anuvika Stalin', 'not_started'),
+      row('Harimadhu Raja', 'not_started', {
+        standing: {
+          ...EMPTY_STANDING,
+          ownOpen: 4,
+          oldestOpenDays: 34,
+          chasedAt: '2026-08-01T10:00:00+05:30',
+          unresponsive: true,
+        },
+      }),
+    ]);
+
+    const banner = screen.getByText(/Needs a call/i).closest('div')!;
+    expect(banner).toBeTruthy();
+    expect(screen.getByText(/Nudged already/i)).toBeTruthy();
+    // The one who has not been chased is not accused of ignoring anybody.
+    expect(screen.getAllByText('Harimadhu Raja').length).toBeGreaterThan(0);
+  });
+
+  it('ranks the call list on their own classes, never the late-joiner backlog', () => {
+    // A student who enrolled in month three owes a row for every class taught
+    // before they arrived. Ranking on the total would put the newest person in
+    // the room at the top of the worst list on the screen.
+    renderTab([
+      row('Late Joiner', 'not_started', {
+        standing: {
+          ...EMPTY_STANDING,
+          ownOpen: 0,
+          lateJoinerOpen: 30,
+          chasedAt: '2026-08-01T10:00:00+05:30',
+          unresponsive: true,
+        },
+      }),
+      row('Actually Ignoring Us', 'not_started', {
+        standing: {
+          ...EMPTY_STANDING,
+          ownOpen: 5,
+          lateJoinerOpen: 0,
+          chasedAt: '2026-08-01T10:00:00+05:30',
+          unresponsive: true,
+        },
+      }),
+    ]);
+
+    const names = within(screen.getByTestId('needs-a-call'))
+      .getAllByText(/^(Late Joiner|Actually Ignoring Us)$/)
+      .map((n) => n.textContent);
+    expect(names).toEqual(['Actually Ignoring Us', 'Late Joiner']);
+    // Their backlog is still stated, it just cannot move them up the list.
+    expect(screen.getByText(/30 from before they joined/)).toBeTruthy();
   });
 
   it('draws each student exactly once', () => {

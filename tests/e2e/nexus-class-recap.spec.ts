@@ -13,11 +13,10 @@ import { APP_URLS, getTestAuthToken } from '../utils/credentials';
 const NEXUS = APP_URLS.nexus;
 
 test.describe('Class Recap API', () => {
-  test('student recap list rejects unauthenticated requests', async ({ request }) => {
-    const res = await request.get(`${NEXUS}/api/student/class-recaps`);
-    expect(res.status()).toBe(401);
-  });
-
+  // The student collection route GET /api/student/class-recaps is gone. It
+  // backed the Study Zone list, which was a second door to the same recordings
+  // that never started the catch-up clock. The classes a student may rewatch
+  // now ride along on /api/student/catchup-journey, asserted below.
   test('recap creation rejects unauthenticated requests', async ({ request }) => {
     const res = await request.post(`${NEXUS}/api/class-recaps`, {
       data: { scheduled_class_id: '00000000-0000-0000-0000-000000000000' },
@@ -25,16 +24,42 @@ test.describe('Class Recap API', () => {
     expect([401, 403]).toContain(res.status());
   });
 
-  test('student recap list returns an array when authorized', async ({ request }) => {
+  test('the catch-up payload carries the rewatchable list', async ({ request }) => {
     const auth = await getTestAuthToken(request, 'student');
     test.skip(!auth, 'Student test login unavailable');
-    const res = await request.get(`${NEXUS}/api/student/class-recaps`, {
+    const res = await request.get(`${NEXUS}/api/student/catchup-journey`, {
       headers: { Authorization: `Bearer ${auth!.testToken}` },
     });
     test.skip(res.status() === 500, 'class-recap migration not applied yet');
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(Array.isArray(body.recaps)).toBe(true);
+    // Always an array, including for a student with no classroom and one with no
+    // backlog at all. Both of those used to take different early returns, and
+    // the no-classroom one shipped without `missed`, which crashed the page.
+    expect(Array.isArray(body.rewatchable)).toBe(true);
+    expect(Array.isArray(body.missed)).toBe(true);
+    expect(Array.isArray(body.items)).toBe(true);
+  });
+
+  test('a class the student still owes never appears in the rewatchable list', async ({
+    request,
+  }) => {
+    const auth = await getTestAuthToken(request, 'student');
+    test.skip(!auth, 'Student test login unavailable');
+    const res = await request.get(`${NEXUS}/api/student/catchup-journey`, {
+      headers: { Authorization: `Bearer ${auth!.testToken}` },
+    });
+    test.skip(res.status() !== 200, 'catch-up payload unavailable');
+    const body = await res.json();
+    const owed = new Set<string>(
+      [...(body.missed || []), ...(body.items || [])]
+        .filter((i: any) => i.status !== 'done' && i.status !== 'excused')
+        .map((i: any) => i.scheduled_class_id),
+    );
+    // The whole point of building both lists in one request: a class belongs to
+    // exactly one tab, so it can never be both homework and optional revision.
+    const overlap = (body.rewatchable || []).filter((r: any) => owed.has(r.class_id));
+    expect(overlap).toEqual([]);
   });
 
   test('candidates requires a classroomId', async ({ request }) => {

@@ -290,16 +290,16 @@ function toDriveItem(item: any): SiteDriveItem {
 }
 
 /**
- * Search the shared Neram document library for a file to attach to a class.
+ * Search the shared Neram document library for a file to attach.
  *
- * App-only against the one configured site, which is the whole reason this needs
- * no new Graph permission and no consent prompt: searching a teacher's PERSONAL
- * OneDrive would need the delegated Files.Read.All scope, and adding that to the
- * MSAL config makes every teacher re-consent at next sign-in.
+ * App-only against the one configured site, so it reads the library with the
+ * application's permissions rather than the caller's. That is why every route
+ * in front of it has to carry its own staff gate.
  *
- * The consequence to tell users about: a deck that exists only in someone's
- * personal OneDrive will not appear here. Move it into the Neram site, or paste
- * its share link, which resolveShareUrlToItem handles across any drive.
+ * This function sees the SITE only. A file that lives in someone's personal
+ * OneDrive is reached by searchMyDrive below, and a file on a drive belonging to
+ * neither is reached by pasting its share link, which resolveShareUrlToItem
+ * handles across any drive.
  */
 export async function searchSiteDrive(query: string, limit = 25): Promise<SiteDriveItem[]> {
   const q = query.trim();
@@ -343,6 +343,71 @@ export async function browseSiteFolder(path = '', limit = 100): Promise<SiteDriv
   if (!res.ok) {
     const err = await res.text().catch(() => '');
     throw new Error(`SharePoint browse failed: ${res.status} ${err}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return ((data?.value || []) as any[]).map(toDriveItem);
+}
+
+/* ── The caller's OWN OneDrive ──────────────────────────────────────────────
+ *
+ * DELEGATED, not app-only, and that distinction is the whole reason these two
+ * functions can exist at no cost.
+ *
+ * The comment that used to sit on searchSiteDrive claimed searching a personal
+ * OneDrive needs the delegated Files.Read.All scope and would make every teacher
+ * re-consent at next sign-in. That is true only for reading SOMEBODY ELSE's
+ * drive. /me/drive is satisfied by plain Files.Read or Files.ReadWrite, and
+ * Files.ReadWrite is already in loginScopes.nexus, which is what getToken()
+ * mints for every signed-in teacher. So there is no Azure change, no admin
+ * consent and no new prompt: the token the caller already sent us is enough.
+ *
+ * The app-only token must never be used here. /users/{oid}/drive app-only needs
+ * Files.Read.All as an APPLICATION permission, which this tenant has never been
+ * confirmed to grant, and reaching for it would put us back at a 403.
+ */
+
+/** Search the signed-in caller's own OneDrive. `msToken` is their delegated token. */
+export async function searchMyDrive(
+  msToken: string,
+  query: string,
+  limit = 25,
+): Promise<SiteDriveItem[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  // Same doubling as searchSiteDrive: "Ravi's notes" is a syntax error otherwise.
+  const escaped = encodeURIComponent(q.replace(/'/g, "''"));
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${escaped}')?$top=${limit}`,
+    { headers: { Authorization: `Bearer ${msToken}` } },
+  );
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`OneDrive search failed: ${res.status} ${err}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return ((data?.value || []) as any[]).map(toDriveItem);
+}
+
+/** List one folder of the caller's own OneDrive. An empty path lists the root. */
+export async function browseMyDriveFolder(
+  msToken: string,
+  path = '',
+  limit = 100,
+): Promise<SiteDriveItem[]> {
+  const clean = path.replace(/^\/+|\/+$/g, '');
+  const base = 'https://graph.microsoft.com/v1.0/me/drive/root';
+  const url = clean
+    ? `${base}:/${encodeURI(clean)}:/children?$top=${limit}`
+    : `${base}/children?$top=${limit}`;
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${msToken}` } });
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`OneDrive browse failed: ${res.status} ${err}`);
   }
 
   const data = await res.json().catch(() => ({}));

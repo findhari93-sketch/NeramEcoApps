@@ -320,23 +320,71 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * The only fields this route may write.
+ *
+ * An allow-list rather than a block-list, because the danger was never one
+ * particular column. `is_active` was the sharpest edge (setting it false is a
+ * delete), but `classroom_id` would reassign a paper to another class and
+ * `created_by_student` would forge its authorship. Anything not named here is
+ * dropped in silence, which is the same thing updateTestMeta does one route
+ * over.
+ */
+const PATCHABLE_TEST_FIELDS = [
+  'title',
+  'description',
+  'is_published',
+  'duration_minutes',
+  'passing_marks',
+  'total_marks',
+  'available_from',
+  'available_until',
+  'shuffle_questions',
+  'show_answers_after',
+] as const;
+
+/**
  * PATCH /api/tests
- * Update test (publish/unpublish, edit settings)
+ * Update test (publish/unpublish, edit settings). Staff only.
  */
 export async function PATCH(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const body = await request.json();
-    const { test_id, ...updates } = body;
+    const { test_id } = body;
 
     if (!test_id) {
       return NextResponse.json({ error: 'Missing test_id' }, { status: 400 });
     }
 
     const supabase = getSupabaseAdminClient();
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, user_type, staff_role, can_teach')
+      .eq('ms_oid', msUser.oid)
+      .single();
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Same hole POST had, left open here: a valid Microsoft token was the whole
+    // check, and the body was spread wholesale into an update on any test id in
+    // the system. Any signed-in student could send { test_id, is_active: false }
+    // and delete their teacher's paper, or retitle it. Deleting a test goes
+    // through the question-bank routes, which record who did it; it never
+    // happens here.
+    if (resolveStaffRole(user) === null) {
+      return NextResponse.json({ error: 'Only staff can edit a test' }, { status: 403 });
+    }
+
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    for (const field of PATCHABLE_TEST_FIELDS) {
+      if (body[field] !== undefined) patch[field] = body[field];
+    }
+
     const { data: test, error } = await supabase
       .from('nexus_tests')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(patch)
       .eq('id', test_id)
       .select()
       .single();

@@ -29,6 +29,7 @@
  */
 
 import type { TrackLanguageOption } from './track-languages';
+import { extractYouTubeId } from './youtube';
 
 /** A track as /api/study-materials/files/[id]/video-tracks returns it. */
 export interface RecordingTrack {
@@ -42,6 +43,12 @@ export interface RecordingTrack {
   section_count: number;
   video_duration_seconds: number | null;
   video_source: string;
+  /**
+   * The video this track points at. Staff-only, and the reason it is returned at
+   * all is that without it the dialog could show a teacher the state of a
+   * recording but never which file it was.
+   */
+  recording_url: string | null;
 }
 
 /** MUI chip colours, kept to the ones the theme defines. */
@@ -67,6 +74,61 @@ export interface TrackRow {
   label: string;
   track: RecordingTrack | null;
   state: TrackState;
+}
+
+/**
+ * Name the attached video in a way a teacher recognises.
+ *
+ * DERIVED, never stored, and that is the point: every recording attached before
+ * this existed gets a name straight away, where a new column would have been
+ * NULL for all of them and only ever filled in for files picked from the new
+ * search. There is nothing to backfill and nothing to migrate.
+ *
+ * The shapes worth handling, in the order they turn up in practice:
+ *   stream.aspx?id=/sites/X/Recordings/Ch3.mp4  the Stream player link, whose
+ *                                               real file name is in the query
+ *   .../Shared%20Documents/Ch3%20English.mp4    a plain path, percent-encoded
+ *   youtu.be/abc123                             no file name exists at all
+ *
+ * Falls back to the host rather than to an empty string: "neramclasses.
+ * sharepoint.com" is a poor label and still tells a teacher more than a blank.
+ */
+export function describeRecordingUrl(url: string | null | undefined): string {
+  const raw = (url || '').trim();
+  if (!raw) return 'No video attached';
+
+  const youtubeId = extractYouTubeId(raw);
+  if (youtubeId) return `YouTube video ${youtubeId}`;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    // Not a URL at all. Show it back rather than swallowing it, since a teacher
+    // looking at their own typo is how they find it.
+    return raw.length > 60 ? `${raw.slice(0, 57)}...` : raw;
+  }
+
+  // Stream and embed links carry the real path in a query parameter, so the
+  // pathname alone would only ever say "stream.aspx".
+  const fromQuery = parsed.searchParams.get('id') || parsed.searchParams.get('file');
+  const path = fromQuery || parsed.pathname;
+
+  const last = path.split('/').filter(Boolean).pop();
+  if (!last) return parsed.hostname;
+
+  let name = last;
+  try {
+    name = decodeURIComponent(last);
+  } catch {
+    /* a stray % is not a reason to show nothing */
+  }
+
+  // A share link ends in an opaque token, not a file name. The host is the more
+  // honest answer than a random string presented as if it were a file.
+  if (!name.includes('.')) return parsed.hostname;
+
+  return name;
 }
 
 /**

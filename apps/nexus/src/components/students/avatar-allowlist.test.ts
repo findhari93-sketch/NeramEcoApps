@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
+import { stripLineComments } from './allowlist-jsonc';
 
 /**
  * The allowlist that says which faces may stay plain.
@@ -18,47 +19,8 @@ interface Override {
   rules?: Record<string, unknown>;
 }
 
-/**
- * ESLint reads .eslintrc.json as JSON with JavaScript-style comments, and the
- * allowlist uses them to carry each exception's reason. JSON.parse does not, so
- * strip line comments first. This tracks string state rather than running a
- * regex over the whole file, because a rule message could legitimately contain
- * a double slash.
- */
-function stripLineComments(src: string): string {
-  let out = '';
-  let inString = false;
-  let escaped = false;
-
-  for (let i = 0; i < src.length; i += 1) {
-    const ch = src[i];
-
-    if (inString) {
-      out += ch;
-      if (escaped) escaped = false;
-      else if (ch === '\\') escaped = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-
-    if (ch === '"') {
-      inString = true;
-      out += ch;
-      continue;
-    }
-
-    if (ch === '/' && src[i + 1] === '/') {
-      while (i < src.length && src[i] !== '\n') i += 1;
-      out += '\n';
-      continue;
-    }
-
-    out += ch;
-  }
-
-  return out;
-}
-
+// ESLint reads .eslintrc.json as JSON with JavaScript-style comments, and the
+// allowlist uses them to carry each exception's reason. JSON.parse does not.
 function readConfig(): { overrides?: Override[] } {
   const raw = readFileSync(join(APP_ROOT, '.eslintrc.json'), 'utf8');
   return JSON.parse(stripLineComments(raw));

@@ -87,6 +87,25 @@ export interface StudyVideoTrack {
   video_source: string;
 }
 
+/**
+ * A track as STAFF may see it: everything a student gets, plus the video it
+ * actually points at.
+ *
+ * Split from StudyVideoTrack rather than added to it, and that separation is
+ * load-bearing. getStudyVideoState spreads the same toTrack mapper into the
+ * student chapter view, so a recording_url on the shared interface would ship a
+ * raw, pre-authenticated Microsoft URL to every student, straight past the
+ * grant-and-proxy path that exists precisely to stop that. Keeping the field on
+ * a separate type means only the reads that opt in can carry it.
+ *
+ * It exists because its absence was a real usability bug: the teacher's own
+ * dialog could not show which file a track pointed at, nor offer to change it,
+ * so an attached recording went invisible the moment it was saved.
+ */
+export interface StaffStudyVideoTrack extends StudyVideoTrack {
+  recording_url: string | null;
+}
+
 export interface StudyVideoState {
   tracks: (StudyVideoTrack & {
     progress_status: 'in_progress' | 'completed' | 'locked' | null;
@@ -352,13 +371,17 @@ function toTrack(row: any, counts: Map<string, number>): StudyVideoTrack {
   };
 }
 
-/** Staff view: every track on a chapter, drafts and held ones included. */
+/**
+ * Staff view: every track on a chapter, drafts and held ones included, each
+ * carrying the video it points at so the teacher's dialog can name it and offer
+ * to change it. Staff-gated at the route, which is what licenses recording_url.
+ */
 export async function listStudyVideoTracks(
   studyFileId: string,
   client?: TypedSupabaseClient,
   /** The admin's configured language order. Falls back to en, ta, ta_en. */
   languageOrder?: string[],
-): Promise<StudyVideoTrack[]> {
+): Promise<StaffStudyVideoTrack[]> {
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
     .from(RECAPS)
@@ -369,7 +392,7 @@ export async function listStudyVideoTracks(
 
   const rows = (data || []).sort(makeByLanguage(languageOrder));
   const counts = await sectionCounts(rows.map((r) => r.id), supabase);
-  return rows.map((r) => toTrack(r, counts));
+  return rows.map((r) => ({ ...toTrack(r, counts), recording_url: r.recording_url ?? null }));
 }
 
 /**

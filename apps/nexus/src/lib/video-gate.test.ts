@@ -170,6 +170,30 @@ describe('computeGate: revision mode', () => {
     expect(gate.activeCheckpointId).toBeNull();
     expect(gate.maxRate).toBeGreaterThan(1);
   });
+
+  /**
+   * The trap that comes with using this mode for a student who was IN the class
+   * rather than one who has completed it.
+   *
+   * `unlockedUntil` equals the duration here, so NeramVideoPlayer treats the end
+   * of the recording as a boundary and raises onCheckpointReached, then raises
+   * it again on `ended`. An attendee has passed nothing, so the "next owed"
+   * index is 0 rather than -1, and a caller that opens a quiz on that signal
+   * would throw checkpoint 1 at someone who just finished watching. Both
+   * RecapPlayer and the Focus Mode page therefore refuse to act on a boundary
+   * outside gated mode. This pins the property that makes that guard necessary.
+   */
+  it('names no active checkpoint even when none have been passed', () => {
+    const gate = computeGate({
+      checkpoints: cps([false, false, false]),
+      duration: DURATION,
+      furthestSeconds: 0,
+      mode: 'revision',
+    });
+    expect(gate.activeCheckpointId).toBeNull();
+    expect(gate.unlockedUntil).toBe(DURATION);
+    expect(gate.currentSegmentPassed).toBe(true);
+  });
 });
 
 describe('computeGate: open mode', () => {

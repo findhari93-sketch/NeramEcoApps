@@ -13,6 +13,7 @@
  * over the teacher segment the crash took the entire shell with it.
  */
 import { emptyTally, type BucketTally } from '@/lib/catchup-buckets';
+import { EMPTY_STANDING } from '@/lib/catchup-standing';
 import type { Payload } from './types';
 
 /**
@@ -58,10 +59,12 @@ export type CachedPayload = Partial<Omit<Payload, 'totals'>> & {
 /**
  * Fill in whatever this payload was written too early to contain.
  *
- * Shallow by design, one level deeper for `totals` only. The arrays are read for
- * their length and mapped over, so an empty one is a correct answer to "we do not
- * know"; the totals are read key by key, so they are the only place a missing
- * field becomes a property access on undefined.
+ * Shallow by design, with two exceptions. `totals` is read key by key, so a
+ * missing field there becomes a property access on undefined. `students[].standing`
+ * is the same hazard one level further down: it arrived after this endpoint had
+ * already been cached in the wild, and the standing block is read field by field
+ * to build the chase ranking, so a row without one throws exactly the way a
+ * missing `byBucket` did.
  *
  * Returns null for nothing at all, which is how the page tells "still loading"
  * from "loaded, and there is nothing here".
@@ -72,6 +75,10 @@ export function withPayloadDefaults(payload: CachedPayload | undefined): Payload
   return {
     ...EMPTY_PAYLOAD,
     ...payload,
+    students: (payload.students || []).map((s) => ({
+      ...s,
+      standing: s?.standing ? { ...EMPTY_STANDING, ...s.standing } : EMPTY_STANDING,
+    })),
     totals: {
       ...EMPTY_PAYLOAD.totals,
       ...payload.totals,

@@ -4,6 +4,7 @@ import { Box, Typography, Paper, useTheme } from '@neram/ui';
 import { useRouter } from 'next/navigation';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import EngagementStatusDot from './EngagementStatusDot';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface StudentData {
   id: string;
@@ -66,9 +67,18 @@ export default function StudentEngagementCard({ student }: StudentEngagementCard
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {/* The desktop list this card replaces below 900px already rings its
+            faces, so without this the same student loses their cohort purely by
+            turning the phone. */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
           <EngagementStatusDot status={student.engagement_status} />
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+          <StudentAvatar
+            userId={student.id}
+            name={`${student.first_name} ${student.last_name}`}
+            src={student.avatar_url}
+            size={28}
+          />
+          <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
             {student.first_name} {student.last_name}
           </Typography>
         </Box>

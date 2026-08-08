@@ -1,0 +1,13 @@
+{
+  // Screens that name a student without showing their face, and why that is allowed.
+  //
+  // Adding an entry is a decision, not a formality: write the reason above the
+  // path, and say what would have to change for the entry to go away. A path
+  // here that no longer exists is drift, and student-name-face.test.ts fails on it.
+  //
+  // Empty is the correct state. Every screen the scan found had a user id within
+  // reach, so all of them were fixed rather than excused. The two that genuinely
+  // had no id in their payload (the exam-recall review queue and the active-grants
+  // list) had it threaded through their routes instead.
+  "files": []
+}

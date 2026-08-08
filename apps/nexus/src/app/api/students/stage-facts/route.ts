@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
+import { foldStudentFacts } from '@/lib/stage-facts';
 
 /**
  * GET /api/students/stage-facts   (staff)
  *
- * Every student's classification, keyed by user id, in one small payload.
+ * Who each student IS, keyed by user id, in one small payload: their cohort,
+ * whether they have paused, their name and their face.
  *
  * WHY A LOOKUP TABLE RATHER THAN A FIELD ON EACH PAYLOAD. The stage ring is
  * meant to appear wherever a student's face does, and that is roughly thirty
@@ -16,9 +18,11 @@ import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
  * Fetched once per session instead, so adopting the badge on a new screen is a
  * one-line component swap with no server change at all.
  *
- * It is small enough to justify that: two short strings per active student, so a
- * hundred-student org is a few kilobytes, and the client holds it in the SWR
- * cache for the session.
+ * The photo rides along for the same reason, and it is why a screen that knows
+ * nothing but a user id can still show the real person. The roster already loads
+ * avatar_url and name to answer this query, so carrying them costs one join
+ * column and no extra request. Over the wire it is about 1.4x the old payload,
+ * not 3x: every storage URL shares a long prefix that gzip collapses.
  *
  * STAFF ONLY, and that line is deliberate. Dormancy is a staff judgement about a
  * student's engagement, and a leaderboard that quietly told every classmate who
@@ -28,11 +32,12 @@ import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
 
 export const dynamic = 'force-dynamic';
 
-export interface StageFact {
-  /** nexus_enrollments.current_standard. Null means nobody has recorded one. */
-  stage: string | null;
-  dormant: boolean;
-}
+/**
+ * The wire shape. Named for the classification it started as; it now carries
+ * identity too, but the name is load-bearing across the provider, the hook and
+ * three test files, and renaming it buys nothing.
+ */
+export type { StudentFact as StageFact } from '@/lib/stage-facts';
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,42 +64,9 @@ export async function GET(request: NextRequest) {
       client: supabase,
     });
 
-    /**
-     * One fact per student, not per enrolment.
-     *
-     * Classroom-per-year means a returning student legitimately holds an
-     * enrolment in both the 2026 and the 2027 classroom. The newest enrolment
-     * wins for the stage, since a student who was in Class 11 last year is in
-     * Class 12 now and the older row is simply out of date.
-     *
-     * Dormancy is the opposite: a student counts as paused only when EVERY
-     * active enrolment says so, matching pickTrackedIds. Someone dormant in last
-     * year's archived classroom and active in this year's is not on a break.
-     */
-    const newest = new Map<string, string>();
-    const facts: Record<string, StageFact> = {};
-
-    for (const member of members) {
-      const existing = facts[member.user_id];
-      const at = member.enrolled_at || '';
-
-      if (!existing) {
-        facts[member.user_id] = {
-          stage: member.current_standard ?? null,
-          dormant: member.participation_status === 'dormant',
-        };
-        newest.set(member.user_id, at);
-        continue;
-      }
-
-      // Any participating enrolment clears the dormant flag for this person.
-      if (member.participation_status !== 'dormant') existing.dormant = false;
-
-      if (at > (newest.get(member.user_id) || '')) {
-        newest.set(member.user_id, at);
-        existing.stage = member.current_standard ?? null;
-      }
-    }
+    // One fact per student, not per enrolment. See lib/stage-facts.ts for why
+    // the four fields fold three different ways.
+    const facts = foldStudentFacts(members);
 
     return NextResponse.json({ facts, count: Object.keys(facts).length });
   } catch (err) {

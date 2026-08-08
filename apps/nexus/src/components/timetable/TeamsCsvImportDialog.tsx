@@ -40,6 +40,7 @@ import {
 } from '@neram/ui';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import {
   parseTeamsAttendanceFile,
   parseTeamsAttendanceText,
@@ -418,6 +419,7 @@ export default function TeamsCsvImportDialog({
               {summary.missingFromFile.map((student) => (
                 <PersonRow
                   key={student.student_id}
+                  userId={student.student_id}
                   name={student.name || 'Unnamed student'}
                   detail="Left as they are, so you can still mark them by hand"
                 />
@@ -527,21 +529,47 @@ function Group({
  * One person. Stacked, never a table: the detail line wraps underneath the name
  * instead of pushing it off a 375px screen.
  */
-function PersonRow({ name, detail }: { name: string; detail: string }) {
+/**
+ * `userId` is optional on purpose. Two of the three groups here are rows read out
+ * of the Teams CSV, where the only identity is whatever Teams recorded, so there
+ * is no users.id to look up. Only the roster group can supply one, and
+ * StudentAvatar renders a plain face for the rest.
+ */
+function PersonRow({
+  name,
+  detail,
+  userId,
+}: {
+  name: string;
+  detail: string;
+  userId?: string | null;
+}) {
   return (
-    <Box sx={{ py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
-      <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: 'break-word' }}>
-        {name}
-      </Typography>
-      {detail && (
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: 'block', wordBreak: 'break-word' }}
-        >
-          {detail}
+    <Box
+      sx={{
+        py: 0.75,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 1,
+      }}
+    >
+      {userId && <StudentAvatar userId={userId} name={name} size={28} />}
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: 'break-word' }}>
+          {name}
         </Typography>
-      )}
+        {detail && (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', wordBreak: 'break-word' }}
+          >
+            {detail}
+          </Typography>
+        )}
+      </Box>
     </Box>
   );
 }

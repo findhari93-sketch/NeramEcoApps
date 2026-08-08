@@ -9,6 +9,7 @@ import {
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { extractYouTubeId } from '@/lib/youtube';
 import { normalizeRecordingUrl } from '@/lib/sharepoint-transcript';
+import { resolveRecordingSource } from '@/lib/recording-source';
 import { readTrackLanguages, trackLanguageOrder, labelForCode } from '@/lib/track-languages';
 
 /**
@@ -33,6 +34,33 @@ import { readTrackLanguages, trackLanguageOrder, labelForCode } from '@/lib/trac
  * here and four more copies elsewhere, so offering a chapter in Hindi meant a
  * migration and a deploy.
  */
+
+/**
+ * Prove the server can actually play this file before agreeing to store it.
+ *
+ * Student playback resolves the stored URL APP-ONLY, through /shares/{id}, and
+ * that is a different permission from the one a teacher used to find the file.
+ * A recording in someone's personal OneDrive is the case that makes the gap
+ * visible: the teacher can search their own drive with their own token and pick
+ * a file the application itself cannot read. Attaching it would succeed, publish
+ * would succeed, and the failure would surface to a student staring at a broken
+ * player, which is the worst possible place to discover it.
+ *
+ * Returns null when the file is playable, or a teacher-readable reason when it
+ * is not. YouTube skips this entirely: it never goes through Graph.
+ */
+async function preflightPlayback(recordingUrl: string): Promise<string | null> {
+  try {
+    await resolveRecordingSource(recordingUrl);
+    return null;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '';
+    if (message.includes('RECORDING_SIZE_UNKNOWN')) {
+      return 'Nexus found that link but cannot read the file itself, so students would get a broken player. This usually means the file sits in a personal OneDrive that Nexus has no access to. Move it into the Neram library and attach it again.';
+    }
+    return 'Nexus could not open that link. Check it points at the video file itself, then try again.';
+  }
+}
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -79,6 +107,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // this classification was missing, which is why YouTube recordings could
     // not be attached even though the embed route already served them.
     const videoSource = extractYouTubeId(recordingUrl) ? 'youtube' : 'sharepoint';
+
+    // Refuse a recording students could not watch, unless the teacher overrides.
+    // The override exists because this check depends on Graph being reachable
+    // right now, and a transient blip must not be able to lock a teacher out of
+    // their own chapter. Default closed, escape hatch open.
+    if (videoSource === 'sharepoint' && body.force !== true) {
+      const problem = await preflightPlayback(recordingUrl);
+      if (problem) {
+        return NextResponse.json(
+          { error: problem, code: 'RECORDING_UNREACHABLE' },
+          { status: 422 },
+        );
+      }
+    }
 
     // Stamp the LABEL here, from the configured list. It used to be left to the
     // query layer's fallback map, which only knew en, ta and ta_en, so a

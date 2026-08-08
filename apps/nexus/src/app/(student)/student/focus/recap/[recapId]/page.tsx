@@ -23,7 +23,7 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
-import { computeGate } from '@/lib/video-gate';
+import { computeGate, type VideoGateMode } from '@/lib/video-gate';
 import { focusChannelName } from '@/components/class-recap/openFocusWindow';
 import { useWatchHeartbeat } from '@/components/class-recap/useWatchHeartbeat';
 import QuizModal from '@/components/foundation/QuizModal';
@@ -76,6 +76,13 @@ export default function FocusRecapPage() {
    * layer. One rule covers both platforms.
    */
   const [quizHost, setQuizHost] = useState<HTMLElement | null>(null);
+  /**
+   * Whether the checkpoints bind here, as the server sees it. Focus Mode is the
+   * other player for the same recording, so it has to ask the same question and
+   * honour the same answer. Two players that decide this differently is exactly
+   * the drift lib/video-gate.ts exists to stop.
+   */
+  const [watchMode, setWatchMode] = useState<VideoGateMode>('gated');
 
   const { onTick, flushNow } = useWatchHeartbeat({ recapId, token });
 
@@ -92,6 +99,7 @@ export default function FocusRecapPage() {
       const recap = recapRes.recap;
       setTitle(recap.title || 'Class recording');
       setSections(recap.sections || []);
+      setWatchMode(recapRes.watch_mode === 'revision' ? 'revision' : 'gated');
 
       if (embedRes.mode === 'youtube' || embedRes.video_source === 'youtube') {
         setYoutubeId(embedRes.youtube_id);
@@ -130,9 +138,9 @@ export default function FocusRecapPage() {
         })),
         duration,
         furthestSeconds: furthest,
-        mode: 'gated',
+        mode: watchMode,
       }),
-    [sections, duration, furthest],
+    [sections, duration, furthest, watchMode],
   );
 
   const passedCount = sections.filter((s) => s.passed).length;
@@ -163,6 +171,10 @@ export default function FocusRecapPage() {
   }, [recapId]);
 
   const openQuiz = useCallback(async () => {
+    // An unbound gate reports the end of the recording as a boundary, and fires
+    // again on `ended`. Without this, finishing a class you sat in would open
+    // checkpoint 1's quiz over the top of it.
+    if (watchMode !== 'gated') return;
     const idx = sections.findIndex((s) => !s.passed);
     if (idx < 0) return;
     flushNow();
@@ -175,7 +187,7 @@ export default function FocusRecapPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the checkpoint quiz');
     }
-  }, [authFetch, flushNow, recapId, sections]);
+  }, [authFetch, flushNow, recapId, sections, watchMode]);
 
   const submitQuiz = useCallback(
     async (answers: Record<string, string>) => {

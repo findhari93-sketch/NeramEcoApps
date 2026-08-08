@@ -28,6 +28,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useNavBadges } from '@/components/NavBadgeProvider';
 import StatCard from '@/components/StatCard';
 import FoundationOverviewCard from '@/components/foundation/FoundationOverviewCard';
+import ClassmatesAllClear from '@/components/catchup/ClassmatesAllClear';
 import RecordingPlayerDialog from '@/components/timetable/RecordingPlayerDialog';
 import ClassCoverThumb from '@/components/timetable/ClassCoverThumb';
 import type { ClassImageRef } from '@/lib/class-cover';
@@ -361,6 +362,13 @@ export default function StudentDashboard() {
           </Button>
         </Paper>
       )}
+
+      {/* ── Classmates who are all clear ──
+          Directly under the backlog card on purpose: the two are read as one
+          thought, "here is what you owe, and here are the people who finished".
+          Renders nothing when the list is empty or the feature is off, and the
+          route decides both, so there is no flag check to keep in step here. */}
+      <ClassmatesAllClear classroomId={activeClassroom?.id ?? null} meId={user?.id} />
 
       {/* ── Foundation Progress ──
           This dashboard is a core feature and can never be switched off, so

@@ -12,7 +12,13 @@
 import { Box, Chip, Stack, Typography, alpha, useTheme } from '@neram/ui';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import { RADIUS } from '@/components/timetable/timetable-theme';
+import { daysBetween } from '@/lib/catchup-turnaround';
 import type { Item, StudentCard } from './types';
+
+// Re-exported rather than redefined: the attendance panel needs the same day
+// count on the server, so it moved to a pure lib module. Everything already
+// importing it from here keeps working.
+export { daysBetween };
 
 /** A YYYY-MM-DD as "29 Jul", read in IST so an evening class keeps its own date. */
 export function shortDate(ymd: string): string {
@@ -39,14 +45,6 @@ export function timeAgo(iso: string | null): string {
   if (days === 1) return 'yesterday';
   if (days < 30) return `${days} days ago`;
   return shortDate(iso.slice(0, 10));
-}
-
-/** Whole days between two ISO-ish dates, floored at 0. */
-export function daysBetween(fromYmd: string, toIso: string): number {
-  const a = new Date(`${fromYmd.slice(0, 10)}T00:00:00+05:30`).getTime();
-  const b = new Date(`${toIso.slice(0, 10)}T00:00:00+05:30`).getTime();
-  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
-  return Math.max(0, Math.round((b - a) / 86400000));
 }
 
 /**

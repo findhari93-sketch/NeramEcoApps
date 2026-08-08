@@ -53,6 +53,20 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.course-plan', label: 'Course Plan', surface: 'student', group: 'Live Class', paths: ['/student/course-plan'], defaultEnabled: false },
   { id: 'student.assignments', label: 'Assignments', surface: 'student', group: 'Live Class', paths: ['/student/assignments'], defaultEnabled: false },
   { id: 'student.catchup', label: 'Catch-up', surface: 'student', group: 'Live Class', paths: ['/student/catch-up'], defaultEnabled: true },
+  /**
+   * Not a page (`paths: []`). Shows classmates who have nothing left to catch up
+   * on, on the student dashboard.
+   *
+   * It gets its own switch rather than riding on `student.catchup` because it is
+   * the only student surface in Nexus that names one student to another, and a
+   * peer-visible list needs to be turnable off without a deploy. Enforced server
+   * side in /api/catchup/wall, which returns an empty list when this is off, so
+   * nothing about anybody reaches the browser to be found in a network tab.
+   *
+   * Defaults OFF like every other student flag: it ships dark and is switched on
+   * for one classroom first.
+   */
+  { id: 'student.catchup-wall', label: 'Show classmates who are all caught up', surface: 'student', group: 'Live Class', paths: [], defaultEnabled: false },
 
   { id: 'student.library', label: 'Library', surface: 'student', group: 'Learn', paths: ['/student/library'], defaultEnabled: false },
   /**
@@ -87,7 +101,12 @@ export const FEATURES: FeatureDef[] = [
   // '/student/focus' is listed here on purpose: Focus Mode is the player for a
   // recap, so it must live and die with the same switch. Left out, the
   // chromeless route would stay reachable after Class Recaps was turned off.
-  { id: 'student.class-recaps', label: 'Class Recaps', surface: 'student', group: 'Study Zone', paths: ['/student/class-recaps', '/student/class-recap', '/student/focus'], defaultEnabled: false },
+  //
+  // The id stays 'student.class-recaps' even though the list it was named for is
+  // gone. Ids are persisted per classroom in nexus_settings, so renaming one
+  // silently resets whatever a teacher had switched on. What it gates now is the
+  // player and Focus Mode, plus the "Watch again" tab that links into them.
+  { id: 'student.class-recaps', label: 'Class recap player', surface: 'student', group: 'Study Zone', paths: ['/student/class-recap', '/student/focus'], defaultEnabled: false },
   // A behaviour switch, not a menu item, hence no paths: it controls HOW a
   // student receives a recording, not whether a page exists.
   //

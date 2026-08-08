@@ -31,7 +31,7 @@ import { RADIUS } from './timetable-theme';
 import ResourceCard from './ResourceCard';
 import ResourceOpener, { openExternalResource } from './ResourceOpener';
 import AddResourceFromClassDialog from './AddResourceFromClassDialog';
-import SharePointPickerDialog from './SharePointPickerDialog';
+import DriveFilePickerDialog from '../shared/DriveFilePickerDialog';
 import ResourceTextDialog from './ResourceTextDialog';
 import { makeThumbnail } from '@/lib/image-downscale';
 import {
@@ -427,7 +427,7 @@ export default function ClassResourcesSection({
             }}
             onNotify={onNotify}
           />
-          <SharePointPickerDialog
+          <DriveFilePickerDialog
             open={spOpen}
             onClose={() => setSpOpen(false)}
             classId={classId}

@@ -240,9 +240,14 @@ export const SELF_LEARNING_PATH = '/student/self-learning';
 export const COURSE_PLAN_PATH = '/student/course-plan';
 export const ASSIGNMENTS_PATH = '/student/assignments';
 export const CATCHUP_PATH = '/student/catch-up';
-// Covers both the list (/student/class-recaps) and the player (/student/class-recap/[id]).
+// The gated player, /student/class-recap/[id]. There is deliberately no list
+// path beside it any more: the Study Zone used to carry a "Class Recaps" item
+// pointing at /student/class-recaps, which showed every recap in the classroom
+// whether the student owed it or not. Two doors to the same recording, and only
+// the Catch-up one started the clock, so a student watching through the other
+// stayed "not started" to their teacher. Catch-up owns both now, as its
+// "Watch again" tab, and the plural route redirects there.
 export const CLASS_RECAP_PATH = '/student/class-recap';
-export const CLASS_RECAPS_PATH = '/student/class-recaps';
 export const RESOURCES_PATH = '/student/resources';
 
 export interface ZoneConfig {
@@ -346,7 +351,6 @@ const STUDY: ZoneConfig = {
         { label: 'Study Materials', path: STUDY_MATERIALS_PATH, icon: <FolderOutlinedIcon /> },
         { label: 'Starred', path: STARRED_PATH, icon: <StarBorderOutlinedIcon /> },
         { label: 'Self-learning', path: SELF_LEARNING_PATH, icon: <AutoStoriesOutlinedIcon /> },
-        { label: 'Class Recaps', path: CLASS_RECAPS_PATH, icon: <VideoLibraryOutlinedIcon /> },
         { label: 'Reference', path: RESOURCES_PATH, icon: <MenuBookOutlinedIcon /> },
         { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
       ],

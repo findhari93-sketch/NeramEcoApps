@@ -20,7 +20,9 @@ export type CatchupBucket =
   | 'run_over'
   | 'not_started'
   | 'behind'
-  | 'in_progress';
+  | 'in_progress'
+  /** Nothing outstanding and nothing blocked. The only bucket that is good news. */
+  | 'all_clear';
 
 export interface BucketInput {
   /** Work the student can actually act on. Excludes anything blocked on us. */
@@ -37,7 +39,14 @@ export interface BucketInput {
 /**
  * Classify one student. Order matters and is not the display order.
  *
- * `waiting_on_us` is tested FIRST because it is a claim about us, not them. A
+ * `all_clear` is tested before everything because it is the only total claim on
+ * the list: it says there is no work at all, where every test below it is a
+ * statement about work that exists. It was missing entirely until now, and its
+ * absence is why the route dropped anyone who had finished before the page could
+ * see them, so the one group a teacher would want to celebrate was the single
+ * group the screen deleted.
+ *
+ * `waiting_on_us` is tested next because it is a claim about us, not them. A
  * student whose every outstanding class is stuck behind an unpublished recap has
  * done nothing wrong, and nudging them is worse than useless. They used to be
  * scattered through the chase list; before that they were not on this screen at
@@ -50,13 +59,12 @@ export interface BucketInput {
  * is the single most common thing on the screen.
  */
 export function catchupBucket(row: BucketInput): CatchupBucket {
+  if (row.openCount === 0 && row.blockedOnUs === 0) return 'all_clear';
   if (row.openCount === 0 && row.blockedOnUs > 0) return 'waiting_on_us';
   if (row.clock.overdue) return 'run_over';
   if (row.clock.stalled) return 'not_started';
   if (row.pace.state === 'behind') return 'behind';
-  // Everything left has a clock running on it and is keeping up. A student with
-  // no open work and nothing blocked never reaches here: the route leaves them
-  // out of the list entirely.
+  // Everything left has a clock running on it and is keeping up.
   return 'in_progress';
 }
 
@@ -75,12 +83,25 @@ export const BUCKET_ORDER: CatchupBucket[] = [
   'waiting_on_us',
 ];
 
+/**
+ * Every bucket that exists, which is deliberately NOT `BUCKET_ORDER`.
+ *
+ * `all_clear` is missing from the order above on purpose, and that omission is
+ * load-bearing rather than an oversight: the needs-action list builds its groups
+ * by iterating `BUCKET_ORDER`, so leaving finished students out of it is what
+ * keeps them off a chase screen without a single `if` anywhere in the UI.
+ *
+ * Use this list, not the order, for anything that must cover the whole type:
+ * tallies, metadata, exhaustiveness checks.
+ */
+export const ALL_BUCKETS: CatchupBucket[] = [...BUCKET_ORDER, 'all_clear'];
+
 export interface BucketMeta {
   /** The group heading. Sentence case, because it is read as a phrase. */
   label: string;
   /** One line under the heading saying what the group means. */
   hint: string;
-  tone: 'bad' | 'warn' | 'idle';
+  tone: 'bad' | 'warn' | 'idle' | 'good';
   /** False where a nudge would be dishonest, which hides the bulk action. */
   nudgeable: boolean;
 }
@@ -116,12 +137,25 @@ export const BUCKET_META: Record<CatchupBucket, BucketMeta> = {
     tone: 'idle',
     nudgeable: false,
   },
+  all_clear: {
+    label: 'All clear',
+    hint: 'Nothing left to catch up on. Worth saying so out loud.',
+    tone: 'good',
+    nudgeable: false,
+  },
 };
 
 export type BucketTally = Record<CatchupBucket, number>;
 
 export function emptyTally(): BucketTally {
-  return { run_over: 0, not_started: 0, behind: 0, in_progress: 0, waiting_on_us: 0 };
+  return {
+    run_over: 0,
+    not_started: 0,
+    behind: 0,
+    in_progress: 0,
+    waiting_on_us: 0,
+    all_clear: 0,
+  };
 }
 
 /** Tally a classified cohort. The tiles read this, so it cannot drift from the list. */

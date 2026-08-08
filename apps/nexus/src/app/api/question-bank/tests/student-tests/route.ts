@@ -27,9 +27,18 @@ interface ReasonRow {
  *
  * Papers students built for themselves, grouped by student.
  *
- * Read only on purpose. Which chapters a student chooses to drill is a real
- * signal a teacher should be able to see, but a student's own workspace is not
- * the teacher's to reorganise, so there is no write path here.
+ * Read only, but no longer on the grounds that a teacher may not touch these at
+ * all. That was the earlier rule and it has been deliberately narrowed: staff
+ * CAN now delete a student's practice paper, through
+ * POST /api/question-bank/tests/bulk-delete, because the papers students
+ * abandon by the dozen are exactly the clutter teachers were asked to clear.
+ *
+ * What survives of the old rule, and is enforced in /api/test-folders: staff may
+ * delete a student's paper, never re-file one. Deleting is housekeeping;
+ * rearranging someone's folders behind their back is not.
+ *
+ * So this route stays a GET. The one write is the shared delete route, which
+ * records who pressed it in nexus_tests.deleted_by.
  */
 export async function GET(request: NextRequest) {
   try {

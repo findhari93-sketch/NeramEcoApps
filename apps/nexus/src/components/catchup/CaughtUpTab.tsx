@@ -17,17 +17,9 @@ import { Alert, Box, Chip, Stack, Typography, alpha, useTheme } from '@neram/ui'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { RADIUS } from '@/components/timetable/timetable-theme';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
-import { StudentIdentity, daysBetween, shortDate, timeAgo } from './shared';
-import type { FeedRow, TabProps } from './types';
-
-/** "the next day", "4 days later". The gap that says whether we chased them. */
-function turnaround(row: FeedRow): string {
-  if (!row.caught_up_at) return '';
-  const days = daysBetween(row.class.scheduled_date, row.caught_up_at);
-  if (days <= 0) return 'same day';
-  if (days === 1) return 'the next day';
-  return `${days} days later`;
-}
+import { turnaround } from '@/lib/catchup-turnaround';
+import { StudentIdentity, shortDate, timeAgo } from './shared';
+import type { TabProps } from './types';
 
 export default function CaughtUpTab({ data }: TabProps) {
   const theme = useTheme();
@@ -65,7 +57,7 @@ export default function CaughtUpTab({ data }: TabProps) {
             secondary={
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {row.class.title || 'Class'} · {shortDate(row.class.scheduled_date)} ·{' '}
-                {turnaround(row)}
+                {turnaround(row.class.scheduled_date, row.caught_up_at)}
               </Typography>
             }
           />

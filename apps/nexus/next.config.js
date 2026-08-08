@@ -89,6 +89,21 @@ const nextConfig = {
         destination: '/teacher/catch-up?tab=classes',
         permanent: true,
       },
+      {
+        // The student list followed the teacher one into catch-up, for the same
+        // reason plus a sharper one: it was a second door to the same recording
+        // that never started the catch-up clock, so a student who used it read
+        // as "not started" to their teacher and got chased for work they were
+        // doing. Catch-up owns both now.
+        //
+        // Lands on the default tab, not ?tab=watch-again. Someone arriving from
+        // an old bookmark should meet what they owe, not the optional shelf.
+        // `source` is the exact path, so the PLAYER at
+        // /student/class-recap/[recapId] and Focus Mode are both untouched.
+        source: '/student/class-recaps',
+        destination: '/student/catch-up',
+        permanent: true,
+      },
     ];
   },
   images: {

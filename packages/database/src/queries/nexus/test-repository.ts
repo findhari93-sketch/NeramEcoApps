@@ -1075,10 +1075,26 @@ export async function updateTestMeta(
   return data || null;
 }
 
+/**
+ * The patch that marks a test deleted.
+ *
+ * `is_active = false` is the delete; the other two columns are the receipt.
+ * Without them a teacher who clears forty student papers leaves no trace of who
+ * did it or when, and "put that back" has nothing to select on: every test that
+ * was never activated looks identical to one deleted a minute ago.
+ */
+function deletePatch(deletedBy?: string | null): Record<string, unknown> {
+  return { is_active: false, deleted_at: new Date().toISOString(), deleted_by: deletedBy ?? null };
+}
+
 /** Soft-delete a test: deactivates the row AND its placements (frees single-test contexts). */
-export async function softDeleteTest(testId: string, client?: TypedSupabaseClient): Promise<void> {
+export async function softDeleteTest(
+  testId: string,
+  deletedBy?: string | null,
+  client?: TypedSupabaseClient,
+): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
-  const { error } = await supabase.from(TESTS).update({ is_active: false }).eq('id', testId);
+  const { error } = await supabase.from(TESTS).update(deletePatch(deletedBy)).eq('id', testId);
   if (error) throw error;
   const { error: pErr } = await supabase.from(PLACEMENTS).update({ is_active: false }).eq('test_id', testId);
   if (pErr) throw pErr;
@@ -1098,6 +1114,7 @@ export async function softDeleteTest(testId: string, client?: TypedSupabaseClien
  */
 export async function softDeleteTests(
   testIds: string[],
+  deletedBy?: string | null,
   client?: TypedSupabaseClient,
 ): Promise<string[]> {
   const ids = [...new Set(testIds.filter((id) => typeof id === 'string' && id))];
@@ -1106,7 +1123,7 @@ export async function softDeleteTests(
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
     .from(TESTS)
-    .update({ is_active: false })
+    .update(deletePatch(deletedBy))
     .in('id', ids)
     .select('id');
   if (error) throw error;

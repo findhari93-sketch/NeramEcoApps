@@ -22,6 +22,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import LeaderboardTopThree from './LeaderboardTopThree';
 import LeaderboardRow from './LeaderboardRow';
 import LeaderboardYourRank from './LeaderboardYourRank';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 type Period = 'weekly' | 'monthly' | 'alltime';
 
@@ -581,39 +582,24 @@ function StudentProfileDrawerContent({
 
       {/* Profile content */}
       <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-        <Box
+        {/* This hand-rolled a 64px <img> with its own gold ring and its own
+            initials, which no ESLint selector can see: the rule looks for an
+            Avatar, and this was a Box. The gold border rides through sx, which
+            StudentStageAvatar merges BEFORE its dormant treatment, so the
+            hall-of-fame look survives and the cohort ring is now the only ring. */}
+        <StudentAvatar
+          userId={entry.student_id}
+          name={entry.student_name}
+          src={entry.avatar_url}
+          size={64}
           sx={{
-            width: 64,
-            height: 64,
-            borderRadius: '50%',
-            overflow: 'hidden',
             border: `2px solid ${neramTokens.gold[500]}`,
             bgcolor: neramTokens.navy[600],
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            color: neramTokens.cream[100],
+            fontFamily: neramFontFamilies.serif,
+            fontWeight: 700,
           }}
-        >
-          {entry.avatar_url ? (
-            <Box
-              component="img"
-              src={entry.avatar_url}
-              alt={entry.student_name}
-              sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          ) : (
-            <Typography
-              sx={{
-                fontFamily: neramFontFamilies.serif,
-                fontWeight: 700,
-                fontSize: '1.5rem',
-                color: neramTokens.cream[100],
-              }}
-            >
-              {entry.student_name?.charAt(0)?.toUpperCase() || '?'}
-            </Typography>
-          )}
-        </Box>
+        />
 
         <Typography
           sx={{

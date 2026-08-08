@@ -37,20 +37,7 @@ test.describe('Nexus — Class recap gating', () => {
     expect([403, 404, 500]).toContain(res.status());
   });
 
-  test('published recaps list is available to a student', async ({ request }) => {
-    const auth = await getTestAuthToken(request, 'student');
-    if (!auth) {
-      test.skip(true, 'Nexus dev server / test-login unavailable');
-      return;
-    }
-    const res = await request.get(`${NEXUS}/api/student/class-recaps`, {
-      headers: { Authorization: `Bearer ${auth.testToken}` },
-    });
-    if (res.status() === 500) {
-      test.skip(true, 'Recap tables not migrated in this environment');
-      return;
-    }
-    expect(res.status()).toBe(200);
-    expect(Array.isArray((await res.json()).recaps)).toBe(true);
-  });
+  // The published-recaps collection route was deleted along with the Study Zone
+  // list it fed. What a student may watch now comes from
+  // /api/student/catchup-journey, covered in nexus-class-recap.spec.ts.
 });

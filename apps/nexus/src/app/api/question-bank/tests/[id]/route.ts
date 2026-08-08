@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
+import { resolveStaffRole } from '@/lib/staff-capabilities';
 import {
   getTestMeta,
   getComposedTestQuestions,
@@ -12,10 +13,14 @@ import {
 async function requireStaff(request: NextRequest) {
   const access = await verifyQBAccess(request.headers.get('Authorization'), null);
   if (!access.ok) return { ok: false as const, response: access.response };
-  if (!['teacher', 'admin'].includes(access.caller.user_type)) {
+  // resolveStaffRole rather than a user_type check: a manager row is
+  // user_type='student' with staff_role='manager', so the old test 403d every
+  // manager here while the bulk-delete route next door let them through. Same
+  // capability, two answers, depending only on which button was pressed.
+  if (resolveStaffRole(access.caller) === null) {
     return {
       ok: false as const,
-      response: NextResponse.json({ error: 'Only teachers can manage tests' }, { status: 403 }),
+      response: NextResponse.json({ error: 'Only staff can manage tests' }, { status: 403 }),
     };
   }
   return { ok: true as const, caller: access.caller };
@@ -87,7 +92,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const meta = await getTestMeta(params.id);
     if (!meta) return NextResponse.json({ error: 'Test not found' }, { status: 404 });
 
-    await softDeleteTest(params.id);
+    await softDeleteTest(params.id, access.caller.id);
     return NextResponse.json({ data: { deleted: true } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to delete test';

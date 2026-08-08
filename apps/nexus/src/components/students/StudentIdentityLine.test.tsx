@@ -20,7 +20,8 @@ describe('StudentIdentityLine', () => {
   it('wears the ring and keeps the chip', () => {
     vi.spyOn(facts, 'useStudentStageFacts').mockReturnValue({
       ready: true,
-      factsFor: (id) => (id === 's1' ? { stage: '11th', dormant: false } : null),
+      factsFor: (id) =>
+        id === 's1' ? { stage: '11th', dormant: false, photo: null, name: null } : null,
     });
 
     render(

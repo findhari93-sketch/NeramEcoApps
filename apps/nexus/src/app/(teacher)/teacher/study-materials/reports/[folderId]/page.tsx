@@ -26,6 +26,7 @@ import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import PageHeader from '@/components/PageHeader';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import { downloadCsv } from '@/lib/csv-export';
 import {
   ChapterStatusCell,
@@ -199,7 +200,9 @@ export default function FoundationReportPage() {
                 zIndex: 1,
               }}
             >
-              <Box sx={{ width: isMobile ? 130 : 220, flexShrink: 0, position: 'sticky', left: 0, bgcolor: 'background.paper' }}>
+              {/* Must track the body cell's width below, or the chapter columns
+                  drift out of line with their headings. */}
+              <Box sx={{ width: isMobile ? 168 : 258, flexShrink: 0, position: 'sticky', left: 0, bgcolor: 'background.paper' }}>
                 <Typography variant="caption" sx={{ fontWeight: 700 }}>
                   Student
                 </Typography>
@@ -239,7 +242,11 @@ export default function FoundationReportPage() {
                   '&:hover': { bgcolor: 'action.hover' },
                 }}
               >
-                <Box sx={{ width: isMobile ? 130 : 220, flexShrink: 0, minWidth: 0, position: 'sticky', left: 0, bgcolor: 'inherit' }}>
+                {/* Widened by the face plus its ring: 130 -> 168, 220 -> 258. A
+                    column sized for a bare name clips the ring, which is drawn
+                    outside the avatar's own box. */}
+                <Box sx={{ width: isMobile ? 168 : 258, flexShrink: 0, minWidth: 0, position: 'sticky', left: 0, bgcolor: 'inherit', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <StudentAvatar userId={s.student_id} name={s.name} size={28} />
                   <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
                     {s.name || s.email}
                   </Typography>

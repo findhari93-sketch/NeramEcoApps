@@ -21,6 +21,11 @@ import { useStudentStageFacts } from './StudentStageFactsProvider';
  * students and staff (a comment thread, a class channel): teachers keep a bare
  * avatar and only the students gain a ring.
  *
+ * The same lookup supplies the PHOTO and the NAME when the caller has neither,
+ * which is what lets a screen that knows only a user id draw the real person
+ * instead of coloured initials. A caller who passes them still wins; see the
+ * resolution rules below.
+ *
  * Prefer this over StudentStageAvatar. Use that one directly only where the
  * screen has already loaded the stage itself, as the students list and the
  * attendance register have, and would otherwise be waiting on a second source
@@ -67,17 +72,39 @@ export default function StudentAvatar({
   const { factsFor } = useStudentStageFacts();
   const facts = factsFor(userId);
 
+  /**
+   * A caller who has the photo wins; the lookup only fills a gap.
+   *
+   * `src={null}` FALLS THROUGH rather than suppressing. Most call sites write
+   * `src={row.avatar_url}` off a nullable column, and a null there is the
+   * payload saying "I have no photo for this person", not "render none". Reading
+   * it as suppression would silently defeat the whole point of the lookup, and
+   * the failure would be invisible: a face that stays initials forever. If a
+   * caller ever does want to suppress it, `src=""` already works, because both
+   * UserAvatar and GraphAvatar do `src={src || undefined}`.
+   */
+  const resolvedSrc = src ?? facts?.photo ?? null;
+
+  /**
+   * Name uses a blank test, NOT `??`. Eight call sites pass
+   * `name={student.name || ''}`, and `'' ?? x` is `''`, so `??` would leave every
+   * one of them nameless. A deliberate label like "Unknown student" is non-empty
+   * so the caller still wins. The trailing `?? name` preserves `''` when the
+   * lookup has nothing, keeping those eight byte-identical without a provider.
+   */
+  const resolvedName = name?.trim() ? name : facts?.name ?? name ?? null;
+
   if (facts) {
     return (
       <StudentStageAvatar
         stage={facts.stage}
         dormant={facts.dormant}
-        name={name}
+        name={resolvedName}
         size={size}
         msOid={msOid}
         fallbackSrc={fallbackSrc}
         presenceStatus={presenceStatus}
-        src={src}
+        src={resolvedSrc}
         largeSrc={largeSrc}
         clickable={clickable}
         tapToView={tapToView}
@@ -87,6 +114,11 @@ export default function StudentAvatar({
     );
   }
 
+  // This branch is only reached when the lookup knew nothing about the id, so
+  // `resolvedSrc`/`resolvedName` collapse to the caller's own props. A teacher,
+  // an alumnus, a parent or an unknown id therefore cannot gain a face from the
+  // lookup: the privacy line holds by construction, not by a guard.
+  //
   // `msOid !== undefined` mirrors StudentStageAvatar's rule: passing the prop at
   // all, even as null, is what selects the Graph path. Keeping the two identical
   // means a row does not change which photo source it uses depending on whether
@@ -95,19 +127,19 @@ export default function StudentAvatar({
     msOid !== undefined ? (
       <GraphAvatar
         msOid={msOid}
-        name={name}
+        name={resolvedName}
         size={size}
         sx={sx}
         presenceStatus={presenceStatus}
         clickable={clickable}
         tapToView={tapToView}
-        fallbackSrc={fallbackSrc ?? src}
+        fallbackSrc={fallbackSrc ?? resolvedSrc}
       />
     ) : (
       <UserAvatar
-        src={src}
+        src={resolvedSrc}
         largeSrc={largeSrc}
-        name={name}
+        name={resolvedName}
         size={size}
         sx={sx}
         clickable={clickable}

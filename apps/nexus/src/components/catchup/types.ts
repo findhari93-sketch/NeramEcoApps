@@ -6,6 +6,7 @@
  * route it is added here, and every tab picks it up.
  */
 import type { BucketTally, CatchupBucket } from '@/lib/catchup-buckets';
+import type { CatchupStanding } from '@/lib/catchup-standing';
 
 /**
  * `current`, `locked` and `open` are gone.
@@ -107,6 +108,13 @@ export interface Row {
     stalled: boolean;
   };
   pace: { state: 'on_track' | 'behind' | 'done'; deficit: number; remaining: number };
+  /**
+   * What this student's whole record adds up to. Kept apart from `totals` and
+   * `missedTotals` because those two answer "how much work is in each list",
+   * where this answers "what should we say about this person": how much of the
+   * backlog is genuinely theirs, and whether they have answered a nudge.
+   */
+  standing: CatchupStanding;
   items: Item[];
 }
 
@@ -170,5 +178,12 @@ export interface TabProps {
    * to be confirmed and counted first.
    */
   onNudgeMany: (studentIds: string[], journeyIds: string[]) => Promise<void>;
+  /**
+   * Open the Teams preview for the students who owe nothing.
+   *
+   * Optional so a surface that has nowhere to post simply does not offer the
+   * button, rather than offering one that fails when pressed.
+   */
+  onCelebrate?: (students: Row[]) => void;
   onReload: () => void;
 }

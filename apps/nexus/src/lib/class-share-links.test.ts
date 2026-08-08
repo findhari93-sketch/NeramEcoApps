@@ -11,8 +11,9 @@ const L = classShareLinks(BASE);
 
 describe('classShareLinks', () => {
   it('uses the SINGULAR class-recap path', () => {
-    // /student/class-recaps is the list page and has no [recapId] child, so the
-    // plural 404s. This is the trap the catch-up page comments on.
+    // The plural has never had a [recapId] child, so it 404s. It is now a
+    // redirect to /student/catch-up as well, which would silently send every
+    // shared recap link to the wrong screen rather than erroring.
     expect(L.recap('rec-1')).toBe(`${BASE}/student/class-recap/rec-1`);
     expect(L.recap('rec-1')).not.toContain('/class-recaps/');
   });

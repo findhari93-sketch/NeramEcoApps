@@ -57,6 +57,32 @@ export interface StudentAbsence {
   followup_sent_at?: string | null;
 }
 
+/**
+ * The catch-up clock for one student on one class.
+ *
+ * Everything here is derived, never stored: `status` and `step` come from
+ * resolveCatchupBacklog, and the deadline exists only on the class a student has
+ * actually started, which is what stops four missed classes rendering as four
+ * simultaneous red deadlines.
+ */
+export interface StudentCatchup {
+  /** 'done' | 'active' | 'waiting' | 'excused' | 'blocked' | 'pending_teacher'. */
+  status: string;
+  /** The one thing standing between them and finishing: watch, assignment, test. */
+  step: 'watch' | 'assignment' | 'test' | 'done';
+  /** Resolved, so a completed gated recap counts. Not the raw column. */
+  watched: boolean;
+  /** Only ever set on the class their clock is running on. */
+  due_on: string | null;
+  days_left: number | null;
+  overdue: boolean;
+  active: boolean;
+  /** How many days they get once they start. Shown before they commit. */
+  window_days: number;
+  /** "the next day", "28 days later". Null while it is unfinished. */
+  cleared_after: string | null;
+}
+
 export interface AttendanceSummary {
   present: number;
   absent: number;
@@ -106,6 +132,16 @@ export interface StudentInsight {
   /** Present, but for so little of the class that it is worth a teacher's eye. */
   barelyAttended: boolean;
   absence: StudentAbsence | null;
+  /**
+   * How far this student has got with making this class up, resolved by the same
+   * rules their own screen uses. Null when there is no absence row.
+   *
+   * Distinct from `absence`, which is the raw table row. The panel must read
+   * `catchup.watched` rather than `absence.recording_watched_at`: a student who
+   * completed the gated recap never gets that stamp, so the raw column reported
+   * the person who did the harder thing as having watched nothing.
+   */
+  catchup?: StudentCatchup | null;
   /** Which of the five states this student is in. Computed server-side. */
   bucket: AttendanceBucket;
 }

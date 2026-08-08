@@ -115,7 +115,7 @@ test.describe('Catch-up is reachable on a phone', () => {
     await assertNoHorizontalOverflow(page);
 
     // All four tabs reachable: the strip scrolls rather than truncating.
-    for (const label of ['Needs action', 'Reasons', 'Caught up', 'Classes and recaps']) {
+    for (const label of ['Needs action', 'Reasons', 'Standing', 'Classes and recaps']) {
       const tab = page.getByRole('tab', { name: new RegExp(label, 'i') });
       if ((await tab.count()) > 0) {
         await tab.first().click();
@@ -210,6 +210,67 @@ test.describe('Catch-up is reachable on a phone', () => {
 
     await expect(page.getByText(/class(es)? to catch up on/).first()).toBeVisible();
     await assertNoHorizontalOverflow(page);
+
+    await context.close();
+  });
+
+  /**
+   * The second tab, at 375px.
+   *
+   * Data dependent: the tab renders only when this account has classes it does
+   * not owe AND the recap player flag is on for its classroom, so it self-skips
+   * rather than failing in an environment without either. What it holds when it
+   * does run is that the merge did not cost the phone anything: the strip is a
+   * real 48px target and the cards do not push the page sideways.
+   */
+  test('student: the Watch again tab is usable on a phone', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: PHONE });
+    const page = await context.newPage();
+
+    const injected = await injectAuthForPage(page, 'student');
+    test.skip(!injected, 'Nexus test-login unavailable');
+
+    await page.goto(`${NEXUS}/student/catch-up`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(6000);
+
+    const tab = page.getByRole('tab', { name: 'Watch again' });
+    test.skip((await tab.count()) === 0, 'Nothing to rewatch for this account');
+
+    const box = await tab.first().boundingBox();
+    expect(box, 'the tab must be laid out').not.toBeNull();
+    expect(box!.height, 'touch target must clear 44px').toBeGreaterThanOrEqual(44);
+
+    await tab.first().click();
+    await page.waitForTimeout(1200);
+
+    // The one sentence that tells a student this shelf is not homework.
+    await expect(page.getByText(/Nothing to finish here/i).first()).toBeVisible();
+    // Nothing on this tab may carry a deadline: that vocabulary belongs to the
+    // other one, and reusing it here is exactly what made two screens feel like
+    // two piles of work.
+    await expect(page.getByText(/days? left|days over|Due today/i)).toHaveCount(0);
+    await assertNoHorizontalOverflow(page);
+
+    // The URL is shareable and survives a reload on the same tab.
+    expect(page.url()).toContain('tab=watch-again');
+
+    await context.close();
+  });
+
+  test('student: the retired Class Recaps item is gone from the Study Zone', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: PHONE });
+    const page = await context.newPage();
+
+    const injected = await injectAuthForPage(page, 'student');
+    test.skip(!injected, 'Nexus test-login unavailable');
+
+    await page.goto(`${NEXUS}/student/study-materials`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(5000);
+
+    // Whether or not the More sheet opens in this environment, no surface in the
+    // Study Zone may offer a second way into a class recording.
+    await openMoreSheet(page);
+    await expect(page.getByRole('link', { name: /^Class Recaps$/ })).toHaveCount(0);
 
     await context.close();
   });

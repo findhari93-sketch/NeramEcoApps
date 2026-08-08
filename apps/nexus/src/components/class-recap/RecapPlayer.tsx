@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress, Button } from '@neram/ui';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
-import { computeGate } from '@/lib/video-gate';
+import { computeGate, type VideoGateMode } from '@/lib/video-gate';
 import type { VideoTransport } from '@/components/video/types';
 
 /**
@@ -65,6 +65,12 @@ interface RecapPlayerProps {
    * threading it back up again, and a second copy that can go stale.
    */
   onFullscreenChange?: (el: HTMLElement | null) => void;
+  /**
+   * Whether the checkpoints bind, decided by the server from the student's
+   * absence row. Defaults to the strict answer so a caller that forgets to pass
+   * it gates rather than opens.
+   */
+  mode?: VideoGateMode;
 }
 
 interface Watermark {
@@ -80,6 +86,7 @@ export default function RecapPlayer({
   onTimeUpdate,
   title,
   onFullscreenChange,
+  mode = 'gated',
 }: RecapPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Whichever surface is live. The checkpoint list drives playback through this,
@@ -108,6 +115,10 @@ export default function RecapPlayer({
   const nextIdx = useMemo(() => sections.findIndex((s) => !s.passed), [sections]);
   const nextIdxRef = useRef(nextIdx);
   nextIdxRef.current = nextIdx;
+  // Read inside handleBoundary, which is registered once and must not re-create
+  // itself when the mode arrives from the fetch.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   /**
    * How far playback may reach, and how fast. Worked out in one place for every
@@ -124,9 +135,9 @@ export default function RecapPlayer({
         })),
         duration,
         furthestSeconds: furthest,
-        mode: 'gated',
+        mode,
       }),
-    [sections, duration, furthest],
+    [sections, duration, furthest, mode],
   );
   /**
    * Checkpoint positions for the scrub bar.
@@ -144,9 +155,12 @@ export default function RecapPlayer({
           id: s.id,
           at: s.end_timestamp_seconds,
           label: `Checkpoint ${i + 1}`,
-          passed: s.passed,
+          // In revision nothing is owed, so every mark is just a chapter
+          // position. Passing the raw flag would paint the bar of someone
+          // rewatching a class they sat in as a row of unmet gates.
+          passed: mode === 'gated' ? s.passed : true,
         })),
-    [sections],
+    [sections, mode],
   );
 
   /**
@@ -259,8 +273,17 @@ export default function RecapPlayer({
    * so there is no "already triggered" latch to get stuck on. The old one meant
    * a failed quiz fetch, or a play press during the fetch, retired that
    * checkpoint for the rest of the session.
+   *
+   * The mode check is load-bearing, not defensive. An unbound gate sets
+   * `unlockedUntil` to the full duration, so NeramVideoPlayer treats the end of
+   * the recording as a boundary and fires this, then fires it again on `ended`.
+   * A student rewatching a class they sat in has passed nothing, so `nextIdx` is
+   * 0, and without this they would be handed checkpoint 1's quiz the moment the
+   * video finished. A fully passed recap is already safe because its `nextIdx`
+   * is -1, which is why this only bites the new revision path.
    */
   const handleBoundary = useCallback(() => {
+    if (modeRef.current !== 'gated') return;
     const idx = nextIdxRef.current;
     if (idx >= 0) onSectionEndRef.current(idx);
   }, []);

@@ -34,7 +34,9 @@ export async function GET(request: NextRequest) {
       // Teacher: pending question submissions
       let query = supabase
         .from('nexus_question_submissions')
-        .select('*, student:users!nexus_question_submissions_student_id_fkey(name), topic:nexus_topics(title)')
+        // id and avatar_url so the review queue can show whose submission this
+        // is, wearing their cohort, rather than a bare name.
+        .select('*, student:users!nexus_question_submissions_student_id_fkey(id, name, avatar_url), topic:nexus_topics(title)')
         .eq('classroom_id', classroomId)
         .order('created_at', { ascending: false });
 

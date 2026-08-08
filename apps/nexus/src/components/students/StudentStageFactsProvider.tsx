@@ -5,7 +5,7 @@ import { useAuthSWR } from '@/lib/nexus-swr';
 import { stageKeyOf, type StageKey } from '@/lib/student-stage';
 
 /**
- * Who is in which cohort, fetched once and readable from any avatar on screen.
+ * Who each student is, fetched once and readable from any avatar on screen.
  *
  * The classification already existed and was already rendered, on precisely four
  * screens: the students list, the profile header, the class prep roster and the
@@ -19,6 +19,11 @@ import { stageKeyOf, type StageKey } from '@/lib/student-stage';
  * screen built next month would be missing it again. One cached lookup keyed by
  * user id makes the badge a property of the avatar rather than of the payload.
  *
+ * The photo and the name ride along for exactly that reason. Plenty of screens
+ * carry a student's id and nothing else, and before this they showed coloured
+ * initials forever unless someone widened their route. Now a bare id is enough
+ * to draw the real person.
+ *
  * Mounted in the TEACHER layout only. A student page renders with an empty map,
  * every avatar falls back to plain, and nothing leaks. See the route for why
  * that matters more for dormancy than for the stage.
@@ -29,6 +34,10 @@ export interface StudentStageFacts {
   stage: StageKey;
   /** Enrolled but paused. Never shown to other students. */
   dormant: boolean;
+  /** users.avatar_url, so a screen holding only an id still shows the real face. */
+  photo: string | null;
+  /** users.name, so a screen holding only an id still shows the real name. */
+  name: string | null;
 }
 
 interface StageFactsContextValue {
@@ -48,7 +57,10 @@ export function useStudentStageFacts(): StageFactsContextValue {
 }
 
 interface Payload {
-  facts: Record<string, { stage: string | null; dormant: boolean }>;
+  facts: Record<
+    string,
+    { stage: string | null; dormant: boolean; photo: string | null; name: string | null }
+  >;
 }
 
 export default function StudentStageFactsProvider({ children }: { children: React.ReactNode }) {
@@ -70,16 +82,24 @@ export default function StudentStageFactsProvider({ children }: { children: Reac
   });
 
   const value = useMemo<StageFactsContextValue>(() => {
-    const facts = data?.facts;
-    return {
-      ready: !!facts,
-      factsFor: (userId) => {
-        if (!userId || !facts) return null;
-        const row = facts[userId];
-        if (!row) return null;
-        return { stage: stageKeyOf(row.stage), dormant: !!row.dormant };
-      },
-    };
+    const raw = data?.facts;
+    if (!raw) return { ready: false, factsFor: () => null };
+
+    // Normalise once into a Map rather than per call. Beyond the obvious, this
+    // gives each fact a STABLE identity, so factsFor(id) can safely be a
+    // useMemo or React.memo dependency. Rebuilding the object on every call
+    // would silently defeat any such memo, and that is a hard bug to see.
+    const byId = new Map<string, StudentStageFacts>();
+    for (const [id, row] of Object.entries(raw)) {
+      byId.set(id, {
+        stage: stageKeyOf(row.stage),
+        dormant: !!row.dormant,
+        photo: row.photo ?? null,
+        name: row.name ?? null,
+      });
+    }
+
+    return { ready: true, factsFor: (userId) => (userId ? byId.get(userId) ?? null : null) };
   }, [data]);
 
   return <StageFactsContext.Provider value={value}>{children}</StageFactsContext.Provider>;

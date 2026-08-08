@@ -13,6 +13,7 @@ import {
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import type { NotSubmittedStudent } from '@/types/exam-schedule';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface NotSubmittedNudgeProps {
   students: NotSubmittedStudent[];
@@ -98,9 +99,12 @@ export default function NotSubmittedNudge({
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 2 }}>
           {students.map((s) => (
-            <Typography key={s.id} variant="body2" sx={{ py: 0.25 }}>
-              {s.name}
-            </Typography>
+            <Box key={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+              <StudentAvatar userId={s.id} name={s.name} size={24} />
+              <Typography variant="body2" noWrap>
+                {s.name}
+              </Typography>
+            </Box>
           ))}
         </Box>
         <Button

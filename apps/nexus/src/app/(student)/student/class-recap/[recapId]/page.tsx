@@ -18,6 +18,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import RecapWatch, { type Recap } from '@/components/class-recap/RecapWatch';
+import type { VideoGateMode } from '@/lib/video-gate';
 import ClassResourcesSection from '@/components/timetable/ClassResourcesSection';
 import { SECTION_LABEL_SX } from '@/components/timetable/timetable-theme';
 import type { ClassResource } from '@/lib/class-resources';
@@ -39,6 +40,10 @@ export default function StudentClassRecapPage() {
 
   const [recap, setRecap] = useState<Recap | null>(null);
   const [resources, setResources] = useState<ClassResource[]>([]);
+  // Reported up by RecapWatch, which got it from the server. Only used to word
+  // this page's chrome; the gating itself is settled inside RecapWatch.
+  const [watchMode, setWatchMode] = useState<VideoGateMode>('gated');
+  const revising = watchMode !== 'gated';
 
   const handleLoaded = useCallback(
     async (r: Recap) => {
@@ -61,9 +66,12 @@ export default function StudentClassRecapPage() {
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() =>
-          recap?.scheduled_class_id
+          // The per-class workspace only exists for a class the student owes. A
+          // rewatcher has no absence row, so it would open on nothing: send them
+          // back to the shelf they came from instead.
+          recap?.scheduled_class_id && !revising
             ? router.push(`/student/timetable/${recap.scheduled_class_id}/catch-up`)
-            : router.push('/student/catch-up')
+            : router.push(revising ? '/student/catch-up?tab=watch-again' : '/student/catch-up')
         }
         sx={{ mb: 1, color: 'text.secondary', minHeight: 44 }}
       >
@@ -77,7 +85,9 @@ export default function StudentClassRecapPage() {
         {recap?.title || 'Class Recap'}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Watch the class. At each checkpoint, pass a short quiz to unlock the next part.
+        {revising
+          ? 'You were in this class. Watch any part of it again, nothing to pass.'
+          : 'Watch the class. At each checkpoint, pass a short quiz to unlock the next part.'}
       </Typography>
 
       {rewatching && recap?.scheduled_class_id && (
@@ -131,7 +141,7 @@ export default function StudentClassRecapPage() {
         </Button>
       )}
 
-      <RecapWatch recapId={recapId} onLoaded={handleLoaded} />
+      <RecapWatch recapId={recapId} onLoaded={handleLoaded} onWatchMode={setWatchMode} />
 
       {/* The teacher's reference material, below the checkpoints. Ungated on
           purpose: the video is what the quiz locks, and a student who just

@@ -15,6 +15,7 @@ import {
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface Student {
   id: string;
@@ -214,7 +215,10 @@ export default function ClassDocumentMatrix() {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {s.name}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <StudentAvatar userId={s.id} name={s.name} size={28} />
+                    {s.name}
+                  </Box>
                 </td>
                 {templates.map((t) => {
                   const cell = matrix[s.id]?.[t.id];

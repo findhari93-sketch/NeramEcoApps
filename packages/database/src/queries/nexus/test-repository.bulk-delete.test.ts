@@ -52,8 +52,8 @@ function stubClient(existing: string[]) {
 describe('softDeleteTests', () => {
   it('does nothing at all for an empty or junk id list', async () => {
     const { client, calls } = stubClient(['a']);
-    expect(await softDeleteTests([], client)).toEqual([]);
-    expect(await softDeleteTests(['', null as never, undefined as never], client)).toEqual([]);
+    expect(await softDeleteTests([], null, client)).toEqual([]);
+    expect(await softDeleteTests(['', null as never, undefined as never], null, client)).toEqual([]);
     // The regression this guards: an `.in('id', [])` reaching the database and
     // matching in a way nobody intended.
     expect(calls).toHaveLength(0);
@@ -61,7 +61,7 @@ describe('softDeleteTests', () => {
 
   it('deduplicates ids before touching the database', async () => {
     const { client, calls } = stubClient(['a', 'b']);
-    const deleted = await softDeleteTests(['a', 'a', 'b', 'a'], client);
+    const deleted = await softDeleteTests(['a', 'a', 'b', 'a'], null, client);
 
     expect(deleted.sort()).toEqual(['a', 'b']);
     expect(calls[0].table).toBe('nexus_tests');
@@ -70,18 +70,47 @@ describe('softDeleteTests', () => {
 
   it('deactivates rather than deletes, so attempt history survives', async () => {
     const { client, calls } = stubClient(['a']);
-    await softDeleteTests(['a'], client);
+    await softDeleteTests(['a'], null, client);
 
     // is_active = false on both tables, and no .delete() anywhere: a hard delete
     // would cascade into nexus_test_attempts and destroy real student scores.
-    expect(calls[0].patch).toEqual({ is_active: false });
+    expect(calls[0].patch).toMatchObject({ is_active: false });
     expect(calls[1].table).toBe('nexus_test_placements');
     expect(calls[1].patch).toEqual({ is_active: false });
   });
 
+  it('records who deleted the tests and when', async () => {
+    const { client, calls } = stubClient(['a']);
+    await softDeleteTests(['a'], 'teacher-1', client);
+
+    // The receipt for a bulk clear-out. Without deleted_by, a student asking
+    // where their paper went has nobody to ask.
+    expect(calls[0].patch).toEqual({
+      is_active: false,
+      deleted_at: expect.any(String),
+      deleted_by: 'teacher-1',
+    });
+    // Placements carry no attribution of their own: they are collateral of the
+    // test's deletion, not a separate act.
+    expect(calls[1].patch).toEqual({ is_active: false });
+  });
+
+  it('stamps deleted_by NULL rather than omitting it when no deleter is named', async () => {
+    const { client, calls } = stubClient(['a']);
+    await softDeleteTests(['a'], undefined, client);
+
+    // An explicit NULL, so a re-delete cannot leave a previous deleter's name
+    // attached to an act they did not perform.
+    expect(calls[0].patch).toEqual({
+      is_active: false,
+      deleted_at: expect.any(String),
+      deleted_by: null,
+    });
+  });
+
   it('only frees placements for tests that really existed', async () => {
     const { client, calls } = stubClient(['a']);
-    const deleted = await softDeleteTests(['a', 'ghost'], client);
+    const deleted = await softDeleteTests(['a', 'ghost'], null, client);
 
     expect(deleted).toEqual(['a']);
     // 'ghost' must not reach the placements update, or a stale id from the
@@ -91,7 +120,7 @@ describe('softDeleteTests', () => {
 
   it('skips the placements update entirely when nothing matched', async () => {
     const { client, calls } = stubClient([]);
-    expect(await softDeleteTests(['gone'], client)).toEqual([]);
+    expect(await softDeleteTests(['gone'], null, client)).toEqual([]);
     expect(calls).toHaveLength(1);
   });
 });

@@ -32,10 +32,13 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 interface ResultRow {
   student_id: string;
   student_name: string | null;
+  /** The route has always sent this; the panel simply never asked for it. */
+  avatar_url: string | null;
   attempts: number;
   best_percentage: number | null;
   last_percentage: number | null;
@@ -257,7 +260,13 @@ export default function TestResultsPanel({
                 <Box key={r.student_id}>
                   {i > 0 && <Divider />}
                   <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-                    <Box sx={{ flex: 1, minWidth: 140 }}>
+                    <StudentAvatar
+                      userId={r.student_id}
+                      name={r.student_name}
+                      src={r.avatar_url}
+                      size={32}
+                    />
+                    <Box sx={{ flex: 1, minWidth: 120 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
                         {r.student_name || 'Unknown student'}
                       </Typography>

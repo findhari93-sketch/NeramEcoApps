@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getRecapById } from '@neram/database';
+import { getSupabaseAdminClient, getRecapById, saveRecapSections } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
+import { extractYouTubeId } from '@/lib/youtube';
+import { normalizeRecordingUrl } from '@/lib/sharepoint-transcript';
+import { resolveRecordingSource } from '@/lib/recording-source';
 
 /**
  * One language track.
@@ -10,6 +13,16 @@ import { getRequestUser, assertStaff } from '@/lib/study-materials';
  *   DELETE -> archive it. Never a hard delete: nexus_class_recap_attempts
  *             cascades from the sections, so removing the row would destroy
  *             every student's passed checkpoints along with it.
+ *
+ * SWAPPING THE VIDEO IS NOT A FIELD EDIT. recording_url has always been in
+ * EDITABLE, so a new link could be written straight over the old one while its
+ * checkpoints stayed exactly where they were. Those timings were cut from the
+ * OLD recording's transcript, and the two recordings of a chapter are different
+ * lengths and pause in different places, so keeping them drops a quiz into the
+ * middle of a sentence in the new video. Changing the video therefore clears the
+ * checkpoints and returns the track to draft, which is the same conclusion
+ * reviveStudyVideoTrack reached for the same reason. Nothing did this before
+ * because nothing offered a way to change the video.
  */
 
 const EDITABLE = new Set([
@@ -46,6 +59,49 @@ export async function PATCH(
     const patch: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (EDITABLE.has(key)) patch[key] = value;
+    }
+
+    /**
+     * A new video, which is a bigger change than the field it arrives in.
+     * See the header: the old checkpoints cannot survive it.
+     */
+    let clearedCheckpoints = false;
+    if (typeof body.recording_url === 'string' && body.recording_url.trim()) {
+      // Same unwrap-and-classify the POST path does, so a Teams recap link
+      // pasted here behaves identically to one pasted when first attaching.
+      const nextUrl = normalizeRecordingUrl(body.recording_url.trim());
+      const videoSource = extractYouTubeId(nextUrl) ? 'youtube' : 'sharepoint';
+
+      if (videoSource === 'sharepoint' && body.force !== true) {
+        try {
+          await resolveRecordingSource(nextUrl);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : '';
+          return NextResponse.json(
+            {
+              error: detail.includes('RECORDING_SIZE_UNKNOWN')
+                ? 'Nexus found that link but cannot read the file itself, so students would get a broken player. This usually means the file sits in a personal OneDrive that Nexus has no access to. Move it into the Neram library and try again.'
+                : 'Nexus could not open that link. Check it points at the video file itself, then try again.',
+              code: 'RECORDING_UNREACHABLE',
+            },
+            { status: 422 },
+          );
+        }
+      }
+
+      patch.recording_url = nextUrl;
+      patch.video_source = videoSource;
+
+      if ((track.recording_url || '') !== nextUrl) {
+        // Safe on both paths: with no attempts this deletes, with attempts it
+        // archives, so nobody's passed checkpoints are destroyed either way.
+        await saveRecapSections(params.trackId, []);
+        patch.status = 'draft';
+        patch.readiness = 'pending';
+        patch.published_at = null;
+        patch.generated_at = null;
+        clearedCheckpoints = true;
+      }
     }
 
     if (body.status === 'published' || body.status === 'draft') {
@@ -99,7 +155,7 @@ export async function PATCH(
       .single();
     if (error) throw error;
 
-    return NextResponse.json({ track: data });
+    return NextResponse.json({ track: data, clearedCheckpoints });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update the track';
     return NextResponse.json({ error: message }, { status: message === 'Not authorized' ? 403 : 500 });

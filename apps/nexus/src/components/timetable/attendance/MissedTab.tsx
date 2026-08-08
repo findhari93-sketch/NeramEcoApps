@@ -45,13 +45,87 @@ function shortDate(iso: string | null): string | null {
   }
 }
 
-/** What this student has and has not done about the class they missed. */
+/**
+ * What this student has and has not done about the class they missed, and how
+ * long it has been.
+ *
+ * The clock is the addition, and it is what turns this panel from a record into
+ * a review. "Recording not watched" is the same sentence on the day after the
+ * class and five weeks later, so a teacher scanning the list could not tell a
+ * student who is inside their window from one who has ignored it since term
+ * started. Now the two read differently.
+ *
+ * `catchup.watched` rather than `absence.recording_watched_at`: that column is
+ * only ever stamped by the "I have watched it" button, which refuses once a
+ * recap is published, so a student who completed the whole gated recap has no
+ * stamp at all and used to be reported here as having watched nothing.
+ */
 function progressLine(s: StudentInsight): string {
   const a = s.absence;
+  const c = s.catchup;
+
   if (a?.excused_at) return 'Excused by a teacher';
-  if (a?.caught_up_at) return 'Caught up';
-  if (a?.recording_watched_at) return 'Watched the recording, check not taken yet';
-  return 'Recording not watched';
+  if (a?.caught_up_at) {
+    return c?.cleared_after ? `Caught up ${c.cleared_after}` : 'Caught up';
+  }
+
+  // Ours, not theirs. Saying "not started" about a class with no recording
+  // blames a student for a gap they cannot close.
+  if (c?.status === 'blocked') return 'No recording for them to watch yet';
+  if (c?.status === 'pending_teacher') return 'Waiting on the recap being published';
+
+  const hasWatched = c?.watched ?? !!a?.recording_watched_at;
+  const where = hasWatched ? stepLine(s) : 'Recording not watched';
+
+  if (c?.overdue && typeof c.days_left === 'number') {
+    const over = Math.abs(c.days_left);
+    return `${where} · ran over by ${over === 1 ? '1 day' : `${over} days`}`;
+  }
+  if (c?.active && typeof c.days_left === 'number') {
+    return `${where} · ${c.days_left === 1 ? '1 day left' : `${c.days_left} days left`}`;
+  }
+  // No clock running at all. The window is quoted rather than counted down,
+  // because nothing is late until they choose to start.
+  if (c) return `${where} · not started, ${c.window_days} days once they do`;
+  return where;
+}
+
+/** Where in the three gates they have got to, once they have watched it. */
+function stepLine(s: StudentInsight): string {
+  switch (s.catchup?.step) {
+    case 'assignment':
+      return 'Watched it, work outstanding';
+    case 'test':
+      return 'Watched it, check not taken yet';
+    case 'done':
+      return 'Everything done, not marked caught up';
+    default:
+      return 'Watched the recording, check not taken yet';
+  }
+}
+
+/**
+ * The class-level answer to "did the people who missed this come back, and how
+ * fast". Median rather than mean, so one student who cleared it four months
+ * later does not describe the group.
+ */
+export function caughtUpSummary(students: StudentInsight[]): string | null {
+  const missed = students.filter((s) => !s.attended && s.absence);
+  if (missed.length === 0) return null;
+  const cleared = missed.filter((s) => s.absence?.caught_up_at);
+  const days = cleared
+    .map((s) => s.catchup?.cleared_after)
+    .filter((v): v is string => !!v)
+    .map((v) => (v === 'same day' ? 0 : v === 'the next day' ? 1 : parseInt(v, 10)))
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b);
+
+  const base = `${cleared.length} of ${missed.length} caught up`;
+  if (days.length === 0) return base;
+  const mid = Math.floor(days.length / 2);
+  const median =
+    days.length % 2 === 1 ? days[mid] : Math.round((days[mid - 1] + days[mid]) / 2);
+  return `${base} · median ${median === 1 ? '1 day' : `${median} days`}`;
 }
 
 function MissedRow({
@@ -226,6 +300,7 @@ function Group({
   onSelect,
   onSelectMany,
   defaultOpen,
+  note,
 }: {
   title: string;
   tone: 'error' | 'warning' | 'info' | 'success';
@@ -234,6 +309,8 @@ function Group({
   onSelect: (id: string, next: boolean) => void;
   onSelectMany: (ids: string[], next: boolean) => void;
   defaultOpen: boolean;
+  /** One line under the heading. Used to report the group's turnaround. */
+  note?: string | null;
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(defaultOpen);
@@ -265,12 +342,24 @@ function Group({
           sx={{ p: 1.25 }}
           inputProps={{ 'aria-label': `Select everyone in ${title}` }}
         />
-        <Typography
-          variant="caption"
-          sx={{ fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', flex: 1 }}
-        >
-          {title}
-        </Typography>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 800,
+              letterSpacing: 0.4,
+              textTransform: 'uppercase',
+              display: 'block',
+            }}
+          >
+            {title}
+          </Typography>
+          {note && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              {note}
+            </Typography>
+          )}
+        </Box>
         <Chip size="small" color={tone} label={students.length} sx={{ fontWeight: 700 }} />
         <IconButton
           onClick={() => setOpen((v) => !v)}
@@ -343,6 +432,11 @@ export default function MissedTab({
     );
   }
 
+  // The review line for the whole class: did the people who missed it come back,
+  // and how quickly. Sits on the finished group because that is the group it
+  // describes, and it is the one number a teacher reads after the fact.
+  const turnaroundNote = caughtUpSummary(insights.students);
+
   return (
     <>
       {outstandingIds.length > 0 && (
@@ -384,6 +478,7 @@ export default function MissedTab({
         onSelect={onSelect}
         onSelectMany={onSelectMany}
         defaultOpen={false}
+        note={turnaroundNote}
       />
     </>
   );

@@ -33,6 +33,18 @@ function humanise(slug: string): string {
 }
 
 /**
+ * A category slug as a human would read it.
+ *
+ * The registry label when there is one, a humanised slug when there is not. The
+ * fallback matters: a tag added to the registry after a page was written must
+ * render as a rough label rather than a blank, because a blank in a grouped list
+ * reads as a bug in the grouping rather than a gap in the tag table.
+ */
+export function categoryLabel(slug: string, labels?: Record<string, string>): string {
+  return labels?.[slug] || humanise(slug);
+}
+
+/**
  * The categories worth naming.
  *
  * A category attached to EVERY question in the paper is an umbrella, not a
@@ -126,7 +138,7 @@ export function describeTestContent(
 
   const cats = meaningfulCategories(summary).slice(0, 2);
   if (cats.length > 0) {
-    const names = cats.map((c) => categoryLabels?.[c.slug] || humanise(c.slug));
+    const names = cats.map((c) => categoryLabel(c.slug, categoryLabels));
     parts.push(`mostly ${names.join(' and ')}`);
   }
 
@@ -175,7 +187,7 @@ export function suggestedTitle(
   if (!summary || (summary.question_count ?? 0) === 0) return null;
   const papers = describePapers(summary);
   const cats = meaningfulCategories(summary).slice(0, 1);
-  const topic = cats.length > 0 ? categoryLabels?.[cats[0].slug] || humanise(cats[0].slug) : null;
+  const topic = cats.length > 0 ? categoryLabel(cats[0].slug, categoryLabels) : null;
   if (!papers && !topic) return null;
   const head = [papers, topic].filter(Boolean).join(', ');
   return `${head} (${summary.question_count} Q)`;

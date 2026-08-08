@@ -12,6 +12,15 @@
  * It owns the watching and nothing else. Whether the class is finished, what the
  * assignment is, and whether the clock is running are all the workspace's
  * business, which is why the only thing this reports upward is `onProgress`.
+ *
+ * Two shapes, chosen by the server, never by this file. `gated` is the catch-up
+ * experience: checkpoints bind, a quiz opens at each one, and the scrub track
+ * stops at the checkpoint owed. `revision` is for a student who sat in the class
+ * or has already cleared it, and it is the whole screen relaxed rather than a
+ * flag on the player: no Focus Mode, no progress bar, no padlocks, and every
+ * checkpoint is a chapter you can jump to. Forcing someone who was in the room
+ * to answer their way through a class to reach the ten minutes they wanted to
+ * see again is the friction this avoids.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -26,6 +35,7 @@ import RecapPlayer from './RecapPlayer';
 import { useWatchHeartbeat } from './useWatchHeartbeat';
 import { openFocusWindow, onFocusWindowClosed, focusChannelName } from './openFocusWindow';
 import QuizModal from '@/components/foundation/QuizModal';
+import type { VideoGateMode } from '@/lib/video-gate';
 
 export interface RecapSection {
   id: string;
@@ -67,6 +77,8 @@ interface RecapWatchProps {
   showFocusButton?: boolean;
   /** Called with the recap once loaded, so a host page can use its title. */
   onLoaded?: (recap: Recap) => void;
+  /** Told the mode the server chose, for pages that word their chrome around it. */
+  onWatchMode?: (mode: VideoGateMode) => void;
 }
 
 function fmt(seconds: number): string {
@@ -80,12 +92,20 @@ export default function RecapWatch({
   onProgress,
   showFocusButton = true,
   onLoaded,
+  onWatchMode,
 }: RecapWatchProps) {
   const router = useRouter();
   const { loading: authLoading, getToken } = useNexusAuthContext();
   const authFetch = useAuthFetch();
 
   const [recap, setRecap] = useState<Recap | null>(null);
+  /**
+   * Starts strict and is only ever relaxed by the server's answer. A render
+   * between mount and the fetch landing therefore gates, which is the safe way
+   * round: the alternative would flash an open scrub track at a student who owes
+   * the class.
+   */
+  const [watchMode, setWatchMode] = useState<VideoGateMode>('gated');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [passedIds, setPassedIds] = useState<Set<string>>(new Set());
@@ -109,6 +129,8 @@ export default function RecapWatch({
   onProgressRef.current = onProgress;
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
+  const onWatchModeRef = useRef(onWatchMode);
+  onWatchModeRef.current = onWatchMode;
 
   const load = useCallback(async () => {
     try {
@@ -117,6 +139,11 @@ export default function RecapWatch({
       const res = await authFetch(`/api/student/class-recaps/${recapId}`);
       const r = res.recap as Recap;
       setRecap(r);
+      // Anything the server did not say is 'gated'. There is no client default
+      // that opens the gate.
+      const mode: VideoGateMode = res.watch_mode === 'revision' ? 'revision' : 'gated';
+      setWatchMode(mode);
+      onWatchModeRef.current?.(mode);
       const passed = new Set(r.sections.filter((s) => s.passed).map((s) => s.id));
       setPassedIds(passed);
       setCompleted(r.progress_status === 'completed');
@@ -182,6 +209,10 @@ export default function RecapWatch({
 
   const openQuiz = useCallback(
     async (index: number) => {
+      // Belt and braces. RecapPlayer already refuses to raise a boundary outside
+      // gated mode, but this component is what actually puts a non-dismissable
+      // drawer over the picture, so it declines on its own account too.
+      if (watchMode !== 'gated') return;
       const section = recap?.sections[index];
       if (!section) return;
       // The player has just auto-paused at the checkpoint, so this is a natural
@@ -213,7 +244,7 @@ export default function RecapWatch({
         setLoadingQuiz(false);
       }
     },
-    [authFetch, recap, recapId, passedIds, flushNow, loadingQuiz],
+    [authFetch, recap, recapId, passedIds, flushNow, loadingQuiz, watchMode],
   );
 
   const submitQuiz = useCallback(
@@ -275,6 +306,7 @@ export default function RecapWatch({
 
   const passedCount = passedIds.size;
   const total = recap?.sections.length ?? 0;
+  const revising = watchMode !== 'gated';
 
   if (errorMsg) {
     return <EmptyState title="Cannot open this recap" description={errorMsg} />;
@@ -299,7 +331,7 @@ export default function RecapWatch({
       {/* Focus Mode is a comfort feature now, not the only safe way to watch:
           no app chrome and a watermark. The inline player below enforces the
           same boundary, which it did not used to. */}
-      {showFocusButton && !completed && (
+      {showFocusButton && !completed && !revising && (
         <Button
           fullWidth
           variant="contained"
@@ -352,27 +384,37 @@ export default function RecapWatch({
           onTimeUpdate={onTick}
           title={recap.title}
           onFullscreenChange={setQuizHost}
+          mode={watchMode}
         />
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.5 }}>
-        <Box sx={{ flex: 1, height: 8, borderRadius: 99, bgcolor: alpha('#1A2027', 0.08) }}>
-          <Box
-            sx={{
-              width: `${total ? Math.round((passedCount / total) * 100) : 0}%`,
-              height: '100%',
-              borderRadius: 99,
-              bgcolor: '#2E7D32',
-              transition: 'width 300ms ease',
-            }}
-          />
-        </Box>
-        <Typography variant="caption" sx={{ fontWeight: 800, color: '#1B5E20', whiteSpace: 'nowrap' }}>
-          {passedCount} of {total} passed
+      {/* A progress bar counts something owed, so revision gets a plain sentence
+          instead. It also answers the question the missing quizzes raise, which
+          is "why is this one not asking me anything". */}
+      {revising ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Nothing to pass here. Jump to any part of the class you want to see again.
         </Typography>
-      </Box>
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.5 }}>
+          <Box sx={{ flex: 1, height: 8, borderRadius: 99, bgcolor: alpha('#1A2027', 0.08) }}>
+            <Box
+              sx={{
+                width: `${total ? Math.round((passedCount / total) * 100) : 0}%`,
+                height: '100%',
+                borderRadius: 99,
+                bgcolor: '#2E7D32',
+                transition: 'width 300ms ease',
+              }}
+            />
+          </Box>
+          <Typography variant="caption" sx={{ fontWeight: 800, color: '#1B5E20', whiteSpace: 'nowrap' }}>
+            {passedCount} of {total} passed
+          </Typography>
+        </Box>
+      )}
 
-      {completed && (
+      {completed && !revising && (
         <Chip
           icon={<CheckCircleIcon />}
           label="Completed. This class is marked done for you."
@@ -390,7 +432,9 @@ export default function RecapWatch({
           {recap.sections.map((s, i) => {
             const isPassed = passedIds.has(s.id);
             const priorPassed = i === 0 || passedIds.has(recap.sections[i - 1].id);
-            const locked = !priorPassed && !isPassed;
+            // Nothing is sequential when nothing is owed, so the list stops
+            // being a ladder and becomes chapters.
+            const locked = revising ? false : !priorPassed && !isPassed;
             return (
               <Box
                 key={s.id}
@@ -419,22 +463,26 @@ export default function RecapWatch({
                     fontSize: '0.82rem',
                     fontWeight: 800,
                     flexShrink: 0,
-                    bgcolor: isPassed ? 'rgba(46,125,50,0.12)' : alpha('#1A2027', 0.06),
-                    color: isPassed ? '#1B5E20' : 'text.secondary',
+                    bgcolor: isPassed && !revising ? 'rgba(46,125,50,0.12)' : alpha('#1A2027', 0.06),
+                    color: isPassed && !revising ? '#1B5E20' : 'text.secondary',
                   }}
                 >
-                  {isPassed ? '✓' : i + 1}
+                  {isPassed && !revising ? '✓' : i + 1}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.3 }} noWrap>
                     {s.title}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {fmt(s.start_timestamp_seconds)} to {fmt(s.end_timestamp_seconds)} · {s.question_count} question
-                    {s.question_count === 1 ? '' : 's'}
+                    {fmt(s.start_timestamp_seconds)} to {fmt(s.end_timestamp_seconds)}
+                    {/* A question count is a description of a gate. With no gate
+                        it is just a number the student can do nothing with. */}
+                    {revising
+                      ? ''
+                      : ` · ${s.question_count} question${s.question_count === 1 ? '' : 's'}`}
                   </Typography>
                 </Box>
-                {isPassed ? (
+                {isPassed && !revising ? (
                   <CheckCircleIcon sx={{ fontSize: 20, color: '#2E7D32', flexShrink: 0 }} />
                 ) : locked ? (
                   <LockOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled', flexShrink: 0 }} />

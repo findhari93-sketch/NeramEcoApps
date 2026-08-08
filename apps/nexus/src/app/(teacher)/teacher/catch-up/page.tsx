@@ -7,7 +7,7 @@
  * It answers four questions, in the order they get asked:
  *   Needs action        who do I call today
  *   Reasons             why did they miss it, in their own words
- *   Caught up           which of them finished
+ *   Standing            who owes nothing at all, and what cleared lately
  *   Classes and recaps  what do I still owe them, and the button that fixes it
  *
  * The last tab absorbed the whole /teacher/class-recaps list page. Those were
@@ -34,10 +34,18 @@ import {
 } from '@/components/catchup/payload';
 import NeedsActionTab from '@/components/catchup/NeedsActionTab';
 import ReasonsTab from '@/components/catchup/ReasonsTab';
-import CaughtUpTab from '@/components/catchup/CaughtUpTab';
+import StandingTab from '@/components/catchup/StandingTab';
 import ClassesRecapsTab from '@/components/catchup/ClassesRecapsTab';
-import type { ItemAction, TabProps } from '@/components/catchup/types';
+import CelebrateDialog, { type CelebrateOutcome } from '@/components/catchup/CelebrateDialog';
+import type { ItemAction, Row, TabProps } from '@/components/catchup/types';
 
+/**
+ * The third key stays `caught-up` although the tab now reads "Standing".
+ *
+ * It is in the URL, so it is in bookmarks and in every notification deep link
+ * already sent. Renaming the key to match the label would break those for a
+ * cosmetic gain.
+ */
 type TabKey = 'students' | 'reasons' | 'caught-up' | 'classes';
 
 const TAB_KEYS: TabKey[] = ['students', 'reasons', 'caught-up', 'classes'];
@@ -49,6 +57,9 @@ function TeacherCatchUpWorkspace() {
 
   const [busy, setBusy] = useState<string | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
+  /** Non-null while the Teams preview is open. Holds the names it is showing. */
+  const [celebrating, setCelebrating] = useState<Row[] | null>(null);
+  const [celebrateOutcome, setCelebrateOutcome] = useState<CelebrateOutcome | null>(null);
 
   // The tab lives in the URL so a notification can deep-link straight to the
   // reasons feed and a teacher can bookmark the view they actually use. Read
@@ -204,9 +215,48 @@ function TeacherCatchUpWorkspace() {
     await mutate();
   }, [mutate]);
 
+  /**
+   * Open the preview. Nothing is sent from here.
+   *
+   * The names are held in state only so the dialog can show them; the server
+   * re-derives the list before posting and can only shorten it, so this is a
+   * preview rather than the payload. See api/catchup/celebrate.
+   */
+  const onCelebrate = useCallback((students: Row[]) => {
+    setCelebrateOutcome(null);
+    setCelebrating(students);
+  }, []);
+
+  const onCelebrateSend = useCallback(
+    async (message: string, postToTeams: 'both' | 'channel') => {
+      if (!activeClassroom?.id) return;
+      setBusy('celebrate');
+      try {
+        const res = await authFetch('/api/catchup/celebrate', {
+          method: 'POST',
+          body: JSON.stringify({
+            classroomId: activeClassroom.id,
+            studentIds: (celebrating || []).map((s) => s.student.id),
+            message,
+            postToTeams,
+          }),
+        });
+        setCelebrateOutcome({ ok: true, named: res?.named || [] });
+      } catch (err) {
+        setCelebrateOutcome({
+          ok: false,
+          error: err instanceof Error ? err.message : 'Could not post to Teams',
+        });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [authFetch, activeClassroom?.id, celebrating],
+  );
+
   const tabProps: TabProps | null = useMemo(
-    () => (data ? { data, busy, onAct, onNudge, onNudgeMany, onReload } : null),
-    [data, busy, onAct, onNudge, onNudgeMany, onReload],
+    () => (data ? { data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onReload } : null),
+    [data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onReload],
   );
 
   if (data === null || tabProps === null) {
@@ -238,23 +288,33 @@ function TeacherCatchUpWorkspace() {
       </Typography>
 
       {/*
-        All four tiles count STUDENTS now. They used to mix units: one counted
-        people and three counted absence rows, so "8 need attention" sat beside
-        "91 unexplained" and read as though they were the same kind of thing.
-        The row counts moved to the line underneath, where a per-absence number
-        is not being silently compared with a per-student one.
+        All five tiles count STUDENTS, except the last. They used to mix units:
+        one counted people and three counted absence rows, so "8 need attention"
+        sat beside "91 unexplained" and read as though they were the same kind of
+        thing. The row counts moved to the line underneath, where a per-absence
+        number is not being silently compared with a per-student one.
 
         Every number here comes from totals.byBucket, which is a tally of the
         rows the tab renders. The tile and the group beneath it cannot disagree.
+
+        "all clear" is the one tile that is good news, and it exists because the
+        route used to drop those students before this page saw them. It is
+        deliberately first: the screen opens on what is working rather than on a
+        wall of red.
       */}
       <Box
         sx={{
           display: 'grid',
           gap: 1,
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' },
+          gridTemplateColumns: {
+            xs: 'repeat(2, 1fr)',
+            sm: 'repeat(3, 1fr)',
+            md: 'repeat(5, 1fr)',
+          },
           mb: 1,
         }}
       >
+        <StatTile n={data.totals.byBucket.all_clear} label="all clear" tone="good" />
         <StatTile n={data.totals.byBucket.run_over} label="run over" tone="bad" />
         <StatTile n={data.totals.byBucket.not_started} label="not started" tone="warn" />
         <StatTile n={data.totals.byBucket.waiting_on_us} label="waiting on us" />
@@ -281,9 +341,20 @@ function TeacherCatchUpWorkspace() {
           label={data.reasons.length > 0 ? `Reasons (${data.reasons.length})` : 'Reasons'}
           sx={{ textTransform: 'none', fontWeight: 700, minHeight: 46 }}
         />
+        {/*
+          The count is students who are completely clear, not finished items.
+          It used to be `data.completed.length`, and "Caught up (7)" was read as
+          seven finished students when it meant seven cleared classes in sixty
+          days: one student who cleared two of her five showed up twice and
+          looked done. Counting people under a heading about people is the fix.
+        */}
         <Tab
           value="caught-up"
-          label={data.completed.length > 0 ? `Caught up (${data.completed.length})` : 'Caught up'}
+          label={
+            data.totals.byBucket.all_clear > 0
+              ? `Standing (${data.totals.byBucket.all_clear})`
+              : 'Standing'
+          }
           sx={{ textTransform: 'none', fontWeight: 700, minHeight: 46 }}
         />
         <Tab
@@ -295,8 +366,20 @@ function TeacherCatchUpWorkspace() {
 
       {tab === 'students' && <NeedsActionTab {...tabProps} />}
       {tab === 'reasons' && <ReasonsTab {...tabProps} />}
-      {tab === 'caught-up' && <CaughtUpTab {...tabProps} />}
+      {tab === 'caught-up' && <StandingTab {...tabProps} />}
       {tab === 'classes' && <ClassesRecapsTab {...tabProps} />}
+
+      <CelebrateDialog
+        open={!!celebrating}
+        names={(celebrating || []).map((s) => s.student.name || s.student.email || 'Student')}
+        busy={busy === 'celebrate'}
+        outcome={celebrateOutcome}
+        onClose={() => {
+          setCelebrating(null);
+          setCelebrateOutcome(null);
+        }}
+        onSend={onCelebrateSend}
+      />
 
       <Snackbar
         open={!!snack}

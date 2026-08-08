@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
+import {
+  getSupabaseAdminClient,
+  istTodayYmd,
+  loadClassroomRoster,
+  readCatchupWindows,
+  resolveCatchupBacklog,
+  toFacts,
+} from '@neram/database';
+import { loadClassFactsForStudents } from '@/lib/catchup-facts';
+import { turnaround } from '@/lib/catchup-turnaround';
 import { LATE_THRESHOLD_MINUTES } from '@/lib/class-absences';
 import { tallyReasons } from '@/lib/rsvp-reasons';
 import { ATTENDANCE_FAILURE_MESSAGES, type AttendanceSyncFailure } from '@/lib/attendance-sync';
@@ -55,7 +64,11 @@ export async function GET(request: NextRequest) {
     const { data: cls } = await supabase
       .from('nexus_scheduled_classes')
       .select(
-        'id, title, scheduled_date, start_time, end_time, classroom_id, status, attendance_synced_at, attendance_sync_status, teams_meeting_id',
+        'id, title, scheduled_date, start_time, end_time, classroom_id, status, attendance_synced_at, ' +
+          // recording_url and youtube_url are read by classifyCatchupCandidate
+          // inside toFacts: a class with neither is one nobody can catch up on,
+          // and saying "not started" about it would blame a student for our gap.
+          'attendance_sync_status, teams_meeting_id, recording_url, youtube_url',
       )
       .eq('id', classId)
       .eq('classroom_id', classroomId)
@@ -87,7 +100,11 @@ export async function GET(request: NextRequest) {
           .from('nexus_class_absences')
           .select(
             'id, student_id, kind, reason_code, reason_note, reason_source, reason_submitted_at, ' +
-              'recording_watched_at, caught_up_at, excused_at, followup_sent_at',
+              'recording_watched_at, caught_up_at, excused_at, followup_sent_at, ' +
+              // The clock. Without these the panel could say what a student had
+              // done but not whether they were inside their window, which is the
+              // half of the question a teacher reviewing a class actually asks.
+              'activated_on, days_used, test_passed_at',
           )
           .eq('scheduled_class_id', classId),
       ]);
@@ -103,6 +120,54 @@ export async function GET(request: NextRequest) {
     const absenceById = new Map<string, any>(
       (absenceRows || []).map((a: any) => [a.student_id, a]),
     );
+
+    // ── How far each absent student has actually got ────────────────────────
+    //
+    // The panel used to read `recording_watched_at` straight off the row, which
+    // is wrong in one direction that matters: a student who completed the gated
+    // recap has no such stamp (the mark_watched action refuses while a published
+    // recap exists), so the one who did the harder thing read as "Recording not
+    // watched" to their teacher. `toFacts` resolves it the same way the student's
+    // own screen and /api/catchup/overview do, so all three now agree.
+    //
+    // Six queries over a single class id, whatever the size of the cohort.
+    const classIdsByStudent = new Map<string, string[]>(
+      (absenceRows || []).map((a: any) => [a.student_id as string, [classId]]),
+    );
+    const [catchupFacts, windows] = await Promise.all([
+      classIdsByStudent.size
+        ? loadClassFactsForStudents(supabase, classIdsByStudent)
+        : Promise.resolve(new Map()),
+      readCatchupWindows(supabase, classroomId),
+    ]);
+    const today = istTodayYmd();
+
+    /** The one resolved item for this student and this class, or null. */
+    const catchupFor = (studentId: string, abs: any) => {
+      const facts = catchupFacts.get(studentId);
+      if (!abs || !facts) return null;
+      const item = { ...abs, scheduled_class_id: classId, class: cls };
+      const facts0 = toFacts(item, facts);
+      const resolved = resolveCatchupBacklog([facts0], { today, windows })[0];
+      if (!resolved) return null;
+      return {
+        status: resolved.status,
+        step: resolved.step,
+        /** Resolved, not the raw column. See the note above. */
+        watched: facts0.watched,
+        due_on: resolved.dueOn,
+        days_left: resolved.daysLeft,
+        overdue: resolved.overdue,
+        active: resolved.active,
+        window_days: resolved.windowDays,
+        /**
+         * "the next day", "28 days later". Computed here rather than in the
+         * browser so this panel and the standing tab print the same sentence
+         * about the same class. See lib/catchup-turnaround.ts.
+         */
+        cleared_after: turnaround(cls.scheduled_date, abs.caught_up_at ?? null) || null,
+      };
+    };
 
     const students = members.map((r: any) => {
       const a = attById.get(r.user_id);
@@ -160,6 +225,7 @@ export async function GET(request: NextRequest) {
               followup_sent_at: abs.followup_sent_at ?? null,
             }
           : null,
+        catchup: catchupFor(r.user_id, abs),
       };
       return { ...row, bucket: bucketFor(row) };
     });

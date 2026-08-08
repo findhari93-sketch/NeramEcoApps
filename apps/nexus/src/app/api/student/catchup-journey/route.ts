@@ -6,14 +6,22 @@ import {
   getCatchupBacklog,
 } from '@neram/database';
 import { computeCatchupPace, describeCatchupPace } from '@/lib/catchup-pace';
+import { listRewatchableRecaps } from '@/lib/rewatchable-recaps';
 
 /**
  * GET /api/student/catchup-journey
  *
  * The whole catch-up screen in one payload: the backlog, where each item stands,
- * and how the student is doing against their weekly quota. One call rather than
- * four, because this is the first thing a newcomer sees and every extra round
- * trip is a Vercel function invocation plus a spinner on a phone.
+ * how the student is doing against their weekly quota, and the classes they may
+ * simply watch again. One call rather than four, because this is the first thing
+ * a newcomer sees and every extra round trip is a Vercel function invocation
+ * plus a spinner on a phone.
+ *
+ * `rewatchable` is the second tab of that screen, and it is built here rather
+ * than behind its own route for a reason beyond the invocation count: it is
+ * defined as the classroom's recaps MINUS whatever this same request has just
+ * found to be outstanding. Computed in one place, off one set of rows, the two
+ * tabs cannot put the same class in both.
  *
  * Not to be confused with /api/student/catchup, which is the older topic-level
  * catch-up track shared per teaching plan.
@@ -46,11 +54,16 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
       classroomId = enrollment?.classroom_id || null;
     }
-    if (!classroomId) {
-      return NextResponse.json({ journey: null, pace: null, items: [], excluded: [], totals: null });
-    }
-
-    const empty = {
+    /**
+     * Every early return sends this shape.
+     *
+     * It used to be spelled out twice, and the no-classroom copy was missing
+     * `missed`. The page destructures that key and spreads it, so `[...undefined]`
+     * threw and a student with no active enrolment met a crash instead of the
+     * empty state. One builder, so a key can never again exist on one path and
+     * not the other.
+     */
+    const emptyPayload = (rewatchable: unknown[] = [], rewatchableTruncated = false) => ({
       journey: null,
       pace: null,
       items: [],
@@ -58,7 +71,20 @@ export async function GET(request: NextRequest) {
       excluded: [],
       totals: null,
       missedTotals: { total: 0, completed: 0, open: 0, overdue: 0 },
-    };
+      clock: null,
+      windows: null,
+      rewatchable,
+      rewatchableTruncated,
+    });
+
+    if (!classroomId) return NextResponse.json(emptyPayload());
+
+    // Ahead of the backlog guard below on purpose. `getCatchupBacklog` returns
+    // null for a student with no absence rows at all, and that is exactly the
+    // student who attended everything and has nothing BUT things to rewatch.
+    // Computed after that guard, the tab would be empty for the only people who
+    // see nothing else on the screen.
+    const { rewatchable, truncated } = await listRewatchableRecaps(supabase, user.id, classroomId);
 
     // Self-heal, same reasoning as the per-class route: a student enrolled a
     // minute ago should not be told to come back after the weekly sweep.
@@ -67,7 +93,7 @@ export async function GET(request: NextRequest) {
       await ensureCatchupJourney(user.id, classroomId, {}, supabase);
       backlog = await getCatchupBacklog(user.id, classroomId, supabase);
     }
-    if (!backlog) return NextResponse.json(empty);
+    if (!backlog) return NextResponse.json(emptyPayload(rewatchable, truncated));
 
     const { journey, missed, totals, missedTotals } = backlog;
 
@@ -118,6 +144,10 @@ export async function GET(request: NextRequest) {
         scheduled_class_id: i.scheduled_class_id,
         class: i.class,
       })),
+      // The other tab. Nothing here is owed, which is why it carries no status,
+      // no clock and no position: those all belong to the lists above.
+      rewatchable,
+      rewatchableTruncated: truncated,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load your catch-up list';

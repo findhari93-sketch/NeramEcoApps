@@ -41,6 +41,7 @@ import { Gates, shortDate } from './shared';
 import StudentRow, { itemLine } from './StudentRow';
 import CatchupFilterBar from './CatchupFilterBar';
 import BulkNudgeBar, { MAX_BULK_NUDGE } from './BulkNudgeBar';
+import NeedsACall from './NeedsACall';
 import type { Row, TabProps } from './types';
 
 const VIEW_STORAGE_KEY = 'nexus:catchup:view';
@@ -93,12 +94,48 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
     }
   }, []);
 
+  /**
+   * This tab's universe: everyone with something left to do.
+   *
+   * `data.students` now carries the students who owe nothing as well, because
+   * the route stopped dropping them so the Standing tab could count them. They
+   * have no place on a screen whose job is "who do I call today", and leaving
+   * them in silently broke three things at once: the filter bar's total, the
+   * matrix, and the empty state, which would have rendered an empty group list
+   * rather than its message for a classroom where everyone was clear.
+   */
+  const chaseStudents = useMemo(
+    () => data.students.filter((s) => s.bucket !== 'all_clear'),
+    [data.students],
+  );
+
   const filtered = useMemo(
     () =>
-      data.students.filter(
+      chaseStudents.filter(
         (s) => (bucketFilter === null || s.bucket === bucketFilter) && matches(s, query),
       ),
-    [data.students, bucketFilter, query],
+    [chaseStudents, bucketFilter, query],
+  );
+
+  /**
+   * The pinned list at the top: we chased them, and nothing has moved since.
+   *
+   * Ranked on `ownOpen` alone, never on the total. A student who enrolled in
+   * month three owes a late-joiner row for every class taught before they
+   * arrived, so ranking on the raw count would put the newest person in the room
+   * at the top of a list a teacher reads as "worst offenders". Their backlog is
+   * still shown on their row, it just cannot decide the order.
+   */
+  const needsACall = useMemo(
+    () =>
+      chaseStudents
+        .filter((s) => s.standing.unresponsive)
+        .sort(
+          (a, b) =>
+            b.standing.ownOpen - a.standing.ownOpen ||
+            (b.standing.oldestOpenDays ?? 0) - (a.standing.oldestOpenDays ?? 0),
+        ),
+    [chaseStudents],
   );
 
   const groups = useMemo(
@@ -157,7 +194,7 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
     // Capped here as well as described in the dialog, so the limit holds even if
     // the confirmation is ever bypassed.
     const ids = [...selected].slice(0, MAX_BULK_NUDGE);
-    const journeyIds = data.students
+    const journeyIds = chaseStudents
       .filter((s) => ids.includes(s.student.id) && s.journey_id)
       .map((s) => s.journey_id as string);
     setSending(true);
@@ -167,12 +204,12 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
     } finally {
       setSending(false);
     }
-  }, [selected, data.students, onNudgeMany, clearSelection]);
+  }, [selected, chaseStudents, onNudgeMany, clearSelection]);
 
   const showMatrix = canShowMatrix && view === 'matrix';
   const matrixTooBig = showMatrix && filtered.length > MATRIX_LIMIT;
 
-  if (data.students.length === 0) {
+  if (chaseStudents.length === 0) {
     return (
       <>
         <Alert severity="success" sx={{ borderRadius: 2 }}>
@@ -191,10 +228,18 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
         bucket={bucketFilter}
         onBucket={setBucketFilter}
         tally={data.totals.byBucket}
-        total={data.students.length}
+        total={chaseStudents.length}
       />
 
-      {data.students.length > 0 && canShowMatrix && (
+      {/*
+        Above the filter results rather than inside them, because it is a
+        different question. Hidden while the teacher is narrowing the list: they
+        have said what they want to look at, and a pinned banner that ignores
+        their search is the thing every dashboard gets wrong.
+      */}
+      {!narrowing && <NeedsACall rows={needsACall} onSelect={selectGroup} />}
+
+      {chaseStudents.length > 0 && canShowMatrix && (
         <Stack direction="row" alignItems="center" justifyContent="flex-end" sx={{ mb: 1 }}>
           <ToggleButtonGroup
             size="small"

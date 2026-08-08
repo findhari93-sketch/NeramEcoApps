@@ -22,6 +22,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import {
   QB_REPORT_TYPE_LABELS,
   QB_REPORT_STATUS_LABELS,
@@ -197,13 +198,20 @@ export default function TeacherReportsPage() {
                   flexWrap: 'wrap',
                 }}
               >
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography variant="body2" fontWeight={600} noWrap>
-                    {report.student_name || 'Unknown Student'}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
-                    {report.student_email || ''}
-                  </Typography>
+                <Box sx={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <StudentAvatar
+                    userId={report.student_id}
+                    name={report.student_name}
+                    size={32}
+                  />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" fontWeight={600} noWrap>
+                      {report.student_name || 'Unknown Student'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap display="block">
+                      {report.student_email || ''}
+                    </Typography>
+                  </Box>
                 </Box>
                 <Chip
                   label={QB_REPORT_STATUS_LABELS[report.status] || report.status}

@@ -41,7 +41,7 @@ test.describe('Catch-up scans on a phone', () => {
     await openCatchUp(page);
     await assertNoHorizontalOverflow(page);
 
-    for (const label of ['Needs action', 'Reasons', 'Caught up', 'Classes and recaps']) {
+    for (const label of ['Needs action', 'Reasons', 'Standing', 'Classes and recaps']) {
       const tab = page.getByRole('tab', { name: new RegExp(label, 'i') });
       if ((await tab.count()) > 0) {
         await tab.first().click();
