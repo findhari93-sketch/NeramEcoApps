@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
     // window so the cost does not grow with a classroom's whole history: a paper
     // set on a class from last term is not "what do I do now".
     const classTestPlacements: any[] = [];
+    const examPlacements: any[] = [];
     const classById = new Map<string, { id: string; title: string | null; scheduled_date: string }>();
     if (classroomId) {
       const windowStart = new Date(Date.now() - CLASS_TEST_LOOKBACK_DAYS * 86_400_000)
@@ -108,6 +109,19 @@ export async function GET(request: NextRequest) {
         // show every student an empty To do list and tell nobody why.
         if (error) throw error;
         classTestPlacements.push(...((rows || []) as any[]));
+
+        // Scheduled exams key on a scheduled class too, so they ride the same
+        // class window. Fetched separately from class tests because the two are
+        // shaped by different rules: an exam's deadline is its available_until.
+        const { data: examRows, error: examErr } = await supabase
+          .from('nexus_test_placements')
+          .select('id, test_id, context_type, context_id, passing_pct, available_from, available_until, gating')
+          .eq('context_type', 'exam')
+          .in('context_id', [...classById.keys()])
+          .eq('is_active', true)
+          .eq('is_visible', true);
+        if (examErr) throw examErr;
+        examPlacements.push(...((examRows || []) as any[]));
       }
     }
 
@@ -123,6 +137,7 @@ export async function GET(request: NextRequest) {
       ...new Set([
         ...placementRows.map((p: any) => p.test_id),
         ...classTestPlacements.map((p: any) => p.test_id),
+        ...examPlacements.map((p: any) => p.test_id),
       ]),
     ];
     const ownTestIds = (ownTests || []).map((t: any) => t.id);
@@ -178,7 +193,10 @@ export async function GET(request: NextRequest) {
 
       // One word for where this test stands, resolved here so the page never has
       // to re-derive it from three nullable dates and an attempt count.
-      const status: 'upcoming' | 'closed' | 'done' | 'open' =
+      //
+      // 'missed' is exam-only and set by shapeExam, never here: it means "you
+      // were absent", which is a different fact from "the link expired".
+      const status: 'upcoming' | 'closed' | 'done' | 'open' | 'missed' =
         from && from > now ? 'upcoming' : until && until < now ? 'closed' : attempts > 0 ? 'done' : 'open';
 
       return {
@@ -241,6 +259,48 @@ export async function GET(request: NextRequest) {
       };
     };
 
+    /**
+     * A scheduled exam, shaped for the same card as everything else.
+     *
+     * THE DEADLINE FOR AN EXAM DOES LIVE IN available_until. That is the one
+     * deliberate exception to the rule stated above shapeClassTest, and it is
+     * why the status ladder has to be different too.
+     *
+     * A closed exam the student never sat is 'missed', not 'closed'. The
+     * distinction matters to the person reading it: 'closed' reads as "that
+     * link expired", which invites them to ask for it to be reopened as if it
+     * were an oversight. 'missed' reads as "you were absent", which is what
+     * actually happened, what the invigilation roster already recorded, and
+     * what the teacher will see if they ask about it.
+     */
+    const shapeExam = (p: any) => {
+      const item = shape(p.test_id, p);
+      if (!item) return null;
+      const cls = classById.get(p.context_id);
+      const from = p.available_from ?? null;
+      const until = p.available_until ?? null;
+
+      const status: 'upcoming' | 'missed' | 'done' | 'open' =
+        from && from > now
+          ? 'upcoming'
+          : item.attempts > 0
+            ? 'done'
+            : until && until < now
+              ? 'missed'
+              : 'open';
+
+      return {
+        ...item,
+        status,
+        is_exam: true as const,
+        // The window IS the deadline here, unlike everywhere else in this file.
+        due_at: until,
+        required: true,
+        class_id: p.context_id,
+        class_title: cls?.title ?? item.title,
+      };
+    };
+
     const due: any[] = [];
     const practice: any[] = [];
     const all: any[] = [];
@@ -268,6 +328,16 @@ export async function GET(request: NextRequest) {
       if (item.status !== 'done') due.push(item);
     }
 
+    // Exams. A missed one stays in `all` so the student can see what happened,
+    // but it leaves the To do list: there is nothing they can do about it now,
+    // and leaving it there would be a permanent task they can never clear.
+    for (const p of examPlacements) {
+      const item = shapeExam(p);
+      if (!item) continue;
+      all.push(item);
+      if (item.status === 'open' || item.status === 'upcoming') due.push(item);
+    }
+
     due.sort((a, b) =>
       String(a.due_at || a.available_until || '9999').localeCompare(
         String(b.due_at || b.available_until || '9999'),
@@ -276,7 +346,15 @@ export async function GET(request: NextRequest) {
 
     // Closed last, then soonest deadline. A student opening this list wants the
     // live work first and the archive underneath.
-    const STATUS_RANK: Record<string, number> = { open: 0, upcoming: 1, done: 2, closed: 3 };
+    const STATUS_RANK: Record<string, number> = {
+      open: 0,
+      upcoming: 1,
+      done: 2,
+      // A missed exam sits with the archive, above a merely expired link:
+      // it is the one a student is most likely to be looking for down there.
+      missed: 3,
+      closed: 4,
+    };
     all.sort(
       (a, b) =>
         (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) ||

@@ -5,7 +5,6 @@
 // tags per question -> commits additively via the bulk add_tags endpoint.
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -25,14 +24,17 @@ import {
   CircularProgress,
   Divider,
 } from '@neram/ui';
-import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import NavigateBeforeOutlinedIcon from '@mui/icons-material/NavigateBeforeOutlined';
 import NavigateNextOutlinedIcon from '@mui/icons-material/NavigateNextOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import PageHeader from '@/components/PageHeader';
 import TagPicker from '@/components/question-bank/TagPicker';
+import { copyText, downloadText } from '@/lib/clipboard';
 import {
   buildTaggingPrompt,
   validateTaggingJSON,
@@ -58,7 +60,6 @@ interface ReviewRow {
 const COMMIT_BATCH = 100;
 
 export default function TaggingAssistantPage() {
-  const router = useRouter();
   const { getToken, isTeacher } = useNexusAuthContext();
 
   // Registry
@@ -72,6 +73,10 @@ export default function TaggingAssistantPage() {
   const [chunk, setChunk] = useState(1);
   const [total, setTotal] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  // The built prompt is held rather than copied straight away: copying after an
+  // awaited fetch loses the user activation and Chrome rejects the write. See
+  // lib/clipboard.ts. Copy and Download both act on this, on their own click.
+  const [prepared, setPrepared] = useState<{ text: string; count: number } | null>(null);
   // id -> question text, accumulated across every chunk fetched this session.
   const [textCache, setTextCache] = useState<Map<string, string | null>>(new Map());
   const [knownIds, setKnownIds] = useState<Set<string>>(new Set());
@@ -131,6 +136,12 @@ export default function TaggingAssistantPage() {
 
   const totalChunks = total != null ? Math.max(1, Math.ceil(total / chunkSize)) : null;
 
+  // Any change to what would be exported makes a built prompt stale, and a stale
+  // prompt silently tags the wrong questions. Drop it and make them rebuild.
+  useEffect(() => {
+    setPrepared(null);
+  }, [chunk, scope, chunkSize, filterSearch, filterTagIds]);
+
   function exportQuery(page: number): string {
     const p = new URLSearchParams();
     p.set('scope', scope);
@@ -143,9 +154,10 @@ export default function TaggingAssistantPage() {
     return p.toString();
   }
 
-  async function copyChunkPrompt() {
+  async function prepareChunkPrompt() {
     setExporting(true);
     setError(null);
+    setPrepared(null);
     try {
       const json = await authFetch(`/api/question-bank/tagging-export?${exportQuery(chunk)}`);
       const questions: TaggingExportQuestion[] = json.data?.questions || [];
@@ -164,13 +176,40 @@ export default function TaggingAssistantPage() {
         for (const q of questions) next.add(q.id);
         return next;
       });
-      const prompt = buildTaggingPrompt(questions, registry);
-      await navigator.clipboard.writeText(prompt);
-      setToast(`Prompt for ${questions.length} questions copied. Paste it into your AI chat.`);
+      setPrepared({ text: buildTaggingPrompt(questions, registry), count: questions.length });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to build the prompt');
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function copyPrepared() {
+    if (!prepared) return;
+    const ok = await copyText(prepared.text);
+    if (ok) {
+      setToast(`Prompt for ${prepared.count} questions copied. Paste it into your AI chat.`);
+    } else {
+      // Rather than leaving a dead button, hand them the file instead.
+      downloadText(`tagging-prompt-chunk-${chunk}.txt`, prepared.text);
+      setToast('Your browser blocked the clipboard, so the prompt was downloaded instead.');
+    }
+  }
+
+  function downloadPrepared() {
+    if (!prepared) return;
+    downloadText(`tagging-prompt-chunk-${chunk}.txt`, prepared.text);
+    setToast(`Prompt for ${prepared.count} questions downloaded. Upload it to your AI tool.`);
+  }
+
+  async function onReplyFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    try {
+      setPasted(await file.text());
+      setToast(`Loaded ${file.name}. Check and preview it below.`);
+    } catch {
+      setError('Could not read that file. Open it and paste the text instead.');
     }
   }
 
@@ -259,19 +298,12 @@ export default function TaggingAssistantPage() {
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 900, mx: 'auto' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-        <IconButton onClick={() => router.push('/teacher/question-bank')} aria-label="Back to Question Bank">
-          <ArrowBackOutlinedIcon />
-        </IconButton>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
-            Tagging assistant
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Copy a prompt, run it in ChatGPT, Gemini or Claude, paste the reply back
-          </Typography>
-        </Box>
-      </Box>
+      <PageHeader
+        title="Tagging assistant"
+        subtitle="Build a prompt, run it in ChatGPT, Gemini or Claude, bring the reply back"
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+      />
 
       {/* Step 1: Export */}
       <Paper variant="outlined" sx={{ p: 2, mt: 2, borderRadius: 2 }}>
@@ -343,14 +375,56 @@ export default function TaggingAssistantPage() {
           </Box>
           <Button
             variant="contained"
-            startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <ContentCopyOutlinedIcon />}
+            startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeOutlinedIcon />}
             disabled={exporting || registry.length === 0}
-            onClick={copyChunkPrompt}
+            onClick={prepareChunkPrompt}
             sx={{ textTransform: 'none', minHeight: 44 }}
           >
-            Copy prompt
+            {prepared ? 'Rebuild prompt' : 'Build prompt'}
           </Button>
         </Box>
+
+        {prepared && (
+          <Box
+            sx={{
+              mt: 1.5,
+              p: 1.5,
+              borderRadius: 1.5,
+              bgcolor: 'action.hover',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <Typography variant="body2" sx={{ flex: '1 1 100%', fontWeight: 600 }}>
+              Prompt ready for {prepared.count} question{prepared.count !== 1 ? 's' : ''}
+              <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1, fontWeight: 400 }}>
+                {Math.ceil(prepared.text.length / 1000)}k characters
+              </Typography>
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<ContentCopyOutlinedIcon />}
+              onClick={copyPrepared}
+              sx={{ textTransform: 'none', minHeight: 44 }}
+            >
+              Copy
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadOutlinedIcon />}
+              onClick={downloadPrepared}
+              sx={{ textTransform: 'none', minHeight: 44 }}
+            >
+              Download .txt
+            </Button>
+            <Typography variant="caption" color="text.secondary" sx={{ flex: '1 1 100%' }}>
+              Too long to paste? Download it and attach the file to your AI chat instead.
+            </Typography>
+          </Box>
+        )}
+
         {scope === 'untagged' && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
             Applied questions leave the untagged pool, so after applying, start again from chunk 1.
@@ -361,7 +435,7 @@ export default function TaggingAssistantPage() {
       {/* Step 2: Paste */}
       <Paper variant="outlined" sx={{ p: 2, mt: 2, borderRadius: 2 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-          2. Paste the AI reply
+          2. Paste the AI reply, or upload it
         </Typography>
         <TextField
           multiline
@@ -373,14 +447,34 @@ export default function TaggingAssistantPage() {
           onChange={(e) => setPasted(e.target.value)}
           sx={{ '& textarea': { fontFamily: 'monospace', fontSize: '0.8rem' } }}
         />
-        <Button
-          variant="outlined"
-          onClick={runValidation}
-          disabled={!pasted.trim() || registry.length === 0}
-          sx={{ textTransform: 'none', minHeight: 44, mt: 1.5 }}
-        >
-          Check and preview
-        </Button>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
+          <Button
+            variant="outlined"
+            onClick={runValidation}
+            disabled={!pasted.trim() || registry.length === 0}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Check and preview
+          </Button>
+          <Button
+            component="label"
+            variant="text"
+            startIcon={<UploadFileOutlinedIcon />}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Upload reply file
+            <input
+              type="file"
+              accept=".json,.txt,application/json,text/plain"
+              hidden
+              onChange={(e) => {
+                void onReplyFile(e.target.files?.[0]);
+                // Clear it so re-picking the same file fires change again.
+                e.target.value = '';
+              }}
+            />
+          </Button>
+        </Box>
       </Paper>
 
       {/* Step 3: Review + commit */}

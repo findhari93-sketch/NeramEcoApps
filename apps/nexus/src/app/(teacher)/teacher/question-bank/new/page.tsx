@@ -10,7 +10,7 @@ import {
   Alert,
   Skeleton,
 } from '@neram/ui';
-import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
+import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type {
   NexusQBTopic,
@@ -103,17 +103,11 @@ export default function AddQuestionPage() {
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
-        <IconButton
-          onClick={() => router.push('/teacher/question-bank')}
-          sx={{ minWidth: 48, minHeight: 48 }}
-        >
-          <ArrowBackOutlinedIcon />
-        </IconButton>
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
-          Add Question
-        </Typography>
-      </Box>
+      <PageHeader
+        title="Add question"
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+      />
 
       {/* Form */}
       {topicsLoading ? (

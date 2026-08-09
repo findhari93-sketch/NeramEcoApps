@@ -49,16 +49,24 @@ import { readTrackLanguages, trackLanguageOrder, labelForCode } from '@/lib/trac
  * Returns null when the file is playable, or a teacher-readable reason when it
  * is not. YouTube skips this entirely: it never goes through Graph.
  */
-async function preflightPlayback(recordingUrl: string): Promise<string | null> {
+async function preflightPlayback(
+  recordingUrl: string,
+): Promise<{ problem: string | null; fileName: string | null }> {
   try {
-    await resolveRecordingSource(recordingUrl);
-    return null;
+    // The driveItem carries the real file name, which is the one thing the URL
+    // cannot always be made to give up: a SharePoint list link says
+    // "DispForm.aspx" and a share link says nothing at all. Free here, since
+    // this call is being made anyway.
+    const source = await resolveRecordingSource(recordingUrl);
+    return { problem: null, fileName: source.name };
   } catch (err) {
     const message = err instanceof Error ? err.message : '';
-    if (message.includes('RECORDING_SIZE_UNKNOWN')) {
-      return 'Nexus found that link but cannot read the file itself, so students would get a broken player. This usually means the file sits in a personal OneDrive that Nexus has no access to. Move it into the Neram library and attach it again.';
-    }
-    return 'Nexus could not open that link. Check it points at the video file itself, then try again.';
+    return {
+      problem: message.includes('RECORDING_SIZE_UNKNOWN')
+        ? 'Nexus found that link but cannot read the file itself, so students would get a broken player. This usually means the file sits in a personal OneDrive that Nexus has no access to. Move it into the Neram library and attach it again.'
+        : 'Nexus could not open that link. Check it points at the video file itself, then try again.',
+      fileName: null,
+    };
   }
 }
 
@@ -112,14 +120,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // The override exists because this check depends on Graph being reachable
     // right now, and a transient blip must not be able to lock a teacher out of
     // their own chapter. Default closed, escape hatch open.
+    /**
+     * The name to show the teacher, in preference order: what the picker saw,
+     * then what Graph reports, then nothing and let the URL be derived from.
+     * The picker's name is first because it is the only one available on a
+     * forced attach, where the preflight was skipped.
+     */
+    let fileName: string | null = body.recording_file_name
+      ? String(body.recording_file_name).slice(0, 300)
+      : null;
+
     if (videoSource === 'sharepoint' && body.force !== true) {
-      const problem = await preflightPlayback(recordingUrl);
-      if (problem) {
+      const preflight = await preflightPlayback(recordingUrl);
+      if (preflight.problem) {
         return NextResponse.json(
-          { error: problem, code: 'RECORDING_UNREACHABLE' },
+          { error: preflight.problem, code: 'RECORDING_UNREACHABLE' },
           { status: 422 },
         );
       }
+      fileName = fileName || preflight.fileName;
     }
 
     // Stamp the LABEL here, from the configured list. It used to be left to the
@@ -133,6 +152,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       languageLabel: body.language_label ? String(body.language_label) : label,
       title: body.title ? String(body.title) : `${file.title} (${label})`,
       recordingUrl,
+      recordingFileName: fileName,
       videoSource,
       transcriptUrl: body.transcript_url ? String(body.transcript_url) : null,
       createdBy: user.id,

@@ -11,6 +11,7 @@ import {
   browseMyDriveFolder,
   type SiteDriveItem,
 } from '@/lib/sharepoint';
+import { searchAllDriveItems } from '@/lib/graph-search';
 import { needsPdfRendition } from '@/lib/office-rendition';
 
 /**
@@ -31,8 +32,18 @@ import { needsPdfRendition } from '@/lib/office-rendition';
  * configured site. `scope=mine` is DELEGATED against the caller's own OneDrive,
  * forwarding the bearer they already sent: /me/drive is satisfied by
  * Files.ReadWrite, which is already in loginScopes.nexus, so this needs no new
- * Graph permission and no consent prompt. `scope=both` runs the two together and
- * labels each result, which is what the recording picker uses.
+ * Graph permission and no consent prompt. `scope=both` is what the recording
+ * picker uses.
+ *
+ * `both` NOW PREFERS THE TENANT INDEX, because two drives were never the right
+ * two. The file a teacher is looking for is often in a folder a COLLEAGUE shared
+ * with them out of their own OneDrive, and that is in neither: not the library,
+ * and not /me/drive, which does not follow shares. So the picker's honest answer
+ * to "find my recording" was an empty list. lib/graph-search asks the index as
+ * the caller instead, which returns everything they are allowed to see wherever
+ * it lives. It needs delegated Files.Read.All and therefore a separate consent,
+ * so the two-drive search stays underneath as the fallback and the response says
+ * through `indexed` and `partial` which one actually answered.
  */
 
 export const dynamic = 'force-dynamic';
@@ -43,14 +54,41 @@ type Scope = 'site' | 'mine' | 'both';
 /** Where a result came from, so the picker can say so on the row. */
 type Source = 'site' | 'mine';
 
-const VIDEO_EXT = /\.(mp4|mkv|mov|webm|m4v)$/i;
+/**
+ * Deliberately wider than the five it started as. Every one of these is a real
+ * recording format that a teacher may have been handed, and a video the picker
+ * refuses to list is a video they end up pasting a link to by hand. `.ts` is left
+ * out on purpose: it is a transport stream and also every other file in this
+ * repository.
+ */
+const VIDEO_EXT = /\.(mp4|mkv|mov|webm|m4v|avi|wmv|mpe?g|3gp)$/i;
+
+/**
+ * Where the video picker starts browsing.
+ *
+ * The drive root is the wrong place and was the whole reason this dialog looked
+ * broken: it opens in browse mode, the root of the library holds two folders and
+ * no files, so "Find the English recording" answered with two folder names and
+ * nothing that could be picked. Starting inside the class-videos tree puts the
+ * teacher where the recordings actually are.
+ */
+function videoRoot(): string {
+  return (process.env.SHAREPOINT_VIDEO_ROOT || 'nexus/class-videos').replace(/^\/+|\/+$/g, '');
+}
 
 /**
  * Only what the caller can actually use. A .zip in the results helps nobody, and
  * a .pptx in a list of recordings helps nobody either.
+ *
+ * FOLDERS ARE NOT ALWAYS ATTACHABLE, which is the correction here. Returning
+ * true for every folder is right while BROWSING, where a folder is the thing you
+ * click to go deeper. In a SEARCH it is noise that crowds out the results, and
+ * when the query happened to match no files it was worse than noise: the picker
+ * showed a list made entirely of folders and its "no video files" hint could
+ * never fire, so the screen said nothing at all about why there were no videos.
  */
-function isAttachable(item: SiteDriveItem, kind: Kind): boolean {
-  if (item.isFolder) return true;
+function isAttachable(item: SiteDriveItem, kind: Kind, searching: boolean): boolean {
+  if (item.isFolder) return !searching;
   const mime = (item.mimeType || '').toLowerCase();
 
   if (kind === 'video') {
@@ -114,8 +152,18 @@ export async function GET(request: NextRequest) {
 
     const params = request.nextUrl.searchParams;
     const q = (params.get('q') || '').trim();
-    const path = params.get('path');
     const kind: Kind = params.get('kind') === 'video' ? 'video' : 'document';
+
+    /**
+     * A MISSING path means "start wherever this kind should start", which is not
+     * the same as an empty one meaning "the drive root". The picker sends no
+     * path on first open and an explicit one once the teacher navigates, so the
+     * default can live here without taking the root away from them afterwards.
+     */
+    const requestedPath = params.get('path');
+    const path = requestedPath ?? (kind === 'video' ? videoRoot() : '');
+    /** What was actually listed, which the fallback below can differ from. */
+    let listedPath = path;
 
     const requested = params.get('scope');
     const scope: Scope =
@@ -137,38 +185,93 @@ export async function GET(request: NextRequest) {
      */
     let effectiveScope: Scope = scope;
 
+    /** Set when the tenant-wide index answered, so the picker can say so. */
+    let indexed = false;
+
     if (scope === 'mine' && canReadOwnDrive) {
-      items = tag(q ? await searchMyDrive(bearer, q) : await browseMyDriveFolder(path || ''), 'mine');
+      items = tag(q ? await searchMyDrive(bearer, q) : await browseMyDriveFolder(path), 'mine');
     } else if (scope === 'both' && canReadOwnDrive && q) {
-      // Search only. A browse path names a folder in ONE drive, so there is no
-      // sensible way to walk both at once.
-      const [site, mine] = await Promise.allSettled([searchSiteDrive(q), searchMyDrive(bearer, q)]);
-
-      const siteItems = site.status === 'fulfilled' ? tag(site.value, 'site') : [];
-      const mineItems = mine.status === 'fulfilled' ? tag(mine.value, 'mine') : [];
-
-      // One side failing must not fail the request. A teacher whose OneDrive is
-      // empty or unreachable still gets the library, and is told which half is
-      // missing rather than left wondering why their file is not listed.
-      if (site.status === 'rejected' && mine.status === 'rejected') {
-        throw site.reason instanceof Error ? site.reason : new Error('Both drives failed');
+      /**
+       * The tenant index first, the two drives as the fallback.
+       *
+       * The index is the only one of the three that can see a folder shared out
+       * of somebody ELSE's OneDrive, which is where teachers keep the recordings
+       * they share with each other, so it is the only one that answers the
+       * question they are actually asking. It needs delegated Files.Read.All,
+       * which is consented separately, so this cannot simply replace the old
+       * path: until that lands the index answers 403 and the two-drive search
+       * has to still be there underneath.
+       */
+      let searched: Array<SiteDriveItem & { source: Source }> | null = null;
+      try {
+        const indexResult = await searchAllDriveItems(bearer, q, kind);
+        // Already tagged per row from each hit's own driveType. Re-tagging them
+        // all as one source is exactly the lie this path exists to avoid.
+        searched = indexResult.items;
+        indexed = true;
+        if (indexResult.moreAvailable) {
+          partial = 'Showing the closest matches. Add a word to narrow it down.';
+        }
+      } catch (err) {
+        console.warn('[sharepoint/search] index unavailable, falling back', err);
       }
-      if (site.status === 'rejected') partial = 'Could not reach the Neram library, showing your OneDrive only.';
-      if (mine.status === 'rejected') partial = 'Could not reach your OneDrive, showing the Neram library only.';
 
-      items = [...siteItems, ...mineItems];
+      if (searched) {
+        items = searched;
+      } else {
+        // Search only. A browse path names a folder in ONE drive, so there is no
+        // sensible way to walk both at once.
+        const [site, mine] = await Promise.allSettled([searchSiteDrive(q), searchMyDrive(bearer, q)]);
+
+        const siteItems = site.status === 'fulfilled' ? tag(site.value, 'site') : [];
+        const mineItems = mine.status === 'fulfilled' ? tag(mine.value, 'mine') : [];
+
+        // One side failing must not fail the request. A teacher whose OneDrive is
+        // empty or unreachable still gets the library, and is told which half is
+        // missing rather than left wondering why their file is not listed.
+        if (site.status === 'rejected' && mine.status === 'rejected') {
+          throw site.reason instanceof Error ? site.reason : new Error('Both drives failed');
+        }
+        if (site.status === 'rejected') partial = 'Could not reach the Neram library, showing your OneDrive only.';
+        else if (mine.status === 'rejected') partial = 'Could not reach your OneDrive, showing the Neram library only.';
+        else partial = 'Searching the Neram library and your own OneDrive only. Files shared with you by someone else are not included yet.';
+
+        items = [...siteItems, ...mineItems];
+      }
+    } else if (q) {
+      items = tag(await searchSiteDrive(q), 'site');
+      effectiveScope = 'site';
     } else {
-      items = tag(q ? await searchSiteDrive(q) : await browseSiteFolder(path || ''), 'site');
+      /**
+       * The video tree may not exist yet on an environment where nobody has made
+       * it. Falling back to the drive root keeps the picker usable rather than
+       * handing back a 404 for a default the teacher never chose.
+       */
+      let listing: SiteDriveItem[];
+      try {
+        listing = await browseSiteFolder(path);
+      } catch (err) {
+        if (!path || requestedPath !== null) throw err;
+        console.warn(`[sharepoint/search] no ${path} folder, listing the drive root`);
+        listing = await browseSiteFolder('');
+        // The echoed path has to describe what was ACTUALLY listed, not what was
+        // asked for. The picker adopts it as its breadcrumb and builds every
+        // subsequent request from it, so echoing the folder that just 404'd
+        // would put a lie in the trail and 502 the next click.
+        listedPath = '';
+      }
+      items = tag(listing, 'site');
       effectiveScope = 'site';
     }
 
     return NextResponse.json({
-      items: items.filter((item) => isAttachable(item, kind)),
+      items: items.filter((item) => isAttachable(item, kind, !!q)),
       mode: q ? 'search' : 'browse',
-      path: q ? null : path || '',
+      path: q ? null : listedPath,
       kind,
       scope: effectiveScope,
       requestedScope: scope,
+      indexed,
       partial,
     });
   } catch (err) {

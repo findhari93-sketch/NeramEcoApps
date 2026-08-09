@@ -14,7 +14,7 @@ import {
   Alert,
   CircularProgress,
 } from '@neram/ui';
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
+import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database';
 
@@ -122,15 +122,12 @@ export default function ReclassifyPage() {
 
   return (
     <Box sx={{ p: { xs: 1.5, md: 3 }, pb: 12, maxWidth: 900, mx: 'auto' }}>
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-        <CategoryOutlinedIcon color="primary" />
-        <Typography variant="h6" fontWeight={700}>
-          Re-classify Topics
-        </Typography>
-      </Stack>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Proposed sub-topics for coordinate geometry questions. Nothing changes for students until you apply.
-      </Typography>
+      <PageHeader
+        title="Re-classify topics"
+        subtitle="Proposed sub-topics for coordinate geometry questions. Nothing changes for students until you apply."
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+      />
 
       {Object.keys(summary).length > 0 && (
         <Stack direction="row" spacing={0.5} sx={{ mb: 2, flexWrap: 'wrap', gap: 0.5 }}>

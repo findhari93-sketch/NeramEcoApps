@@ -25,7 +25,14 @@ export type ShareSectionId =
   | 'recording'
   | 'tests'
   | 'assignments'
-  | 'footer';
+  | 'footer'
+  // Exam results reuse this renderer rather than forking a second one, so the
+  // Teams card matches every other Nexus card and the existing test asserting
+  // the text and HTML carry identical URLs covers it too.
+  | 'exam_summary'
+  | 'exam_podium'
+  | 'exam_sections'
+  | 'exam_footer';
 
 /** Sections the teacher may switch off. Header and footer are always in. */
 export const TOGGLEABLE_SECTIONS: ShareSectionId[] = [

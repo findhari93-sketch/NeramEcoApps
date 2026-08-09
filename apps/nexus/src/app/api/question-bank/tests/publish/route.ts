@@ -78,10 +78,21 @@ export async function POST(request: NextRequest) {
     // is the whole reason the picker branch is cheap.
     const authored: CommitRow[] = [];
     const bankIds: string[] = [];
+    // Per-question marking travelled from the wizard and was thrown away here,
+    // so an exam-faithful import composed at 1 mark a question with no penalty.
+    // Keyed by bank id, because commitImport chooses the final question order.
+    const marksByQuestionId: Record<string, { marks: number; negativeMarks: number }> = {};
     for (const q of questions) {
       if (q?.action === 'skip') continue;
       if (q?.bank_question_id) {
-        bankIds.push(String(q.bank_question_id));
+        const id = String(q.bank_question_id);
+        bankIds.push(id);
+        const m = Number(q?.marks);
+        const n = Number(q?.negative_marks);
+        marksByQuestionId[id] = {
+          marks: Number.isFinite(m) && m > 0 ? m : 1,
+          negativeMarks: Number.isFinite(n) ? Math.abs(n) : 0,
+        };
         continue;
       }
       authored.push({
@@ -120,6 +131,12 @@ export async function POST(request: NextRequest) {
       timerType,
       durationMinutes,
       passingPct,
+      // rules.shuffle was collected in step 4 and silently dropped here, so the
+      // toggle a teacher ticked never reached the test row.
+      shuffle: Boolean(rules?.shuffle),
+      // An imported paper keeps its sections in order and shuffles inside them.
+      shuffleSections: body?.source === 'pyq',
+      marksByQuestionId: Object.keys(marksByQuestionId).length > 0 ? marksByQuestionId : undefined,
       isPublished: body?.publish !== false,
       createdFrom: typeof body?.created_from === 'string' ? body.created_from : 'wizard',
       origin: 'imported',

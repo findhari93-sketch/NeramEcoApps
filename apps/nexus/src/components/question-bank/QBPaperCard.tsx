@@ -1,14 +1,20 @@
 'use client';
 
 import { Box, Typography, Paper, Chip } from '@neram/ui';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import type { NexusQBOriginalPaper } from '@neram/database';
 import PaperProgressBar from './PaperProgressBar';
 
+/**
+ * How far the PARSE got. Easily mistaken for a publish state, which is why the
+ * student-visibility chip below sits beside it and always renders.
+ */
 const STATUS_CONFIG: Record<string, { label: string; color: 'success' | 'info' | 'warning' | 'default' }> = {
-  complete: { label: 'Complete', color: 'success' },
-  answer_keyed: { label: 'Answer Keyed', color: 'info' },
-  parsed: { label: 'Parsed', color: 'warning' },
-  pending: { label: 'Pending', color: 'default' },
+  complete: { label: 'Parsed in full', color: 'success' },
+  answer_keyed: { label: 'Answers added', color: 'info' },
+  parsed: { label: 'Questions only', color: 'warning' },
+  pending: { label: 'Not parsed', color: 'default' },
 };
 
 interface QBPaperCardProps {
@@ -76,10 +82,21 @@ export default function QBPaperCard({ paper, onClick }: QBPaperCardProps) {
         </Box>
       )}
 
-      {/* Row 3: Stats summary */}
-      <Typography variant="caption" color="text.secondary">
-        {total} total{keyed > 0 ? ` · ${keyed} with answers` : ''}{complete > 0 ? ` · ${complete} complete` : ''}
-      </Typography>
+      {/* Row 3: Stats summary + who can see this */}
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ flex: 1, minWidth: 0 }}>
+          {total} total{keyed > 0 ? ` · ${keyed} with answers` : ''}{complete > 0 ? ` · ${complete} complete` : ''}
+          {paper.study_file_id ? ' · PDF linked' : ''}
+        </Typography>
+        <Chip
+          icon={paper.is_student_visible ? <VisibilityOutlinedIcon /> : <VisibilityOffOutlinedIcon />}
+          label={paper.is_student_visible ? 'Live for students' : 'Not published'}
+          size="small"
+          color={paper.is_student_visible ? 'success' : 'default'}
+          variant={paper.is_student_visible ? 'filled' : 'outlined'}
+          sx={{ height: 22, fontSize: '0.7rem', '& .MuiChip-icon': { fontSize: 14 } }}
+        />
+      </Box>
     </Paper>
   );
 }

@@ -14,6 +14,8 @@ import {
   Skeleton,
   Button,
   Tooltip,
+  Menu,
+  MenuItem,
   TextField,
   InputAdornment,
   Stack,
@@ -35,6 +37,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
@@ -181,6 +184,25 @@ function StudyMaterialsBrowser() {
     }
   };
 
+  /**
+   * Open a recording, carrying the folder so the player can send them back here.
+   *
+   * The watch page used to push a bare /student/study-materials on the way out,
+   * which drops ?folder= and lands a student at the top of the tree however deep
+   * they were. Passing it forward costs one query parameter and is the only way
+   * the player can know where "back" is.
+   */
+  const openTrack = (trackId: string) => {
+    const back = folderId ? `?folder=${encodeURIComponent(folderId)}` : '';
+    router.push(`/student/study-materials/watch/${trackId}${back}`);
+  };
+
+  /** Which chapter's language menu is open, and what it is anchored to. */
+  const [watchMenu, setWatchMenu] = useState<{
+    anchor: HTMLElement;
+    file: NexusStudyFileDTO;
+  } | null>(null);
+
   const toggleFavorite = async (file: NexusStudyFileDTO, e: React.MouseEvent) => {
     e.stopPropagation();
     const next = !file.is_favorite;
@@ -230,6 +252,49 @@ function StudyMaterialsBrowser() {
     openFile(partial);
   };
 
+  /**
+   * The way into a chapter's recording, as a control of its own.
+   *
+   * Rendered as a SIBLING of the card's action area, never inside it, which is
+   * the same shape the star and the download button already use and for the same
+   * reason: the grid card's action area is a real <button> and nothing
+   * interactive can legally live inside it. The chips under the title say which
+   * languages exist; this is what opens one.
+   *
+   * One language goes straight there. Two or more open a menu, because guessing
+   * which one a student wants is the thing that sends them into a recording they
+   * cannot follow.
+   */
+  const watchButton = (file: NexusStudyFileDTO, sx: object) => {
+    const langs = file.video_languages || [];
+    if (!langs.length) return null;
+    const only = langs.length === 1 ? langs[0] : null;
+    return (
+      <Tooltip title={only ? `Watch in ${only.label}` : 'Watch the class'}>
+        <IconButton
+          onClick={(e) => {
+            e.stopPropagation();
+            if (only) openTrack(only.track_id);
+            else setWatchMenu({ anchor: e.currentTarget, file });
+          }}
+          aria-label={only ? `Watch this chapter in ${only.label}` : 'Watch this chapter'}
+          aria-haspopup={only ? undefined : 'menu'}
+          sx={{
+            width: 44,
+            height: 44,
+            color: 'info.main',
+            bgcolor: alpha(theme.palette.background.paper, 0.85),
+            transition: 'background-color 200ms',
+            '&:hover': { bgcolor: alpha(theme.palette.info.main, 0.16) },
+            ...sx,
+          }}
+        >
+          <PlayCircleOutlineIcon sx={{ fontSize: '1.35rem' }} />
+        </IconButton>
+      </Tooltip>
+    );
+  };
+
   // Status + affordance chips shown under a file's title in both grid and list layouts.
   const fileStatusChips = (file: NexusStudyFileDTO) => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
@@ -266,11 +331,21 @@ function StudyMaterialsBrowser() {
           sx={{ height: 20, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' }, bgcolor: alpha(theme.palette.warning.main, 0.16), color: 'warning.dark' }}
         />
       )}
-      {/* Which languages this chapter's class was recorded in. The data has been
-          available per chapter since the tracks shipped and was never drawn on a
-          card, so the only way to find out a chapter had a Tamil recording was
-          to open it. Only published recordings appear, so a card promises
-          nothing a student cannot press. */}
+      {/* Which languages this chapter's class was recorded in, and the way in.
+          The data has been available per chapter since the tracks shipped and
+          was never drawn on a card, so the only way to find out a chapter had a
+          Tamil recording was to open it. Only published recordings appear, so a
+          card promises nothing a student cannot press.
+
+          THEY STAY LABELS, and the way in is the overlay button instead. Making
+          these chips pressable was the obvious move and the wrong one twice
+          over: this row renders inside a CardActionArea in the grid layout,
+          which is a real <button>, and an interactive element nested in a button
+          is invalid and does not reliably receive the click. A 20px control is
+          also unhittable on a phone, and it sits inside a card that is itself
+          tappable, so a near miss opens the PDF rather than nothing. The star
+          and the download button solved this same problem long ago by sitting
+          OUTSIDE the action area; watchButton below does the same. */}
       {(file.video_languages || []).map((l) => (
         <Chip
           key={l.code}
@@ -508,6 +583,8 @@ function StudyMaterialsBrowser() {
             <Typography variant="subtitle2" sx={{ fontWeight: file.is_unread ? 700 : 600 }} noWrap>{file.title}</Typography>
             {fileStatusChips(file)}
           </Box>
+          {/* Before the star, because watching is the thing a student came for. */}
+          {watchButton(file, { flexShrink: 0 })}
           <Tooltip title={file.is_favorite ? 'Remove from starred' : 'Add to starred'}>
             <IconButton
               size="small"
@@ -635,6 +712,15 @@ function StudyMaterialsBrowser() {
                 </Box>
               </CardActionArea>
 
+              {/* Watch (bottom-right overlay), outside the action area for the
+                  same reason the star and the download button are. */}
+              {watchButton(file, {
+                position: 'absolute',
+                bottom: 6,
+                right: 6,
+                boxShadow: `0 2px 8px ${alpha('#000', 0.12)}`,
+              })}
+
               {/* Favorite star (top-left overlay) */}
               <Tooltip title={file.is_favorite ? 'Remove from starred' : 'Add to starred'}>
                 <IconButton
@@ -681,6 +767,30 @@ function StudyMaterialsBrowser() {
         watermark={watermark}
         track
       />
+
+      {/* Which language, when a chapter was recorded in more than one. Anchored
+          to the button that opened it, so the chapter it belongs to is never in
+          doubt on a grid of them. */}
+      <Menu
+        anchorEl={watchMenu?.anchor || null}
+        open={!!watchMenu}
+        onClose={() => setWatchMenu(null)}
+        MenuListProps={{ 'aria-label': 'Watch this chapter in' }}
+      >
+        {(watchMenu?.file.video_languages || []).map((l) => (
+          <MenuItem
+            key={l.code}
+            onClick={() => {
+              setWatchMenu(null);
+              openTrack(l.track_id);
+            }}
+            sx={{ minHeight: 48, gap: 1 }}
+          >
+            <SmartDisplayOutlinedIcon fontSize="small" sx={{ color: 'info.main' }} />
+            {l.label}
+          </MenuItem>
+        ))}
+      </Menu>
     </Box>
   );
 }

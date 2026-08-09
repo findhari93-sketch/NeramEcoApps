@@ -44,6 +44,7 @@ import DifficultyChip from '@/components/question-bank/DifficultyChip';
 import SourceBadges from '@/components/question-bank/SourceBadges';
 import CategoryChips from '@/components/question-bank/CategoryChips';
 import MathText from '@/components/common/MathText';
+import PageHeader from '@/components/PageHeader';
 import TeacherFilterBar from '@/components/question-bank/TeacherFilterBar';
 import TagPicker from '@/components/question-bank/TagPicker';
 
@@ -71,6 +72,7 @@ function QuestionsListContent() {
   const [examRelevance, setExamRelevance] = useState('');
   const [questionStatus, setQuestionStatus] = useState('');
   const [solutionFilter, setSolutionFilter] = useState('');
+  const [origin, setOrigin] = useState('');
   const [tagIds, setTagIds] = useState<string[]>(() => {
     const raw = searchParams?.get('tag_ids');
     return raw ? raw.split(',').filter(Boolean) : [];
@@ -123,6 +125,7 @@ function QuestionsListContent() {
         if (examRelevance) params.set('exam_relevance', examRelevance);
         if (questionStatus) params.set('question_status', questionStatus);
         if (solutionFilter) params.set('solution_filter', solutionFilter);
+        if (origin) params.set('origin', origin);
         if (tagIds.length > 0) params.set('tag_ids', tagIds.join(','));
 
         const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
@@ -148,14 +151,14 @@ function QuestionsListContent() {
         setLoadingMore(false);
       }
     },
-    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, tagIds]
+    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, origin, tagIds]
   );
 
   // Reset page and fetch when filters change
   useEffect(() => {
     setPage(1);
     fetchQuestions(1, false);
-  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, tagIds, fetchQuestions]);
+  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, origin, tagIds, fetchQuestions]);
 
   // Load the tag registry once (labels/colors for chips + optimistic bulk-add updates).
   useEffect(() => {
@@ -350,40 +353,44 @@ function QuestionsListContent() {
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 700, flex: 1 }}>
-          Questions
-        </Typography>
-        <ToggleButtonGroup
-          value={lang}
-          exclusive
-          onChange={(_, v) => v && setLang(v)}
-          size="small"
-          sx={{
-            '& .MuiToggleButton-root': {
-              px: 1,
-              py: 0.25,
-              fontSize: '0.7rem',
-              fontWeight: 600,
-              textTransform: 'none',
-              minWidth: 32,
-              minHeight: 32,
-            },
-          }}
-        >
-          <ToggleButton value="en">EN</ToggleButton>
-          <ToggleButton value="hi">हि</ToggleButton>
-        </ToggleButtonGroup>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<AddOutlinedIcon />}
-          onClick={() => router.push('/teacher/question-bank/new')}
-          sx={{ textTransform: 'none' }}
-        >
-          Add Question
-        </Button>
-      </Box>
+      <PageHeader
+        title="Questions"
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+        action={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ToggleButtonGroup
+              value={lang}
+              exclusive
+              onChange={(_, v) => v && setLang(v)}
+              size="small"
+              sx={{
+                '& .MuiToggleButton-root': {
+                  px: 1,
+                  py: 0.25,
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  minWidth: 32,
+                  minHeight: 32,
+                },
+              }}
+            >
+              <ToggleButton value="en">EN</ToggleButton>
+              <ToggleButton value="hi">हि</ToggleButton>
+            </ToggleButtonGroup>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AddOutlinedIcon />}
+              onClick={() => router.push('/teacher/question-bank/new')}
+              sx={{ textTransform: 'none' }}
+            >
+              Add Question
+            </Button>
+          </Box>
+        }
+      />
 
       {/* Search */}
       <TextField
@@ -407,6 +414,7 @@ function QuestionsListContent() {
         examRelevance={examRelevance}
         questionStatus={questionStatus}
         solutionFilter={solutionFilter}
+        origin={origin}
         total={total}
         loading={loading}
         onDifficultyChange={setDifficulty}
@@ -414,6 +422,7 @@ function QuestionsListContent() {
         onExamRelevanceChange={setExamRelevance}
         onQuestionStatusChange={setQuestionStatus}
         onSolutionFilterChange={setSolutionFilter}
+        onOriginChange={setOrigin}
       />
 
       {/* Tag filter (managed registry, OR semantics) */}

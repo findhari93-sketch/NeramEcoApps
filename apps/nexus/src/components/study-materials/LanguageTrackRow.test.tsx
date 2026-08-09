@@ -48,6 +48,8 @@ function renderRow(t: RecordingTrack | null, over: Partial<LanguageTrackRowProps
     onOpenPaste: vi.fn(),
     onCancelPaste: vi.fn(),
     onSubmitVideo: vi.fn(),
+    moveTargets: [{ code: 'ta', label: 'தமிழ்', taken: false }],
+    onChangeLanguage: vi.fn(),
     onUploadVtt: vi.fn(),
     onFetchTranscript: vi.fn(),
     onEditCheckpoints: vi.fn(),
@@ -114,6 +116,66 @@ describe('LanguageTrackRow', () => {
     // replaces the open one.
     expect(screen.getByRole('button', { name: /^publish$/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /publish as open/i })).toBeNull();
+  });
+
+  /**
+   * Re-filing, which exists because a Tamil recording was attached to the
+   * English row and every exit from that cost work that was already correct:
+   * Remove archives the transcript and the checkpoints, Change clears them on
+   * purpose. Move sits with Change because that is where a teacher looks when
+   * the video is wrong, and the two are one press apart precisely so the cheaper
+   * one is not missed.
+   */
+  it('offers Move beside Change once a video is attached', () => {
+    renderRow(track());
+
+    expect(
+      screen.getByRole('button', { name: /move the english recording to another language/i }),
+    ).toBeTruthy();
+  });
+
+  it('does not offer Move before there is anything to move', () => {
+    renderRow(null);
+
+    expect(// Anchored: "Remove the English recording" contains this phrase too.
+      screen.queryByRole('button', { name: /^move the english recording/i })).toBeNull();
+  });
+
+  it('hides Move when this is the only language on offer', () => {
+    renderRow(track(), { moveTargets: [] });
+
+    expect(// Anchored: "Remove the English recording" contains this phrase too.
+      screen.queryByRole('button', { name: /^move the english recording/i })).toBeNull();
+  });
+
+  it('hands back the language picked from the menu', () => {
+    const props = renderRow(track());
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /move the english recording to another language/i }),
+    );
+    fireEvent.click(screen.getByText('தமிழ்'));
+
+    expect(props.onChangeLanguage).toHaveBeenCalledWith('ta');
+  });
+
+  /**
+   * A greyed row with no explanation reads as broken. The reason sits on the
+   * item itself, because that is where the teacher is looking when they cannot
+   * press it.
+   */
+  it('greys an occupied language and says why', () => {
+    const props = renderRow(track(), {
+      moveTargets: [{ code: 'ta', label: 'தமிழ்', taken: true }],
+    });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /move the english recording to another language/i }),
+    );
+    expect(screen.getByText(/already has a recording/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByText('தமிழ்'));
+    expect(props.onChangeLanguage).not.toHaveBeenCalled();
   });
 
   it('collapses every step once the recording is live', () => {

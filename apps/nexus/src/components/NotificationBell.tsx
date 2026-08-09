@@ -102,6 +102,25 @@ function getNavigationUrl(
       const classId = notification.metadata?.scheduled_class_id as string | undefined;
       return classId ? `/student/timetable/${classId}/catch-up` : '/student/catch-up';
     }
+    // A class test is due. This case was missing since the event type was added,
+    // so every one of those rows was inert: it told a student to finish a paper
+    // and then did nothing when they tapped it.
+    case 'class_test_due': {
+      const classId = notification.metadata?.class_id as string | undefined;
+      return classId
+        ? `/${nexusRole || 'student'}/timetable/${classId}`
+        : `/${nexusRole || 'student'}/tests`;
+    }
+    // Exams. All three land on the class the exam is scheduled on, which is
+    // where the lobby, the countdown and afterwards the result all live.
+    case 'exam_scheduled':
+    case 'exam_result':
+    case 'exam_makeup_granted': {
+      const classId = notification.metadata?.class_id as string | undefined;
+      return classId
+        ? `/${nexusRole || 'student'}/timetable/${classId}/exam`
+        : `/${nexusRole || 'student'}/tests`;
+    }
     default:
       return null;
   }

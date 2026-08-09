@@ -5,10 +5,12 @@ import { countRowsByKey } from '../../utils/paged-rows';
 import { storeContentSummary, type NexusTestSourceFilters } from './test-provenance';
 import { recordCatchupTestAttempt } from './catchup-journey';
 import { gradeQBAnswerStrict, normaliseQuestionFormat } from './question-bank';
+import { sectionOrderFor } from './paper-marking';
 import {
   applyTestOptionMap,
   buildTestOptionMaps,
   originalToDisplayedId,
+  pickSectionedDraw,
   pickTestDraw,
   testDrawSeed,
   translateDrawnAnswers,
@@ -70,6 +72,21 @@ export interface ComposeTestInput {
    * that sitting it feels like sitting the real one.
    */
   negativeMarks?: number[] | number;
+  /**
+   * Per-question section, aligned with questionIds. Omit to inherit whatever
+   * section each question carries in the bank, which is what every caller
+   * wants: a paper composed from real questions is already sectioned.
+   */
+  sections?: (string | null)[] | null;
+  /** Per-question section order, same shape. Omit to inherit from the bank. */
+  sectionOrders?: (number | null)[] | null;
+  /**
+   * Shuffle within sections and keep sections in paper order.
+   *
+   * Separate from `shuffle`, which is the older flat shuffle over the whole
+   * paper. Setting this is what makes a sectioned draw happen at all.
+   */
+  shuffleSections?: boolean;
   timerType?: TimerType;
   durationMinutes?: number | null;
   perQuestionSeconds?: number | null;
@@ -111,10 +128,34 @@ export async function composeTest(
   const ids = [...new Set(input.questionIds)];
   if (ids.length === 0) throw new Error('A test needs at least one question');
 
-  // Validate all questions exist and are active in the bank.
+  // The aligned arrays (marks, negativeMarks, sections, sectionOrders) are
+  // indexed against the CALLER's array, but `ids` above is deduped. A caller
+  // that passes the same question twice therefore used to shift every mark
+  // after the duplicate by one and silently mis-mark the rest of the paper.
+  // Latent while everything was worth 1 mark; fatal the moment a real paper
+  // marks +4/-1 for maths and 50 for a drawing.
+  //
+  // Not thrown, because duplicateTest passes pre-dedupe arrays and refusing
+  // would break a working feature to fix a theoretical one. Instead the caller
+  // index is remapped so every value follows its own question.
+  const firstIndexOf = new Map<string, number>();
+  input.questionIds.forEach((id, i) => {
+    if (!firstIndexOf.has(id)) firstIndexOf.set(id, i);
+  });
+  const sourceIndex = (i: number): number => firstIndexOf.get(ids[i]) ?? i;
+  if (input.questionIds.length !== ids.length) {
+    console.warn(
+      `[composeTest] ${input.questionIds.length - ids.length} duplicate question id(s) dropped; per-question marks realigned.`,
+    );
+  }
+
+  // Validate all questions exist and are active in the bank, and pick up the
+  // section each one sits in while we are here. Widening this select is what
+  // gives sections to generatePaperMockTest, the recap composer, study-tests
+  // and the wizard at once, with no call-site changes.
   const { data: existing, error: qErr } = await supabase
     .from('nexus_qb_questions')
-    .select('id')
+    .select('id, section, section_order')
     .in('id', ids)
     .eq('is_active', true);
   if (qErr) throw qErr;
@@ -122,17 +163,36 @@ export async function composeTest(
   const invalid = ids.filter((id) => !valid.has(id));
   if (invalid.length > 0) throw new Error(`Invalid or inactive question ids: ${invalid.join(', ')}`);
 
+  const bankSection = new Map<string, { section: string | null; section_order: number | null }>(
+    (existing || []).map((q: any) => [q.id, { section: q.section ?? null, section_order: q.section_order ?? null }]),
+  );
+
   const marksFor = (i: number): number => {
-    if (Array.isArray(input.marks)) return Number(input.marks[i]) || 1;
+    const src = sourceIndex(i);
+    if (Array.isArray(input.marks)) return Number(input.marks[src]) || 1;
     if (typeof input.marks === 'number') return input.marks;
     return 1;
+  };
+  /** An explicit override wins; otherwise the question keeps the section it has in the bank. */
+  const sectionFor = (i: number): { section: string | null; section_order: number | null } => {
+    const src = sourceIndex(i);
+    const override = input.sections?.[src];
+    if (override !== undefined && override !== null) {
+      const order = input.sectionOrders?.[src];
+      return {
+        section: override,
+        section_order: typeof order === 'number' ? order : sectionOrderFor(override),
+      };
+    }
+    return bankSection.get(ids[i]) ?? { section: null, section_order: null };
   };
   // Zero by default, which is what every existing caller gets and what every
   // existing row already holds. A negative value is normalised to its
   // magnitude: the column is the size of the penalty, and storing -1 here would
   // make a wrong answer ADD a mark at grading time.
   const negativeFor = (i: number): number => {
-    const raw = Array.isArray(input.negativeMarks) ? input.negativeMarks[i] : input.negativeMarks;
+    const src = sourceIndex(i);
+    const raw = Array.isArray(input.negativeMarks) ? input.negativeMarks[src] : input.negativeMarks;
     const n = Number(raw);
     return Number.isFinite(n) ? Math.abs(n) : 0;
   };
@@ -155,6 +215,7 @@ export async function composeTest(
       test_kind: input.testKind,
       created_from: input.createdFrom ?? null,
       shuffle_questions: input.shuffle ?? false,
+      shuffle_sections: input.shuffleSections ?? false,
       is_custom: !input.isRepository,
       created_by: input.createdBy ?? null,
       created_by_student: input.createdByStudent ?? null,
@@ -172,13 +233,18 @@ export async function composeTest(
     .single();
   if (testErr) throw testErr;
 
-  const rows = ids.map((qId, i) => ({
-    test_id: test.id,
-    qb_question_id: qId,
-    sort_order: i,
-    marks: marksFor(i),
-    negative_marks: negativeFor(i),
-  }));
+  const rows = ids.map((qId, i) => {
+    const { section, section_order } = sectionFor(i);
+    return {
+      test_id: test.id,
+      qb_question_id: qId,
+      sort_order: i,
+      marks: marksFor(i),
+      negative_marks: negativeFor(i),
+      section,
+      section_order,
+    };
+  });
   const { error: tqErr } = await supabase.from(TEST_QUESTIONS).insert(rows);
   if (tqErr) throw tqErr;
 
@@ -782,7 +848,11 @@ export async function getComposedTestQuestions(
   const supabase = client || getSupabaseAdminClient();
   const { data: tqs, error } = await supabase
     .from(TEST_QUESTIONS)
-    .select('id, qb_question_id, question_id, marks, sort_order')
+    // negative_marks has been written since the table was created and selected
+    // by nobody, which is why no test in the product has ever deducted a mark.
+    // section comes along for the player's section strip and the section-wise
+    // report.
+    .select('id, qb_question_id, question_id, marks, negative_marks, section, section_order, sort_order')
     .eq('test_id', testId)
     .order('sort_order', { ascending: true });
   if (error) throw error;
@@ -832,6 +902,12 @@ export async function getComposedTestQuestions(
       question_format: normaliseQuestionFormat(src?.question_format || src?.question_type),
       options: src?.options ?? null,
       marks: Number(tq.marks) || 1,
+      // Magnitude, never a sign. composeTest already stores the absolute value;
+      // this is belt and braces so a hand-edited row cannot make a wrong answer
+      // add marks at grading time.
+      negative_marks: Math.abs(Number(tq.negative_marks) || 0),
+      section: tq.section ?? null,
+      section_order: tq.section_order ?? null,
       sort_order: tq.sort_order ?? 0,
     };
     if (withAnswers) {
@@ -931,25 +1007,51 @@ export async function ensureTestDraw(
     studentId: string;
     attemptNumber: number;
     questions: NexusComposedQuestion[];
-    /** From nexus_tests.questions_to_serve. null or >= the pool size means no draw. */
+    /** From nexus_tests.questions_to_serve. null or >= the pool size means no pool. */
     serve: number | null | undefined;
+    /**
+     * From nexus_tests.shuffle_sections. Shuffle within sections, keep sections
+     * in paper order.
+     *
+     * This is the second reason a draw can exist. Before it, a full paper never
+     * got a draw at all: serve >= questions.length bailed out below, so an
+     * imported exam paper was served in its stored order to every student, with
+     * no option permutation either.
+     */
+    sectionShuffle?: boolean;
   },
   client?: TypedSupabaseClient,
 ): Promise<NexusTestDraw | null> {
   const serve = Number(input.serve);
-  if (!Number.isFinite(serve) || serve <= 0 || serve >= input.questions.length) return null;
+  const isPool = Number.isFinite(serve) && serve > 0 && serve < input.questions.length;
+  if (!isPool && !input.sectionShuffle) return null;
 
   const existing = await getTestDraw(input.testId, input.studentId, input.attemptNumber, client);
   if (existing) return existing;
 
   const supabase = client || getSupabaseAdminClient();
   const seed = testDrawSeed(input.studentId, input.testId);
-  const questionIds = pickTestDraw(
-    input.questions.map((q) => q.question_id),
-    serve,
-    input.attemptNumber,
-    seed,
-  );
+  const questionIds = input.sectionShuffle
+    ? pickSectionedDraw(
+        input.questions.map((q) => ({
+          id: q.question_id,
+          section: q.section ?? null,
+          section_order: q.section_order ?? null,
+        })),
+        // A scheduled exam serves the whole paper. Serving "20 of 40 maths, all
+        // 50 aptitude" would need a serve_by_section JSONB on nexus_tests;
+        // questions_to_serve is a single integer and cannot express it. Noted
+        // as the extension point, deliberately not built.
+        null,
+        input.attemptNumber,
+        seed,
+      )
+    : pickTestDraw(
+        input.questions.map((q) => q.question_id),
+        serve,
+        input.attemptNumber,
+        seed,
+      );
   const drawn = input.questions.filter((q) => questionIds.includes(q.question_id));
   const optionMaps = buildTestOptionMaps(drawn, input.attemptNumber, seed);
 
@@ -1041,7 +1143,14 @@ export async function getServedTestQuestions(
 
   const attemptNumber = await nextAttemptNumber(testId, studentId, supabase);
   const draw = await ensureTestDraw(
-    { testId, studentId, attemptNumber, questions, serve: meta.questions_to_serve },
+    {
+      testId,
+      studentId,
+      attemptNumber,
+      questions,
+      serve: meta.questions_to_serve,
+      sectionShuffle: Boolean(meta.shuffle_sections),
+    },
     supabase,
   );
   return applyTestDraw(questions, draw);
@@ -1055,7 +1164,7 @@ export async function getTestMeta(testId: string, client?: TypedSupabaseClient):
     // test_kind and folder_id were missing while the test detail page read both:
     // it seeds its type dropdown from test_kind, so every test read back as
     // 'classroom_assigned' no matter what had been stored.
-    .select('id, title, description, test_type, duration_minutes, per_question_seconds, total_marks, passing_marks, is_published, is_active, shuffle_questions, is_repository, created_from, test_kind, folder_id, questions_to_serve, created_at')
+    .select('id, title, description, test_type, duration_minutes, per_question_seconds, total_marks, passing_marks, is_published, is_active, shuffle_questions, shuffle_sections, is_repository, created_from, test_kind, folder_id, questions_to_serve, created_at')
     .eq('id', testId)
     .maybeSingle();
   return data || null;
@@ -1314,6 +1423,16 @@ export function resolvePassingPct(
 
 /** How long after the clock runs out an attempt is still resumable. */
 const TIMED_GRACE_MS = 30 * 1000;
+
+/**
+ * How late an exam submit is still accepted after the door closes.
+ *
+ * A paper whose submit request was already in flight at 13:00:00 is a paper the
+ * student finished in time, and refusing it over network latency would be
+ * cruel. Anything past this is refused and left for the close sweep, which
+ * submits whatever was autosaved.
+ */
+const EXAM_SUBMIT_GRACE_MS = 60 * 1000;
 const PER_QUESTION_GRACE_MS = 60 * 1000;
 
 export interface NexusAttemptRow {
@@ -1362,20 +1481,44 @@ export function gradeComposedAnswers(
     if (gradable) totalMarks += marks;
 
     const isCorrect = verdict === true;
-    if (isCorrect) score += marks;
+
+    // The penalty, at last. negative_marks has been stored since the table was
+    // created and applied by nobody, so every paper in the product has marked
+    // as if it were unpenalised. A JEE Paper 2 mock that does not deduct is not
+    // the paper.
+    //
+    // Only ever charged when the student actually ANSWERED. Leaving a question
+    // blank is a legitimate exam strategy under negative marking, and charging
+    // for it would invert the strategy the paper is testing.
+    const penalty = Math.abs(Number(q.negative_marks) || 0);
+    const answered = selected != null && String(selected).trim() !== '';
+    let awarded = 0;
+    if (isCorrect) {
+      awarded = marks;
+    } else if (gradable && answered && penalty > 0) {
+      awarded = -penalty;
+    }
+    score += awarded;
+
     return {
       question_id: q.question_id,
       correct_answer: q.correct_answer ?? null,
       selected,
       is_correct: isCorrect,
       is_gradable: gradable,
-      marks_awarded: isCorrect ? marks : 0,
+      marks_awarded: awarded,
     };
   });
 
   const percentage = totalMarks > 0 ? Math.round((score / totalMarks) * 10000) / 100 : 0;
+  // Both the score and the percentage floor at zero. Under negative marking a
+  // bad enough paper genuinely computes below zero, and nothing downstream is
+  // ready for that: percentage lands in a NUMERIC(5,2), feeds every average and
+  // the leaderboard, and a pass check of "-12 >= 40" is the same answer as
+  // "0 >= 40" anyway. A student is told they scored nothing, not that they owe
+  // marks.
   return {
-    score,
+    score: Math.max(0, score),
     total_marks: totalMarks,
     percentage: Math.max(0, percentage),
     passed: passingPct == null ? true : percentage >= passingPct,
@@ -1453,6 +1596,24 @@ async function dispatchPlacementSideEffect(
     // report is derived from nexus_test_attempts on the read (see
     // summariseAttempts in qb-papers.ts), so there is no denormalised counter to
     // keep in step and no second place for the two to disagree.
+  } else if (placement.context_type === 'exam') {
+    // Hand every drawing on this paper to the review queue.
+    //
+    // Lazily imported for the same reason as class-prep: exam-drawings reaches
+    // back into this module, and a top-level import would close the cycle.
+    //
+    // Deliberately not awaited into the caller's failure path. A student who
+    // has just submitted an exam must not see an error because a review row
+    // could not be written; the queue is recoverable, their submission is not.
+    try {
+      const { queueExamDrawings } = await import('./exam-drawings');
+      await queueExamDrawings(
+        { attemptId: args.attemptId, studentId: args.studentId, placement },
+        supabase,
+      );
+    } catch (err) {
+      console.error('[dispatchPlacementSideEffect] exam drawings were not queued:', err);
+    }
   }
 }
 
@@ -1563,7 +1724,14 @@ export async function startOrResumeAttempt(
   /** The paper for one sitting. Idempotent, so resuming re-reads rather than re-draws. */
   const drawFor = (attemptNumber: number) =>
     ensureTestDraw(
-      { testId: input.testId, studentId: input.studentId, attemptNumber, questions, serve: meta.questions_to_serve },
+      {
+        testId: input.testId,
+        studentId: input.studentId,
+        attemptNumber,
+        questions,
+        serve: meta.questions_to_serve,
+        sectionShuffle: Boolean(meta.shuffle_sections),
+      },
       supabase,
     );
 
@@ -1691,7 +1859,20 @@ export async function saveAttemptAnswers(
  * side-effect. The single write path for every surface.
  */
 export async function submitAttempt(
-  input: { attemptId: string; studentId: string; answers?: Record<string, string> },
+  input: {
+    attemptId: string;
+    studentId: string;
+    answers?: Record<string, string>;
+    /**
+     * Submit an exam paper even though its window has closed.
+     *
+     * ONLY for the close sweep and the teacher's "Close exam now" button, which
+     * exist precisely to submit after the door has shut. A student request must
+     * never set this: the whole point of the guard below is that a late POST
+     * from a browser is refused.
+     */
+    allowAfterClose?: boolean;
+  },
   client?: TypedSupabaseClient,
 ): Promise<
   NexusTestGradeResult & { test_id: string; attempt_number: number; draw: NexusTestDraw | null }
@@ -1717,6 +1898,26 @@ export async function submitAttempt(
   ]);
   if (!meta) throw new Error('TEST_NOT_FOUND');
   if (composed.length === 0) throw new Error('TEST_HAS_NO_QUESTIONS');
+
+  /**
+   * An exam's door is shut on the way out as well as on the way in.
+   *
+   * Without this a late POST is still accepted. attemptIsStale only knows
+   * duration_minutes, so a student who started at 12:50 on a 180-minute paper
+   * that closes at 13:00 would keep a valid attempt alive until 15:50 and could
+   * submit at any point in it.
+   *
+   * The grace window is deliberate: a paper submitted a few seconds after the
+   * close because the request was in flight is a paper the student finished in
+   * time. Anything beyond it is refused and left for the sweep to auto-submit
+   * with whatever was saved.
+   */
+  if (!input.allowAfterClose && placement?.context_type === 'exam' && placement.available_until) {
+    const closedAt = new Date(placement.available_until).getTime();
+    if (Number.isFinite(closedAt) && Date.now() > closedAt + EXAM_SUBMIT_GRACE_MS) {
+      throw new Error('EXAM_CLOSED');
+    }
+  }
 
   // Grade the paper the student was actually served, not the pool it came from.
   // Both halves matter: scoring 20 answers out of a 40-question denominator

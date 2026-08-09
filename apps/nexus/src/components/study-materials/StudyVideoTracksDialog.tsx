@@ -54,6 +54,11 @@ import CloseIcon from '@mui/icons-material/Close';
 import TuneIcon from '@mui/icons-material/Tune';
 import { FALLBACK_TRACK_LANGUAGES, type TrackLanguageOption } from '@/lib/track-languages';
 import { buildLanguageRows, type RecordingTrack, type TrackRow } from '@/lib/chapter-recordings';
+import {
+  detectTranscriptScript,
+  transcriptLanguageConflict,
+  type TranscriptScript,
+} from '@/lib/transcript-language';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import DriveFilePickerDialog, { type DriveItem } from '../shared/DriveFilePickerDialog';
 import LanguageTrackRow from './LanguageTrackRow';
@@ -70,7 +75,7 @@ interface Props {
 export default function StudyVideoTracksDialog({ open, file, getToken, onClose, onChanged }: Props) {
   const router = useRouter();
   const fullScreen = useMediaQuery('(max-width:599px)');
-  const { can } = useNexusAuthContext();
+  const { can, getFileSearchToken } = useNexusAuthContext();
   const [tracks, setTracks] = useState<RecordingTrack[]>([]);
   const [languages, setLanguages] = useState<TrackLanguageOption[]>(FALLBACK_TRACK_LANGUAGES);
   const [loading, setLoading] = useState(false);
@@ -88,6 +93,19 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
 
   /** The language code the file picker was opened for, or null when it is shut. */
   const [pickingFor, setPickingFor] = useState<string | null>(null);
+
+  /**
+   * A `.vtt` held back because its script does not match the row it was dropped
+   * on. Held rather than rejected: the teacher is the one who knows, and a
+   * bilingual class or a transliterated transcript are both real.
+   */
+  const [vttMismatch, setVttMismatch] = useState<{
+    row: TrackRow;
+    text: string;
+    script: TranscriptScript;
+    /** The offered language the transcript looks like, when it is free to move to. */
+    moveTo: TrackLanguageOption | null;
+  } | null>(null);
 
   /**
    * The language whose last save was refused as unplayable.
@@ -143,6 +161,7 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
       setRecordingUrl('');
       setNotice(null);
       setUnreachable(null);
+      setVttMismatch(null);
       setLegacyLink(file?.recording?.url || null);
     }
   }, [open, load, file]);
@@ -198,7 +217,7 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
    * timings and could only land mid-sentence in the new one.
    */
   const saveVideo = useCallback(
-    async (code: string, url: string, opts?: { force?: boolean }) => {
+    async (code: string, url: string, opts?: { force?: boolean; fileName?: string | null }) => {
       if (!file || !url.trim()) return;
       const clean = url.trim();
       const label = languages.find((l) => l.code === code)?.label || code;
@@ -212,16 +231,25 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
       setNotice(null);
       try {
         const base = `/api/study-materials/files/${file.id}/video-tracks`;
+        // The name the picker showed. Sent because it is the only one available
+        // on a forced attach, and because it beats anything derivable from a
+        // list-form or share URL even when the preflight does run.
+        const named = opts?.fileName ? { recording_file_name: opts.fileName } : {};
         const res = existing
           ? await authed(`${base}/${existing.id}`, {
               method: 'PATCH',
-              body: JSON.stringify({ recording_url: clean, ...(opts?.force ? { force: true } : {}) }),
+              body: JSON.stringify({
+                recording_url: clean,
+                ...named,
+                ...(opts?.force ? { force: true } : {}),
+              }),
             })
           : await authed(base, {
               method: 'POST',
               body: JSON.stringify({
                 language: code,
                 recording_url: clean,
+                ...named,
                 ...(opts?.force ? { force: true } : {}),
               }),
             });
@@ -274,9 +302,61 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
     (item: DriveItem) => {
       const code = pickingFor;
       setPickingFor(null);
-      if (code && item.webUrl) saveVideo(code, item.webUrl);
+      // The name travels with the URL. Without it the row would fall back to
+      // reading the webUrl, and a SharePoint list link reads "DispForm.aspx".
+      if (code && item.webUrl) saveVideo(code, item.webUrl, { fileName: item.name });
     },
     [pickingFor, saveVideo],
+  );
+
+  /**
+   * Re-file a recording under the language it is actually in.
+   *
+   * The mistake this exists for: a chapter taught in Tamil gets attached to the
+   * English row, and nothing downstream notices, so students are offered a Tamil
+   * video labelled English with checkpoints cut from a Tamil transcript. Every
+   * one of those artefacts is CORRECT, only the filing is wrong, so neither of
+   * the two exits that existed was right. Remove archives the row and makes the
+   * transcript and the checkpoints have to be rebuilt; Change the video clears
+   * the checkpoints on purpose. This moves the label and keeps the rest,
+   * including the progress of any student already part-way through it.
+   */
+  const changeLanguage = useCallback(
+    async (row: TrackRow, code: string, opts?: { quiet?: boolean }): Promise<boolean> => {
+      const track = row.track;
+      if (!file || !track) return false;
+      setBusyId(track.id);
+      setError(null);
+      setNotice(null);
+      try {
+        const res = await authed(
+          `/api/study-materials/files/${file.id}/video-tracks/${track.id}`,
+          { method: 'PATCH', body: JSON.stringify({ language: code }) },
+        );
+        // Quiet when a transcript upload is about to speak for both steps, so
+        // the teacher gets one sentence describing what happened, not two that
+        // race and leave only the second.
+        if (res.movedLanguage && !opts?.quiet) {
+          const kept = track.section_count
+            ? `Its video, transcript and ${track.section_count} checkpoint${
+                track.section_count === 1 ? '' : 's'
+              } came with it`
+            : 'Its video came with it';
+          setNotice(
+            `Moved the ${row.label} recording to ${res.movedLanguage}. ${kept}, and students who already watched it keep their progress.`,
+          );
+        }
+        await load();
+        onChanged?.();
+        return true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not move the recording');
+        return false;
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [authed, file, load, onChanged],
   );
 
   /**
@@ -284,7 +364,7 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
    * before publishing, and now they actually can: this saves the checkpoints but
    * leaves the track a draft, and "Edit checkpoints" opens them.
    */
-  const draftCheckpoints = async (row: TrackRow, vttContent?: string) => {
+  const draftCheckpoints = async (row: TrackRow, vttContent?: string, noticePrefix?: string) => {
     const track = row.track!;
     if (!file) return;
     setBusyId(track.id);
@@ -310,9 +390,10 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
         // An open recording that was already published becomes a gate the moment
         // it has checkpoints, and students part-way through it now have quizzes
         // to pass. Said at the moment it happens rather than discovered.
-        track.status === 'published'
-          ? `Drafted ${sections.length} checkpoints for ${row.label}. This recording was open, so finishing it now unlocks the chapter test, and anyone part-way through has these checkpoints to pass.`
-          : `Drafted ${sections.length} checkpoints for ${row.label}. Open Edit to read them, then publish.`,
+        (noticePrefix ? `${noticePrefix} ` : '') +
+          (track.status === 'published'
+            ? `Drafted ${sections.length} checkpoints for ${row.label}. This recording was open, so finishing it now unlocks the chapter test, and anyone part-way through has these checkpoints to pass.`
+            : `Drafted ${sections.length} checkpoints for ${row.label}. Open Edit to read them, then publish.`),
       );
       await load();
       onChanged?.();
@@ -323,6 +404,17 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
     }
   };
 
+  /**
+   * Upload the transcript, and look at what language it is in on the way past.
+   *
+   * The check earns its place because of what happens without it. A Tamil
+   * transcript dropped on the English row produces Tamil checkpoints on a Tamil
+   * video labelled English, and every artefact is internally correct, so nothing
+   * downstream can notice. The only signal was a student opening a recording
+   * marked English and hearing Tamil. It reads the SCRIPT, so it is exact and
+   * free and it cannot see a Tamil class transcribed into Latin letters. See
+   * lib/transcript-language.ts.
+   */
   const uploadVtt = (row: TrackRow) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -331,6 +423,19 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
       const chosen = input.files?.[0];
       if (!chosen) return;
       const text = await chosen.text();
+
+      const script = detectTranscriptScript(text);
+      if (transcriptLanguageConflict(script, row.code)) {
+        const target = languages.find((l) => l.code === script.likelyLanguage) || null;
+        // Only offer the move when the language it looks like is actually free.
+        // Offering a move the API will refuse is worse than not offering one.
+        const free = target && !tracks.some((t) => t.language === target.code);
+        setError(null);
+        setNotice(null);
+        setVttMismatch({ row, text, script, moveTo: free ? target : null });
+        return;
+      }
+
       await draftCheckpoints(row, text);
     };
     input.click();
@@ -424,6 +529,88 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           {notice && <Alert severity="info" sx={{ mb: 2 }}>{notice}</Alert>}
 
+          {/*
+            The transcript does not look like the row it was dropped on.
+
+            A question, not a refusal. The teacher is the one who knows what was
+            spoken, and both ways of being "wrong" here are real: a class can be
+            taught bilingually, and a transcript can be transliterated. So the
+            safe path is offered first and named, and carrying on is one press
+            away rather than blocked.
+          */}
+          {vttMismatch && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {/* Named as SCRIPT and given its number, because that is exactly
+                  what was measured. Claiming a language would be claiming more
+                  than a character count can know. */}
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                This transcript is{' '}
+                {vttMismatch.script.kind === 'tamil'
+                  ? `${vttMismatch.script.tamilPct}% Tamil script`
+                  : `${vttMismatch.script.latinPct}% Latin script`}
+                , and you are filling the {vttMismatch.row.label} recording.
+              </Typography>
+              <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.25 }}>
+                {vttMismatch.moveTo
+                  ? `Its checkpoints are cut from this transcript, so they will be in the same language as it. If the class was taught in ${vttMismatch.moveTo.label}, move the recording across first.`
+                  : 'Its checkpoints are cut from this transcript, so they will be in the same language as it. Carry on if that is what you meant.'}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.25 }}>
+                {vttMismatch.moveTo && (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="warning"
+                    onClick={async () => {
+                      const { row, text, moveTo } = vttMismatch;
+                      if (!moveTo) return;
+                      /**
+                       * The transcript is NOT let go of until the move lands.
+                       *
+                       * The move can still be refused after every check this
+                       * screen can make: a language whose recording was removed
+                       * earlier still holds its slot, and an archived row is
+                       * invisible to listStudyVideoTracks, so `taken` reads
+                       * false and the API answers 409. Clearing first would lose
+                       * the file the teacher just chose and make them find it
+                       * again to read an error about something else entirely.
+                       */
+                      const moved = await changeLanguage(row, moveTo.code, { quiet: true });
+                      if (!moved) return;
+                      setVttMismatch(null);
+                      // The track id survives a language move, so this still
+                      // reaches the same recording. Only the label has changed.
+                      await draftCheckpoints(
+                        { ...row, code: moveTo.code, label: moveTo.label },
+                        text,
+                        `Moved the ${row.label} recording to ${moveTo.label}.`,
+                      );
+                    }}
+                    sx={actionSx}
+                  >
+                    Move to {vttMismatch.moveTo.label} and continue
+                  </Button>
+                )}
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="inherit"
+                  onClick={async () => {
+                    const { row, text } = vttMismatch;
+                    setVttMismatch(null);
+                    await draftCheckpoints(row, text);
+                  }}
+                  sx={actionSx}
+                >
+                  Use it for {vttMismatch.row.label} anyway
+                </Button>
+                <Button size="small" onClick={() => setVttMismatch(null)} sx={actionSx}>
+                  Cancel
+                </Button>
+              </Box>
+            </Alert>
+          )}
+
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
               <CircularProgress size={28} />
@@ -493,6 +680,14 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
                     setUnreachable(null);
                   }}
                   onSubmitVideo={(opts) => saveVideo(row.code, recordingUrl, opts)}
+                  moveTargets={rows
+                    .filter((other) => other.code !== row.code)
+                    .map((other) => ({
+                      code: other.code,
+                      label: other.label,
+                      taken: !!other.track,
+                    }))}
+                  onChangeLanguage={(code) => changeLanguage(row, code)}
                   onUploadVtt={() => uploadVtt(row)}
                   onFetchTranscript={() => draftCheckpoints(row)}
                   onEditCheckpoints={() =>
@@ -552,6 +747,10 @@ export default function StudyVideoTracksDialog({ open, file, getToken, onClose, 
         open={!!pickingFor}
         onClose={() => setPickingFor(null)}
         getToken={getToken}
+        // Reaches the tenant index when Files.Read.All has been consented, and
+        // answers null rather than redirecting when it has not, so the picker
+        // can quietly fall back to the two drives it could always search.
+        getSearchToken={getFileSearchToken}
         onPick={onPick}
         kind="video"
         scope="both"

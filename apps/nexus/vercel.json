@@ -56,6 +56,10 @@
       "schedule": "30 10 * * 1-5"
     },
     {
+      "path": "/api/cron/exam-close",
+      "schedule": "5 * * * *"
+    },
+    {
       "path": "/api/cron/youtube-backup",
       "schedule": "10 19 * * *"
     },

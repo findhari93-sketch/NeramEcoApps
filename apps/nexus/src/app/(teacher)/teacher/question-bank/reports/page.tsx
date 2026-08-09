@@ -18,9 +18,9 @@ import {
   DialogActions,
   TextField,
 } from '@neram/ui';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined';
+import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import {
@@ -121,18 +121,12 @@ export default function TeacherReportsPage() {
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 800, mx: 'auto' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <IconButton
-          onClick={() => router.push('/teacher/question-bank')}
-          aria-label="Back to Question Bank"
-          sx={{ minWidth: 48, minHeight: 48 }}
-        >
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h5" fontWeight={700}>
-          Question Reports
-        </Typography>
-      </Box>
+      <PageHeader
+        title="Question reports"
+        subtitle="Problems students flagged on a question"
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+      />
 
       {/* Status filter tabs */}
       <Tabs

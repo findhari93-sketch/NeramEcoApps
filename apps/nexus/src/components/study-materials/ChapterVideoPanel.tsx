@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Typography, Button, Chip, Skeleton, CircularProgress, alpha, useTheme } from '@neram/ui';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -71,6 +71,12 @@ export default function ChapterVideoPanel({
 }: Props) {
   const theme = useTheme();
   const router = useRouter();
+  /**
+   * The folder behind this viewer, handed to the player so its Back button can
+   * return here. Without it the player pushes a bare study-materials URL and a
+   * student four folders deep lands at the root.
+   */
+  const backFolder = useSearchParams().get('folder');
   const [state, setState] = useState<ChapterVideoState | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -125,7 +131,13 @@ export default function ChapterVideoPanel({
                 variant={done || open ? 'outlined' : 'contained'}
                 color={done ? 'success' : 'primary'}
                 startIcon={done ? <ReplayRoundedIcon /> : <SmartDisplayOutlinedIcon />}
-                onClick={() => router.push(`/student/study-materials/watch/${t.id}`)}
+                onClick={() =>
+                  router.push(
+                    `/student/study-materials/watch/${t.id}${
+                      backFolder ? `?folder=${encodeURIComponent(backFolder)}` : ''
+                    }`,
+                  )
+                }
                 sx={{ textTransform: 'none', minHeight: 44, flexShrink: 0 }}
               >
                 {t.language_label}

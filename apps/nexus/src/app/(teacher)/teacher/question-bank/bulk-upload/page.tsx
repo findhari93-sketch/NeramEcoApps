@@ -30,12 +30,12 @@ import {
   FormControlLabel,
 } from '@neram/ui';
 import type { QBShift } from '@neram/database';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import DataObjectIcon from '@mui/icons-material/DataObject';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
+import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { QBExamType } from '@neram/database';
 import type { ReviewQuestion, UploadMethod } from '@/lib/bulk-upload-schema';
@@ -223,14 +223,11 @@ export default function BulkUploadPage() {
   return (
     <Box sx={{ px: { xs: 0, md: 1 }, py: 2 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <IconButton size="small" onClick={() => router.push('/teacher/question-bank')}>
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h5" component="h1" fontWeight={700}>
-          Bulk Upload
-        </Typography>
-      </Box>
+      <PageHeader
+        title="Bulk upload"
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+      />
 
       {/* Stepper */}
       <Stepper

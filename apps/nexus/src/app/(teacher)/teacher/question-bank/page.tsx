@@ -12,12 +12,13 @@ import {
   Tabs,
   Card,
   CardActionArea,
+  Alert,
 } from '@neram/ui';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
-import CollectionsBookmarkOutlinedIcon from '@mui/icons-material/CollectionsBookmarkOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import SellOutlinedIcon from '@mui/icons-material/SellOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
@@ -29,6 +30,52 @@ import { QB_EXAM_TYPE_LABELS } from '@neram/database';
 import QBPaperCard from '@/components/question-bank/QBPaperCard';
 
 const EXAM_TABS: QBExamType[] = ['NATA', 'JEE_PAPER_2'];
+
+/**
+ * The rest of the section, in one place.
+ *
+ * Every route here existed and had no door: the only way in was a typed URL or
+ * a bookmark, so the work they do (bulk solutions, re-classification, reported
+ * questions) looked like it did not exist. They sit below the papers rather than
+ * beside the four main cards because they are occasional jobs, not daily ones.
+ */
+const MORE_TOOLS: { label: string; desc: string; href: string }[] = [
+  {
+    label: 'Manage papers',
+    desc: 'Publish, activate questions, delete',
+    href: '/teacher/question-bank/papers',
+  },
+  {
+    label: 'Student progress',
+    desc: 'Who has read, practised and sat each paper',
+    href: '/teacher/question-bank/papers/overview',
+  },
+  {
+    label: 'Bulk solutions',
+    desc: 'Upload explanations for many questions',
+    href: '/teacher/question-bank/solutions',
+  },
+  {
+    label: 'Drawing questions',
+    desc: 'Prompts, references and marking notes',
+    href: '/teacher/question-bank/drawing-management',
+  },
+  {
+    label: 'Import recalled',
+    desc: 'Turn recalled questions into bank entries',
+    href: '/teacher/question-bank/recalled-import',
+  },
+  {
+    label: 'Re-classify topics',
+    desc: 'Move questions between categories in bulk',
+    href: '/teacher/question-bank/reclassify',
+  },
+  {
+    label: 'Reported questions',
+    desc: 'What students flagged as wrong',
+    href: '/teacher/question-bank/reports',
+  },
+];
 
 /** The hub's primary destinations, surfaced as cards so nothing is an orphan route. */
 const HUB_LINKS: {
@@ -48,26 +95,21 @@ const HUB_LINKS: {
     color: '#6366F1',
   },
   {
-    key: 'sets',
-    label: 'Custom sets',
-    desc: 'Named question collections',
-    href: '/teacher/question-bank/sets',
-    icon: <CollectionsBookmarkOutlinedIcon />,
-    color: '#0EA5E9',
-  },
-  {
     key: 'tags',
-    label: 'Tags',
-    desc: 'Manage the question taxonomy',
+    label: 'Tags and themes',
+    desc: 'The taxonomy, and what is tagged with it',
     href: '/teacher/question-bank/tags',
     icon: <SellOutlinedIcon />,
     color: '#F59E0B',
   },
   {
-    key: 'submissions',
-    label: 'Submissions',
-    desc: 'Review student questions',
-    href: '/teacher/questions',
+    // Recall is a sidebar feature in its own right. This card used to point at
+    // /teacher/questions, a separate system with its own tables that never
+    // received a single submission and titled itself "Question Bank" too.
+    key: 'recall',
+    label: 'Student exam recall',
+    desc: 'Questions students remembered after an exam',
+    href: '/teacher/exam-recall',
     icon: <RateReviewOutlinedIcon />,
     color: '#10B981',
   },
@@ -96,6 +138,9 @@ export default function QuestionBankDashboard() {
   const [papersLoading, setPapersLoading] = useState(true);
 
   const [selectedExam, setSelectedExam] = useState<QBExamType>('NATA');
+
+  const [publishing, setPublishing] = useState(false);
+  const [publishNotice, setPublishNotice] = useState<string | null>(null);
 
   // Fetch QB enabled status
   useEffect(() => {
@@ -207,6 +252,60 @@ export default function QuestionBankDashboard() {
     }
   }
 
+  /**
+   * Papers ready to publish but not yet published. Drives the nudge below: the
+   * parse status chips look like completion, so without this a fully parsed bank
+   * can sit invisible to students indefinitely.
+   */
+  const unpublishedReady = useMemo(
+    () =>
+      papers.filter(
+        (p) => !p.is_student_visible && ((p.questions_parsed || 0) > 0 || !!p.study_file_id),
+      ).length,
+    [papers],
+  );
+
+  async function handlePublishAll() {
+    setPublishing(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/question-bank/papers/bulk-publish', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setPublishNotice(json.error || 'Could not publish the papers.');
+        return;
+      }
+      const { published, skipped } = json.data as {
+        published: number;
+        skipped: { id: string; label: string }[];
+      };
+      setPapers((prev) =>
+        prev.map((p) =>
+          !p.is_student_visible && ((p.questions_parsed || 0) > 0 || !!p.study_file_id)
+            ? { ...p, is_student_visible: true }
+            : p,
+        ),
+      );
+      setPublishNotice(
+        `${published} paper${published !== 1 ? 's' : ''} published.` +
+          (skipped.length > 0
+            ? ` ${skipped.length} still need questions or a PDF: ${skipped
+                .slice(0, 3)
+                .map((s) => s.label)
+                .join(', ')}${skipped.length > 3 ? ` and ${skipped.length - 3} more` : ''}.`
+            : ''),
+      );
+    } catch {
+      setPublishNotice('Could not publish the papers.');
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   // Group papers by exam type for tab counts
   const paperCountByExam = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -303,7 +402,7 @@ export default function QuestionBankDashboard() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' },
+          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
           gap: { xs: 1, sm: 1.5 },
           mb: 2.5,
         }}
@@ -351,6 +450,39 @@ export default function QuestionBankDashboard() {
           </Card>
         ))}
       </Box>
+
+      {/* Publishing is separate from parsing, and easy to forget. Say so here. */}
+      {!papersLoading && unpublishedReady > 0 && (
+        <Alert
+          severity="info"
+          icon={<VisibilityOffOutlinedIcon />}
+          action={
+            <Button
+              size="small"
+              variant="contained"
+              disabled={publishing}
+              onClick={handlePublishAll}
+              sx={{ textTransform: 'none', minHeight: 36, whiteSpace: 'nowrap' }}
+            >
+              {publishing ? 'Publishing...' : 'Publish all ready'}
+            </Button>
+          }
+          sx={{ mb: 2, alignItems: 'center', '& .MuiAlert-action': { alignItems: 'center', pt: 0 } }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {unpublishedReady} paper{unpublishedReady !== 1 ? 's are' : ' is'} ready but not published
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Students see nothing here until a paper is published. Parsing status is not publishing.
+          </Typography>
+        </Alert>
+      )}
+
+      {publishNotice && (
+        <Alert severity="success" onClose={() => setPublishNotice(null)} sx={{ mb: 2 }}>
+          {publishNotice}
+        </Alert>
+      )}
 
       {/* Papers browse */}
       <Box
@@ -456,6 +588,42 @@ export default function QuestionBankDashboard() {
           ))}
         </Box>
       )}
+
+      {/* Everything else this section can do, with a door at last. */}
+      <Typography
+        variant="overline"
+        color="text.secondary"
+        sx={{ letterSpacing: 1, fontWeight: 700, display: 'block', mt: 4, mb: 1 }}
+      >
+        More tools
+      </Typography>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)' },
+          gap: 1,
+        }}
+      >
+        {MORE_TOOLS.map((tool) => (
+          <Card key={tool.href} variant="outlined" sx={{ borderRadius: 2 }}>
+            <CardActionArea
+              onClick={() => router.push(tool.href)}
+              aria-label={`${tool.label}. ${tool.desc}`}
+              sx={{ px: 1.5, py: 1.25, minHeight: 56, display: 'flex', alignItems: 'center', gap: 1 }}
+            >
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+                  {tool.label}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {tool.desc}
+                </Typography>
+              </Box>
+              <ChevronRightOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled', flexShrink: 0 }} />
+            </CardActionArea>
+          </Card>
+        ))}
+      </Box>
     </Box>
   );
 }

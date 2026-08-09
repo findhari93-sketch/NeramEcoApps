@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBStaff } from '@/lib/qb-auth';
 import {
   listOriginalPapers,
+  listOriginalPapersWithBreakdown,
   getOrCreateOriginalPaper,
   bulkCreateDraftQuestions,
 } from '@neram/database';
@@ -15,7 +16,12 @@ export async function GET(request: NextRequest) {
     const access = await verifyQBStaff(authHeader);
     if (!access.ok) return access.response;
 
-    const papers = await listOriginalPapers();
+    // The management list needs per paper counts; the hub does not. Opt in, so
+    // the cheaper callers keep the cheaper query.
+    const withBreakdown = request.nextUrl.searchParams.get('breakdown') === '1';
+    const papers = withBreakdown
+      ? await listOriginalPapersWithBreakdown()
+      : await listOriginalPapers();
     return NextResponse.json({ data: papers }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';

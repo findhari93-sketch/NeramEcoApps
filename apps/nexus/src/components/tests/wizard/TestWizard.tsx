@@ -16,6 +16,8 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useTestWizardDraft, clearStoredDraft } from '@/hooks/useTestWizardDraft';
 import type { ImportRegistryTag } from '@/lib/qb-import-schema';
 import type { NexusQBQuestionListItem } from '@neram/database';
+import { QB_EXAM_TYPE_LABELS } from '@neram/database';
+import { buildPaperBlueprint, markingKeyFor, marksForQuestions } from '@/lib/paper-blueprint';
 import {
   activeQuestions,
   estimatedMinutes,
@@ -44,6 +46,17 @@ import StepPlace from './StepPlace';
  * by a dropdown, which is what allows the five separate creation paths that
  * used to exist to collapse into this.
  */
+
+/**
+ * "JEE Paper 2 2025 Session 1 (forenoon)". Only ever fills a blank title, so a
+ * teacher who has already named the test keeps their name.
+ */
+function paperTitleFor(paper: any): string {
+  const exam = QB_EXAM_TYPE_LABELS[paper?.exam_type as keyof typeof QB_EXAM_TYPE_LABELS] || paper?.exam_type || 'Paper';
+  return [exam, paper?.year, paper?.session, paper?.shift ? `(${paper.shift})` : null]
+    .filter(Boolean)
+    .join(' ');
+}
 
 /** An import row carries fields DraftQuestion needs defaults for. */
 function importRowToDraft(q: any, i: number): DraftQuestion {
@@ -87,6 +100,7 @@ export default function TestWizard() {
    */
   const [bankSelection, setBankSelection] = useState<Map<string, NexusQBQuestionListItem>>(new Map());
   const [publishing, setPublishing] = useState(false);
+  const [importingPaper, setImportingPaper] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -119,6 +133,71 @@ export default function TestWizard() {
     },
     [getToken],
   );
+
+  /**
+   * Load the chosen paper's questions into the draft.
+   *
+   * This step used to be a dead end. Its primary button called goNext() and
+   * nothing else, so draft.questions stayed empty, and because 'faithful' also
+   * sets skipReview the wizard jumped Generate straight to Place and then sent
+   * `questions: []` to publish, which answers 400 "A test needs at least one
+   * question". Every exam-faithful import in the product failed at the last
+   * screen.
+   *
+   * Marks come from the published scheme via the blueprint the panel already
+   * fetched, so an imported JEE Paper 2 is +4/-1 with a 50-mark drawing rather
+   * than 1 mark a question with no penalty. Questions come back referencing the
+   * bank, never re-authored, so importing a paper twice cannot duplicate it.
+   */
+  const importPaperQuestions = useCallback(async () => {
+    const paperId = draft.pyq.paperId;
+    if (!paperId) return;
+
+    setImportingPaper(true);
+    setError(null);
+    try {
+      const json = await authFetch(`/api/question-bank/papers/${paperId}`);
+      const rows: any[] = json?.data?.questions || [];
+      const active = rows.filter((q) => q.is_active !== false);
+
+      if (active.length === 0) {
+        setError(
+          'That paper has no active questions yet. Finish its answer key and activate it first.',
+        );
+        return;
+      }
+
+      const blueprint =
+        draft.pyq.blueprint ??
+        buildPaperBlueprint(
+          active.reduce<Record<string, number>>((acc, q) => {
+            const key = markingKeyFor(q);
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+          }, {}),
+          json?.data?.paper?.exam_type,
+        );
+
+      const { marks, negativeMarks } = marksForQuestions(active, blueprint as any);
+
+      const questions: DraftQuestion[] = active.map((q, i) => ({
+        ...bankQuestionToDraft(q as NexusQBQuestionListItem),
+        marks: marks[i] ?? 1,
+        negative_marks: negativeMarks[i] ?? 0,
+      }));
+
+      dispatch({
+        type: 'questionsReady',
+        questions,
+        title: json?.data?.paper ? paperTitleFor(json.data.paper) : undefined,
+      });
+      goNext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load that paper');
+    } finally {
+      setImportingPaper(false);
+    }
+  }, [authFetch, dispatch, draft.pyq.paperId, draft.pyq.blueprint, goNext]);
 
   useEffect(() => {
     let cancelled = false;
@@ -431,9 +510,13 @@ export default function TestWizard() {
         <StickyWizardBar
           secondary={{ label: 'Back', onClick: goBack }}
           primary={{
-            label: draft.pyq.mode === 'faithful' ? 'Import and place' : 'Import and review',
-            disabled: !draft.pyq.paperId,
-            onClick: goNext,
+            label: importingPaper
+              ? 'Loading the paper...'
+              : draft.pyq.mode === 'faithful'
+                ? 'Import and place'
+                : 'Import and review',
+            disabled: !draft.pyq.paperId || importingPaper,
+            onClick: importPaperQuestions,
           }}
         />
       )}

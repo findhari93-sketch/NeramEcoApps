@@ -50,6 +50,7 @@ export {
   signInWithMicrosoft,
   signInSilent,
   getAccessToken,
+  getAccessTokenSilent,
   getActiveAccount,
   setActiveAccount,
   getAllAccounts,

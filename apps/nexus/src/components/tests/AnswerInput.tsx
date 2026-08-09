@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, TextField, Typography, alpha, useTheme } from '@neram/ui';
+import { Box, TextField, Typography, alpha, useTheme, ImageUploadField } from '@neram/ui';
 import MathText from '@/components/common/MathText';
 
 export interface AnswerInputQuestion {
@@ -15,6 +15,13 @@ interface AnswerInputProps {
   value: string | null;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /**
+   * Uploader for a drawing answer. Injected rather than built here, because the
+   * take page already holds the auth token and this component is otherwise pure.
+   * Omit it and a drawing question falls back to explaining that it is marked
+   * on paper, which is what a practice test wants.
+   */
+  uploadDrawing?: (file: File) => Promise<{ url: string; path?: string }>;
 }
 
 interface OptionShape {
@@ -31,9 +38,74 @@ interface OptionShape {
  * text and offered zero ways to respond. Fixing the grader without this would
  * have turned "tolerance silently ignored" into "guaranteed zero".
  */
-export default function AnswerInput({ question, value, onChange, disabled }: AnswerInputProps) {
+export default function AnswerInput({
+  question,
+  value,
+  onChange,
+  disabled,
+  uploadDrawing,
+}: AnswerInputProps) {
   const theme = useTheme();
   const format = String(question.question_format || 'MCQ').toUpperCase();
+
+  /**
+   * A drawing answer is a photograph.
+   *
+   * Camera-first, because a student sits the drawing section on paper and then
+   * photographs it on the phone in front of them. The uploaded URL goes into
+   * the same answers map as every other answer, so autosave, resume, submit and
+   * abandon all work with no new plumbing at all.
+   *
+   * No machine marks this. gradeQBAnswerStrict returns null for a drawing, so
+   * it stays out of both the numerator and the denominator until a teacher has
+   * marked it, and the copy below says so plainly rather than letting a student
+   * think a submitted photo has been scored.
+   */
+  if (format === 'DRAWING_PROMPT' || format === 'IMAGE_BASED') {
+    if (!uploadDrawing) {
+      return (
+        <Box
+          sx={{
+            p: 2,
+            borderRadius: 2,
+            border: `1px dashed ${theme.palette.divider}`,
+            bgcolor: alpha(theme.palette.info.main, 0.05),
+          }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            This one is drawn on paper and marked by your teacher. Nothing to type here.
+          </Typography>
+        </Box>
+      );
+    }
+
+    return (
+      <Box>
+        <ImageUploadField
+          value={value || null}
+          onChange={(url) => onChange(url || '')}
+          upload={uploadDrawing}
+          disabled={disabled}
+          camera
+          label="Your drawing"
+          helperText="Photograph your sheet, or choose a file. Make sure the whole drawing is in frame."
+          height={220}
+          maxSizeMB={15}
+        />
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: 1 }}
+          // Announced, because this is the one answer type whose result does
+          // not arrive with the rest of the paper.
+          role="note"
+        >
+          Your teacher marks this by hand after the exam. Your total will show as provisional until
+          they have.
+        </Typography>
+      </Box>
+    );
+  }
 
   if (format === 'NUMERICAL') {
     return (

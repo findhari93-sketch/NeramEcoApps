@@ -206,6 +206,20 @@ export interface CommitImportInput {
   isPublished?: boolean;
   /** How many questions one sitting asks. Omit to ask all of them. */
   questionsToServe?: number | null;
+  /**
+   * Per-question marking, keyed by bank question id.
+   *
+   * Keyed rather than an aligned array on purpose: this function decides the
+   * final question order itself (authored rows, then extraQuestionIds), so an
+   * array indexed against the caller's draft would attach a section's marking
+   * to the wrong questions. Anything missing falls back to 1 mark, no penalty,
+   * which is what every caller got before exam-faithful marking existed.
+   */
+  marksByQuestionId?: Record<string, { marks: number; negativeMarks: number }>;
+  /** Flat shuffle over the whole paper. */
+  shuffle?: boolean;
+  /** Shuffle within sections, keeping sections in paper order. */
+  shuffleSections?: boolean;
   /** Provenance stamp on nexus_tests. 'ai_import' for a paste, 'ai_pdf' for a generated chapter. */
   createdFrom?: string;
   /** What origin the new bank questions carry. */
@@ -461,6 +475,15 @@ export async function commitImport(input: CommitImportInput): Promise<CommitImpo
     ? (input.testKind as NexusTestKind)
     : 'classroom_assigned';
 
+  // Expanded against the FINAL order this function chose, not the caller's.
+  // Omitted entirely when no marking was supplied, so composeTest keeps its own
+  // defaults and every existing import behaves exactly as before.
+  const marking = input.marksByQuestionId;
+  const marks = marking ? orderedQuestionIds.map((id) => marking[id]?.marks ?? 1) : undefined;
+  const negativeMarks = marking
+    ? orderedQuestionIds.map((id) => marking[id]?.negativeMarks ?? 0)
+    : undefined;
+
   const { id: testId } = await composeTest(
     {
       title,
@@ -470,6 +493,10 @@ export async function commitImport(input: CommitImportInput): Promise<CommitImpo
       durationMinutes: input.durationMinutes ?? null,
       perQuestionSeconds: input.perQuestionSeconds ?? null,
       passingMarks,
+      marks,
+      negativeMarks,
+      shuffle: input.shuffle ?? false,
+      shuffleSections: input.shuffleSections ?? false,
       isPublished: input.isPublished ?? false,
       isRepository: true,
       createdFrom: input.createdFrom ?? 'ai_import',

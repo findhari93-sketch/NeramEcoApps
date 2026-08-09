@@ -20,8 +20,14 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
-import type { NexusQBQuestion } from '@neram/database';
-import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
+import type { NexusQBQuestion, QBQuestionSection } from '@neram/database';
+import {
+  QB_QUESTION_STATUS_COLORS,
+  QB_QUESTION_STATUS_LABELS,
+  QB_SECTIONS,
+  QB_SECTION_ORDER,
+  qbSectionLabel,
+} from '@neram/database';
 import MathText from '@/components/common/MathText';
 import AnswerKeyUpload from './AnswerKeyUpload';
 
@@ -47,13 +53,57 @@ export function questionMissingImages(q: NexusQBQuestion): boolean {
   return false;
 }
 
+/**
+ * Move one question into a different section.
+ *
+ * Deliberately a plain labelled Select and not a colour-coded chip: which
+ * section a question is in changes how it is marked, so it has to be readable
+ * as a word, not inferred from a hue.
+ */
+function SectionSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: QBQuestionSection | null;
+  onChange: (next: QBQuestionSection) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Select
+      size="small"
+      value={value ?? ''}
+      displayEmpty
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value as QBQuestionSection)}
+      inputProps={{ 'aria-label': 'Section this question belongs to' }}
+      sx={{ minWidth: 150, height: 32, fontSize: '0.8125rem' }}
+    >
+      <MenuItem value="" disabled>
+        <em>Unsectioned</em>
+      </MenuItem>
+      {QB_SECTIONS.map((s) => (
+        <MenuItem key={s} value={s}>
+          {qbSectionLabel(s)}
+        </MenuItem>
+      ))}
+    </Select>
+  );
+}
+
 interface AnswerKeyGridProps {
   questions: NexusQBQuestion[];
   onSave: (answers: { question_number: number; correct_answer: string }[]) => Promise<void>;
   saving?: boolean;
+  /**
+   * Correct the section on a single question. Omit to hide the control
+   * entirely: the section editor lives in its own tab, and this is only the
+   * one-off fix a teacher wants without leaving the answer key.
+   */
+  onChangeSection?: (questionId: string, section: QBQuestionSection) => Promise<void>;
 }
 
-export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGridProps) {
+export default function AnswerKeyGrid({ questions, onSave, saving, onChangeSection }: AnswerKeyGridProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -71,6 +121,21 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
   const [dirty, setDirty] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  // The id of the question whose section is being saved right now. A section
+  // change saves immediately rather than joining the answer-key dirty state,
+  // because the two are saved by different buttons and merging them would let
+  // "Save All" quietly rewrite sections a teacher only meant to look at.
+  const [sectionSaving, setSectionSaving] = useState<string | null>(null);
+
+  const handleSectionChange = async (questionId: string, next: QBQuestionSection) => {
+    if (!onChangeSection) return;
+    setSectionSaving(questionId);
+    try {
+      await onChangeSection(questionId, next);
+    } finally {
+      setSectionSaving(null);
+    }
+  };
 
   const toggleExpand = (qNum: number) => {
     setExpandedRows((prev) => {
@@ -99,28 +164,43 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
     setDirty(false);
   };
 
-  // Group questions by section
+  // Group questions by the section stored on each question.
+  //
+  // This used to re-derive the split from hardcoded question-number ranges,
+  // which was a third copy of a guess that already lives in nta-parser.ts and
+  // in the backfill migration, and which quietly mislabelled any paper that did
+  // not follow the JEE Paper 2 numbering. Questions nobody has classified yet
+  // group under "Unsectioned" at the end rather than being re-guessed here, so
+  // the gap is visible and fixable instead of invisible and wrong.
   const sections = useMemo(() => {
-    const groups: { title: string; questions: NexusQBQuestion[] }[] = [];
-    const mathMcq: NexusQBQuestion[] = [];
-    const mathNum: NexusQBQuestion[] = [];
-    const aptitude: NexusQBQuestion[] = [];
-    const drawing: NexusQBQuestion[] = [];
+    const groups = new Map<string, { order: number; questions: NexusQBQuestion[] }>();
 
     for (const q of questions) {
-      const num = q.display_order ?? 0;
-      if (num <= 20) mathMcq.push(q);
-      else if (num <= 25) mathNum.push(q);
-      else if (num <= 75) aptitude.push(q);
-      else drawing.push(q);
+      const key = q.section ?? '__none__';
+      if (!groups.has(key)) {
+        groups.set(key, {
+          order: q.section ? QB_SECTION_ORDER[q.section] ?? 98 : 99,
+          questions: [],
+        });
+      }
+      groups.get(key)!.questions.push(q);
     }
 
-    if (mathMcq.length) groups.push({ title: 'Mathematics - MCQ (Q1-Q20)', questions: mathMcq });
-    if (mathNum.length) groups.push({ title: 'Mathematics - Numerical (Q21-Q25)', questions: mathNum });
-    if (aptitude.length) groups.push({ title: 'Aptitude Test (Q26-Q75)', questions: aptitude });
-    if (drawing.length) groups.push({ title: 'Drawing Test (Q76-Q77)', questions: drawing });
-
-    return groups;
+    return Array.from(groups.entries())
+      .sort((a, b) => a[1].order - b[1].order)
+      .map(([key, group]) => {
+        const numbers = group.questions
+          .map((q) => q.display_order)
+          .filter((n): n is number => n != null);
+        const range = numbers.length
+          ? ` (Q${Math.min(...numbers)} to Q${Math.max(...numbers)})`
+          : '';
+        return {
+          key,
+          title: `${key === '__none__' ? 'Unsectioned' : qbSectionLabel(key)}${range}`,
+          questions: group.questions,
+        };
+      });
   }, [questions]);
 
   return (
@@ -151,7 +231,7 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
       </Box>
 
       {sections.map((section) => (
-        <Box key={section.title} sx={{ mb: 2.5 }}>
+        <Box key={section.key} sx={{ mb: 2.5 }}>
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
             {section.title}
           </Typography>
@@ -227,6 +307,16 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
                       </Box>
                     )}
 
+                    {onChangeSection && (
+                      <Box sx={{ mb: 1 }}>
+                        <SectionSelect
+                          value={q.section}
+                          disabled={sectionSaving === q.id}
+                          onChange={(next) => handleSectionChange(q.id, next)}
+                        />
+                      </Box>
+                    )}
+
                     {/* Answer input */}
                     {isDrawing ? (
                       <Typography variant="caption" color="text.disabled">
@@ -293,6 +383,7 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
                     <th style={{ width: 50 }}>Q#</th>
                     <th>Question</th>
                     <th style={{ width: 70 }}>Type</th>
+                    {onChangeSection && <th style={{ width: 170 }}>Section</th>}
                     <th style={{ width: 220 }}>Correct Answer</th>
                     <th style={{ width: 80 }}>Status</th>
                   </tr>
@@ -354,6 +445,15 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
                             {q.question_format}
                           </Typography>
                         </td>
+                        {onChangeSection && (
+                          <td>
+                            <SectionSelect
+                              value={q.section}
+                              disabled={sectionSaving === q.id}
+                              onChange={(next) => handleSectionChange(q.id, next)}
+                            />
+                          </td>
+                        )}
                         <td>
                           {isDrawing ? (
                             <Typography variant="caption" color="text.disabled">

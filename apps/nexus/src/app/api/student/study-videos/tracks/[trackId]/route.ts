@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getStudyTrackForStudent, upsertRecapProgress } from '@neram/database';
+import {
+  getStudyTrackForStudent,
+  getStudyVideoState,
+  upsertRecapProgress,
+} from '@neram/database';
 import { getRequestUser } from '@/lib/study-materials';
 import { assertCanSeeTrack, assertServable, trackErrorResponse } from '@/lib/study-video-access';
 
@@ -14,6 +18,13 @@ import { assertCanSeeTrack, assertServable, trackErrorResponse } from '@/lib/stu
  * worked it out client-side from the section list. Sending it means the client
  * can stay dumb, and a client that lies about it is arguing with the server
  * rather than with itself.
+ *
+ * `siblings` is the chapter's OTHER recordings, so the player can offer the
+ * language switch it never had. Changing language used to mean going Back, which
+ * lands at the top of the tree, finding the chapter again, opening the PDF and
+ * pressing the other button in the footer. Served from getStudyVideoState, the
+ * same read the chapter footer uses, so the two can never disagree about which
+ * recordings a student may see.
  */
 export async function GET(request: NextRequest, { params }: { params: { trackId: string } }) {
   try {
@@ -29,6 +40,14 @@ export async function GET(request: NextRequest, { params }: { params: { trackId:
     if (track.progress_status == null) {
       await upsertRecapProgress(user.id, params.trackId, { status: 'in_progress' });
     }
+
+    // Only the servable ones come back from here, so the switch cannot offer a
+    // draft. A chapter recorded in one language returns a single entry, which
+    // the player draws as nothing at all rather than as a switch with no other
+    // side.
+    const chapter = track.study_file_id
+      ? await getStudyVideoState(track.study_file_id, user.id)
+      : null;
 
     return NextResponse.json({
       track: {
@@ -49,6 +68,14 @@ export async function GET(request: NextRequest, { params }: { params: { trackId:
         passed: s.passed,
         locked: s.locked,
       })),
+      siblings: (chapter?.tracks || [])
+        .filter((t) => t.id !== track.id)
+        .map((t) => ({
+          id: t.id,
+          language: t.language,
+          language_label: t.language_label,
+          progress_status: t.progress_status,
+        })),
       mode: track.mode,
       max_scrub_seconds: track.max_scrub_seconds,
       progress_status: track.progress_status,

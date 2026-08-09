@@ -18,14 +18,16 @@ import {
   DialogContentText,
   DialogActions,
 } from '@neram/ui';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import TranslateIcon from '@mui/icons-material/Translate';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
+import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { QB_EXAM_TYPE_LABELS, QB_CATEGORY_LABELS } from '@neram/database';
 import type { NexusQBOriginalPaper } from '@neram/database';
@@ -61,49 +63,14 @@ export default function PapersListPage() {
       const token = await getToken();
       if (!token) return;
 
-      const res = await fetch('/api/question-bank/papers', {
+      // One request. This used to fetch every paper's full detail to count
+      // categories in the browser, so 26 papers meant 27 round trips.
+      const res = await fetch('/api/question-bank/papers?breakdown=1', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const json = await res.json();
-        const papersData = json.data || [];
-
-        // Fetch section breakdowns for each paper in parallel
-        const enriched = await Promise.all(
-          papersData.map(async (paper: NexusQBOriginalPaper) => {
-            try {
-              const detailRes = await fetch(`/api/question-bank/papers/${paper.id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (detailRes.ok) {
-                const detailJson = await detailRes.json();
-                const questions = detailJson.data?.questions || [];
-                const breakdown: Record<string, number> = {};
-                let activeCount = 0;
-                let hindiCount = 0;
-                for (const q of questions) {
-                  const cats = q.categories as string[] | null;
-                  if (cats && cats.length > 0) {
-                    for (const cat of cats) {
-                      breakdown[cat] = (breakdown[cat] || 0) + 1;
-                    }
-                  } else {
-                    const fmt = q.question_format || 'OTHER';
-                    breakdown[fmt] = (breakdown[fmt] || 0) + 1;
-                  }
-                  if (q.is_active && q.status === 'active') activeCount++;
-                  if ((q as any).question_text_hi) hindiCount++;
-                }
-                return { ...paper, section_breakdown: breakdown, active_count: activeCount, hindi_count: hindiCount };
-              }
-            } catch {
-              // Ignore errors for individual papers
-            }
-            return paper;
-          })
-        );
-
-        setPapers(enriched);
+        setPapers(json.data || []);
       }
     } catch (err) {
       console.error('Failed to fetch papers:', err);
@@ -165,6 +132,84 @@ export default function PapersListPage() {
     }
   }
 
+  /**
+   * Whether students would get anything from this paper.
+   *
+   * A hint only. `setPaperStudentVisibility` enforces the same rule server-side
+   * and returns its own sentence, which is what gets shown when it refuses.
+   */
+  function isReadyForStudents(paper: PaperWithBreakdown): boolean {
+    return (paper.active_count || 0) > 0 || !!paper.study_file_id;
+  }
+
+  async function handleSetVisibility(paperId: string, visible: boolean, e: React.MouseEvent) {
+    e.stopPropagation();
+    setActionLoading(paperId + '-publish');
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/question-bank/papers/${paperId}/access`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_student_visible: visible }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Could not change who can see this paper');
+
+      setSnackbar({
+        open: true,
+        message: visible ? 'Published. Students can see this paper now.' : 'Unpublished. Students can no longer see it.',
+        severity: 'success',
+      });
+      fetchPapers();
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Could not change who can see this paper',
+        severity: 'error',
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handlePublishAll() {
+    setActionLoading('publish-all');
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/question-bank/papers/bulk-publish', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Could not publish');
+
+      const { published = 0, skipped = [] } = json.data || {};
+      // Say what was refused. A bare "Published 12" reads as "all of them" when
+      // 14 were left behind for a reason the teacher can act on.
+      const skipNote = skipped.length
+        ? ` ${skipped.length} skipped, with no questions and no PDF.`
+        : '';
+      setSnackbar({
+        open: true,
+        message: published === 0 && !skipped.length
+          ? 'Every ready paper was already published.'
+          : `Published ${published}.${skipNote}`,
+        severity: 'success',
+      });
+      fetchPapers();
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Could not publish',
+        severity: 'error',
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   async function handleDelete() {
     const paperId = deleteConfirm.paperId;
     setDeleteConfirm({ open: false, paperId: '', paperLabel: '' });
@@ -200,34 +245,57 @@ export default function PapersListPage() {
   const getCategoryLabel = (cat: string) =>
     QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS] || cat;
 
+  const liveCount = papers.filter((p) => p.is_student_visible).length;
+  const publishable = papers.filter((p) => !p.is_student_visible && isReadyForStudents(p)).length;
+
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <IconButton size="small" onClick={() => router.push('/teacher/question-bank')}>
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h5" component="h1" fontWeight={700} sx={{ flex: 1 }}>
-          Uploaded Papers
-        </Typography>
-        {/* The other axis: this list is papers, that page is students. */}
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<InsightsOutlinedIcon />}
-          onClick={() => router.push('/teacher/question-bank/papers/overview')}
-          sx={{ textTransform: 'none' }}
-        >
-          Progress
-        </Button>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<UploadFileOutlinedIcon />}
-          onClick={() => router.push('/teacher/question-bank/bulk-upload')}
-        >
-          Upload
-        </Button>
-      </Box>
+      <PageHeader
+        title="Uploaded papers"
+        subtitle={
+          loading
+            ? undefined
+            : `${papers.length} papers · ${liveCount} live for students` +
+              (publishable > 0 ? ` · ${publishable} ready to publish` : '')
+        }
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+        action={
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {publishable > 0 && (
+              <Button
+                variant="outlined"
+                size="small"
+                color="success"
+                startIcon={<VisibilityOutlinedIcon />}
+                onClick={handlePublishAll}
+                disabled={actionLoading === 'publish-all'}
+                sx={{ textTransform: 'none' }}
+              >
+                {actionLoading === 'publish-all' ? 'Publishing...' : `Publish ${publishable} ready`}
+              </Button>
+            )}
+            {/* The other axis: this list is papers, that page is students. */}
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<InsightsOutlinedIcon />}
+              onClick={() => router.push('/teacher/question-bank/papers/overview')}
+              sx={{ textTransform: 'none' }}
+            >
+              Progress
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<UploadFileOutlinedIcon />}
+              onClick={() => router.push('/teacher/question-bank/bulk-upload')}
+            >
+              Upload
+            </Button>
+          </Box>
+        }
+      />
 
       {loading ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -310,6 +378,16 @@ export default function PapersListPage() {
                     />
                   )}
                   <Box sx={{ flex: 1 }} />
+                  {/* The state teachers kept missing: parsing progress and
+                      question activation both look like "done" without it. */}
+                  <Chip
+                    icon={paper.is_student_visible ? <VisibilityOutlinedIcon /> : <VisibilityOffOutlinedIcon />}
+                    label={paper.is_student_visible ? 'Live for students' : 'Not published'}
+                    size="small"
+                    color={paper.is_student_visible ? 'success' : 'default'}
+                    variant={paper.is_student_visible ? 'filled' : 'outlined'}
+                    sx={{ height: 22, fontSize: '0.7rem', '& .MuiChip-icon': { fontSize: 14 } }}
+                  />
                   <Typography variant="caption" color="text.secondary">
                     {formatDate(paper.created_at)}
                   </Typography>
@@ -329,7 +407,16 @@ export default function PapersListPage() {
                 {/* Stats summary */}
                 <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>
                   {total} total &middot; {keyed} with answers &middot; {complete} complete{activeCount > 0 ? ` \u00b7 ${activeCount} active` : ''}
+                  {paper.study_file_id ? ' \u00b7 PDF linked' : ''}
                 </Typography>
+
+                {/* Why Publish is greyed out. A disabled button with no reason
+                    is the whole problem this screen had. */}
+                {!paper.is_student_visible && !isReadyForStudents(paper) && (
+                  <Typography variant="caption" color="warning.main" sx={{ mb: 0.75, display: 'block' }}>
+                    Nothing for students yet. Activate a question or link the original PDF.
+                  </Typography>
+                )}
 
                 {/* Section breakdown */}
                 {paper.section_breakdown && Object.keys(paper.section_breakdown).length > 0 && (
@@ -351,6 +438,35 @@ export default function PapersListPage() {
                   sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {/* First, because it is the only action here that changes what
+                      a student sees. Activate and Deactivate move questions in
+                      and out of the bank, which is a different question. */}
+                  {paper.is_student_visible ? (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="inherit"
+                      startIcon={<VisibilityOffOutlinedIcon />}
+                      onClick={(e) => handleSetVisibility(paper.id, false, e)}
+                      disabled={actionLoading === paper.id + '-publish'}
+                      sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
+                    >
+                      {actionLoading === paper.id + '-publish' ? 'Working...' : 'Unpublish'}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="success"
+                      disableElevation
+                      startIcon={<VisibilityOutlinedIcon />}
+                      onClick={(e) => handleSetVisibility(paper.id, true, e)}
+                      disabled={actionLoading === paper.id + '-publish' || !isReadyForStudents(paper)}
+                      sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
+                    >
+                      {actionLoading === paper.id + '-publish' ? 'Publishing...' : 'Publish to students'}
+                    </Button>
+                  )}
                   {activatable > 0 && (
                     <Button
                       size="small"
@@ -369,7 +485,9 @@ export default function PapersListPage() {
                       size="small"
                       variant="outlined"
                       color="warning"
-                      startIcon={<VisibilityOffOutlinedIcon />}
+                      // Not an eye. Deactivating pulls questions out of the
+                      // bank; hiding the paper from students is Unpublish.
+                      startIcon={<RemoveCircleOutlineIcon />}
                       onClick={(e) => handleDeactivate(paper.id, e)}
                       disabled={actionLoading === paper.id + '-deactivate'}
                       sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}

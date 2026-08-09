@@ -277,7 +277,7 @@ export interface SiteDriveItem {
   isFolder: boolean;
 }
 
-function toDriveItem(item: any): SiteDriveItem {
+export function toDriveItem(item: any): SiteDriveItem {
   return {
     id: item.id,
     name: item.name || 'Untitled',
@@ -287,6 +287,43 @@ function toDriveItem(item: any): SiteDriveItem {
     lastModified: item.lastModifiedDateTime || null,
     isFolder: !!item.folder,
   };
+}
+
+/**
+ * How many pages of a drive listing are worth following.
+ *
+ * Paging exists here because the caller filters AFTER Graph has truncated. A
+ * video search over a library whose first page is all PDFs used to come back
+ * empty with the videos sitting unread on page two, and nothing said so: an
+ * empty list and a truncated one look identical. Capped rather than exhaustive
+ * so a search over a large library cannot turn into a dozen serial round trips.
+ */
+const MAX_PAGES = 4;
+
+/** Follow @odata.nextLink up to MAX_PAGES, mapping as it goes. */
+async function collectDriveItems(
+  firstUrl: string,
+  token: string,
+  label: string,
+): Promise<SiteDriveItem[]> {
+  const out: SiteDriveItem[] = [];
+  let url: string | null = firstUrl;
+
+  for (let page = 0; url && page < MAX_PAGES; page++) {
+    const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      // Page one failing is the request failing. A later page failing is not
+      // worth losing the results already in hand over.
+      if (page === 0) throw new Error(`${label} failed: ${res.status} ${err}`);
+      break;
+    }
+    const data: any = await res.json().catch(() => ({}));
+    out.push(...((data?.value || []) as any[]).map(toDriveItem));
+    url = data?.['@odata.nextLink'] || null;
+  }
+
+  return out;
 }
 
 /**
@@ -311,18 +348,11 @@ export async function searchSiteDrive(query: string, limit = 25): Promise<SiteDr
   // Single quotes inside the OData search term have to be doubled, or a file
   // called "Ravi's notes" turns the query into a syntax error.
   const escaped = encodeURIComponent(q.replace(/'/g, "''"));
-  const res = await fetch(
+  return collectDriveItems(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/root/search(q='${escaped}')?$top=${limit}`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    token,
+    'SharePoint search',
   );
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`SharePoint search failed: ${res.status} ${err}`);
-  }
-
-  const data = await res.json().catch(() => ({}));
-  return ((data?.value || []) as any[]).map(toDriveItem);
 }
 
 /**
@@ -339,14 +369,7 @@ export async function browseSiteFolder(path = '', limit = 100): Promise<SiteDriv
     ? `${base}:/${encodeURI(clean)}:/children?$top=${limit}`
     : `${base}/children?$top=${limit}`;
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`SharePoint browse failed: ${res.status} ${err}`);
-  }
-
-  const data = await res.json().catch(() => ({}));
-  return ((data?.value || []) as any[]).map(toDriveItem);
+  return collectDriveItems(url, token, 'SharePoint browse');
 }
 
 /* ── The caller's OWN OneDrive ──────────────────────────────────────────────
@@ -378,18 +401,11 @@ export async function searchMyDrive(
 
   // Same doubling as searchSiteDrive: "Ravi's notes" is a syntax error otherwise.
   const escaped = encodeURIComponent(q.replace(/'/g, "''"));
-  const res = await fetch(
+  return collectDriveItems(
     `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${escaped}')?$top=${limit}`,
-    { headers: { Authorization: `Bearer ${msToken}` } },
+    msToken,
+    'OneDrive search',
   );
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`OneDrive search failed: ${res.status} ${err}`);
-  }
-
-  const data = await res.json().catch(() => ({}));
-  return ((data?.value || []) as any[]).map(toDriveItem);
 }
 
 /** List one folder of the caller's own OneDrive. An empty path lists the root. */
@@ -404,14 +420,7 @@ export async function browseMyDriveFolder(
     ? `${base}:/${encodeURI(clean)}:/children?$top=${limit}`
     : `${base}/children?$top=${limit}`;
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${msToken}` } });
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`OneDrive browse failed: ${res.status} ${err}`);
-  }
-
-  const data = await res.json().catch(() => ({}));
-  return ((data?.value || []) as any[]).map(toDriveItem);
+  return collectDriveItems(url, msToken, 'OneDrive browse');
 }
 
 /**

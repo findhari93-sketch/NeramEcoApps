@@ -27,7 +27,8 @@
 
 import { useState } from 'react';
 import {
-  Box, Typography, Button, Chip, TextField, Collapse, CircularProgress, alpha, useTheme,
+  Box, Typography, Button, Chip, TextField, Collapse, CircularProgress, Menu, MenuItem,
+  alpha, useTheme,
 } from '@neram/ui';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
@@ -39,10 +40,19 @@ import PublishRoundedIcon from '@mui/icons-material/PublishRounded';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
 import { describeRecordingUrl, type TrackRow } from '@/lib/chapter-recordings';
 
 /** Every control on this row, so touch targets never fall below the guideline. */
 const actionSx = { textTransform: 'none' as const, minHeight: 48 };
+
+/** One language this recording could be moved to. */
+export interface MoveTarget {
+  code: string;
+  label: string;
+  /** Already holds a recording, so the move would collide. Shown, not hidden. */
+  taken: boolean;
+}
 
 export interface LanguageTrackRowProps {
   row: TrackRow;
@@ -64,6 +74,10 @@ export interface LanguageTrackRowProps {
   onOpenPaste: () => void;
   onCancelPaste: () => void;
   onSubmitVideo: (opts?: { force?: boolean }) => void;
+
+  /** The other offered languages, so a mis-filed recording can be re-filed. */
+  moveTargets: MoveTarget[];
+  onChangeLanguage: (code: string) => void;
 
   onUploadVtt: () => void;
   onFetchTranscript: () => void;
@@ -170,6 +184,8 @@ export default function LanguageTrackRow({
   onOpenPaste,
   onCancelPaste,
   onSubmitVideo,
+  moveTargets,
+  onChangeLanguage,
   onUploadVtt,
   onFetchTranscript,
   onEditCheckpoints,
@@ -179,6 +195,8 @@ export default function LanguageTrackRow({
   onRemove,
 }: LanguageTrackRowProps) {
   const [showVttHelp, setShowVttHelp] = useState(false);
+  /** Anchor for the move menu, or null when it is shut. */
+  const [moveAnchor, setMoveAnchor] = useState<HTMLElement | null>(null);
   const track = row.track;
 
   const hasVideo = !!track;
@@ -220,7 +238,7 @@ export default function LanguageTrackRow({
               variant="caption"
               sx={{ fontWeight: 600, wordBreak: 'break-word', minWidth: 0 }}
             >
-              {describeRecordingUrl(track!.recording_url)}
+              {describeRecordingUrl(track!.recording_url, track!.recording_file_name)}
             </Typography>
             <Chip
               size="small"
@@ -238,6 +256,78 @@ export default function LanguageTrackRow({
             >
               Change
             </Button>
+            {/*
+              Re-file, which is not the same as replace and sits next to it for
+              exactly that reason. A recording that turned out to be in the other
+              language is a mislabelled row, not the wrong video: Change would
+              clear its checkpoints, and Remove would archive the transcript
+              along with them. This keeps all of it and moves the label.
+            */}
+            {moveTargets.length > 0 && (
+              <Button
+                size="small"
+                variant="text"
+                color="inherit"
+                startIcon={<SwapHorizRoundedIcon />}
+                onClick={(e) => setMoveAnchor(e.currentTarget)}
+                disabled={busy}
+                sx={{ ...actionSx, color: 'text.secondary' }}
+                aria-haspopup="menu"
+                aria-expanded={!!moveAnchor}
+                aria-label={`Move the ${row.label} recording to another language`}
+              >
+                Move
+              </Button>
+            )}
+            <Menu
+              anchorEl={moveAnchor}
+              open={!!moveAnchor}
+              onClose={() => setMoveAnchor(null)}
+              MenuListProps={{ 'aria-label': 'Move this recording to' }}
+            >
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', px: 2, pt: 0.5, pb: 1, maxWidth: 260 }}
+              >
+                Move this recording, with its transcript and checkpoints, to:
+              </Typography>
+              {moveTargets.map((target) => (
+                <MenuItem
+                  key={target.code}
+                  disabled={target.taken}
+                  /**
+                   * No handler at all when it is taken, rather than relying on
+                   * `disabled`. A MenuItem renders as an <li>, which cannot
+                   * carry the DOM disabled attribute, so MUI marks it
+                   * aria-disabled and blocks it with pointer-events. That stops
+                   * a mouse and does not stop a click that reaches it any other
+                   * way, which is a fine distinction to leave in a control whose
+                   * whole job is refusing an operation the API will reject.
+                   */
+                  onClick={
+                    target.taken
+                      ? undefined
+                      : () => {
+                          setMoveAnchor(null);
+                          onChangeLanguage(target.code);
+                        }
+                  }
+                  sx={{ minHeight: 48, display: 'block', py: 1 }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {target.label}
+                  </Typography>
+                  {/* The reason, next to the thing it disables. A greyed row with
+                      no explanation reads as broken rather than as occupied. */}
+                  {target.taken && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Already has a recording
+                    </Typography>
+                  )}
+                </MenuItem>
+              ))}
+            </Menu>
           </Box>
         ) : (
           !isPasting && (

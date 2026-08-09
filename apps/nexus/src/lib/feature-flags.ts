@@ -171,7 +171,6 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.question-bank', label: 'Question Bank', surface: 'staff', group: 'Management', paths: ['/teacher/question-bank'], defaultEnabled: true },
   { id: 'staff.exam-recall', label: 'Recall', surface: 'staff', group: 'Management', paths: ['/teacher/exam-recall'], defaultEnabled: true },
   { id: 'staff.tests', label: 'Tests', surface: 'staff', group: 'Management', paths: ['/teacher/tests'], defaultEnabled: true },
-  { id: 'staff.questions', label: 'Questions', surface: 'staff', group: 'Management', paths: ['/teacher/questions'], defaultEnabled: true },
   { id: 'staff.library', label: 'Library', surface: 'staff', group: 'Management', paths: ['/teacher/library/review'], defaultEnabled: true },
   // Not a page (`paths: []`). Gates the "Publish to YouTube" panel inside the
   // class wrap-up, so the metadata workflow can be switched off from

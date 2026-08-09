@@ -6,12 +6,12 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Skeleton, useTheme, useMediaQuery,
 } from '@neram/ui';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import LinkIcon from '@mui/icons-material/Link';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import { useRouter } from 'next/navigation';
+import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import DifficultyChip from '@/components/drawings/DifficultyChip';
@@ -100,14 +100,12 @@ export default function DrawingManagementPage() {
   return (
     <Box sx={{ px: isMobile ? 1 : 3, py: 2, maxWidth: 1000, mx: 'auto' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <IconButton onClick={() => router.push('/teacher/question-bank')} size="small">
-          <ArrowBackIcon />
-        </IconButton>
-        <BrushOutlinedIcon sx={{ color: 'primary.main' }} />
-        <Typography variant="h6" fontWeight={700}>Drawing Questions</Typography>
-        <Chip label={`${questions.length} questions`} size="small" sx={{ ml: 'auto' }} />
-      </Box>
+      <PageHeader
+        title="Drawing questions"
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+        action={<Chip label={`${questions.length} questions`} size="small" />}
+      />
 
       {/* Year tabs */}
       <Tabs

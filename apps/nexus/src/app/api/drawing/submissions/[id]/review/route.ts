@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, createUserNotification } from '@neram/database';
-import { saveDrawingReviewWithAction, recordGamificationEvent, setSubmissionTags } from '@neram/database/queries/nexus';
+import {
+  saveDrawingReviewWithAction,
+  recordGamificationEvent,
+  setSubmissionTags,
+  recomputeExamAttemptScore,
+} from '@neram/database/queries/nexus';
 import type { GalleryReactionType } from '@neram/database/types';
 import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
 
@@ -32,11 +37,14 @@ export async function PATCH(
     // Fetch current status before update to detect re-reviews. assignment_id tells
     // us this drawing answers a class assignment (drives the grade scale + notify).
     const { data: currentSub } = await supabase
-      .from('drawing_submissions')
-      .select('status, student_id, assignment_id')
+      .from('drawing_submissions' as any)
+      // exam_attempt_id is what tells us this drawing belongs to a scheduled
+      // exam, so marking it has to move that attempt from provisional to final.
+      .select('status, student_id, assignment_id, exam_attempt_id')
       .eq('id', id)
       .single();
-    const wasAlreadyReviewed = ['reviewed', 'redo', 'completed'].includes(currentSub?.status || '');
+    const sub = currentSub as any;
+    const wasAlreadyReviewed = ['reviewed', 'redo', 'completed'].includes(sub?.status || '');
 
     const body = await request.json();
     const {
@@ -62,7 +70,7 @@ export async function PATCH(
     // Draft: save fields without changing status or sending notifications
     if (reviewAction === 'draft') {
       await supabase
-        .from('drawing_submissions')
+        .from('drawing_submissions' as any)
         .update({
           tutor_rating: tutor_rating || null,
           tutor_marks: tutorMarks,
@@ -97,15 +105,29 @@ export async function PATCH(
       await setSubmissionTags(id, tag_labels, user.id);
     }
 
+    // An exam drawing moves the student's total the moment it is marked.
+    //
+    // Best-effort: a teacher who has just graded a drawing must not see an
+    // error because a derived score could not be recomputed. The publish
+    // preflight recomputes every attempt again anyway, so a miss here is
+    // recovered rather than permanent.
+    if (sub?.exam_attempt_id) {
+      try {
+        await recomputeExamAttemptScore(sub.exam_attempt_id);
+      } catch (err) {
+        console.error('[Drawing review] exam score was not recomputed:', err);
+      }
+    }
+
     // When this drawing answers a class assignment, load it once: it drives the
     // grade scale (marks vs stars) for the student ping and the point scaling.
     let assignment:
       | { id: string; title: string; evaluation_type: string; max_marks: number }
       | null = null;
-    if (currentSub?.assignment_id) {
+    if (sub?.assignment_id) {
       const { data: a } = await (supabase.from('nexus_class_assignments' as any) as any)
         .select('id, title, evaluation_type, max_marks')
-        .eq('id', currentSub.assignment_id)
+        .eq('id', sub.assignment_id)
         .single();
       assignment = (a as any) ?? null;
     }

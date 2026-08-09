@@ -27,6 +27,7 @@ interface TeacherFilterBarProps {
   examRelevance: string;
   questionStatus: string;
   solutionFilter: string;
+  origin: string;
   total: number;
   loading: boolean;
   onDifficultyChange: (v: string) => void;
@@ -34,6 +35,7 @@ interface TeacherFilterBarProps {
   onExamRelevanceChange: (v: string) => void;
   onQuestionStatusChange: (v: string) => void;
   onSolutionFilterChange: (v: string) => void;
+  onOriginChange: (v: string) => void;
 }
 
 interface FilterConfig {
@@ -51,6 +53,7 @@ export default function TeacherFilterBar({
   examRelevance,
   questionStatus,
   solutionFilter,
+  origin,
   total,
   loading,
   onDifficultyChange,
@@ -58,6 +61,7 @@ export default function TeacherFilterBar({
   onExamRelevanceChange,
   onQuestionStatusChange,
   onSolutionFilterChange,
+  onOriginChange,
 }: TeacherFilterBarProps) {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [openFilter, setOpenFilter] = useState<string | null>(null);
@@ -65,6 +69,20 @@ export default function TeacherFilterBar({
   const chipRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const filters: FilterConfig[] = [
+    {
+      // First in the row because it answers the question teachers ask before any
+      // other: is this a real past paper question, or one we wrote ourselves?
+      key: 'origin',
+      label: 'Source',
+      value: origin,
+      options: [
+        { value: 'pyq', label: 'Previous year papers' },
+        { value: 'authored', label: 'Written in-house' },
+        { value: 'student_recalled', label: 'Student recalled' },
+        { value: 'imported', label: 'Imported' },
+      ],
+      onChange: onOriginChange,
+    },
     {
       key: 'difficulty',
       label: 'Difficulty',

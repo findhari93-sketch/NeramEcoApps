@@ -54,6 +54,8 @@ import type {
   QBShift,
 } from '../../types';
 import { QB_EXAM_TYPE_LABELS } from '../../types';
+import { buildPaperBlueprint, marksForQuestions } from './paper-marking';
+import { getPaperSectionBreakdown } from './question-bank';
 import {
   composeTest,
   createPlacement,
@@ -379,6 +381,29 @@ export async function generatePaperMockTest(
   const { title } = paperTitles(paper);
   const duration = paper.duration_minutes ?? null;
 
+  // The published marking scheme for this exam, expanded per question.
+  //
+  // Until now a paper mock was composed with no marks argument at all, so every
+  // question was worth 1 and nothing was penalised: a JEE Paper 2 "full paper"
+  // scored out of 77 instead of 200 and never deducted for a wrong answer.
+  // buildPaperBlueprint and marksForQuestions existed the whole time but lived
+  // in the Nexus app, which this package cannot import from. They now live in
+  // paper-marking.ts, which is what makes this call possible.
+  const breakdown = await getPaperSectionBreakdown(input.paperId, supabase);
+  const blueprint = buildPaperBlueprint(breakdown, paper.exam_type);
+
+  const { data: questionRows } = await supabase
+    .from('nexus_qb_questions')
+    .select('id, section, categories, question_format')
+    .in('id', questionIds);
+  const byId = new Map((questionRows || []).map((q: any) => [q.id, q]));
+  // Aligned with questionIds, in that order: marksForQuestions reads each
+  // question's own section rather than assuming sections are contiguous.
+  const orderedQuestions = questionIds.map(
+    (id) => byId.get(id) ?? { section: null, categories: null, question_format: null },
+  );
+  const { marks, negativeMarks } = marksForQuestions(orderedQuestions, blueprint);
+
   const test = await composeTest(
     {
       title,
@@ -387,7 +412,13 @@ export async function generatePaperMockTest(
       testKind: 'full',
       timerType: duration ? 'full' : 'none',
       durationMinutes: duration,
+      marks,
+      negativeMarks,
       shuffle: false, // A real paper is sat in its real order.
+      // Sections keep their paper order and the questions inside them shuffle,
+      // so two students sitting the same paper at the same time cannot simply
+      // read each other's answers off in order.
+      shuffleSections: true,
       isPublished: true,
       isRepository: true,
       createdFrom: 'qb_paper',
@@ -483,6 +514,92 @@ export async function setPaperStudentVisibility(
     .single();
   if (error) throw error;
   return data as unknown as NexusQBOriginalPaper;
+}
+
+export interface BulkPublishResult {
+  published: number;
+  already_visible: number;
+  /** Papers with neither questions nor a PDF, named so the gap is actionable. */
+  skipped: { id: string; label: string }[];
+}
+
+/** How a skipped paper is named back to the teacher, so they can go find it. */
+export function paperLabel(paper: Pick<NexusQBOriginalPaper, 'exam_type' | 'year' | 'session' | 'shift'>): string {
+  const suffix = [paper.session, paper.shift].filter(Boolean).join(' ');
+  return `${paper.exam_type} ${paper.year}${suffix ? ` ${suffix}` : ''}`;
+}
+
+/**
+ * Split papers into publish / skip / already, without touching the database.
+ *
+ * The gate matches `paperPublishBlocker`: a paper needs questions or a PDF,
+ * because with neither it would draw a card whose three faces are all dead.
+ */
+export function partitionForPublish(
+  papers: NexusQBOriginalPaper[],
+  hasQuestions: (paper: NexusQBOriginalPaper) => boolean,
+): { ready: string[]; skipped: { id: string; label: string }[]; alreadyVisible: number } {
+  const ready: string[] = [];
+  const skipped: { id: string; label: string }[] = [];
+  let alreadyVisible = 0;
+
+  for (const paper of papers) {
+    if (paper.is_student_visible) {
+      alreadyVisible++;
+      continue;
+    }
+    if (hasQuestions(paper) || paper.study_file_id) {
+      ready.push(paper.id);
+    } else {
+      skipped.push({ id: paper.id, label: paperLabel(paper) });
+    }
+  }
+
+  return { ready, skipped, alreadyVisible };
+}
+
+/**
+ * Publish every paper that has something to show, in one press.
+ *
+ * Publishing is per paper by design, but the first run of this feature means
+ * doing it two dozen times before a student sees anything, and a switch buried
+ * one tab deep in each paper reads as a chore rather than a decision. This
+ * applies the same readiness gate `paperPublishBlocker` uses, and reports what
+ * it refused rather than failing the whole batch on one unready paper.
+ *
+ * Unpublishing stays deliberate and stays per paper: taking something away from
+ * students who have started it should never be one press.
+ */
+export async function publishReadyPapers(
+  client?: TypedSupabaseClient,
+): Promise<BulkPublishResult> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: rows, error } = await supabase
+    .from(PAPERS as any)
+    .select('*')
+    .order('year', { ascending: false });
+  if (error) throw error;
+  const papers = (rows || []) as unknown as NexusQBOriginalPaper[];
+  if (papers.length === 0) return { published: 0, already_visible: 0, skipped: [] };
+
+  // One read for every paper's questions rather than a blocker call each.
+  const questionIdsByPaper = await loadPaperQuestionIds(papers, supabase);
+
+  const { ready, skipped, alreadyVisible } = partitionForPublish(
+    papers,
+    (paper) => (questionIdsByPaper.get(paperKey(paper)) || []).length > 0,
+  );
+
+  for (const batch of chunk(ready, IN_CHUNK)) {
+    const { error: updateError } = await supabase
+      .from(PAPERS as any)
+      .update({ is_student_visible: true })
+      .in('id', batch);
+    if (updateError) throw updateError;
+  }
+
+  return { published: ready.length, already_visible: alreadyVisible, skipped };
 }
 
 // ============================================================================

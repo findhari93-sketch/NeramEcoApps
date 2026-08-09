@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
-import { useMicrosoftAuth, getAccessToken, loginScopes } from '@neram/auth';
+import { useMicrosoftAuth, getAccessToken, getAccessTokenSilent, loginScopes } from '@neram/auth';
 import {
   resolveFlags,
   allFeaturesEnabled,
@@ -159,6 +159,16 @@ interface NexusAuthState {
   getToken: () => Promise<string | null>;
   /** Get token with extended teacher scopes (meetings, channels, calendar) */
   getTeacherToken: () => Promise<string | null>;
+  /**
+   * A token that can search the tenant file index, or null when it cannot.
+   *
+   * Silent only, and null is an ordinary answer rather than an error: before an
+   * admin consents to Files.Read.All in Azure this always returns null and the
+   * recording picker falls back to searching the two drives it could already
+   * reach. Never routed through getAccessToken, which would redirect the whole
+   * page for a permission nothing on screen actually requires.
+   */
+  getFileSearchToken: () => Promise<string | null>;
 
   // "View as Student" (impersonation)
   /** Active impersonation, if a teacher/admin is currently viewing as a student. */
@@ -387,6 +397,15 @@ export function useNexusAuth(): NexusAuthState {
 
   const getTeacherToken = useCallback(async () => {
     return getAccessToken(loginScopes.nexusTeacher);
+  }, []);
+
+  /**
+   * Silent, and null when the consent is not there. See the interface comment:
+   * getAccessToken would redirect the page instead of answering, which is the
+   * wrong trade for a permission the picker is designed to work without.
+   */
+  const getFileSearchToken = useCallback(async () => {
+    return getAccessTokenSilent(loginScopes.nexusFileSearch);
   }, []);
 
   // E2E test auth bypass: if nexus_test_token exists in localStorage,
@@ -867,6 +886,7 @@ export function useNexusAuth(): NexusAuthState {
     isAdmin: nexusRole === 'admin',
     getToken,
     getTeacherToken,
+    getFileSearchToken,
     impersonation: {
       active: !!impersonationToken,
       student: impersonationToken ? impersonationState!.student : null,

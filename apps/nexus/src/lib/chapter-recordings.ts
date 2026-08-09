@@ -49,6 +49,17 @@ export interface RecordingTrack {
    * recording but never which file it was.
    */
   recording_url: string | null;
+  /**
+   * The file's real name when Nexus could read it, NULL otherwise.
+   *
+   * describeRecordingUrl below is still the fallback and still handles every
+   * track attached before this column existed. What it cannot do is name a
+   * SharePoint list link, whose path ends in DispForm.aspx, or a share link,
+   * whose path ends in an opaque token. Those are exactly the two shapes the
+   * file picker produces, so the row that was meant to say which video it holds
+   * read "DispForm.aspx" instead.
+   */
+  recording_file_name?: string | null;
 }
 
 /** MUI chip colours, kept to the ones the theme defines. */
@@ -93,7 +104,14 @@ export interface TrackRow {
  * Falls back to the host rather than to an empty string: "neramclasses.
  * sharepoint.com" is a poor label and still tells a teacher more than a blank.
  */
-export function describeRecordingUrl(url: string | null | undefined): string {
+export function describeRecordingUrl(
+  url: string | null | undefined,
+  /** The stored file name, which beats anything that can be read out of a URL. */
+  fileName?: string | null,
+): string {
+  const stored = (fileName || '').trim();
+  if (stored) return stored;
+
   const raw = (url || '').trim();
   if (!raw) return 'No video attached';
 

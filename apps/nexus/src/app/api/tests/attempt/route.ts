@@ -10,6 +10,9 @@ import {
   saveAttemptAnswers,
   startOrResumeAttempt,
   submitAttempt,
+  getExamByClass,
+  getExamMakeup,
+  resolveExamWindowForStudent,
 } from '@neram/database';
 import { attemptSeed, seededShuffle } from '@/lib/seeded-shuffle';
 
@@ -111,11 +114,53 @@ export async function GET(request: NextRequest) {
         if (!placement.is_active || !placement.is_visible) {
           return NextResponse.json({ error: 'This test is not available' }, { status: 403 });
         }
-        if (placement.available_from && new Date(placement.available_from) > now) {
-          return NextResponse.json({ error: 'This test is not open yet' }, { status: 403 });
-        }
-        if (placement.available_until && new Date(placement.available_until) < now) {
-          return NextResponse.json({ error: 'This test has closed' }, { status: 403 });
+
+        /**
+         * An exam resolves its own window BEFORE the generic check below, and
+         * this ordering is load-bearing.
+         *
+         * The shared placement closes at the main closes_at. A student who has
+         * been granted a makeup is sitting a DIFFERENT window, so running the
+         * generic available_until check first would refuse every makeup student
+         * before their own grant was ever read. That bug would look like "the
+         * makeup feature does nothing", which is exactly the kind of thing that
+         * is only discovered by the student it happens to.
+         *
+         * The copy matters too: a closed exam is not an expired link, it is an
+         * exam this student was absent for, and the code says so.
+         */
+        if (placement.context_type === 'exam') {
+          const exam = await getExamByClass(placement.context_id);
+          if (exam) {
+            const makeup = await getExamMakeup(exam.id, user.id);
+            const window = resolveExamWindowForStudent(exam, makeup);
+
+            if (new Date(window.opens_at) > now) {
+              return NextResponse.json(
+                {
+                  error: `This exam opens at ${new Date(window.opens_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.`,
+                  code: 'EXAM_NOT_OPEN',
+                },
+                { status: 403 },
+              );
+            }
+            if (new Date(window.closes_at) < now) {
+              return NextResponse.json(
+                {
+                  error: 'This exam has closed. Ask your teacher if you need another sitting.',
+                  code: 'EXAM_CLOSED',
+                },
+                { status: 403 },
+              );
+            }
+          }
+        } else {
+          if (placement.available_from && new Date(placement.available_from) > now) {
+            return NextResponse.json({ error: 'This test is not open yet' }, { status: 403 });
+          }
+          if (placement.available_until && new Date(placement.available_until) < now) {
+            return NextResponse.json({ error: 'This test has closed' }, { status: 403 });
+          }
         }
 
         /**
@@ -170,7 +215,12 @@ export async function GET(request: NextRequest) {
       id: q.test_question_id,
       sort_order: q.sort_order,
       marks: q.marks,
-      negative_marks: 0,
+      // The real penalty, not a hardcoded 0. A student sitting an exam-faithful
+      // paper has to be told what a wrong answer costs before they answer it,
+      // otherwise the paper is testing a rule it never showed them.
+      negative_marks: q.negative_marks,
+      section: q.section,
+      section_order: q.section_order,
       qb_question_id: q.question_id,
       question_id: q.question_id,
       question: {
@@ -186,7 +236,14 @@ export async function GET(request: NextRequest) {
     // catch-up gates do. Math.random() here re-ordered the paper on every GET,
     // so a student who refreshed mid-attempt watched the questions rearrange
     // themselves around the answers they had already given.
-    if (test.shuffle_questions && !started.draw) {
+    //
+    // The !test.shuffle_sections guard is explicit rather than implied. A
+    // sectioned test always has a draw, so !started.draw already keeps this
+    // from firing today, but that is an accident of another function's
+    // behaviour. Without saying it here, one change to ensureTestDraw would
+    // scramble a sectioned paper's sections into each other and nothing would
+    // fail loudly.
+    if (test.shuffle_questions && !test.shuffle_sections && !started.draw) {
       const seed = attemptSeed(user.id, testId, Number(started.attempt.attempt_number) || 1);
       questions = seededShuffle(questions, seed);
     }

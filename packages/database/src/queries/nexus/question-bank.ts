@@ -1,6 +1,9 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { expandQBCategorySlugs } from './qb-tags';
+import { QB_SECTION_ORDER } from '../../types';
 import type {
+  QBQuestionSection,
+  NexusQBPaperSectionRow,
   QBQuestionFormat,
   QBDifficulty,
   QBExamRelevance,
@@ -36,6 +39,7 @@ import type {
   NexusQBAnswerKeyEntry,
   NexusQBQuestionReport,
   NexusQBReportWithContext,
+  NexusQBOrigin,
 } from '../../types';
 
 // ============================================
@@ -351,6 +355,51 @@ async function getQBCategoryCountsFallback(
 // ============================================
 
 /**
+ * Which questions appeared in a given exam sitting.
+ *
+ * `nexus_qb_question_sources` is the membership record, so "questions from JEE
+ * 2014" is a lookup there and then an id filter, never a column on the question
+ * itself. PostgREST cannot express the join inline, which is why this is a
+ * separate round trip.
+ *
+ * Shared by the student and teacher list queries deliberately. The teacher one
+ * used to accept these filters and silently drop them, so a teacher asking for
+ * one paper got the whole bank back and no error to explain it.
+ *
+ * Returns null when no paper filter was asked for, and an empty array when one
+ * was asked for and matched nothing. Callers must tell those apart.
+ */
+async function resolvePaperSourceIds(
+  filters: Pick<QBFilterState, 'exam_type' | 'source_year' | 'source_session' | 'source_shift'>,
+  supabase: TypedSupabaseClient,
+): Promise<string[] | null> {
+  if (!filters.exam_type) return null;
+
+  let sourceQuery = supabase
+    .from('nexus_qb_question_sources')
+    .select('question_id')
+    .eq('exam_type', filters.exam_type);
+
+  if (filters.source_year) {
+    sourceQuery = sourceQuery.eq('year', filters.source_year);
+  }
+  if (filters.source_session) {
+    const parsed = parseSessionKey(filters.source_session);
+    sourceQuery = sourceQuery.eq('session', parsed.session);
+    if (parsed.shift) {
+      sourceQuery = sourceQuery.eq('shift', parsed.shift);
+    }
+  }
+  if (filters.source_shift) {
+    sourceQuery = sourceQuery.eq('shift', filters.source_shift);
+  }
+
+  const { data, error } = await sourceQuery;
+  if (error) throw error;
+  return [...new Set((data || []).map((s: any) => s.question_id))];
+}
+
+/**
  * Main filtered question list with pagination.
  * Applies all filters from QBFilterState, enriches with sources/topic,
  * and optionally computes attempt_summary per question for a student.
@@ -401,34 +450,13 @@ export async function getQBQuestions(
   if (filters.paper_source === 'recalled') {
     query = query.not('confidence_tier', 'is', null);
   }
+  if (filters.origin && filters.origin.length > 0) {
+    query = query.in('origin' as any, filters.origin);
+  }
 
   // Source-based filters from sidebar (exam_type + source_year + source_session)
-  let sourceFilteredIds: string[] | null = null;
-  if (filters.exam_type) {
-    let sourceQuery = supabase
-      .from('nexus_qb_question_sources')
-      .select('question_id')
-      .eq('exam_type', filters.exam_type);
-
-    if (filters.source_year) {
-      sourceQuery = sourceQuery.eq('year', filters.source_year);
-    }
-    if (filters.source_session) {
-      const parsed = parseSessionKey(filters.source_session);
-      sourceQuery = sourceQuery.eq('session', parsed.session);
-      if (parsed.shift) {
-        sourceQuery = sourceQuery.eq('shift', parsed.shift);
-      }
-    }
-    if (filters.source_shift) {
-      sourceQuery = sourceQuery.eq('shift', filters.source_shift);
-    }
-
-    const { data: sourceData, error: sourceError } = await sourceQuery;
-    if (sourceError) throw sourceError;
-
-    sourceFilteredIds = [...new Set((sourceData || []).map((s: any) => s.question_id))];
-
+  const sourceFilteredIds = await resolvePaperSourceIds(filters, supabase);
+  if (sourceFilteredIds !== null) {
     if (sourceFilteredIds.length === 0) {
       return { questions: [], total: 0 };
     }
@@ -1372,6 +1400,21 @@ export async function getOrCreateOriginalPaper(
 }
 
 /**
+ * What a question parsed off a real paper counts as.
+ *
+ * Mirrors the 20260713180000 backfill rule: everything off a paper is 'pyq'
+ * except a drawing prompt, which carries a year source but is teacher-curated
+ * practice rather than a reproduced exam question.
+ *
+ * Exported for its test. The column defaults to 'authored', so getting this
+ * wrong does not fail loudly, it just makes the Source filter call every newly
+ * uploaded paper "written in-house" and nobody notices for months.
+ */
+export function originForParsedQuestion(format: QBQuestionFormat): NexusQBOrigin {
+  return format === 'DRAWING_PROMPT' ? 'authored' : 'pyq';
+}
+
+/**
  * Bulk insert question shells from parsed NTA data.
  */
 export async function bulkCreateDraftQuestions(
@@ -1409,7 +1452,13 @@ export async function bulkCreateDraftQuestions(
     exam_relevance: (examType === 'JEE_PAPER_2' ? 'JEE' : 'NATA') as QBExamRelevance,
     categories: q.categories,
     original_paper_id: paperId,
+    origin: originForParsedQuestion(q.question_format),
     display_order: q.question_number,
+    // The section the parser guessed, persisted rather than discarded. A
+    // teacher corrects it in the paper workspace; nothing downstream has to
+    // re-guess it from categories[0] ever again.
+    section: q.section || null,
+    section_order: q.section ? QB_SECTION_ORDER[q.section] ?? null : null,
     status: 'draft' as QBQuestionStatus,
     nta_question_id: q.nta_question_id,
     is_active: false,
@@ -1653,6 +1702,83 @@ export async function listOriginalPapers(
   return (data || []) as NexusQBOriginalPaper[];
 }
 
+/** A paper plus the per paper counts the management list draws. */
+export interface NexusQBPaperWithBreakdown extends NexusQBOriginalPaper {
+  /** Questions per category, falling back to question_format when untagged. */
+  section_breakdown: Record<string, number>;
+  active_count: number;
+  hindi_count: number;
+}
+
+/**
+ * Every paper with the counts its card needs, in two queries rather than 2N.
+ *
+ * The management list used to fetch each paper's full detail from the browser
+ * to derive these, so two dozen papers meant two dozen requests, each hauling
+ * back every question row to count them and throw them away. On a phone that is
+ * the difference between a list that appears and one that arrives in pieces.
+ */
+export async function listOriginalPapersWithBreakdown(
+  client?: TypedSupabaseClient
+): Promise<NexusQBPaperWithBreakdown[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const papers = await listOriginalPapers(supabase);
+  if (papers.length === 0) return [];
+
+  // Only the columns the counts need, for every paper at once.
+  const { data: rows, error } = await supabase
+    .from('nexus_qb_questions')
+    .select('original_paper_id, categories, question_format, is_active, status, question_text_hi')
+    .in('original_paper_id', papers.map((p) => p.id));
+  if (error) throw error;
+
+  return buildPaperBreakdowns(papers, (rows || []) as PaperBreakdownRow[]);
+}
+
+/** The columns `buildPaperBreakdowns` counts. */
+export interface PaperBreakdownRow {
+  original_paper_id: string | null;
+  categories: string[] | null;
+  question_format: string | null;
+  is_active: boolean | null;
+  status: string | null;
+  question_text_hi: string | null;
+}
+
+/**
+ * Roll question rows up into per paper counts.
+ *
+ * Pure, so the counting rules stay testable: an untagged question falls back to
+ * its format, a question in two categories counts once in each, and "active"
+ * means both the flag and the status agree.
+ */
+export function buildPaperBreakdowns(
+  papers: NexusQBOriginalPaper[],
+  rows: PaperBreakdownRow[],
+): NexusQBPaperWithBreakdown[] {
+  const byPaper = new Map<string, NexusQBPaperWithBreakdown>(
+    papers.map((p) => [p.id, { ...p, section_breakdown: {}, active_count: 0, hindi_count: 0 }])
+  );
+
+  for (const q of rows) {
+    const entry = q.original_paper_id ? byPaper.get(q.original_paper_id) : undefined;
+    if (!entry) continue;
+
+    const keys = q.categories && q.categories.length > 0
+      ? q.categories
+      : [q.question_format || 'OTHER'];
+    for (const key of keys) {
+      entry.section_breakdown[key] = (entry.section_breakdown[key] || 0) + 1;
+    }
+
+    if (q.is_active && q.status === 'active') entry.active_count++;
+    if (q.question_text_hi) entry.hindi_count++;
+  }
+
+  return papers.map((p) => byPaper.get(p.id)!);
+}
+
 /**
  * Get a single paper with stats.
  */
@@ -1787,6 +1913,20 @@ export async function getTeacherQBQuestions(
   }
   if (filters.search_text) {
     query = query.ilike('question_text', `%${filters.search_text}%`);
+  }
+  if (filters.origin && filters.origin.length > 0) {
+    query = query.in('origin' as any, filters.origin);
+  }
+
+  // Which paper the question came from. The API has always parsed these; until
+  // now this function ignored them, so "show me JEE 2014" quietly returned the
+  // entire bank.
+  const sourceFilteredIds = await resolvePaperSourceIds(filters, supabase);
+  if (sourceFilteredIds !== null) {
+    if (sourceFilteredIds.length === 0) {
+      return { questions: [], total: 0 };
+    }
+    query = query.in('id', sourceFilteredIds);
   }
 
   // Solution filter
@@ -2005,12 +2145,21 @@ export async function getPaperSectionBreakdown(
 
   const { data, error } = await supabase
     .from('nexus_qb_questions')
-    .select('categories, question_format')
+    .select('section, categories, question_format')
     .eq('original_paper_id', paperId);
   if (error) throw error;
 
   const breakdown: Record<string, number> = {};
   for (const q of (data || []) as any[]) {
+    // The persisted section is the answer when it exists. It counts a question
+    // exactly once, which the categories fallback below cannot: a question
+    // tagged ['mathematics','trigonometry'] lands in two buckets there, so the
+    // old breakdown could total more than the paper had questions.
+    if (q.section) {
+      breakdown[q.section] = (breakdown[q.section] || 0) + 1;
+      continue;
+    }
+
     const cats = q.categories as string[] | null;
     if (cats && cats.length > 0) {
       for (const cat of cats) {
@@ -2024,6 +2173,122 @@ export async function getPaperSectionBreakdown(
   }
 
   return breakdown;
+}
+
+/**
+ * Every question of a paper with the section it currently sits in.
+ *
+ * Ordered the way the paper is sat: sections in section_order, questions in
+ * display_order within them. Nulls sort last, so a question nobody has
+ * classified yet is visible at the bottom rather than silently first.
+ */
+export async function getPaperSections(
+  paperId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusQBPaperSectionRow[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('nexus_qb_questions')
+    .select('id, display_order, question_format, section, section_order')
+    .eq('original_paper_id', paperId)
+    .order('section_order', { ascending: true, nullsFirst: false })
+    .order('display_order', { ascending: true, nullsFirst: false });
+  if (error) throw error;
+
+  return (data || []).map((q: any) => ({
+    id: q.id,
+    question_number: q.display_order ?? null,
+    question_format: q.question_format,
+    section: q.section ?? null,
+    section_order: q.section_order ?? null,
+  }));
+}
+
+/**
+ * Set the section on specific questions of a paper.
+ *
+ * section_order is derived here from QB_SECTION_ORDER rather than accepted from
+ * the caller, so a teacher can never save a paper whose sections claim an order
+ * the rest of the system does not agree with. Passing section: null clears it.
+ *
+ * Scoped by paperId on every update: a stray question id from another paper
+ * cannot be relabelled through this route.
+ */
+export async function setQuestionSections(
+  paperId: string,
+  updates: Array<{ question_id: string; section: QBQuestionSection | null }>,
+  client?: TypedSupabaseClient
+): Promise<{ updated: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  if (updates.length === 0) return { updated: 0 };
+
+  // Group by target section so this is one statement per distinct section
+  // rather than one per question. A 77-question paper is at most 5 writes.
+  const bySection = new Map<string, string[]>();
+  for (const u of updates) {
+    const key = u.section ?? '__null__';
+    if (!bySection.has(key)) bySection.set(key, []);
+    bySection.get(key)!.push(u.question_id);
+  }
+
+  let updated = 0;
+  for (const [key, questionIds] of bySection) {
+    const section = key === '__null__' ? null : (key as QBQuestionSection);
+    const { data, error } = await supabase
+      .from('nexus_qb_questions')
+      .update({
+        section,
+        section_order: section ? QB_SECTION_ORDER[section] ?? null : null,
+      } as any)
+      .eq('original_paper_id', paperId)
+      .in('id', questionIds)
+      .select('id');
+    if (error) throw error;
+    updated += (data || []).length;
+  }
+
+  return { updated };
+}
+
+/**
+ * Re-run the section guess over a whole paper.
+ *
+ * Uses the same rule as the parser and the backfill migration, called through
+ * the injected classifier so the app owns the rule and this package owns the
+ * write. `onlyUnset` is the safe default: a teacher who has already corrected
+ * sections by hand does not want a button that quietly undoes that work.
+ */
+export async function reclassifyPaperSections(
+  paperId: string,
+  classify: (questionNumber: number, format: QBQuestionFormat) => QBQuestionSection,
+  opts?: { onlyUnset?: boolean },
+  client?: TypedSupabaseClient
+): Promise<{ updated: number; skipped: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const onlyUnset = opts?.onlyUnset !== false;
+
+  const { data, error } = await supabase
+    .from('nexus_qb_questions')
+    .select('id, display_order, question_format, section')
+    .eq('original_paper_id', paperId);
+  if (error) throw error;
+
+  const rows = (data || []) as any[];
+  const targets = onlyUnset ? rows.filter((q) => !q.section) : rows;
+  const skipped = rows.length - targets.length;
+
+  const updates = targets.map((q, i) => ({
+    question_id: q.id as string,
+    // A question with no display_order still needs a number. Its position in
+    // the fetched set is a worse guess than a real question number but a far
+    // better one than treating every such question as Q0 and calling the whole
+    // tail Mathematics.
+    section: classify(q.display_order ?? i + 1, q.question_format as QBQuestionFormat),
+  }));
+
+  const { updated } = await setQuestionSections(paperId, updates, supabase);
+  return { updated, skipped };
 }
 
 // ============================================
@@ -2334,6 +2599,12 @@ export async function promoteRecallToQB(
       confidence_tier: confidenceTier,
       recall_thread_id: threadId,
       answer_source: confidenceTier === 1 ? 'teacher_verified' : 'student_recalled',
+      // A question a student remembered, whoever later verified it. This stays
+      // 'student_recalled' even at tier 1, because `answer_source` above already
+      // records who confirmed the answer; origin records where it came from, and
+      // a teacher checking a recalled question does not turn it into a scan of
+      // the real paper.
+      origin: 'student_recalled' as NexusQBOrigin,
       original_paper_id: paperId,
       status: confidenceTier === 3 ? 'draft' : 'active',
       is_active: confidenceTier !== 3,

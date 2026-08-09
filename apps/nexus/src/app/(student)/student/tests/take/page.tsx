@@ -32,6 +32,7 @@ import MathText from '@/components/common/MathText';
 import AnswerInput from '@/components/tests/AnswerInput';
 import ExplanationPanel from '@/components/tests/ExplanationPanel';
 import OptionBody, { type TestOption } from '@/components/tests/OptionBody';
+import SectionStrip, { buildSectionRuns } from '@/components/tests/SectionStrip';
 import { optionKeyAt, sameChoice } from '@/lib/option-keys';
 import {
   DEFAULT_TEST_RETURN,
@@ -50,6 +51,10 @@ interface Question {
   id: string;
   sort_order: number;
   marks: number;
+  /** What a wrong answer costs. Zero on every test that does not penalise. */
+  negative_marks?: number;
+  /** Which part of the paper this question sits in, when the paper has sections. */
+  section?: string | null;
   question: {
     id: string;
     question_text: string;
@@ -433,6 +438,37 @@ export default function TakeTestPage() {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   }
 
+  /**
+   * Upload a photograph of a drawing.
+   *
+   * Reuses the EXISTING drawing upload route, which already verifies the token,
+   * normalises image/jpg to image/jpeg for the Android cameras that send the
+   * wrong MIME, and returns { url, path }. There was no reason for a second
+   * upload endpoint, and a second one would have needed the same two fixes.
+   */
+  const uploadDrawing = useCallback(
+    async (file: File): Promise<{ url: string; path?: string }> => {
+      const token = await getToken();
+      if (!token) throw new Error('Your session has expired. Sign in and try again.');
+
+      const form = new FormData();
+      form.append('file', file);
+      form.append('bucket', 'drawing-uploads');
+
+      const res = await fetch('/api/drawing/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.url) {
+        throw new Error(json?.error || 'That did not upload. Check your connection and try again.');
+      }
+      return { url: json.url, path: json.path };
+    },
+    [getToken],
+  );
+
   async function handleSubmit(autoSubmit = false) {
     if (submitting) return;
     setSubmitting(true);
@@ -495,6 +531,17 @@ export default function TakeTestPage() {
   const isPerQuestion = test?.test_type === 'per_question_timer';
   const answeredCount = questions.filter((q) => answers[q.question.id]).length;
   const unansweredCount = questions.length - answeredCount;
+
+  // Where the sections of this paper begin and end in the served order. Empty
+  // for an ordinary single-section test, in which case the strip renders nothing.
+  const sectionRuns = buildSectionRuns(
+    questions.map((q) => ({ id: q.question.id, section: q.section })),
+    answers,
+    (q) => q.id,
+  );
+
+  /** Does any question on this paper carry a penalty? Drives the warning below. */
+  const hasNegativeMarking = questions.some((q) => Number(q.negative_marks) > 0);
   const currentQuestion = questions[currentIndex];
 
   // =========================================================================
@@ -912,8 +959,10 @@ export default function TakeTestPage() {
   // block mapped over `options` unconditionally, and question_type was declared
   // on the interface and read nowhere. So the paper was unanswerable and the
   // student had no way to know why.
-  const isNumerical =
-    String(currentQuestion?.question.question_type || '').toUpperCase() === 'NUMERICAL';
+  const currentFormat = String(currentQuestion?.question.question_type || '').toUpperCase();
+  const isNumerical = currentFormat === 'NUMERICAL';
+  // A drawing question is answered with a photograph of the sheet.
+  const isDrawing = currentFormat === 'DRAWING_PROMPT' || currentFormat === 'IMAGE_BASED';
 
   const numericInput = currentQuestion ? (
     <AnswerInput
@@ -923,6 +972,18 @@ export default function TakeTestPage() {
       }}
       value={selectedAnswer ?? null}
       onChange={(v) => handleAnswer(currentQuestion.question.id, v)}
+    />
+  ) : null;
+
+  const drawingInput = currentQuestion ? (
+    <AnswerInput
+      question={{
+        question_id: currentQuestion.question.id,
+        question_format: currentFormat,
+      }}
+      value={selectedAnswer ?? null}
+      onChange={(v) => handleAnswer(currentQuestion.question.id, v)}
+      uploadDrawing={uploadDrawing}
     />
   ) : null;
 
@@ -1130,6 +1191,13 @@ export default function TakeTestPage() {
         sx={{ height: 3, flexShrink: 0 }}
       />
 
+      {/* Which section you are in. Self-hiding on a single-section paper. */}
+      <SectionStrip
+        runs={sectionRuns}
+        currentIndex={currentIndex}
+        onJump={(index) => setCurrentIndex(index)}
+      />
+
       {/* ================================================================= */}
       {/* MAIN CONTENT AREA                                                 */}
       {/* ================================================================= */}
@@ -1237,7 +1305,7 @@ export default function TakeTestPage() {
                 )}
 
                 {/* Options */}
-                {isNumerical ? numericInput : optionCards}
+                {isDrawing ? drawingInput : isNumerical ? numericInput : optionCards}
               </>
             )}
           </Box>
@@ -1438,7 +1506,30 @@ export default function TakeTestPage() {
                 </Typography>
               </Box>
             )}
+
+            {/* Per section, so a student can see they never opened Drawing. On
+                a 77-question paper "12 unanswered" does not tell them where. */}
+            {sectionRuns.length > 1 &&
+              sectionRuns
+                .filter((run) => run.answered < run.count)
+                .map((run) => (
+                  <Box
+                    key={`${run.key}-${run.start}`}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 3.5 }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      {run.label}: {run.answered} of {run.count} answered
+                    </Typography>
+                  </Box>
+                ))}
           </Box>
+
+          {hasNegativeMarking && unansweredCount > 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              This paper deducts marks for a wrong answer. A question you leave blank costs you
+              nothing, so a guess you are unsure of is worse than no answer.
+            </Typography>
+          )}
 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
             Once submitted, you cannot change your answers.

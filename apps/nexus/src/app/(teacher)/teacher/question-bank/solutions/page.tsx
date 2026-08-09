@@ -21,12 +21,12 @@ import {
   useTheme,
   LinearProgress,
 } from '@neram/ui';
-import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
+import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
   parseCSV,
@@ -195,17 +195,11 @@ export default function BulkSolutionUploadPage() {
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 960, mx: 'auto' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
-        <IconButton
-          size="small"
-          onClick={() => router.push('/teacher/question-bank')}
-        >
-          <ArrowBackOutlinedIcon />
-        </IconButton>
-        <Typography variant="h5" component="h1" fontWeight={700}>
-          Bulk Solution Upload
-        </Typography>
-      </Box>
+      <PageHeader
+        title="Bulk solution upload"
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+      />
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>

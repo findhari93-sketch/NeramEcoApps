@@ -4,12 +4,14 @@ import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { extractYouTubeId } from '@/lib/youtube';
 import { normalizeRecordingUrl } from '@/lib/sharepoint-transcript';
 import { resolveRecordingSource } from '@/lib/recording-source';
+import { readTrackLanguages, labelForCode } from '@/lib/track-languages';
 
 /**
  * One language track.
  *
- *   PATCH  -> edit it: title, recording link, label, publish/unpublish, and the
- *             generation knobs (segment length, questions served, pass mark).
+ *   PATCH  -> edit it: title, recording link, label, language, publish/unpublish,
+ *             and the generation knobs (segment length, questions served, pass
+ *             mark).
  *   DELETE -> archive it. Never a hard delete: nexus_class_recap_attempts
  *             cascades from the sections, so removing the row would destroy
  *             every student's passed checkpoints along with it.
@@ -23,6 +25,16 @@ import { resolveRecordingSource } from '@/lib/recording-source';
  * checkpoints and returns the track to draft, which is the same conclusion
  * reviveStudyVideoTrack reached for the same reason. Nothing did this before
  * because nothing offered a way to change the video.
+ *
+ * CHANGING THE LANGUAGE IS NOT THE SAME OPERATION, and the difference is the
+ * whole reason it exists. A recording filed under the wrong language is a
+ * mis-labelled row, not a different video: the audio, the transcript it was cut
+ * from and every checkpoint timing are all still correct. So this one KEEPS the
+ * checkpoints, keeps the publish state and keeps every student's progress, and
+ * the rule two paragraphs up deliberately does not carry over to it. Without
+ * this the only exits were Remove, which archives the row and makes the
+ * transcript and the checkpoints have to be built a second time, or Change the
+ * video, which clears them on purpose. Both threw away work that was right.
  */
 
 const EDITABLE = new Set([
@@ -72,9 +84,16 @@ export async function PATCH(
       const nextUrl = normalizeRecordingUrl(body.recording_url.trim());
       const videoSource = extractYouTubeId(nextUrl) ? 'youtube' : 'sharepoint';
 
+      // What the picker saw first, then what Graph reports. The picker's name is
+      // the only one available on a forced attach, where nothing is resolved.
+      let fileName: string | null = body.recording_file_name
+        ? String(body.recording_file_name).slice(0, 300)
+        : null;
+
       if (videoSource === 'sharepoint' && body.force !== true) {
         try {
-          await resolveRecordingSource(nextUrl);
+          const source = await resolveRecordingSource(nextUrl);
+          fileName = fileName || source.name;
         } catch (err) {
           const detail = err instanceof Error ? err.message : '';
           return NextResponse.json(
@@ -90,6 +109,9 @@ export async function PATCH(
       }
 
       patch.recording_url = nextUrl;
+      // Written even when null, because the old name described the old file and
+      // a stale name is worse than one derived from the URL.
+      patch.recording_file_name = fileName;
       patch.video_source = videoSource;
 
       if ((track.recording_url || '') !== nextUrl) {
@@ -101,6 +123,95 @@ export async function PATCH(
         patch.published_at = null;
         patch.generated_at = null;
         clearedCheckpoints = true;
+      }
+    }
+
+    /**
+     * Re-file the recording under a different language.
+     *
+     * Handled here rather than by adding 'language' to EDITABLE, because EDITABLE
+     * validates nothing and this needs three checks: the code has to be one an
+     * admin actually offers, the slot has to be free, and the label has to move
+     * with it. A bare passthrough would let a typo reach the CHECK constraint and
+     * come back as a 500.
+     */
+    let movedLanguage: string | null = null;
+    if (typeof body.language === 'string' && body.language.trim()) {
+      const language = body.language.trim().toLowerCase();
+
+      if (language !== track.language) {
+        const supabase = getSupabaseAdminClient() as any;
+        const languages = await readTrackLanguages(supabase);
+        if (!languages.some((l) => l.code === language)) {
+          return NextResponse.json(
+            { error: `Pick one of the offered languages: ${languages.map((l) => l.code).join(', ')}` },
+            { status: 400 },
+          );
+        }
+
+        /**
+         * The slot has to be empty, and "empty" includes archived.
+         *
+         * uq_class_recaps_study_file_language does not exclude archived rows, so
+         * a language whose recording was removed still holds its slot, which is
+         * the same fact createStudyVideoTrack has to revive around. Checked here
+         * so the teacher gets a sentence naming the recording in the way rather
+         * than a 23505 surfacing as a 500.
+         */
+        const { data: occupant } = await supabase
+          .from('nexus_class_recaps')
+          .select('id, status, language_label, title')
+          .eq('study_file_id', params.id)
+          .eq('language', language)
+          .maybeSingle();
+
+        const targetLabel = labelForCode(languages, language);
+        if (occupant) {
+          return occupant.status === 'archived'
+            ? NextResponse.json(
+                {
+                  error: `${targetLabel} already holds a recording that was removed earlier. Restore it by attaching a video to the ${targetLabel} row, or change that video, then move this one.`,
+                  code: 'LANGUAGE_ARCHIVED',
+                },
+                { status: 409 },
+              )
+            : NextResponse.json(
+                {
+                  error: `${targetLabel} already has a recording on this chapter. Remove that one first, or pick another language.`,
+                  code: 'LANGUAGE_TAKEN',
+                },
+                { status: 409 },
+              );
+        }
+
+        patch.language = language;
+        // The label is stored on the row on purpose (see track-languages.ts), so
+        // it has to travel with the code or the row keeps saying "English".
+        patch.language_label = body.language_label ? String(body.language_label) : targetLabel;
+
+        /**
+         * The title too, but only when it still ends in the old language.
+         *
+         * POST writes `${file.title} (${label})`, so the generated shape would
+         * otherwise read "Ch:1 History Of Architecture (English)" on a Tamil
+         * recording. A title a teacher typed by hand is left exactly as it is.
+         *
+         * BOTH the label and the bare code are matched, because the tracks that
+         * most need moving are the oldest ones. Stamping the label at creation
+         * arrived after the first tracks did, so those read "(en)" rather than
+         * "(English)" and a label-only check would silently skip exactly them.
+         */
+        const suffixes = [
+          track.language_label ? ` (${track.language_label})` : '',
+          ` (${track.language})`,
+        ].filter(Boolean);
+        const stale = suffixes.find((s) => typeof track.title === 'string' && track.title.endsWith(s));
+        if (stale) {
+          patch.title = `${track.title.slice(0, -stale.length)} (${patch.language_label})`;
+        }
+
+        // NOT cleared, unlike a video change. Same audio, same timings.
+        movedLanguage = String(patch.language_label);
       }
     }
 
@@ -147,16 +258,47 @@ export async function PATCH(
     }
 
     const supabase = getSupabaseAdminClient() as any;
-    const { data, error } = await supabase
-      .from('nexus_class_recaps')
-      .update(patch)
-      .eq('id', params.trackId)
-      .select('*')
-      .single();
+    const save = () =>
+      supabase.from('nexus_class_recaps').update(patch).eq('id', params.trackId).select('*').single();
+
+    let { data, error } = await save();
+
+    /**
+     * The schema is a release behind the code.
+     *
+     * Migrations here are applied by GitHub Actions during deploy and have
+     * silently no-opped before, so recording_file_name can be absent while this
+     * code is live. Dropping it and retrying costs a display name that already
+     * has a fallback; not retrying would make every video change 500.
+     */
+    if (
+      (error as { code?: string })?.code === 'PGRST204' &&
+      (error as { message?: string })?.message?.includes('recording_file_name')
+    ) {
+      console.warn('[video-tracks] recording_file_name column missing, saving without it');
+      delete patch.recording_file_name;
+      ({ data, error } = await save());
+    }
     if (error) throw error;
 
-    return NextResponse.json({ track: data, clearedCheckpoints });
+    return NextResponse.json({ track: data, clearedCheckpoints, movedLanguage });
   } catch (err) {
+    /**
+     * The language slot was taken between the check above and the update.
+     *
+     * Only reachable as a race, since the ordinary case is answered with a 409
+     * that names the occupant. Caught anyway so two teachers pressing Move at
+     * the same instant get a conflict rather than a 500.
+     */
+    if ((err as { code?: string })?.code === '23505') {
+      return NextResponse.json(
+        {
+          error: 'That language was given a recording a moment ago. Reopen this dialog to see it.',
+          code: 'LANGUAGE_TAKEN',
+        },
+        { status: 409 },
+      );
+    }
     const message = err instanceof Error ? err.message : 'Failed to update the track';
     return NextResponse.json({ error: message }, { status: message === 'Not authorized' ? 403 : 500 });
   }

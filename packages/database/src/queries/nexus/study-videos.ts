@@ -104,6 +104,12 @@ export interface StudyVideoTrack {
  */
 export interface StaffStudyVideoTrack extends StudyVideoTrack {
   recording_url: string | null;
+  /**
+   * The file's real name, or NULL for a track attached before it was recorded
+   * and for any link the preflight could not resolve. NULL means "derive it from
+   * the URL", which is what every reader did before this column existed.
+   */
+  recording_file_name: string | null;
 }
 
 export interface StudyVideoState {
@@ -163,6 +169,23 @@ function isServable(row: { status: string; readiness: string | null }): boolean 
   return row.status === 'published' && (row.readiness ?? 'ready') === 'ready';
 }
 
+/**
+ * PostgREST's "you named a column I do not have".
+ *
+ * Worth knowing by name because of how this environment fails: migrations are
+ * applied by GitHub Actions during deploy, and `supabase db push` has silently
+ * no-opped here before, so code can reach production a full release ahead of its
+ * schema. Writing recording_file_name unconditionally would then turn a missing
+ * cosmetic column into "no teacher can attach a recording at all", which is a
+ * wildly disproportionate failure for a field whose absence has a fallback.
+ */
+const COLUMN_MISSING = 'PGRST204';
+
+function isMissingColumn(error: unknown, column: string): boolean {
+  const e = error as { code?: string; message?: string } | null;
+  return e?.code === COLUMN_MISSING && !!e.message?.includes(column);
+}
+
 export class TrackLanguageTakenError extends Error {
   code = 'TRACK_LANGUAGE_TAKEN';
   constructor(language: string) {
@@ -176,6 +199,16 @@ export interface CreateStudyVideoTrackInput {
   languageLabel?: string | null;
   title?: string | null;
   recordingUrl: string;
+  /**
+   * The real name of the file behind recordingUrl, when the caller knows it.
+   *
+   * Optional and NULL-friendly on purpose: the display name is derived from the
+   * URL when this is absent, which is what every track created before the column
+   * existed relies on. It is stored only because the URL cannot always give it
+   * up, a SharePoint list link reading "DispForm.aspx" being the case that made
+   * the derived name useless.
+   */
+  recordingFileName?: string | null;
   /**
    * Which player the student gets. Passed in rather than sniffed here: the
    * YouTube id parser lives in the nexus app, and this package must not reach
@@ -243,29 +276,37 @@ export async function createStudyVideoTrack(
     return reviveStudyVideoTrack(existing, input, supabase);
   }
 
-  const { data, error } = await supabase
-    .from(RECAPS)
-    .insert({
-      // Both parents deliberately absent: a track belongs to a chapter, and
-      // chk_class_recaps_single_parent refuses a row that claims a class too.
-      scheduled_class_id: null,
-      classroom_id: null,
-      study_file_id: input.studyFileId,
-      language: input.language,
-      language_label:
-        input.languageLabel || DEFAULT_LANGUAGE_LABELS[input.language] || input.language,
-      title:
-        input.title ||
-        `${input.languageLabel || DEFAULT_LANGUAGE_LABELS[input.language] || input.language} recording`,
-      recording_url: input.recordingUrl,
-      transcript_url: input.transcriptUrl ?? null,
-      video_source: input.videoSource ?? 'sharepoint',
-      status: 'draft',
-      readiness: 'pending',
-      created_by: input.createdBy ?? null,
-    })
-    .select('*')
-    .single();
+  const row: Record<string, unknown> = {
+    // Both parents deliberately absent: a track belongs to a chapter, and
+    // chk_class_recaps_single_parent refuses a row that claims a class too.
+    scheduled_class_id: null,
+    classroom_id: null,
+    study_file_id: input.studyFileId,
+    language: input.language,
+    language_label:
+      input.languageLabel || DEFAULT_LANGUAGE_LABELS[input.language] || input.language,
+    title:
+      input.title ||
+      `${input.languageLabel || DEFAULT_LANGUAGE_LABELS[input.language] || input.language} recording`,
+    recording_url: input.recordingUrl,
+    recording_file_name: input.recordingFileName ?? null,
+    transcript_url: input.transcriptUrl ?? null,
+    video_source: input.videoSource ?? 'sharepoint',
+    status: 'draft',
+    readiness: 'pending',
+    created_by: input.createdBy ?? null,
+  };
+
+  let { data, error } = await supabase.from(RECAPS).insert(row).select('*').single();
+
+  // The schema is a release behind the code. Attach the recording anyway and
+  // lose only the display name, which has a fallback, rather than refusing the
+  // whole operation. See COLUMN_MISSING above for why this is not theoretical.
+  if (error && isMissingColumn(error, 'recording_file_name')) {
+    console.warn('[study-videos] recording_file_name column missing, attaching without it');
+    delete row.recording_file_name;
+    ({ data, error } = await supabase.from(RECAPS).insert(row).select('*').single());
+  }
 
   if (error) {
     // Still caught, as the backstop for two teachers pressing save at the same
@@ -307,6 +348,9 @@ async function reviveStudyVideoTrack(
   const patch: Record<string, unknown> = {
     status: 'draft',
     recording_url: input.recordingUrl,
+    // Always rewritten, including to NULL. The old name described the old file,
+    // and a stale name is worse than a derived one.
+    recording_file_name: input.recordingFileName ?? null,
     video_source: input.videoSource ?? 'sharepoint',
     // Only overwrite what the caller actually supplied. A revive should not
     // silently rename a track the teacher had titled by hand.
@@ -321,12 +365,25 @@ async function reviveStudyVideoTrack(
     patch.generated_at = null;
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from(RECAPS)
     .update(patch)
     .eq('id', existing.id)
     .select('*')
     .single();
+
+  // Same degradation as the insert path: a missing column must not be the reason
+  // a teacher cannot restore a recording they removed by mistake.
+  if (error && isMissingColumn(error, 'recording_file_name')) {
+    console.warn('[study-videos] recording_file_name column missing, restoring without it');
+    delete patch.recording_file_name;
+    ({ data, error } = await supabase
+      .from(RECAPS)
+      .update(patch)
+      .eq('id', existing.id)
+      .select('*')
+      .single());
+  }
   if (error) throw error;
 
   return {
@@ -392,7 +449,11 @@ export async function listStudyVideoTracks(
 
   const rows = (data || []).sort(makeByLanguage(languageOrder));
   const counts = await sectionCounts(rows.map((r) => r.id), supabase);
-  return rows.map((r) => ({ ...toTrack(r, counts), recording_url: r.recording_url ?? null }));
+  return rows.map((r) => ({
+    ...toTrack(r, counts),
+    recording_url: r.recording_url ?? null,
+    recording_file_name: r.recording_file_name ?? null,
+  }));
 }
 
 /**
@@ -461,6 +522,15 @@ export async function getStudyVideoState(
 
 /** One language a chapter is available in, ready to draw as a chip. */
 export interface StudyVideoLanguage {
+  /**
+   * The track to open, which is what turns this from a label into a way in.
+   *
+   * Its absence was the whole reason the chips on a chapter card did nothing:
+   * they looked exactly like buttons, a student tapped one, and the card opened
+   * the PDF because the payload had no id to navigate to. Free to carry, since
+   * the query below already selects it to count checkpoints.
+   */
+  track_id: string;
   code: TrackLanguage;
   /** The label stored on the track, so a language nobody offers any more still reads. */
   label: string;
@@ -511,6 +581,7 @@ export async function getStudyVideoSummaryMap(
     const gates = trackGatesChapter(counts.get(row.id) || 0);
     if (!entry.languages.some((l) => l.code === row.language)) {
       entry.languages.push({
+        track_id: row.id,
         code: row.language,
         label: labelFor(row.language, row.language_label),
         gates,

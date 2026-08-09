@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Box, Typography, Button, CircularProgress, Chip, Paper } from '@neram/ui';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
@@ -39,6 +39,14 @@ interface Section {
   locked: boolean;
 }
 
+/** The same chapter in another language, already published to this student. */
+interface Sibling {
+  id: string;
+  language: string;
+  language_label: string;
+  progress_status: 'in_progress' | 'completed' | 'locked' | null;
+}
+
 interface StrippedQuestion {
   id: string;
   question_text: string;
@@ -58,6 +66,8 @@ export default function StudyTrackWatchPage() {
   const params = useParams();
   const router = useRouter();
   const trackId = params?.trackId as string;
+  /** The folder the student came from, so Back can put them back in it. */
+  const backFolder = useSearchParams().get('folder');
   const { getToken, loading: authLoading } = useNexusAuthContext();
   const authFetch = useAuthFetch();
 
@@ -69,6 +79,7 @@ export default function StudyTrackWatchPage() {
     title: string;
   } | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
+  const [siblings, setSiblings] = useState<Sibling[]>([]);
   const [mode, setMode] = useState<'gated' | 'revision'>('gated');
   const [source, setSource] = useState<VideoSource | null>(null);
   const [watermark, setWatermark] = useState<{ name: string; code: string } | null>(null);
@@ -100,6 +111,7 @@ export default function StudyTrackWatchPage() {
       const data = await authFetch(`/api/student/study-videos/tracks/${trackId}`);
       setTrack(data.track);
       setSections(data.sections || []);
+      setSiblings(data.siblings || []);
       setMode(data.mode);
 
       const embed = await authFetch(
@@ -211,7 +223,24 @@ export default function StudyTrackWatchPage() {
     [activeIdx, authFetch, flushNow, sections, trackId],
   );
 
-  const backToChapter = () => router.push('/student/study-materials');
+  /**
+   * Back to the folder they came from, not to the top of the tree.
+   *
+   * This used to push a bare /student/study-materials, which drops ?folder= and
+   * drops a student who was four folders deep at the root with no trail back.
+   * The folder rides in on the link that opened this page, so all that is needed
+   * is to hand it back.
+   */
+  const backToChapter = () =>
+    router.push(
+      backFolder ? `/student/study-materials?folder=${encodeURIComponent(backFolder)}` : '/student/study-materials',
+    );
+
+  /** Same recording, other language, keeping the way back. */
+  const switchTo = (id: string) =>
+    router.push(
+      `/student/study-materials/watch/${id}${backFolder ? `?folder=${encodeURIComponent(backFolder)}` : ''}`,
+    );
 
   if (loading) {
     return (
@@ -254,6 +283,42 @@ export default function StudyTrackWatchPage() {
         <Chip size="small" label={track.language_label} />
         {mode === 'revision' && <Chip size="small" color="success" label="Revision" />}
       </Box>
+
+      {/*
+        The other languages, one press away.
+
+        Switching used to mean leaving: Back to the top of the tree, find the
+        chapter again, open the PDF, press the other button in its footer. Four
+        steps to answer "I cannot follow this one", which is a question a student
+        asks in the first thirty seconds. Nothing is lost by moving, since each
+        recording keeps its own position and its own checkpoints, and finishing
+        EITHER satisfies the chapter.
+      */}
+      {siblings.length > 0 && (
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}
+        >
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+            Also recorded in
+          </Typography>
+          {siblings.map((s) => (
+            <Button
+              key={s.id}
+              size="small"
+              variant="outlined"
+              startIcon={
+                s.progress_status === 'completed' ? <CheckCircleRoundedIcon /> : <PlayArrowRoundedIcon />
+              }
+              color={s.progress_status === 'completed' ? 'success' : 'primary'}
+              onClick={() => switchTo(s.id)}
+              sx={{ minHeight: 44, textTransform: 'none', flexShrink: 0 }}
+            >
+              {s.language_label}
+              {s.progress_status === 'in_progress' && ' (continue)'}
+            </Button>
+          ))}
+        </Box>
+      )}
 
       {banner && (
         <Paper

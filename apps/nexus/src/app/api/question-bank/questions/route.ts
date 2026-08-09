@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
         ? params.get('confidence_tier')!.split(',').map(Number) as any
         : undefined,
       paper_source: (params.get('paper_source') as any) || undefined,
+      origin: params.get('origin') ? (params.get('origin')!.split(',') as any) : undefined,
     };
 
     // Teachers see all statuses; students only see active questions

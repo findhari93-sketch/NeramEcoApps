@@ -109,6 +109,80 @@ export function pickTestDraw(
   return window;
 }
 
+/** A question that knows which part of its paper it belongs to. */
+export interface SectionedItem {
+  id: string;
+  section: string | null;
+  section_order: number | null;
+}
+
+/**
+ * The questions for one sitting of a SECTIONED paper.
+ *
+ * A real exam paper is not one bag of questions. It is Mathematics, then
+ * Aptitude, then Drawing, and a candidate works through them in that order. So
+ * the shuffle has to happen inside each section and never across them: two
+ * students sitting the same paper at adjacent desks see different question
+ * orders, but both still sit Mathematics first.
+ *
+ * Built on pickTestDraw rather than reimplementing Fisher-Yates, with the
+ * section folded into the seed so two sections of the same length cannot draw
+ * the same permutation.
+ *
+ * ORDERING OF THE SECTIONS THEMSELVES is by the smallest section_order in each
+ * group, with first appearance as the tiebreak, and NEVER by the section name.
+ * Ordering by name would mean renaming "Aptitude" to "General Aptitude" in a
+ * label map silently reordered a live paper.
+ *
+ * A group with no section sorts last, so an unclassified question lands at the
+ * end where it is visible rather than silently opening the paper.
+ *
+ * The return value is a flat array in served order, exactly like pickTestDraw.
+ * That is what lets nexus_test_draws.question_ids keep its shape and its
+ * meaning, and why applyTestDraw, translateDrawnAnswers, buildTestOptionMaps
+ * and submitAttempt all need no change at all: the DRAW carries the order, the
+ * QUESTION carries its label.
+ */
+export function pickSectionedDraw(
+  items: SectionedItem[],
+  serveBySection: Map<string, number> | null,
+  attemptNumber: number,
+  seed: string,
+): string[] {
+  const groups = new Map<string, { order: number; firstSeen: number; ids: string[] }>();
+
+  items.forEach((item, i) => {
+    if (!item?.id) return;
+    const key = item.section ?? '__unsectioned__';
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        // An unsectioned group always sorts last, whatever number it carries.
+        order: item.section ? item.section_order ?? 98 : 99,
+        firstSeen: i,
+        ids: [],
+      };
+      groups.set(key, group);
+    } else if (item.section && item.section_order != null) {
+      // The smallest order in the group wins, so one row with a stale
+      // section_order cannot drag a whole section out of place.
+      group.order = Math.min(group.order, item.section_order);
+    }
+    group.ids.push(item.id);
+  });
+
+  const ordered = Array.from(groups.entries()).sort(
+    (a, b) => a[1].order - b[1].order || a[1].firstSeen - b[1].firstSeen,
+  );
+
+  const out: string[] = [];
+  for (const [key, group] of ordered) {
+    const serve = serveBySection?.get(key) ?? group.ids.length;
+    out.push(...pickTestDraw(group.ids, serve, attemptNumber, `${seed}:${key}`));
+  }
+  return out;
+}
+
 /**
  * The option order for one question in one attempt, as the original ids in
  * displayed order. `['c','a','d','b']` means the option shown first is the

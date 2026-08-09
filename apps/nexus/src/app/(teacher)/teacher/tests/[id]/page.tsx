@@ -42,6 +42,8 @@ import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
+import ExamScheduleDialog from '@/components/scheduled-exams/ExamScheduleDialog';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import MathText from '@/components/common/MathText';
 import QuestionPreviewText from '@/components/question-bank/QuestionPreviewText';
@@ -152,6 +154,7 @@ export default function TestDetailPage() {
   const [tab, setTab] = useState<'overview' | 'results'>('overview');
   const [duplicating, setDuplicating] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [examOpen, setExamOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [assignFrom, setAssignFrom] = useState('');
   const [assignUntil, setAssignUntil] = useState('');
@@ -491,6 +494,19 @@ export default function TestDetailPage() {
         >
           Assign
         </Button>
+        {/* Any paper in the library can be sat as an exam, not only one built
+            from a question paper. This is the second of the three doors into
+            ExamScheduleDialog, beside the paper workspace and the timetable. */}
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<EventAvailableOutlinedIcon />}
+          onClick={() => setExamOpen(true)}
+          disabled={busy}
+          sx={{ textTransform: 'none', minHeight: 44 }}
+        >
+          Schedule as exam
+        </Button>
         <Button
           variant="outlined"
           size="small"
@@ -790,6 +806,15 @@ export default function TestDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ExamScheduleDialog
+        open={examOpen}
+        onClose={() => setExamOpen(false)}
+        testId={testId}
+        testTitle={test?.title ?? null}
+        classroomId={activeClassroom?.id ?? null}
+        onScheduled={() => load()}
+      />
 
       {/* Assign dialog */}
       <Dialog open={assignOpen} onClose={() => !busy && setAssignOpen(false)} fullWidth maxWidth="xs">

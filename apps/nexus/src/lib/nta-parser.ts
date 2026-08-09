@@ -1,4 +1,12 @@
-import type { QBQuestionFormat, NTAParsedQuestion, NTAParsedPaper } from '@neram/database';
+import {
+  QB_SECTION_LABELS,
+  QB_SECTION_ORDER,
+  type QBExamType,
+  type QBQuestionFormat,
+  type QBQuestionSection,
+  type NTAParsedQuestion,
+  type NTAParsedPaper,
+} from '@neram/database';
 
 /**
  * Parse pasted NTA answer sheet text into structured question data.
@@ -16,7 +24,10 @@ import type { QBQuestionFormat, NTAParsedQuestion, NTAParsedPaper } from '@neram
  * CRITICAL: "Chosen Option" is the STUDENT's response, NOT the correct answer.
  * We parse it but explicitly DISCARD it.
  */
-export function parseNTAAnswerSheet(rawText: string): NTAParsedPaper {
+export function parseNTAAnswerSheet(
+  rawText: string,
+  examType: QBExamType = 'JEE_PAPER_2',
+): NTAParsedPaper {
   const warnings: string[] = [];
   const questions: NTAParsedQuestion[] = [];
 
@@ -89,7 +100,7 @@ export function parseNTAAnswerSheet(rawText: string): NTAParsedPaper {
     //   Section B (Math Numerical): Q21-Q25
     //   Aptitude Test: Q26-Q75
     //   Drawing Test: Q76-Q77
-    const { section, categories } = classifyQuestion(questionNumber, questionFormat);
+    const { section, categories } = classifyQuestion(questionNumber, questionFormat, examType);
 
     questions.push({
       question_number: questionNumber,
@@ -107,17 +118,12 @@ export function parseNTAAnswerSheet(rawText: string): NTAParsedPaper {
     sectionCounts.set(q.section, (sectionCounts.get(q.section) || 0) + 1);
   }
 
-  const sectionLabels: Record<string, string> = {
-    math_mcq: 'Mathematics (MCQ)',
-    math_numerical: 'Mathematics (Numerical)',
-    aptitude: 'Aptitude Test',
-    drawing: 'Drawing Test',
-  };
-
-  const sections = Array.from(sectionCounts.entries()).map(([key, count]) => ({
-    name: sectionLabels[key] || key,
-    count,
-  }));
+  const sections = Array.from(sectionCounts.entries())
+    .sort((a, b) => (SECTION_ORDER_OF[a[0]] ?? 99) - (SECTION_ORDER_OF[b[0]] ?? 99))
+    .map(([key, count]) => ({
+      name: QB_SECTION_LABELS[key as QBQuestionSection] || key,
+      count,
+    }));
 
   return {
     questions,
@@ -127,22 +133,65 @@ export function parseNTAAnswerSheet(rawText: string): NTAParsedPaper {
   };
 }
 
+const SECTION_ORDER_OF: Record<string, number> = QB_SECTION_ORDER;
+
+/** The broad topic slug that goes into categories[] for each section. */
+const SECTION_CATEGORY: Record<QBQuestionSection, string> = {
+  math_mcq: 'mathematics',
+  math_numerical: 'mathematics',
+  aptitude: 'aptitude',
+  drawing: 'drawing',
+};
+
 /**
- * Classify a question into section and categories based on position in JEE Paper 2.
+ * Which section a question belongs to.
+ *
+ * This is the single definition of the guess. The same rule is reproduced in
+ * SQL by 20260827090000_nexus_qb_question_sections.sql for the backfill, and
+ * called again server-side when a teacher presses "Re-run the guess", so the
+ * three can never drift.
+ *
+ * Priority order matters:
+ *   1. A DRAWING_PROMPT is a drawing question wherever it sits. Format beats
+ *      position, so a paper that numbers its drawing prompts differently still
+ *      lands right.
+ *   2. JEE Paper 2 has a published structure: Q1-20 maths MCQ, Q21-25 maths
+ *      numerical, Q26-75 aptitude, Q76+ drawing.
+ *   3. NATA's boundaries move between years, so guessing by position there
+ *      would be confidently wrong. Fall back to the format alone and let the
+ *      teacher correct it in the paper workspace. A visible wrong guess a
+ *      teacher can fix beats an invisible one.
+ *
+ * Every guess is correctable per question, so none of this is load-bearing on
+ * its own. What is load-bearing is that it is ONE rule in ONE place.
  */
-function classifyQuestion(
+export function classifyQuestion(
   questionNumber: number,
-  format: QBQuestionFormat
-): { section: NTAParsedQuestion['section']; categories: string[] } {
-  if (questionNumber <= 20) {
-    return { section: 'math_mcq', categories: ['mathematics'] };
+  format: QBQuestionFormat,
+  examType: QBExamType = 'JEE_PAPER_2',
+): { section: QBQuestionSection; section_order: number; categories: string[] } {
+  const section = guessSection(questionNumber, format, examType);
+  return {
+    section,
+    section_order: QB_SECTION_ORDER[section],
+    categories: [SECTION_CATEGORY[section]],
+  };
+}
+
+function guessSection(
+  questionNumber: number,
+  format: QBQuestionFormat,
+  examType: QBExamType,
+): QBQuestionSection {
+  if (format === 'DRAWING_PROMPT') return 'drawing';
+
+  if (examType === 'JEE_PAPER_2') {
+    if (questionNumber <= 20) return 'math_mcq';
+    if (questionNumber <= 25) return 'math_numerical';
+    if (questionNumber <= 75) return 'aptitude';
+    return 'drawing';
   }
-  if (questionNumber <= 25) {
-    return { section: 'math_numerical', categories: ['mathematics'] };
-  }
-  if (questionNumber <= 75) {
-    return { section: 'aptitude', categories: ['aptitude'] };
-  }
-  // Q76+
-  return { section: 'drawing', categories: ['drawing'] };
+
+  // NATA and anything else: format only.
+  return format === 'NUMERICAL' ? 'math_numerical' : 'aptitude';
 }

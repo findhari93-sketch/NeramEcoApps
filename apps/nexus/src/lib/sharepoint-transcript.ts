@@ -15,9 +15,12 @@
  * for this class yet") while the transcript sat readable on the Teams artifact
  * API the whole time. Do not add it back without a fresh probe.
  *
- * What remains is a genuine long shot: Teams does not export a .vtt next to the
- * .mp4, so this only finds a transcript somebody put there by hand. It stays
- * because it is a single call and lib/transcript-resolver runs it last.
+ * What remains only finds a .vtt somebody put next to the .mp4 by hand, because
+ * Teams does not export one there. That used to make it a long shot kept alive
+ * on the grounds that it is a single call. It is now a supported workflow: a
+ * teacher downloads the transcript from Stream once, drops it beside the video
+ * in the class-videos tree, and "Try fetching it" answers without an upload. See
+ * pickSiblingVtt for the rule that makes a folder holding two languages safe.
  *
  * Throws one of: NO_ACCESS | VIDEO_NOT_FOUND | NO_TRANSCRIPT (callers map these
  * to friendly messages), or a generic Error for unexpected Graph failures.
@@ -54,6 +57,57 @@ export function encodeSharingUrl(url: string): string {
   const base64 = Buffer.from(url, 'utf-8').toString('base64');
   const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   return `u!${base64url}`;
+}
+
+/** Everything before the last dot. "Ch1 History en.mp4" -> "Ch1 History en". */
+function baseName(name: string): string {
+  const cut = name.lastIndexOf('.');
+  return (cut > 0 ? name.slice(0, cut) : name).toLowerCase();
+}
+
+/**
+ * Which `.vtt` in this folder belongs to THIS video.
+ *
+ * It used to be `.find(endsWith('.vtt'))`, the first one in whatever order Graph
+ * returned. That was harmless while a folder held one recording and is wrong the
+ * moment it holds a chapter's English and Tamil videos side by side, which is
+ * exactly the layout Nexus now asks teachers to use so that this lookup works at
+ * all: the Tamil track would be handed the English transcript, its checkpoints
+ * would be cut from the wrong audio, and every timestamp would land in the middle
+ * of nothing. Nothing would report a failure, because a transcript WAS found.
+ *
+ * Matching on the base name first fixes that. The old behaviour survives as the
+ * fallback, so a folder with one video and a differently-named transcript keeps
+ * working exactly as it did.
+ */
+export interface SiblingVtt {
+  id?: string;
+  name: string;
+  /** Graph's short-lived pre-authenticated URL, when the listing carried one. */
+  '@microsoft.graph.downloadUrl'?: string;
+}
+
+export function pickSiblingVtt(
+  children: unknown,
+  videoName: string | undefined,
+): SiblingVtt | null {
+  if (!Array.isArray(children)) return null;
+
+  const vtts = (children as SiblingVtt[]).filter(
+    (f) => typeof f?.name === 'string' && f.name.toLowerCase().endsWith('.vtt'),
+  );
+  if (!vtts.length) return null;
+
+  if (videoName) {
+    const stem = baseName(videoName);
+    const exact = vtts.find((f) => baseName(f.name) === stem);
+    if (exact) return exact;
+  }
+
+  // One transcript and no name match is not ambiguous, so take it. Several with
+  // no match IS ambiguous, and guessing there is how the wrong one gets used;
+  // the teacher uploads it by hand instead, which is the primary path anyway.
+  return vtts.length === 1 ? vtts[0] : null;
 }
 
 export async function fetchTranscriptFromSharePoint(
@@ -94,9 +148,7 @@ export async function fetchTranscriptFromSharePoint(
       );
       if (childrenRes.ok) {
         const childrenData = await childrenRes.json();
-        const vttFile = childrenData.value?.find((f: { name?: string }) =>
-          f.name?.toLowerCase().endsWith('.vtt'),
-        );
+        const vttFile = pickSiblingVtt(childrenData.value, driveItem.name);
         if (vttFile) {
           const downloadUrl =
             vttFile['@microsoft.graph.downloadUrl'] ||

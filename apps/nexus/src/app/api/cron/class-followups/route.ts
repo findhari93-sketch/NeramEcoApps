@@ -3,6 +3,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { computeAbsencesForClass, istToday } from '@/lib/class-absences';
 import { assertCronRequest } from '@/lib/cron-auth';
 import { syncClassAttendance, CLASS_SYNC_COLUMNS, type ClassMeetingRow } from '@/lib/attendance-sync';
+import { CLASS_KIND_LECTURE } from '@/lib/class-kind';
 
 /**
  * GET /api/cron/class-followups
@@ -48,7 +49,11 @@ export async function GET(request: NextRequest) {
       .eq('scheduled_date', today)
       .lte('end_time', nowIstTime)
       .neq('status', 'cancelled')
-      .eq('publish_state', 'published');
+      .eq('publish_state', 'published')
+      // Exams are timetable rows too, and this sweep chases wrap-ups and
+      // attendance for a class that was taught. An exam has neither, so without
+      // this it would nag a teacher every hour about a paper.
+      .eq('kind', CLASS_KIND_LECTURE);
 
     if (error) throw error;
     if (!classes || classes.length === 0) {

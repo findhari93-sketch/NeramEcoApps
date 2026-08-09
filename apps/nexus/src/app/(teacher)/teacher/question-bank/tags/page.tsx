@@ -31,7 +31,8 @@ import {
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import MoreVertOutlinedIcon from '@mui/icons-material/MoreVert';
-import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import { useRouter } from 'next/navigation';
+import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBTagWithCount, NexusQBTagGroup } from '@neram/database';
 
@@ -57,6 +58,7 @@ type Draft = {
 };
 
 export default function QuestionTagsPage() {
+  const router = useRouter();
   const { getToken, isTeacher } = useNexusAuthContext();
 
   const [tags, setTags] = useState<NexusQBTagWithCount[]>([]);
@@ -213,24 +215,23 @@ export default function QuestionTagsPage() {
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 900, mx: 'auto' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-        <LocalOfferOutlinedIcon sx={{ color: 'primary.main' }} />
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 700, flex: 1 }}>
-          Question Tags
-        </Typography>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<AddOutlinedIcon />}
-          onClick={() => openCreate('theme')}
-          sx={{ textTransform: 'none', minHeight: 40 }}
-        >
-          New tag
-        </Button>
-      </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
-        Reusable labels applied to bank questions. One question can carry many tags; students and teachers filter by any of them.
-      </Typography>
+      <PageHeader
+        title="Tags and themes"
+        subtitle="Reusable labels applied to bank questions. One question can carry many tags, and the count on each is how many carry it. Tap a tag to see its questions."
+        breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
+        backHref="/teacher/question-bank"
+        action={
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddOutlinedIcon />}
+            onClick={() => openCreate('theme')}
+            sx={{ textTransform: 'none', minHeight: 40 }}
+          >
+            New tag
+          </Button>
+        }
+      />
 
       {loading ? (
         <Stack spacing={3}>
@@ -330,6 +331,17 @@ export default function QuestionTagsPage() {
 
       {/* Per-tag actions menu */}
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
+        {/* The one thing the old Custom sets page did that this one could not:
+            open a tag as a collection. Folded in so there is a single surface. */}
+        <MenuItem
+          onClick={() => {
+            if (menuTag) router.push(`/teacher/question-bank/questions?tag_ids=${menuTag.id}`);
+            setMenuAnchor(null);
+          }}
+        >
+          View its {menuTag?.question_count ?? 0} question
+          {menuTag?.question_count === 1 ? '' : 's'}
+        </MenuItem>
         <MenuItem onClick={() => menuTag && openEdit(menuTag)}>Rename / reorder</MenuItem>
         {menuTag && !menuTag.is_system && (
           <MenuItem onClick={() => menuTag && toggleActive(menuTag)}>

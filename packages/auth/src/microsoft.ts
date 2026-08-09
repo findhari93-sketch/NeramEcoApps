@@ -95,6 +95,32 @@ export const loginScopes = {
     'Channel.ReadBasic.All',
     'TeamMember.ReadWrite.All',
   ],
+  /**
+   * Searching the tenant index for a file, and NOTHING else.
+   *
+   * Files.ReadWrite in the base list reaches /me/drive only and does not follow
+   * shares, so the recording picker could not see a folder a colleague shared
+   * out of their own OneDrive, which is where teachers keep the recordings they
+   * pass to each other. Files.Read.All is what POST /search/query needs to
+   * answer as the caller.
+   *
+   * ITS OWN LIST, and that is the whole point of it existing rather than being
+   * appended to nexusTeacher. Scopes are requested as a set, so adding one
+   * unconsented scope to nexusTeacher would make acquireTokenSilent fail for the
+   * WHOLE set, and getAccessToken answers that failure with a full-page
+   * acquireTokenRedirect. Every existing getTeacherToken caller (assignments,
+   * attendance, course plans, photo review) would have been bounced through
+   * Microsoft on first use after deploy, to buy a permission none of them need.
+   *
+   * Must be acquired with getAccessTokenSilent, never getAccessToken: silent
+   * failure is the designed outcome here, because the picker falls back to the
+   * two-drive search and says so. It is also NOT in loginScopes.nexus, which
+   * students share and which has no business holding a tenant-wide file read.
+   */
+  nexusFileSearch: [
+    'openid', 'profile', 'email', 'User.Read',
+    'Files.Read.All',
+  ],
 };
 
 // ============================================
@@ -435,6 +461,32 @@ export async function getAccessToken(
       return redirectForTokenOnce(msal, scopes, account);
     }
     throw error;
+  }
+}
+
+/**
+ * A token for scopes the app can live without, acquired silently or not at all.
+ *
+ * getAccessToken above answers InteractionRequiredAuthError with a full-page
+ * redirect, which is right for the scopes a screen cannot function without and
+ * wrong for an upgrade it is meant to degrade past: a caller cannot catch a
+ * navigation, so a try/catch around it protects nothing and the user loses
+ * whatever they were doing. This one returns null instead, and never navigates.
+ *
+ * Use it for anything optional. Files.Read.All for the recording search is the
+ * first: before an admin consents in Azure it simply answers null, and the
+ * picker falls back to searching the two drives it could always reach.
+ */
+export async function getAccessTokenSilent(scopes: string[]): Promise<string | null> {
+  try {
+    const msal = await initializeMsal();
+    const account = getActiveAccount();
+    if (!account) return null;
+    const result = await msal.acquireTokenSilent({ scopes, account });
+    return result.accessToken;
+  } catch {
+    // Every failure is the same answer here: no token, carry on without it.
+    return null;
   }
 }
 

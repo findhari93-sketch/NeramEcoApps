@@ -4675,8 +4675,13 @@ export interface NexusStudyFileDTO {
   /**
    * The languages this chapter is published in, each saying whether finishing
    * it unlocks the chapter test. Empty when nothing is published yet.
+   *
+   * `track_id` is what turns these from labels into a way in. Without it the
+   * chips on a chapter card could only be drawn, not pressed, so a student who
+   * tapped one got the PDF and the recording stayed reachable only from the
+   * strip at the bottom of the viewer.
    */
-  video_languages?: { code: string; label: string; gates: boolean }[];
+  video_languages?: { track_id: string; code: string; label: string; gates: boolean }[];
 }
 
 /** Per-student progress status for a study-material file. */
@@ -6501,6 +6506,100 @@ export interface NexusQBQuestionOption {
   nta_id?: string;
 }
 
+/**
+ * Which part of its paper a question belongs to.
+ *
+ * This is the section a candidate actually sits: a scheduled exam shuffles
+ * WITHIN a section and keeps the sections in paper order, and the score report
+ * breaks down along the same lines. It is deliberately NOT `categories[]`,
+ * which is a topic taxonomy a question can carry several of in no guaranteed
+ * order.
+ */
+export type QBQuestionSection = 'math_mcq' | 'math_numerical' | 'aptitude' | 'drawing';
+
+/**
+ * Sort position of each section within a paper.
+ *
+ * Sections are ordered by this number and never by name, so renaming a section
+ * for display can never reorder a paper someone is sitting.
+ */
+export const QB_SECTION_ORDER: Record<QBQuestionSection, number> = {
+  math_mcq: 1,
+  math_numerical: 2,
+  aptitude: 3,
+  drawing: 4,
+};
+
+export const QB_SECTION_LABELS: Record<QBQuestionSection, string> = {
+  math_mcq: 'Mathematics (MCQ)',
+  math_numerical: 'Mathematics (Numerical)',
+  aptitude: 'Aptitude',
+  drawing: 'Drawing',
+};
+
+/** Sections in the order a paper presents them. */
+export const QB_SECTIONS: QBQuestionSection[] = ['math_mcq', 'math_numerical', 'aptitude', 'drawing'];
+
+export function isQBQuestionSection(value: unknown): value is QBQuestionSection {
+  return typeof value === 'string' && (QB_SECTIONS as string[]).includes(value);
+}
+
+/** Display label for a section, falling back to the raw value for anything unrecognised. */
+export function qbSectionLabel(section: string | null | undefined): string {
+  if (!section) return 'Unsectioned';
+  return isQBQuestionSection(section) ? QB_SECTION_LABELS[section] : section;
+}
+
+/** One question of a paper, as the section editor sees it. */
+export interface NexusQBPaperSectionRow {
+  id: string;
+  question_number: number | null;
+  question_format: QBQuestionFormat;
+  section: QBQuestionSection | null;
+  section_order: number | null;
+}
+
+/** A contiguous run of questions sharing a section, for the paper summary strip. */
+export interface NexusQBPaperSectionRun {
+  section: QBQuestionSection | null;
+  label: string;
+  count: number;
+  first_question: number | null;
+  last_question: number | null;
+}
+
+/**
+ * Collapse a paper's questions into the runs a teacher reads as "the sections".
+ *
+ * Pure, so the summary strip, the exam schedule dialog and any report can all
+ * describe a paper the same way. A paper whose sections interleave (a bad
+ * guess, or a genuinely odd paper) produces several runs for the same section
+ * rather than one tidy lie, which is exactly the signal a teacher needs to go
+ * and fix it.
+ */
+export function qbPaperSectionRuns(rows: NexusQBPaperSectionRow[]): NexusQBPaperSectionRun[] {
+  const runs: NexusQBPaperSectionRun[] = [];
+  for (const row of rows) {
+    const last = runs[runs.length - 1];
+    if (last && last.section === row.section) {
+      last.count += 1;
+      if (row.question_number != null) {
+        if (last.first_question == null) last.first_question = row.question_number;
+        last.last_question = row.question_number;
+      }
+      continue;
+    }
+    runs.push({
+      section: row.section,
+      label: qbSectionLabel(row.section),
+      count: 1,
+      first_question: row.question_number ?? null,
+      last_question: row.question_number ?? null,
+    });
+  }
+  return runs;
+}
+
 export interface NexusQBQuestion {
   id: string;
   question_text: string | null;
@@ -6526,6 +6625,10 @@ export interface NexusQBQuestion {
   original_paper_id: string | null;
   original_paper_page: number | null;
   display_order: number | null;
+  /** Which part of its paper this question sits in. Null for questions never tied to a paper. */
+  section: QBQuestionSection | null;
+  /** Sort position of that section within the paper. Mirrors QB_SECTION_ORDER. */
+  section_order: number | null;
   status: QBQuestionStatus;
   nta_question_id: string | null;
   is_active: boolean;
@@ -6839,7 +6942,20 @@ export type NexusPlacementContext =
    * questions one at a time. Holds at most one active test, enforced by
    * uq_placement_single_test, so "best score on this paper" means one thing.
    */
-  | 'qb_paper';
+  | 'qb_paper'
+  /**
+   * context_id = nexus_scheduled_classes.id, on a row whose kind is 'exam'.
+   * A scheduled, invigilated sitting: a fixed window, one attempt, and a
+   * published result.
+   *
+   * THE ONE CONTEXT WHOSE DEADLINE LIVES IN available_until. Every other
+   * placement keeps a soft deadline in gating.due_at precisely so a late
+   * student is never sent to a locked door (see class-test.ts). An exam makes
+   * the opposite promise: the door closes, and a student who did not sit it is
+   * ABSENT rather than overdue. The student surfaces must therefore shape a
+   * closed exam as "Missed", never as an expired link.
+   */
+  | 'exam';
 
 /**
  * What a test IS, stored on nexus_tests.test_kind rather than inferred from its
@@ -6939,6 +7055,19 @@ export interface NexusComposedQuestion {
   question_format: string;
   options: unknown;
   marks: number;
+  /**
+   * What a wrong answer costs, as a positive magnitude. Zero for every test
+   * composed before exam-faithful marking existed, and for every test whose
+   * scheme does not penalise. Only ever applied when the student answered.
+   */
+  negative_marks: number;
+  /**
+   * The section this question sat in when the test was composed. Drives the
+   * player's section strip and the section-wise score report. Null for a test
+   * whose questions were never tied to a sectioned paper.
+   */
+  section: string | null;
+  section_order: number | null;
   sort_order: number;
 }
 
@@ -7239,6 +7368,14 @@ export interface QBFilterState {
   // Recalled paper filters
   confidence_tier?: QBConfidenceTier[];
   paper_source?: QBPaperSource;
+  /**
+   * Where the question came from: a real exam paper, someone typing it, a bulk
+   * import, or a student's recall. Separate from every other filter here, which
+   * describe what the question IS rather than how it got into the bank. The
+   * distinction matters because the bank mixes past papers with questions
+   * authored for chapter tests and recaps, and only the first set is official.
+   */
+  origin?: NexusQBOrigin[];
 }
 
 // Exam tree types for sidebar navigation
@@ -7619,7 +7756,7 @@ export interface NTAParsedQuestion {
     label?: string;
     image_url?: string | null;
   }[];
-  section: 'math_mcq' | 'math_numerical' | 'aptitude' | 'drawing';
+  section: QBQuestionSection;
   categories: string[];
   marks_correct?: number;
   marks_negative?: number;

@@ -16,19 +16,24 @@
  * Exactly one of the two is required.
  *
  * SCOPE. `site` searches the shared Neram library app-only. `mine` searches the
- * signed-in teacher's own OneDrive with their own token. `both` runs the two
- * together and labels each row, so a teacher never has to know or guess which
- * drive their recording was saved to. The claim this file used to carry, that
- * personal OneDrive needs Files.Read.All and a fresh consent from every teacher,
- * was only ever true of reading SOMEBODY ELSE's drive.
+ * signed-in teacher's own OneDrive with their own token. `both` asks the tenant
+ * index as the caller, which reaches everything they can see including folders
+ * shared with them by someone else, and falls back to the two drives when that
+ * consent is not in place yet. The route says which one answered.
  *
- * A file on a drive belonging to neither is still reachable by pasting its share
- * link into the box behind this dialog.
+ * WHERE IT OPENS is decided by the server, not here, which is the correction
+ * this file needed most. It used to send `path=''` on first open, so the video
+ * picker listed the top of the library: two folders, no files, and no way to
+ * tell that anything was wrong. `path` is now NULL until the teacher navigates,
+ * and null means "start where this kind belongs".
+ *
+ * A file on a drive belonging to none of these is still reachable by pasting its
+ * share link into the box behind this dialog.
  *
  * Dialog on desktop, bottom drawer on mobile, matching AddResourceFromClassDialog.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -77,6 +82,17 @@ interface DriveFilePickerDialogProps {
   onAdded?: (resource: ClassResource) => void;
   /** Hand-back mode. When given, nothing is posted anywhere. */
   onPick?: (item: DriveItem) => void;
+  /**
+   * A token that can search the tenant index, used for SEARCH alone.
+   *
+   * The index needs Files.Read.All, which is not in the base scopes, so the
+   * token `getToken` mints cannot reach it. MUST be a silent-only acquirer:
+   * anything routed through getAccessToken redirects the whole page when the
+   * consent is missing, and a navigation cannot be caught, so the fallback below
+   * would never run. Null, or absent, means the server answers from the two
+   * drives instead and says so.
+   */
+  getSearchToken?: () => Promise<string | null>;
   /** Which files are offered. Defaults to documents. */
   kind?: 'document' | 'video';
   /** Which drives are read. Defaults to the shared library alone. */
@@ -127,6 +143,7 @@ export default function DriveFilePickerDialog({
   classId,
   onAdded,
   onPick,
+  getSearchToken,
   kind = 'document',
   scope = 'site',
   title,
@@ -141,8 +158,23 @@ export default function DriveFilePickerDialog({
   const [partial, setPartial] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  /** Folder segments from the drive root. Empty means the root itself. */
-  const [path, setPath] = useState<string[]>([]);
+  /**
+   * Folder segments from the drive root. An empty array is the root itself; NULL
+   * is "wherever the server thinks this kind should start", which is not the
+   * same thing and is the whole reason this is nullable. Sending path='' on
+   * first open is what made the video picker list the two folders at the top of
+   * the library and nothing else.
+   */
+  const [path, setPath] = useState<string[] | null>(null);
+  /**
+   * What the server actually listed, which is what the breadcrumb and the Up
+   * button have to be built from. Kept apart from `path` on purpose: folding the
+   * resolved default back into `path` would change the state `load` depends on
+   * and cost a second identical request every time the dialog opens.
+   */
+  const [resolvedPath, setResolvedPath] = useState<string[]>([]);
+  /** Guards against a slow response landing on top of a newer one. */
+  const requestSeq = useRef(0);
 
   const isVideo = kind === 'video';
   /**
@@ -154,21 +186,46 @@ export default function DriveFilePickerDialog({
 
   const load = useCallback(async () => {
     if (!open) return;
+    const seq = ++requestSeq.current;
+    /** This response is still the newest one asked for. */
+    const current = () => requestSeq.current === seq;
+
     setLoading(true);
     setError(null);
     setPartial(null);
     try {
-      const token = await getToken();
-      if (!token) return;
       const q = query.trim();
-      const params = new URLSearchParams(
-        q ? { q, scope } : { path: path.join('/'), scope: browseScope },
-      );
+      /**
+       * The elevated token, for SEARCH only, and never allowed to be fatal.
+       *
+       * The caller is contracted to acquire it silently, but the try/catch stays
+       * as the belt: a rejection here must not take down a picker that works
+       * perfectly well without the index. It also cannot serve an injected E2E
+       * token, which is another reason null has to be an ordinary answer.
+       */
+      let searchToken: string | null = null;
+      if (q && getSearchToken) {
+        try {
+          searchToken = await getSearchToken();
+        } catch {
+          searchToken = null;
+        }
+      }
+      const token = searchToken || (await getToken());
+      if (!token) return;
+
+      const params = new URLSearchParams(q ? { q, scope } : { scope: browseScope });
+      // Omitted entirely while the path is unset, which is how the server is
+      // told to choose the starting folder rather than list the drive root.
+      if (!q && path !== null) params.set('path', path.join('/'));
       params.set('kind', kind);
+
       const res = await fetch(`/api/sharepoint/search?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json().catch(() => ({}));
+      if (!current()) return;
+
       if (!res.ok) {
         setError(data.error || 'Could not reach SharePoint.');
         setItems([]);
@@ -176,13 +233,20 @@ export default function DriveFilePickerDialog({
       }
       setItems(data.items || []);
       setPartial(data.partial || null);
+      // Record whatever the server actually listed, so the breadcrumb and the Up
+      // button describe the real folder rather than the one we guessed.
+      if (!q && typeof data.path === 'string') {
+        setResolvedPath(data.path ? data.path.split('/') : []);
+      }
     } catch {
-      setError('Could not reach SharePoint.');
-      setItems([]);
+      if (current()) {
+        setError('Could not reach SharePoint.');
+        setItems([]);
+      }
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [open, getToken, query, path, kind, scope, browseScope]);
+  }, [open, getToken, getSearchToken, query, path, kind, scope, browseScope]);
 
   // Debounced, so typing does not fire a request per keystroke.
   useEffect(() => {
@@ -193,7 +257,8 @@ export default function DriveFilePickerDialog({
   useEffect(() => {
     if (!open) {
       setQuery('');
-      setPath([]);
+      setPath(null);
+      setResolvedPath([]);
       setError(null);
       setPartial(null);
     }
@@ -202,9 +267,11 @@ export default function DriveFilePickerDialog({
   const choose = async (item: DriveItem) => {
     if (item.isFolder) {
       // Browsing into a folder clears the search, or the list would show results
-      // from a query that no longer matches the breadcrumb above it.
+      // from a query that no longer matches the breadcrumb above it. Built from
+      // the RESOLVED path so drilling out of the server-chosen starting folder
+      // goes one level deeper rather than jumping back to the drive root.
       setQuery('');
-      setPath((prev) => [...prev, item.name]);
+      setPath([...resolvedPath, item.name]);
       return;
     }
 
@@ -258,9 +325,9 @@ export default function DriveFilePickerDialog({
   const emptyMessage = query
     ? scope === 'site'
       ? `Nothing in the Neram library matches that. A file saved only in your own OneDrive will not appear here, paste its share link instead.`
-      : `Nothing matches that in the Neram library or your OneDrive. Try part of the file name, or paste the file's share link instead.`
+      : `Nothing matches that. Try part of the file name, or paste the file's share link instead.`
     : isVideo
-      ? 'This folder has no video files. Try searching by name.'
+      ? 'No video files in this folder. Go up a level, or search by name.'
       : 'This folder has nothing you can attach.';
 
   const body = (
@@ -308,18 +375,18 @@ export default function DriveFilePickerDialog({
 
       {/* Breadcrumb. Hidden while searching, because results span every folder
           and a trail would claim a location the list does not have. */}
-      {!query && path.length > 0 && (
+      {!query && resolvedPath.length > 0 && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1.25 }}>
           <IconButton
             size="small"
             aria-label="Go up one folder"
-            onClick={() => setPath((prev) => prev.slice(0, -1))}
+            onClick={() => setPath(resolvedPath.slice(0, -1))}
             sx={{ width: 48, height: 48 }}
           >
             <ArrowBackIcon fontSize="small" />
           </IconButton>
           <Typography variant="caption" color="text.secondary" noWrap sx={{ flex: 1, minWidth: 0 }}>
-            {path.join(' / ')}
+            {resolvedPath.join(' / ')}
           </Typography>
         </Box>
       )}

@@ -28,9 +28,9 @@ import TranslateIcon from '@mui/icons-material/Translate';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
   QB_EXAM_TYPE_LABELS,
-  QB_CATEGORY_LABELS,
+  qbPaperSectionRuns,
 } from '@neram/database';
-import type { NexusQBOriginalPaper, NexusQBQuestion } from '@neram/database';
+import type { NexusQBOriginalPaper, NexusQBQuestion, QBQuestionSection } from '@neram/database';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
 import AnswerKeyGrid from '@/components/question-bank/AnswerKeyGrid';
@@ -63,6 +63,7 @@ export default function PaperDetailPage() {
   const [videoLinksOpen, setVideoLinksOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
+  const [reclassifying, setReclassifying] = useState(false);
 
   const fetchData = useCallback(async (background = false) => {
     if (!background) setLoading(true);
@@ -88,6 +89,75 @@ export default function PaperDetailPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  /**
+   * Move one question into a different section.
+   *
+   * Saves on change and refetches in the background, so the summary chips above
+   * and the grouping below stay honest without a save button the teacher has to
+   * remember. Sections are cheap to change and consequential to get wrong, so
+   * the feedback loop is worth more than the batching.
+   */
+  const handleChangeSection = async (questionId: string, section: QBQuestionSection) => {
+    setMessage('');
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/question-bank/papers/${paperId}/sections`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: [{ question_id: questionId, section }] }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setMessage(json.error || 'Could not change the section');
+        return;
+      }
+      await fetchData(true);
+    } catch (err) {
+      console.error('Failed to change section:', err);
+      setMessage('Could not change the section');
+    }
+  };
+
+  /**
+   * Fill in the sections nobody has set yet.
+   *
+   * Deliberately does not overwrite hand corrections: a teacher who has already
+   * fixed this paper does not want a button that silently undoes that.
+   */
+  const handleReclassifySections = async () => {
+    setReclassifying(true);
+    setMessage('');
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/question-bank/papers/${paperId}/sections`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage(json.error || 'Could not work out the sections');
+        return;
+      }
+      const { updated = 0, skipped = 0 } = json.data || {};
+      setMessage(
+        updated === 0
+          ? 'Every question already has a section.'
+          : `Set ${updated} question${updated === 1 ? '' : 's'}${skipped > 0 ? `, left ${skipped} you had already set` : ''}.`,
+      );
+      await fetchData(true);
+    } catch (err) {
+      console.error('Failed to reclassify sections:', err);
+      setMessage('Could not work out the sections');
+    } finally {
+      setReclassifying(false);
+    }
+  };
 
   const handleSaveAnswers = async (
     answers: { question_number: number; correct_answer: string }[]
@@ -208,9 +278,6 @@ export default function PaperDetailPage() {
       minute: '2-digit',
     });
 
-  const getCategoryLabel = (cat: string) =>
-    QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS] || cat;
-
   if (loading) {
     return (
       <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
@@ -241,19 +308,20 @@ export default function PaperDetailPage() {
   // Count questions that need images AND are still missing some
   const missingAnyImageCount = questions.filter(questionMissingImages).length;
 
-  // Section breakdown
-  const sectionBreakdown: Record<string, number> = {};
-  for (const q of questions) {
-    const cats = q.categories as string[] | null;
-    if (cats && cats.length > 0) {
-      for (const cat of cats) {
-        sectionBreakdown[cat] = (sectionBreakdown[cat] || 0) + 1;
-      }
-    } else {
-      const fmt = q.question_format || 'OTHER';
-      sectionBreakdown[fmt] = (sectionBreakdown[fmt] || 0) + 1;
-    }
-  }
+  // How this paper is laid out, read from the section stored on each question
+  // rather than re-derived from categories or question numbers. qbPaperSectionRuns
+  // is the same function the exam scheduler uses, so a teacher sees here exactly
+  // the shape a student will sit.
+  const sectionRuns = qbPaperSectionRuns(
+    questions.map((q) => ({
+      id: q.id,
+      question_number: q.display_order ?? null,
+      question_format: q.question_format,
+      section: q.section,
+      section_order: q.section_order,
+    })),
+  );
+  const unsectionedCount = questions.filter((q) => !q.section).length;
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
@@ -317,19 +385,40 @@ export default function PaperDetailPage() {
           />
         )}
 
-        {/* Section breakdown */}
-        {Object.keys(sectionBreakdown).length > 0 && (
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1 }}>
-            {Object.entries(sectionBreakdown).map(([cat, count]) => (
+        {/* How the paper is sectioned */}
+        {sectionRuns.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', mt: 1 }}>
+            {sectionRuns.map((run, i) => (
               <Chip
-                key={cat}
-                label={`${getCategoryLabel(cat)}: ${count}`}
+                key={`${run.section ?? 'none'}-${i}`}
+                label={
+                  run.first_question != null && run.last_question != null
+                    ? `${run.label}: Q${run.first_question} to Q${run.last_question}`
+                    : `${run.label}: ${run.count}`
+                }
                 size="small"
                 variant="outlined"
+                color={run.section ? 'default' : 'warning'}
                 sx={{ height: 22, fontSize: '0.65rem' }}
               />
             ))}
+            <Button
+              size="small"
+              onClick={handleReclassifySections}
+              disabled={reclassifying}
+              sx={{ fontSize: '0.65rem', minHeight: 22, py: 0 }}
+            >
+              {reclassifying ? 'Working...' : 'Re-run the guess'}
+            </Button>
           </Box>
+        )}
+
+        {unsectionedCount > 0 && (
+          <Alert severity="warning" sx={{ mt: 1, py: 0.25 }}>
+            {unsectionedCount} question{unsectionedCount === 1 ? ' is' : 's are'} not in a section
+            yet. A scheduled exam shuffles within sections, so set these before using this paper as
+            an exam.
+          </Alert>
         )}
 
         {/* Action buttons */}
@@ -425,7 +514,12 @@ export default function PaperDetailPage() {
 
       {/* Tab: Answer Key */}
       {tab === 0 && (
-        <AnswerKeyGrid questions={questions} onSave={handleSaveAnswers} saving={saving} />
+        <AnswerKeyGrid
+          questions={questions}
+          onSave={handleSaveAnswers}
+          saving={saving}
+          onChangeSection={handleChangeSection}
+        />
       )}
 
       {/* Tab: Questions List (Inline Editing) */}

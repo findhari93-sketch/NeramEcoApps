@@ -40,6 +40,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import LinkOffOutlinedIcon from '@mui/icons-material/LinkOffOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import TestResultsPanel from '@/components/tests/TestResultsPanel';
+import ExamScheduleDialog from '@/components/scheduled-exams/ExamScheduleDialog';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import type { GetToken } from '@/lib/nexus-swr';
 
@@ -77,6 +78,7 @@ export default function PaperStudentAccessPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [examOpen, setExamOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -234,7 +236,18 @@ export default function PaperStudentAccessPanel({
         }
         action={
           view.test ? (
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {/* The first of the three doors into scheduling. A paper that
+                  already has a mock is the most natural thing in the product to
+                  sit as a real exam. */}
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => setExamOpen(true)}
+                sx={{ minHeight: 40, textTransform: 'none', borderRadius: 2 }}
+              >
+                Schedule as exam
+              </Button>
               <Button
                 size="small"
                 variant="outlined"
@@ -339,6 +352,15 @@ export default function PaperStudentAccessPanel({
           void setStudyFile(fileId);
         }}
       />
+
+      {view?.test && (
+        <ExamScheduleDialog
+          open={examOpen}
+          onClose={() => setExamOpen(false)}
+          testId={view.test.test_id}
+          testTitle={view.test.title}
+        />
+      )}
     </Box>
   );
 }
