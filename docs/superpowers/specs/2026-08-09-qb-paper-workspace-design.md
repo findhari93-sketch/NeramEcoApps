@@ -36,7 +36,7 @@ Components that already exist and are reused rather than rebuilt:
 
 ## Non-goals
 
-- Editing the stored JSON and re-importing it. Read-only comparison only. A merge that preserves hand edits, answer keys and tags is a separate project.
+- ~~Editing the stored JSON and re-importing it.~~ **Revised 2026-08-09 after review:** the JSON must round-trip. A UI edit has to show up in the JSON and a JSON edit has to show up in the UI. See "The JSON round-trips" below, which replaces the read-only design.
 - Any LLM-backed tagging. The user's requirement is explicitly free and automated.
 - Changing how students see a paper. The Student access tab and `study_file_id` behaviour are untouched.
 - Migrating the 26 existing papers to have sources. There is no data to migrate; sources are attached by hand.
@@ -102,7 +102,27 @@ Linking one file to both is a one-click action when they are the same file.
 
 **Known dependency:** the `both` scope needs delegated `Files.Read.All`, which lives in `loginScopes.nexusTeacher`. Without admin consent in Azure the route falls back to a two-drive search and a folder shared out of another person's OneDrive will not be found. Verify consent before relying on this; see `project_msal_scope_addition_redirects` for why an unconsented scope is not a silent failure.
 
-### The JSON goes in its own table
+### The JSON round-trips, and that means two artifacts, not one
+
+A single JSON document cannot both be the extraction baseline and track the teacher's edits. If it follows the edits, then comparing it against the questions always agrees, and the question it was stored to answer ("did the AI extract this correctly?") can no longer be asked. So there are two, and only one of them is stored:
+
+| Artifact | Stored? | Mutable? | Purpose |
+|---|---|---|---|
+| **Import snapshot** | Yes, `nexus_qb_paper_imports` | Never | What the AI returned. The extraction baseline the Source tab compares against. |
+| **Live JSON** | **No, generated from the question rows on demand** | Yes, applying it writes back to the rows | The round-trip document a teacher reads and edits. |
+
+Generating the live JSON rather than storing it is what makes "a UI change shows up in the JSON" true by construction. It is a projection of the rows, so it cannot drift, and there is no synchronisation code to get wrong. The bug class where two stored copies disagree simply does not exist.
+
+**Both directions:**
+
+- **UI to JSON:** automatic. Editing a question writes the row; the next render of the live JSON reads that row. Nothing to implement beyond the generator.
+- **JSON to UI:** an Apply action parses the edited document, diffs it against the current rows, shows what would change, and writes on confirmation. It must refuse to silently drop fields it does not understand, and must never clear `correct_answer`, `section` or tags that the document omits, since those are edited elsewhere and an omission is not an instruction to delete.
+
+**Media fields must round-trip too.** The current import schema carries `question_image`, per-option `image` and `solution_video_url`, but **has no `solution_image_url` field**, so a solution image added in the UI has nowhere to go. Add it. The generated document emits stored URLs (not base64) for `question_image_url`, each option's `image_url`, `solution_image_url` and `solution_video_url`, so a teacher can see at a glance which media a question carries. On Apply, an `http(s)` URL is stored as-is and a `data:` URL is uploaded first, matching what the bulk importer already does.
+
+**The drift badge now compares against the snapshot,** not the live JSON, since the live JSON can never differ from the rows. A badge means "this question no longer matches what the AI extracted", which is the signal that was wanted.
+
+### The import snapshot goes in its own table
 
 ```sql
 create table nexus_qb_paper_imports (
@@ -181,7 +201,9 @@ Tick Q41–Q70, add a tag to all of them in one call, using the selection bar fr
 | Endpoint | Change |
 |---|---|
 | `POST /api/question-bank/papers` | also writes the import row from the raw payload |
-| `GET /api/question-bank/papers/[id]/import` | new: payload for the Source tab |
+| `GET /api/question-bank/papers/[id]/import` | new: the frozen snapshot, for the Source tab |
+| `GET /api/question-bank/papers/[id]/json` | new: the live JSON generated from the question rows |
+| `POST /api/question-bank/papers/[id]/json` | new: apply an edited document. `?dryRun=1` returns the diff without writing |
 | `PATCH /api/question-bank/papers/[id]` | accepts the source PDF reference |
 | `POST /api/study-materials/files` | accepts a drive item, registering it as a study file so the student picker can offer drive search |
 | `POST /api/question-bank/questions/[id]/suggest-tags` | new: runs the scanner, returns proposals, writes nothing |
