@@ -94,22 +94,38 @@ export function parseNTAAnswerSheet(
       }
     }
 
-    // Determine section and categories based on question number
-    // JEE Paper 2 (B.Arch) structure:
-    //   Section A (Math MCQ): Q1-Q20
-    //   Section B (Math Numerical): Q21-Q25
-    //   Aptitude Test: Q26-Q75
-    //   Drawing Test: Q76-Q77
-    const { section, categories } = classifyQuestion(questionNumber, questionFormat, examType);
-
     questions.push({
       question_number: questionNumber,
       nta_question_id: ntaQuestionId,
       question_format: questionFormat,
       options,
-      section,
-      categories,
+      // Filled in below. Sections cannot be decided inside this loop because
+      // which layout the paper follows depends on how many questions it turns
+      // out to have, and we do not know that until the loop ends.
+      section: 'aptitude',
+      categories: [],
     });
+  }
+
+  // Sections, now that the paper's length is known.
+  const total = questions.length;
+  for (const q of questions) {
+    const { section, categories } = classifyQuestion(
+      q.question_number,
+      q.question_format,
+      examType,
+      total,
+    );
+    q.section = section;
+    q.categories = categories;
+  }
+
+  if (examType === 'JEE_PAPER_2' && !isKnownJEEPaper2Layout(total)) {
+    warnings.push(
+      `This paper has ${total} questions, which does not match a JEE Paper 2 layout we know. ` +
+        `Maths and aptitude questions have all been put in Aptitude. Open the paper and use ` +
+        `"Work out the sections" to fix them, or set them yourself.`,
+    );
   }
 
   // Build section summary
@@ -144,33 +160,57 @@ const SECTION_CATEGORY: Record<QBQuestionSection, string> = {
 };
 
 /**
- * Which section a question belongs to.
+ * Where each JEE Paper 2 layout puts its section boundaries, keyed by how many
+ * questions the paper has.
  *
- * This is the single definition of the guess. The same rule is reproduced in
- * SQL by 20260827090000_nexus_qb_question_sections.sql for the backfill, and
- * called again server-side when a teacher presses "Re-run the guess", so the
- * three can never drift.
+ * The layout has been rewritten several times. Assuming one of them applies to
+ * all of them is what put fifteen aptitude MCQs of the 92-question 2006 paper
+ * into the drawing section, where they are marked +50/0 and never auto-graded.
+ * `mathEnd` is the last maths question, `aptitudeEnd` the last aptitude one;
+ * everything after is drawing.
+ */
+const JEE_PAPER_2_LAYOUTS: Record<number, { mathEnd: number; aptitudeEnd: number }> = {
+  // 2006-era AIEEE B.Arch: maths 40, aptitude 50, drawing 2.
+  92: { mathEnd: 40, aptitudeEnd: 90 },
+  // 2014-2018 and 2021-onwards: maths 30, aptitude 50, drawing 2.
+  82: { mathEnd: 30, aptitudeEnd: 80 },
+  // 2019-2020: maths 25 (20 MCQ + 5 numerical), aptitude 50, drawing 2.
+  77: { mathEnd: 25, aptitudeEnd: 75 },
+};
+
+/** Do we recognise a paper of this length, or are we about to guess blindly? */
+export function isKnownJEEPaper2Layout(totalQuestions: number): boolean {
+  return totalQuestions in JEE_PAPER_2_LAYOUTS;
+}
+
+/**
+ * Which section a question belongs to, knowing only its number and format.
+ *
+ * This is the guess used by the paste path, where an NTA answer sheet gives us
+ * question IDs and nothing to read. When the question text IS available, prefer
+ * inferPaperSections in qb-section-inference.ts, which reads the questions
+ * instead of assuming a layout.
  *
  * Priority order matters:
- *   1. A DRAWING_PROMPT is a drawing question wherever it sits. Format beats
- *      position, so a paper that numbers its drawing prompts differently still
- *      lands right.
- *   2. JEE Paper 2 has a published structure: Q1-20 maths MCQ, Q21-25 maths
- *      numerical, Q26-75 aptitude, Q76+ drawing.
- *   3. NATA's boundaries move between years, so guessing by position there
- *      would be confidently wrong. Fall back to the format alone and let the
- *      teacher correct it in the paper workspace. A visible wrong guess a
+ *   1. Format decides whatever it can. A DRAWING_PROMPT is drawing wherever it
+ *      sits and a NUMERICAL is maths-numerical wherever it sits. Just as
+ *      importantly the converse holds: a four-option MCQ is NEVER put in
+ *      drawing or maths-numerical, because it cannot be either. That veto
+ *      alone would have prevented the mislabelling above.
+ *   2. Position, but only against a layout we recognise from the paper's
+ *      length. `totalQuestions` is what makes that safe.
+ *   3. Otherwise format alone. NATA's boundaries move between years and an
+ *      unrecognised JEE paper is a layout we have not seen, so guessing by
+ *      position there would be confidently wrong. A visible wrong guess a
  *      teacher can fix beats an invisible one.
- *
- * Every guess is correctable per question, so none of this is load-bearing on
- * its own. What is load-bearing is that it is ONE rule in ONE place.
  */
 export function classifyQuestion(
   questionNumber: number,
   format: QBQuestionFormat,
   examType: QBExamType = 'JEE_PAPER_2',
+  totalQuestions?: number,
 ): { section: QBQuestionSection; section_order: number; categories: string[] } {
-  const section = guessSection(questionNumber, format, examType);
+  const section = guessSection(questionNumber, format, examType, totalQuestions);
   return {
     section,
     section_order: QB_SECTION_ORDER[section],
@@ -182,16 +222,25 @@ function guessSection(
   questionNumber: number,
   format: QBQuestionFormat,
   examType: QBExamType,
+  totalQuestions?: number,
 ): QBQuestionSection {
+  // 1. Format first, both ways.
   if (format === 'DRAWING_PROMPT') return 'drawing';
+  if (format === 'NUMERICAL') return 'math_numerical';
 
-  if (examType === 'JEE_PAPER_2') {
-    if (questionNumber <= 20) return 'math_mcq';
-    if (questionNumber <= 25) return 'math_numerical';
-    if (questionNumber <= 75) return 'aptitude';
-    return 'drawing';
+  // 2. Position, only against a layout this paper's length matches.
+  const layout = examType === 'JEE_PAPER_2' && totalQuestions
+    ? JEE_PAPER_2_LAYOUTS[totalQuestions]
+    : undefined;
+  if (layout) {
+    if (questionNumber <= layout.mathEnd) return 'math_mcq';
+    if (questionNumber <= layout.aptitudeEnd) return 'aptitude';
+    // Past the aptitude block, but this is an MCQ, so it cannot be drawing.
+    // The paper is numbered differently from what we assumed; aptitude is the
+    // section it is most likely to belong to and the one that marks it +4/-1.
+    return 'aptitude';
   }
 
-  // NATA and anything else: format only.
-  return format === 'NUMERICAL' ? 'math_numerical' : 'aptitude';
+  // 3. Unrecognised layout: format alone.
+  return 'aptitude';
 }

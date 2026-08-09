@@ -7,10 +7,9 @@ import {
   reclassifyPaperSections,
   qbPaperSectionRuns,
   isQBQuestionSection,
-  type QBQuestionFormat,
   type QBQuestionSection,
 } from '@neram/database';
-import { classifyQuestion } from '@/lib/nta-parser';
+import { inferPaperSections } from '@/lib/qb-section-inference';
 
 /**
  * Which section each question of a paper sits in.
@@ -101,11 +100,16 @@ export async function PATCH(
 }
 
 /**
- * Re-run the guess over the paper.
+ * Work the sections out from the questions themselves.
  *
  * Defaults to filling only the questions that have no section yet. Passing
- * overwrite: true replaces hand corrections too, which is what a teacher wants
- * after fixing the question numbering and nothing else.
+ * overwrite: true re-does the whole paper, which is what a teacher wants when
+ * the original guess was wrong rather than merely missing.
+ *
+ * The rule lives in the app (qb-section-inference), the write lives in the
+ * package. It reads question text rather than trusting question numbers,
+ * because the number-range rule only ever described one year's JEE layout and
+ * silently mislabelled every paper that predates it.
  */
 export async function POST(
   request: NextRequest,
@@ -124,14 +128,9 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const onlyUnset = body?.overwrite !== true;
 
-    // The rule lives in the app (nta-parser), the write lives in the package.
-    // Injecting it here is what keeps the parser, this button and the backfill
-    // migration agreeing on what a section is.
-    const examType = (paper as any).exam_type;
     const result = await reclassifyPaperSections(
       params.id,
-      (questionNumber: number, format: QBQuestionFormat) =>
-        classifyQuestion(questionNumber, format, examType).section,
+      (questions) => inferPaperSections(questions),
       { onlyUnset },
     );
 

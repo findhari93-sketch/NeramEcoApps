@@ -4,18 +4,25 @@ import { useState } from 'react';
 import { Box, Typography, TextField, Button, Alert } from '@neram/ui';
 import { parseNTAAnswerSheet } from '@/lib/nta-parser';
 import { ntaParsedToReviewQuestions, type ReviewQuestion } from '@/lib/bulk-upload-schema';
+import type { QBExamType } from '@neram/database';
 
 interface PasteTextTabProps {
   onQuestionsReady: (questions: ReviewQuestion[], warnings: string[]) => void;
+  /**
+   * Which exam this paper is from. The parser needs it to pick a section
+   * layout: without it every paste was read as JEE Paper 2, so NATA papers
+   * were sectioned against a layout they do not follow.
+   */
+  examType: QBExamType;
 }
 
-export default function PasteTextTab({ onQuestionsReady }: PasteTextTabProps) {
+export default function PasteTextTab({ onQuestionsReady, examType }: PasteTextTabProps) {
   const [rawText, setRawText] = useState('');
   const [error, setError] = useState('');
 
   const handleParse = () => {
     setError('');
-    const result = parseNTAAnswerSheet(rawText);
+    const result = parseNTAAnswerSheet(rawText, examType);
     if (result.total === 0) {
       setError('No questions found. Check that you pasted the correct NTA answer sheet text.');
       return;

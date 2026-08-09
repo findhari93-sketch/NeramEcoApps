@@ -242,8 +242,8 @@ export function validateAndConvertJSON(data: unknown): ValidationResult {
         question_format: format,
         options,
         nta_question_id: q.nta_question_id || '',
-        section: sectionKey,
-        categories: q.categories || inferCategories(sectionKey),
+        section: reconcileSection(sectionKey, format),
+        categories: q.categories || inferCategories(reconcileSection(sectionKey, format)),
         marks_correct: q.marks_correct,
         marks_negative: q.marks_negative,
         solution_video_url: q.solution_video_url || undefined,
@@ -285,6 +285,32 @@ function normalizeFormat(raw: string | undefined): QBQuestionFormat {
   if (upper === 'DRAWING_PROMPT' || upper === 'SUBJECTIVE' || upper === 'DRAWING') return 'DRAWING_PROMPT';
   if (upper === 'IMAGE_BASED') return 'IMAGE_BASED';
   return 'MCQ';
+}
+
+/**
+ * Stop a question's format and its section from contradicting each other.
+ *
+ * Every question inside a declared section inherits that section's key
+ * verbatim, so one mis-titled heading from the extractor relabels the whole
+ * block. On a real import that put a run of four-option MCQs into "drawing",
+ * where they are marked +50/0 and never auto-graded, and each one had to be
+ * corrected by hand.
+ *
+ * The format is the harder fact: an MCQ with options cannot be a drawing
+ * prompt or a numerical answer whatever the heading above it said. Where they
+ * disagree the format wins and the section falls back to the one it can
+ * actually be.
+ */
+function reconcileSection(
+  section: ReviewQuestion['section'],
+  format: QBQuestionFormat,
+): ReviewQuestion['section'] {
+  if (format === 'DRAWING_PROMPT') return 'drawing';
+  if (format === 'NUMERICAL') return 'math_numerical';
+  // MCQ and IMAGE_BASED: neither can be drawing or numerical.
+  if (section === 'drawing') return 'aptitude';
+  if (section === 'math_numerical') return 'math_mcq';
+  return section;
 }
 
 function inferSectionKey(name: string): ReviewQuestion['section'] {

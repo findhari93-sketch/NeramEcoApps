@@ -29,6 +29,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
   QB_EXAM_TYPE_LABELS,
   qbPaperSectionRuns,
+  qbSectionLabel,
 } from '@neram/database';
 import type { NexusQBOriginalPaper, NexusQBQuestion, QBQuestionSection } from '@neram/database';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
@@ -64,6 +65,7 @@ export default function PaperDetailPage() {
   const [message, setMessage] = useState('');
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
   const [reclassifying, setReclassifying] = useState(false);
+  const [redoSectionsOpen, setRedoSectionsOpen] = useState(false);
 
   const fetchData = useCallback(async (background = false) => {
     if (!background) setLoading(true);
@@ -91,14 +93,15 @@ export default function PaperDetailPage() {
   }, [fetchData]);
 
   /**
-   * Move one question into a different section.
+   * Move one or more questions into a different section.
    *
-   * Saves on change and refetches in the background, so the summary chips above
-   * and the grouping below stay honest without a save button the teacher has to
-   * remember. Sections are cheap to change and consequential to get wrong, so
-   * the feedback loop is worth more than the batching.
+   * Takes a list because a bad import misplaces a whole block, not one
+   * question, and the API has always accepted a batch. Saves on change and
+   * refetches in the background, so the summary chips above and the grouping
+   * below stay honest without a save button the teacher has to remember.
    */
-  const handleChangeSection = async (questionId: string, section: QBQuestionSection) => {
+  const handleChangeSections = async (questionIds: string[], section: QBQuestionSection) => {
+    if (questionIds.length === 0) return;
     setMessage('');
     try {
       const token = await getToken();
@@ -107,27 +110,34 @@ export default function PaperDetailPage() {
       const res = await fetch(`/api/question-bank/papers/${paperId}/sections`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates: [{ question_id: questionId, section }] }),
+        body: JSON.stringify({
+          updates: questionIds.map((question_id) => ({ question_id, section })),
+        }),
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
         setMessage(json.error || 'Could not change the section');
         return;
       }
+      if (questionIds.length > 1) {
+        setMessage(`Moved ${questionIds.length} questions to ${qbSectionLabel(section)}.`);
+      }
       await fetchData(true);
     } catch (err) {
-      console.error('Failed to change section:', err);
+      console.error('Failed to change sections:', err);
       setMessage('Could not change the section');
     }
   };
 
   /**
-   * Fill in the sections nobody has set yet.
+   * Work the sections out from the questions themselves.
    *
-   * Deliberately does not overwrite hand corrections: a teacher who has already
-   * fixed this paper does not want a button that silently undoes that.
+   * Two modes. The default fills only what has no section yet and never touches
+   * a hand correction. `overwrite` re-does the whole paper, which is what a
+   * teacher needs when the sections are not missing but wrong, and is behind a
+   * confirmation because it discards corrections.
    */
-  const handleReclassifySections = async () => {
+  const handleReclassifySections = async (overwrite = false) => {
     setReclassifying(true);
     setMessage('');
     try {
@@ -137,18 +147,24 @@ export default function PaperDetailPage() {
       const res = await fetch(`/api/question-bank/papers/${paperId}/sections`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(overwrite ? { overwrite: true } : {}),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         setMessage(json.error || 'Could not work out the sections');
         return;
       }
-      const { updated = 0, skipped = 0 } = json.data || {};
+      const { updated = 0, skipped = 0, unresolved = 0 } = json.data || {};
+      const tail = [
+        skipped > 0 ? `left ${skipped} you had already set` : '',
+        unresolved > 0 ? `could not tell for ${unresolved}` : '',
+      ].filter(Boolean);
       setMessage(
         updated === 0
-          ? 'Every question already has a section.'
-          : `Set ${updated} question${updated === 1 ? '' : 's'}${skipped > 0 ? `, left ${skipped} you had already set` : ''}.`,
+          ? unresolved > 0
+            ? `Could not work out a section for ${unresolved} question${unresolved === 1 ? '' : 's'} from their text. Set them yourself below.`
+            : 'Every question already has a section.'
+          : `Set ${updated} question${updated === 1 ? '' : 's'}${tail.length ? `, ${tail.join(', ')}` : ''}.`,
       );
       await fetchData(true);
     } catch (err) {
@@ -156,6 +172,7 @@ export default function PaperDetailPage() {
       setMessage('Could not work out the sections');
     } finally {
       setReclassifying(false);
+      setRedoSectionsOpen(false);
     }
   };
 
@@ -404,11 +421,20 @@ export default function PaperDetailPage() {
             ))}
             <Button
               size="small"
-              onClick={handleReclassifySections}
+              onClick={() => handleReclassifySections(false)}
               disabled={reclassifying}
               sx={{ fontSize: '0.65rem', minHeight: 22, py: 0 }}
             >
-              {reclassifying ? 'Working...' : 'Re-run the guess'}
+              {reclassifying ? 'Working...' : 'Fill in missing sections'}
+            </Button>
+            <Button
+              size="small"
+              color="warning"
+              onClick={() => setRedoSectionsOpen(true)}
+              disabled={reclassifying}
+              sx={{ fontSize: '0.65rem', minHeight: 22, py: 0 }}
+            >
+              Redo all sections
             </Button>
           </Box>
         )}
@@ -518,7 +544,7 @@ export default function PaperDetailPage() {
           questions={questions}
           onSave={handleSaveAnswers}
           saving={saving}
-          onChangeSection={handleChangeSection}
+          onChangeSections={handleChangeSections}
         />
       )}
 
@@ -574,6 +600,30 @@ export default function PaperDetailPage() {
           <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
           <Button onClick={handleDelete} color="error" variant="contained">
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Redo-all-sections confirmation. Behind a dialog because it discards
+          corrections a teacher may have spent real time making by hand. */}
+      <Dialog open={redoSectionsOpen} onClose={() => setRedoSectionsOpen(false)}>
+        <DialogTitle>Work out every section again?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This reads all {total} questions and decides the sections from their text, replacing
+            what is there now, including any you set by hand. Questions it cannot place are left
+            alone rather than cleared.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRedoSectionsOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => handleReclassifySections(true)}
+            color="warning"
+            variant="contained"
+            disabled={reclassifying}
+          >
+            {reclassifying ? 'Working...' : 'Redo sections'}
           </Button>
         </DialogActions>
       </Dialog>

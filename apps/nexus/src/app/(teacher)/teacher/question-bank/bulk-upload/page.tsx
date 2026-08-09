@@ -489,10 +489,10 @@ export default function BulkUploadPage() {
           {/* Tab content */}
           <Box sx={{ p: 2.5 }}>
             {uploadMethod === 'paste' && (
-              <PasteTextTab onQuestionsReady={handleQuestionsReady} />
+              <PasteTextTab onQuestionsReady={handleQuestionsReady} examType={examType} />
             )}
             {uploadMethod === 'pdf' && (
-              <UploadPDFTab onQuestionsReady={handleQuestionsReady} />
+              <UploadPDFTab onQuestionsReady={handleQuestionsReady} examType={examType} />
             )}
             {uploadMethod === 'json' && (
               <UploadJSONTab onQuestionsReady={handleQuestionsReady} />

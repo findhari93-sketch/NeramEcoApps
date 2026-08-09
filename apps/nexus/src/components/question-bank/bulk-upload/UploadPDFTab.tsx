@@ -13,12 +13,19 @@ import {
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import { parseNTAAnswerSheet } from '@/lib/nta-parser';
 import { ntaParsedToReviewQuestions, type ReviewQuestion } from '@/lib/bulk-upload-schema';
+import type { QBExamType } from '@neram/database';
 
 interface UploadPDFTabProps {
   onQuestionsReady: (questions: ReviewQuestion[], warnings: string[]) => void;
+  /**
+   * Which exam this paper is from. The parser needs it to pick a section
+   * layout: without it every PDF was read as JEE Paper 2, so NATA papers were
+   * sectioned against a layout they do not follow.
+   */
+  examType: QBExamType;
 }
 
-export default function UploadPDFTab({ onQuestionsReady }: UploadPDFTabProps) {
+export default function UploadPDFTab({ onQuestionsReady, examType }: UploadPDFTabProps) {
   const theme = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState('');
@@ -70,7 +77,7 @@ export default function UploadPDFTab({ onQuestionsReady }: UploadPDFTabProps) {
         return;
       }
 
-      const parsed = parseNTAAnswerSheet(text);
+      const parsed = parseNTAAnswerSheet(text, examType);
 
       if (parsed.total === 0) {
         setError(
@@ -88,7 +95,10 @@ export default function UploadPDFTab({ onQuestionsReady }: UploadPDFTabProps) {
     } finally {
       setLoading(false);
     }
-  }, [extractTextFromPDF, onQuestionsReady]);
+    // examType is a dependency: it decides which section layout the parser
+    // applies, and a teacher can change it in step 1 after this callback is
+    // first created.
+  }, [extractTextFromPDF, onQuestionsReady, examType]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

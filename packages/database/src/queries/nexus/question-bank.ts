@@ -2251,44 +2251,84 @@ export async function setQuestionSections(
   return { updated };
 }
 
+/** One question as the section classifier sees it. */
+export interface NexusQBSectionCandidate {
+  id: string;
+  question_number: number | null;
+  question_format: QBQuestionFormat;
+  question_text: string | null;
+  options: { text?: string | null }[] | null;
+}
+
 /**
  * Re-run the section guess over a whole paper.
  *
- * Uses the same rule as the parser and the backfill migration, called through
- * the injected classifier so the app owns the rule and this package owns the
- * write. `onlyUnset` is the safe default: a teacher who has already corrected
- * sections by hand does not want a button that quietly undoes that work.
+ * The classifier is injected and sees the WHOLE paper at once, not one question
+ * at a time. That is the difference between a rule that can only look at a
+ * question's number and one that can read the questions and find where maths
+ * stops and aptitude starts, which is what a paper laid out differently from
+ * the current JEE pattern needs.
+ *
+ * `onlyUnset` is the safe default: a teacher who has already corrected sections
+ * by hand does not want a button that quietly undoes that work. A classifier
+ * that returns null for a question means "I cannot tell", and is skipped rather
+ * than allowed to clear a section, so even overwrite: true can only ever
+ * replace a guess with another guess.
  */
 export async function reclassifyPaperSections(
   paperId: string,
-  classify: (questionNumber: number, format: QBQuestionFormat) => QBQuestionSection,
+  classify: (
+    questions: NexusQBSectionCandidate[]
+  ) => Array<{ id: string; section: QBQuestionSection | null }>,
   opts?: { onlyUnset?: boolean },
   client?: TypedSupabaseClient
-): Promise<{ updated: number; skipped: number }> {
+): Promise<{ updated: number; skipped: number; unresolved: number }> {
   const supabase = client || getSupabaseAdminClient();
   const onlyUnset = opts?.onlyUnset !== false;
 
   const { data, error } = await supabase
     .from('nexus_qb_questions')
-    .select('id, display_order, question_format, section')
+    .select('id, display_order, question_format, section, question_text, options')
     .eq('original_paper_id', paperId);
   if (error) throw error;
 
   const rows = (data || []) as any[];
-  const targets = onlyUnset ? rows.filter((q) => !q.section) : rows;
-  const skipped = rows.length - targets.length;
 
-  const updates = targets.map((q, i) => ({
-    question_id: q.id as string,
-    // A question with no display_order still needs a number. Its position in
-    // the fetched set is a worse guess than a real question number but a far
-    // better one than treating every such question as Q0 and calling the whole
-    // tail Mathematics.
-    section: classify(q.display_order ?? i + 1, q.question_format as QBQuestionFormat),
-  }));
+  // The classifier is handed every question, including ones already sectioned,
+  // because the boundary between two sections can only be found by looking at
+  // the whole paper. onlyUnset then decides what is actually written.
+  const verdicts = classify(
+    rows.map((q, i) => ({
+      id: q.id as string,
+      // A question with no display_order still needs a position. Its position
+      // in the fetched set is a worse answer than a real question number but a
+      // far better one than treating every such question as Q0.
+      question_number: (q.display_order as number | null) ?? i + 1,
+      question_format: q.question_format as QBQuestionFormat,
+      question_text: (q.question_text as string | null) ?? null,
+      options: (q.options as { text?: string | null }[] | null) ?? null,
+    }))
+  );
+
+  const alreadySectioned = new Set(rows.filter((q) => q.section).map((q) => q.id as string));
+  let skipped = 0;
+  let unresolved = 0;
+  const updates: Array<{ question_id: string; section: QBQuestionSection }> = [];
+
+  for (const verdict of verdicts) {
+    if (onlyUnset && alreadySectioned.has(verdict.id)) {
+      skipped++;
+      continue;
+    }
+    if (!verdict.section) {
+      unresolved++;
+      continue;
+    }
+    updates.push({ question_id: verdict.id, section: verdict.section });
+  }
 
   const { updated } = await setQuestionSections(paperId, updates, supabase);
-  return { updated, skipped };
+  return { updated, skipped, unresolved };
 }
 
 // ============================================
