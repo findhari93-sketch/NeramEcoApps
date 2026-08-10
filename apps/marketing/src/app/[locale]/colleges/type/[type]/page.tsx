@@ -10,14 +10,13 @@ import { getCollegesByType } from '@/lib/college-hub/queries';
 import { COLLEGE_TYPE_SLUGS } from '@/lib/college-hub/constants';
 import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 type Props = { params: { locale: string; type: string } };
 
+// English only. See colleges/[state]/[slug] for the rationale.
 export async function generateStaticParams() {
-  const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
-  const types = Object.keys(COLLEGE_TYPE_SLUGS);
-  return locales.flatMap((locale) => types.map((type) => ({ locale, type })));
+  return Object.keys(COLLEGE_TYPE_SLUGS).map((type) => ({ locale: 'en', type }));
 }
 
 export async function generateMetadata({ params: { locale, type } }: Props): Promise<Metadata> {

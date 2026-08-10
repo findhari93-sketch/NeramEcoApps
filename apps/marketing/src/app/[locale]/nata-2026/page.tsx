@@ -28,7 +28,7 @@ import ContactSection from '@/components/nata/sections/ContactSection';
 import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 // ISR: Revalidate every hour since hub fetches dynamic data from Supabase
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

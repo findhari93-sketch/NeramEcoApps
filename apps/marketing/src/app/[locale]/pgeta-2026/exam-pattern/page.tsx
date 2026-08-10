@@ -5,7 +5,7 @@ import ExamSpokeLayout from '@/components/exam-hub/sections/ExamSpokeLayout';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { PGETA_MODULES } from '@/components/pgeta/data/pgetaContent';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

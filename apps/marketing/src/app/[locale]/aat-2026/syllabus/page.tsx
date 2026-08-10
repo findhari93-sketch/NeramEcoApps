@@ -5,7 +5,7 @@ import ExamSpokeLayout from '@/components/exam-hub/sections/ExamSpokeLayout';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { AAT_SYLLABUS } from '@/components/aat/data/aatContent';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

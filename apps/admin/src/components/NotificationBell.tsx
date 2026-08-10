@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -14,6 +14,7 @@ import {
   Button,
   Divider,
   CircularProgress,
+  useVisibilityPolling,
 } from '@neram/ui';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
@@ -136,7 +137,6 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const popoverOpenRef = useRef(false);
 
   const fetchUnreadCount = useCallback(async () => {
@@ -184,42 +184,35 @@ export default function NotificationBell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifications.length]);
 
-  // Polling: always fetch unread count, also refresh list if popover is open
-  const startPolling = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      fetchUnreadCount();
-      if (popoverOpenRef.current) {
-        // Refresh the list silently (don't reset pagination — just refresh the current visible set)
-        fetch(`/api/notifications?limit=${PAGE_SIZE}&offset=0&_t=${Date.now()}`, { cache: 'no-store' })
-          .then(res => res.json())
-          .then(data => {
-            if (data.notifications) {
-              setNotifications(prev => {
-                // Merge: prepend any new notifications, keep existing ones for pagination
-                const existingIds = new Set(prev.map(n => n.id));
-                const newOnes = (data.notifications as AdminNotification[]).filter(n => !existingIds.has(n.id));
-                if (newOnes.length > 0) {
-                  return [...newOnes, ...prev];
-                }
-                // Also update read state of visible notifications
-                const updatedMap = new Map((data.notifications as AdminNotification[]).map(n => [n.id, n]));
-                return prev.map(n => updatedMap.get(n.id) || n);
-              });
-            }
-          })
-          .catch(() => {});
-      }
-    }, 30000);
+  // Polling: always fetch unread count, also refresh list if popover is open.
+  // Suspended while the tab is hidden, since a staff dashboard left open in a
+  // background tab was billing two invocations a minute indefinitely.
+  const poll = useCallback(() => {
+    fetchUnreadCount();
+    if (popoverOpenRef.current) {
+      // Refresh the list silently (don't reset pagination — just refresh the current visible set)
+      fetch(`/api/notifications?limit=${PAGE_SIZE}&offset=0&_t=${Date.now()}`, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(data => {
+          if (data.notifications) {
+            setNotifications(prev => {
+              // Merge: prepend any new notifications, keep existing ones for pagination
+              const existingIds = new Set(prev.map(n => n.id));
+              const newOnes = (data.notifications as AdminNotification[]).filter(n => !existingIds.has(n.id));
+              if (newOnes.length > 0) {
+                return [...newOnes, ...prev];
+              }
+              // Also update read state of visible notifications
+              const updatedMap = new Map((data.notifications as AdminNotification[]).map(n => [n.id, n]));
+              return prev.map(n => updatedMap.get(n.id) || n);
+            });
+          }
+        })
+        .catch(() => {});
+    }
   }, [fetchUnreadCount]);
 
-  useEffect(() => {
-    fetchUnreadCount();
-    startPolling();
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [fetchUnreadCount, startPolling]);
+  useVisibilityPolling(poll, 60000);
 
   const handleOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);

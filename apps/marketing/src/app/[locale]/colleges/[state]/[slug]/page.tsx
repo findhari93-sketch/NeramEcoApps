@@ -17,17 +17,22 @@ import {
 import { getCollegeBySlug, getAllCollegeSlugs, getSimilarColleges } from '@/lib/college-hub/queries';
 import CollegePageTemplate from '@/components/college-hub/CollegePageTemplate';
 
-export const revalidate = 3600;
+// College fees, rankings and accreditation are seasonal data, not hourly data.
+// This route is the largest prerendered surface on the site, so an hourly window
+// here was the single biggest source of ISR writes on the account.
+export const revalidate = 86400;
 
 type Props = { params: { locale: string; state: string; slug: string } };
 
+// English only. The college hub content is hardcoded English, so the ta/hi/kn/ml
+// variants were 4/5 of a ~930 path prerender for duplicate content that
+// next.config.js now marks noindex. dynamicParams defaults to true, so those URLs
+// still resolve, they just render on demand instead of being built and then
+// revalidated forever. Same tradeoff already documented in rankings/nirf/[collegeSlug].
 export async function generateStaticParams() {
   try {
     const slugs = await getAllCollegeSlugs();
-    const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
-    return locales.flatMap((locale) =>
-      slugs.map(({ state, slug }) => ({ locale, state, slug }))
-    );
+    return slugs.map(({ state, slug }) => ({ locale: 'en', state, slug }));
   } catch {
     return [];
   }

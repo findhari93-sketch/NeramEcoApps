@@ -10,17 +10,18 @@ import { getCollegesByCounseling, getActiveCounselingSystems } from '@/lib/colle
 import { COUNSELING_LABELS, COUNSELING_SLUGS } from '@/lib/college-hub/constants';
 import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 type Props = { params: { locale: string; system: string } };
 
+// English only. See colleges/[state]/[slug] for the rationale.
 export async function generateStaticParams() {
   try {
     const systems = await getActiveCounselingSystems();
-    const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
-    return locales.flatMap((locale) =>
-      systems.map((s) => ({ locale, system: s.system.toLowerCase().replace(/_/g, '-') }))
-    );
+    return systems.map((s) => ({
+      locale: 'en',
+      system: s.system.toLowerCase().replace(/_/g, '-'),
+    }));
   } catch {
     return [];
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Box,
@@ -19,6 +19,7 @@ import {
   Menu,
   MenuItem,
   Divider,
+  useVisibilityPolling,
 } from '@neram/ui';
 import { useBatches } from '@/contexts/BatchContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -210,9 +211,6 @@ export default function Sidebar() {
     payments: 0,
     chat_history: 0,
   });
-  const messageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const careersIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const badgesIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMessageUnreadCount = useCallback(async () => {
     try {
@@ -250,19 +248,16 @@ export default function Sidebar() {
     }
   }, []);
 
-  useEffect(() => {
+  // Three counts on one guarded interval. These were three separate unguarded
+  // setIntervals, so every open staff tab cost three invocations a minute for as
+  // long as it existed, including tabs nobody was looking at.
+  const refreshCounts = useCallback(() => {
     fetchMessageUnreadCount();
     fetchCareersNewCount();
     fetchBadgeCounts();
-    messageIntervalRef.current = setInterval(fetchMessageUnreadCount, 60000);
-    careersIntervalRef.current = setInterval(fetchCareersNewCount, 60000);
-    badgesIntervalRef.current = setInterval(fetchBadgeCounts, 60000);
-    return () => {
-      if (messageIntervalRef.current) clearInterval(messageIntervalRef.current);
-      if (careersIntervalRef.current) clearInterval(careersIntervalRef.current);
-      if (badgesIntervalRef.current) clearInterval(badgesIntervalRef.current);
-    };
   }, [fetchMessageUnreadCount, fetchCareersNewCount, fetchBadgeCounts]);
+
+  useVisibilityPolling(refreshCounts, 60000);
 
   const handleLogout = async () => {
     await signOut();

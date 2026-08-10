@@ -9,17 +9,16 @@ import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup
 import { getCollegesByCity, getActiveCities } from '@/lib/college-hub/queries';
 import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 type Props = { params: { locale: string; city: string } };
 
+// English only. See colleges/[state]/[slug] for the rationale; non-English variants
+// stay reachable via on-demand rendering.
 export async function generateStaticParams() {
   try {
     const cities = await getActiveCities();
-    const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
-    return locales.flatMap((locale) =>
-      cities.map((c) => ({ locale, city: c.city_slug }))
-    );
+    return cities.map((c) => ({ locale: 'en', city: c.city_slug }));
   } catch {
     return [];
   }

@@ -31,7 +31,7 @@ import {
   PGETA_DEFAULT_FAQS,
 } from '@/components/pgeta/data/pgetaContent';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

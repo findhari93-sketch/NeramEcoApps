@@ -8,10 +8,14 @@
  * a scrape import) surface without a deploy.
  *
  * Node runtime (default), @neram/database is not edge-compatible (uses
- * crypto via Supabase SDK). Cached 5 minutes at the CDN so newly imported
- * years surface quickly while still avoiding a DB hit on every request.
+ * crypto via Supabase SDK).
+ *
+ * Cached 1 hour. This was 5 minutes, which regenerated one path ~8,600 times a
+ * month for a list that changes when a scrape import lands, i.e. roughly once a
+ * year. An hour still surfaces a new year on the same working day without the
+ * write volume.
  */
-export const revalidate = 300;
+export const revalidate = 3600;
 
 import { NextResponse } from 'next/server';
 import { getJosaaYears, getSupabaseBrowserClient } from '@neram/database';
@@ -22,7 +26,7 @@ export async function GET() {
     const years = await getJosaaYears(supabase);
     return NextResponse.json(
       { years },
-      { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' } },
+      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
     );
   } catch (err: any) {
     return NextResponse.json({ years: [], error: err?.message }, { status: 500 });

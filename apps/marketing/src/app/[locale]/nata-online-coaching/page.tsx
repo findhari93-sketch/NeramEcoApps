@@ -35,7 +35,7 @@ import { APP_URL, BASE_URL } from '@/lib/seo/constants';
 import NataOnlineCoachingTamil from '@/components/nata-coaching/localized/NataOnlineCoachingTamil';
 import NataOnlineCoachingHindi from '@/components/nata-coaching/localized/NataOnlineCoachingHindi';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 // Locale-specific title and description for the canonical NATA Online Coaching landing page.
 // Tamil and Hindi serve native script through dedicated localized components further below.

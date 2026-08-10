@@ -51,14 +51,47 @@ const nextConfig = {
             key: 'Cross-Origin-Opener-Policy',
             value: 'same-origin-allow-popups',
           },
-          // Prevent Cloudflare CDN from caching HTML/RSC responses
-          // (Cloudflare sits in front of Vercel and can serve stale RSC payloads on hard refresh)
-          // Vercel's own ISR cache is unaffected by this header
-          {
-            key: 'CDN-Cache-Control',
-            value: 'no-store',
-          },
         ],
+      },
+      // Stop Cloudflare caching HTML/RSC on the private and per-request surfaces.
+      // (Cloudflare sits in front of Vercel and can serve stale RSC payloads on hard refresh.)
+      //
+      // Scoped deliberately. This header used to sit on '/:path*', which was a costly
+      // mistake: Vercel's own Edge Cache honours CDN-Cache-Control whenever the
+      // higher-precedence Vercel-CDN-Cache-Control is absent (it is absent across this
+      // repo), so a blanket no-store suppressed edge caching site-wide. Every request
+      // then fell through to the ISR layer, turning each cached page into an ISR read
+      // and each stale one into an ISR write. Public content pages are now left alone
+      // so Vercel can serve them from the edge.
+      //
+      // Do NOT add Vercel-CDN-Cache-Control to any rule that can match /api/*:
+      // edge-caching an authenticated API response would leak one user's data to another.
+      {
+        source: '/api/:path*',
+        headers: [{ key: 'CDN-Cache-Control', value: 'no-store' }],
+      },
+      // Bare form. A path-to-regexp group matches exactly one segment, so the
+      // sub-path form below is a separate rule rather than an optional suffix.
+      {
+        source:
+          '/(sso|signout|thank-you|college-dashboard|unsubscribe|enroll|my-enrollment)',
+        headers: [{ key: 'CDN-Cache-Control', value: 'no-store' }],
+      },
+      {
+        source:
+          '/(sso|signout|thank-you|college-dashboard|unsubscribe|enroll|my-enrollment)/:path*',
+        headers: [{ key: 'CDN-Cache-Control', value: 'no-store' }],
+      },
+      // enroll, my-enrollment and thank-you also live under [locale], so they are
+      // reachable as /ta/enroll and friends. localePrefix is 'as-needed', which is
+      // why the unprefixed rules above are needed too.
+      {
+        source: '/(en|ta|hi|kn|ml)/(enroll|my-enrollment|thank-you)',
+        headers: [{ key: 'CDN-Cache-Control', value: 'no-store' }],
+      },
+      {
+        source: '/(en|ta|hi|kn|ml)/(enroll|my-enrollment|thank-you)/:path*',
+        headers: [{ key: 'CDN-Cache-Control', value: 'no-store' }],
       },
       // noindex non-content utility pages (SSO, signout, enrollment, etc.)
       {
@@ -71,14 +104,14 @@ const nextConfig = {
       // These pages have no real translations — Google sees them as duplicates of the
       // English version and reports "Duplicate, Google chose different canonical".
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching)/:path*',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching)/:path*',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],
       },
       // Also catch the root-level (non-nested) versions of these paths
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching)',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching)',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],

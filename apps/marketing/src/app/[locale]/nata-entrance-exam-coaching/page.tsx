@@ -33,7 +33,7 @@ import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 import { BASE_URL } from '@/lib/seo/constants';
 import { NataAssistanceForm } from '@/components/nata/NataAssistanceForm';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

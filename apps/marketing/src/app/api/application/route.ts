@@ -6,6 +6,7 @@ import {
   sendTemplateEmail,
   notifyNewApplication,
   parseExamYearAnswer,
+  createLogger,
 } from '@neram/database';
 import {
   createApplication,
@@ -16,6 +17,8 @@ import {
   type CreateApplicationInput,
 } from '@neram/database/queries';
 import { verifyFirebaseToken } from '../_lib/auth';
+
+const log = createLogger('[Application API]');
 
 interface ApplicationResponse {
   success: boolean;
@@ -101,7 +104,7 @@ async function sendSubmissionEmails(
       academicInfo,
     });
 
-    console.log('Submission emails sent successfully');
+    log.debug('Submission emails sent successfully');
   } catch (error) {
     // Log error but don't fail the submission
     console.error('Failed to send submission emails:', error);
@@ -222,14 +225,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       Object.entries(raw).filter(([, v]) => v !== undefined)
     ) as CreateApplicationInput;
 
-    console.log('[Application API] Sanitized payload keys:', Object.keys(applicationData));
-    console.log('[Application API] Sanitized payload:', JSON.stringify(applicationData, null, 2));
+    // The full payload used to be dumped here with JSON.stringify(..., null, 2).
+    // That was billed one observability event per printed line, so a single form
+    // submission cost dozens, and it wrote applicant PII (name, phone, email,
+    // address) into the log retention window. The key list is enough to debug a
+    // shape problem, and it is development only.
+    log.debug('Sanitized payload keys:', Object.keys(applicationData));
 
     // Step 1: Check if user already has an application
     let hasExisting: boolean;
     try {
       hasExisting = await hasExistingApplication(supabase, auth.userId);
-      console.log('[Application API] hasExisting:', hasExisting);
+      log.debug('hasExisting:', hasExisting);
     } catch (checkError: any) {
       console.error('[Application API] hasExistingApplication FAILED:', checkError);
       return NextResponse.json(
@@ -245,7 +252,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       let existing;
       try {
         existing = await getApplicationsByUserId(supabase, auth.userId);
-        console.log('[Application API] Existing applications:', existing.length);
+        log.debug('Existing applications:', existing.length);
       } catch (fetchError: any) {
         console.error('[Application API] getApplicationsByUserId FAILED:', fetchError);
         return NextResponse.json(
@@ -268,7 +275,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
 
           if (error) throw error;
           application = data;
-          console.log('[Application API] Updated draft:', draftApplication.id);
+          log.debug('Updated draft:', draftApplication.id);
         } catch (updateError: any) {
           console.error('[Application API] UPDATE draft FAILED:', updateError);
           return NextResponse.json(
@@ -281,7 +288,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
         if (isSubmitting) {
           try {
             application = await submitApplication(supabase, draftApplication.id);
-            console.log('[Application API] Submitted draft:', application?.application_number);
+            log.debug('Submitted draft:', application?.application_number);
           } catch (submitError: any) {
             console.error('[Application API] submitApplication FAILED:', submitError);
             return NextResponse.json(
@@ -294,7 +301,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
         // User has existing non-draft application(s) — create a new one for additional course
         try {
           application = await createApplication(supabase, applicationData);
-          console.log('[Application API] Created additional application:', application?.id);
+          log.debug('Created additional application:', application?.id);
         } catch (createError: any) {
           console.error('[Application API] createApplication (additional) FAILED:', createError);
           return NextResponse.json(
@@ -319,7 +326,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       // Create new application
       try {
         application = await createApplication(supabase, applicationData);
-        console.log('[Application API] Created new application:', application?.id);
+        log.debug('Created new application:', application?.id);
       } catch (createError: any) {
         console.error('[Application API] createApplication FAILED:', JSON.stringify({
           message: createError?.message,
@@ -349,7 +356,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       if (isSubmitting) {
         try {
           application = await submitApplication(supabase, application.id);
-          console.log('[Application API] Submitted new application:', application?.application_number);
+          log.debug('Submitted new application:', application?.application_number);
         } catch (submitError: any) {
           console.error('[Application API] submitApplication FAILED:', submitError);
           return NextResponse.json(
@@ -668,7 +675,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Applica
       auth.userId
     );
 
-    console.log('[Application API] Soft-deleted application:', applicationId);
+    log.debug('Soft-deleted application:', applicationId);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

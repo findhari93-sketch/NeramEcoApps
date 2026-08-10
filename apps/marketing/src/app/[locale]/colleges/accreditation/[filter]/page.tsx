@@ -10,14 +10,13 @@ import { getCollegesByAccreditation } from '@/lib/college-hub/queries';
 import { ACCREDITATION_FILTERS } from '@/lib/college-hub/constants';
 import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 type Props = { params: { locale: string; filter: string } };
 
+// English only. See colleges/[state]/[slug] for the rationale.
 export async function generateStaticParams() {
-  const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
-  const filters = Object.keys(ACCREDITATION_FILTERS);
-  return locales.flatMap((locale) => filters.map((filter) => ({ locale, filter })));
+  return Object.keys(ACCREDITATION_FILTERS).map((filter) => ({ locale: 'en', filter }));
 }
 
 export async function generateMetadata({ params: { locale, filter } }: Props): Promise<Metadata> {

@@ -6,7 +6,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { AAT_SCHEDULE } from '@/components/aat/data/aatContent';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

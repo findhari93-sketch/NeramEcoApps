@@ -25,7 +25,8 @@ import {
 import ExploreCategoriesSection from '@/components/college-hub/landing/ExploreCategoriesSection';
 import type { CollegeFilters } from '@/lib/college-hub/types';
 
-export const revalidate = 3600;
+// Matches the rest of the college hub. This data is seasonal, not hourly.
+export const revalidate = 86400;
 
 type Props = {
   params: { locale: string };

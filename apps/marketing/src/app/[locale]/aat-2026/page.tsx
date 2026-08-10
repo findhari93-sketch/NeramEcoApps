@@ -31,7 +31,7 @@ import {
 } from '@/components/aat/data/aatContent';
 
 // ISR: revalidate hourly so dynamic FAQs from Supabase pick up admin edits.
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

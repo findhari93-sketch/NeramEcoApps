@@ -11,8 +11,14 @@ import { createAdminClientISR, getSupabaseAdminClient } from '@neram/database';
 import type { College, CollegeDetail, CollegeListItem, CollegeFilters } from './types';
 import { COLLEGES_PER_PAGE } from './constants';
 
-// ISR revalidation buckets — must match `export const revalidate` on the pages
-const ISR_COLLEGE = 3600;   // state listings, detail pages (1 hour)
+// ISR revalidation buckets — must match `export const revalidate` on the pages.
+//
+// This is not merely documentation: Next.js takes the LOWEST revalidate across a
+// route's segment config and all of its fetches, so a low value here silently
+// overrides the page's own export. ISR_COLLEGE was 3600 while the pages said
+// 86400, and the pages regenerated hourly regardless. If you change one, change
+// both, and confirm with `initialRevalidateSeconds` in .next/prerender-manifest.json.
+const ISR_COLLEGE = 86400;  // state listings, detail pages (1 day)
 const ISR_EXAM_HUB = 86400; // TNEA / JoSAA hubs (1 day)
 
 // ─── List queries ────────────────────────────────────────────────────────────
@@ -128,7 +134,7 @@ export const getJoSAAColleges = cache(async (): Promise<CollegeListItem[]> => {
 // ISR: counseling system hub (e.g. TNEA, JoSAA, COMEDK, etc.)
 export const getCollegesByCounseling = cache(
   async (systemKey: string): Promise<CollegeListItem[]> => {
-    const supabase = createAdminClientISR(86400);
+    const supabase = createAdminClientISR(ISR_EXAM_HUB);
     const { data } = await supabase
       .from('colleges')
       .select(LISTING_SELECT)
@@ -142,7 +148,7 @@ export const getCollegesByCounseling = cache(
 // ISR: city hub pages
 export const getCollegesByCity = cache(
   async (citySlug: string): Promise<CollegeListItem[]> => {
-    const supabase = createAdminClientISR(3600);
+    const supabase = createAdminClientISR(ISR_COLLEGE);
     const { data } = await supabase
       .from('colleges')
       .select(LISTING_SELECT)
@@ -156,7 +162,7 @@ export const getCollegesByCity = cache(
 // ISR: college type hub pages
 export const getCollegesByType = cache(
   async (type: string): Promise<CollegeListItem[]> => {
-    const supabase = createAdminClientISR(3600);
+    const supabase = createAdminClientISR(ISR_COLLEGE);
     const { data } = await supabase
       .from('colleges')
       .select(LISTING_SELECT)
@@ -170,7 +176,7 @@ export const getCollegesByType = cache(
 // ISR: accreditation filter pages (COA approved, NAAC A+/A++)
 export const getCollegesByAccreditation = cache(
   async (filter: string): Promise<CollegeListItem[]> => {
-    const supabase = createAdminClientISR(3600);
+    const supabase = createAdminClientISR(ISR_COLLEGE);
     let query = supabase.from('colleges').select(LISTING_SELECT).eq('status', 'active');
 
     if (filter === 'coa-approved') {
@@ -311,7 +317,7 @@ export async function getTypeCountsForState(
 
 export const getActiveCities = cache(
   async (): Promise<Array<{ city_slug: string; city: string; count: number }>> => {
-    const supabase = createAdminClientISR(3600);
+    const supabase = createAdminClientISR(ISR_COLLEGE);
     const { data } = await supabase
       .from('colleges')
       .select('city, city_slug')
@@ -336,7 +342,7 @@ export const getActiveCities = cache(
 
 export const getActiveCounselingSystems = cache(
   async (): Promise<Array<{ system: string; count: number }>> => {
-    const supabase = createAdminClientISR(3600);
+    const supabase = createAdminClientISR(ISR_COLLEGE);
     const { data } = await supabase
       .from('colleges')
       .select('counseling_systems');

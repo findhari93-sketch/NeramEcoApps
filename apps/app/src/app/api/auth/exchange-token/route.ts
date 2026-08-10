@@ -9,8 +9,10 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken, createCustomToken } from '@/lib/firebase-admin';
-import { getOrCreateUserFromFirebase } from '@neram/database';
+import { getOrCreateUserFromFirebase, createLogger } from '@neram/database';
 import { getCorsHeaders } from '@/lib/cors';
+
+const log = createLogger('[exchange-token]');
 
 export async function OPTIONS(req: NextRequest) {
   const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
@@ -31,8 +33,8 @@ export async function POST(req: NextRequest) {
 
     // Verify the ID token
     const decodedToken = await verifyIdToken(idToken);
-    console.log('[exchange-token] Verified ID token for UID:', decodedToken.uid);
-    console.log('[exchange-token] Token issuer:', decodedToken.iss);
+    log.debug('Verified ID token for UID:', decodedToken.uid);
+    log.debug('Token issuer:', decodedToken.iss);
 
     // Sync Google profile data to Supabase while we have the full token data
     // (custom tokens only carry UID, so register-user won't have this data)
@@ -46,7 +48,9 @@ export async function POST(req: NextRequest) {
 
     // Create a custom token for the user
     const customToken = await createCustomToken(decodedToken.uid);
-    console.log('[exchange-token] Custom token created for UID:', decodedToken.uid, 'Admin email:', process.env.FIREBASE_ADMIN_CLIENT_EMAIL);
+    // The service-account email used to be logged here on every auth. It is a
+    // credential identifier and does not belong in a log line.
+    log.debug('Custom token created for UID:', decodedToken.uid);
 
     return NextResponse.json(
       {
