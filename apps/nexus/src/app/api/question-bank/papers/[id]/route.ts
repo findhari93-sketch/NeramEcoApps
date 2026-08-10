@@ -7,7 +7,61 @@ import {
   getQuestionsByPaper,
   deletePaperWithQuestions,
 } from '@neram/database';
+import type { NexusQBOriginalPaper, NexusQBQuestionSource } from '@neram/database';
 import { buildPaperBlueprint } from '@/lib/paper-blueprint';
+
+
+import { describeError } from '@/lib/api-errors';
+type PaperTuple = Pick<NexusQBOriginalPaper, 'exam_type' | 'year' | 'session' | 'shift'>;
+
+/**
+ * The tuple that joins a paper to its question source rows.
+ *
+ * Both unique indexes key on (exam_type, year, COALESCE(session,''),
+ * COALESCE(shift,'')), so a null session and an empty-string session are the
+ * same paper. This mirrors paperKey() in packages/database; keep them in step.
+ */
+function paperTupleKey(t: PaperTuple): string {
+  return `${t.exam_type}|${t.year}|${t.session ?? ''}|${t.shift ?? ''}`;
+}
+
+/**
+ * Source rows for this paper's questions, keyed by question id.
+ *
+ * The editor's Source & Format panel reads the exam/year/session tuple from
+ * here. It used to be handed nothing and fell back to a literal 'NATA' plus the
+ * current year, so a 2006 JEE paper's questions all read as NATA 2026.
+ *
+ * The row belonging to THIS paper is sorted first, because the editor reads
+ * sources[0] and a question that also appeared in a later paper has more than
+ * one row. Picking arbitrarily would label a 2006 question with its 2019
+ * reappearance.
+ */
+async function getSourcesByQuestion(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  paper: PaperTuple,
+  questionIds: string[]
+): Promise<Record<string, NexusQBQuestionSource[]>> {
+  if (questionIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('nexus_qb_question_sources')
+    .select('*')
+    .in('question_id', questionIds);
+  if (error) throw error;
+
+  const wanted = paperTupleKey(paper);
+  const byQuestion: Record<string, NexusQBQuestionSource[]> = {};
+  for (const row of (data || []) as unknown as NexusQBQuestionSource[]) {
+    (byQuestion[row.question_id] ||= []).push(row);
+  }
+  for (const rows of Object.values(byQuestion)) {
+    rows.sort(
+      (a, b) => Number(paperTupleKey(b) === wanted) - Number(paperTupleKey(a) === wanted)
+    );
+  }
+  return byQuestion;
+}
 
 export async function GET(
   request: NextRequest,
@@ -38,13 +92,18 @@ export async function GET(
     }
 
     const questions = await getQuestionsByPaper(params.id);
+    const sources = await getSourcesByQuestion(
+      supabase,
+      paper as unknown as PaperTuple,
+      questions.map((q) => q.id)
+    );
 
     return NextResponse.json({
-      data: { paper, questions },
+      data: { paper, questions, sources },
     }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Paper Detail API] Error:', message);
+    console.error('[Paper Detail API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -84,7 +143,7 @@ export async function PATCH(
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Paper Detail API] PATCH Error:', message);
+    console.error('[Paper Detail API] PATCH Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -109,7 +168,7 @@ export async function DELETE(
     }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Paper Detail API] DELETE Error:', message);
+    console.error('[Paper Detail API] DELETE Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

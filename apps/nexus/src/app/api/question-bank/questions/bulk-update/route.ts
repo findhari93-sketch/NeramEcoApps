@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, addQuestionTags, addQuestionTagPairs } from '@neram/database';
+import {
+  getSupabaseAdminClient,
+  addQuestionTags,
+  addQuestionTagPairs,
+  hardDeleteQBQuestions,
+} from '@neram/database';
+
+import { describeError } from '@/lib/api-errors';
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -23,15 +30,19 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { question_ids, action, tag_ids, assignments } = body as {
+    const { question_ids, action, tag_ids, assignments, force } = body as {
       question_ids?: string[];
-      action: 'activate' | 'deactivate' | 'add_tags';
+      action: 'activate' | 'deactivate' | 'add_tags' | 'delete';
       tag_ids?: string[];
       assignments?: Array<{ question_id: string; tag_ids: string[] }>;
+      force?: boolean;
     };
 
-    if (!['activate', 'deactivate', 'add_tags'].includes(action)) {
-      return NextResponse.json({ error: 'action must be activate, deactivate or add_tags' }, { status: 400 });
+    if (!['activate', 'deactivate', 'add_tags', 'delete'].includes(action)) {
+      return NextResponse.json(
+        { error: 'action must be activate, deactivate, add_tags or delete' },
+        { status: 400 },
+      );
     }
 
     // Additive bulk tagging. Two shapes: uniform ({question_ids, tag_ids}: same tags
@@ -61,6 +72,23 @@ export async function PATCH(request: NextRequest) {
 
     if (!question_ids || !Array.isArray(question_ids) || question_ids.length === 0) {
       return NextResponse.json({ error: 'question_ids required' }, { status: 400 });
+    }
+
+    // Permanent, and guarded. Unlike the one-off cleanup script, partial success
+    // is the right semantic here: a teacher clearing out a batch of junk should
+    // not be stopped because one row in the selection turned out to be in use.
+    // The refused rows come back with their reasons so the UI can say which.
+    if (action === 'delete') {
+      const result = await hardDeleteQBQuestions(question_ids, {
+        force: force === true,
+        actorId: caller.id,
+      });
+      return NextResponse.json({
+        data: {
+          deleted: result.deleted.length,
+          refused: result.refused,
+        },
+      });
     }
 
     if (action === 'activate') {
@@ -98,7 +126,7 @@ export async function PATCH(request: NextRequest) {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Bulk update error:', message);
+    console.error('[QB API] Bulk update error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

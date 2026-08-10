@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
 import { toggleQBStudyMark } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -22,7 +24,7 @@ export async function POST(
     return NextResponse.json({ data: { is_studied: isStudied } }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error:', message);
+    console.error('[QB API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

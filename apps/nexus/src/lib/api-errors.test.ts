@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ApiError, httpStatusForError, errorResponse } from './api-errors';
+import { ApiError, httpStatusForError, errorResponse, describeError } from './api-errors';
 
 /**
  * This helper decides what a client is told when a route throws, and it is on the
@@ -73,6 +73,64 @@ describe('an explicit ApiError always wins', () => {
   it('is not overridden by a message that looks like an auth failure', () => {
     // A caller who says 418 means 418, even if the words match a pattern.
     expect(httpStatusForError(new ApiError('Not authorized', 418))).toBe(418);
+  });
+});
+
+/**
+ * The Question Bank 500 that could not be diagnosed from its own log. Forty catch
+ * blocks used `err instanceof Error ? err.message : 'Internal server error'`, and
+ * a PostgrestError is a plain object, so every database failure printed the same
+ * eight words. These assert the cause survives to the log.
+ */
+describe('describeError names what actually broke', () => {
+  const postgrestError = {
+    message: 'column nexus_qb_questions.section does not exist',
+    details: '',
+    hint: 'Perhaps you meant to reference the column "nexus_qb_questions.section_order".',
+    code: '42703',
+  };
+
+  it('keeps the message, the code and the hint of a PostgrestError', () => {
+    const detail = describeError(postgrestError);
+    expect(detail).toContain('column nexus_qb_questions.section does not exist');
+    expect(detail).toContain('42703');
+    expect(detail).toContain('Perhaps you meant');
+    expect(detail).not.toBe('Internal server error');
+  });
+
+  it('surfaces a network failure, which arrives in the same shape', () => {
+    // supabase-js wraps a dead connection into the PostgrestError shape too, so
+    // the log has to distinguish "cannot reach the database" from "bad SQL".
+    const detail = describeError({
+      message: 'TypeError: fetch failed',
+      details: 'Caused by: AggregateError: (ECONNREFUSED)',
+      hint: '',
+      code: '',
+    });
+    expect(detail).toContain('fetch failed');
+    expect(detail).toContain('ECONNREFUSED');
+  });
+
+  it('omits the fields PostgREST left blank', () => {
+    expect(describeError({ message: 'boom', details: '', hint: '', code: '' })).toBe('boom');
+  });
+
+  it('uses the message of a real Error', () => {
+    expect(describeError(new Error('SUPABASE_SERVICE_ROLE_KEY is not set'))).toBe(
+      'SUPABASE_SERVICE_ROLE_KEY is not set',
+    );
+  });
+
+  it('never returns [object Object]', () => {
+    expect(describeError({})).not.toContain('[object Object]');
+    expect(describeError({ unexpected: 'shape' })).toContain('unexpected');
+  });
+
+  it('survives the awkward values', () => {
+    expect(describeError(null)).toBe('null');
+    expect(describeError(undefined)).toBe('undefined');
+    expect(describeError('a bare string')).toBe('a bare string');
+    expect(describeError(42)).toBe('42');
   });
 });
 

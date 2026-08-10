@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, createLogger } from '@neram/database';
 import { canUser } from '@/lib/staff-capabilities';
 import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { notifyRecordingAvailable, notifyClassCancelled } from '@/lib/timetable-notifications';
@@ -14,6 +14,8 @@ import {
   matchRecordingToClass,
   type RecordingFile,
 } from '@/lib/channel-recordings';
+
+const log = createLogger('[sync-now]');
 
 /**
  * POST /api/timetable/sync-now
@@ -159,7 +161,7 @@ export async function POST(request: NextRequest) {
       return endDateTime < twentyMinutesAgo;
     });
 
-    console.log(`[sync-now] Recording sync: ${classesToCheck.length} completed classes to check`);
+    log.debug(`Recording sync: ${classesToCheck.length} completed classes to check`);
 
     let recordingsFound = 0;
 
@@ -190,7 +192,7 @@ export async function POST(request: NextRequest) {
       try {
         const files = await fetchOrganizerRecordings(appToken, oid);
         oneDriveByOrganizer.set(oid, files);
-        console.log(`[sync-now] Found ${files.length} OneDrive recordings for organizer ${oid}`);
+        log.debug(`Found ${files.length} OneDrive recordings for organizer ${oid}`);
         return files;
       } catch (err) {
         console.error(`[sync-now] OneDrive recording fetch failed for organizer ${oid}:`, err);
@@ -206,7 +208,7 @@ export async function POST(request: NextRequest) {
       let channelRecordings: RecordingFile[] = [];
       try {
         channelRecordings = await fetchChannelRecordings(appToken, classroom.ms_team_id);
-        console.log(`[sync-now] Found ${channelRecordings.length} recording files in team ${classroom.ms_team_id}`);
+        log.debug(`Found ${channelRecordings.length} recording files in team ${classroom.ms_team_id}`);
       } catch (err) {
         // Loud, but not fatal: the OneDrive scan below may still find the class.
         console.error(`[sync-now] SharePoint recording fetch failed for team ${classroom.ms_team_id}:`, err);
@@ -254,7 +256,7 @@ export async function POST(request: NextRequest) {
 
           await notifyRecordingAvailable(cls.classroom_id, cls.title, cls.id).catch(() => {});
           recordingsFound++;
-          console.log(`[sync-now] Matched recording for "${cls.title}" on ${cls.scheduled_date}: ${matched.name}`);
+          log.debug(`Matched recording for "${cls.title}" on ${cls.scheduled_date}: ${matched.name}`);
         } else {
           // No recording found. Mark old classes so we don't re-check every load.
           const classAge = now.getTime() - new Date(cls.scheduled_date).getTime();

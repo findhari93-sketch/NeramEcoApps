@@ -6,12 +6,15 @@ import {
   getQBQuestionDetail,
   updateQBQuestion,
   softDeleteQBQuestion,
+  hardDeleteQBQuestions,
   getQuestionTagIds,
   setQuestionTags,
 } from '@neram/database';
 import { getLinkedDrawingQuestionId } from '@neram/database/queries/nexus';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { getQuestionOrigin } from '@/lib/test-import-store';
+
+import { describeError } from '@/lib/api-errors';
 
 export async function GET(
   request: NextRequest,
@@ -58,7 +61,7 @@ export async function GET(
     return NextResponse.json({ data: { ...data, drawing_question_id, tag_ids, origin } }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error:', message);
+    console.error('[QB API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -114,7 +117,7 @@ export async function PATCH(
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error:', message);
+    console.error('[QB API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -143,12 +146,35 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    await softDeleteQBQuestion(id);
 
-    return NextResponse.json({ data: { success: true } }, { status: 200 });
+    // Default stays a soft delete. ?hard=1 is the guarded permanent one, which
+    // refuses anything a student has answered or a test is holding: five tables
+    // reference this row with ON DELETE CASCADE and one of them is
+    // nexus_test_questions, so an unguarded delete rewrites the score of a paper
+    // that has already been sat.
+    const hard = request.nextUrl.searchParams.get('hard') === '1';
+    if (!hard) {
+      await softDeleteQBQuestion(id);
+      return NextResponse.json({ data: { success: true, mode: 'soft' } }, { status: 200 });
+    }
+
+    const force = request.nextUrl.searchParams.get('force') === '1';
+    const result = await hardDeleteQBQuestions([id], { force, actorId: caller.id });
+
+    if (result.deleted.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'This question cannot be deleted permanently.',
+          preflight: result.refused[0] ?? null,
+        },
+        { status: 409 },
+      );
+    }
+
+    return NextResponse.json({ data: { success: true, mode: 'hard' } }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error:', message);
+    console.error('[QB API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

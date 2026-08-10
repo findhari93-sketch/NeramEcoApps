@@ -19,7 +19,7 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import GestureIcon from '@mui/icons-material/Gesture';
 import RegionAnnotationLayer from './RegionAnnotationLayer';
 import {
-  type DrawingMedium, type SkillLevel, type RegionAnnotation, type PromptType,
+  type DrawingMedium, type SkillLevel, type RegionAnnotation, type SubmissionPromptType,
   MEDIUM_LABELS, LEVEL_LABELS, PROMPT_TYPE_LABELS,
   buildAnnotationPrompt, buildReferencePrompt, buildFeedbackPrompt,
   getMediumFromCategory,
@@ -146,7 +146,7 @@ export default function ImageToggleTabs({
     setCopyMenuAnchor(null);
   };
 
-  const handleCopyPrompt = async (type: PromptType) => {
+  const handleCopyPrompt = async (type: SubmissionPromptType) => {
     let prompt: string;
     switch (type) {
       case 'annotation':

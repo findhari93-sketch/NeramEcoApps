@@ -5,6 +5,8 @@ import {
   mergeHindiIntoQuestions,
 } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -32,7 +34,7 @@ export async function POST(
     }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Merge Hindi API] Error:', message);
+    console.error('[Merge Hindi API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

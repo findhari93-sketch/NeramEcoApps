@@ -12,6 +12,8 @@ import {
 } from '@neram/database';
 import type { QBQuestionStatus } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function GET(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
@@ -91,7 +93,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error:', message);
+    console.error('[QB API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -149,7 +151,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ data: question }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error:', message);
+    console.error('[QB API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

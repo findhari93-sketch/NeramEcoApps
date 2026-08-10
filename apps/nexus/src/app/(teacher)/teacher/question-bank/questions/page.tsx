@@ -34,8 +34,14 @@ import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import SellOutlinedIcon from '@mui/icons-material/SellOutlined';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import DeleteQuestionDialog from '@/components/question-bank/DeleteQuestionDialog';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import type { NexusQBQuestionListItem, NexusQBQuestionTagChip } from '@neram/database';
+import type {
+  NexusQBQuestionListItem,
+  NexusQBQuestionTagChip,
+  QBDeletePreflight,
+} from '@neram/database';
 import {
   QB_QUESTION_STATUS_LABELS,
   QB_QUESTION_STATUS_COLORS,
@@ -73,6 +79,7 @@ function QuestionsListContent() {
   const [questionStatus, setQuestionStatus] = useState('');
   const [solutionFilter, setSolutionFilter] = useState('');
   const [origin, setOrigin] = useState('');
+  const [questionFormat, setQuestionFormat] = useState('');
   const [tagIds, setTagIds] = useState<string[]>(() => {
     const raw = searchParams?.get('tag_ids');
     return raw ? raw.split(',').filter(Boolean) : [];
@@ -86,6 +93,9 @@ function QuestionsListContent() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [addTagsOpen, setAddTagsOpen] = useState(false);
   const [addTagsSel, setAddTagsSel] = useState<string[]>([]);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  /** Questions the server refused to delete, with the reasons, after an attempt. */
+  const [deleteRefused, setDeleteRefused] = useState<QBDeletePreflight[]>([]);
 
   // Debounce search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,7 +104,10 @@ function QuestionsListContent() {
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
-    severity: 'success' | 'error';
+    // 'warning' is for a partial bulk delete: some rows went, some were kept
+    // because a student or a test still needs them. Neither success nor error
+    // describes that honestly.
+    severity: 'success' | 'error' | 'warning';
   }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
@@ -126,6 +139,10 @@ function QuestionsListContent() {
         if (questionStatus) params.set('question_status', questionStatus);
         if (solutionFilter) params.set('solution_filter', solutionFilter);
         if (origin) params.set('origin', origin);
+        // The list API reads either 'question_format' or the short alias
+        // 'format'. Use the long name, which both the student and teacher
+        // paths agree on.
+        if (questionFormat) params.set('question_format', questionFormat);
         if (tagIds.length > 0) params.set('tag_ids', tagIds.join(','));
 
         const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
@@ -151,14 +168,14 @@ function QuestionsListContent() {
         setLoadingMore(false);
       }
     },
-    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, origin, tagIds]
+    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, origin, questionFormat, tagIds]
   );
 
   // Reset page and fetch when filters change
   useEffect(() => {
     setPage(1);
     fetchQuestions(1, false);
-  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, origin, tagIds, fetchQuestions]);
+  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, origin, questionFormat, tagIds, fetchQuestions]);
 
   // Load the tag registry once (labels/colors for chips + optimistic bulk-add updates).
   useEffect(() => {
@@ -244,6 +261,50 @@ function QuestionsListContent() {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(questions.map((q) => q.id)));
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    setBulkLoading(true);
+    setDeleteRefused([]);
+
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch('/api/question-bank/questions/bulk-update', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_ids: Array.from(selectedIds), action: 'delete' }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Delete failed');
+
+      const deleted: number = json.data?.deleted ?? 0;
+      const refused: QBDeletePreflight[] = json.data?.refused ?? [];
+      const refusedIds = new Set(refused.map((r) => r.question_id));
+
+      setQuestions((prev) => prev.filter((q) => !selectedIds.has(q.id) || refusedIds.has(q.id)));
+      setSelectedIds(new Set(refusedIds));
+      setDeleteRefused(refused);
+      // Only close when everything went. Leaving it open is how the teacher
+      // finds out which ones were kept and why.
+      if (refused.length === 0) setConfirmDeleteOpen(false);
+
+      setSnackbar({
+        open: true,
+        message:
+          refused.length === 0
+            ? `${deleted} question${deleted !== 1 ? 's' : ''} deleted`
+            : `${deleted} deleted, ${refused.length} kept because they are in use`,
+        severity: refused.length === 0 ? 'success' : 'warning',
+      });
+    } catch (err) {
+      console.error('Bulk delete failed:', err);
+      setSnackbar({ open: true, message: 'Delete failed', severity: 'error' });
+    } finally {
+      setBulkLoading(false);
     }
   }
 
@@ -349,6 +410,8 @@ function QuestionsListContent() {
     (q) => !q.is_active || ['answer_keyed', 'complete'].includes(q.status)
   );
   const canDeactivate = selectedQuestions.some((q) => q.is_active);
+  /** Exactly one selected, so the detailed preflight dialog is worth showing. */
+  const singleSelectedId = selectedIds.size === 1 ? Array.from(selectedIds)[0] : null;
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
@@ -415,6 +478,7 @@ function QuestionsListContent() {
         questionStatus={questionStatus}
         solutionFilter={solutionFilter}
         origin={origin}
+        questionFormat={questionFormat}
         total={total}
         loading={loading}
         onDifficultyChange={setDifficulty}
@@ -423,6 +487,7 @@ function QuestionsListContent() {
         onQuestionStatusChange={setQuestionStatus}
         onSolutionFilterChange={setSolutionFilter}
         onOriginChange={setOrigin}
+        onQuestionFormatChange={setQuestionFormat}
       />
 
       {/* Tag filter (managed registry, OR semantics) */}
@@ -455,7 +520,7 @@ function QuestionsListContent() {
               color="success"
               disabled={bulkLoading}
               onClick={() => handleBulkAction('activate')}
-              sx={{ textTransform: 'none', minHeight: 36 }}
+              sx={{ textTransform: 'none', minHeight: 44 }}
             >
               {bulkLoading ? 'Updating...' : 'Activate for Students'}
             </Button>
@@ -467,7 +532,7 @@ function QuestionsListContent() {
               color="warning"
               disabled={bulkLoading}
               onClick={() => handleBulkAction('deactivate')}
-              sx={{ textTransform: 'none', minHeight: 36 }}
+              sx={{ textTransform: 'none', minHeight: 44 }}
             >
               Deactivate
             </Button>
@@ -478,9 +543,20 @@ function QuestionsListContent() {
             startIcon={<SellOutlinedIcon sx={{ fontSize: 16 }} />}
             disabled={bulkLoading}
             onClick={() => setAddTagsOpen(true)}
-            sx={{ textTransform: 'none', minHeight: 36 }}
+            sx={{ textTransform: 'none', minHeight: 44 }}
           >
             Add tags
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteForeverIcon sx={{ fontSize: 16 }} />}
+            disabled={bulkLoading}
+            onClick={() => setConfirmDeleteOpen(true)}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Delete
           </Button>
           <Button
             size="small"
@@ -768,6 +844,87 @@ function QuestionsListContent() {
             sx={{ textTransform: 'none', minHeight: 44 }}
           >
             {bulkLoading ? 'Adding...' : 'Add tags'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* One question selected: show what points at it BEFORE offering the
+          button, and offer Hide as the alternative. For a batch that is not
+          practical, so the bulk dialog below reports refusals afterwards
+          instead. */}
+      {singleSelectedId && (
+        <DeleteQuestionDialog
+          open={confirmDeleteOpen}
+          onClose={() => setConfirmDeleteOpen(false)}
+          questionId={singleSelectedId}
+          questionText={questions.find((q) => q.id === singleSelectedId)?.question_text ?? null}
+          getToken={getToken}
+          onDeleted={(mode) => {
+            setQuestions((prev) =>
+              mode === 'hard'
+                ? prev.filter((q) => q.id !== singleSelectedId)
+                : prev.map((q) => (q.id === singleSelectedId ? { ...q, is_active: false } : q)),
+            );
+            setSelectedIds(new Set());
+            setSnackbar({
+              open: true,
+              message: mode === 'hard' ? 'Question deleted' : 'Question hidden from students',
+              severity: 'success',
+            });
+          }}
+        />
+      )}
+
+      {/* Permanent bulk delete. Guarded server-side: anything a student has
+          answered or a test is holding comes back refused and is listed here
+          rather than silently skipped. */}
+      <Dialog
+        open={confirmDeleteOpen && !singleSelectedId}
+        onClose={() => !bulkLoading && setConfirmDeleteOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        fullScreen={fullScreenDialog}
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Delete {selectedIds.size} question{selectedIds.size !== 1 ? 's' : ''} permanently?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            This cannot be undone. Questions that a student has already answered, that a test is
+            holding, or that have drawing submissions against them will be kept and listed back to
+            you. If you only want to stop students seeing these, use Deactivate instead.
+          </Typography>
+          {deleteRefused.length > 0 && (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                {deleteRefused.length} question{deleteRefused.length !== 1 ? 's were' : ' was'} kept
+              </Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                {deleteRefused.slice(0, 6).map((r) => (
+                  <li key={r.question_id}>
+                    <Typography variant="body2">{r.blockers[0]}</Typography>
+                  </li>
+                ))}
+              </Box>
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setConfirmDeleteOpen(false)}
+            disabled={bulkLoading}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            {deleteRefused.length > 0 ? 'Close' : 'Cancel'}
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleBulkDelete}
+            disabled={bulkLoading}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            {bulkLoading ? 'Deleting...' : 'Delete permanently'}
           </Button>
         </DialogActions>
       </Dialog>

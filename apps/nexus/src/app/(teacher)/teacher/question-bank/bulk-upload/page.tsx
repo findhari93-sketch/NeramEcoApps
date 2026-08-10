@@ -23,6 +23,7 @@ import {
   alpha,
   useTheme,
   LinearProgress,
+  CircularProgress,
   Autocomplete,
   ToggleButton,
   ToggleButtonGroup,
@@ -102,10 +103,17 @@ export default function BulkUploadPage() {
   const [importResult, setImportResult] = useState<{
     paperId: string;
     count: number;
+    /** How many arrived with their answer already in the same JSON. */
+    withAnswers: number;
+    /** Drawings need no key, so they count as ready alongside the keyed ones. */
+    drawings: number;
     isNew: boolean;
     message: string;
   } | null>(null);
   const [error, setError] = useState('');
+  /** The one-press finish on the Done step: activate, then build the test. */
+  const [finishing, setFinishing] = useState<string | null>(null);
+  const [finishError, setFinishError] = useState('');
 
   const handleQuestionsReady = useCallback(async (questions: ReviewQuestion[], warns: string[]) => {
     // Check if there are any base64 images that need uploading
@@ -149,6 +157,61 @@ export default function BulkUploadPage() {
     }
   }, [getToken]);
 
+  /**
+   * Every question either has its answer or needs none, so nothing is waiting
+   * on the answer-key screen and the paper can go live from here.
+   */
+  const readyToFinish = Boolean(
+    importResult?.isNew &&
+      importResult.count > 0 &&
+      importResult.withAnswers + importResult.drawings >= importResult.count,
+  );
+
+  /**
+   * Activate, then build the test, then land on the paper.
+   *
+   * Two existing endpoints in sequence rather than a new one. The test is
+   * built second on purpose: it composes from whatever is active at that
+   * moment, so activating first is what puts the drawing section in it.
+   */
+  const handleActivateAndBuild = async () => {
+    if (!importResult) return;
+    setFinishError('');
+    try {
+      const token = await getToken();
+      if (!token) {
+        setFinishError('Authentication failed');
+        return;
+      }
+      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+      setFinishing('Activating questions...');
+      const activateRes = await fetch(
+        `/api/question-bank/papers/${importResult.paperId}/activate`,
+        { method: 'POST', headers },
+      );
+      const activateJson = await activateRes.json();
+      if (!activateRes.ok) throw new Error(activateJson.error || 'Could not activate the questions');
+
+      setFinishing('Building the test...');
+      const testRes = await fetch(`/api/question-bank/papers/${importResult.paperId}/test`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ generate: true }),
+      });
+      const testJson = await testRes.json();
+      // The questions are activated either way, so a failed test build is
+      // reported against a paper that is still better off than it was.
+      if (!testRes.ok) throw new Error(testJson.error || 'The questions are active, but the test was not built');
+
+      router.push(`/teacher/question-bank/papers/${importResult.paperId}`);
+    } catch (err) {
+      setFinishError(err instanceof Error ? err.message : 'That did not work');
+    } finally {
+      setFinishing(null);
+    }
+  };
+
   const handleImport = async () => {
     if (reviewQuestions.length === 0) return;
     setImporting(true);
@@ -178,6 +241,11 @@ export default function BulkUploadPage() {
         })),
         section: q.section,
         categories: q.categories,
+        // Only present when the upload JSON carried the answers. When it does,
+        // the questions land answer_keyed and the separate answer-key paste is
+        // not needed at all.
+        correct_answer: q.correct_answer || null,
+        answer_tolerance: q.answer_tolerance ?? null,
         marks_correct: q.marks_correct,
         marks_negative: q.marks_negative,
         solution_video_url: q.solution_video_url || null,
@@ -209,6 +277,10 @@ export default function BulkUploadPage() {
       setImportResult({
         paperId: json.data.id,
         count: json.data.questions_parsed || reviewQuestions.length,
+        withAnswers: json.data.questions_with_answers || 0,
+        drawings: reviewQuestions.filter(
+          (q) => q.question_format === 'DRAWING_PROMPT' || q.question_format === 'IMAGE_BASED',
+        ).length,
         isNew: json.isNew,
         message: json.message,
       });
@@ -569,21 +641,53 @@ export default function BulkUploadPage() {
 
           {importResult.isNew && (
             <Typography variant="body2" sx={{ mb: 2 }}>
-              {importResult.count} questions created as drafts.
-              Add the answer key to proceed.
+              {readyToFinish
+                ? `All ${importResult.count} questions are ready${
+                    importResult.drawings > 0
+                      ? `, including ${importResult.drawings} drawing${
+                          importResult.drawings === 1 ? '' : 's'
+                        } a teacher marks`
+                      : ''
+                  }. You can put them in front of students now.`
+                : `${importResult.count} questions created as drafts. Add the answer key to proceed.`}
             </Typography>
           )}
 
-          <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center' }}>
+          {finishError && (
+            <Alert severity="error" sx={{ mb: 2, textAlign: 'left' }} onClose={() => setFinishError('')}>
+              {finishError}
+            </Alert>
+          )}
+
+          <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {/* The whole point of putting answers in the upload JSON: when the
+                paper arrives complete, there is nothing left to visit three
+                other screens for. Activate and build the test, one press. */}
+            {readyToFinish && (
+              <Button
+                variant="contained"
+                color="success"
+                disabled={Boolean(finishing)}
+                onClick={handleActivateAndBuild}
+                startIcon={finishing ? <CircularProgress size={16} color="inherit" /> : undefined}
+                sx={{ minHeight: 48 }}
+              >
+                {finishing || 'Activate and build the test'}
+              </Button>
+            )}
             <Button
-              variant="contained"
+              variant={readyToFinish ? 'outlined' : 'contained'}
+              disabled={Boolean(finishing)}
               onClick={() => router.push(`/teacher/question-bank/papers/${importResult.paperId}`)}
+              sx={{ minHeight: 48 }}
             >
-              {importResult.isNew ? 'Add Answer Key' : 'View Paper'}
+              {importResult.isNew && !readyToFinish ? 'Add Answer Key' : 'View Paper'}
             </Button>
             <Button
               variant="outlined"
+              disabled={Boolean(finishing)}
               onClick={() => router.push('/teacher/question-bank/papers')}
+              sx={{ minHeight: 48 }}
             >
               View All Papers
             </Button>

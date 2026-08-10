@@ -33,7 +33,6 @@ import {
 } from '@neram/ui';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
@@ -47,6 +46,7 @@ import type { GetToken } from '@/lib/nexus-swr';
 interface StaffView {
   paper: { id: string; is_student_visible: boolean; duration_minutes: number | null };
   question_count: number;
+  parsed_question_count: number;
   study_file: { id: string; title: string; file_name: string; folder_id: string } | null;
   test: {
     test_id: string;
@@ -224,14 +224,25 @@ export default function PaperStudentAccessPanel({
       <Row
         icon={<TimerOutlinedIcon />}
         color={theme.palette.success.main}
-        title="Timed test"
+        // Not "Timed test": with no duration on the paper the generator builds
+        // an untimed one, and a row that promises a clock and delivers none is
+        // the kind of small lie that makes a teacher distrust the whole screen.
+        title={view.paper.duration_minutes ? 'Timed test' : 'Full paper test'}
         body={
           view.test
             ? `${view.test.title} · ${view.test.question_count} questions${
                 view.test.duration_minutes ? ` · ${view.test.duration_minutes} min` : ' · untimed'
               }`
             : view.question_count > 0
-              ? `Build one from this paper's ${view.question_count} active questions, in their original order.`
+              ? // "in their original order" used to sit here, but composeTest is
+                // called with shuffleSections, which reshuffles inside each
+                // section on every attempt. Sections keep their order; questions
+                // do not.
+                `Build one from this paper's ${view.question_count} active question${
+                  view.question_count === 1 ? '' : 's'
+                }, section by section.${
+                  view.paper.duration_minutes ? '' : ' It will be untimed until this paper has a duration.'
+                }`
               : 'Activate this paper’s questions before a test can be built from them.'
         }
         action={
@@ -272,20 +283,28 @@ export default function PaperStudentAccessPanel({
               color="success"
               disabled={view.question_count === 0 || busy === 'test'}
               onClick={generateTest}
-              startIcon={
-                busy === 'test' ? (
-                  <CircularProgress size={14} color="inherit" />
-                ) : (
-                  <AutoAwesomeOutlinedIcon />
-                )
-              }
+              // No sparkle. This composes the paper's own questions with the
+              // published marking scheme and calls no model at all, but the AI
+              // icon made it read as a Gemini feature people were afraid to press.
+              startIcon={busy === 'test' ? <CircularProgress size={14} color="inherit" /> : undefined}
               sx={{ minHeight: 40, textTransform: 'none', borderRadius: 2 }}
             >
-              Generate
+              Build test
             </Button>
           )
         }
       />
+
+      {/* The gap that hid the drawing section. When a paper has parsed more
+          questions than it has activated, say so here rather than reporting a
+          confident "90" for a 92 question paper. */}
+      {view.parsed_question_count > view.question_count && (
+        <Alert severity="info" sx={{ borderRadius: 2 }}>
+          {view.question_count} of {view.parsed_question_count} questions are active.
+          The other {view.parsed_question_count - view.question_count} will not appear for
+          students or in a test until you activate them on the Questions tab.
+        </Alert>
+      )}
 
       {/* ── 3. Publish ─────────────────────────────────────────────────── */}
       <Paper

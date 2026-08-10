@@ -10,6 +10,7 @@ import {
   type QBQuestionSection,
 } from '@neram/database';
 import { inferPaperSections } from '@/lib/qb-section-inference';
+import { describeError } from '@/lib/api-errors';
 
 /**
  * Which section each question of a paper sits in.
@@ -41,7 +42,7 @@ export async function GET(
     }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Paper Sections API] GET Error:', message);
+    console.error('[Paper Sections API] GET Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -94,7 +95,7 @@ export async function PATCH(
     }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Paper Sections API] PATCH Error:', message);
+    console.error('[Paper Sections API] PATCH Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -141,7 +142,7 @@ export async function POST(
     }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Paper Sections API] POST Error:', message);
+    console.error('[Paper Sections API] POST Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

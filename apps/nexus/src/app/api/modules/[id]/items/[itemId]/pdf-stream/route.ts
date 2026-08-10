@@ -70,13 +70,18 @@ export async function GET(
       return NextResponse.json({ error: 'Storage returned non-PDF content. The file may have expired.' }, { status: 502 });
     }
 
-    const pdfBuffer = await pdfRes.arrayBuffer();
+    if (!pdfRes.body) {
+      return NextResponse.json({ error: 'Storage returned an empty response' }, { status: 502 });
+    }
 
-    return new NextResponse(pdfBuffer, {
+    // Streamed, not buffered: arrayBuffer() held the whole PDF in function
+    // memory for the life of the invocation, once per student per open.
+    const upstreamLength = pdfRes.headers.get('content-length');
+    return new NextResponse(pdfRes.body, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Length': String(pdfBuffer.byteLength),
+        ...(upstreamLength ? { 'Content-Length': upstreamLength } : {}),
         'Cache-Control': 'private, max-age=3600',
       },
     });

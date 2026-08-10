@@ -34,6 +34,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
@@ -145,6 +146,41 @@ export default function QuestionBankHome() {
             {totalQuestions > 0
               ? `${totalQuestions.toLocaleString()} questions by subject, chapter, year, difficulty`
               : 'By subject, chapter, year, difficulty'}
+          </Typography>
+        </Box>
+      </Button>
+
+      {/* Drawing practice.
+          The question_format filter has always worked; what was missing was a
+          door to it. A drawing is the one question type a student cannot answer
+          by tapping, so burying it in a filter drawer hid the whole section. */}
+      <Button
+        variant="outlined"
+        size="large"
+        fullWidth
+        startIcon={<BrushOutlinedIcon />}
+        onClick={() =>
+          router.push('/student/question-bank/questions?fmt=DRAWING_PROMPT')
+        }
+        sx={{
+          mb: 3,
+          py: 1.5,
+          minHeight: 52,
+          justifyContent: 'flex-start',
+          fontWeight: 600,
+          borderRadius: 2,
+          textTransform: 'none',
+          color: 'text.primary',
+          borderColor: 'divider',
+          '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
+        }}
+      >
+        <Box sx={{ textAlign: 'left', minWidth: 0 }}>
+          <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+            Drawing practice
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+            Draw it, upload a photo, and your teacher marks it
           </Typography>
         </Box>
       </Button>

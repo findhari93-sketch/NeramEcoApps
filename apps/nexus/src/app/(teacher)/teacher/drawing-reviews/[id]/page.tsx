@@ -483,7 +483,14 @@ export default function DrawingReviewDetailPage() {
   ) : lockedBar;
 
   // Question text (for prompt context)
-  const questionText = submission.question?.question_text || '';
+  //
+  // An exam drawing points straight at the bank question and has no
+  // drawing_questions mirror, so submission.question is null for it. Without
+  // the fallback the manual Gemini prompts below lose their ASSIGNMENT line
+  // entirely, which is the single most useful thing in them, on exactly the
+  // submissions this feature creates.
+  const questionText =
+    submission.question?.question_text || (submission as any).qb_question?.question_text || '';
 
   // Reference / expected-output images the teacher set on the assignment (may be
   // several). These live on the backing question; the review screen never showed

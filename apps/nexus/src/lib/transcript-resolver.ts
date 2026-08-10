@@ -41,6 +41,7 @@ import { fetchTranscriptFromSharePoint } from '@/lib/sharepoint-transcript';
 import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { resolveOnlineMeetingDetailed, resolveOrganizerOid } from '@/lib/teams-online-meeting';
 import type { TranscriptEntry } from '@neram/database';
+import { log } from '@neram/database';
 
 /**
  * Failed attempts before a class is declared hopeless. Only the cron counts
@@ -166,9 +167,13 @@ async function fetchTranscriptContent(url: string, tokens: Array<string | null |
         headers: { Authorization: `Bearer ${token}`, Accept: 'text/vtt' },
       });
       if (res.ok) return await res.text();
-      console.warn(`[transcript] content fetch answered ${res.status} for class transcript`);
+      // A token that does not work is the expected case here, not a fault: this
+      // loop exists precisely to try them all. Warning per miss billed an event
+      // on every recap open, so it is development only. A genuine failure is
+      // reported by the caller when every rung of the ladder comes back null.
+      log.debug(`[transcript] content fetch answered ${res.status} for class transcript`);
     } catch (err) {
-      console.warn('[transcript] content fetch threw:', err);
+      log.debug('[transcript] content fetch threw:', err);
     }
   }
   return null;

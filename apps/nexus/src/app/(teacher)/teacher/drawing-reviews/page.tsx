@@ -32,6 +32,25 @@ const REVIEWED_SUB_FILTERS = [
   { value: 'reviewed', label: 'Feedback Sent', apiStatus: 'reviewed_only' },
 ];
 
+/** One queue holds every kind of drawing. These say which kind you are looking at. */
+const SOURCE_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'question_bank', label: 'Question bank' },
+  { value: 'exam', label: 'Exam' },
+  { value: 'assignment', label: 'Assignment' },
+  { value: 'homework', label: 'Homework' },
+  { value: 'free_practice', label: 'Free practice' },
+];
+
+/** Human labels for the source chip on each card. */
+const SOURCE_LABELS: Record<string, string> = {
+  question_bank: 'Question bank',
+  exam: 'Exam',
+  assignment: 'Assignment',
+  homework: 'Homework',
+  free_practice: 'Free practice',
+};
+
 export default function DrawingReviewsPage() {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
@@ -42,6 +61,7 @@ export default function DrawingReviewsPage() {
   const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [tagSlugs, setTagSlugs] = useState<string[]>([]);
+  const [source, setSource] = useState('all');
   const [viewMode, setViewMode] = useDrawingViewMode();
 
   const handleDelete = async () => {
@@ -75,6 +95,7 @@ export default function DrawingReviewsPage() {
 
       const params = new URLSearchParams({ status: fetchStatus });
       if (tagSlugs.length > 0) params.set('tags', tagSlugs.join(','));
+      if (source !== 'all') params.set('source_type', source);
 
       const res = await fetch(`/api/drawing/submissions/review-queue?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -86,7 +107,7 @@ export default function DrawingReviewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [getToken, status, reviewedSubFilter, tagSlugs]);
+  }, [getToken, status, reviewedSubFilter, tagSlugs, source]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
@@ -121,6 +142,25 @@ export default function DrawingReviewsPage() {
               variant={reviewedSubFilter === f.value ? 'filled' : 'outlined'}
               size="small"
               sx={{ cursor: 'pointer' }}
+            />
+          ))}
+        </Box>
+      )}
+
+      {/* Where the drawing came from. One queue holds assignment, exam,
+          question-bank and free-practice work, and a teacher marking exams
+          should not have to read past the rest to find them. */}
+      {status !== 'gallery' && status !== 'reference' && (
+        <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+          {SOURCE_FILTERS.map((f) => (
+            <Chip
+              key={f.value}
+              label={f.label}
+              onClick={() => setSource(f.value)}
+              color={source === f.value ? 'primary' : 'default'}
+              variant={source === f.value ? 'filled' : 'outlined'}
+              size="small"
+              sx={{ cursor: 'pointer', height: 32 }}
             />
           ))}
         </Box>
@@ -185,8 +225,14 @@ export default function DrawingReviewsPage() {
                       <Typography variant="body2" fontWeight={600} noWrap>{s.student?.name || 'Student'}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 0.5, mb: 0.25, flexWrap: 'wrap' }}>
-                      {(s as any).source_type === 'assignment' && (
-                        <Chip label="Assignment" size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                      {SOURCE_LABELS[(s as any).source_type] && (
+                        <Chip
+                          label={SOURCE_LABELS[(s as any).source_type]}
+                          size="small"
+                          color={(s as any).source_type === 'exam' ? 'error' : 'primary'}
+                          variant="outlined"
+                          sx={{ height: 20, fontSize: '0.65rem' }}
+                        />
                       )}
                       {!isCompact && s.question && <CategoryBadge category={s.question.category} />}
                       {(s as any).thread_info?.total_attempts > 1 && (
@@ -205,7 +251,11 @@ export default function DrawingReviewsPage() {
                       ))}
                     </Box>
                     <Typography variant="body2" color="text.secondary" noWrap sx={{ fontSize: '0.8rem' }}>
-                      {s.question?.question_text || 'Free Practice'}
+                      {/* An exam drawing has no drawing_questions mirror, so
+                          its prompt arrives on qb_question. Falling straight
+                          through to "Free Practice" put those words over an
+                          exam answer. */}
+                      {s.question?.question_text || s.qb_question?.question_text || 'Free practice'}
                     </Typography>
                     {!isCompact && (
                       <Typography variant="caption" color="text.secondary">

@@ -3,6 +3,8 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, promoteRecallToQB, refreshContributorSummary } from '@neram/database';
 import type { QBConfidenceTier, NexusQBQuestionInsert } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -57,7 +59,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ data: question }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error promoting recall:', message);
+    console.error('[QB API] Error promoting recall:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

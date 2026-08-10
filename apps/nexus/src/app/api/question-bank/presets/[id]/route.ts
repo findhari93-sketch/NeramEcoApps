@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, deleteQBPreset } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -28,7 +30,7 @@ export async function DELETE(
     return NextResponse.json({ data: { success: true } }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error:', message);
+    console.error('[QB API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

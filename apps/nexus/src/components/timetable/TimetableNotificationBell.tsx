@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -12,6 +12,7 @@ import {
   ListItemText,
   Button,
   Divider,
+  useVisibilityPolling,
 } from '@neram/ui';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 
@@ -69,12 +70,10 @@ export default function TimetableNotificationBell({
     }
   }, [classroomId, getToken]);
 
-  // Poll for unread count every 30 seconds
-  useEffect(() => {
-    fetchCount();
-    const interval = setInterval(fetchCount, 30000);
-    return () => clearInterval(interval);
-  }, [fetchCount]);
+  // Poll for unread count, but only while somebody is looking. The timetable is
+  // the default landing surface for both roles, so this bell is mounted for most
+  // signed-in sessions; an unguarded 30s interval billed every idle tab.
+  useVisibilityPolling(fetchCount, 60000);
 
   const fetchNotifications = async () => {
     setLoading(true);

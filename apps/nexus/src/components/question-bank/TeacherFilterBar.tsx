@@ -28,6 +28,7 @@ interface TeacherFilterBarProps {
   questionStatus: string;
   solutionFilter: string;
   origin: string;
+  questionFormat: string;
   total: number;
   loading: boolean;
   onDifficultyChange: (v: string) => void;
@@ -36,6 +37,7 @@ interface TeacherFilterBarProps {
   onQuestionStatusChange: (v: string) => void;
   onSolutionFilterChange: (v: string) => void;
   onOriginChange: (v: string) => void;
+  onQuestionFormatChange: (v: string) => void;
 }
 
 interface FilterConfig {
@@ -54,6 +56,7 @@ export default function TeacherFilterBar({
   questionStatus,
   solutionFilter,
   origin,
+  questionFormat,
   total,
   loading,
   onDifficultyChange,
@@ -62,6 +65,7 @@ export default function TeacherFilterBar({
   onQuestionStatusChange,
   onSolutionFilterChange,
   onOriginChange,
+  onQuestionFormatChange,
 }: TeacherFilterBarProps) {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [openFilter, setOpenFilter] = useState<string | null>(null);
@@ -82,6 +86,20 @@ export default function TeacherFilterBar({
         { value: 'imported', label: 'Imported' },
       ],
       onChange: onOriginChange,
+    },
+    {
+      // Without this there is no way to see the drawing questions as a set,
+      // which is the first thing a teacher wants after authoring one.
+      key: 'format',
+      label: 'Format',
+      value: questionFormat,
+      options: [
+        { value: 'MCQ', label: 'MCQ' },
+        { value: 'NUMERICAL', label: 'Numerical' },
+        { value: 'DRAWING_PROMPT', label: 'Drawing' },
+        { value: 'IMAGE_BASED', label: 'Image based' },
+      ],
+      onChange: onQuestionFormatChange,
     },
     {
       key: 'difficulty',

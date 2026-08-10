@@ -40,9 +40,22 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdminClient();
 
     // Fast path: an already-linked Microsoft account (the vast majority of logins).
+    //
+    // Explicit column list, not select('*'). The users table has 62 columns, half
+    // of them text/json, and this route runs on every page load for every signed-in
+    // person; the response below projects six fields. Everything listed here is
+    // read somewhere in this handler, so adding a read means adding it here too:
+    //   staff_role, user_type          -> resolveStaffRole
+    //   can_teach                      -> canTeach
+    //   photo_*                        -> photoGate
+    //   nexus_first_login_at           -> the Nexus login stamp
+    //   linked_classroom_email/_at     -> the UPN linking branch
+    // Kept as one string literal on purpose: supabase-js infers the row type by
+    // parsing this at the type level, and a concatenated string widens to
+    // `string`, which collapses the result to GenericStringError.
     let { data: user } = await supabase
       .from('users')
-      .select('*')
+      .select('id, name, email, phone, avatar_url, user_type, is_alumni, nexus_first_login_at, linked_classroom_email, linked_classroom_at, photo_status, photo_rejection_reason, photo_ms_sync_status, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .maybeSingle();
 
@@ -329,8 +342,8 @@ export async function GET(request: NextRequest) {
     // has to upload a photo, which needs a live auth context, and the 403 path
     // deliberately nulls out user/nexusRole/classrooms on the client.
     //
-    // Costs zero extra reads: photo_status rides the select('*') on users above,
-    // and the kill switch rides the feature-flags read we just did.
+    // Costs zero extra reads: photo_status is in the users select above, and the
+    // kill switch rides the feature-flags read we just did.
     const photoStatus = toPhotoStatus(user.photo_status);
     const photoGate: PhotoGateState = {
       status: photoStatus,
@@ -342,9 +355,9 @@ export async function GET(request: NextRequest) {
         classroomCount: activeEnrollments.length,
         photoStatus,
       }),
-      // Also rides the select('*'). Only true when the approved photo really did
-      // reach the Microsoft account, so the profile screen never claims a Teams
-      // sync that silently failed.
+      // Also in the users select above. Only true when the approved photo really
+      // did reach the Microsoft account, so the profile screen never claims a
+      // Teams sync that silently failed.
       microsoftSynced:
         photoStatus === 'approved' && (user as any).photo_ms_sync_status === 'synced',
     };

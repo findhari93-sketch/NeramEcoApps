@@ -133,6 +133,17 @@ export interface BulkUploadQuestion {
     image?: string;
     nta_id?: string;
   }[];
+  /**
+   * The answer, when this file carries it.
+   *
+   * Optional, because the NTA answer key is usually a second PDF that arrives
+   * later and still has its own paste screen. Including it here collapses the
+   * import from three screens to one. For an MCQ give the option label ("A" or
+   * "a"); for a NUMERICAL give the value.
+   */
+  correct_answer?: string;
+  /** Accepted range either side of a NUMERICAL answer. */
+  answer_tolerance?: number;
   marks_correct?: number;
   marks_negative?: number;
   categories?: string[];
@@ -162,6 +173,55 @@ export interface ValidationResult {
   errors: string[];
   warnings: string[];
   questions: ReviewQuestion[];
+}
+
+/**
+ * Turn the answer this file gives us into the value the bank stores.
+ *
+ * bulkCreateDraftQuestions numbers MCQ options by position, 'a' through 'd',
+ * and gradeQBAnswerStrict compares against that id. So "A", "a", "(A)" and the
+ * option's own label all have to arrive here and leave as 'a'. Getting this
+ * wrong would not fail on import: it would mark every student wrong months
+ * later, which is why it resolves against the question's real options rather
+ * than trusting the letter.
+ *
+ * Returns null with a reason when it cannot resolve, and the caller drops the
+ * answer while keeping the question. A paper that imports 92 questions and 91
+ * answers is far better than one that refuses the file.
+ */
+export function resolveCorrectAnswer(
+  raw: string | undefined,
+  format: ReviewQuestion['question_format'],
+  options: ReviewQuestionOption[],
+): { answer: string | undefined; problem?: string } {
+  const value = (raw ?? '').trim();
+  if (!value) return { answer: undefined };
+
+  if (format === 'DRAWING_PROMPT' || format === 'IMAGE_BASED') {
+    return { answer: undefined, problem: 'a drawing has no answer key, so it was ignored' };
+  }
+
+  if (format === 'NUMERICAL') return { answer: value };
+
+  // MCQ. Match the option's own label first, since that is what the paper
+  // actually printed, then fall back to reading the value as a position.
+  const cleaned = value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  const byLabel = options.findIndex(
+    (o) => (o.label || '').replace(/[^a-z0-9]/gi, '').toLowerCase() === cleaned,
+  );
+  const index =
+    byLabel >= 0
+      ? byLabel
+      : /^[a-z]$/.test(cleaned)
+        ? cleaned.charCodeAt(0) - 97
+        : /^[1-9]$/.test(cleaned)
+          ? Number(cleaned) - 1
+          : -1;
+
+  if (index < 0 || index >= options.length) {
+    return { answer: undefined, problem: `answer "${value}" matches none of its options` };
+  }
+  return { answer: String.fromCharCode(97 + index) };
 }
 
 let clientIdCounter = 0;
@@ -233,6 +293,13 @@ export function validateAndConvertJSON(data: unknown): ValidationResult {
         }
       }
 
+      // An answer in this file is optional. When it is here, one paste does the
+      // whole paper instead of a second trip through the answer-key screen.
+      const resolved = resolveCorrectAnswer(q.correct_answer, format, options);
+      if (resolved.problem) {
+        warnings.push(`Q${q.question_number}: ${resolved.problem}`);
+      }
+
       questions.push({
         _clientId: generateClientId(),
         question_number: q.question_number,
@@ -244,6 +311,8 @@ export function validateAndConvertJSON(data: unknown): ValidationResult {
         nta_question_id: q.nta_question_id || '',
         section: reconcileSection(sectionKey, format),
         categories: q.categories || inferCategories(reconcileSection(sectionKey, format)),
+        correct_answer: resolved.answer,
+        answer_tolerance: q.answer_tolerance,
         marks_correct: q.marks_correct,
         marks_negative: q.marks_negative,
         solution_video_url: q.solution_video_url || undefined,
@@ -268,8 +337,18 @@ export function validateAndConvertJSON(data: unknown): ValidationResult {
   const paper = json.paper as Record<string, unknown>;
   if (paper.total_questions && typeof paper.total_questions === 'number') {
     if (questions.length !== paper.total_questions) {
+      // Short by a couple is the normal case for a JEE Paper 2 whose drawing
+      // sheet was printed separately and is not in the PDF. The extractor is
+      // now told to omit those rather than invent them, so this warning fires
+      // on exactly the papers where nothing is wrong. Say so, or a teacher
+      // re-uploads looking for questions that were never in the file.
+      const missing = (paper.total_questions as number) - questions.length;
+      const drawingHint =
+        missing > 0 && missing <= 3
+          ? ' If the drawing sheet was not part of the PDF, this is expected.'
+          : '';
       warnings.push(
-        `Expected ${paper.total_questions} questions but found ${questions.length}`
+        `The paper says ${paper.total_questions} questions and the file has ${questions.length}.${drawingHint}`
       );
     }
   }
@@ -389,6 +468,7 @@ export const JSON_SCHEMA_EXAMPLE: BulkUploadJSON = {
             { label: 'C', text: '1/6', text_hi: '1/6', nta_id: '49513493353' },
             { label: 'D', text: '5/6', text_hi: '5/6', nta_id: '49513493354' },
           ],
+          correct_answer: 'A',
           marks_correct: 4,
           marks_negative: -1,
           categories: ['mathematics'],
@@ -515,12 +595,20 @@ ${JSON.stringify(JSON_SCHEMA_EXAMPLE, null, 2)}
      * \`drawing_color_constraint\`: color rules (e.g. "primary colors only", "maximum 4 colours")
      * \`drawing_design_principle\`: principle tested (e.g. "balance", "rhythm", "emphasis")
      * \`drawing_sub_type\`: one of \`"2d_composition"\`, \`"3d_composition"\`, \`"kit_sculpture"\`
+   - **Only emit a DRAWING_PROMPT when the drawing sheet is actually in this PDF and you can read its prompt text.** The JEE Paper 2 drawing section is printed on a separate sheet and is very often missing from a scanned or downloaded paper. If it is missing, omit the drawing section entirely: no \`"drawing"\` section object, no questions standing in for it.
+   - **Never invent a drawing question.** Do not emit \`"Drawing question 1"\`, \`"Drawing Test Question 2"\`, \`"See separate Drawing Sheet"\`, or any other stand-in for a prompt you cannot read. An invented prompt is indistinguishable from a real one once it is in the bank, and a student can be asked to spend ninety minutes drawing it.
+   - If the paper's instructions say a drawing section exists but its sheet is not in this PDF, say so in your reply outside the JSON. Do not add a field to the JSON for it, and do not emit questions for it.
    - Include \`nta_question_id\` if visible in the PDF. Omit or use empty string for old-format papers.
 6. **Extract marks from paper instructions:**
    - Modern NTA: MCQ +4/-1, Numerical +4/0, Drawing +100/0
    - Old format: Read from the instructions section (e.g., "Each correct answer carries 3 marks", "1 mark deducted for wrong answer")
    - Set \`marks_correct\` and \`marks_negative\` accordingly per question type.
-7. Do NOT include correct answers (they come from a separate answer key).
+7. **Correct answers are optional, and worth including when the PDF contains them.**
+   - If the PDF is a question paper WITH its answer key (a solved paper, or a paper with an answer table at the end), set \`correct_answer\` on each question. That way one file does the whole import and no separate answer key is needed.
+   - For MCQ: use the option label exactly as printed, e.g. \`"A"\` (or \`"3"\` for an old paper numbering options (1) to (4)).
+   - For NUMERICAL: use the value, e.g. \`"4"\` or \`"2.5"\`. Add \`answer_tolerance\` if the paper allows a range.
+   - For DRAWING_PROMPT: omit it. A drawing is marked by a teacher and has no key.
+   - **Do NOT guess.** If the answer is not printed in the PDF, omit \`correct_answer\` entirely. A wrong key is far worse than a missing one, because it marks every student wrong without anyone noticing.
 8. For each question, include solution details:
    - \`"explanation_brief"\`: A concise 1-2 sentence summary of the solution approach.
    - \`"explanation_detailed"\`: A detailed step-by-step solution with reasoning. Use LaTeX notation (\`$...$\`) for math.
@@ -580,7 +668,7 @@ Rules:
 9. For image-based questions where text is in an image: set question_text_hi to "" but still generate explanations
 10. For NUMERICAL type questions (integer answer): omit the options array entirely
 11. Do NOT include correct_answer, solution_video_url, or any English text fields
-12. For Drawing Test questions (Q76-Q82 typically): omit entirely or set question_text_hi to the drawing prompt in Hindi
+12. For Drawing Test questions (Q76-Q82 typically): translate the prompt into question_text_hi ONLY if the drawing sheet is in this PDF and you can read it. If it is not there, omit the question. Never write a stand-in like "Drawing question 1" in either language.
 
 Important Notes:
 - CRITICAL: Every MCQ question MUST include the "options" array with text_hi for ALL options (A, B, C, D). Do not skip option translations.

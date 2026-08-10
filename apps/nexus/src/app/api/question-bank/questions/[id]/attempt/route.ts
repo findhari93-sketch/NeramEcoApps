@@ -3,7 +3,10 @@ import { verifyQBAccess } from '@/lib/qb-auth';
 import {
   submitQBAttempt,
   getQBQuestionDetail,
+  DRAWING_ATTEMPT_ERROR,
 } from '@neram/database';
+
+import { describeError } from '@/lib/api-errors';
 
 export async function POST(
   request: NextRequest,
@@ -48,7 +51,13 @@ export async function POST(
     }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error:', message);
+    // A drawing sent here is the caller using the wrong route, not a server
+    // fault. It answered 500 for every drawing in the bank before the guard
+    // existed, so name it as a client error and skip the error log.
+    if (message === DRAWING_ATTEMPT_ERROR) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    console.error('[QB API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

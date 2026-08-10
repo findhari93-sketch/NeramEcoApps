@@ -103,7 +103,14 @@ export async function GET(request: NextRequest) {
         'Content-Disposition': 'inline',
         // private keeps this out of any shared cache while still letting the
         // browser reuse chunks, so scrubbing back over watched video is free.
-        'Cache-Control': 'private, max-age=300',
+        //
+        // max-age was 300, which expired chunks well inside the 600s life of the
+        // grant that fetched them, so a student scrubbing back over the first
+        // half of a lecture re-downloaded bytes already on their disk. The bytes
+        // at a given range never change, hence immutable. This does not widen
+        // access: the vt grant in the URL still expires on its own schedule, and
+        // any new request is checked against it server-side.
+        'Cache-Control': 'private, max-age=3600, immutable',
         'X-Content-Type-Options': 'nosniff',
         'Cross-Origin-Resource-Policy': 'same-origin',
       },

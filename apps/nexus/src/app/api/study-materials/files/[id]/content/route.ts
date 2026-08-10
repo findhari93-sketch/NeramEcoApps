@@ -98,17 +98,25 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const upstream = await fetch(downloadUrl, { redirect: 'follow' });
-    if (!upstream.ok) {
+    if (!upstream.ok || !upstream.body) {
       return NextResponse.json({ error: 'Could not fetch file' }, { status: 502 });
     }
-    const buffer = await upstream.arrayBuffer();
 
+    // Streamed, not buffered. This used to be `await upstream.arrayBuffer()`,
+    // which held the whole document in function memory for the life of the
+    // invocation: a 20 MB chapter cost 20 MB of provisioned memory for every
+    // student who opened it. Passing the body through keeps memory flat
+    // regardless of file size. Same approach as api/media/recording.
     const safeName = (file.file_name || 'file').replace(/["\\]/g, '');
-    return new NextResponse(buffer, {
+    const upstreamLength = upstream.headers.get('content-length');
+    return new NextResponse(upstream.body, {
       status: 200,
       headers: {
         'Content-Type': servedType,
-        'Content-Length': String(buffer.byteLength),
+        // Only forwarded when the source declared it: computing it ourselves
+        // would mean buffering, which is the thing being removed.
+        ...(upstreamLength ? { 'Content-Length': upstreamLength } : {}),
+        // private: authenticated study material must never enter a shared cache.
         'Cache-Control': 'private, max-age=3600',
         'Content-Disposition': wantDownload ? `attachment; filename="${safeName}"` : 'inline',
       },

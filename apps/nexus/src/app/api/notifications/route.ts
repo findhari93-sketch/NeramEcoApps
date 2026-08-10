@@ -34,7 +34,12 @@ export async function GET(request: NextRequest) {
 
     if (countOnly) {
       const count = await getUserUnreadNotificationCount(user.id, supabase);
-      return NextResponse.json({ count });
+      // private: this is one user's count and must never enter a shared cache.
+      // max-age lets the browser absorb a duplicate poll without a round trip.
+      return NextResponse.json(
+        { count },
+        { headers: { 'Cache-Control': 'private, max-age=30' } }
+      );
     }
 
     const limit = parseInt(searchParams.get('limit') || '15');

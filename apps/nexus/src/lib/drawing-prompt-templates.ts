@@ -186,9 +186,97 @@ TASK: Write a comprehensive evaluation covering:
 Keep the feedback constructive, specific, and actionable. Reference specific areas of the drawing where possible.`;
 }
 
+// ─── Prompt 4: Model Solution (Image Output) ────────────────────────────────
+
+/**
+ * The parts of a bank question that describe what a good answer looks like.
+ *
+ * Deliberately a plain shape rather than NexusQBQuestion: the panel calls this
+ * with UNSAVED form state so a teacher can iterate on the wording, press Copy,
+ * and see the prompt change without saving a draft they may throw away.
+ */
+export interface DrawingQuestionBrief {
+  question_text: string | null;
+  design_principle_tested?: string | null;
+  colour_constraint?: string | null;
+  objects_to_include?: Array<{ name: string; count?: number }> | null;
+  focus_points?: Array<{ text: string }> | null;
+  drawing_marks?: number | null;
+  /** Feeds getMediumFromCategory when no medium is passed. */
+  category?: string | null;
+}
+
+/**
+ * Build the prompt a teacher pastes into Gemini to get a model answer image.
+ *
+ * The fourth of the copy-paste prompts, and the first that describes a QUESTION
+ * rather than a student's submission. Same closing line as buildReferencePrompt
+ * so the workflow a teacher already knows carries over.
+ *
+ * No API call. Nothing in this file talks to a model.
+ */
+export function buildSolutionPrompt(
+  q: DrawingQuestionBrief,
+  level: SkillLevel = 'expert',
+  medium?: DrawingMedium,
+): string {
+  const chosenMedium = medium ?? getMediumFromCategory(q.category || '');
+  const lines: string[] = [];
+
+  lines.push('You are an expert architecture entrance-exam tutor. Generate a MODEL ANSWER image for the drawing question below.');
+  lines.push('');
+  lines.push(`DRAWING MEDIUM: ${MEDIUM_LABELS[chosenMedium]}`);
+  lines.push(`TARGET LEVEL: ${LEVEL_LABELS[level]}`);
+  lines.push(MEDIUM_CONTEXT[chosenMedium]);
+  lines.push('');
+  lines.push('QUESTION:');
+  lines.push((q.question_text || '').trim() || '(no question text yet)');
+
+  const objects = (q.objects_to_include || []).filter((o) => o && o.name);
+  if (objects.length > 0) {
+    const rendered = objects
+      .map((o) => (o.count && o.count > 1 ? `${o.name} (x${o.count})` : o.name))
+      .join(', ');
+    lines.push('', `MUST INCLUDE: ${rendered}`);
+  }
+  if (q.colour_constraint) lines.push('', `COLOUR RULE: ${q.colour_constraint}`);
+  if (q.design_principle_tested) lines.push('', `PRINCIPLE BEING TESTED: ${q.design_principle_tested}`);
+
+  const focus = (q.focus_points || []).filter((f) => f && f.text?.trim());
+  if (focus.length > 0) {
+    lines.push('', 'THE ANSWER MUST DEMONSTRATE:');
+    focus.forEach((f, i) => lines.push(`  ${i + 1}. ${f.text.trim()}`));
+  }
+  if (q.drawing_marks) lines.push('', `MARKS: ${q.drawing_marks}`);
+
+  lines.push('');
+  lines.push('Requirements:');
+  lines.push('- Draw it as a student would on an exam answer sheet, inside a clean rectangular frame');
+  lines.push(`- Render it by hand in ${MEDIUM_LABELS[chosenMedium].toLowerCase()}, not as a photograph and not as a 3D render`);
+  lines.push('- Correct proportion, consistent light source, and a clear focal point');
+  lines.push('- Satisfy every constraint listed above exactly, including counts and colour rules');
+  lines.push('- No text labels, no arrows, no annotations, no watermark, and no signature on the image');
+  lines.push('');
+  lines.push('OUTPUT: Generate a single model answer image.');
+
+  return lines.join('\n');
+}
+
 // ─── Prompt Type Labels (for UI) ─────────────────────────────────────────────
 
-export type PromptType = 'annotation' | 'reference' | 'feedback';
+export type PromptType = 'annotation' | 'reference' | 'feedback' | 'solution';
+
+/**
+ * The prompts the review screen offers, which is every one that describes a
+ * student's SUBMISSION.
+ *
+ * 'solution' is excluded deliberately: it describes a question and is built
+ * from the authoring panel's form state, so there is nothing sensible for the
+ * review screen to pass it. Narrowing here keeps that screen's switch
+ * exhaustive, so adding a fifth prompt later fails to compile rather than
+ * silently falling through with an unassigned variable.
+ */
+export type SubmissionPromptType = Exclude<PromptType, 'solution'>;
 
 export const PROMPT_TYPE_LABELS: Record<PromptType, { label: string; description: string; icon: string }> = {
   annotation: {
@@ -205,5 +293,10 @@ export const PROMPT_TYPE_LABELS: Record<PromptType, { label: string; description
     label: 'Text Feedback',
     description: 'Written evaluation with rating and improvement tips',
     icon: '📝',
+  },
+  solution: {
+    label: 'Model Solution',
+    description: 'Generates a reference answer image for this question',
+    icon: '🖼️',
   },
 };

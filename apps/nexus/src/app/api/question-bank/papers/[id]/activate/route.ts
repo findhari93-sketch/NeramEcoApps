@@ -6,6 +6,8 @@ import {
 } from '@neram/database';
 import { createDrawingQuestionFromQB } from '@neram/database/queries/nexus';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -47,7 +49,7 @@ export async function POST(
     }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Activate API] Error:', message);
+    console.error('[Activate API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

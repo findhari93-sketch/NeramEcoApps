@@ -8,6 +8,8 @@ import {
 } from '@neram/database';
 import type { QBExamType, QBShift, NTAParsedQuestion } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: papers }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Papers API] GET Error:', message);
+    console.error('[Papers API] GET Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -65,19 +67,26 @@ export async function POST(request: NextRequest) {
       }, { status: 200 });
     }
 
-    // Bulk create draft questions
-    const { created } = await bulkCreateDraftQuestions(
+    // Bulk create the questions.
+    //
+    // "as drafts" is no longer the whole story: a JSON carrying answers lands
+    // its questions answer_keyed, so the message reports what actually
+    // happened rather than sending a teacher off to an answer-key screen they
+    // no longer need.
+    const { created, withAnswers } = await bulkCreateDraftQuestions(
       paper.id, exam_type, year, session, parsed_questions, caller.id, shift || null
     );
 
     return NextResponse.json({
-      data: { ...paper, questions_parsed: created },
-      message: `${created} questions imported as drafts`,
+      data: { ...paper, questions_parsed: created, questions_with_answers: withAnswers },
+      message: withAnswers
+        ? `${created} questions imported, ${withAnswers} with answers`
+        : `${created} questions imported as drafts`,
       isNew: true,
     }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Papers API] POST Error:', message);
+    console.error('[Papers API] POST Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

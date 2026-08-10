@@ -3,6 +3,8 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import type { NexusQBQuestionOption } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 /**
  * Lightweight endpoint for updating only image fields on a question.
  * Used by the Bulk Images tab for rapid image uploads.
@@ -82,7 +84,7 @@ export async function PATCH(
     return NextResponse.json({ data: updated }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Image update error:', message);
+    console.error('[QB API] Image update error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

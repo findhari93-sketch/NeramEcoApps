@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -101,7 +103,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ questions, available_years: availableYears });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Drawing Management API] Error:', message);
+    console.error('[Drawing Management API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

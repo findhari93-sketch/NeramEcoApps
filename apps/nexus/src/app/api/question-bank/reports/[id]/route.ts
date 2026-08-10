@@ -5,6 +5,8 @@ import {
   resolveQBReport,
 } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -57,7 +59,7 @@ export async function PATCH(
     return NextResponse.json({ data: report }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Report resolve error:', message);
+    console.error('[QB API] Report resolve error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

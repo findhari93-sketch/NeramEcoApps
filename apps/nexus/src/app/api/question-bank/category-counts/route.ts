@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
 import { getQBSubjectTagTree, parseSessionKey } from '@neram/database';
 import type { QBExamType } from '@neram/database';
+import { describeError } from '@/lib/api-errors';
 
 /**
  * Facet counts for the Category filter, plus the subject tag hierarchy.
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Category counts error:', message);
+    console.error('[QB API] Category counts error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -32,10 +32,18 @@ export async function GET(request: NextRequest) {
       ? tagsParam.split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
 
+    // Where the drawing came from: question_bank, exam, assignment, homework,
+    // free_practice. Comma-separated, absent means all of them.
+    const sourceParam = params.get('source_type');
+    const sourceTypes = sourceParam
+      ? sourceParam.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
     const filters = {
       status,
       category: params.get('category') || undefined,
       tagSlugs,
+      source_type: sourceTypes,
       student_id: params.get('student_id') || undefined,
       limit: params.get('limit') ? parseInt(params.get('limit')!) : 50,
       offset: params.get('offset') ? parseInt(params.get('offset')!) : 0,

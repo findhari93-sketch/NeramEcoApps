@@ -3,6 +3,8 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import type { SolutionEntry } from '@/lib/solution-csv-parser';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -130,7 +132,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Bulk solution upload error:', message);
+    console.error('[QB API] Bulk solution upload error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -31,18 +31,24 @@ import {
   qbPaperSectionRuns,
   qbSectionLabel,
 } from '@neram/database';
-import type { NexusQBOriginalPaper, NexusQBQuestion, QBQuestionSection } from '@neram/database';
+import type {
+  NexusQBOriginalPaper,
+  NexusQBQuestion,
+  NexusQBQuestionSource,
+  QBQuestionSection,
+} from '@neram/database';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
-import AnswerKeyGrid from '@/components/question-bank/AnswerKeyGrid';
 import { questionNeedsImage, questionMissingImages } from '@/components/question-bank/AnswerKeyGrid';
 import HindiMergeDialog from '@/components/question-bank/HindiMergeDialog';
 import BulkImageManager from '@/components/question-bank/BulkImageManager';
-import InlineQuestionEditor from '@/components/question-bank/InlineQuestionEditor';
+import AnswerKeyUpload from '@/components/question-bank/AnswerKeyUpload';
+import PaperWorkspace from '@/components/question-bank/paper/PaperWorkspace';
 import BulkVideoLinksDialog from '@/components/question-bank/BulkVideoLinksDialog';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import PaperStudentAccessPanel from '@/components/question-bank/PaperStudentAccessPanel';
 
 export default function PaperDetailPage() {
@@ -53,6 +59,8 @@ export default function PaperDetailPage() {
 
   const [paper, setPaper] = useState<NexusQBOriginalPaper | null>(null);
   const [questions, setQuestions] = useState<NexusQBQuestion[]>([]);
+  /** Source rows per question id, this paper's row first. Feeds Source & Format. */
+  const [sources, setSources] = useState<Record<string, NexusQBQuestionSource[]>>({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -63,7 +71,7 @@ export default function PaperDetailPage() {
   const [hindiMergeOpen, setHindiMergeOpen] = useState(false);
   const [videoLinksOpen, setVideoLinksOpen] = useState(false);
   const [message, setMessage] = useState('');
-  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
+  const [answerKeyOpen, setAnswerKeyOpen] = useState(false);
   const [reclassifying, setReclassifying] = useState(false);
   const [redoSectionsOpen, setRedoSectionsOpen] = useState(false);
 
@@ -80,6 +88,7 @@ export default function PaperDetailPage() {
         const json = await res.json();
         setPaper(json.data.paper);
         setQuestions(json.data.questions);
+        setSources(json.data.sources || {});
       }
     } catch (err) {
       console.error('Failed to fetch paper:', err);
@@ -473,6 +482,18 @@ export default function PaperDetailPage() {
               {deactivating ? 'Deactivating...' : `Deactivate ${activeCount}`}
             </Button>
           )}
+          {/* Bulk answer-key upload. It used to live inside the Answer Key tab,
+              which no longer exists, so it belongs with the other paper-wide
+              actions rather than disappearing with the tab. */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<UploadFileIcon />}
+            onClick={() => setAnswerKeyOpen(true)}
+            disabled={saving}
+          >
+            {saving ? 'Saving answers...' : 'Upload Answer Key'}
+          </Button>
           <Button
             variant="outlined"
             size="small"
@@ -522,7 +543,6 @@ export default function PaperDetailPage() {
         variant="scrollable"
         scrollButtons="auto"
       >
-        <Tab label="Answer Key" />
         <Tab label={`Questions (${questions.length})`} />
         <Tab
           label={`Bulk Images${missingAnyImageCount > 0 ? ` (${missingAnyImageCount})` : ''}`}
@@ -538,37 +558,24 @@ export default function PaperDetailPage() {
         />
       </Tabs>
 
-      {/* Tab: Answer Key */}
+      {/* Tab: Questions.
+          One tab, not two. Answer Key and Questions each showed the same 92
+          questions and each kept its own idea of which one you were on, so
+          correcting an answer and then fixing its wording meant finding the
+          question twice. The list scans, the pane edits, one selection. */}
       {tab === 0 && (
-        <AnswerKeyGrid
+        <PaperWorkspace
           questions={questions}
-          onSave={handleSaveAnswers}
-          saving={saving}
+          paper={paper ?? undefined}
+          sources={sources}
+          getToken={getToken}
+          onSaved={() => fetchData(true)}
           onChangeSections={handleChangeSections}
         />
       )}
 
-      {/* Tab: Questions List (Inline Editing) */}
-      {tab === 1 && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          {questions.map((q, i) => (
-            <InlineQuestionEditor
-              key={q.id}
-              question={q}
-              expanded={expandedQuestionId === q.id}
-              onToggle={() =>
-                setExpandedQuestionId((prev) => (prev === q.id ? null : q.id))
-              }
-              getToken={getToken}
-              onSaved={() => fetchData(true)}
-              index={i}
-            />
-          ))}
-        </Box>
-      )}
-
       {/* Tab: Bulk Images */}
-      {tab === 2 && (
+      {tab === 1 && (
         <BulkImageManager
           questions={questions}
           paperId={paperId}
@@ -580,9 +587,18 @@ export default function PaperDetailPage() {
       {/* Tab: Student access — the PDF, the test, and the publish switch.
           Mounted only when open so its four server-side reads are not paid for
           by a teacher who came here to fix an answer key. */}
-      {tab === 3 && (
+      {tab === 2 && (
         <PaperStudentAccessPanel paperId={paperId} getToken={getToken} refreshKey={total} />
       )}
+
+      {/* Bulk answer-key paste, reachable from the action row now that the tab
+          it used to be nested inside is gone. */}
+      <AnswerKeyUpload
+        open={answerKeyOpen}
+        onClose={() => setAnswerKeyOpen(false)}
+        questions={questions}
+        onApply={handleSaveAnswers}
+      />
 
       {/* Delete confirmation dialog */}
       <Dialog

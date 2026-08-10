@@ -43,6 +43,49 @@ export function messageOf(err: unknown, fallback = 'Request failed'): string {
 }
 
 /**
+ * Everything known about a thrown thing, for a server log.
+ *
+ * messageOf above reads `.message` and stops, which is right for a response body
+ * but throws away the three fields that actually identify a Supabase failure.
+ * PostgREST puts the useful part in `code` (42703 is an unknown column, 23505 a
+ * unique violation, 42501 a refused policy), and a network failure arrives as
+ * `message: 'TypeError: fetch failed'` with the real cause buried in `details`.
+ *
+ * So the Question Bank routes could log a message and still not say what broke.
+ * Forty catch blocks printed the literal 'Internal server error' because a
+ * PostgrestError is a plain object and `err instanceof Error` is false for every
+ * one of them: missing column, dead connection, refused policy, all identical on
+ * the way out. Finding which of forty queries failed meant guessing.
+ *
+ * Log this. Do not return it: `code` and `hint` name our columns and constraints.
+ * Responses keep going through messageOf / errorResponse.
+ */
+export function describeError(err: unknown): string {
+  const field = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+  if (err instanceof Error) return err.message;
+
+  if (err && typeof err === 'object') {
+    const pg = err as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    const parts = [
+      field(pg.message),
+      field(pg.code) && `code=${field(pg.code)}`,
+      field(pg.details) && `details=${field(pg.details)}`,
+      field(pg.hint) && `hint=${field(pg.hint)}`,
+    ].filter(Boolean);
+    if (parts.length > 0) return parts.join(' | ');
+    // An object carrying none of those still beats logging '[object Object]'.
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return '(unserialisable error object)';
+    }
+  }
+
+  return String(err);
+}
+
+/**
  * Messages that mean "we know who you are, you may not be here".
  *
  * verifyMsToken's parent branch fails closed on any `par_` token for a route that

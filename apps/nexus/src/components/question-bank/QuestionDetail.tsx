@@ -37,11 +37,10 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CloseIcon from '@mui/icons-material/Close';
 import FlagOutlined from '@mui/icons-material/FlagOutlined';
-import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
-import { useRouter } from 'next/navigation';
 import type { NexusQBQuestionDetail } from '@neram/database';
 import { QB_REPORT_TYPE_LABELS } from '@neram/database';
+import DrawingPracticePanel from './DrawingPracticePanel';
 import SourceBadges from './SourceBadges';
 import RepeatBadges from './RepeatBadges';
 import DifficultyChip from './DifficultyChip';
@@ -103,87 +102,6 @@ interface QuestionDetailProps {
 interface SolutionTab {
   label: string;
   key: 'explanation' | 'video' | 'image';
-}
-
-/** Sub-component: renders drawing-specific info + Practice CTA for DRAWING_PROMPT questions */
-function DrawingPromptSection({ question }: { question: NexusQBQuestionDetail }) {
-  const router = useRouter();
-  const drawingQuestionId = (question as any).drawing_question_id;
-
-  return (
-    <Box sx={{ mb: 3 }}>
-      {/* Drawing metadata */}
-      {question.objects_to_include && (question.objects_to_include as any[]).length > 0 && (
-        <Box sx={{ mb: 1.5 }}>
-          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-            OBJECTS TO INCLUDE
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.25 }}>
-            {(question.objects_to_include as any[]).map((obj: any, i: number) => (
-              <Chip key={i} label={obj.name || String(obj)} size="small" variant="outlined" sx={{ height: 24, fontSize: '0.75rem' }} />
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {question.colour_constraint && (
-        <Box sx={{ mb: 1, p: 1, bgcolor: 'warning.50', borderRadius: 1 }}>
-          <Typography variant="caption" fontWeight={600}>Color Constraint</Typography>
-          <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>{question.colour_constraint}</Typography>
-        </Box>
-      )}
-
-      {question.design_principle_tested && (
-        <Box sx={{ mb: 1.5, p: 1, bgcolor: 'info.50', borderRadius: 1 }}>
-          <Typography variant="caption" fontWeight={600}>Design Principle</Typography>
-          <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>{question.design_principle_tested}</Typography>
-        </Box>
-      )}
-
-      {/* Solution image (if available in QB) */}
-      {question.solution_image_url && (
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ fontSize: '0.7rem', mb: 0.5, display: 'block' }}>
-            REFERENCE SOLUTION
-          </Typography>
-          <Box
-            component="img"
-            src={question.solution_image_url}
-            alt="Reference solution"
-            sx={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
-          />
-        </Box>
-      )}
-
-      {/* Practice CTA */}
-      <Button
-        variant="contained"
-        fullWidth
-        startIcon={<BrushOutlinedIcon />}
-        disabled={!drawingQuestionId}
-        onClick={() => {
-          if (drawingQuestionId) {
-            router.push(`/student/drawings/${drawingQuestionId}?from=qb&qb_id=${question.id}`);
-          }
-        }}
-        sx={{
-          minHeight: 48,
-          fontWeight: 600,
-          textTransform: 'none',
-          borderRadius: 2,
-          fontSize: '0.9rem',
-        }}
-      >
-        {drawingQuestionId ? 'Practice This Drawing' : 'Practice Coming Soon'}
-      </Button>
-
-      {!drawingQuestionId && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 0.5, fontSize: '0.7rem' }}>
-          This drawing question is not yet linked to the practice module
-        </Typography>
-      )}
-    </Box>
-  );
 }
 
 export default function QuestionDetail({
@@ -452,7 +370,7 @@ export default function QuestionDetail({
 
       {/* Drawing Prompt: show drawing-specific info + Practice CTA */}
       {question.question_format === 'DRAWING_PROMPT' && (
-        <DrawingPromptSection question={question} />
+        <DrawingPracticePanel question={question} />
       )}
 
       {/* Feedback animation overlay */}

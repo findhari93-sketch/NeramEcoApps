@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, getQBRecalledSessionCards } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -26,7 +28,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error fetching recalled sessions:', message);
+    console.error('[QB API] Error fetching recalled sessions:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

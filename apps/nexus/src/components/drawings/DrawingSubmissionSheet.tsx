@@ -25,10 +25,22 @@ interface DrawingSubmissionSheetProps {
   referenceImageUrl?: string | null;
   getToken: () => Promise<string | null>;
   onSubmitted: () => void;
+  /**
+   * Where the submission record is created, once the image is uploaded.
+   *
+   * Defaults to the drawing module's own route. The Question Bank passes its
+   * own, because a bank drawing has to mint its practice-module mirror before
+   * the submission can carry a thread, and that is not the drawing module's
+   * business. Upload is unchanged either way: one bucket, one route.
+   */
+  submitUrl?: string;
+  /** The body for `submitUrl`. Required when submitUrl is set. */
+  submitBody?: (uploadedUrl: string, selfNote: string | null) => unknown;
 }
 
 export default function DrawingSubmissionSheet({
   open, onClose, questionId, assignmentId, sourceType, redoFeedback, referenceImageUrl, getToken, onSubmitted,
+  submitUrl, submitBody,
 }: DrawingSubmissionSheetProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const canCapture = useCanCapturePhoto();
@@ -103,19 +115,23 @@ export default function DrawingSubmissionSheet({
       const { url } = await uploadRes.json();
       setProgress(60);
 
-      const submitRes = await fetch('/api/drawing/submissions', {
+      const submitRes = await fetch(submitUrl || '/api/drawing/submissions', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          question_id: questionId || null,
-          assignment_id: assignmentId || null,
-          source_type: sourceType,
-          original_image_url: url,
-          self_note: selfNote || null,
-        }),
+        body: JSON.stringify(
+          submitUrl && submitBody
+            ? submitBody(url, selfNote || null)
+            : {
+                question_id: questionId || null,
+                assignment_id: assignmentId || null,
+                source_type: sourceType,
+                original_image_url: url,
+                self_note: selfNote || null,
+              },
+        ),
       });
 
       if (!submitRes.ok) {

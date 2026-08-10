@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBStaff } from '@/lib/qb-auth';
 import { getSupabaseAdminClient } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 /**
  * Bulk-update solution_video_url for questions in a paper.
  * Accepts an array of { question_id, solution_video_url } pairs.
@@ -71,7 +73,7 @@ export async function POST(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[Video Links API] Error:', message);
+    console.error('[Video Links API] Error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -39,9 +39,10 @@ async function resolveLinkedPdfUrl(sharingUrl: string): Promise<string | null> {
 
 /**
  * Fetch PDF content directly via the /shares/{encoded}/driveItem/content endpoint.
- * Returns the binary PDF data as ArrayBuffer if successful.
+ * Returns the upstream Response so the caller can stream the body through rather
+ * than materialising the whole PDF in function memory.
  */
-async function fetchLinkedPdfContent(sharingUrl: string): Promise<ArrayBuffer | null> {
+async function fetchLinkedPdfContent(sharingUrl: string): Promise<Response | null> {
   const token = await getAppOnlyToken();
   const encoded = encodeSharingUrl(sharingUrl);
 
@@ -53,12 +54,29 @@ async function fetchLinkedPdfContent(sharingUrl: string): Promise<ArrayBuffer | 
     }
   );
 
-  if (res.ok) {
-    return res.arrayBuffer();
+  if (res.ok && res.body) {
+    return res;
   }
 
   console.error('Direct content fetch failed:', res.status, await res.text().catch(() => ''));
   return null;
+}
+
+/** Stream an upstream PDF response through without buffering it. */
+function streamPdf(upstream: Response, disposition?: string): NextResponse {
+  const upstreamLength = upstream.headers.get('content-length');
+  return new NextResponse(upstream.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      // Only forwarded when the source declared it: computing it ourselves would
+      // mean buffering, which is the thing being removed.
+      ...(upstreamLength ? { 'Content-Length': upstreamLength } : {}),
+      // private: authenticated chapter content must never enter a shared cache.
+      'Cache-Control': 'private, max-age=3600',
+      ...(disposition ? { 'Content-Disposition': disposition } : {}),
+    },
+  });
 }
 
 /**
@@ -114,17 +132,8 @@ export async function GET(
 
     if (downloadUrl) {
       const pdfRes = await fetch(downloadUrl, { redirect: 'follow' });
-      if (pdfRes.ok) {
-        const pdfBuffer = await pdfRes.arrayBuffer();
-        return new NextResponse(pdfBuffer, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/pdf',
-            'Content-Length': String(pdfBuffer.byteLength),
-            'Cache-Control': 'private, max-age=3600',
-            'Content-Disposition': 'inline',
-          },
-        });
+      if (pdfRes.ok && pdfRes.body) {
+        return streamPdf(pdfRes, 'inline');
       }
       console.error('Download URL fetch failed:', pdfRes.status);
     }
@@ -132,16 +141,9 @@ export async function GET(
     // --- Strategy 2: Fetch content directly via /shares/.../content ---
     if (chapter.pdf_url) {
       try {
-        const pdfBuffer = await fetchLinkedPdfContent(chapter.pdf_url);
-        if (pdfBuffer) {
-          return new NextResponse(pdfBuffer, {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/pdf',
-              'Content-Length': String(pdfBuffer.byteLength),
-              'Cache-Control': 'private, max-age=3600',
-            },
-          });
+        const upstream = await fetchLinkedPdfContent(chapter.pdf_url);
+        if (upstream) {
+          return streamPdf(upstream);
         }
       } catch (err) {
         console.error('Direct content fetch error:', err);

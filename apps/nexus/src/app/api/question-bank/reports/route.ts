@@ -6,6 +6,8 @@ import {
   getTeacherQBReports,
 } from '@neram/database';
 
+import { describeError } from '@/lib/api-errors';
+
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Reports list error:', message);
+    console.error('[QB API] Reports list error:', describeError(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

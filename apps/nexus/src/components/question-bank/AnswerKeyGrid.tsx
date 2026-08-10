@@ -606,8 +606,11 @@ export default function AnswerKeyGrid({ questions, onSave, saving, onChangeSecti
 
                     {/* Answer input */}
                     {isDrawing ? (
-                      <Typography variant="caption" color="text.disabled">
-                        N/A (self-assessed)
+                      // "N/A" used to sit here, which read as a gap and was the
+                      // visible end of the chain that kept drawings out of every
+                      // paper test. They need no key, and are ready already.
+                      <Typography variant="caption" color="success.main">
+                        No answer key needed. A teacher marks this one.
                       </Typography>
                     ) : isMCQ ? (
                       <AnswerSelect

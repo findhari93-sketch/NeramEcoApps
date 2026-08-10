@@ -6,10 +6,6 @@ import {
   Typography,
   Button,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   RadioGroup,
   FormControlLabel,
   Radio,
@@ -30,6 +26,7 @@ import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
 import type {
+  NexusQBOriginalPaper,
   NexusQBQuestion,
   NexusQBQuestionSource,
   QBQuestionFormat,
@@ -45,14 +42,29 @@ import {
   QB_QUESTION_STATUS_LABELS,
   QB_QUESTION_STATUS_COLORS,
 } from '@neram/database';
-import type { QBCategory } from '@neram/database';
+import type { QBCategory, QBDrawingFocusPoint } from '@neram/database';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import ImageUploadZone from './ImageUploadZone';
+import DrawingQuestionPanel from './DrawingQuestionPanel';
 import MathText from '@/components/common/MathText';
+
+/** What a question's Source & Format panel needs when it has no source row. */
+type PaperFallback = Pick<NexusQBOriginalPaper, 'exam_type' | 'year' | 'session'>;
 
 interface InlineQuestionEditorProps {
   question: NexusQBQuestion;
+  /**
+   * The question's source rows, the one for the paper being viewed first.
+   * Optional because a question can genuinely have none yet.
+   */
   sources?: NexusQBQuestionSource[];
+  /**
+   * The paper this question was uploaded from, read when there is no source
+   * row. Without it the panel fell back to a literal 'NATA' and the current
+   * year, which labelled every paper's questions NATA whatever exam they came
+   * from. A question reached through a paper can only belong to that paper.
+   */
+  paper?: PaperFallback;
   expanded: boolean;
   onToggle: () => void;
   getToken: () => Promise<string | null>;
@@ -62,7 +74,8 @@ interface InlineQuestionEditorProps {
 }
 
 interface FormData {
-  exam_type: QBExamType;
+  /** Null when neither a source row nor a paper says which exam this came from. */
+  exam_type: QBExamType | null;
   year: string;
   session: string;
   question_number: string;
@@ -84,6 +97,15 @@ interface FormData {
   explanation_detailed: string;
   solution_video_url: string;
   solution_image?: ImageState;
+  // Drawing-only. Sent to the server only when question_format is
+  // DRAWING_PROMPT, so switching a question's format cannot smear drawing
+  // metadata onto an MCQ.
+  drawing_marks: string;
+  colour_constraint: string;
+  design_principle_tested: string;
+  objects_to_include: Array<{ name: string; count?: number }>;
+  drawing_focus_points: QBDrawingFocusPoint[];
+  drawing_reference_image?: ImageState;
 }
 
 function createDefaultOption(idx: number): NexusQBQuestionOption {
@@ -92,14 +114,17 @@ function createDefaultOption(idx: number): NexusQBQuestionOption {
 
 function getInitialFormData(
   question: NexusQBQuestion,
-  sources?: NexusQBQuestionSource[]
+  sources?: NexusQBQuestionSource[],
+  paper?: PaperFallback
 ): FormData {
   const source = sources?.[0];
+  // Source row, then the paper, then nothing. Never a made-up exam: showing the
+  // wrong exam confidently is worse than showing a blank.
   return {
-    exam_type: source?.exam_type ?? 'NATA',
-    year: source?.year ? String(source.year) : String(new Date().getFullYear()),
-    session: source?.session ?? '',
-    question_number: source?.question_number ? String(source.question_number) : '',
+    exam_type: source?.exam_type ?? paper?.exam_type ?? null,
+    year: String(source?.year ?? paper?.year ?? ''),
+    session: source?.session ?? paper?.session ?? '',
+    question_number: String(source?.question_number ?? question.display_order ?? ''),
     question_format: question.question_format ?? 'MCQ',
     question_text: question.question_text ?? '',
     question_text_hi: question.question_text_hi ?? '',
@@ -127,6 +152,14 @@ function getInitialFormData(
     solution_image: question.solution_image_url
       ? { url: question.solution_image_url, uploaded: true }
       : undefined,
+    drawing_marks: question.drawing_marks != null ? String(question.drawing_marks) : '',
+    colour_constraint: question.colour_constraint ?? '',
+    design_principle_tested: question.design_principle_tested ?? '',
+    objects_to_include: question.objects_to_include ?? [],
+    drawing_focus_points: question.drawing_focus_points ?? [],
+    drawing_reference_image: question.drawing_reference_image_url
+      ? { url: question.drawing_reference_image_url, uploaded: true }
+      : undefined,
   };
 }
 
@@ -145,8 +178,16 @@ function buildSubmitPayload(form: FormData) {
           };
         })
       : null,
+    // A drawing has no key and never will, so send null rather than the empty
+    // string this used to write. submitQBAttempt now refuses drawings on format
+    // rather than on emptiness precisely because '' was reaching it, but a
+    // column every other reader treats as "the key" should not hold a blank.
     correct_answer:
-      form.question_format === 'MCQ' ? form.correct_option_id : form.correct_answer,
+      form.question_format === 'DRAWING_PROMPT'
+        ? null
+        : form.question_format === 'MCQ'
+          ? form.correct_option_id
+          : form.correct_answer,
     answer_tolerance:
       form.question_format === 'NUMERICAL' && form.answer_tolerance
         ? Number(form.answer_tolerance)
@@ -161,12 +202,30 @@ function buildSubmitPayload(form: FormData) {
     topic_id: form.topic_id || null,
     sub_topic: form.sub_topic || null,
   };
+
+  if (form.question_format === 'DRAWING_PROMPT') {
+    questionData.drawing_marks = form.drawing_marks ? Number(form.drawing_marks) : null;
+    questionData.colour_constraint = form.colour_constraint || null;
+    questionData.design_principle_tested = form.design_principle_tested || null;
+    questionData.objects_to_include = form.objects_to_include.length
+      ? form.objects_to_include
+      : null;
+    // Blank rows are what an "Add focus point" press leaves behind when a
+    // teacher changes their mind, and they would render as empty bullets.
+    const focus = form.drawing_focus_points.filter((f) => f.text.trim());
+    questionData.drawing_focus_points = focus.length ? focus : null;
+    questionData.drawing_reference_image_url = form.drawing_reference_image?.uploaded
+      ? form.drawing_reference_image.url
+      : null;
+  }
+
   return questionData;
 }
 
 export default function InlineQuestionEditor({
   question,
   sources,
+  paper,
   expanded,
   onToggle,
   getToken,
@@ -174,7 +233,7 @@ export default function InlineQuestionEditor({
   index = 0,
 }: InlineQuestionEditorProps) {
   const theme = useTheme();
-  const [form, setForm] = useState<FormData>(() => getInitialFormData(question, sources));
+  const [form, setForm] = useState<FormData>(() => getInitialFormData(question, sources, paper));
   const [optionImagesEnabled, setOptionImagesEnabled] = useState(
     () => question.options?.some((o) => !!o.image_url) ?? false
   );
@@ -184,11 +243,11 @@ export default function InlineQuestionEditor({
   // Reset form when question changes (e.g. after save + refetch)
   useEffect(() => {
     if (!expanded) {
-      setForm(getInitialFormData(question, sources));
+      setForm(getInitialFormData(question, sources, paper));
       setDirty(false);
       setOptionImagesEnabled(question.options?.some((o) => !!o.image_url) ?? false);
     }
-  }, [question, sources, expanded]);
+  }, [question, sources, paper, expanded]);
 
   const updateField = useCallback(
     <K extends keyof FormData>(key: K, value: FormData[K]) => {
@@ -280,7 +339,7 @@ export default function InlineQuestionEditor({
   };
 
   const handleCancel = () => {
-    setForm(getInitialFormData(question, sources));
+    setForm(getInitialFormData(question, sources, paper));
     setDirty(false);
     setOptionImagesEnabled(question.options?.some((o) => !!o.image_url) ?? false);
     onToggle();
@@ -630,6 +689,39 @@ export default function InlineQuestionEditor({
           </AccordionDetails>
         </Accordion>
 
+        {/* Section 2b: Drawing setup. Only a drawing has any of this, and a
+            teacher who opened a drawing came for it, so it starts open. It owns
+            the solution image and video for this format, which is why the
+            Solution panel below hides its copies of those two. */}
+        {form.question_format === 'DRAWING_PROMPT' && (
+          <Accordion defaultExpanded disableGutters variant="outlined" sx={{ mb: 1 }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="body2" fontWeight={600}>Drawing setup</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <DrawingQuestionPanel
+                value={{
+                  drawing_marks: form.drawing_marks,
+                  colour_constraint: form.colour_constraint,
+                  design_principle_tested: form.design_principle_tested,
+                  objects_to_include: form.objects_to_include,
+                  drawing_focus_points: form.drawing_focus_points,
+                  drawing_reference_image: form.drawing_reference_image,
+                  solution_image: form.solution_image,
+                  solution_video_url: form.solution_video_url,
+                }}
+                onChange={(patch) => {
+                  setForm((prev) => ({ ...prev, ...patch }));
+                  setDirty(true);
+                }}
+                getToken={getToken}
+                questionText={form.question_text}
+                categories={form.categories}
+              />
+            </AccordionDetails>
+          </Accordion>
+        )}
+
         {/* Section 3: Solution (collapsible) */}
         <Accordion defaultExpanded={false} disableGutters variant="outlined" sx={{ mb: 1 }}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -658,26 +750,33 @@ export default function InlineQuestionEditor({
               size="small"
               sx={{ mb: 1.5 }}
             />
-            <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
-              Solution Image
-            </Typography>
-            <ImageUploadZone
-              image={form.solution_image}
-              onChange={(img) => { updateField('solution_image', img); }}
-              label="Paste or drop solution image"
-              height={120}
-              getToken={getToken}
-              subfolder="solutions"
-            />
-            <TextField
-              label="Solution Video URL"
-              value={form.solution_video_url}
-              onChange={(e) => updateField('solution_video_url', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 1.5 }}
-              placeholder="YouTube or SharePoint link"
-            />
+            {/* Drawing setup owns these two for a drawing. Rendering both would
+                be two controls writing one column, and the last one touched
+                would silently win. */}
+            {form.question_format !== 'DRAWING_PROMPT' && (
+              <>
+                <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
+                  Solution Image
+                </Typography>
+                <ImageUploadZone
+                  image={form.solution_image}
+                  onChange={(img) => { updateField('solution_image', img); }}
+                  label="Paste or drop solution image"
+                  height={120}
+                  getToken={getToken}
+                  subfolder="solutions"
+                />
+                <TextField
+                  label="Solution Video URL"
+                  value={form.solution_video_url}
+                  onChange={(e) => updateField('solution_video_url', e.target.value)}
+                  size="small"
+                  fullWidth
+                  sx={{ mt: 1.5 }}
+                  placeholder="YouTube or SharePoint link"
+                />
+              </>
+            )}
           </AccordionDetails>
         </Accordion>
 
@@ -687,41 +786,47 @@ export default function InlineQuestionEditor({
             <Typography variant="body2" fontWeight={600}>Source & Format</Typography>
           </AccordionSummary>
           <AccordionDetails>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
-              <FormControl size="small" sx={{ minWidth: 140 }}>
-                <InputLabel>Exam Type</InputLabel>
-                <Select
-                  value={form.exam_type}
-                  label="Exam Type"
-                  onChange={(e) => updateField('exam_type', e.target.value as QBExamType)}
-                >
-                  {Object.entries(QB_EXAM_TYPE_LABELS).map(([k, v]) => (
-                    <MenuItem key={k} value={k}>{v}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+            {/* Where the question came from. Read-only: this tuple lives on the
+                paper and its source row, and Save has never carried these four
+                fields, so an editable control here only invites a correction
+                that is silently thrown away. */}
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+              <TextField
+                label="Exam Type"
+                value={
+                  form.exam_type
+                    ? QB_EXAM_TYPE_LABELS[form.exam_type] || form.exam_type
+                    : 'Not recorded'
+                }
+                size="small"
+                sx={{ minWidth: 140 }}
+                InputProps={{ readOnly: true }}
+              />
               <TextField
                 label="Year"
-                value={form.year}
-                onChange={(e) => updateField('year', e.target.value)}
+                value={form.year || '-'}
                 size="small"
-                sx={{ width: 80 }}
+                sx={{ width: 90 }}
+                InputProps={{ readOnly: true }}
               />
               <TextField
                 label="Session"
-                value={form.session}
-                onChange={(e) => updateField('session', e.target.value)}
+                value={form.session || '-'}
                 size="small"
-                sx={{ width: 100 }}
+                sx={{ width: 110 }}
+                InputProps={{ readOnly: true }}
               />
               <TextField
                 label="Q#"
-                value={form.question_number}
-                onChange={(e) => updateField('question_number', e.target.value)}
+                value={form.question_number || '-'}
                 size="small"
-                sx={{ width: 60 }}
+                sx={{ width: 70 }}
+                InputProps={{ readOnly: true }}
               />
             </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
+              Taken from the paper this question belongs to. Change it on the paper.
+            </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
               Question Format
             </Typography>
