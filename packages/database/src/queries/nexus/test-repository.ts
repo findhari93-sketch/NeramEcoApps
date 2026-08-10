@@ -1587,23 +1587,24 @@ async function dispatchPlacementSideEffect(
     // module, so a top-level import here would close the cycle.
     const { recomputeClassPrep } = await import('./class-prep');
     await recomputeClassPrep(args.studentId, placement.context_id, supabase);
-  } else if (placement.context_type === 'qb_paper') {
-    // Nothing to do, and written out rather than left to fall through the end of
-    // the chain, so the next person adding a context can see this one was
-    // considered rather than forgotten.
-    //
-    // The attempt row IS the record here. Everything the paper's three faces
-    // report is derived from nexus_test_attempts on the read (see
-    // summariseAttempts in qb-papers.ts), so there is no denormalised counter to
-    // keep in step and no second place for the two to disagree.
-  } else if (placement.context_type === 'exam') {
+  } else if (placement.context_type === 'exam' || placement.context_type === 'qb_paper') {
     // Hand every drawing on this paper to the review queue.
+    //
+    // A qb_paper mock belongs here too. It used to have its own do-nothing
+    // branch on the reasoning that the attempt row IS the record for a paper,
+    // which is true of the objective score and false of the drawing: the photo
+    // a student uploaded for Q91 landed in attempt.answers and no teacher ever
+    // saw it. A past paper mock without its drawing section is not the paper.
+    //
+    // queueExamDrawings and recomputeExamAttemptScore are exam-flavoured in
+    // name only. Both work from the attempt and nexus_test_questions, and the
+    // review route already recomputes any submission carrying exam_attempt_id.
     //
     // Lazily imported for the same reason as class-prep: exam-drawings reaches
     // back into this module, and a top-level import would close the cycle.
     //
     // Deliberately not awaited into the caller's failure path. A student who
-    // has just submitted an exam must not see an error because a review row
+    // has just submitted a paper must not see an error because a review row
     // could not be written; the queue is recoverable, their submission is not.
     try {
       const { queueExamDrawings } = await import('./exam-drawings');
@@ -1612,7 +1613,18 @@ async function dispatchPlacementSideEffect(
         supabase,
       );
     } catch (err) {
-      console.error('[dispatchPlacementSideEffect] exam drawings were not queued:', err);
+      // Name the attempt. The previous message carried only the error, so a
+      // constraint violation that silently dropped every exam drawing for the
+      // life of the feature was indistinguishable in the logs from a paper that
+      // simply had no drawings on it.
+      console.error(
+        '[dispatchPlacementSideEffect] drawings were not queued for attempt',
+        args.attemptId,
+        'placement',
+        placement.context_type,
+        placement.context_id,
+        err,
+      );
     }
   }
 }

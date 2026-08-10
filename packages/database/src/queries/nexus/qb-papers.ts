@@ -55,6 +55,8 @@ import type {
 } from '../../types';
 import { QB_EXAM_TYPE_LABELS } from '../../types';
 import { buildPaperBlueprint, marksForQuestions } from './paper-marking';
+// Pure module, only depends on ../../types, so no cycle back into this one.
+import { effectiveAttemptScore } from './exam-score';
 import { getPaperSectionBreakdown } from './question-bank';
 import {
   composeTest,
@@ -656,19 +658,31 @@ export function isPaperComplete(faces: QBPaperFaceStates): boolean {
  * whole point of mode='revision' is that it does not touch the record. Counting
  * them would let a student lower their best by practising, which is the opposite
  * of the intent.
+ *
+ * Read through effectiveAttemptScore rather than off `percentage`, because a
+ * paper with a drawing section is scored in two stages. `percentage` holds the
+ * objective half and never moves again; the teacher's marks land in final_*.
+ * Reading the raw column would leave a 92 question paper's best score frozen at
+ * whatever the 90 machine-marked questions came to.
  */
 export function summariseAttempts(
-  rows: Array<{ percentage: number | null; status: string | null; mode: string | null }>,
+  rows: Array<{
+    percentage: number | null;
+    status: string | null;
+    mode: string | null;
+    final_percentage?: number | null;
+    finalised_at?: string | null;
+  }>,
   passingPct: number | null,
 ): TestOutcome {
   const official = rows.filter(
     (r) => r.status === 'submitted' && (r.mode == null || r.mode === 'official'),
   );
-  const best = official.reduce<number | null>(
-    (acc, r) =>
-      r.percentage == null ? acc : acc == null ? Number(r.percentage) : Math.max(acc, Number(r.percentage)),
-    null,
-  );
+  const best = official.reduce<number | null>((acc, r) => {
+    if (r.percentage == null && r.final_percentage == null) return acc;
+    const pct = effectiveAttemptScore(r).percentage;
+    return acc == null ? pct : Math.max(acc, pct);
+  }, null);
   // A placement with no passing mark is read as "no bar", exactly as
   // resolvePassingPct does, so sitting it at all counts as done.
   const passed = best != null && (passingPct == null || best >= passingPct);
@@ -735,11 +749,22 @@ async function loadTestOutcomes(
   if (tests.length === 0) return out;
   const supabase = client || getSupabaseAdminClient();
 
-  const byTest = new Map<string, Array<{ percentage: number | null; status: string | null; mode: string | null }>>();
+  const byTest = new Map<
+    string,
+    Array<{
+      percentage: number | null;
+      status: string | null;
+      mode: string | null;
+      final_percentage: number | null;
+      finalised_at: string | null;
+    }>
+  >();
   for (const part of chunk(tests.map((t) => t.testId), IN_CHUNK)) {
     const { data, error } = await supabase
       .from(TEST_ATTEMPTS as any)
-      .select('test_id, percentage, status, mode')
+      // final_percentage/finalised_at carry the drawing marks. Without them a
+      // paper mock's score would stop at its objective half forever.
+      .select('test_id, percentage, status, mode, final_percentage, finalised_at')
       .eq('student_id', studentId)
       .in('test_id', part);
     if (error) throw error;
@@ -1149,6 +1174,8 @@ export async function getPaperProgressMatrix(
 export interface NexusQBPaperStaffView {
   paper: NexusQBOriginalPaper;
   question_count: number;
+  /** Everything parsed off this paper, whether active or not. */
+  parsed_question_count: number;
   study_file: { id: string; title: string; file_name: string; folder_id: string } | null;
   test: Omit<NexusQBPaperTest, 'attempts_used' | 'official_attempt_done' | 'best_pct'> | null;
   publish_blocker: string | null;
@@ -1162,9 +1189,17 @@ export async function getPaperStaffView(
   const paper = await getPaperById(paperId, supabase);
   if (!paper) return null;
 
-  const [questionIds, test] = await Promise.all([
+  const [questionIds, test, parsedCount] = await Promise.all([
     getPaperQuestionIds(paper, supabase),
     getPlacedPaperTest(paperId, supabase),
+    // Everything parsed off this paper, active or not. The panel shows the two
+    // side by side, because "90 questions" reads as the whole paper when the
+    // paper has 92 and the 2 missing ones are its entire drawing section.
+    supabase
+      .from(QUESTIONS)
+      .select('id', { count: 'exact', head: true })
+      .eq('original_paper_id', paperId)
+      .then((r) => r.count ?? 0),
   ]);
 
   let studyFile: NexusQBPaperStaffView['study_file'] = null;
@@ -1183,6 +1218,7 @@ export async function getPaperStaffView(
   return {
     paper,
     question_count: questionIds.length,
+    parsed_question_count: parsedCount,
     study_file: studyFile,
     test,
     publish_blocker: studyFile || questionIds.length > 0

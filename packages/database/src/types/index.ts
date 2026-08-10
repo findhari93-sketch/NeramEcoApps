@@ -6645,6 +6645,29 @@ export interface NexusQBQuestion {
   design_principle_tested: string | null;
   colour_constraint: string | null;
   objects_to_include: Array<{ name: string; count?: number }> | null;
+  /** What the student should concentrate on. Gated: revealed only after they upload. */
+  drawing_focus_points: QBDrawingFocusPoint[] | null;
+  /** A teacher-added aid for the prompt, not the printed figure and not the answer. */
+  drawing_reference_image_url: string | null;
+}
+
+/**
+ * One thing a student should concentrate on in a drawing.
+ *
+ * `weight` is unused in v1 and is here so "this one is worth 40 of the 100" can
+ * arrive without a second migration.
+ */
+export interface QBDrawingFocusPoint {
+  text: string;
+  weight?: number;
+}
+
+/** A student who unlocked a drawing's solution without attempting it first. */
+export interface NexusQBDrawingReveal {
+  id: string;
+  student_id: string;
+  question_id: string;
+  revealed_at: string;
 }
 
 export interface NexusQBQuestionSource {
@@ -7461,6 +7484,8 @@ export interface NexusQBQuestionInsert {
   design_principle_tested?: string | null;
   colour_constraint?: string | null;
   objects_to_include?: Array<{ name: string; count?: number }> | null;
+  drawing_focus_points?: QBDrawingFocusPoint[] | null;
+  drawing_reference_image_url?: string | null;
 }
 
 export interface NexusQBQuestionUpdate {
@@ -7492,6 +7517,8 @@ export interface NexusQBQuestionUpdate {
   design_principle_tested?: string | null;
   colour_constraint?: string | null;
   objects_to_include?: Array<{ name: string; count?: number }> | null;
+  drawing_focus_points?: QBDrawingFocusPoint[] | null;
+  drawing_reference_image_url?: string | null;
 }
 
 export interface NexusQBQuestionSourceInsert {
@@ -7758,6 +7785,16 @@ export interface NTAParsedQuestion {
   }[];
   section: QBQuestionSection;
   categories: string[];
+  /**
+   * The answer, when the upload JSON carries it.
+   *
+   * Optional because the NTA answer key is usually a second PDF and arrives as
+   * a separate paste. Supplying it here lets one file do the whole paper, which
+   * is the difference between a three screen import and a one screen one.
+   */
+  correct_answer?: string | null;
+  /** Accepted range either side of a NUMERICAL answer. */
+  answer_tolerance?: number | null;
   marks_correct?: number;
   marks_negative?: number;
   /** Solution video URL (YouTube unlisted or SharePoint) */
@@ -9093,6 +9130,22 @@ export interface DrawingSubmissionWithQuestion extends DrawingSubmission {
 
 export interface DrawingSubmissionWithDetails extends DrawingSubmission {
   question: DrawingQuestion | null;
+  /**
+   * The bank question, for submissions that point at one directly rather than
+   * through a drawing_questions mirror. Exam drawings are the case: they carry
+   * exam_qb_question_id and have no mirror, so `question` is null and this is
+   * where their prompt text lives.
+   */
+  qb_question?: {
+    id: string;
+    question_text: string | null;
+    categories: string[] | null;
+    drawing_marks: number | null;
+    design_principle_tested: string | null;
+    colour_constraint: string | null;
+    objects_to_include: Array<{ name: string; count?: number }> | null;
+    drawing_focus_points: QBDrawingFocusPoint[] | null;
+  } | null;
   student: {
     id: string;
     name: string;

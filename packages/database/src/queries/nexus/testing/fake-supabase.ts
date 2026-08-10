@@ -40,8 +40,10 @@ export function createFakeDb(seed: FakeTables, defaults: FakeDefaults = {}): Fak
 
   function builder(table: string) {
     const filters: Array<(r: any) => boolean> = [];
-    let op: 'select' | 'insert' | 'update' | 'delete' = 'select';
+    let op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
     let payload: any = null;
+    let conflictCols: string[] = [];
+    let ignoreDuplicates = false;
     let wantCount = false;
     let orderKey: string | null = null;
     let rowLimit: number | null = null;
@@ -50,6 +52,29 @@ export function createFakeDb(seed: FakeTables, defaults: FakeDefaults = {}): Fak
     const matched = () => rows().filter((r) => filters.every((f) => f(r)));
 
     const run = () => {
+      if (op === 'upsert') {
+        // Enough of ON CONFLICT to test idempotency: a row whose conflict
+        // columns match an existing one is skipped when ignoreDuplicates is
+        // set and merged into it otherwise. Rows with a NULL in any conflict
+        // column never collide, which mirrors a partial unique index and is
+        // exactly the case queueExamDrawings relies on.
+        const arr = Array.isArray(payload) ? payload : [payload];
+        const created: any[] = [];
+        for (const r of arr) {
+          const collides =
+            conflictCols.length > 0 &&
+            conflictCols.every((c) => r[c] !== null && r[c] !== undefined) &&
+            rows().find((existing) => conflictCols.every((c) => existing[c] === r[c]));
+          if (collides) {
+            if (!ignoreDuplicates) Object.assign(collides, r);
+            continue;
+          }
+          const row = { id: r.id ?? `${table}-${++autoId}`, ...(defaults[table] || {}), ...r };
+          rows().push(row);
+          created.push(row);
+        }
+        return { data: created, error: null, count: created.length };
+      }
       if (op === 'insert') {
         const arr = Array.isArray(payload) ? payload : [payload];
         const created = arr.map((r) => ({
@@ -87,6 +112,16 @@ export function createFakeDb(seed: FakeTables, defaults: FakeDefaults = {}): Fak
       insert(v: any) {
         op = 'insert';
         payload = v;
+        return chain;
+      },
+      upsert(v: any, opts?: { onConflict?: string; ignoreDuplicates?: boolean }) {
+        op = 'upsert';
+        payload = v;
+        conflictCols = (opts?.onConflict || '')
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean);
+        ignoreDuplicates = opts?.ignoreDuplicates === true;
         return chain;
       },
       update(v: any) {

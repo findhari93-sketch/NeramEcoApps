@@ -11,6 +11,7 @@
  */
 
 import type { NotificationEvent, NotificationEventType } from '../types';
+import { log } from '../utils/logger';
 import {
   sendTelegramMessage,
   isTelegramConfigured,
@@ -168,8 +169,11 @@ export async function dispatchNotification(
     results.teams = { success: false, error: teamsResult.reason?.message || 'Unknown error' };
   }
 
-  // Log dispatch results for production debugging
-  console.log(`[Notification] Dispatch results for "${event.type}":`, {
+  // Dispatch results. Development only: this fired on every notification in
+  // production, which is a billed event per dispatch for a line nobody reads
+  // unless they are actively debugging. Individual channel failures are still
+  // reported by each service's own console.error.
+  log.debug(`[Notification] Dispatch results for "${event.type}":`, {
     telegram: results.telegram.success ? 'OK' : `FAIL: ${results.telegram.error}`,
     email: `sent=${results.email.sent} failed=${results.email.failed}`,
     admin: results.admin.success ? 'OK' : `FAIL: ${results.admin.error}`,

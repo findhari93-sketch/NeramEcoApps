@@ -772,7 +772,14 @@ export function checkQBAnswer(
 
     case 'DRAWING_PROMPT':
     case 'IMAGE_BASED':
-      // Self-assessed formats — always treated as correct
+      // Self-assessed formats, always treated as correct.
+      //
+      // Nothing may reach here with a DRAWING_PROMPT any more: submitQBAttempt
+      // refuses that format outright (see DRAWING_ATTEMPT_ERROR) because a
+      // drawing is marked by a human in drawing_submissions, and answering
+      // `true` here would have written is_correct = true for a sheet no teacher
+      // had looked at. The arm stays so the hazard is visible at the call site
+      // and so gradeQBAnswerStrict's contrast test keeps its subject.
       return true;
 
     default:
@@ -814,6 +821,34 @@ export function normaliseQuestionFormat(format: string | null | undefined): stri
 
 export function isGradableFormat(format: string | null | undefined): boolean {
   return GRADABLE_FORMATS.has(normaliseQuestionFormat(format));
+}
+
+/**
+ * Whether this format has an answer key to wait for.
+ *
+ * A drawing prompt does not. It is finished the moment its prompt is parsed,
+ * and treating "no answer yet" as "not ready" is what kept every drawing on
+ * every past paper out of every test:
+ *
+ *   AnswerKeyGrid shows a drawing as "no key needed", so saveAnswerKey never
+ *   sees it -> the row never leaves 'draft' -> bulkActivateQuestions only takes
+ *   'complete' and 'answer_keyed' -> loadPaperQuestionIds only takes active.
+ *
+ * Nothing errored anywhere along that chain. JEE Paper 2 2006 just quietly
+ * reported 90 of its 92 questions, and 43 drawings across 18 papers had never
+ * appeared in a single generated mock.
+ */
+export function needsAnswerKey(format: string | null | undefined): boolean {
+  return GRADABLE_FORMATS.has(normaliseQuestionFormat(format));
+}
+
+/** The status a freshly parsed question of this format should land at. */
+export function parsedQuestionStatus(
+  format: string | null | undefined,
+  hasAnswer: boolean,
+): QBQuestionStatus {
+  if (!needsAnswerKey(format)) return 'complete';
+  return hasAnswer ? 'answer_keyed' : 'draft';
 }
 
 /**
@@ -879,6 +914,15 @@ function normaliseFreeText(value: string): string {
 }
 
 /**
+ * What submitQBAttempt throws when handed a drawing.
+ *
+ * Exported so the route can turn it into a 400 rather than a 500, and so a test
+ * can assert on it without copying the sentence.
+ */
+export const DRAWING_ATTEMPT_ERROR =
+  'Drawing questions are marked by a teacher and are not submitted here. Use the drawing attempt route instead.';
+
+/**
  * Record a student's attempt on a question.
  */
 export async function submitQBAttempt(
@@ -900,6 +944,19 @@ export async function submitQBAttempt(
   if (questionError) throw questionError;
 
   const q = question as Pick<NexusQBQuestion, 'correct_answer' | 'question_format' | 'answer_tolerance'>;
+
+  // A drawing never comes through here. It has no answer key and never will,
+  // so the guard below used to throw for every single one and practising a
+  // drawing from the bank returned a 500.
+  //
+  // The check is on the FORMAT, not on the emptiness of correct_answer: the
+  // paper workspace editor writes '' rather than null for a drawing, so a
+  // truthiness test alone would still fire while letting a differently saved
+  // row through to checkQBAnswer, which answers `true` unconditionally.
+  if (normaliseQuestionFormat(q.question_format) === 'DRAWING_PROMPT') {
+    throw new Error(DRAWING_ATTEMPT_ERROR);
+  }
+
   if (!q.correct_answer) {
     throw new Error('Cannot submit attempt: question has no correct answer set');
   }
@@ -1402,16 +1459,19 @@ export async function getOrCreateOriginalPaper(
 /**
  * What a question parsed off a real paper counts as.
  *
- * Mirrors the 20260713180000 backfill rule: everything off a paper is 'pyq'
- * except a drawing prompt, which carries a year source but is teacher-curated
- * practice rather than a reproduced exam question.
+ * Everything off a paper is 'pyq', drawings included. The 20260713180000
+ * backfill rule used to exempt DRAWING_PROMPT on the theory that a drawing is
+ * teacher-curated practice, but a drawing that arrived inside a past paper's
+ * upload is as much a reproduced exam question as the MCQ above it. The exempt
+ * rule left production with 145 drawings marked 'authored' and 0 marked 'pyq',
+ * so the Source filter's "Previous year papers" hid every one of them.
  *
  * Exported for its test. The column defaults to 'authored', so getting this
  * wrong does not fail loudly, it just makes the Source filter call every newly
  * uploaded paper "written in-house" and nobody notices for months.
  */
-export function originForParsedQuestion(format: QBQuestionFormat): NexusQBOrigin {
-  return format === 'DRAWING_PROMPT' ? 'authored' : 'pyq';
+export function originForParsedQuestion(_format: QBQuestionFormat): NexusQBOrigin {
+  return 'pyq';
 }
 
 /**
@@ -1426,52 +1486,59 @@ export async function bulkCreateDraftQuestions(
   createdBy: string,
   shift?: QBShift | null,
   client?: TypedSupabaseClient
-): Promise<{ created: number }> {
+): Promise<{ created: number; withAnswers: number }> {
   const supabase = client || getSupabaseAdminClient();
 
   // Build question inserts
-  const questionInserts = questions.map((q) => ({
-    question_format: q.question_format,
-    question_text: q.question_text || null,
-    question_text_hi: q.question_text_hi || null,
-    question_image_url: q.question_image_url || null,
-    options: q.question_format === 'MCQ'
-      ? q.options.map((opt, i) => ({
-          id: String.fromCharCode(97 + i), // a, b, c, d
-          text: opt.text || '',
-          text_hi: opt.text_hi || undefined,
-          image_url: opt.image_url || null,
-          nta_id: opt.nta_id,
-        }))
-      : null,
-    correct_answer: null,
-    explanation_brief: q.explanation_brief || null,
-    explanation_detailed: q.explanation_detailed || null,
-    solution_video_url: q.solution_video_url || null,
-    difficulty: 'MEDIUM' as QBDifficulty,
-    exam_relevance: (examType === 'JEE_PAPER_2' ? 'JEE' : 'NATA') as QBExamRelevance,
-    categories: q.categories,
-    original_paper_id: paperId,
-    origin: originForParsedQuestion(q.question_format),
-    display_order: q.question_number,
-    // The section the parser guessed, persisted rather than discarded. A
-    // teacher corrects it in the paper workspace; nothing downstream has to
-    // re-guess it from categories[0] ever again.
-    section: q.section || null,
-    section_order: q.section ? QB_SECTION_ORDER[q.section] ?? null : null,
-    status: 'draft' as QBQuestionStatus,
-    nta_question_id: q.nta_question_id,
-    is_active: false,
-    created_by: createdBy,
-    // Drawing-specific fields (only populated for DRAWING_PROMPT)
-    ...(q.question_format === 'DRAWING_PROMPT' && {
-      objects_to_include: q.drawing_objects
-        ? q.drawing_objects.map((name: string) => ({ name }))
+  const questionInserts = questions.map((q) => {
+    const answer = typeof q.correct_answer === 'string' ? q.correct_answer.trim() : '';
+    return {
+      question_format: q.question_format,
+      question_text: q.question_text || null,
+      question_text_hi: q.question_text_hi || null,
+      question_image_url: q.question_image_url || null,
+      options: q.question_format === 'MCQ'
+        ? q.options.map((opt, i) => ({
+            id: String.fromCharCode(97 + i), // a, b, c, d
+            text: opt.text || '',
+            text_hi: opt.text_hi || undefined,
+            image_url: opt.image_url || null,
+            nta_id: opt.nta_id,
+          }))
         : null,
-      colour_constraint: q.drawing_color_constraint || null,
-      design_principle_tested: q.drawing_design_principle || null,
-    }),
-  }));
+      correct_answer: answer || null,
+      answer_tolerance: q.answer_tolerance ?? null,
+      explanation_brief: q.explanation_brief || null,
+      explanation_detailed: q.explanation_detailed || null,
+      solution_video_url: q.solution_video_url || null,
+      difficulty: 'MEDIUM' as QBDifficulty,
+      exam_relevance: (examType === 'JEE_PAPER_2' ? 'JEE' : 'NATA') as QBExamRelevance,
+      categories: q.categories,
+      original_paper_id: paperId,
+      origin: originForParsedQuestion(q.question_format),
+      display_order: q.question_number,
+      // The section the parser guessed, persisted rather than discarded. A
+      // teacher corrects it in the paper workspace; nothing downstream has to
+      // re-guess it from categories[0] ever again.
+      section: q.section || null,
+      section_order: q.section ? QB_SECTION_ORDER[q.section] ?? null : null,
+      // Not always 'draft' any more. A drawing has no key to wait for, and a
+      // question whose answer travelled in the same JSON has already got one,
+      // so neither should sit in a queue nobody will come back to.
+      status: parsedQuestionStatus(q.question_format, Boolean(answer)),
+      nta_question_id: q.nta_question_id,
+      is_active: false,
+      created_by: createdBy,
+      // Drawing-specific fields (only populated for DRAWING_PROMPT)
+      ...(q.question_format === 'DRAWING_PROMPT' && {
+        objects_to_include: q.drawing_objects
+          ? q.drawing_objects.map((name: string) => ({ name }))
+          : null,
+        colour_constraint: q.drawing_color_constraint || null,
+        design_principle_tested: q.drawing_design_principle || null,
+      }),
+    };
+  });
 
   // Batch insert questions
   const { data: createdQuestions, error: insertError } = await supabase
@@ -1497,18 +1564,20 @@ export async function bulkCreateDraftQuestions(
     if (sourceError) throw sourceError;
   }
 
-  // Update paper stats
+  // Update paper stats.
+  //
+  // upload_status is no longer hardcoded to 'parsed'. Drawings land 'complete'
+  // and a JSON carrying answers lands its questions 'answer_keyed', so the
+  // status has to be derived from what actually went in rather than assumed.
   const count = createdQuestions?.length || 0;
   await supabase
     .from('nexus_qb_original_papers')
-    .update({
-      upload_status: 'parsed',
-      questions_parsed: count,
-      total_questions: count,
-    } as any)
+    .update({ total_questions: count } as any)
     .eq('id', paperId);
+  await refreshPaperStats(paperId, supabase);
 
-  return { created: count };
+  const withAnswers = questionInserts.filter((q) => q.correct_answer).length;
+  return { created: count, withAnswers };
 }
 
 /**

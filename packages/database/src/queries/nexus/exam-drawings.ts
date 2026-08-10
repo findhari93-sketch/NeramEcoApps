@@ -21,6 +21,24 @@ const ATTEMPTS = 'nexus_test_attempts' as any;
 /** Formats a human has to mark. Mirrors GRADABLE_FORMATS in question-bank.ts, inverted. */
 const HUMAN_MARKED = new Set(['DRAWING_PROMPT', 'IMAGE_BASED']);
 
+/**
+ * The full vocabulary of drawing_submissions_status_check, copied from the live
+ * constraint. Anything outside this set makes the insert throw at the database,
+ * and every caller of queueExamDrawings swallows that throw so the student is
+ * not shown an error for a review row. The set is exported so a test can assert
+ * membership rather than trusting a string literal.
+ */
+export const DRAWING_SUBMISSION_STATUSES = [
+  'submitted',
+  'under_review',
+  'redo',
+  'completed',
+  'reviewed',
+] as const;
+
+/** The status a freshly queued, unlooked-at drawing carries. */
+export const QUEUED_STATUS: (typeof DRAWING_SUBMISSION_STATUSES)[number] = 'submitted';
+
 function looksLikeUpload(value: unknown): value is string {
   return typeof value === 'string' && /^https?:\/\//i.test(value.trim());
 }
@@ -72,7 +90,11 @@ export async function queueExamDrawings(
       original_image_url: answer.trim(),
       exam_attempt_id: input.attemptId,
       exam_qb_question_id: q.question_id,
-      status: 'pending',
+      // 'submitted', not 'pending'. drawing_submissions_status_check allows only
+      // submitted | under_review | redo | completed | reviewed, so 'pending' made
+      // every insert here throw, and the caller swallows the throw. That is why
+      // no exam drawing ever reached a teacher. See QUEUED_STATUS below.
+      status: QUEUED_STATUS,
     });
   }
 

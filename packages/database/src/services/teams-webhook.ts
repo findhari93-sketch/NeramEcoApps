@@ -10,6 +10,7 @@
  */
 
 import type { NotificationEvent } from '../types';
+import { log } from '../utils/logger';
 
 /**
  * Send an Adaptive Card to the configured Teams channel for the given event.
@@ -50,7 +51,7 @@ export async function sendTeamsWebhook(
       return { success: false, error: errorMsg };
     }
 
-    console.log('[Teams] Adaptive Card sent successfully');
+    log.debug('[Teams] Adaptive Card sent successfully');
     return { success: true };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown error';

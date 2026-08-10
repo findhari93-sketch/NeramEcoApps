@@ -517,6 +517,8 @@ export function useKeyboardShortcut(
 // USER NOTIFICATIONS HOOK
 // ============================================
 
+export { useVisibilityPolling } from './useVisibilityPolling';
+export type { VisibilityPollingOptions } from './useVisibilityPolling';
 export { useUserNotifications } from './useUserNotifications';
 export type { UseUserNotificationsOptions, UseUserNotificationsReturn, UserNotificationItem } from './useUserNotifications';
 

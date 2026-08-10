@@ -21,11 +21,15 @@ describe('originForParsedQuestion', () => {
     expect(originForParsedQuestion('IMAGE_BASED')).toBe('pyq');
   });
 
-  it('leaves a drawing prompt authored, matching the 20260713180000 backfill', () => {
-    // Drawing questions carry a year source but are teacher-curated practice
-    // rather than a reproduced exam question. Production has 145 of these, all
-    // deliberately 'authored', and this rule is what keeps that true.
-    expect(originForParsedQuestion('DRAWING_PROMPT')).toBe('authored');
+  it('marks a drawing prompt as a past paper question too', () => {
+    // This assertion used to read 'authored', on the theory that a drawing is
+    // teacher-curated practice rather than a reproduced exam question. That is
+    // true of a drawing authored for a chapter; it is not true of one that
+    // arrived inside a past paper's own upload, which is where all 145 of
+    // production's drawings came from. The result was 145 'authored' and 0
+    // 'pyq', so the Source filter's "Previous year papers" hid the entire
+    // drawing section of every paper in the bank.
+    expect(originForParsedQuestion('DRAWING_PROMPT')).toBe('pyq');
   });
 });
 

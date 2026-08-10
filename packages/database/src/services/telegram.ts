@@ -11,6 +11,8 @@
  * 5. Add to .env.local: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
  */
 
+import { log } from '../utils/logger';
+
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';
 
 function getBotToken(): string {
@@ -65,7 +67,7 @@ export async function sendTelegramMessage(
       return { success: false, error: errorMsg };
     }
 
-    console.log('[Telegram] Message sent successfully');
+    log.debug('[Telegram] Message sent successfully');
     return { success: true };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown error';
@@ -78,13 +80,20 @@ export async function sendTelegramMessage(
 /**
  * Check if Telegram is configured
  */
+/** Missing config is a deployment state, not an event, so warn once not per call. */
+let warnedNotConfigured = false;
+
 export function isTelegramConfigured(): boolean {
   const hasToken = !!process.env.TELEGRAM_BOT_TOKEN;
   const hasChatId = !!process.env.TELEGRAM_CHAT_ID;
   if (!hasToken || !hasChatId) {
-    console.warn('[Telegram] Not configured:', { hasToken, hasChatId });
+    if (!warnedNotConfigured) {
+      warnedNotConfigured = true;
+      log.warn('[Telegram] Not configured:', { hasToken, hasChatId });
+    }
+    return false;
   }
-  return hasToken && hasChatId;
+  return true;
 }
 
 // ============================================

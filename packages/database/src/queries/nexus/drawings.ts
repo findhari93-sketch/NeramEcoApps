@@ -511,7 +511,24 @@ export async function getDrawingSubmissionById(
     if (error.code === 'PGRST116') return null;
     throw error;
   }
-  return data as unknown as DrawingSubmissionWithDetails;
+
+  const submission = data as unknown as DrawingSubmissionWithDetails;
+
+  // An exam drawing has no drawing_questions mirror by design, so the embed
+  // above comes back null and the review screen has no prompt to show or to put
+  // in the Gemini prompt it builds. Fetch it from the bank instead.
+  if (!submission.question && (submission as any).exam_qb_question_id) {
+    const { data: qb } = await supabase
+      .from('nexus_qb_questions' as any)
+      .select(
+        'id, question_text, categories, drawing_marks, design_principle_tested, colour_constraint, objects_to_include, drawing_focus_points',
+      )
+      .eq('id', (submission as any).exam_qb_question_id)
+      .maybeSingle();
+    submission.qb_question = (qb as any) ?? null;
+  }
+
+  return submission;
 }
 
 // ============================================================
@@ -524,6 +541,8 @@ export async function getDrawingReviewQueue(
     category?: string;
     tagSlugs?: string[];
     student_id?: string;
+    /** question_bank | homework | free_practice | assignment | exam */
+    source_type?: string | string[];
     limit?: number;
     offset?: number;
   },
@@ -564,6 +583,11 @@ export async function getDrawingReviewQueue(
   }
 
   if (filters?.student_id) query = query.eq('student_id', filters.student_id);
+  if (filters?.source_type) {
+    query = Array.isArray(filters.source_type)
+      ? (query as any).in('source_type', filters.source_type)
+      : query.eq('source_type', filters.source_type);
+  }
   if (tagRestrictedIds) query = query.in('id', tagRestrictedIds);
 
   const limit = filters?.limit || 50;
@@ -607,10 +631,34 @@ export async function getDrawingReviewQueue(
       if (link.tag) tagsBySubmission[sid].push(link.tag as DrawingTag);
     }
 
+    // An exam drawing points straight at the bank question and has no
+    // drawing_questions mirror, so `question` comes back null. Without this the
+    // queue card falls through to the words "Free Practice" over an exam
+    // answer, and the review screen builds its Gemini prompt with no
+    // ASSIGNMENT line, which is the most useful thing in that prompt.
+    const qbIds = [
+      ...new Set(
+        results
+          .filter((s) => !s.question && (s as any).exam_qb_question_id)
+          .map((s) => (s as any).exam_qb_question_id as string),
+      ),
+    ];
+    let qbMap: Map<string, any> = new Map();
+    if (qbIds.length > 0) {
+      const { data: qbRows } = await supabase
+        .from('nexus_qb_questions' as any)
+        .select(
+          'id, question_text, categories, drawing_marks, design_principle_tested, colour_constraint, objects_to_include, drawing_focus_points',
+        )
+        .in('id', qbIds);
+      qbMap = new Map((qbRows || []).map((q: any) => [q.id, q]));
+    }
+
     results = results.map((s) => ({
       ...s,
       thread_info: s.question ? threadMap.get(`${s.student_id}_${s.question.id}`) || null : null,
       tags: tagsBySubmission[s.id] || [],
+      qb_question: s.question ? null : qbMap.get((s as any).exam_qb_question_id) || null,
     }));
   }
 
@@ -1016,7 +1064,65 @@ export async function saveDrawingReviewWithAction(
       .eq('question_id', submission.question_id);
   }
 
+  // A marked Question Bank drawing becomes a bank attempt, and only now.
+  //
+  // nexus_qb_student_attempts.is_correct is BOOLEAN NOT NULL and feeds
+  // getStudentQBStats' accuracy percentage, so a row written at upload time
+  // would have to assert something about a sheet nobody had looked at. A redo
+  // writes nothing: the thread is still open, so the work is not finished.
+  if (action === 'complete' && submission.source_type === 'question_bank' && submission.question_id) {
+    try {
+      await recordQBAttemptForDrawing(submission, supabase);
+    } catch (err) {
+      // The teacher's review is saved and must not be rolled back because a
+      // statistics row failed. Loud in the log, invisible to them.
+      console.error('[saveDrawingReviewWithAction] QB attempt row not written for', submissionId, err);
+    }
+  }
+
   return submission as DrawingSubmission;
+}
+
+/** The tutor_rating at or above which a drawing counts as a pass. 3 is "Good". */
+const DRAWING_PASS_RATING = 3;
+
+/**
+ * Mirror a marked question-bank drawing into nexus_qb_student_attempts.
+ *
+ * Idempotent per submission: re-saving a completed review must not add a second
+ * attempt, which would double-count the question in the student's stats.
+ */
+async function recordQBAttemptForDrawing(
+  submission: any,
+  supabase: any,
+): Promise<void> {
+  const { data: mirror } = await supabase
+    .from('drawing_questions')
+    .select('qb_question_id')
+    .eq('id', submission.question_id)
+    .maybeSingle();
+
+  const qbQuestionId = mirror?.qb_question_id;
+  if (!qbQuestionId) return;
+
+  const { data: already } = await supabase
+    .from('nexus_qb_student_attempts')
+    .select('id')
+    .eq('student_id', submission.student_id)
+    .eq('question_id', qbQuestionId)
+    .eq('selected_answer', submission.original_image_url)
+    .maybeSingle();
+  if (already) return;
+
+  await supabase.from('nexus_qb_student_attempts').insert({
+    student_id: submission.student_id,
+    question_id: qbQuestionId,
+    // There is no option to record, so the answer IS the sheet.
+    selected_answer: submission.original_image_url,
+    is_correct: (submission.tutor_rating ?? 0) >= DRAWING_PASS_RATING,
+    time_spent_seconds: null,
+    mode: 'practice',
+  });
 }
 
 // ============================================================

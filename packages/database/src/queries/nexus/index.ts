@@ -11,6 +11,8 @@ export * from './drawings';
 export * from './foundation';
 export * from './foundation-admin';
 export * from './question-bank';
+export * from './qb-question-delete';
+export * from './qb-drawing-practice';
 export * from './qb-tags';
 export * from './qb-category-proposals';
 export * from './qb-papers';
