@@ -275,6 +275,34 @@ export interface SiteDriveItem {
   lastModified: string | null;
   /** Present on folders only, so the picker can grey them out. */
   isFolder: boolean;
+  /**
+   * The folder this item sits in, human-readable ("Neram library/2019 JEE
+   * Papers"), or null when Graph reported no parent. Search results span every
+   * folder in the drive, so without this a picker can only say a file exists,
+   * never where, and a teacher cannot tell it apart from a same-named file
+   * elsewhere before committing to it.
+   */
+  folderPath: string | null;
+}
+
+/**
+ * Graph's parentReference.path looks like
+ * "/drives/b!xxx/root:/nexus/class-videos/2019" or
+ * "/sites/{id}/drive/root:/Documents/Neram library". Everything up to and
+ * including "root:" is drive plumbing no teacher recognizes; only the segment
+ * after it is a folder name they would actually see in the browser.
+ */
+function folderPathOf(item: any): string | null {
+  const raw = item?.parentReference?.path;
+  if (typeof raw !== 'string') return null;
+  const marker = raw.indexOf('root:');
+  const rel = (marker >= 0 ? raw.slice(marker + 'root:'.length) : raw).replace(/^\/+|\/+$/g, '');
+  if (!rel) return null;
+  try {
+    return decodeURIComponent(rel).replace(/\//g, ' / ');
+  } catch {
+    return rel.replace(/\//g, ' / ');
+  }
 }
 
 export function toDriveItem(item: any): SiteDriveItem {
@@ -286,6 +314,7 @@ export function toDriveItem(item: any): SiteDriveItem {
     size: typeof item.size === 'number' ? item.size : null,
     lastModified: item.lastModifiedDateTime || null,
     isFolder: !!item.folder,
+    folderPath: folderPathOf(item),
   };
 }
 

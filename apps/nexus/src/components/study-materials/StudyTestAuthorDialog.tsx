@@ -25,14 +25,18 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  Paper,
   Slider,
   Typography,
+  alpha,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import LinkOffOutlinedIcon from '@mui/icons-material/LinkOffOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import TestBrowser, { type PickableTest } from '@/components/tests/TestBrowser';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
@@ -45,9 +49,23 @@ interface LinkedTest {
   is_published: boolean;
 }
 
+/** The paper's own mock, as GET /api/question-bank/papers/[id]/test returns it. */
+interface PaperTest {
+  test_id: string;
+  placement_id: string;
+  title: string;
+  question_count: number;
+  passing_pct: number | null;
+}
+
 interface StudyTestAuthorDialogProps {
   open: boolean;
-  file: { id: string; title: string } | null;
+  file: {
+    id: string;
+    title: string;
+    /** Set when this PDF is the source of a Question Bank paper: its own questions come first. */
+    qb_paper?: { id: string; title: string; short_title: string } | null;
+  } | null;
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
   onClose: () => void;
   onSaved: () => void;
@@ -75,6 +93,12 @@ export default function StudyTestAuthorDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The linked paper's own mock, when this PDF is a Question Bank paper's
+  // source. Loaded alongside the chapter's current link so the card below can
+  // say "use this" or "generate one" without a second round trip on click.
+  const [paperTest, setPaperTest] = useState<PaperTest | null>(null);
+  const [paperTestLoading, setPaperTestLoading] = useState(false);
+
   useEffect(() => {
     if (!open || !file?.id) return;
     setPicked(null);
@@ -99,18 +123,43 @@ export default function StudyTestAuthorDialog({
     };
   }, [open, file?.id, authFetch]);
 
+  useEffect(() => {
+    if (!open || !file?.qb_paper?.id) {
+      setPaperTest(null);
+      return;
+    }
+    const paperId = file.qb_paper.id;
+    setPaperTestLoading(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const json = await authFetch(`/api/question-bank/papers/${paperId}/test`);
+        if (!cancelled) setPaperTest((json?.data as PaperTest) || null);
+      } catch {
+        if (!cancelled) setPaperTest(null);
+      } finally {
+        if (!cancelled) setPaperTestLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, file?.qb_paper?.id, authFetch]);
+
   const questionCount = picked?.question_count ?? linked?.question_count ?? 0;
   const mustGetRight = questionCount > 0 ? Math.ceil((passingPct / 100) * questionCount) : 0;
 
-  async function save() {
-    const testId = picked?.id ?? linked?.test_id;
-    if (!file?.id || !testId) return;
+  /** Link a test to this chapter by id, however it was chosen. Shared by the
+   * library picker below and the paper card's shortcuts, so a failure is
+   * reported the same way regardless of which path found the test. */
+  async function linkTestId(testId: string, pct: number) {
+    if (!file?.id) return;
     setBusy(true);
     setError(null);
     try {
       await authFetch(`/api/study-materials/files/${file.id}/test`, {
         method: 'POST',
-        body: JSON.stringify({ test_id: testId, passing_pct: passingPct }),
+        body: JSON.stringify({ test_id: testId, passing_pct: pct }),
       });
       onSaved();
       onClose();
@@ -118,6 +167,35 @@ export default function StudyTestAuthorDialog({
       setError(err instanceof Error ? err.message : 'Could not link the test');
     } finally {
       setBusy(false);
+    }
+  }
+
+  const save = () => {
+    const testId = picked?.id ?? linked?.test_id;
+    if (testId) void linkTestId(testId, passingPct);
+  };
+
+  /** The paper already has a mock: attach the same test here rather than a second one. */
+  const useThisPaperTest = () => {
+    if (paperTest) void linkTestId(paperTest.test_id, paperTest.passing_pct ?? passingPct);
+  };
+
+  /** No mock yet: build one from the paper's own questions, then attach it here. */
+  async function generateFromPaper() {
+    if (!file?.qb_paper?.id) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const json = await authFetch(`/api/question-bank/papers/${file.qb_paper.id}/test`, {
+        method: 'POST',
+        body: JSON.stringify({ generate: true }),
+      });
+      const testId = (json?.data as { test_id?: string })?.test_id;
+      if (!testId) throw new Error('The paper has no active questions yet.');
+      await linkTestId(testId, passingPct);
+    } catch (err) {
+      setBusy(false);
+      setError(err instanceof Error ? err.message : 'Could not generate the paper test');
     }
   }
 
@@ -159,6 +237,90 @@ export default function StudyTestAuthorDialog({
           </Box>
         ) : (
           <>
+            {/* This PDF is a Question Bank paper's own source: its questions
+                already exist, tagged and reviewed, so the paper's own test is
+                the right one here rather than a second set written fresh from
+                the raw PDF. */}
+            {file?.qb_paper && (
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 1.5,
+                  mb: 2,
+                  borderRadius: 1.5,
+                  borderColor: 'primary.main',
+                  bgcolor: alpha(theme.palette.primary.main, 0.04),
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, flex: 1, minWidth: 0 }}>
+                    Linked to {file.qb_paper.short_title}
+                  </Typography>
+                  <Button
+                    size="small"
+                    endIcon={<OpenInNewOutlinedIcon fontSize="small" />}
+                    onClick={() => router.push(`/teacher/question-bank/papers/${file.qb_paper!.id}`)}
+                    sx={{ textTransform: 'none', minHeight: 36 }}
+                  >
+                    Open the paper
+                  </Button>
+                </Box>
+
+                {paperTestLoading ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                    <CircularProgress size={16} />
+                    <Typography variant="caption" color="text.secondary">
+                      Checking the paper&apos;s test...
+                    </Typography>
+                  </Box>
+                ) : linked && paperTest && linked.test_id === paperTest.test_id ? (
+                  <Alert severity="success" icon={<CheckCircleOutlinedIcon />} sx={{ mt: 1, py: 0.25 }}>
+                    Already using the paper&apos;s own {paperTest.question_count} question
+                    {paperTest.question_count === 1 ? '' : 's'}.
+                  </Alert>
+                ) : paperTest ? (
+                  <Alert
+                    severity="info"
+                    sx={{ mt: 1 }}
+                    action={
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={useThisPaperTest}
+                        disabled={busy}
+                        sx={{ minHeight: 40, whiteSpace: 'nowrap' }}
+                      >
+                        {busy ? <CircularProgress size={16} color="inherit" /> : 'Use this test'}
+                      </Button>
+                    }
+                  >
+                    The paper already has a {paperTest.question_count}-question test. Use it here instead of
+                    writing a second one.
+                  </Alert>
+                ) : (
+                  <Alert
+                    severity="info"
+                    icon={<AutoAwesomeOutlinedIcon />}
+                    sx={{ mt: 1 }}
+                    action={
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={generateFromPaper}
+                        disabled={busy}
+                        sx={{ minHeight: 40, whiteSpace: 'nowrap' }}
+                      >
+                        {busy ? <CircularProgress size={16} color="inherit" /> : 'Generate from the paper'}
+                      </Button>
+                    }
+                  >
+                    The paper has no test yet. Build it from the paper&apos;s own questions, not a fresh read
+                    of this PDF.
+                  </Alert>
+                )}
+              </Paper>
+            )}
+
             {linked && (
               <Box
                 sx={{
@@ -241,7 +403,7 @@ export default function StudyTestAuthorDialog({
                 round trip through another module as though it were help. The
                 generator does the whole thing from the chapter that is already
                 open, so the advice became a button. */}
-            {!linked && !picked && onGenerate && (
+            {!linked && !picked && !file?.qb_paper && onGenerate && (
               <Alert
                 severity="info"
                 icon={<AutoAwesomeOutlinedIcon />}

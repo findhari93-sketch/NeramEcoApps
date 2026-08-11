@@ -7,7 +7,6 @@ import {
   Typography,
   TextField,
   Button,
-  IconButton,
   Chip,
   MenuItem,
   Snackbar,
@@ -15,10 +14,6 @@ import {
 } from '@neram/ui';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ImageUploadZone from './ImageUploadZone';
 import {
   buildSolutionPrompt,
@@ -29,7 +24,6 @@ import {
   type SkillLevel,
 } from '@/lib/drawing-prompt-templates';
 import type { ImageState } from '@/lib/bulk-upload-schema';
-import type { QBDrawingFocusPoint } from '@neram/database';
 
 /**
  * Everything that makes a drawing question answerable and markable.
@@ -43,16 +37,23 @@ import type { QBDrawingFocusPoint } from '@neram/database';
  * The prompt is built from the CURRENT FORM STATE, not the saved row, so a
  * teacher can reword the question, press Copy, and get the reworded prompt
  * without first saving a draft they might throw away.
+ *
+ * Colour rule, design principle, objects to include and focus points used to
+ * live here too. Nobody was filling them in, so they are gone from
+ * authoring: the columns stay on the row (drawing_marks aside, they are
+ * simply never read or written by this panel any more), and a later change
+ * of mind costs no migration.
  */
 
 /** The slice of editor form state this panel owns. */
 export interface DrawingFormState {
   drawing_marks: string;
-  colour_constraint: string;
-  design_principle_tested: string;
-  objects_to_include: Array<{ name: string; count?: number }>;
-  drawing_focus_points: QBDrawingFocusPoint[];
-  drawing_reference_image?: ImageState;
+  /**
+   * One image, shown to a student before they draw in practice (subject to
+   * their own reveal switch) and never before they submit in a test. It used
+   * to be two fields, a "reference" and a "model solution", and nobody could
+   * say what told them apart, since the same picture usually served both.
+   */
   solution_image?: ImageState;
   solution_video_url: string;
 }
@@ -66,9 +67,6 @@ interface Props {
   /** Drives the default medium. Pass the question's categories. */
   categories?: string[] | null;
 }
-
-/** A focus list longer than this is not a focus. */
-const MAX_FOCUS_POINTS = 8;
 
 const MEDIA: DrawingMedium[] = ['graphite_pencil', 'charcoal_pencil', 'color_pencil'];
 const LEVELS: SkillLevel[] = ['beginner', 'medium', 'expert'];
@@ -86,7 +84,6 @@ export default function DrawingQuestionPanel({
   );
   const [medium, setMedium] = useState<DrawingMedium>(defaultMedium);
   const [level, setLevel] = useState<SkillLevel>('expert');
-  const [objectDraft, setObjectDraft] = useState('');
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
 
@@ -95,17 +92,13 @@ export default function DrawingQuestionPanel({
       buildSolutionPrompt(
         {
           question_text: questionText,
-          design_principle_tested: value.design_principle_tested,
-          colour_constraint: value.colour_constraint,
-          objects_to_include: value.objects_to_include,
-          focus_points: value.drawing_focus_points,
           drawing_marks: value.drawing_marks ? Number(value.drawing_marks) : null,
           category: (categories || []).find((c) => c !== 'drawing') || null,
         },
         level,
         medium,
       ),
-    [questionText, value, level, medium, categories],
+    [questionText, value.drawing_marks, level, medium, categories],
   );
 
   const copyPrompt = useCallback(async () => {
@@ -119,54 +112,15 @@ export default function DrawingQuestionPanel({
     }
   }, [prompt]);
 
-  const addObject = useCallback(() => {
-    const name = objectDraft.trim();
-    if (!name) return;
-    onChange({ objects_to_include: [...value.objects_to_include, { name }] });
-    setObjectDraft('');
-  }, [objectDraft, value.objects_to_include, onChange]);
-
-  const setFocus = useCallback(
-    (next: QBDrawingFocusPoint[]) => onChange({ drawing_focus_points: next }),
-    [onChange],
-  );
-
-  const moveFocus = useCallback(
-    (index: number, delta: number) => {
-      const next = [...value.drawing_focus_points];
-      const target = index + delta;
-      if (target < 0 || target >= next.length) return;
-      [next[index], next[target]] = [next[target], next[index]];
-      setFocus(next);
-    },
-    [value.drawing_focus_points, setFocus],
-  );
-
   return (
     <Stack spacing={2.5}>
       <Box>
         <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-          Reference image
+          Solution image
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          An aid for the prompt, such as a photo of the kit. Students see this before they draw.
-        </Typography>
-        <ImageUploadZone
-          image={value.drawing_reference_image}
-          onChange={(img) => onChange({ drawing_reference_image: img })}
-          getToken={getToken}
-          subfolder="drawing-references"
-          height={140}
-          label="Drop a reference image, paste, or click to upload"
-        />
-      </Box>
-
-      <Box>
-        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-          Model solution image
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Hidden from a student until they upload their own attempt.
+          Hidden during a test until the student submits. In practice they can choose to reveal it
+          before they draw.
         </Typography>
         <ImageUploadZone
           image={value.solution_image}
@@ -187,142 +141,15 @@ export default function DrawingQuestionPanel({
         placeholder="https://..."
       />
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-        <TextField
-          label="Marks"
-          value={value.drawing_marks}
-          onChange={(e) => onChange({ drawing_marks: e.target.value.replace(/[^0-9]/g, '') })}
-          size="small"
-          inputMode="numeric"
-          sx={{ width: { xs: '100%', sm: 140 } }}
-        />
-        <TextField
-          label="Colour rule"
-          value={value.colour_constraint}
-          onChange={(e) => onChange({ colour_constraint: e.target.value })}
-          size="small"
-          fullWidth
-          placeholder="maximum 3 colours"
-        />
-      </Stack>
-
       <TextField
-        label="Design principle tested"
-        value={value.design_principle_tested}
-        onChange={(e) => onChange({ design_principle_tested: e.target.value })}
+        label="Marks in the exam"
+        value={value.drawing_marks}
+        onChange={(e) => onChange({ drawing_marks: e.target.value.replace(/[^0-9]/g, '') })}
         size="small"
-        fullWidth
-        placeholder="balance, rhythm, emphasis"
+        inputMode="numeric"
+        helperText="Leave blank if the paper does not say"
+        sx={{ width: { xs: '100%', sm: 200 } }}
       />
-
-      <Box>
-        <Typography variant="subtitle2" sx={{ mb: 1 }}>
-          Objects to include
-        </Typography>
-        <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-          <TextField
-            value={objectDraft}
-            onChange={(e) => setObjectDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addObject();
-              }
-            }}
-            size="small"
-            fullWidth
-            placeholder="chair, table, lamp"
-            label="Add an object"
-          />
-          <Button
-            onClick={addObject}
-            disabled={!objectDraft.trim()}
-            startIcon={<AddIcon />}
-            sx={{ minHeight: 44, whiteSpace: 'nowrap' }}
-          >
-            Add
-          </Button>
-        </Stack>
-        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-          {value.objects_to_include.map((o, i) => (
-            <Chip
-              key={`${o.name}-${i}`}
-              label={o.count && o.count > 1 ? `${o.name} x${o.count}` : o.name}
-              onDelete={() =>
-                onChange({ objects_to_include: value.objects_to_include.filter((_, j) => j !== i) })
-              }
-              sx={{ height: 36 }}
-            />
-          ))}
-        </Stack>
-      </Box>
-
-      <Box>
-        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-          What to concentrate on
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Shown to the student after they upload, and used in the prompt below. Up to{' '}
-          {MAX_FOCUS_POINTS}, because a longer list is not a focus.
-        </Typography>
-        <Stack spacing={1}>
-          {value.drawing_focus_points.map((fp, i) => (
-            <Stack
-              key={i}
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              alignItems={{ xs: 'stretch', sm: 'flex-start' }}
-            >
-              <TextField
-                value={fp.text}
-                onChange={(e) => {
-                  const next = [...value.drawing_focus_points];
-                  next[i] = { ...next[i], text: e.target.value };
-                  setFocus(next);
-                }}
-                size="small"
-                fullWidth
-                multiline
-                maxRows={3}
-                placeholder="Keep the horizon line consistent"
-              />
-              <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
-                <IconButton
-                  onClick={() => moveFocus(i, -1)}
-                  disabled={i === 0}
-                  aria-label={`Move focus point ${i + 1} up`}
-                  sx={{ width: 44, height: 44 }}
-                >
-                  <ArrowUpwardIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  onClick={() => moveFocus(i, 1)}
-                  disabled={i === value.drawing_focus_points.length - 1}
-                  aria-label={`Move focus point ${i + 1} down`}
-                  sx={{ width: 44, height: 44 }}
-                >
-                  <ArrowDownwardIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  onClick={() => setFocus(value.drawing_focus_points.filter((_, j) => j !== i))}
-                  aria-label={`Remove focus point ${i + 1}`}
-                  sx={{ width: 44, height: 44 }}
-                >
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              </Stack>
-            </Stack>
-          ))}
-        </Stack>
-        <Button
-          onClick={() => setFocus([...value.drawing_focus_points, { text: '' }])}
-          disabled={value.drawing_focus_points.length >= MAX_FOCUS_POINTS}
-          startIcon={<AddIcon />}
-          sx={{ mt: 1, minHeight: 44 }}
-        >
-          Add focus point
-        </Button>
-      </Box>
 
       <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
         <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
@@ -330,7 +157,7 @@ export default function DrawingQuestionPanel({
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
           Copy this prompt, paste it into Gemini with no image attached, then upload what it gives
-          you into Model solution image above.
+          you into Solution image above.
         </Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1.5 }}>
           <TextField

@@ -50,7 +50,14 @@ interface Row {
 interface Props {
   open: boolean;
   folderName: string;
-  files: Array<{ id: string; title: string; file_type: string | null; has_test?: boolean }>;
+  files: Array<{
+    id: string;
+    title: string;
+    file_type: string | null;
+    has_test?: boolean;
+    /** Linked to a Question Bank paper: that paper's own questions are the test, not a fresh AI write. */
+    qb_paper?: { id: string } | null;
+  }>;
   onClose: () => void;
   onFinished: () => void;
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
@@ -68,7 +75,7 @@ export default function GenerateFolderTestsDialog({
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
   const candidates = useMemo(
-    () => files.filter((f) => f.file_type === 'application/pdf' && !f.has_test),
+    () => files.filter((f) => f.file_type === 'application/pdf' && !f.has_test && !f.qb_paper),
     [files],
   );
 

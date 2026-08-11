@@ -36,6 +36,7 @@ import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { pickUnexplainedAttempt } from '@/lib/unfinished-test-prompt';
 import UnfinishedTestSheet, { type UnfinishedAttempt } from '@/components/tests/UnfinishedTestSheet';
 import StudentTestCard, { formatWhen, type StudentTest, type TestStatus } from '@/components/tests/StudentTestCard';
 import MyTestsLibrary from '@/components/tests/MyTestsLibrary';
@@ -127,15 +128,21 @@ export default function StudentTestsPage() {
   const setError = useCallback((message: string) => setNotice({ message, severity: 'error' }), []);
   const [statusFilter, setStatusFilter] = useState<TestStatus | 'all'>('all');
   /**
-   * Attempts the student has waved away this visit.
+   * Whether the student has already been asked about an abandoned attempt
+   * this visit, one way or another.
    *
    * Held in component state rather than written to the server, deliberately.
    * "Not now" means not now, not never: the question comes back next visit,
    * which is the right cadence for something worth asking but not worth
    * demanding. Persisting a dismissal would silently turn one skipped tap into
    * permanent silence about a test that may well be broken.
+   *
+   * A single flag, not a per-attempt set: up to three attempts can need a
+   * reason at once, and answering or dismissing one must not immediately
+   * surface the next in the same session, that reads as the same modal
+   * refusing to close. One prompt per visit; the rest wait for the next load.
    */
-  const [dismissedReasons, setDismissedReasons] = useState<Set<string>>(new Set());
+  const [askedThisVisit, setAskedThisVisit] = useState(false);
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -213,8 +220,8 @@ export default function StudentTestsPage() {
    * next on the following visit.
    */
   const askAbout = useMemo(
-    () => (data?.needs_reason || []).find((a) => !dismissedReasons.has(a.attempt_id)) ?? null,
-    [data, dismissedReasons],
+    () => pickUnexplainedAttempt(data?.needs_reason, askedThisVisit),
+    [data, askedThisVisit],
   );
 
   const submitReason = useCallback(
@@ -223,6 +230,7 @@ export default function StudentTestsPage() {
         method: 'POST',
         body: JSON.stringify({ ...input, classroom_id: activeClassroom?.id ?? null }),
       });
+      setAskedThisVisit(true);
       // Drop it locally rather than reloading the whole page: the answer changes
       // nothing else on screen, and a full refetch would cost a student on a
       // phone a visible flash for no gain.
@@ -475,18 +483,7 @@ export default function StudentTestsPage() {
       {/* Asked once per visit, one paper at a time, and always skippable. See
           UnfinishedTestSheet for why this lives here rather than at the moment
           the test was abandoned. */}
-      <UnfinishedTestSheet
-        attempt={askAbout}
-        onDismiss={() =>
-          setDismissedReasons((prev) => {
-            if (!askAbout) return prev;
-            const next = new Set(prev);
-            next.add(askAbout.attempt_id);
-            return next;
-          })
-        }
-        onSubmit={submitReason}
-      />
+      <UnfinishedTestSheet attempt={askAbout} onDismiss={() => setAskedThisVisit(true)} onSubmit={submitReason} />
 
       <Snackbar
         open={Boolean(notice)}

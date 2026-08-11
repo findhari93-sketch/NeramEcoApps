@@ -18,10 +18,19 @@ const base = {
 };
 
 describe('PaperQuestionDetail', () => {
-  it('invites the teacher to pick a question when none is open', () => {
+  /**
+   * The parent (PaperWorkspace) only ever mounts this component for a
+   * question that exists, so question=null is a render race, not a "nothing
+   * selected" state: the id changed and the new question has not arrived in
+   * props yet. It used to be a permanent empty state occupying half the
+   * screen even when a question genuinely was selected elsewhere; now it is
+   * one blank frame with nothing in it.
+   */
+  it('renders an empty frame, not a permanent empty state, while the question prop is still catching up', () => {
     render(<PaperQuestionDetail {...base} question={null} position={null}
       onPrevious={() => {}} onNext={() => {}} />);
-    expect(screen.getByText('Select a question to edit it')).not.toBeNull();
+    expect(screen.queryByText('Select a question to edit it')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Previous question' })).toBeNull();
   });
 
   it('says where you are in the paper', () => {

@@ -1,22 +1,27 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
+  Button,
   Typography,
   Chip,
   Paper,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   alpha,
   useTheme,
 } from '@neram/ui';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import type { NexusQBQuestion, NexusQBQuestionOption } from '@neram/database';
+import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_LABELS, QB_QUESTION_STATUS_COLORS } from '@neram/database';
 import ImageUploadZone from './ImageUploadZone';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import type { SlotType, PendingImages } from '@/hooks/useBulkImageFlow';
 import { getEffectiveImage } from '@/hooks/useBulkImageFlow';
+import { questionImageSlots } from '@/lib/qb-image-needs';
 import MathText from '@/components/common/MathText';
 
 interface BulkImageQuestionCardProps {
@@ -27,25 +32,11 @@ interface BulkImageQuestionCardProps {
   getToken: () => Promise<string | null>;
   registerSlotRef: (questionId: string, slot: SlotType, el: HTMLElement | null) => void;
   pending: PendingImages;
-}
-
-function hasAllImages(question: NexusQBQuestion, pending: PendingImages): boolean {
-  const qImg = getEffectiveImage(question, 'question', pending);
-  if (!qImg) return false;
-  if (question.question_format === 'MCQ' && question.options) {
-    const opts = question.options as NexusQBQuestionOption[];
-    return opts.every((o) => getEffectiveImage(question, o.id as SlotType, pending));
-  }
-  return true;
-}
-
-function hasSomeImages(question: NexusQBQuestion, pending: PendingImages): boolean {
-  if (getEffectiveImage(question, 'question', pending)) return true;
-  if (question.options) {
-    const opts = question.options as NexusQBQuestionOption[];
-    return opts.some((o) => getEffectiveImage(question, o.id as SlotType, pending));
-  }
-  return false;
+  /**
+   * Pin the tri-state `needs_image` verdict, overruling the keyword guess.
+   * Undefined hides the control, for a caller that has not wired persistence.
+   */
+  onSetNeedsImage?: (value: boolean | null) => void;
 }
 
 export default function BulkImageQuestionCard({
@@ -56,11 +47,37 @@ export default function BulkImageQuestionCard({
   getToken,
   registerSlotRef,
   pending,
+  onSetNeedsImage,
 }: BulkImageQuestionCardProps) {
   const theme = useTheme();
   const isMCQ = question.question_format === 'MCQ';
-  const allDone = hasAllImages(question, pending);
-  const someDone = hasSomeImages(question, pending);
+
+  /**
+   * The one place this card decides what it is waiting for.
+   *
+   * It used to answer that three different ways: `hasAllImages` demanded a
+   * picture in every MCQ option, so "how many rectangles are in the figure
+   * below?" with the options 16, 14, 13, 12 was amber forever.
+   */
+  const slots = useMemo(
+    () =>
+      questionImageSlots(question, (slot) => !!getEffectiveImage(question, slot, pending)),
+    [question, pending],
+  );
+
+  const wanted = slots.filter((s) => s.expected);
+  const allDone = wanted.length > 0 && wanted.every((s) => s.filled);
+  const someDone = wanted.some((s) => s.filled) && !allDone;
+
+  const optionSlots = slots.filter((s) => s.slot !== 'question');
+  /**
+   * Show the option grid when a picture is expected in one, or when one is
+   * already there. A teacher can still open it by hand for the case the guess
+   * missed, which is what the button below is for.
+   */
+  const [optionsForced, setOptionsForced] = useState(false);
+  const showOptions =
+    isMCQ && optionSlots.length > 0 && (optionsForced || optionSlots.some((s) => s.expected || s.filled));
 
   const borderColor = allDone
     ? theme.palette.success.main
@@ -79,17 +96,7 @@ export default function BulkImageQuestionCard({
     [onPendingChange]
   );
 
-  const options = (question.options as NexusQBQuestionOption[] | null) || [];
-
-  // Build slot list for selector chips
-  const slots: { slot: SlotType; label: string }[] = [
-    { slot: 'question', label: 'Q Image' },
-  ];
-  if (isMCQ) {
-    for (const opt of options) {
-      slots.push({ slot: opt.id as SlotType, label: opt.id.toUpperCase() });
-    }
-  }
+  const visibleSlots = showOptions ? slots : slots.filter((s) => s.slot === 'question');
 
   return (
     <Paper
@@ -141,6 +148,46 @@ export default function BulkImageQuestionCard({
         ) : null}
       </Box>
 
+      {/*
+        The keyword guess is a default, not a verdict. One click here pins it
+        either way, permanently, for this one question; nothing below in the
+        card touches this row again once it's set.
+      */}
+      {onSetNeedsImage && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            {question.needs_image == null ? 'Guessing from the wording:' : "Teacher's answer:"}
+          </Typography>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={question.needs_image}
+            // MUI already returns null when the selected button is clicked again,
+            // which is exactly "go back to guessing".
+            onChange={(_, next) => onSetNeedsImage(next)}
+            sx={{ height: 28 }}
+          >
+            <ToggleButton value={true} sx={{ px: 1, fontSize: '0.7rem', textTransform: 'none' }}>
+              Needs a figure
+            </ToggleButton>
+            <ToggleButton value={false} sx={{ px: 1, fontSize: '0.7rem', textTransform: 'none' }}>
+              No figure needed
+            </ToggleButton>
+          </ToggleButtonGroup>
+          {question.needs_image != null && (
+            <Tooltip title="Go back to guessing from the wording" arrow>
+              <Button
+                size="small"
+                onClick={() => onSetNeedsImage(null)}
+                sx={{ minHeight: 28, fontSize: '0.7rem', textTransform: 'none' }}
+              >
+                Reset
+              </Button>
+            </Tooltip>
+          )}
+        </Box>
+      )}
+
       {/* Question text preview */}
       {question.question_text && (
         <MathText
@@ -158,18 +205,17 @@ export default function BulkImageQuestionCard({
         />
       )}
 
-      {/* Slot selector chips — click to select, NO file picker */}
+      {/* Slot selector chips. Click to aim the next paste; these open no file picker. */}
       <Box sx={{ display: 'flex', gap: 0.5, mb: 1, flexWrap: 'wrap' }}>
-        {slots.map(({ slot, label }) => {
+        {visibleSlots.map(({ slot, label, expected, filled }) => {
           const isActive = activeSlot === slot;
-          const hasImg = !!getEffectiveImage(question, slot, pending);
           return (
             <Chip
               key={slot}
               label={label}
               size="small"
               variant={isActive ? 'filled' : 'outlined'}
-              color={isActive ? 'primary' : hasImg ? 'success' : 'default'}
+              color={isActive ? 'primary' : filled ? 'success' : expected ? 'warning' : 'default'}
               onClick={(e) => {
                 e.stopPropagation();
                 onSlotFocus(slot);
@@ -179,6 +225,9 @@ export default function BulkImageQuestionCard({
                 fontSize: '0.7rem',
                 height: 26,
                 cursor: 'pointer',
+                // A slot nothing is expected in is still reachable, just not
+                // asking for attention.
+                opacity: expected || filled ? 1 : 0.55,
               }}
             />
           );
@@ -205,7 +254,7 @@ export default function BulkImageQuestionCard({
       </SlotWrapper>
 
       {/* Option image slots (MCQ only) */}
-      {isMCQ && options.length > 0 && (
+      {showOptions && (
         <Box sx={{ mt: 1.5 }}>
           <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
             Option Images
@@ -213,32 +262,51 @@ export default function BulkImageQuestionCard({
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr 1fr', md: '1fr 1fr 1fr 1fr' },
+              // minmax(0, 1fr), not 1fr. A grid track defaults to
+              // min-width: auto, so four "Image added / Replace / bin" rows that
+              // refuse to shrink pushed the whole grid past the card edge.
+              gridTemplateColumns: {
+                xs: 'repeat(2, minmax(0, 1fr))',
+                md: 'repeat(4, minmax(0, 1fr))',
+              },
               gap: 1,
             }}
           >
-            {options.map((opt) => (
+            {optionSlots.map(({ slot, label }) => (
               <SlotWrapper
-                key={opt.id}
+                key={slot}
                 questionId={question.id}
-                slot={opt.id as SlotType}
-                isActive={activeSlot === opt.id}
+                slot={slot}
+                isActive={activeSlot === slot}
                 registerRef={registerSlotRef}
-                label={`Option ${opt.id.toUpperCase()}`}
+                label={`Option ${label}`}
               >
                 <ImageUploadZone
-                  image={getEffectiveImage(question, opt.id as SlotType, pending)}
-                  onChange={handleChange(opt.id as SlotType)}
-                  label={`${opt.id.toUpperCase()}`}
+                  image={getEffectiveImage(question, slot, pending)}
+                  onChange={handleChange(slot)}
+                  label={label}
                   height={80}
+                  dense
                   getToken={getToken}
-                  enableGlobalPaste={activeSlot === opt.id}
+                  enableGlobalPaste={activeSlot === slot}
                   subfolder="options"
                 />
               </SlotWrapper>
             ))}
           </Box>
         </Box>
+      )}
+
+      {/* The escape hatch for a paper whose option images the wording did not
+          announce. Text options are the common case, so this stays a link. */}
+      {isMCQ && !showOptions && optionSlots.length > 0 && (
+        <Button
+          size="small"
+          onClick={() => setOptionsForced(true)}
+          sx={{ mt: 1, textTransform: 'none', minHeight: 36 }}
+        >
+          The options are pictures too
+        </Button>
       )}
     </Paper>
   );
@@ -273,6 +341,9 @@ function SlotWrapper({
       ref={ref}
       sx={{
         position: 'relative',
+        // Without this the wrapper inherits min-width: auto from its grid track
+        // and re-creates the overflow the minmax(0, 1fr) above just fixed.
+        minWidth: 0,
         borderRadius: 1,
         border: isActive
           ? `2px solid ${theme.palette.primary.main}`

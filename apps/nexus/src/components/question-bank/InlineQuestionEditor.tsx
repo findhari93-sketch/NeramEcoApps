@@ -42,7 +42,7 @@ import {
   QB_QUESTION_STATUS_LABELS,
   QB_QUESTION_STATUS_COLORS,
 } from '@neram/database';
-import type { QBCategory, QBDrawingFocusPoint } from '@neram/database';
+import type { QBCategory } from '@neram/database';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import ImageUploadZone from './ImageUploadZone';
 import DrawingQuestionPanel from './DrawingQuestionPanel';
@@ -101,11 +101,6 @@ interface FormData {
   // DRAWING_PROMPT, so switching a question's format cannot smear drawing
   // metadata onto an MCQ.
   drawing_marks: string;
-  colour_constraint: string;
-  design_principle_tested: string;
-  objects_to_include: Array<{ name: string; count?: number }>;
-  drawing_focus_points: QBDrawingFocusPoint[];
-  drawing_reference_image?: ImageState;
 }
 
 function createDefaultOption(idx: number): NexusQBQuestionOption {
@@ -153,13 +148,6 @@ function getInitialFormData(
       ? { url: question.solution_image_url, uploaded: true }
       : undefined,
     drawing_marks: question.drawing_marks != null ? String(question.drawing_marks) : '',
-    colour_constraint: question.colour_constraint ?? '',
-    design_principle_tested: question.design_principle_tested ?? '',
-    objects_to_include: question.objects_to_include ?? [],
-    drawing_focus_points: question.drawing_focus_points ?? [],
-    drawing_reference_image: question.drawing_reference_image_url
-      ? { url: question.drawing_reference_image_url, uploaded: true }
-      : undefined,
   };
 }
 
@@ -205,18 +193,6 @@ function buildSubmitPayload(form: FormData) {
 
   if (form.question_format === 'DRAWING_PROMPT') {
     questionData.drawing_marks = form.drawing_marks ? Number(form.drawing_marks) : null;
-    questionData.colour_constraint = form.colour_constraint || null;
-    questionData.design_principle_tested = form.design_principle_tested || null;
-    questionData.objects_to_include = form.objects_to_include.length
-      ? form.objects_to_include
-      : null;
-    // Blank rows are what an "Add focus point" press leaves behind when a
-    // teacher changes their mind, and they would render as empty bullets.
-    const focus = form.drawing_focus_points.filter((f) => f.text.trim());
-    questionData.drawing_focus_points = focus.length ? focus : null;
-    questionData.drawing_reference_image_url = form.drawing_reference_image?.uploaded
-      ? form.drawing_reference_image.url
-      : null;
   }
 
   return questionData;
@@ -702,11 +678,6 @@ export default function InlineQuestionEditor({
               <DrawingQuestionPanel
                 value={{
                   drawing_marks: form.drawing_marks,
-                  colour_constraint: form.colour_constraint,
-                  design_principle_tested: form.design_principle_tested,
-                  objects_to_include: form.objects_to_include,
-                  drawing_focus_points: form.drawing_focus_points,
-                  drawing_reference_image: form.drawing_reference_image,
                   solution_image: form.solution_image,
                   solution_video_url: form.solution_video_url,
                 }}

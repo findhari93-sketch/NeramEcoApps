@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import {
@@ -30,19 +31,66 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { question_ids, action, tag_ids, assignments, force } = body as {
+    const { question_ids, action, tag_ids, assignments, force, needs_image, choice_group_pick } = body as {
       question_ids?: string[];
-      action: 'activate' | 'deactivate' | 'add_tags' | 'delete';
+      action: 'activate' | 'deactivate' | 'add_tags' | 'delete' | 'set_needs_image' | 'link_choice_group';
       tag_ids?: string[];
       assignments?: Array<{ question_id: string; tag_ids: string[] }>;
       force?: boolean;
+      needs_image?: boolean;
+      choice_group_pick?: number;
     };
 
-    if (!['activate', 'deactivate', 'add_tags', 'delete'].includes(action)) {
+    if (
+      !['activate', 'deactivate', 'add_tags', 'delete', 'set_needs_image', 'link_choice_group'].includes(action)
+    ) {
       return NextResponse.json(
-        { error: 'action must be activate, deactivate, add_tags or delete' },
+        {
+          error:
+            'action must be activate, deactivate, add_tags, delete, set_needs_image or link_choice_group',
+        },
         { status: 400 },
       );
+    }
+
+    // "Attempt any N of these." Display only: nothing here touches scoring.
+    // A fresh group id every call, so linking a second, unrelated pair never
+    // merges into the first pair's group by accident.
+    if (action === 'link_choice_group') {
+      if (!Array.isArray(question_ids) || question_ids.length < 2) {
+        return NextResponse.json(
+          { error: 'link_choice_group needs at least two question_ids' },
+          { status: 400 },
+        );
+      }
+      const groupId = randomUUID();
+      const pick = Number.isInteger(choice_group_pick) && choice_group_pick! > 0 ? choice_group_pick : 1;
+      const { data, error } = await supabase
+        .from('nexus_qb_questions')
+        .update({ choice_group_id: groupId, choice_group_pick: pick, updated_at: new Date().toISOString() } as any)
+        .in('id', question_ids)
+        .select('id');
+      if (error) throw error;
+      return NextResponse.json({ data: { updated: data?.length || 0, choice_group_id: groupId } });
+    }
+
+    // A whole aptitude section is usually one answer to "does this need a
+    // figure?", so this is bulk-settable from the same selection every other
+    // batch action uses.
+    if (action === 'set_needs_image') {
+      if (!Array.isArray(question_ids) || question_ids.length === 0 || typeof needs_image !== 'boolean') {
+        return NextResponse.json(
+          { error: 'set_needs_image needs question_ids and a boolean needs_image' },
+          { status: 400 },
+        );
+      }
+      const { data, error } = await supabase
+        .from('nexus_qb_questions')
+        .update({ needs_image, updated_at: new Date().toISOString() } as any)
+        .in('id', question_ids)
+        .select('id');
+      if (error) throw error;
+      return NextResponse.json({ data: { updated: data?.length || 0 } });
     }
 
     // Additive bulk tagging. Two shapes: uniform ({question_ids, tag_ids}: same tags

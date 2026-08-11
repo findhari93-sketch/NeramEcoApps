@@ -1,8 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { NexusQBQuestion, NexusQBQuestionOption } from '@neram/database';
 import type { ImageState } from '@/lib/bulk-upload-schema';
+import { questionImageSlots, questionImagesComplete, type SlotType } from '@/lib/qb-image-needs';
 
-export type SlotType = 'question' | 'a' | 'b' | 'c' | 'd';
+// SlotType now belongs with the rest of the image-need vocabulary. Re-exported
+// so the components that import it from here keep working.
+export type { SlotType };
 
 export interface ActiveSlot {
   questionId: string;
@@ -12,35 +15,39 @@ export interface ActiveSlot {
 /** Pending image changes per question: questionId -> slot -> ImageState */
 export type PendingImages = Record<string, Partial<Record<SlotType, ImageState | null>>>;
 
-const OPTION_SLOTS: SlotType[] = ['a', 'b', 'c', 'd'];
-
-function getSlotOrder(question: NexusQBQuestion): SlotType[] {
-  const slots: SlotType[] = ['question'];
-  if (question.question_format === 'MCQ') {
-    slots.push(...OPTION_SLOTS);
-  }
-  return slots;
+/**
+ * Is this slot filled, counting unsaved work?
+ *
+ * Bound per question so it can be handed straight to questionImageSlots, which
+ * is what keeps the progress bar and the card border reading from one rule
+ * instead of three.
+ */
+function filledWithPending(question: NexusQBQuestion, pending: PendingImages) {
+  return (slot: SlotType): boolean => {
+    const pendingImg = pending[question.id]?.[slot];
+    if (pendingImg !== undefined) return pendingImg !== null; // null means explicitly removed
+    if (slot === 'question') return !!question.question_image_url;
+    const options = question.options as NexusQBQuestionOption[] | null;
+    return !!options?.find((o) => o.id === slot)?.image_url;
+  };
 }
 
-/** Check if a slot is empty (no server image AND no pending image) */
-function isSlotEmpty(
-  question: NexusQBQuestion,
-  slot: SlotType,
-  pending: PendingImages
-): boolean {
-  // Check pending first
-  const pendingImg = pending[question.id]?.[slot];
-  if (pendingImg !== undefined) {
-    return pendingImg === null; // null means explicitly removed
-  }
-  // Fall back to server data
-  if (slot === 'question') {
-    return !question.question_image_url;
-  }
-  const options = question.options as NexusQBQuestionOption[] | null;
-  if (!options) return true;
-  const opt = options.find((o) => o.id === slot);
-  return !opt?.image_url;
+/** Every slot on the question, in paste order. */
+function allSlotsOf(question: NexusQBQuestion): SlotType[] {
+  return questionImageSlots(question).map((s) => s.slot);
+}
+
+/**
+ * The slots the assembly line should visit.
+ *
+ * Only the ones a picture is expected in. Tabbing through the four option slots
+ * of "how many rectangles are in the figure below?" is four keystrokes spent
+ * confirming that 16, 14, 13 and 12 are still numbers.
+ */
+function expectedSlotsOf(question: NexusQBQuestion): SlotType[] {
+  return questionImageSlots(question)
+    .filter((s) => s.expected)
+    .map((s) => s.slot);
 }
 
 /** Get the effective image for a slot (pending overrides server) */
@@ -64,9 +71,21 @@ export function getEffectiveImage(
   return opt?.image_url ? { url: opt.image_url, uploaded: true } : undefined;
 }
 
-export function useBulkImageFlow(questions: NexusQBQuestion[]) {
+export interface BulkImageFlowOptions {
+  /**
+   * Called when the assembly line runs off the end of one question onto the
+   * next. The list pane uses it to open that question and scroll its row into
+   * view, so pasting never silently continues on a question nobody can see.
+   */
+  onCrossQuestion?: (questionId: string) => void;
+}
+
+export function useBulkImageFlow(
+  questions: NexusQBQuestion[],
+  { onCrossQuestion }: BulkImageFlowOptions = {},
+) {
   const [activeSlot, setActiveSlot] = useState<ActiveSlot | null>(null);
-  const [filter, setFilter] = useState<'all' | 'needs-images' | 'missing'>('needs-images');
+  const [filter, setFilter] = useState<'all' | 'figures' | 'missing'>('missing');
   const [pending, setPending] = useState<PendingImages>({});
   const slotRefs = useRef<Map<string, HTMLElement>>(new Map());
 
@@ -130,13 +149,17 @@ export function useBulkImageFlow(questions: NexusQBQuestion[]) {
 
       for (let qi = qIndex; qi < questions.length; qi++) {
         const q = questions[qi];
-        const slots = getSlotOrder(q);
+        const slots = expectedSlotsOf(q);
+        // indexOf can be -1 when the teacher pasted into a slot nothing was
+        // expected in; +1 then starts at 0, which is the right answer anyway.
         const startSlotIdx = qi === qIndex ? slots.indexOf(currentSlot) + 1 : 0;
+        const isFilled = filledWithPending(q, pending);
 
         for (let si = startSlotIdx; si < slots.length; si++) {
-          if (isSlotEmpty(q, slots[si], pending)) {
+          if (!isFilled(slots[si])) {
             const next = { questionId: q.id, slot: slots[si] };
             setActiveSlot(next);
+            if (q.id !== currentQuestionId) onCrossQuestion?.(q.id);
             setTimeout(() => scrollSlotIntoView(q.id, slots[si]), 100);
             return;
           }
@@ -145,16 +168,18 @@ export function useBulkImageFlow(questions: NexusQBQuestion[]) {
 
       setActiveSlot(null);
     },
-    [questions, pending, scrollSlotIntoView]
+    [questions, pending, scrollSlotIntoView, onCrossQuestion]
   );
 
   const moveSlot = useCallback(
     (direction: 1 | -1) => {
       if (!activeSlot) return;
 
+      // Tab walks every slot, not just the expected ones: the guess is a
+      // default, and a teacher must always be able to reach a slot it skipped.
       const allSlots: ActiveSlot[] = [];
       for (const q of questions) {
-        for (const s of getSlotOrder(q)) {
+        for (const s of allSlotsOf(q)) {
           allSlots.push({ questionId: q.id, slot: s });
         }
       }
@@ -189,19 +214,19 @@ export function useBulkImageFlow(questions: NexusQBQuestion[]) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [activeSlot, moveSlot]);
 
-  // Progress stats (server + pending)
-  const stats = {
-    total: questions.length,
-    withImages: questions.filter((q) => {
-      const qImgDone = !isSlotEmpty(q, 'question', pending);
-      if (!qImgDone) return false;
-      if (q.question_format === 'MCQ' && q.options) {
-        const opts = q.options as NexusQBQuestionOption[];
-        return opts.every((o) => !isSlotEmpty(q, o.id as SlotType, pending));
-      }
-      return true;
-    }).length,
-  };
+  /**
+   * Progress over the questions that actually want a picture, counting unsaved
+   * work.
+   *
+   * The denominator used to be every question in the paper, so a 47-question
+   * aptitude paper with 20 figures could never read better than 20/47 and the
+   * bar looked stalled at exactly the moment the job was finished.
+   */
+  const stats = (() => {
+    const wanting = questions.filter((q) => questionImageSlots(q).some((s) => s.expected));
+    const done = wanting.filter((q) => questionImagesComplete(q, filledWithPending(q, pending)));
+    return { total: wanting.length, withImages: done.length };
+  })();
 
   return {
     activeSlot,

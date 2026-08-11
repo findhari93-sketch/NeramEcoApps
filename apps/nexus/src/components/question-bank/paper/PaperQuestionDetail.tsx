@@ -1,11 +1,28 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { Box, IconButton, Paper, Typography, useMediaQuery, useTheme } from '@neram/ui';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
 import type { NexusQBQuestion, NexusQBQuestionSource, QBQuestionSection } from '@neram/database';
 import QuestionEditForm, { type PaperFallback } from './QuestionEditForm';
+import BulkImageQuestionCard from '../BulkImageQuestionCard';
+import type { SlotType, PendingImages } from '@/hooks/useBulkImageFlow';
+import type { ImageState } from '@/lib/bulk-upload-schema';
+
+/**
+ * The paste-image mode's own props, kept in one bundle so the pane's main
+ * prop list does not carry image plumbing it only needs in one mode.
+ */
+export interface ImagesPaneProps {
+  activeSlot: SlotType | null;
+  pending: PendingImages;
+  onSlotFocus: (slot: SlotType) => void;
+  onPendingChange: (slot: SlotType, image: ImageState | null) => void;
+  registerSlotRef: (questionId: string, slot: SlotType, el: HTMLElement | null) => void;
+  onSetNeedsImage: (value: boolean | null) => void;
+}
 
 export interface PaperQuestionDetailProps {
   question: NexusQBQuestion | null;
@@ -19,12 +36,20 @@ export interface PaperQuestionDetailProps {
   paper?: PaperFallback;
   /** The open question's source rows, the paper's own row first. */
   sources?: NexusQBQuestionSource[];
+  /** The open question's current tag ids. */
+  tagIds?: string[];
+  /** Paper numbers of the open question's either/or alternatives, if any. */
+  choiceGroupSiblings?: number[];
+  onUnlinkChoiceGroup?: () => void;
   getToken: () => Promise<string | null>;
   onSaved: () => void;
   onClose: () => void;
   onPrevious: () => void;
   onNext: () => void;
   onChangeSection: (questionId: string, section: QBQuestionSection) => Promise<void>;
+  /** 'edit' shows the full question form; 'images' shows the paste assembly line. */
+  mode?: 'edit' | 'images';
+  imagesPane?: ImagesPaneProps;
 }
 
 /**
@@ -35,19 +60,34 @@ export interface PaperQuestionDetailProps {
  * maths question.
  */
 export default function PaperQuestionDetail({
-  question, position, paper, sources, getToken, onSaved, onClose, onPrevious, onNext, onChangeSection,
+  question, position, paper, sources, tagIds, choiceGroupSiblings, onUnlinkChoiceGroup,
+  getToken, onSaved, onClose, onPrevious, onNext, onChangeSection,
+  mode = 'edit', imagesPane,
 }: PaperQuestionDetailProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const scrollRef = useRef<HTMLDivElement>(null);
 
+  // The direct fix for "I open Q91 and I'm scrolled to the bottom of the
+  // page with the stem off the top of the screen". A pane that keeps its
+  // scroll offset between questions reproduces the same complaint one
+  // question later, so this has to run on every question change, not just
+  // mount.
+  useEffect(() => {
+    // Optional-chained on the call, not just the ref: jsdom's Element has no
+    // scrollTo at all, and a component that throws in an effect during a test
+    // fails every test in the file, not just the ones about scrolling.
+    scrollRef.current?.scrollTo?.({ top: 0 });
+  }, [question?.id]);
+
+  // The parent only mounts this component for a question that exists (see
+  // the effect in PaperWorkspace), so this is a render race, not a steady
+  // state: the id just changed and the new question has not arrived in props
+  // yet. A blank Paper here is honest about that for one frame; it is not a
+  // "nothing selected" empty state, which used to occupy half the screen
+  // permanently whether or not that was true.
   if (!question || !position) {
-    return (
-      <Paper variant="outlined" sx={{ p: 3, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant="body2" color="text.secondary">
-          Select a question to edit it
-        </Typography>
-      </Paper>
-    );
+    return <Paper variant="outlined" sx={{ height: '100%' }} />;
   }
 
   return (
@@ -99,21 +139,38 @@ export default function PaperQuestionDetail({
         </IconButton>
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: { xs: 1.5, md: 2 } }}>
+      <Box ref={scrollRef} sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: { xs: 1.5, md: 2 } }}>
         {/*
           key is load-bearing: it remounts the form when the teacher moves to
           another question, so a half-typed edit cannot leak across.
         */}
-        <QuestionEditForm
-          key={question.id}
-          question={question}
-          paper={paper}
-          sources={sources}
-          getToken={getToken}
-          onSaved={onSaved}
-          onCancel={onClose}
-          onChangeSection={onChangeSection}
-        />
+        {mode === 'images' && imagesPane ? (
+          <BulkImageQuestionCard
+            key={question.id}
+            question={question}
+            activeSlot={imagesPane.activeSlot}
+            onSlotFocus={imagesPane.onSlotFocus}
+            onPendingChange={imagesPane.onPendingChange}
+            getToken={getToken}
+            registerSlotRef={imagesPane.registerSlotRef}
+            pending={imagesPane.pending}
+            onSetNeedsImage={imagesPane.onSetNeedsImage}
+          />
+        ) : (
+          <QuestionEditForm
+            key={question.id}
+            question={question}
+            paper={paper}
+            sources={sources}
+            tagIds={tagIds}
+            choiceGroupSiblings={choiceGroupSiblings}
+            onUnlinkChoiceGroup={onUnlinkChoiceGroup}
+            getToken={getToken}
+            onSaved={onSaved}
+            onCancel={onClose}
+            onChangeSection={onChangeSection}
+          />
+        )}
       </Box>
     </Paper>
   );

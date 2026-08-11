@@ -241,6 +241,37 @@ export async function getQuestionTagIds(
   return (data || []).map((r: any) => r.tag_id as string);
 }
 
+/**
+ * Tag ids for many questions in one round trip, keyed by question id.
+ *
+ * The paper workspace needs this for every row on the page, and calling
+ * getQuestionTagIds once per question is exactly the N+1 that made the tag
+ * count a static `{}` in the first place: it was easier to omit the prop than
+ * to fetch it 92 times. Chunked the way addQuestionTags already chunks writes.
+ */
+export async function getQuestionTagIdsBatch(
+  questionIds: string[],
+  client?: TypedSupabaseClient,
+): Promise<Record<string, string[]>> {
+  const ids = [...new Set(questionIds)].filter(Boolean);
+  const byQuestion: Record<string, string[]> = {};
+  if (ids.length === 0) return byQuestion;
+
+  const supabase = client || getSupabaseAdminClient();
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500);
+    const { data, error } = await supabase
+      .from(QUESTION_TAGS)
+      .select('question_id, tag_id')
+      .in('question_id', chunk);
+    if (error) throw error;
+    for (const row of (data || []) as any[]) {
+      (byQuestion[row.question_id] ||= []).push(row.tag_id);
+    }
+  }
+  return byQuestion;
+}
+
 // ============================================
 // WRITE (registry management)
 // ============================================

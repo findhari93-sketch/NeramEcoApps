@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken } from '@/lib/ms-verify';
-import { uploadToSharePoint } from '@/lib/sharepoint';
+import { uploadToSharePoint, resolveShareUrlToItem } from '@/lib/sharepoint';
 import { getFolderById, createFileRecord, getNextSortOrder } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 
@@ -19,10 +19,73 @@ function sanitize(name: string): string {
 
 /**
  * POST /api/study-materials/files  (staff)
- * Multipart upload: { folder_id, file, title?, allow_download? }.
- * Uploads the file to SharePoint and records it in nexus_study_files.
+ *
+ * Two request shapes, told apart by content type:
+ *   multipart/form-data  { folder_id, file, title?, allow_download? }
+ *     Uploads the bytes to SharePoint and records the result.
+ *   application/json     { folder_id, url, title?, allow_download? }
+ *     Links an EXISTING SharePoint/OneDrive file by its share URL (from
+ *     DriveFilePickerDialog) instead of copying it. Same "link, don't copy"
+ *     pattern as /api/assignments/link-document: resolveShareUrlToItem
+ *     validates the link server-side and the row stores link_url, so the
+ *     content route streams it fresh from the source drive on every read.
  */
 export async function POST(request: NextRequest) {
+  const contentType = request.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return linkExistingFile(request);
+  }
+  return uploadNewFile(request);
+}
+
+async function linkExistingFile(request: NextRequest) {
+  try {
+    const user = await getRequestUser(request.headers.get('Authorization'));
+    assertStaff(user);
+
+    const body = await request.json();
+    const folderId = String(body?.folder_id || '').trim();
+    const url = String(body?.url || '').trim();
+    const title = String(body?.title || '').trim();
+    if (!folderId) return NextResponse.json({ error: 'Missing folder_id' }, { status: 400 });
+    if (!/^https?:\/\//i.test(url)) {
+      return NextResponse.json({ error: 'Pick a valid OneDrive/SharePoint file.' }, { status: 400 });
+    }
+
+    const folder = await getFolderById(folderId);
+    if (!folder) return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
+
+    const item = await resolveShareUrlToItem(url);
+
+    let allowDownload: boolean | null = null;
+    if (body?.allow_download === true) allowDownload = true;
+    else if (body?.allow_download === false) allowDownload = false;
+
+    const sortOrder = await getNextSortOrder({ files: folderId });
+
+    const record = await createFileRecord({
+      folder_id: folderId,
+      title: title || item.name.replace(/\.[^.]+$/, ''),
+      file_name: item.name,
+      file_type: item.mimeType,
+      file_size_bytes: item.size,
+      sharepoint_item_id: item.id,
+      sharepoint_web_url: url,
+      link_url: url,
+      allow_download: allowDownload,
+      sort_order: sortOrder,
+      uploaded_by: user.id,
+    });
+
+    return NextResponse.json({ file: record });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Could not link that file';
+    const status = message === 'Not authorized' ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+async function uploadNewFile(request: NextRequest) {
   try {
     const user = await getRequestUser(request.headers.get('Authorization'));
     assertStaff(user);

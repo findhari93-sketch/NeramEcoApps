@@ -453,6 +453,42 @@ export async function getPaperById(
   return (data as unknown as NexusQBOriginalPaper) || null;
 }
 
+export interface LinkedQBPaper {
+  id: string;
+  title: string;
+  short_title: string;
+}
+
+/**
+ * Which of these Study Materials files are a Question Bank paper's linked PDF,
+ * for the "Linked to <paper>" chip and the paper-aware test card.
+ *
+ * The reverse of study_file_id: a paper points at its file, so finding the
+ * paper for a file is a lookup, not a join, and one query covers a whole
+ * folder rather than one per card.
+ */
+export async function getLinkedPapersForFiles(
+  fileIds: string[],
+  client?: TypedSupabaseClient,
+): Promise<Map<string, LinkedQBPaper>> {
+  const supabase = client || getSupabaseAdminClient();
+  const ids = [...new Set(fileIds)].filter(Boolean);
+  const out = new Map<string, LinkedQBPaper>();
+  if (ids.length === 0) return out;
+
+  const { data, error } = await supabase
+    .from(PAPERS as any)
+    .select('id, exam_type, year, session, shift, study_file_id')
+    .in('study_file_id', ids);
+  if (error) throw error;
+
+  for (const row of (data || []) as unknown as (PaperTuple & { id: string; study_file_id: string })[]) {
+    const { title, short_title } = paperTitles(row);
+    out.set(row.study_file_id, { id: row.id, title, short_title });
+  }
+  return out;
+}
+
 /** Point a paper at its original PDF, or clear it by passing null. */
 export async function setPaperStudyFile(
   paperId: string,

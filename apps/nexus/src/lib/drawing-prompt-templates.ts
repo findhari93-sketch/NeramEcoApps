@@ -197,10 +197,6 @@ Keep the feedback constructive, specific, and actionable. Reference specific are
  */
 export interface DrawingQuestionBrief {
   question_text: string | null;
-  design_principle_tested?: string | null;
-  colour_constraint?: string | null;
-  objects_to_include?: Array<{ name: string; count?: number }> | null;
-  focus_points?: Array<{ text: string }> | null;
   drawing_marks?: number | null;
   /** Feeds getMediumFromCategory when no medium is passed. */
   category?: string | null;
@@ -232,21 +228,6 @@ export function buildSolutionPrompt(
   lines.push('QUESTION:');
   lines.push((q.question_text || '').trim() || '(no question text yet)');
 
-  const objects = (q.objects_to_include || []).filter((o) => o && o.name);
-  if (objects.length > 0) {
-    const rendered = objects
-      .map((o) => (o.count && o.count > 1 ? `${o.name} (x${o.count})` : o.name))
-      .join(', ');
-    lines.push('', `MUST INCLUDE: ${rendered}`);
-  }
-  if (q.colour_constraint) lines.push('', `COLOUR RULE: ${q.colour_constraint}`);
-  if (q.design_principle_tested) lines.push('', `PRINCIPLE BEING TESTED: ${q.design_principle_tested}`);
-
-  const focus = (q.focus_points || []).filter((f) => f && f.text?.trim());
-  if (focus.length > 0) {
-    lines.push('', 'THE ANSWER MUST DEMONSTRATE:');
-    focus.forEach((f, i) => lines.push(`  ${i + 1}. ${f.text.trim()}`));
-  }
   if (q.drawing_marks) lines.push('', `MARKS: ${q.drawing_marks}`);
 
   lines.push('');

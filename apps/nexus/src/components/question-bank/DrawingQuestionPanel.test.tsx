@@ -12,6 +12,11 @@ import DrawingQuestionPanel, { type DrawingFormState } from './DrawingQuestionPa
  * form, a teacher who rewords the question and presses Copy silently gets the
  * old wording, which is the kind of bug nobody reports because the output looks
  * plausible.
+ *
+ * Colour rule, design principle, objects to include and focus points used to
+ * be authored here too. Nobody was filling them in, so they were removed;
+ * these tests assert they stay gone rather than testing behaviour that no
+ * longer exists.
  */
 
 vi.mock('./ImageUploadZone', () => ({
@@ -23,10 +28,6 @@ Object.assign(navigator, { clipboard: { writeText } });
 
 const BASE: DrawingFormState = {
   drawing_marks: '50',
-  colour_constraint: 'three colours only',
-  design_principle_tested: 'balance',
-  objects_to_include: [{ name: 'cuboid' }],
-  drawing_focus_points: [{ text: 'Keep the horizon steady' }],
   solution_video_url: '',
 };
 
@@ -56,84 +57,33 @@ describe('the copy prompt button', () => {
     expect(writeText).toHaveBeenCalledTimes(1);
     const prompt = writeText.mock.calls[0][0];
     expect(prompt).toContain('Draw a village railway station at dusk.');
-    expect(prompt).toContain('cuboid');
-    expect(prompt).toContain('Keep the horizon steady');
-    expect(prompt).toContain('three colours only');
+    expect(prompt).toContain('MARKS: 50');
   });
 
-  it('reflects an unsaved focus point, not the saved row', async () => {
-    setup({ drawing_focus_points: [{ text: 'A brand new unsaved point' }] });
+  it('reflects an unsaved marks edit, not the saved row', async () => {
+    setup({ drawing_marks: '75' });
     fireEvent.click(screen.getByRole('button', { name: /copy prompt/i }));
 
     const prompt = writeText.mock.calls[0][0];
-    expect(prompt).toContain('A brand new unsaved point');
+    expect(prompt).toContain('MARKS: 75');
   });
 });
 
-describe('focus points', () => {
-  it('adds one', () => {
-    const { onChange } = setup();
-    fireEvent.click(screen.getByRole('button', { name: /add focus point/i }));
-
-    expect(onChange).toHaveBeenCalledWith({
-      drawing_focus_points: [{ text: 'Keep the horizon steady' }, { text: '' }],
-    });
-  });
-
-  it('removes one', () => {
-    const { onChange } = setup();
-    fireEvent.click(screen.getByLabelText('Remove focus point 1'));
-
-    expect(onChange).toHaveBeenCalledWith({ drawing_focus_points: [] });
-  });
-
-  it('reorders them', () => {
-    const { onChange } = setup({
-      drawing_focus_points: [{ text: 'first' }, { text: 'second' }],
-    });
-    fireEvent.click(screen.getByLabelText('Move focus point 2 up'));
-
-    expect(onChange).toHaveBeenCalledWith({
-      drawing_focus_points: [{ text: 'second' }, { text: 'first' }],
-    });
-  });
-
-  it('stops at eight, because a longer list is not a focus', () => {
-    setup({
-      drawing_focus_points: Array.from({ length: 8 }, (_, i) => ({ text: `point ${i}` })),
-    });
-    expect(screen.getByRole('button', { name: /add focus point/i }).hasAttribute('disabled')).toBe(true);
-  });
-
-  it('cannot move the first one up or the last one down', () => {
-    setup({ drawing_focus_points: [{ text: 'only' }] });
-    expect(screen.getByLabelText('Move focus point 1 up').hasAttribute('disabled')).toBe(true);
-    expect(screen.getByLabelText('Move focus point 1 down').hasAttribute('disabled')).toBe(true);
-  });
-});
-
-describe('objects', () => {
-  it('adds one and clears the draft', () => {
-    const { onChange } = setup();
-    const input = screen.getByLabelText('Add an object');
-    fireEvent.change(input, { target: { value: 'lamp post' } });
-    fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
-
-    expect(onChange).toHaveBeenCalledWith({
-      objects_to_include: [{ name: 'cuboid' }, { name: 'lamp post' }],
-    });
-  });
-
-  it('will not add an empty object', () => {
+describe('the removed fields', () => {
+  it('no longer offers colour rule, design principle, objects, or focus points', () => {
     setup();
-    expect(screen.getByRole('button', { name: /^add$/i }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByLabelText(/colour rule/i)).toBeNull();
+    expect(screen.queryByLabelText(/design principle/i)).toBeNull();
+    expect(screen.queryByLabelText('Add an object')).toBeNull();
+    expect(screen.queryByRole('button', { name: /add focus point/i })).toBeNull();
   });
 });
 
 describe('marks', () => {
-  it('keeps only digits, so the column never receives text', () => {
+  it('is labelled for the exam, and keeps only digits', () => {
     const { onChange } = setup();
-    fireEvent.change(screen.getByLabelText('Marks'), { target: { value: '5a0' } });
+    const field = screen.getByLabelText('Marks in the exam');
+    fireEvent.change(field, { target: { value: '5a0' } });
 
     expect(onChange).toHaveBeenCalledWith({ drawing_marks: '50' });
   });

@@ -26,7 +26,10 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
 import { useCanCapturePhoto } from '../hooks';
+// Direct, not through the barrel: the barrel re-exports this file too.
+import { ImageViewerDialog } from './ImageViewerDialog';
 
 export interface ImageUploadFieldProps {
   /** Current image (or file) URL, or null when empty. */
@@ -46,6 +49,24 @@ export interface ImageUploadFieldProps {
   camera?: boolean;
   /** Also listen for paste on the whole document (single-field dialogs only). */
   enableGlobalPaste?: boolean;
+  /**
+   * Make the filled preview open full screen when clicked.
+   *
+   * Off by default because most callers show a thumbnail of something the user
+   * just picked and already knows. Turn it on wherever the picture is the thing
+   * being checked, such as a solution image a teacher is verifying against a
+   * worked answer, where a 72px square is not enough to read.
+   */
+  previewable?: boolean;
+  /**
+   * Drop the "Image added" line and fold Replace and Remove into icons.
+   *
+   * For grids of small slots. The default row lays out a 72px thumbnail, a
+   * label, a text button and a 40px icon button side by side and none of them
+   * shrink, which is roughly 260px of unshrinkable content in a track that may
+   * only be 150px wide.
+   */
+  dense?: boolean;
   disabled?: boolean;
   error?: string;
   required?: boolean;
@@ -64,6 +85,8 @@ export function ImageUploadField({
   accept = 'image/*',
   camera = false,
   enableGlobalPaste = false,
+  previewable = false,
+  dense = false,
   disabled = false,
   error,
   required = false,
@@ -71,6 +94,7 @@ export function ImageUploadField({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   // Only surface the Camera button where it can actually open a camera (touch
   // devices). On desktop `capture` is ignored and it would just re-open the file
@@ -79,6 +103,16 @@ export function ImageUploadField({
   const showCamera = camera && canCapturePhoto;
 
   const acceptsPdf = /pdf/i.test(accept);
+  // A PDF has nothing to lightbox, so the affordance only appears for images.
+  const canPreview = previewable && !!value && isImageUrl(value);
+  /**
+   * What to call this image out loud.
+   *
+   * `label` is a visible heading and most callers leave it off, describing the
+   * field through helperText instead, so fall through to that before settling
+   * for the generic word.
+   */
+  const imageName = label || helperText || 'image';
 
   const validate = useCallback(
     (file: File): string | null => {
@@ -244,47 +278,120 @@ export function ImageUploadField({
           onPaste={handlePaste}
           sx={{
             position: 'relative',
+            minWidth: 0,
             p: 1,
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
+            gap: dense ? 0.5 : 1.5,
             borderRadius: 2,
           }}
         >
           {isImageUrl(value) ? (
             <Box
-              component="img"
-              src={value}
-              alt="upload"
-              sx={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}
-            />
-          ) : (
-            <PictureAsPdfIcon sx={{ fontSize: 44, color: 'error.main' }} />
-          )}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {isImageUrl(value) ? 'Image added' : 'File added'}
-            </Typography>
-            <Button
-              size="small"
-              startIcon={<AutorenewIcon sx={{ fontSize: 16 }} />}
-              onClick={() => openPicker(false)}
-              disabled={disabled || uploading}
-              sx={{ mt: 0.25, minHeight: 36, textTransform: 'none' }}
+              component={canPreview ? 'button' : 'div'}
+              type={canPreview ? 'button' : undefined}
+              onClick={canPreview ? () => setViewerOpen(true) : undefined}
+              aria-label={canPreview ? `View ${imageName} full size` : undefined}
+              sx={{
+                p: 0,
+                flexShrink: 0,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1.5,
+                lineHeight: 0,
+                background: 'none',
+                cursor: canPreview ? 'pointer' : 'default',
+                '&:hover': canPreview ? { borderColor: 'primary.main' } : undefined,
+                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+              }}
             >
-              {uploading ? 'Uploading…' : 'Replace'}
-            </Button>
-          </Box>
-          <IconButton
-            onClick={() => onChange(null)}
-            disabled={disabled || uploading}
-            color="error"
-            aria-label="Remove"
-            sx={{ minWidth: 40, minHeight: 40 }}
-          >
-            <DeleteOutlineIcon />
-          </IconButton>
+              <Box
+                component="img"
+                src={value}
+                alt={`${imageName} preview`}
+                sx={{
+                  width: dense ? 48 : 72,
+                  height: dense ? 48 : 72,
+                  objectFit: 'cover',
+                  borderRadius: 1.5,
+                  display: 'block',
+                }}
+              />
+            </Box>
+          ) : (
+            <PictureAsPdfIcon sx={{ fontSize: 44, color: 'error.main', flexShrink: 0 }} />
+          )}
+
+          {dense ? (
+            <Box sx={{ display: 'flex', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+              {canPreview && (
+                <IconButton
+                  onClick={() => setViewerOpen(true)}
+                  aria-label="View full size"
+                  size="small"
+                  sx={{ minWidth: 36, minHeight: 36 }}
+                >
+                  <ZoomOutMapIcon fontSize="small" />
+                </IconButton>
+              )}
+              <IconButton
+                onClick={() => openPicker(false)}
+                disabled={disabled || uploading}
+                aria-label={uploading ? 'Uploading' : 'Replace'}
+                size="small"
+                sx={{ minWidth: 36, minHeight: 36 }}
+              >
+                <AutorenewIcon fontSize="small" />
+              </IconButton>
+              <IconButton
+                onClick={() => onChange(null)}
+                disabled={disabled || uploading}
+                color="error"
+                aria-label="Remove"
+                size="small"
+                sx={{ minWidth: 36, minHeight: 36 }}
+              >
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          ) : (
+            <>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                  {isImageUrl(value) ? 'Image added' : 'File added'}
+                </Typography>
+                <Button
+                  size="small"
+                  startIcon={<AutorenewIcon sx={{ fontSize: 16 }} />}
+                  onClick={() => openPicker(false)}
+                  disabled={disabled || uploading}
+                  sx={{ mt: 0.25, minHeight: 36, textTransform: 'none' }}
+                >
+                  {uploading ? 'Uploading…' : 'Replace'}
+                </Button>
+              </Box>
+              <IconButton
+                onClick={() => onChange(null)}
+                disabled={disabled || uploading}
+                color="error"
+                aria-label="Remove"
+                sx={{ minWidth: 40, minHeight: 40, flexShrink: 0 }}
+              >
+                <DeleteOutlineIcon />
+              </IconButton>
+            </>
+          )}
         </Paper>
+      )}
+
+      {canPreview && (
+        <ImageViewerDialog
+          open={viewerOpen}
+          onClose={() => setViewerOpen(false)}
+          src={value || ''}
+          name={label}
+          alt={`${imageName} full size`}
+        />
       )}
 
       {(error || localError) && (

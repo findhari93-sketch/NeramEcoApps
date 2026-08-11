@@ -4682,6 +4682,13 @@ export interface NexusStudyFileDTO {
    * strip at the bottom of the viewer.
    */
   video_languages?: { track_id: string; code: string; label: string; gates: boolean }[];
+  /**
+   * The Question Bank paper this PDF is the source of, staff-only. Present
+   * when a teacher has linked this file via nexus_qb_original_papers.study_file_id,
+   * so the file's own test authoring can point at the paper's questions instead
+   * of forking a second, untagged set from the raw PDF.
+   */
+  qb_paper?: { id: string; title: string; short_title: string } | null;
 }
 
 /** Per-student progress status for a study-material file. */
@@ -6632,6 +6639,14 @@ export interface NexusQBQuestion {
   status: QBQuestionStatus;
   nta_question_id: string | null;
   is_active: boolean;
+  /**
+   * Does this question need a figure? Tri-state, and a teacher's answer wins.
+   *
+   * NULL means nobody has looked, so the keyword guess in
+   * apps/nexus/src/lib/qb-image-needs.ts applies and keeps improving with the
+   * wordlist. true and false are decisions no regex change can undo.
+   */
+  needs_image: boolean | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -6649,6 +6664,14 @@ export interface NexusQBQuestion {
   drawing_focus_points: QBDrawingFocusPoint[] | null;
   /** A teacher-added aid for the prompt, not the printed figure and not the answer. */
   drawing_reference_image_url: string | null;
+  /**
+   * Questions sharing this value are alternatives, e.g. "attempt any one of
+   * Q91, Q92". Display only: scoring still requires every question. Null for
+   * a question with no alternatives.
+   */
+  choice_group_id: string | null;
+  /** How many of the choice group must be attempted. Meaningless when choice_group_id is null. */
+  choice_group_pick: number | null;
 }
 
 /**
@@ -7508,6 +7531,8 @@ export interface NexusQBQuestionUpdate {
   status?: QBQuestionStatus;
   nta_question_id?: string | null;
   is_active?: boolean;
+  /** A teacher's answer to "does this need a figure?", overruling the guess. */
+  needs_image?: boolean | null;
   // Recalled paper fields
   confidence_tier?: QBConfidenceTier | null;
   answer_source?: QBAnswerSource | null;
@@ -7519,6 +7544,8 @@ export interface NexusQBQuestionUpdate {
   objects_to_include?: Array<{ name: string; count?: number }> | null;
   drawing_focus_points?: QBDrawingFocusPoint[] | null;
   drawing_reference_image_url?: string | null;
+  choice_group_id?: string | null;
+  choice_group_pick?: number | null;
 }
 
 export interface NexusQBQuestionSourceInsert {

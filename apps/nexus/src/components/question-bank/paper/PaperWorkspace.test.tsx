@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { NexusQBQuestion } from '@neram/database';
 import PaperWorkspace from './PaperWorkspace';
 
@@ -11,15 +11,28 @@ const questions = [1, 2, 3].map((n) => ({
 
 const base = {
   questions,
+  mode: 'edit' as const,
+  onModeChange: vi.fn(),
+  imageFilter: 'missing' as const,
+  onImageFilterChange: vi.fn(),
+  sectionFilter: null,
+  onSectionFilterChange: vi.fn(),
   getToken: async () => 'token',
   onSaved: () => {},
   onChangeSections: vi.fn().mockResolvedValue(undefined),
+  onOptimisticPatch: vi.fn(),
 };
 
 describe('PaperWorkspace', () => {
-  it('opens with nothing selected, so the teacher sees the whole paper first', () => {
+  /**
+   * The right pane used to always mount, showing "Select a question to edit
+   * it" and permanently occupying about half the screen. It only mounts once
+   * a question is open now, so the list gets the full width until then.
+   */
+  it('opens with nothing selected, and mounts no detail pane at all', () => {
     render(<PaperWorkspace {...base} />);
-    expect(screen.getByText('Select a question to edit it')).not.toBeNull();
+    expect(screen.queryByText('Select a question to edit it')).toBeNull();
+    expect(screen.queryByText(/of 3/)).toBeNull();
   });
 
   it('loads a clicked question into the pane', () => {
@@ -46,11 +59,12 @@ describe('PaperWorkspace', () => {
     expect(screen.getByText('1 of 3')).not.toBeNull();
   });
 
-  it('closes the pane on Escape', () => {
+  it('closes the pane on Escape, unmounting it rather than showing an empty state', () => {
     render(<PaperWorkspace {...base} />);
     fireEvent.click(screen.getByRole('button', { name: 'Open question 1' }));
+    expect(screen.getByText('1 of 3')).not.toBeNull();
     fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.getByText('Select a question to edit it')).not.toBeNull();
+    expect(screen.queryByText(/of 3/)).toBeNull();
   });
 
   /**
@@ -65,5 +79,46 @@ describe('PaperWorkspace', () => {
     render(<PaperWorkspace {...base} questions={gappy} />);
     fireEvent.click(screen.getByRole('button', { name: 'Open question 42' }));
     expect(screen.getByText('2 of 2')).not.toBeNull();
+  });
+});
+
+/**
+ * setNeedsImageOne/bulkSetNeedsImage used to await fetch() and call onSaved()
+ * unconditionally without checking res.ok, so a rejected write (auth,
+ * validation, a dropped connection) refetched the same unchanged row and
+ * looked identical to the click doing nothing. This pins the fix: an
+ * optimistic patch that rolls itself back and surfaces a toast on failure,
+ * and stays applied (no rollback, onSaved fires) on success.
+ */
+describe('PaperWorkspace needs-image bulk action', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('rolls back the optimistic patch and shows a toast when the write fails', async () => {
+    const onOptimisticPatch = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: 'Forbidden' }) }));
+
+    render(<PaperWorkspace {...base} onOptimisticPatch={onOptimisticPatch} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark every selected question as not needing a figure' }));
+
+    await screen.findByText('Forbidden');
+    expect(onOptimisticPatch).toHaveBeenCalledWith('q1', { needs_image: false });
+    expect(onOptimisticPatch).toHaveBeenCalledWith('q1', { needs_image: null });
+  });
+
+  it('patches optimistically and saves, with no rollback, on success', async () => {
+    const onOptimisticPatch = vi.fn();
+    const onSaved = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+
+    render(<PaperWorkspace {...base} onOptimisticPatch={onOptimisticPatch} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark every selected question as not needing a figure' }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(onOptimisticPatch).toHaveBeenCalledWith('q1', { needs_image: false });
+    expect(onOptimisticPatch).not.toHaveBeenCalledWith('q1', { needs_image: null });
   });
 });

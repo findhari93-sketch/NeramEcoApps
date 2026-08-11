@@ -57,6 +57,8 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import { RADIUS } from '../timetable/timetable-theme';
 import { isPresentation } from '@/lib/office-rendition';
 import type { ClassResource } from '@/lib/class-resources';
@@ -71,6 +73,8 @@ export interface DriveItem {
   isFolder: boolean;
   /** Which drive the row came from. Absent on older responses. */
   source?: 'site' | 'mine';
+  /** The folder this item sits in, e.g. "Neram library / 2019 JEE Papers". */
+  folderPath?: string | null;
 }
 
 interface DriveFilePickerDialogProps {
@@ -82,6 +86,14 @@ interface DriveFilePickerDialogProps {
   onAdded?: (resource: ClassResource) => void;
   /** Hand-back mode. When given, nothing is posted anywhere. */
   onPick?: (item: DriveItem) => void;
+  /**
+   * Multi-select hand-back mode: rows toggle a checkbox instead of picking
+   * immediately, and an "Add N files" action in the footer hands back
+   * everything checked in one call. Lets a teacher stage several files from
+   * one open of the picker instead of reopening it per file.
+   */
+  multiple?: boolean;
+  onPickMultiple?: (items: DriveItem[]) => void;
   /**
    * A token that can search the tenant index, used for SEARCH alone.
    *
@@ -143,6 +155,8 @@ export default function DriveFilePickerDialog({
   classId,
   onAdded,
   onPick,
+  multiple = false,
+  onPickMultiple,
   getSearchToken,
   kind = 'document',
   scope = 'site',
@@ -175,6 +189,8 @@ export default function DriveFilePickerDialog({
   const [resolvedPath, setResolvedPath] = useState<string[]>([]);
   /** Guards against a slow response landing on top of a newer one. */
   const requestSeq = useRef(0);
+  /** Multi-select staging, keyed the same way rows are (source:id). */
+  const [selected, setSelected] = useState<Map<string, DriveItem>>(new Map());
 
   const isVideo = kind === 'video';
   /**
@@ -261,6 +277,7 @@ export default function DriveFilePickerDialog({
       setResolvedPath([]);
       setError(null);
       setPartial(null);
+      setSelected(new Map());
     }
   }, [open]);
 
@@ -272,6 +289,19 @@ export default function DriveFilePickerDialog({
       // goes one level deeper rather than jumping back to the drive root.
       setQuery('');
       setPath([...resolvedPath, item.name]);
+      return;
+    }
+
+    // Multi-select hand-back: toggle staging instead of picking immediately,
+    // so several files can be gathered from one open of the dialog.
+    if (multiple) {
+      const key = `${item.source || 'site'}:${item.id}`;
+      setSelected((prev) => {
+        const next = new Map(prev);
+        if (next.has(key)) next.delete(key);
+        else next.set(key, item);
+        return next;
+      });
       return;
     }
 
@@ -427,11 +457,13 @@ export default function DriveFilePickerDialog({
               .filter(Boolean)
               .join(' · ');
             const isBusy = busyId === item.id;
+            const key = `${item.source || 'site'}:${item.id}`;
+            const isChecked = multiple && !item.isFolder && selected.has(key);
             // Only worth the pixels when results can come from either drive.
             const showSource = scope === 'both' && !!item.source && !item.isFolder;
             return (
               <Box
-                key={`${item.source || 'site'}:${item.id}`}
+                key={key}
                 component="button"
                 type="button"
                 disabled={busyId !== null}
@@ -439,10 +471,13 @@ export default function DriveFilePickerDialog({
                 aria-label={
                   item.isFolder
                     ? `Open folder ${item.name}`
-                    : onPick
-                      ? `Choose ${item.name}`
-                      : `Attach ${item.name} to this class`
+                    : multiple
+                      ? `${isChecked ? 'Unselect' : 'Select'} ${item.name}`
+                      : onPick
+                        ? `Choose ${item.name}`
+                        : `Attach ${item.name} to this class`
                 }
+                aria-pressed={multiple && !item.isFolder ? isChecked : undefined}
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -455,9 +490,9 @@ export default function DriveFilePickerDialog({
                   cursor: busyId !== null ? 'default' : 'pointer',
                   font: 'inherit',
                   color: 'inherit',
-                  border: `1px solid ${theme.palette.divider}`,
+                  border: `1px solid ${isChecked ? theme.palette.primary.main : theme.palette.divider}`,
                   borderRadius: RADIUS.control,
-                  bgcolor: 'transparent',
+                  bgcolor: isChecked ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
                   opacity: busyId !== null && !isBusy ? 0.5 : 1,
                   transition: 'background-color 200ms, border-color 200ms',
                   '&:hover:not(:disabled)': {
@@ -470,6 +505,13 @@ export default function DriveFilePickerDialog({
                   },
                 }}
               >
+                {multiple && !item.isFolder && (
+                  isChecked ? (
+                    <CheckCircleIcon sx={{ fontSize: 22, color: 'primary.main', flexShrink: 0 }} />
+                  ) : (
+                    <RadioButtonUncheckedIcon sx={{ fontSize: 22, color: 'text.disabled', flexShrink: 0 }} />
+                  )
+                )}
                 <Box
                   sx={{
                     display: 'flex',
@@ -493,8 +535,22 @@ export default function DriveFilePickerDialog({
                   <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600 }} noWrap>
                     {item.name}
                   </Typography>
+                  {/* Search results span every folder in the drive, so without
+                      this a same-named file elsewhere is indistinguishable from
+                      the right one. Shown in browse mode too when Graph reports
+                      a parent, since it costs nothing and is never wrong. */}
+                  {!item.isFolder && item.folderPath && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      noWrap
+                      sx={{ display: 'block', opacity: 0.85 }}
+                    >
+                      {(item.source === 'mine' ? 'My OneDrive' : 'Neram library') + ' / ' + item.folderPath}
+                    </Typography>
+                  )}
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-                    {showSource && (
+                    {showSource && !item.folderPath && (
                       <Chip
                         size="small"
                         variant="outlined"
@@ -534,13 +590,31 @@ export default function DriveFilePickerDialog({
         </Box>
       )}
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: multiple ? 'space-between' : 'flex-end', gap: 1, mt: 2 }}>
+        {multiple && (
+          <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+            {selected.size} selected
+          </Typography>
+        )}
         <Button
           onClick={onClose}
           sx={{ textTransform: 'none', minHeight: 48, borderRadius: RADIUS.control }}
         >
-          Close
+          {multiple ? 'Cancel' : 'Close'}
         </Button>
+        {multiple && (
+          <Button
+            variant="contained"
+            disabled={selected.size === 0}
+            onClick={() => {
+              onPickMultiple?.(Array.from(selected.values()));
+              onClose();
+            }}
+            sx={{ textTransform: 'none', minHeight: 48, borderRadius: RADIUS.control }}
+          >
+            Add {selected.size} file{selected.size === 1 ? '' : 's'}
+          </Button>
+        )}
       </Box>
     </Box>
   );

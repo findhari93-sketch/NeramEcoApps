@@ -19,6 +19,14 @@ interface ImageUploadZoneProps {
   enableGlobalPaste?: boolean;
   /** Optional subfolder in storage path (e.g. 'options') */
   subfolder?: string;
+  /**
+   * Click the thumbnail to open it full screen. On by default here: every image
+   * in the question bank exists to be checked against a printed paper, and a
+   * 72px square is not enough to tell one answer figure from another.
+   */
+  previewable?: boolean;
+  /** Icon-only controls, for the option-image grid. */
+  dense?: boolean;
 }
 
 /**
@@ -39,6 +47,8 @@ export default function ImageUploadZone({
   getToken,
   enableGlobalPaste = false,
   subfolder,
+  previewable = true,
+  dense = false,
 }: ImageUploadZoneProps) {
   // Remember the storage path returned for the last uploaded URL so we can
   // reconstruct the full ImageState (callers may read `storagePath`).
@@ -98,6 +108,8 @@ export default function ImageUploadZone({
       helperText={label}
       height={typeof height === 'number' ? height : 120}
       enableGlobalPaste={enableGlobalPaste}
+      previewable={previewable}
+      dense={dense}
     />
   );
 }

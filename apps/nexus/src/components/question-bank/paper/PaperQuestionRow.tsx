@@ -1,9 +1,14 @@
 'use client';
 
-import { Box, Checkbox, Chip, Tooltip, Typography } from '@neram/ui';
+import { Box, Checkbox, Tooltip, Typography } from '@neram/ui';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import LinkIcon from '@mui/icons-material/Link';
 import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
+import { questionImageSlots } from '@/lib/qb-image-needs';
 import MathText from '@/components/common/MathText';
 
 export interface PaperQuestionRowProps {
@@ -23,7 +28,9 @@ export interface PaperQuestionRowProps {
    * name is unusable with a screen reader and ambiguous for anyone else.
    */
   position?: number;
-  onToggleSelect: (shiftKey: boolean) => void;
+  /** Does this question share a choice_group_id with another on the paper? */
+  linked?: boolean;
+  onToggleSelect: (shiftKey: boolean, ctrlKey: boolean) => void;
   onActivate: () => void;
 }
 
@@ -44,12 +51,29 @@ export default function PaperQuestionRow({
   active,
   tagCount,
   position,
+  linked,
   onToggleSelect,
   onActivate,
 }: PaperQuestionRowProps) {
   const qNum = question.display_order ?? position ?? 0;
   const isDrawing = question.question_format === 'DRAWING_PROMPT';
   const answer = question.correct_answer;
+  const statusColor = QB_QUESTION_STATUS_COLORS[question.status] || '#9e9e9e';
+  const statusLabel = QB_QUESTION_STATUS_LABELS[question.status] || question.status;
+
+  const imageSlots = questionImageSlots(question);
+  const wantedSlots = imageSlots.filter((s) => s.expected);
+  const imageState: 'none' | 'complete' | 'missing' =
+    wantedSlots.length === 0 ? 'none' : wantedSlots.every((s) => s.filled) ? 'complete' : 'missing';
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      onToggleSelect(e.shiftKey, e.ctrlKey || e.metaKey);
+      return;
+    }
+    onActivate();
+  };
 
   return (
     <Box
@@ -68,7 +92,10 @@ export default function PaperQuestionRow({
       <Checkbox
         size="small"
         checked={selected}
-        onClick={(e) => onToggleSelect((e as React.MouseEvent).shiftKey)}
+        onClick={(e) => {
+          const me = e as unknown as React.MouseEvent;
+          onToggleSelect(me.shiftKey, me.ctrlKey || me.metaKey);
+        }}
         inputProps={{ 'aria-label': `Select question ${qNum}` }}
         sx={{ p: 1 }}
       />
@@ -77,7 +104,7 @@ export default function PaperQuestionRow({
         role="button"
         tabIndex={0}
         aria-label={`Open question ${qNum}`}
-        onClick={onActivate}
+        onClick={handleRowClick}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
@@ -93,11 +120,20 @@ export default function PaperQuestionRow({
           cursor: 'pointer',
           minHeight: 44,
           py: 0.5,
+          // shift-click selects a run of text by default in every browser;
+          // this row's shift-click means something else.
+          userSelect: 'none',
         }}
       >
-        <Typography variant="body2" fontWeight={700} sx={{ minWidth: 32, flexShrink: 0 }}>
+        <Typography variant="body2" fontWeight={700} sx={{ minWidth: 28, flexShrink: 0 }}>
           {qNum}
         </Typography>
+
+        {linked && (
+          <Tooltip title="Attempt any one of a linked group" arrow>
+            <LinkIcon sx={{ fontSize: 14, color: 'text.disabled', flexShrink: 0 }} />
+          </Tooltip>
+        )}
 
         <MathText
           text={question.question_text || '(no text)'}
@@ -112,21 +148,38 @@ export default function PaperQuestionRow({
           }}
         />
 
-        <Box sx={{ flexShrink: 0, width: 64, textAlign: 'center' }}>
+        <Box sx={{ flexShrink: 0, width: 28, textAlign: 'center' }}>
           {isDrawing ? (
-            <Typography variant="caption" color="text.disabled">
-              Self-assessed
-            </Typography>
+            <Tooltip title="Self-assessed" arrow>
+              <BrushOutlinedIcon aria-label="Self-assessed" sx={{ fontSize: 14, color: 'text.disabled' }} />
+            </Tooltip>
           ) : answer ? (
             <Typography variant="caption" fontWeight={700}>
               {answer.toUpperCase()}
             </Typography>
           ) : (
-            <Typography variant="caption" color="warning.main">
-              No answer
-            </Typography>
+            <Tooltip title="No answer key yet" arrow>
+              <Typography variant="caption" color="warning.main" aria-label="No answer key yet">
+                &mdash;
+              </Typography>
+            </Tooltip>
           )}
         </Box>
+
+        {imageState !== 'none' && (
+          <Tooltip
+            title={imageState === 'complete' ? 'Every expected image is uploaded' : 'Missing an expected image'}
+            arrow
+          >
+            <Box sx={{ flexShrink: 0, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {imageState === 'complete' ? (
+                <CheckCircleIcon sx={{ fontSize: 14, color: 'success.main' }} />
+              ) : (
+                <WarningAmberIcon sx={{ fontSize: 14, color: 'warning.main' }} />
+              )}
+            </Box>
+          </Tooltip>
+        )}
 
         <Tooltip title={tagCount > 0 ? `${tagCount} tags` : 'No tags'} arrow>
           <Box
@@ -136,8 +189,8 @@ export default function PaperQuestionRow({
               display: 'flex',
               alignItems: 'center',
               gap: 0.25,
-              width: 40,
-              color: tagCount > 0 ? 'text.secondary' : 'warning.main',
+              width: 32,
+              color: tagCount > 0 ? 'text.secondary' : 'text.disabled',
             }}
           >
             <LocalOfferOutlinedIcon sx={{ fontSize: 14 }} />
@@ -145,18 +198,18 @@ export default function PaperQuestionRow({
           </Box>
         </Tooltip>
 
-        <Chip
-          label={QB_QUESTION_STATUS_LABELS[question.status] || question.status}
-          size="small"
-          sx={{
-            flexShrink: 0,
-            bgcolor: QB_QUESTION_STATUS_COLORS[question.status] + '20',
-            color: QB_QUESTION_STATUS_COLORS[question.status],
-            fontWeight: 600,
-            fontSize: '0.65rem',
-            height: 20,
-          }}
-        />
+        <Tooltip title={statusLabel} arrow>
+          <Box
+            aria-label={statusLabel}
+            sx={{
+              flexShrink: 0,
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              bgcolor: statusColor,
+            }}
+          />
+        </Tooltip>
       </Box>
     </Box>
   );

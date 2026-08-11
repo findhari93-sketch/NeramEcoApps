@@ -15,12 +15,18 @@ import {
   DialogActions,
   Skeleton,
   Link as MuiLink,
+  Switch,
+  FormControlLabel,
+  IconButton,
+  ImageViewerDialog,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import ReplayIcon from '@mui/icons-material/Replay';
+import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
+import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
 import DrawingSubmissionSheet from '@/components/drawings/DrawingSubmissionSheet';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionDetail, QBDrawingState } from '@neram/database';
@@ -28,11 +34,16 @@ import type { NexusQBQuestionDetail, QBDrawingState } from '@neram/database';
 /**
  * A drawing question, from a student's side.
  *
- * The prompt is always visible. The model solution, the solution video and the
- * focus points are not, until the student has either uploaded an attempt or
- * explicitly chosen to see the answer first. Drawing from a worked example is a
- * real way to learn, so that door stays open, but it is recorded: the teacher
- * marking the later attempt can see they had the answer in front of them.
+ * The prompt is always visible. The solution image and the solution video are
+ * not, until the student has either uploaded an attempt or explicitly chosen
+ * to see the answer first. Drawing from a worked example is a real way to
+ * learn, so that door stays open, but it is recorded: the teacher marking the
+ * later attempt can see they had the answer in front of them.
+ *
+ * Colour rule, design principle, objects to include and the focus-point list
+ * used to render here too. Nobody was authoring them, so there is nothing
+ * left to show; a question now carries only its picture, its video, and its
+ * marks.
  *
  * `unlocked` comes from the server as one boolean and is used as-is. Rebuilding
  * it here from "has a submission or has a reveal" would be a second copy of the
@@ -53,6 +64,7 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [confirmReveal, setConfirmReveal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -97,61 +109,9 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
   const submission = state?.submission ?? null;
   const awaitingReview = submission?.status === 'submitted' || submission?.status === 'under_review';
   const needsRedo = submission?.status === 'redo';
-  const focusPoints = (question.drawing_focus_points ?? []).filter((f) => f?.text?.trim());
 
   return (
     <Box sx={{ mb: 3 }}>
-      {/* Always visible: what the question asks for. */}
-      {question.drawing_reference_image_url && (
-        <Box
-          component="img"
-          src={question.drawing_reference_image_url}
-          alt="Reference for this drawing question"
-          sx={{
-            width: '100%',
-            maxHeight: 280,
-            objectFit: 'contain',
-            borderRadius: 1,
-            border: '1px solid',
-            borderColor: 'divider',
-            mb: 2,
-          }}
-        />
-      )}
-
-      {question.objects_to_include && (question.objects_to_include as any[]).length > 0 && (
-        <Box sx={{ mb: 1.5 }}>
-          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-            OBJECTS TO INCLUDE
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.25 }}>
-            {(question.objects_to_include as any[]).map((obj: any, i: number) => (
-              <Chip
-                key={i}
-                label={obj.name || String(obj)}
-                size="small"
-                variant="outlined"
-                sx={{ height: 24, fontSize: '0.75rem' }}
-              />
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {question.colour_constraint && (
-        <Box sx={{ mb: 1, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
-          <Typography variant="caption" fontWeight={600}>Colour rule</Typography>
-          <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>{question.colour_constraint}</Typography>
-        </Box>
-      )}
-
-      {question.design_principle_tested && (
-        <Box sx={{ mb: 1.5, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
-          <Typography variant="caption" fontWeight={600}>Design principle</Typography>
-          <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>{question.design_principle_tested}</Typography>
-        </Box>
-      )}
-
       {question.drawing_marks ? (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
           Worth {question.drawing_marks} marks
@@ -224,8 +184,8 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
             >
               <LockOutlinedIcon sx={{ color: 'text.disabled', mb: 0.5 }} />
               <Typography variant="body2" color="text.secondary">
-                Draw it first. The model answer and the points to concentrate on open up once you
-                upload your attempt.
+                Draw it first. The solution image opens up once you upload your attempt, or you can
+                switch it on below.
               </Typography>
             </Box>
           ) : (
@@ -239,30 +199,43 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
                 />
               )}
 
-              {focusPoints.length > 0 && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                    WHAT TO CONCENTRATE ON
-                  </Typography>
-                  <Box component="ol" sx={{ m: 0, mt: 0.5, pl: 2.5 }}>
-                    {focusPoints.map((fp, i) => (
-                      <li key={i}>
-                        <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>{fp.text}</Typography>
-                      </li>
-                    ))}
-                  </Box>
-                </Box>
-              )}
-
               {question.solution_image_url && (
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ fontSize: '0.7rem', mb: 0.5, display: 'block' }}>
-                    MODEL ANSWER
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                      SOLUTION IMAGE
+                    </Typography>
+                    <Stack direction="row" spacing={0.5}>
+                      <IconButton
+                        size="small"
+                        aria-label="View full size"
+                        onClick={() => setViewerOpen(true)}
+                        sx={{ minWidth: 36, minHeight: 36 }}
+                      >
+                        <ZoomOutMapIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        component="a"
+                        href={question.solution_image_url}
+                        download
+                        aria-label="Download the solution image"
+                        sx={{ minWidth: 36, minHeight: 36 }}
+                      >
+                        <DownloadOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  </Box>
                   <Box
                     component="img"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setViewerOpen(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setViewerOpen(true);
+                    }}
                     src={question.solution_image_url}
-                    alt="Model answer"
+                    alt="Solution"
                     sx={{
                       width: '100%',
                       maxHeight: 300,
@@ -270,7 +243,14 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
                       borderRadius: 1,
                       border: '1px solid',
                       borderColor: 'divider',
+                      cursor: 'pointer',
                     }}
+                  />
+                  <ImageViewerDialog
+                    open={viewerOpen}
+                    onClose={() => setViewerOpen(false)}
+                    src={question.solution_image_url}
+                    alt="Solution, full size"
                   />
                 </Box>
               )}
@@ -290,17 +270,29 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
               {needsRedo ? 'Upload your next try' : submission ? 'Upload another attempt' : 'Upload my attempt'}
             </Button>
 
-            {!unlocked && (
-              <Button
-                variant="text"
-                fullWidth
-                startIcon={<VisibilityOutlinedIcon />}
-                onClick={() => setConfirmReveal(true)}
-                sx={{ minHeight: 44, textTransform: 'none' }}
-              >
-                Just show me the solution
-              </Button>
-            )}
+            {/*
+              A switch, not a one-way button, to read as a choice rather than a
+              dare. It can only ever move to on: nexus_qb_drawing_reveals has no
+              un-reveal, so a flip back to off would lie about what the teacher
+              can still see on their side.
+            */}
+            <FormControlLabel
+              sx={{ alignSelf: 'center', ml: 0 }}
+              control={
+                <Switch
+                  checked={unlocked}
+                  disabled={unlocked}
+                  onChange={(e) => {
+                    if (e.target.checked) setConfirmReveal(true);
+                  }}
+                />
+              }
+              label={
+                <Typography variant="body2" color="text.secondary">
+                  Show the solution image
+                </Typography>
+              }
+            />
 
             {state?.drawing_question_id && (
               <MuiLink
@@ -344,7 +336,13 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
         sourceType="question_bank"
         getToken={getToken}
         redoFeedback={needsRedo ? submission?.tutor_feedback ?? undefined : undefined}
-        referenceImageUrl={question.drawing_reference_image_url ?? undefined}
+        // Reference and solution used to be different columns, one always
+        // shown and one gated. They are the same column now, so this can only
+        // be passed once `unlocked`: the sheet is reachable before that (the
+        // Upload button has no gate of its own), and passing the image
+        // unconditionally would show the solution through the submission
+        // sheet to a student who has not earned it yet.
+        referenceImageUrl={unlocked ? question.solution_image_url ?? undefined : undefined}
         submitUrl={`/api/question-bank/questions/${question.id}/drawing-attempt`}
         submitBody={(uploadedUrl, selfNote) => ({
           original_image_url: uploadedUrl,

@@ -54,6 +54,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
 import StudyUploadDialog from '@/components/study-materials/StudyUploadDialog';
@@ -63,6 +64,7 @@ import GenerateChapterTestSheet from '@/components/study-materials/GenerateChapt
 import GenerateFolderTestsDialog from '@/components/study-materials/GenerateFolderTestsDialog';
 import StudyVideoTracksDialog from '@/components/study-materials/StudyVideoTracksDialog';
 import FolderMovePicker, { type MoveItem } from '@/components/study-materials/FolderMovePicker';
+import LinkQBPaperDialog from '@/components/study-materials/LinkQBPaperDialog';
 import { FileThumb, FileIcon } from '@/components/study-materials/FileThumb';
 import type { NexusStudyFileDTO, NexusStudyFolderDTO, NexusStudyFileRecording } from '@neram/database/types';
 
@@ -118,8 +120,11 @@ function TeacherStudyMaterials() {
 
   // Time-limited download grant dialog (file or folder target).
   const [grantTarget, setGrantTarget] = useState<GrantTarget | null>(null);
-  // Test authoring dialog (per file).
-  const [testFile, setTestFile] = useState<{ id: string; title: string } | null>(null);
+  // Test authoring dialog (per file). qb_paper rides along when known, so the
+  // dialog can offer the linked paper's own questions instead of the library.
+  const [testFile, setTestFile] = useState<
+    { id: string; title: string; qb_paper?: FileDTO['qb_paper'] } | null
+  >(null);
   // Generate a test straight from a chapter PDF, one file or the whole folder.
   const [generateFile, setGenerateFile] = useState<{ id: string; title: string } | null>(null);
   const [folderGenOpen, setFolderGenOpen] = useState(false);
@@ -130,6 +135,8 @@ function TeacherStudyMaterials() {
   const [tracksFile, setTracksFile] = useState<
     { id: string; title: string; recording?: NexusStudyFileRecording | null } | null
   >(null);
+  // Link this PDF to the Question Bank paper it is the source of.
+  const [linkPaperFile, setLinkPaperFile] = useState<{ id: string; title: string } | null>(null);
 
   // Deep-link from the Tests hub (?testFile=<id>&testTitle=<name>): open the authoring dialog,
   // then strip the params so closing or refresh does not re-open it.
@@ -586,10 +593,10 @@ function TeacherStudyMaterials() {
       if (!viewerFile) return;
       // Same rule as the card menu: with a test already linked the honest
       // action is to edit that one, not to quietly build a second.
-      if (viewerFile.file_type === 'application/pdf' && !viewerFile.has_test) {
+      if (viewerFile.file_type === 'application/pdf' && !viewerFile.has_test && !viewerFile.qb_paper) {
         setGenerateFile({ id: viewerFile.id, title: viewerFile.title });
       } else {
-        setTestFile({ id: viewerFile.id, title: viewerFile.title });
+        setTestFile({ id: viewerFile.id, title: viewerFile.title, qb_paper: viewerFile.qb_paper });
       }
     },
     // A paper already exists: open it where everything about it lives, rather
@@ -670,6 +677,22 @@ function TeacherStudyMaterials() {
           color: file.has_test ? 'success.main' : 'warning.dark',
         }}
       />
+      {/* This PDF is also a Question Bank paper's source: its test can reuse
+          the paper's own tagged questions instead of a second, separate set. */}
+      {file.qb_paper && (
+        <Chip
+          size="small"
+          icon={<LinkOutlinedIcon />}
+          label={`Linked: ${file.qb_paper.short_title}`}
+          sx={{
+            height: 20,
+            fontSize: '0.6rem',
+            '& .MuiChip-icon': { fontSize: '0.78rem' },
+            bgcolor: alpha(theme.palette.primary.main, 0.1),
+            color: 'primary.main',
+          }}
+        />
+      )}
       {/* What a student can actually watch, which is not the same question as
           "does this row hold a URL". The chip here used to read `file.recording`,
           the old ungated link no student screen ever rendered, so a chapter with
@@ -888,8 +911,9 @@ function TeacherStudyMaterials() {
           </Button>
         )}
         {/* Only when there is something to do: a folder whose PDFs all have
-            tests should not offer a button that opens onto "nothing to see". */}
-        {!atRoot && files.some((f) => f.file_type === 'application/pdf' && !f.has_test) && (
+            tests, or are linked to a Question Bank paper, should not offer a
+            button that opens onto "nothing to see". */}
+        {!atRoot && files.some((f) => f.file_type === 'application/pdf' && !f.has_test && !f.qb_paper) && (
           <Button
             variant="outlined"
             size="small"
@@ -1065,28 +1089,49 @@ function TeacherStudyMaterials() {
           <ListItemIcon><LockClockOutlinedIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Grant download access...</ListItemText>
         </MenuItem>
-        {/* Only for a PDF with nothing on it yet: with a test already linked the
+        {/* Only for a PDF with nothing on it yet, and not already linked to a
+            paper: a linked paper already has its own questions, so writing a
+            second, disconnected set from the raw PDF is exactly the mistake
+            this menu should stop offering. With a test already linked the
             honest action is to edit that one, not to quietly build a second. */}
-        {fileMenu?.file.file_type === 'application/pdf' && !fileMenu?.file.has_test && (
-          <MenuItem
-            onClick={() => {
-              if (fileMenu) setGenerateFile({ id: fileMenu.file.id, title: fileMenu.file.title });
-              setFileMenu(null);
-            }}
-          >
-            <ListItemIcon><AutoAwesomeOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
-            <ListItemText
-              primary="Add a test"
-              secondary="Write it from this PDF, or upload JSON"
-              primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
-              secondaryTypographyProps={{ variant: 'caption' }}
-            />
-          </MenuItem>
-        )}
-        <MenuItem onClick={() => { if (fileMenu) setTestFile({ id: fileMenu.file.id, title: fileMenu.file.title }); setFileMenu(null); }}>
+        {fileMenu?.file.file_type === 'application/pdf' &&
+          !fileMenu?.file.has_test &&
+          !fileMenu?.file.qb_paper && (
+            <MenuItem
+              onClick={() => {
+                if (fileMenu) setGenerateFile({ id: fileMenu.file.id, title: fileMenu.file.title });
+                setFileMenu(null);
+              }}
+            >
+              <ListItemIcon><AutoAwesomeOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+              <ListItemText
+                primary="Add a test"
+                secondary="Write it from this PDF, or upload JSON"
+                primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+                secondaryTypographyProps={{ variant: 'caption' }}
+              />
+            </MenuItem>
+          )}
+        <MenuItem onClick={() => { if (fileMenu) setTestFile({ id: fileMenu.file.id, title: fileMenu.file.title, qb_paper: fileMenu.file.qb_paper }); setFileMenu(null); }}>
           <ListItemIcon><QuizOutlinedIcon fontSize="small" /></ListItemIcon>
           <ListItemText>{fileMenu?.file.has_test ? 'Edit test' : 'Attach test'}</ListItemText>
         </MenuItem>
+        {/* Previous-year papers are built twice today: once here as a PDF,
+            once in Question Bank as tagged questions. Linking the two is what
+            lets "Attach test" reuse the paper's own questions instead. */}
+        {fileMenu?.file.file_type === 'application/pdf' && (
+          <MenuItem
+            onClick={() => {
+              if (fileMenu) setLinkPaperFile({ id: fileMenu.file.id, title: fileMenu.file.title });
+              setFileMenu(null);
+            }}
+          >
+            <ListItemIcon><LinkOutlinedIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>
+              {fileMenu?.file.qb_paper ? 'Change linked Question Bank paper' : 'Link to Question Bank paper'}
+            </ListItemText>
+          </MenuItem>
+        )}
         {/* These two both attach a video and were previously adjacent, identically
             iconed, and near-identically worded, which is why the gated flow went
             unused. They are now told apart three ways: order, icon, and a
@@ -1189,11 +1234,14 @@ function TeacherStudyMaterials() {
         onClose={() => setGrantTarget(null)}
       />
 
-      {/* Per-file test authoring (JSON upload or manual) */}
+      {/* Per-file test authoring (JSON upload or manual). authJson, not the
+          raw-Response authFetch: the dialog reads the parsed body to show what
+          is currently linked and to surface a save/link failure instead of
+          silently treating a non-2xx response as success. */}
       <StudyTestAuthorDialog
         open={!!testFile}
         file={testFile}
-        authFetch={authFetch}
+        authFetch={authJson}
         onClose={() => setTestFile(null)}
         onSaved={load}
         onGenerate={(f) => {
@@ -1223,6 +1271,18 @@ function TeacherStudyMaterials() {
         authFetch={authJson}
         onClose={() => setFolderGenOpen(false)}
         onFinished={load}
+      />
+
+      {/* Point this PDF at the Question Bank paper it is the source of. */}
+      <LinkQBPaperDialog
+        open={!!linkPaperFile}
+        file={linkPaperFile}
+        authFetch={authFetch}
+        onClose={() => setLinkPaperFile(null)}
+        onLinked={(paper) => {
+          setSnack({ msg: `Linked to ${paper.short_title}`, sev: 'success' });
+          load();
+        }}
       />
 
       {/*

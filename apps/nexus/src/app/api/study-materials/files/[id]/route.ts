@@ -52,6 +52,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 /**
  * DELETE /api/study-materials/files/[id]  (staff)
  * Remove the file from SharePoint, then soft-delete the record.
+ *
+ * A LINKED file (link_url set) is never the app's own copy, it points at
+ * something a teacher already owned in OneDrive/SharePoint. Deleting that item
+ * would destroy their real file, not just unlink it here, so only an app-owned
+ * upload gets deleteFromSharePoint.
  */
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -60,7 +65,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const token = extractBearerToken(request.headers.get('Authorization'))!;
 
     const file = await getFileById(params.id);
-    if (file?.sharepoint_item_id) {
+    if (file?.sharepoint_item_id && !file.link_url) {
       await deleteFromSharePoint(token, file.sharepoint_item_id).catch(() => {});
     }
     await softDeleteFile(params.id);

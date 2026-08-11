@@ -6,6 +6,7 @@ import {
   getPaperSectionBreakdown,
   getQuestionsByPaper,
   deletePaperWithQuestions,
+  getQuestionTagIdsBatch,
 } from '@neram/database';
 import type { NexusQBOriginalPaper, NexusQBQuestionSource } from '@neram/database';
 import { buildPaperBlueprint } from '@/lib/paper-blueprint';
@@ -92,14 +93,14 @@ export async function GET(
     }
 
     const questions = await getQuestionsByPaper(params.id);
-    const sources = await getSourcesByQuestion(
-      supabase,
-      paper as unknown as PaperTuple,
-      questions.map((q) => q.id)
-    );
+    const questionIds = questions.map((q) => q.id);
+    const [sources, tagsByQuestion] = await Promise.all([
+      getSourcesByQuestion(supabase, paper as unknown as PaperTuple, questionIds),
+      getQuestionTagIdsBatch(questionIds, supabase),
+    ]);
 
     return NextResponse.json({
-      data: { paper, questions, sources },
+      data: { paper, questions, sources, tagsByQuestion },
     }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';

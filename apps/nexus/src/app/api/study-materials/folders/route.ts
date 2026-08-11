@@ -22,7 +22,9 @@ import {
   listFavoriteFileIds,
   getCommentCounts,
   getStudyVideoSummaryMap,
+  getLinkedPapersForFiles,
   type FileProgress,
+  type LinkedQBPaper,
 } from '@neram/database';
 import { getRequestUser, isStaff, assertStaff, getStudentExamSet } from '@/lib/study-materials';
 
@@ -104,7 +106,7 @@ export async function GET(request: NextRequest) {
       // written for exactly this and had never been called, so a student
       // browsing Foundation Books could not tell a chapter with two recordings
       // from one with none until they opened it.
-      const [progress, favSet, commentCounts, grants, testSet, videoLanguages] = await Promise.all([
+      const [progress, favSet, commentCounts, grants, testSet, videoLanguages, linkedPapers] = await Promise.all([
         staff
           ? Promise.resolve(new Map<string, FileProgress>())
           : getFileProgressMap(user.id, fileIds),
@@ -117,6 +119,12 @@ export async function GET(request: NextRequest) {
         // hottest path a student has, to decide the order of at most two chips.
         // The built-in fallback covers the languages that exist.
         getStudyVideoSummaryMap(fileIds),
+        // Staff only: which of these files is a Question Bank paper's PDF, so
+        // "Attach test" can point at the paper's own questions instead of
+        // writing a second, disconnected set from the raw file.
+        staff
+          ? getLinkedPapersForFiles(fileIds)
+          : Promise.resolve(new Map<string, LinkedQBPaper>()),
       ]);
       const now = Date.now();
       files = rawFiles.map((file) => {
@@ -152,7 +160,9 @@ export async function GET(request: NextRequest) {
                 active_seconds: p?.active_seconds ?? 0,
                 best_score_pct: p?.best_score_pct ?? null,
               }),
-          ...(staff ? { allow_download: file.allow_download } : {}),
+          ...(staff
+            ? { allow_download: file.allow_download, qb_paper: linkedPapers.get(file.id) ?? null }
+            : {}),
         };
       });
     }

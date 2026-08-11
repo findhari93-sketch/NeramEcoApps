@@ -71,6 +71,28 @@ describe('QuestionEditForm', () => {
    * fix that stopped every paper's questions reading 'NATA' whatever exam they
    * came from. Extracting without it would quietly reintroduce that.
    */
+  /**
+   * The escape hatch for a placeholder question that was never really on the
+   * paper (e.g. an auto-generated drawing slot with no real content): the
+   * same preflight-guarded soft/hard dialog the standalone Questions page
+   * uses, opened from the pane instead of a checkbox selection.
+   */
+  it('opens the delete dialog and hides the question on confirm', async () => {
+    const onSaved = vi.fn();
+    render(<QuestionEditForm question={question} getToken={getToken} onSaved={onSaved} onCancel={() => {}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete question' }));
+    expect(await screen.findByText('Remove this question?')).not.toBeNull();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Hide it/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
+    const deleteCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([, init]) => init?.method === 'DELETE',
+    );
+    expect(deleteCall?.[0]).toBe('/api/question-bank/questions/q1');
+  });
+
   it('falls back to the paper for the exam when the question has no source row', () => {
     render(
       <QuestionEditForm

@@ -31,28 +31,10 @@ import {
 } from '@neram/database';
 import MathText from '@/components/common/MathText';
 import AnswerKeyUpload from './AnswerKeyUpload';
-
-const IMAGE_KEYWORDS = /figure|image|diagram|picture|given below|shown below|problem figure|shown in|refer to|look at the/i;
-
-/** Does this question need images at all? (based on format/keywords) */
-export function questionNeedsImage(q: NexusQBQuestion): boolean {
-  if (q.question_format === 'IMAGE_BASED') return true;
-  if (q.question_text && IMAGE_KEYWORDS.test(q.question_text)) return true;
-  const opts = q.options as { id: string; text: string; image_url?: string }[] | null;
-  if (opts?.some((o) => IMAGE_KEYWORDS.test(o.text || ''))) return true;
-  return false;
-}
-
-/** Does this question need images AND is missing any of them? */
-export function questionMissingImages(q: NexusQBQuestion): boolean {
-  if (!questionNeedsImage(q)) return false;
-  // Check question image
-  if (!q.question_image_url) return true;
-  // Check option images (only for options with image keywords)
-  const opts = q.options as { id: string; text: string; image_url?: string }[] | null;
-  if (opts?.some((o) => IMAGE_KEYWORDS.test(o.text || '') && !o.image_url)) return true;
-  return false;
-}
+// The image-need rules used to live here, which meant a grid component owned a
+// judgement four other screens depended on and three of them re-implemented.
+// They are in lib/qb-image-needs.ts now. Import from there, not from a grid.
+import { questionMissingImages } from '@/lib/qb-image-needs';
 
 /**
  * Move one question into a different section.
@@ -509,7 +491,9 @@ export default function AnswerKeyGrid({ questions, onSave, saving, onChangeSecti
                 const isDrawing = q.question_format === 'DRAWING_PROMPT';
                 const currentAnswer = answers[qNum] || '';
                 const isExpanded = expandedRows.has(qNum);
-                const needsImage = questionNeedsImage(q);
+                // Missing, not "references a figure". The badge says "No Image",
+                // so it has to disappear once the image is there.
+                const needsImage = questionMissingImages(q);
 
                 const isSelected = selected.has(q.id);
 
@@ -673,7 +657,7 @@ export default function AnswerKeyGrid({ questions, onSave, saving, onChangeSecti
                     const isDrawing = q.question_format === 'DRAWING_PROMPT';
                     const currentAnswer = answers[qNum] || '';
                     const isExpanded = expandedRows.has(qNum);
-                    const needsImage = questionNeedsImage(q);
+                    const needsImage = questionMissingImages(q);
                     const isSelected = selected.has(q.id);
 
                     return (
@@ -698,7 +682,7 @@ export default function AnswerKeyGrid({ questions, onSave, saving, onChangeSecti
                               {qNum}
                             </Typography>
                             {needsImage && (
-                              <Tooltip title="Image not uploaded — this question references a figure" arrow>
+                              <Tooltip title="This question references a figure and the image is not uploaded yet" arrow>
                                 <ImageNotSupportedOutlinedIcon sx={{ fontSize: 16, color: '#D97706' }} />
                               </Tooltip>
                             )}

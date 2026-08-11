@@ -17,17 +17,15 @@ import {
  *
  * The prompt is READ BY A HUMAN before it is pasted, so the house style rules
  * about punctuation apply to its output, not just to the source.
+ *
+ * Colour rule, design principle, objects to include and focus points used to
+ * feed this prompt too. Nobody was authoring them, so DrawingQuestionBrief no
+ * longer carries them: the brief is now just the question text, the marks,
+ * and the category that picks a default medium.
  */
 
 const FULL: DrawingQuestionBrief = {
   question_text: 'Create a composition using square, circle and triangle for TECHNOLOGY.',
-  design_principle_tested: 'balance',
-  colour_constraint: 'shades of blue and one accent colour',
-  objects_to_include: [
-    { name: 'cuboid', count: 3 },
-    { name: 'cylinder' },
-  ],
-  focus_points: [{ text: 'Keep the horizon line consistent' }, { text: 'Vary line weight' }],
   drawing_marks: 50,
   category: '2d_composition',
 };
@@ -39,22 +37,8 @@ describe('buildSolutionPrompt', () => {
     );
   });
 
-  it('lists every object, with counts where given', () => {
+  it('carries the marks', () => {
     const out = buildSolutionPrompt(FULL);
-    expect(out).toContain('cuboid (x3)');
-    expect(out).toContain('cylinder');
-  });
-
-  it('lists every focus point, numbered', () => {
-    const out = buildSolutionPrompt(FULL);
-    expect(out).toContain('1. Keep the horizon line consistent');
-    expect(out).toContain('2. Vary line weight');
-  });
-
-  it('carries the colour rule, the principle and the marks', () => {
-    const out = buildSolutionPrompt(FULL);
-    expect(out).toContain('shades of blue and one accent colour');
-    expect(out).toContain('balance');
     expect(out).toContain('MARKS: 50');
   });
 
@@ -85,17 +69,7 @@ describe('buildSolutionPrompt', () => {
   it('survives a question that has nothing filled in yet', () => {
     const out = buildSolutionPrompt({ question_text: null });
     expect(out).toContain('(no question text yet)');
-    expect(out).not.toContain('MUST INCLUDE');
     expect(out).not.toContain('MARKS:');
-  });
-
-  it('skips focus points that are only whitespace', () => {
-    const out = buildSolutionPrompt({
-      question_text: 'Draw something',
-      focus_points: [{ text: '  ' }, { text: 'Real point' }],
-    });
-    expect(out).toContain('1. Real point');
-    expect(out).not.toContain('2.');
   });
 
   it('contains no em dash and no double dash, because a human reads it', () => {

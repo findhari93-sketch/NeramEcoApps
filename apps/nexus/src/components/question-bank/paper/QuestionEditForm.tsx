@@ -37,10 +37,9 @@ import type {
   QBExamType,
   NexusQBQuestionOption,
 } from '@neram/database';
-import type { QBQuestionSection, QBDrawingFocusPoint } from '@neram/database';
+import type { QBQuestionSection } from '@neram/database';
 import {
   QB_CATEGORY_LABELS,
-  groupQBCategories,
   QB_EXAM_TYPE_LABELS,
   QB_SECTIONS,
   qbSectionLabel,
@@ -48,10 +47,12 @@ import {
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import ImageUploadZone from '../ImageUploadZone';
 import DrawingQuestionPanel from '../DrawingQuestionPanel';
+import TagCategoryDialog from '../TagCategoryDialog';
+import DeleteQuestionDialog from '../DeleteQuestionDialog';
 import MathField from '@/components/common/MathField';
-// The keyword list that decides this has one home, in AnswerKeyGrid. A second
-// copy here would drift the moment either changed.
-import { questionNeedsImage } from '@/components/question-bank/AnswerKeyGrid';
+// The keyword guess has one home, in lib/qb-image-needs.ts. A second copy
+// here would drift the moment either changed.
+import { questionNeedsImage } from '@/lib/qb-image-needs';
 
 /** What a question's Source & Format panel needs when it has no source row. */
 export type PaperFallback = Pick<NexusQBOriginalPaper, 'exam_type' | 'year' | 'session'>;
@@ -70,6 +71,11 @@ export interface QuestionEditFormProps {
    * from. A question reached through a paper can only belong to that paper.
    */
   paper?: PaperFallback;
+  /** This question's current tag ids, fetched in batch alongside the paper. */
+  tagIds?: string[];
+  /** Paper numbers of this question's either/or alternatives, if it has any. */
+  choiceGroupSiblings?: number[];
+  onUnlinkChoiceGroup?: () => void;
   getToken: () => Promise<string | null>;
   onSaved: () => void;
   onCancel: () => void;
@@ -100,6 +106,7 @@ interface FormData {
   correct_answer: string;
   answer_tolerance: string;
   categories: string[];
+  tag_ids: string[];
   difficulty: QBDifficulty;
   exam_relevance: QBExamRelevance;
   topic_id: string;
@@ -112,11 +119,6 @@ interface FormData {
   // DRAWING_PROMPT, so switching a question's format cannot smear drawing
   // metadata onto an MCQ.
   drawing_marks: string;
-  colour_constraint: string;
-  design_principle_tested: string;
-  objects_to_include: Array<{ name: string; count?: number }>;
-  drawing_focus_points: QBDrawingFocusPoint[];
-  drawing_reference_image?: ImageState;
 }
 
 function createDefaultOption(idx: number): NexusQBQuestionOption {
@@ -126,7 +128,8 @@ function createDefaultOption(idx: number): NexusQBQuestionOption {
 function getInitialFormData(
   question: NexusQBQuestion,
   sources?: NexusQBQuestionSource[],
-  paper?: PaperFallback
+  paper?: PaperFallback,
+  tagIds?: string[],
 ): FormData {
   const source = sources?.[0];
   // Source row, then the paper, then nothing. Never a made-up exam: showing the
@@ -153,6 +156,7 @@ function getInitialFormData(
     correct_answer: question.correct_answer ?? '',
     answer_tolerance: question.answer_tolerance ? String(question.answer_tolerance) : '',
     categories: question.categories ?? [],
+    tag_ids: tagIds ?? [],
     difficulty: question.difficulty ?? 'MEDIUM',
     exam_relevance: question.exam_relevance ?? 'BOTH',
     topic_id: question.topic_id ?? '',
@@ -164,18 +168,14 @@ function getInitialFormData(
       ? { url: question.solution_image_url, uploaded: true }
       : undefined,
     drawing_marks: question.drawing_marks != null ? String(question.drawing_marks) : '',
-    colour_constraint: question.colour_constraint ?? '',
-    design_principle_tested: question.design_principle_tested ?? '',
-    objects_to_include: question.objects_to_include ?? [],
-    drawing_focus_points: question.drawing_focus_points ?? [],
-    drawing_reference_image: question.drawing_reference_image_url
-      ? { url: question.drawing_reference_image_url, uploaded: true }
-      : undefined,
   };
 }
 
 function buildSubmitPayload(form: FormData) {
-  const questionData: Partial<NexusQBQuestion> = {
+  // tag_ids rides alongside the question row but is not a column on it: the
+  // API route strips it out and writes it through setQuestionTags instead.
+  const questionData: Partial<NexusQBQuestion> & { tag_ids?: string[] } = {
+    tag_ids: form.tag_ids,
     question_text: form.question_text || null,
     question_text_hi: form.question_text_hi || null,
     question_image_url: form.question_image?.uploaded ? form.question_image.url : null,
@@ -215,16 +215,6 @@ function buildSubmitPayload(form: FormData) {
 
   if (form.question_format === 'DRAWING_PROMPT') {
     questionData.drawing_marks = form.drawing_marks ? Number(form.drawing_marks) : null;
-    questionData.colour_constraint = form.colour_constraint || null;
-    questionData.design_principle_tested = form.design_principle_tested || null;
-    questionData.objects_to_include = form.objects_to_include.length ? form.objects_to_include : null;
-    // Blank rows are what an "Add focus point" press leaves behind when a
-    // teacher changes their mind, and they would render as empty bullets.
-    const focus = form.drawing_focus_points.filter((f) => f.text.trim());
-    questionData.drawing_focus_points = focus.length ? focus : null;
-    questionData.drawing_reference_image_url = form.drawing_reference_image?.uploaded
-      ? form.drawing_reference_image.url
-      : null;
   }
 
   return questionData;
@@ -246,19 +236,24 @@ export default function QuestionEditForm({
   question,
   sources,
   paper,
+  tagIds,
+  choiceGroupSiblings,
+  onUnlinkChoiceGroup,
   getToken,
   onSaved,
   onCancel,
   onChangeSection,
 }: QuestionEditFormProps) {
   const theme = useTheme();
-  const [form, setForm] = useState<FormData>(() => getInitialFormData(question, sources, paper));
+  const [form, setForm] = useState<FormData>(() => getInitialFormData(question, sources, paper, tagIds));
   const [optionImagesEnabled, setOptionImagesEnabled] = useState(
     () => question.options?.some((o) => !!o.image_url) ?? false
   );
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [tagDialogOpen, setTagDialogOpen] = useState(false);
   const [sectionSaving, setSectionSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   /**
    * Hindi is empty on almost every paper, so it costs a field per option and one
    * for the stem to show it by default. Seeded from the question so a paper that
@@ -276,12 +271,12 @@ export default function QuestionEditForm({
   // comes back refetched after a save. No `expanded` guard any more: the pane
   // unmounts nothing, so this effect is the only thing that resets the form.
   useEffect(() => {
-    setForm(getInitialFormData(question, sources, paper));
+    setForm(getInitialFormData(question, sources, paper, tagIds));
     setDirty(false);
     setOptionImagesEnabled(question.options?.some((o) => !!o.image_url) ?? false);
     setShowHindi(Boolean(question.question_text_hi) || (question.options ?? []).some((o) => o.text_hi));
     setShowImageZone(Boolean(question.question_image_url) || questionNeedsImage(question));
-  }, [question, sources, paper]);
+  }, [question, sources, paper, tagIds]);
 
   const updateField = useCallback(
     <K extends keyof FormData>(key: K, value: FormData[K]) => {
@@ -329,6 +324,37 @@ export default function QuestionEditForm({
       options: prev.options.filter((o) => o.id !== optId),
       option_images: { ...prev.option_images, [optId]: undefined },
     }));
+    setDirty(true);
+  }, []);
+
+  /**
+   * Id to label for the compact chip row. Only ids are stored on the form and
+   * on the row, since a tag's own label can be renamed in Tag management, so
+   * this looks it up rather than caching a copy that could drift.
+   */
+  const [tagLabels, setTagLabels] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (form.tag_ids.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/question-bank/tags', { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok || cancelled) return;
+      const json = await res.json();
+      const map: Record<string, string> = {};
+      for (const t of json.data || []) map[t.id] = t.label;
+      if (!cancelled) setTagLabels(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only the id set changing (not identity) should re-fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.tag_ids.join(','), getToken]);
+
+  const removeTag = useCallback((id: string) => {
+    setForm((prev) => ({ ...prev, tag_ids: prev.tag_ids.filter((t) => t !== id) }));
     setDirty(true);
   }, []);
 
@@ -439,6 +465,15 @@ export default function QuestionEditForm({
           </Select>
         )}
         <Box sx={{ flex: 1 }} />
+        <IconButton
+          size="small"
+          onClick={() => setDeleteOpen(true)}
+          title="Delete question"
+          aria-label="Delete question"
+          sx={{ color: 'error.main' }}
+        >
+          <DeleteOutlineIcon fontSize="small" />
+        </IconButton>
         <Button
           size="small"
           variant="contained"
@@ -453,6 +488,38 @@ export default function QuestionEditForm({
           <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
+
+      {/* Placeholder or junk question that was never really on this paper
+          (e.g. an auto-generated drawing slot with no real content): the
+          teacher's escape hatch, with the same preflight-guarded soft/hard
+          choice as the standalone Questions page. */}
+      <DeleteQuestionDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        questionId={question.id}
+        questionText={question.question_text}
+        getToken={getToken}
+        onDeleted={() => onSaved()}
+      />
+
+      {/*
+        Either/or is display only, so this line is the whole feature: a
+        teacher created the link from the selection bar and unlinks it from
+        here, and nothing about scoring changes either way.
+      */}
+      {choiceGroupSiblings && choiceGroupSiblings.length > 0 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="caption" color="text.secondary">
+            Attempt any {question.choice_group_pick ?? 1} of Q{question.display_order},{' '}
+            {choiceGroupSiblings.map((n) => `Q${n}`).join(', ')}
+          </Typography>
+          {onUnlinkChoiceGroup && (
+            <Button size="small" onClick={onUnlinkChoiceGroup} sx={{ textTransform: 'none', minHeight: 28, fontSize: '0.7rem' }}>
+              Unlink
+            </Button>
+          )}
+        </Box>
+      )}
 
       <Box sx={{ p: { xs: 1.5, md: 2 } }}>
         {/* Section 1: Content (always visible) */}
@@ -613,45 +680,74 @@ export default function QuestionEditForm({
           )}
         </Box>
 
+        {/* Tags and categories: always visible, not a disclosure. This used to
+            be a 58-chip wall inside an accordion, roughly 400px whether or not
+            it was ever opened, and it had no way to reach the tag registry a
+            teacher actually curates at /teacher/question-bank/tags. Now it is
+            the chips that are already set, plus one button to change them. */}
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography variant="caption" fontWeight={600} color="text.secondary">
+              Tags and categories
+            </Typography>
+            <Button
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => setTagDialogOpen(true)}
+              sx={{ textTransform: 'none', minHeight: 32 }}
+            >
+              Add
+            </Button>
+          </Box>
+          {form.tag_ids.length === 0 && form.categories.length === 0 ? (
+            <Typography variant="caption" color="text.disabled">
+              Nothing set yet.
+            </Typography>
+          ) : (
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', maxHeight: 68, overflowY: 'auto' }}>
+              {form.tag_ids.map((id) => (
+                <Chip
+                  key={id}
+                  label={tagLabels[id] || '…'}
+                  size="small"
+                  onDelete={() => removeTag(id)}
+                  sx={{ fontSize: '0.7rem' }}
+                />
+              ))}
+              {form.categories.map((cat) => (
+                <Chip
+                  key={cat}
+                  label={QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS] || cat}
+                  size="small"
+                  variant="outlined"
+                  onDelete={() => toggleCategory(cat)}
+                  sx={{ fontSize: '0.7rem' }}
+                />
+              ))}
+            </Box>
+          )}
+        </Box>
+
+        <TagCategoryDialog
+          open={tagDialogOpen}
+          onClose={() => setTagDialogOpen(false)}
+          questionFormat={form.question_format}
+          categories={form.categories}
+          tagIds={form.tag_ids}
+          getToken={getToken}
+          onApply={({ categories, tagIds: nextTagIds }) => {
+            setForm((prev) => ({ ...prev, categories, tag_ids: nextTagIds }));
+            setDirty(true);
+            setTagDialogOpen(false);
+          }}
+        />
+
         {/* Section 2: Classification (collapsible) */}
         <Accordion defaultExpanded={false} disableGutters variant="outlined" sx={{ mb: 1 }}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="body2" fontWeight={600}>Classification</Typography>
           </AccordionSummary>
           <AccordionDetails>
-            {/* Categories */}
-            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-              Categories
-            </Typography>
-            {/* Grouped rather than one flat wall of 58 chips. Sections mirror
-                the subject hierarchy in nexus_qb_tags. */}
-            <Box sx={{ mb: 2 }}>
-              {groupQBCategories().map((group) => (
-                <Box key={group.label} sx={{ mb: 1 }}>
-                  <Typography
-                    variant="caption"
-                    color="text.disabled"
-                    sx={{ display: 'block', fontWeight: 600, mb: 0.25 }}
-                  >
-                    {group.label}
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                    {group.categories.map((cat) => (
-                      <Chip
-                        key={cat}
-                        label={QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS] || cat}
-                        size="small"
-                        variant={form.categories.includes(cat) ? 'filled' : 'outlined'}
-                        color={form.categories.includes(cat) ? 'primary' : 'default'}
-                        onClick={() => toggleCategory(cat)}
-                        sx={{ fontSize: '0.7rem', cursor: 'pointer' }}
-                      />
-                    ))}
-                  </Box>
-                </Box>
-              ))}
-            </Box>
-
             {/* Difficulty */}
             <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
               Difficulty
@@ -706,11 +802,6 @@ export default function QuestionEditForm({
               <DrawingQuestionPanel
                 value={{
                   drawing_marks: form.drawing_marks,
-                  colour_constraint: form.colour_constraint,
-                  design_principle_tested: form.design_principle_tested,
-                  objects_to_include: form.objects_to_include,
-                  drawing_focus_points: form.drawing_focus_points,
-                  drawing_reference_image: form.drawing_reference_image,
                   solution_image: form.solution_image,
                   solution_video_url: form.solution_video_url,
                 }}

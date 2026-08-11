@@ -68,7 +68,37 @@ describe('PaperQuestionRow', () => {
         onToggleSelect={onToggleSelect} onActivate={() => {}} />,
     );
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }), { shiftKey: true });
-    expect(onToggleSelect).toHaveBeenCalledWith(true);
+    expect(onToggleSelect).toHaveBeenCalledWith(true, false);
+  });
+
+  it('passes the ctrl key through too, for a toggle that does not open the question', () => {
+    const onToggleSelect = vi.fn();
+    render(
+      <PaperQuestionRow question={q()} selected={false} active={false} tagCount={1}
+        onToggleSelect={onToggleSelect} onActivate={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }), { ctrlKey: true });
+    expect(onToggleSelect).toHaveBeenCalledWith(false, true);
+  });
+
+  it('shift-clicking the row body extends the selection instead of opening the question', () => {
+    const onActivate = vi.fn();
+    const onToggleSelect = vi.fn();
+    render(
+      <PaperQuestionRow question={q()} selected={false} active={false} tagCount={1}
+        onToggleSelect={onToggleSelect} onActivate={onActivate} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Open question 1/ }), { shiftKey: true });
+    expect(onToggleSelect).toHaveBeenCalledWith(true, false);
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('the status is a colour, not a chip, but still has a name a screen reader can announce', () => {
+    render(
+      <PaperQuestionRow question={q({ status: 'active' })} selected={false} active={false} tagCount={1}
+        onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    expect(screen.getByLabelText('Active')).not.toBeNull();
   });
 
   it('says a drawing prompt is self-assessed rather than showing a blank answer', () => {
@@ -77,6 +107,6 @@ describe('PaperQuestionRow', () => {
         selected={false} active={false} tagCount={0}
         onToggleSelect={() => {}} onActivate={() => {}} />,
     );
-    expect(screen.getByText('Self-assessed')).not.toBeNull();
+    expect(screen.getByLabelText('Self-assessed')).not.toBeNull();
   });
 });
