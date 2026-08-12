@@ -33,6 +33,8 @@ import TranslateIcon from '@mui/icons-material/Translate';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { QB_EXAM_TYPE_LABELS, qbSectionLabel } from '@neram/database';
 import type {
@@ -57,6 +59,7 @@ import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import PaperStudentAccessPanel from '@/components/question-bank/PaperStudentAccessPanel';
 import PaperJSONDialog from '@/components/question-bank/PaperJSONDialog';
+import PaperShell from '@/components/question-bank/paper/PaperShell';
 
 export default function PaperDetailPage() {
   const router = useRouter();
@@ -87,6 +90,16 @@ export default function PaperDetailPage() {
   const [redoSectionsOpen, setRedoSectionsOpen] = useState(false);
   const [actionsMenuAnchor, setActionsMenuAnchor] = useState<HTMLElement | null>(null);
   const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false);
+  /**
+   * Focus mode: the workspace goes edge to edge over the sidebar and top bar.
+   *
+   * Deliberately not persisted and deliberately not a route or a Dialog. It is
+   * a posture for the session you are in, not a setting, and a teacher arriving
+   * from a link should see the normal navigation. Both a route change and a
+   * Dialog would also remount the workspace, throwing away the open question,
+   * a half-typed edit and any images waiting to be pasted.
+   */
+  const [focus, setFocus] = useState(false);
   // Edit/Images mode and both filters live here rather than inside
   // PaperWorkspace so the header can still drive the list, which is what the
   // unsectioned warning below does: it is the one thing up here that sets a
@@ -415,7 +428,13 @@ export default function PaperDetailPage() {
   const unsectionedCount = questions.filter((q) => !q.section).length;
 
   return (
-    <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
+    <Box sx={{ px: { xs: 2, md: 3 }, pt: { xs: 1.5, md: 2 } }}>
+      {/*
+        No padding-bottom here, and none on the shell either: PaperShell claims
+        exactly the viewport height left below this point, so anything reserved
+        underneath it would push its own bottom edge off screen.
+      */}
+      <PaperShell focus={focus} onFocusChange={setFocus} focusEnabled={tab === 0}>
       {/*
         One header block, where there used to be a title row and a status card
         under it.
@@ -428,8 +447,13 @@ export default function PaperDetailPage() {
         directly above the list they narrow. What is left here is what never
         needed a card around it: what this paper is, how far along it is, and
         what you can do to it.
+
+        It is two short rows rather than four tall ones, because everything in
+        here is subtracted from the work area below. The progress bar lost its
+        labels and the counts moved into the caption beside it, which says the
+        same thing in a fifth of the height and does not lean on colour alone.
       */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexShrink: 0 }}>
         <IconButton
           size="small"
           aria-label="Back to all papers"
@@ -442,7 +466,7 @@ export default function PaperDetailPage() {
           {/* Title and actions share one row, so the actions cost no height of
               their own. They wrap as a group rather than splitting up, and stay
               right-aligned when they do, which is where a thumb is. */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minHeight: 44 }}>
             <Chip
               label={QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type}
               size="small"
@@ -490,6 +514,23 @@ export default function PaperDetailPage() {
                   {activating ? 'Activating...' : `Activate ${completeCount}`}
                 </Button>
               )}
+              {/* Focus mode. Only offered on Questions, since Student access
+                  has no second pane to give the room to. */}
+              {tab === 0 && (
+                <Tooltip title={focus ? 'Leave focus mode (Esc)' : 'Focus mode (F)'} arrow>
+                  <IconButton
+                    size="small"
+                    aria-label={focus ? 'Leave focus mode' : 'Enter focus mode'}
+                    aria-pressed={focus}
+                    onClick={() => setFocus((f) => !f)}
+                    sx={{ border: '1px solid', borderColor: 'divider', minWidth: 44, minHeight: 44 }}
+                  >
+                    {focus
+                      ? <FullscreenExitIcon fontSize="small" />
+                      : <FullscreenIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+              )}
               <IconButton
                 size="small"
                 aria-label="More paper actions"
@@ -502,14 +543,28 @@ export default function PaperDetailPage() {
             </Box>
           </Box>
 
-          {/* The one backlog the filter bar below cannot state. Its Section
-              select lists Unsectioned, but never how many, and never that
-              leaving them unset is what stops this paper being scheduled as an
-              exam. It renders only when something is wrong, so a healthy paper
-              pays no height for it. */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {/* One status line: the bar, then what it means in words, then the
+              one backlog the filter bar below cannot state.
+
+              The bar lost `showLabels`. The labels stacked a second wrapping
+              row of dot-and-count pairs under it, which on a narrow window was
+              two more lines of header for information the caption beside it now
+              carries in one. Hovering a segment still names it. */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
+            <Box sx={{ flex: '1 1 160px', maxWidth: 320, minWidth: 96 }}>
+              <PaperProgressBar
+                total={total}
+                draft={draft > 0 ? draft : 0}
+                answerKeyed={answerKeyedOnly > 0 ? answerKeyedOnly : 0}
+                complete={complete - activeCount > 0 ? complete - activeCount : 0}
+                active={activeCount}
+              />
+            </Box>
             <Typography variant="caption" color="text.secondary">
-              Uploaded {formatDate(paper.created_at)}
+              {activeCount} active
+              {draft > 0 ? ` · ${draft} draft` : ''}
+              {' · '}
+              uploaded {formatDate(paper.created_at)}
             </Typography>
             {unsectionedCount > 0 && (
               <Tooltip
@@ -532,22 +587,6 @@ export default function PaperDetailPage() {
                 />
               </Tooltip>
             )}
-          </Box>
-
-          {/* Aligned to the title's own left edge instead of floating in a card
-              of its own: it describes this paper, so it should read as part of
-              the heading rather than as a separate panel. Each segment names
-              itself and its count underneath, so colour is never the only thing
-              saying what is done. */}
-          <Box sx={{ mt: 1 }}>
-            <PaperProgressBar
-              total={total}
-              draft={draft > 0 ? draft : 0}
-              answerKeyed={answerKeyedOnly > 0 ? answerKeyedOnly : 0}
-              complete={complete - activeCount > 0 ? complete - activeCount : 0}
-              active={activeCount}
-              showLabels
-            />
           </Box>
         </Box>
 
@@ -652,33 +691,27 @@ export default function PaperDetailPage() {
         </Menu>
       </Box>
 
-      {message && (
-        <Alert
-          severity={message.startsWith('Error') ? 'error' : 'success'}
-          sx={{ mb: 2 }}
-          onClose={() => setMessage('')}
-        >
-          {message}
-        </Alert>
-      )}
-
       {/* Tabs. Bulk Images used to be its own tab with its own scrolling list
           of every question; it is an Edit/Images mode switch inside Questions
           now (see PaperQuestionList), so it no longer needs a tab of its own.
-          The same 92 rows would otherwise exist in three places. */}
+          The same 92 rows would otherwise exist in three places.
+
+          Short, and with no margin under it. Every pixel between the top of the
+          page and the panes is a pixel the panes do not get, and this bar sits
+          directly on top of them. */}
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v)}
-        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+        sx={{ flexShrink: 0, minHeight: 40, borderBottom: 1, borderColor: 'divider' }}
         variant="scrollable"
         scrollButtons="auto"
       >
-        <Tab label={`Questions (${questions.length})`} />
+        <Tab label={`Questions (${questions.length})`} sx={{ minHeight: 40, py: 0 }} />
         <Tab
           label="Student access"
           icon={<GroupsOutlinedIcon sx={{ fontSize: 18 }} />}
           iconPosition="start"
-          sx={{ minHeight: 48 }}
+          sx={{ minHeight: 40, py: 0 }}
         />
       </Tabs>
 
@@ -688,6 +721,7 @@ export default function PaperDetailPage() {
           correcting an answer and then fixing its wording meant finding the
           question twice. The list scans, the pane edits, one selection. */}
       {tab === 0 && (
+        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pt: 1 }}>
         <PaperWorkspace
           questions={questions}
           tagCounts={tagCounts}
@@ -705,14 +739,22 @@ export default function PaperDetailPage() {
           onChangeSections={handleChangeSections}
           onOptimisticPatch={patchQuestionLocally}
         />
+        </Box>
       )}
 
       {/* Tab: Student access — the PDF, the test, and the publish switch.
           Mounted only when open so its four server-side reads are not paid for
-          by a teacher who came here to fix an answer key. */}
+          by a teacher who came here to fix an answer key.
+
+          It scrolls inside the shell rather than growing the page, so switching
+          tabs does not switch between a page that scrolls and one that does
+          not. */}
       {tab === 1 && (
-        <PaperStudentAccessPanel paperId={paperId} getToken={getToken} refreshKey={total} />
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', pt: 2 }}>
+          <PaperStudentAccessPanel paperId={paperId} getToken={getToken} refreshKey={total} />
+        </Box>
       )}
+      </PaperShell>
 
       {/* Bulk answer-key paste, reachable from the action row now that the tab
           it used to be nested inside is gone. */}
@@ -824,6 +866,26 @@ export default function PaperDetailPage() {
           fetchData(true);
         }}
       />
+
+      {/* Confirmations used to land as an inline Alert above the tabs, which
+          pushed the work area down by its own height and kept it there until
+          somebody dismissed it. A message about what just happened should not
+          cost the panes 64px for the rest of the session. */}
+      <Snackbar
+        open={!!message}
+        autoHideDuration={4000}
+        onClose={() => setMessage('')}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setMessage('')}
+          severity={message.startsWith('Error') ? 'error' : 'success'}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

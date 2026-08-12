@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Snackbar } from '@neram/ui';
 import type { NexusQBQuestion, NexusQBQuestionSource, QBQuestionSection } from '@neram/database';
 import PaperQuestionList, {
@@ -101,36 +101,6 @@ export default function PaperWorkspace({
     // that question so the teacher can see what they are pasting into.
     onCrossQuestion: setActiveId,
   });
-
-  /**
-   * How far down the page this shell starts, so it can claim exactly the
-   * viewport height that is left rather than a guessed constant.
-   *
-   * Measured, not hardcoded, because the paper header above this shell wraps
-   * differently paper to paper (a long exam name, a Hindi-merge banner, a
-   * warning chip) and a fixed number would either clip the list or waste
-   * space depending on which paper is open. A ResizeObserver on the shell's
-   * own offsetParent chain would be more precise, but the header is what
-   * actually changes height, so watching it directly is enough.
-   */
-  const shellRef = useRef<HTMLDivElement>(null);
-  const [shellTop, setShellTop] = useState(0);
-  useLayoutEffect(() => {
-    const el = shellRef.current;
-    if (!el) return;
-    const measure = () => setShellTop(el.getBoundingClientRect().top);
-    measure();
-    // The header collapses (accordion open/close, tab switch) without this
-    // component re-rendering, so a resize observer on the shell's own
-    // position is what keeps the measurement honest.
-    const ro = new ResizeObserver(measure);
-    ro.observe(document.body);
-    window.addEventListener('resize', measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-    };
-  }, []);
 
   const activeIndex = useMemo(
     () => (activeId ? questions.findIndex((q) => q.id === activeId) : -1),
@@ -429,21 +399,24 @@ export default function PaperWorkspace({
 
   return (
     <Box
-      ref={shellRef}
       sx={{
         display: 'flex',
         gap: 2,
         // flex-start let both columns size to their content, which is exactly
         // why neither one ever formed its own scroll region: with no resolved
         // height, `overflowY: auto` inside them has nothing to clip against
-        // and the whole document scrolls instead. `stretch` plus the height
-        // below is what makes the two independent scroll panes real.
+        // and the whole document scrolls instead. `stretch` is half of what
+        // makes the two independent scroll panes real; the other half is the
+        // resolved height, which now comes from PaperShell.
         alignItems: 'stretch',
-        minHeight: { xs: 0, md: 420 },
-        height: {
-          xs: 'auto',
-          md: shellTop > 0 ? `calc(100dvh - ${shellTop}px - 16px)` : undefined,
-        },
+        // This used to measure its own distance from the top of the viewport
+        // and subtract it. That put the measurement BELOW the header it was
+        // measuring, so the header's height was spent before the calculation
+        // began, and the observer watched document.body, which never resizes
+        // because <main> is what scrolls. PaperShell takes one measurement
+        // above the header instead, and everything under it is plain flex.
+        flex: 1,
+        minHeight: 0,
       }}
     >
       <Box

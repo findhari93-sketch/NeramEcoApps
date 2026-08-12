@@ -11,6 +11,7 @@
  */
 import type { Theme } from '@neram/ui';
 import { alpha } from '@neram/ui';
+import { SHELL_CHROME } from '@/lib/shell-chrome';
 
 /** Card, button, tag and modal radii lifted from the design. */
 export const RADIUS = {
@@ -46,16 +47,11 @@ export const LAYOUT = {
    * App chrome above and below a page's content box, which the calendar has to
    * subtract from the viewport to fill the rest of the screen exactly.
    *
-   * These are the FULL-BLEED numbers, i.e. what the teacher/student/parent
-   * layouts leave once the timetable route drops its Container padding. Note
-   * the two do not change at the same breakpoint: TopBar grows at sm
-   * (52 to 56), BottomNav disappears at md, so sm needs its own value or the
-   * page picks up a 4px scrollbar on a landscape phone.
-   *   xs: TopBar 52 + BottomNav 64 = 116
-   *   sm: TopBar 56 + BottomNav 64 = 120
-   *   md: TopBar 56                =  56
+   * Re-exported from lib/shell-chrome rather than restated, because the paper
+   * workspace now claims the viewport the same way and two copies of these
+   * numbers is two places to forget when the TopBar changes height.
    */
-  shellChrome: { xs: 116, sm: 120, md: 56 },
+  shellChrome: SHELL_CHROME,
 } as const;
 
 /**

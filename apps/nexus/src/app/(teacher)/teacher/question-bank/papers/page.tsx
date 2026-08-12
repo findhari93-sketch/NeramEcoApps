@@ -1,17 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
-  Typography,
-  Paper,
   Button,
-  Skeleton,
-  Chip,
-  IconButton,
   Snackbar,
   Alert,
+  EmptyState,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -20,24 +16,41 @@ import {
 } from '@neram/ui';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
-import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
-import TranslateIcon from '@mui/icons-material/Translate';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { QB_EXAM_TYPE_LABELS, QB_CATEGORY_LABELS } from '@neram/database';
-import type { NexusQBOriginalPaper } from '@neram/database';
-import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
+import { QB_CATEGORY_LABELS } from '@neram/database';
+import { useStoredViewMode } from '@/hooks/useStoredViewMode';
+import {
+  PAPER_VIEWS,
+  PAPER_VIEW_STORAGE_KEY,
+  type PaperActionHandlers,
+  type PaperSort,
+  type PaperStatus,
+  type PaperWithBreakdown,
+} from '@/components/question-bank/papers/paperTypes';
+import { countBuckets, queryPapers, toRows } from '@/components/question-bank/papers/paperFilters';
+import PaperListToolbar from '@/components/question-bank/papers/PaperListToolbar';
+import PaperListSkeleton from '@/components/question-bank/papers/PaperListSkeleton';
+import PaperTable from '@/components/question-bank/papers/PaperTable';
+import PaperGridCard from '@/components/question-bank/papers/PaperGridCard';
+import PaperDetailedCard from '@/components/question-bank/papers/PaperDetailedCard';
 
-interface PaperWithBreakdown extends NexusQBOriginalPaper {
-  section_breakdown?: Record<string, number>;
-  active_count?: number;
-  hindi_count?: number;
-}
+/**
+ * On a phone these share the row and grow to fill it, two per line, instead of
+ * spilling past the right edge. On sm and up they keep their natural width.
+ */
+const HEADER_ACTION_SX = {
+  // Grow from the label's own width rather than a fixed basis. A 50% basis
+  // fits two per row but breaks "Publish 4 ready" across two lines; sizing from
+  // content packs as many as fit and stretches them to fill the row.
+  flex: { xs: '1 1 auto', sm: '0 0 auto' },
+  whiteSpace: 'nowrap',
+  maxWidth: '100%',
+  minHeight: { xs: 44, sm: 'auto' },
+} as const;
 
 export default function PapersListPage() {
   const router = useRouter();
@@ -56,6 +69,11 @@ export default function PapersListPage() {
     message: string;
     severity: 'success' | 'error';
   }>({ open: false, message: '', severity: 'success' });
+
+  const [view, setView] = useStoredViewMode(PAPER_VIEW_STORAGE_KEY, PAPER_VIEWS, 'table');
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<PaperStatus>('all');
+  const [sort, setSort] = useState<PaperSort>('recent');
 
   async function fetchPapers() {
     setLoading(true);
@@ -130,16 +148,6 @@ export default function PapersListPage() {
     } finally {
       setActionLoading(null);
     }
-  }
-
-  /**
-   * Whether students would get anything from this paper.
-   *
-   * A hint only. `setPaperStudentVisibility` enforces the same rule server-side
-   * and returns its own sentence, which is what gets shown when it refuses.
-   */
-  function isReadyForStudents(paper: PaperWithBreakdown): boolean {
-    return (paper.active_count || 0) > 0 || !!paper.study_file_id;
   }
 
   async function handleSetVisibility(paperId: string, visible: boolean, e: React.MouseEvent) {
@@ -245,8 +253,44 @@ export default function PapersListPage() {
   const getCategoryLabel = (cat: string) =>
     QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS] || cat;
 
-  const liveCount = papers.filter((p) => p.is_student_visible).length;
-  const publishable = papers.filter((p) => !p.is_student_visible && isReadyForStudents(p)).length;
+  // Derived once per fetch, then reused by the counts, the chips and whichever
+  // view is showing. Recomputing "activatable is keyed minus active" inside
+  // three separate row components is how the three quietly disagree.
+  const rows = useMemo(() => toRows(papers), [papers]);
+  const counts = useMemo(() => countBuckets(rows), [rows]);
+  const visibleRows = useMemo(
+    () => queryPapers(rows, { search, status, sort }),
+    [rows, search, status, sort],
+  );
+
+  const liveCount = counts.live;
+  const publishable = counts.ready;
+
+  /**
+   * The five mutations, bundled once and handed to whichever view is showing.
+   *
+   * Rebuilt every render rather than memoised: none of the row components is
+   * `React.memo`, so a stable identity would save nothing, and memoising it
+   * would pin the handlers to the closure of whichever render last invalidated
+   * the dependency list.
+   */
+  const actions: PaperActionHandlers = {
+    onOpen: (paperId) => router.push(`/teacher/question-bank/papers/${paperId}`),
+    onActivate: handleActivate,
+    onDeactivate: handleDeactivate,
+    onSetVisibility: handleSetVisibility,
+    onRequestDelete: (paperId, paperLabel, e) => {
+      // The row navigates. Without this, deleting a paper also opens it.
+      e.stopPropagation();
+      setDeleteConfirm({ open: true, paperId, paperLabel });
+    },
+    actionLoading,
+  };
+
+  const clearFilters = useCallback(() => {
+    setSearch('');
+    setStatus('all');
+  }, []);
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
@@ -261,7 +305,14 @@ export default function PapersListPage() {
         breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
         backHref="/teacher/question-bank"
         action={
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1,
+              flexWrap: 'wrap',
+              justifyContent: { xs: 'flex-start', sm: 'flex-end' },
+            }}
+          >
             {publishable > 0 && (
               <Button
                 variant="outlined"
@@ -270,7 +321,7 @@ export default function PapersListPage() {
                 startIcon={<VisibilityOutlinedIcon />}
                 onClick={handlePublishAll}
                 disabled={actionLoading === 'publish-all'}
-                sx={{ textTransform: 'none' }}
+                sx={{ textTransform: 'none', ...HEADER_ACTION_SX }}
               >
                 {actionLoading === 'publish-all' ? 'Publishing...' : `Publish ${publishable} ready`}
               </Button>
@@ -281,7 +332,7 @@ export default function PapersListPage() {
               size="small"
               startIcon={<InsightsOutlinedIcon />}
               onClick={() => router.push('/teacher/question-bank/papers/overview')}
-              sx={{ textTransform: 'none' }}
+              sx={{ textTransform: 'none', ...HEADER_ACTION_SX }}
             >
               Progress
             </Button>
@@ -290,6 +341,7 @@ export default function PapersListPage() {
               size="small"
               startIcon={<UploadFileOutlinedIcon />}
               onClick={() => router.push('/teacher/question-bank/bulk-upload')}
+              sx={{ textTransform: 'none', ...HEADER_ACTION_SX }}
             >
               Upload
             </Button>
@@ -297,223 +349,99 @@ export default function PapersListPage() {
         }
       />
 
+      {/* The toolbar renders as soon as there is anything to narrow. Hidden
+          while loading, so its chip counts do not flash zeroes. */}
+      {!loading && papers.length > 0 && (
+        <PaperListToolbar
+          search={search}
+          onSearchChange={setSearch}
+          status={status}
+          onStatusChange={setStatus}
+          counts={counts}
+          sort={sort}
+          onSortChange={setSort}
+          view={view}
+          onViewChange={setView}
+        />
+      )}
+
       {loading ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={140} sx={{ borderRadius: 1 }} />
-          ))}
-        </Box>
+        <PaperListSkeleton view={view} />
       ) : papers.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <DescriptionOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-            No papers uploaded yet
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<UploadFileOutlinedIcon />}
-            onClick={() => router.push('/teacher/question-bank/bulk-upload')}
-          >
-            Upload First Paper
-          </Button>
-        </Paper>
+        <EmptyState
+          icon={<DescriptionOutlinedIcon sx={{ fontSize: 64 }} />}
+          title="No papers uploaded yet"
+          description="Upload a question paper to start building the bank."
+          action={
+            <Button
+              variant="contained"
+              startIcon={<UploadFileOutlinedIcon />}
+              onClick={() => router.push('/teacher/question-bank/bulk-upload')}
+              sx={{ minHeight: 48 }}
+            >
+              Upload First Paper
+            </Button>
+          }
+        />
+      ) : visibleRows.length === 0 ? (
+        /* Distinct from having no papers at all. "Upload your first paper" is
+           the wrong instruction when there are 26 and the search just does not
+           match any of them. */
+        <EmptyState
+          icon={<SearchOffOutlinedIcon sx={{ fontSize: 64 }} />}
+          title="No papers match these filters"
+          description={`${papers.length} papers are hidden by the search or status filter.`}
+          action={
+            <Button variant="outlined" onClick={clearFilters} sx={{ minHeight: 48 }}>
+              Clear filters
+            </Button>
+          }
+        />
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {papers.map((paper) => {
-            const total = paper.questions_parsed || 0;
-            const keyed = paper.questions_answer_keyed || 0;
-            const complete = paper.questions_complete || 0;
-            const draft = total - keyed;
-            const answerKeyedOnly = keyed - complete;
-            const activeCount = paper.active_count || 0;
-            // Activatable = answer_keyed + complete, minus already active
-            const activatable = keyed - activeCount;
-            const shiftSuffix = paper.shift ? ` (${paper.shift === 'forenoon' ? 'Forenoon' : 'Afternoon'})` : '';
-            const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}${shiftSuffix}`;
-            const isDeleting = actionLoading === paper.id + '-delete';
+        <>
+          {/* One list, three densities. The rows are identical data; only the
+              layout differs, which is the only thing that ever should differ
+              between them. */}
+          {view === 'table' && (
+            <PaperTable rows={visibleRows} actions={actions} formatDate={formatDate} />
+          )}
 
-            return (
-              <Paper
-                key={paper.id}
-                variant="outlined"
-                sx={{
-                  p: 2,
-                  cursor: 'pointer',
-                  '&:hover': { bgcolor: 'action.hover' },
-                  opacity: isDeleting ? 0.5 : 1,
-                }}
-                onClick={() => router.push(`/teacher/question-bank/papers/${paper.id}`)}
-              >
-                {/* Header row */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <Chip
-                    label={QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type}
-                    size="small"
-                    color="primary"
-                  />
-                  <Typography variant="subtitle1" fontWeight={600}>
-                    {paper.year}
-                  </Typography>
-                  {paper.session && (
-                    <Chip
-                      label={paper.shift
-                        ? `${paper.session} (${paper.shift === 'forenoon' ? 'FN' : 'AN'})`
-                        : paper.session}
-                      size="small"
-                      variant="outlined"
-                    />
-                  )}
-                  {(paper.hindi_count ?? 0) > 0 && (
-                    <Chip
-                      icon={<TranslateIcon sx={{ fontSize: 14 }} />}
-                      label={`हिंदी ${paper.hindi_count}/${total}`}
-                      size="small"
-                      sx={{
-                        bgcolor: '#fff3e0',
-                        color: '#e65100',
-                        fontWeight: 600,
-                        fontSize: '0.65rem',
-                        height: 22,
-                      }}
-                    />
-                  )}
-                  <Box sx={{ flex: 1 }} />
-                  {/* The state teachers kept missing: parsing progress and
-                      question activation both look like "done" without it. */}
-                  <Chip
-                    icon={paper.is_student_visible ? <VisibilityOutlinedIcon /> : <VisibilityOffOutlinedIcon />}
-                    label={paper.is_student_visible ? 'Live for students' : 'Not published'}
-                    size="small"
-                    color={paper.is_student_visible ? 'success' : 'default'}
-                    variant={paper.is_student_visible ? 'filled' : 'outlined'}
-                    sx={{ height: 22, fontSize: '0.7rem', '& .MuiChip-icon': { fontSize: 14 } }}
-                  />
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDate(paper.created_at)}
-                  </Typography>
-                </Box>
+          {view === 'grid' && (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+                gap: 1.5,
+                alignItems: 'stretch',
+              }}
+            >
+              {visibleRows.map(({ paper, stats }) => (
+                <PaperGridCard
+                  key={paper.id}
+                  paper={paper}
+                  stats={stats}
+                  actions={actions}
+                  formatDate={formatDate}
+                />
+              ))}
+            </Box>
+          )}
 
-                {/* Progress bar */}
-                <Box sx={{ mb: 1 }}>
-                  <PaperProgressBar
-                    total={total}
-                    draft={draft > 0 ? draft : 0}
-                    answerKeyed={answerKeyedOnly > 0 ? answerKeyedOnly : 0}
-                    complete={complete - activeCount > 0 ? complete - activeCount : 0}
-                    active={activeCount}
-                  />
-                </Box>
-
-                {/* Stats summary */}
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>
-                  {total} total &middot; {keyed} with answers &middot; {complete} complete{activeCount > 0 ? ` \u00b7 ${activeCount} active` : ''}
-                  {paper.study_file_id ? ' \u00b7 PDF linked' : ''}
-                </Typography>
-
-                {/* Why Publish is greyed out. A disabled button with no reason
-                    is the whole problem this screen had. */}
-                {!paper.is_student_visible && !isReadyForStudents(paper) && (
-                  <Typography variant="caption" color="warning.main" sx={{ mb: 0.75, display: 'block' }}>
-                    Nothing for students yet. Activate a question or link the original PDF.
-                  </Typography>
-                )}
-
-                {/* Section breakdown */}
-                {paper.section_breakdown && Object.keys(paper.section_breakdown).length > 0 && (
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
-                    {Object.entries(paper.section_breakdown).map(([cat, count]) => (
-                      <Chip
-                        key={cat}
-                        label={`${getCategoryLabel(cat)}: ${count}`}
-                        size="small"
-                        variant="outlined"
-                        sx={{ height: 22, fontSize: '0.65rem' }}
-                      />
-                    ))}
-                  </Box>
-                )}
-
-                {/* Bulk action buttons */}
-                <Box
-                  sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* First, because it is the only action here that changes what
-                      a student sees. Activate and Deactivate move questions in
-                      and out of the bank, which is a different question. */}
-                  {paper.is_student_visible ? (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="inherit"
-                      startIcon={<VisibilityOffOutlinedIcon />}
-                      onClick={(e) => handleSetVisibility(paper.id, false, e)}
-                      disabled={actionLoading === paper.id + '-publish'}
-                      sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
-                    >
-                      {actionLoading === paper.id + '-publish' ? 'Working...' : 'Unpublish'}
-                    </Button>
-                  ) : (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      color="success"
-                      disableElevation
-                      startIcon={<VisibilityOutlinedIcon />}
-                      onClick={(e) => handleSetVisibility(paper.id, true, e)}
-                      disabled={actionLoading === paper.id + '-publish' || !isReadyForStudents(paper)}
-                      sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
-                    >
-                      {actionLoading === paper.id + '-publish' ? 'Publishing...' : 'Publish to students'}
-                    </Button>
-                  )}
-                  {activatable > 0 && (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="success"
-                      startIcon={<CheckCircleOutlineIcon />}
-                      onClick={(e) => handleActivate(paper.id, e)}
-                      disabled={actionLoading === paper.id + '-activate'}
-                      sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
-                    >
-                      {actionLoading === paper.id + '-activate' ? 'Activating...' : `Activate ${activatable}`}
-                    </Button>
-                  )}
-                  {activeCount > 0 && (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="warning"
-                      // Not an eye. Deactivating pulls questions out of the
-                      // bank; hiding the paper from students is Unpublish.
-                      startIcon={<RemoveCircleOutlineIcon />}
-                      onClick={(e) => handleDeactivate(paper.id, e)}
-                      disabled={actionLoading === paper.id + '-deactivate'}
-                      sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
-                    >
-                      {actionLoading === paper.id + '-deactivate' ? 'Deactivating...' : `Deactivate ${activeCount}`}
-                    </Button>
-                  )}
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    startIcon={<DeleteOutlineIcon />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteConfirm({ open: true, paperId: paper.id, paperLabel });
-                    }}
-                    disabled={isDeleting}
-                    sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
-                  >
-                    Delete
-                  </Button>
-                </Box>
-              </Paper>
-            );
-          })}
-        </Box>
+          {view === 'cards' && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {visibleRows.map(({ paper, stats }) => (
+                <PaperDetailedCard
+                  key={paper.id}
+                  paper={paper}
+                  stats={stats}
+                  actions={actions}
+                  getCategoryLabel={getCategoryLabel}
+                  formatDate={formatDate}
+                />
+              ))}
+            </Box>
+          )}
+        </>
       )}
 
       {/* Delete confirmation dialog */}

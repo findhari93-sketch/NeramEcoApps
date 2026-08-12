@@ -1,17 +1,25 @@
 /**
  * Routes that opt out of the shared content Container and its padding.
  *
- * The timetable is a calendar: it is sized off the viewport and scrolls
+ * Both entries are the same shape of screen: sized off the viewport, scrolling
  * internally, so the 1200px cap (900px for parents, which already clipped the
- * seven-column grid) and the page padding both work against it. Every other
- * route keeps the Container untouched, which is why this is a route test rather
- * than a layout change.
+ * seven-column grid) and the page padding both work against them.
+ *
+ * The timetable is a calendar. The question-bank paper workspace is a
+ * two-pane editor where the teacher spends most of a session, and the cap was
+ * costing it roughly 200px of width while `main`'s padding was being applied on
+ * top of the page's own. Its list page and its `overview` sibling are ordinary
+ * scrolling pages and stay capped, hence the negative lookahead.
+ *
+ * Every other route keeps the Container untouched, which is why this is a route
+ * test rather than a layout change.
  *
  * Kept in one module so the three role layouts cannot drift apart, and so the
- * matching pattern sits next to LAYOUT.shellChrome, which encodes the chrome
- * heights these routes leave behind.
+ * matching pattern sits next to SHELL_CHROME (lib/shell-chrome), which encodes
+ * the chrome heights these routes leave behind.
  */
-const FULL_BLEED = /^\/(teacher|student|parent)\/timetable\/?$/;
+const FULL_BLEED =
+  /^\/(teacher|student|parent)\/timetable\/?$|^\/teacher\/question-bank\/papers\/(?!overview\/?$)[^/]+\/?$/;
 
 export function isFullBleedRoute(pathname: string | null | undefined): boolean {
   return !!pathname && FULL_BLEED.test(pathname);

@@ -65,8 +65,19 @@ export default function PageHeader({
           )}
         </Breadcrumbs>
       )}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
+      {/* Mobile-first: actions take their own row below the title. Keeping them
+          on the title's row means their natural width wins the fight for a
+          375px viewport and the title collapses to one word per line. */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: { xs: 1.5, sm: 2 },
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0, flex: '1 1 auto' }}>
           {backHref && (
             <IconButton
               component={Link}
@@ -101,7 +112,9 @@ export default function PageHeader({
             )}
           </Box>
         </Box>
-        {action && <Box sx={{ flexShrink: 0 }}>{action}</Box>}
+        {action && (
+          <Box sx={{ flexShrink: 0, width: { xs: '100%', sm: 'auto' } }}>{action}</Box>
+        )}
       </Box>
     </Box>
   );

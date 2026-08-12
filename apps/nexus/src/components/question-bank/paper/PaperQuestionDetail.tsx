@@ -100,7 +100,11 @@ export default function PaperQuestionDetail({
         minHeight: 0,
         ...(isMobile
           ? { position: 'fixed', inset: 0, zIndex: theme.zIndex.modal, borderRadius: 0 }
-          : { height: '100%', position: 'sticky', top: 16 }),
+          // `position: sticky` was compensating for a page that scrolled under
+          // a pane taller than the viewport. The shell has a resolved height
+          // now and this pane scrolls inside it, so there is nothing to stick
+          // to and plain full height is what is meant.
+          : { height: '100%' }),
       }}
     >
       {/*
