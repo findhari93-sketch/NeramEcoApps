@@ -5,7 +5,7 @@ import { Box, Snackbar } from '@neram/ui';
 import type { NexusQBQuestion, NexusQBQuestionSource, QBQuestionSection } from '@neram/database';
 import PaperQuestionList, {
   type PaperQuestionMode,
-  type ImageFilter,
+  type NeedsFilter,
   type PaperSectionFilter,
   type DeleteRefusal,
 } from './PaperQuestionList';
@@ -14,7 +14,7 @@ import type { PaperFallback } from './QuestionEditForm';
 import { useBulkImageFlow, type SlotType } from '@/hooks/useBulkImageFlow';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 
-export type { PaperQuestionMode, ImageFilter, PaperSectionFilter };
+export type { PaperQuestionMode, NeedsFilter, PaperSectionFilter };
 
 export interface PaperWorkspaceProps {
   /** Already in paper order. Position is counted from this order, not display_order. */
@@ -32,14 +32,14 @@ export interface PaperWorkspaceProps {
    */
   sources?: Record<string, NexusQBQuestionSource[]>;
   /**
-   * Edit/Images mode and the section filter are owned by the paper header
-   * (page.tsx), not here, so a click on a section chip or the "N missing an
-   * image" chip up there can drive this list directly.
+   * Edit/Images mode and both filters are owned by the paper header (page.tsx),
+   * not here, so the work-queue chips up there ("28 need a solution") can drive
+   * this list directly rather than only describing it.
    */
   mode: PaperQuestionMode;
   onModeChange: (mode: PaperQuestionMode) => void;
-  imageFilter: ImageFilter;
-  onImageFilterChange: (filter: ImageFilter) => void;
+  needsFilter: NeedsFilter;
+  onNeedsFilterChange: (filter: NeedsFilter) => void;
   sectionFilter: PaperSectionFilter | null;
   onSectionFilterChange: (filter: PaperSectionFilter | null) => void;
   getToken: () => Promise<string | null>;
@@ -71,7 +71,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  */
 export default function PaperWorkspace({
   questions, tagCounts = {}, tagsByQuestion, paper, sources,
-  mode, onModeChange, imageFilter, onImageFilterChange, sectionFilter, onSectionFilterChange,
+  mode, onModeChange, needsFilter, onNeedsFilterChange, sectionFilter, onSectionFilterChange,
   getToken, onSaved, onChangeSections, onOptimisticPatch,
 }: PaperWorkspaceProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -226,6 +226,7 @@ export default function PaperWorkspace({
         const optionImages: Record<string, string | null> = {};
         for (const { slot, image } of slots) {
           if (slot === 'question') body.question_image_url = image?.uploaded ? image.url : null;
+          else if (slot === 'solution') body.solution_image_url = image?.uploaded ? image.url : null;
           else optionImages[slot] = image?.uploaded ? image.url : null;
         }
         if (Object.keys(optionImages).length > 0) body.option_images = optionImages;
@@ -367,6 +368,50 @@ export default function PaperWorkspace({
     [getToken, onSaved],
   );
 
+  /**
+   * Hide or re-show just the ticked questions.
+   *
+   * The paper header used to carry a permanently armed "Deactivate 90", which
+   * is the whole paper and no way back short of Activate-then-recheck. Scoped
+   * to a selection the same action needs no confirmation: the teacher ticked
+   * the rows, the count is on screen, and Activate on the same bar undoes it.
+   */
+  const setActiveQuestions = useCallback(
+    async (questionIds: string[], active: boolean) => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const res = await fetch('/api/question-bank/questions/bulk-update', {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: active ? 'activate' : 'deactivate',
+            question_ids: questionIds,
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setImageToast(json.error || 'Could not change that, try again');
+          return;
+        }
+        const updated = json.data?.updated ?? 0;
+        // activate only takes questions that already have an answer key, so
+        // "3 selected" and "1 activated" is a normal and important difference.
+        setImageToast(
+          active
+            ? updated === questionIds.length
+              ? `${updated} question${updated === 1 ? '' : 's'} activated`
+              : `${updated} of ${questionIds.length} activated, the rest have no answer key yet`
+            : `${updated} question${updated === 1 ? '' : 's'} hidden from students`,
+        );
+        onSaved();
+      } catch {
+        setImageToast('Could not change that, try again');
+      }
+    },
+    [getToken, onSaved],
+  );
+
   /** "Attempt any one of these", from a run selected in the list. */
   const linkChoiceGroup = useCallback(
     async (questionIds: string[]) => {
@@ -418,13 +463,14 @@ export default function PaperWorkspace({
           onChangeSections={onChangeSections}
           mode={mode}
           onModeChange={onModeChange}
-          imageFilter={imageFilter}
-          onImageFilterChange={onImageFilterChange}
+          needsFilter={needsFilter}
+          onNeedsFilterChange={onNeedsFilterChange}
           sectionFilter={sectionFilter}
           onSectionFilterChange={onSectionFilterChange}
           onBulkSetNeedsImage={bulkSetNeedsImage}
           onLinkChoiceGroup={linkChoiceGroup}
           onDeleteQuestions={deleteQuestions}
+          onSetActiveQuestions={setActiveQuestions}
           imageStats={imageStats}
           pendingImageCount={pendingCount}
           onSaveAllImages={handleSaveAllImages}

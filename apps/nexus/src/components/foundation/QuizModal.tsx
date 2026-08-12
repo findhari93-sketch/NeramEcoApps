@@ -6,11 +6,8 @@ import {
   Typography,
   Button,
   IconButton,
-  Drawer,
-  SwipeableDrawer,
   alpha,
   useTheme,
-  useMediaQuery,
   CircularProgress,
 } from '@neram/ui';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -19,6 +16,8 @@ import ReplayIcon from '@mui/icons-material/Replay';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import QuizSurface from '@/components/video/QuizSurface';
 import QuizQuestion from './QuizQuestion';
 
 interface QuizQuestionData {
@@ -52,16 +51,24 @@ interface QuizModalProps {
   /** If true, the student can dismiss the quiz. Defaults to true. */
   dismissable?: boolean;
   /**
-   * Where the drawer's portal lands. Undefined or null keeps MUI's default,
-   * document.body, which is right everywhere except one case.
-   *
-   * That case is fullscreen. The browser paints only the fullscreen element's
-   * subtree, so a quiz portalled to document.body while the video player is
-   * fullscreen does not render at all: the student reaches a checkpoint, playback
-   * pauses, and nothing appears. NeramVideoPlayer publishes its container through
-   * `onFullscreenChange` for exactly this, and the player's caller passes it here.
+   * The player's container while it is fullscreen, null otherwise. Non-null
+   * moves the quiz onto the video instead of the edge of the viewport, which is
+   * the only place the browser will paint it while fullscreen. NeramVideoPlayer
+   * publishes it through `onFullscreenChange`; see QuizSurface for the rest.
    */
   container?: HTMLElement | null;
+  /**
+   * The three props below let the caller open this the instant playback stops
+   * at a checkpoint, rather than after the questions have arrived.
+   *
+   * That ordering matters in fullscreen. The loading spinner and the "it did not
+   * load" retry used to live on the page below the player, which is off screen
+   * while fullscreen, so a slow network showed a paused video with no
+   * explanation and a failed fetch showed one forever.
+   */
+  loadingQuestions?: boolean;
+  loadError?: string | null;
+  onRetryLoad?: () => void;
 }
 
 export default function QuizModal({
@@ -75,9 +82,11 @@ export default function QuizModal({
   onContinue,
   dismissable = true,
   container,
+  loadingQuestions = false,
+  loadError = null,
+  onRetryLoad,
 }: QuizModalProps) {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<QuizResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -126,26 +135,49 @@ export default function QuizModal({
 
   const allAnswered = Object.keys(answers).length >= questions.length;
 
-  const content = (
-    <Box sx={{ p: { xs: 2.5, sm: 3 }, height: '100%', overflow: 'auto' }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2.5 }}>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '1.1rem' }}>
-            {dismissable ? 'Redo Quiz' : 'Section Quiz'}
+  const header = (
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2.5 }}>
+      <Box sx={{ minWidth: 0 }}>
+        {/* Names the thing that stopped the video, so the panel reads as the
+            answer to "why did it pause" rather than an unprompted quiz. */}
+        {!dismissable && (
+          <Typography
+            sx={{
+              display: 'block',
+              fontSize: '0.7rem',
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'primary.main',
+              mb: 0.5,
+            }}
+          >
+            Checkpoint
           </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
-            {sectionTitle}
-          </Typography>
-        </Box>
-        {dismissable && (
-          <IconButton size="small" onClick={handleDismiss} sx={{ mt: -0.5, mr: -0.5 }}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
         )}
+        <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '1.1rem' }}>
+          {dismissable ? 'Redo Quiz' : 'Section Quiz'}
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
+          {sectionTitle}
+        </Typography>
       </Box>
+      {dismissable && (
+        <IconButton
+          size="small"
+          aria-label="Close the quiz"
+          onClick={handleDismiss}
+          sx={{ mt: -0.5, mr: -0.5, minWidth: 44, minHeight: 44 }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      )}
+    </Box>
+  );
 
-      {/* Instructional message — shown before submission on mandatory quizzes */}
+  const questionBody = (
+    <>
+      {/* Instructional message, shown before submission on mandatory quizzes */}
       {!result && !dismissable && (
         <Box
           sx={{
@@ -317,77 +349,92 @@ export default function QuizModal({
           </>
         )}
       </Box>
-    </Box>
+    </>
   );
 
   /**
-   * Shared by both drawer variants so they cannot drift.
-   *
-   * `container` goes through ModalProps rather than as a top-level prop because
-   * that is the one path Drawer and SwipeableDrawer treat identically: Drawer
-   * spreads ModalProps last, so it wins, and SwipeableDrawer merges it into the
-   * ModalProps it forwards.
-   *
-   * The scroll lock has to go with it. MUI writes inline `overflow` and
-   * `padding-right` onto whatever container it is given. On <body> that is
-   * invisible; on a 16:9 player box it is a visible jolt.
+   * Scrolling belongs to QuizSurface: the drawer Paper and the fullscreen panel
+   * each own their own height, and a second scroller in here fought both.
    */
-  const modalProps = {
-    disableEscapeKeyDown: !dismissable,
-    container: container ?? undefined,
-    disableScrollLock: !!container,
-  };
-
-  if (isMobile) {
-    return (
-      <SwipeableDrawer
-        anchor="bottom"
-        open={open}
-        onClose={dismissable ? handleDismiss : () => {}}
-        onOpen={() => {}}
-        disableSwipeToOpen={!dismissable}
-        disableDiscovery={!dismissable}
-        ModalProps={modalProps}
-        PaperProps={{
-          sx: {
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            maxHeight: '85vh',
-          },
-        }}
-      >
-        {/* Drag handle */}
-        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1.5, pb: 0.5 }}>
-          <Box
-            sx={{
-              width: 40,
-              height: 4,
-              borderRadius: 2,
-              bgcolor: alpha(theme.palette.text.primary, 0.2),
-            }}
-          />
-        </Box>
-        {content}
-      </SwipeableDrawer>
-    );
-  }
+  const content = (
+    <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
+      {header}
+      {loadError ? (
+        <LoadFailure message={loadError} onRetry={onRetryLoad} />
+      ) : loadingQuestions ? (
+        <LoadingQuestions />
+      ) : (
+        questionBody
+      )}
+    </Box>
+  );
 
   return (
-    <Drawer
-      anchor="right"
+    <QuizSurface
       open={open}
-      onClose={dismissable ? handleDismiss : () => {}}
-      ModalProps={{ disableEscapeKeyDown: !dismissable }}
-      PaperProps={{
-        sx: {
-          width: { md: 420, lg: 460 },
-          maxWidth: '100vw',
-          borderTopLeftRadius: 16,
-          borderBottomLeftRadius: 16,
-        },
-      }}
+      container={container}
+      dismissable={dismissable}
+      onDismiss={handleDismiss}
+      ariaLabel={dismissable ? `Redo quiz: ${sectionTitle}` : `Checkpoint quiz: ${sectionTitle}`}
     >
       {content}
-    </Drawer>
+    </QuizSurface>
+  );
+}
+
+function LoadingQuestions() {
+  return (
+    <Box
+      role="status"
+      sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 4, justifyContent: 'center' }}
+    >
+      <CircularProgress size={22} />
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        Getting your checkpoint questions.
+      </Typography>
+    </Box>
+  );
+}
+
+/**
+ * The retry that used to sit on the page below the player, where a fullscreen
+ * student could not see it. One failed fetch was a video that never restarted.
+ */
+function LoadFailure({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const theme = useTheme();
+  return (
+    <Box role="alert" sx={{ py: 2 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 1.25,
+          p: 2,
+          borderRadius: 2,
+          bgcolor: alpha(theme.palette.warning.main, 0.08),
+          border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
+        }}
+      >
+        <ErrorOutlineIcon sx={{ color: theme.palette.warning.main, flexShrink: 0 }} />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.25 }}>
+            These questions did not load
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {message}
+          </Typography>
+        </Box>
+      </Box>
+      {onRetry && (
+        <Button
+          variant="contained"
+          onClick={onRetry}
+          startIcon={<ReplayIcon />}
+          sx={{ mt: 2, borderRadius: 2, textTransform: 'none', fontWeight: 600, px: 3, minHeight: 44 }}
+        >
+          Try again
+        </Button>
+      )}
+    </Box>
   );
 }

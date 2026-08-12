@@ -92,4 +92,57 @@ describe('marksForQuestions', () => {
     const questions = Array.from({ length: 7 }, () => ({ categories: ['mathematics'] }));
     expect(marksForQuestions(questions, blueprint).marks).toHaveLength(7);
   });
+
+  it('reports scheme when no question states its own marking', () => {
+    const { marksSource } = marksForQuestions([{ categories: ['mathematics'] }], blueprint);
+    expect(marksSource).toBe('scheme');
+  });
+
+  it("lets a question's own marks beat the scheme", () => {
+    const { marks, negativeMarks, marksSource } = marksForQuestions(
+      [{ categories: ['mathematics'], marks_correct: 2, marks_negative: 0.5 }],
+      blueprint,
+    );
+    expect(marks).toEqual([2]);
+    expect(negativeMarks).toEqual([0.5]);
+    expect(marksSource).toBe('paper');
+  });
+
+  it('treats a stated mark with no stated penalty as unpenalised', () => {
+    // Not a fallback to the scheme's -1: stating "this is worth 2" and leaving
+    // the deduction blank is a real marking scheme, and inheriting a penalty
+    // there would deduct marks the paper never did.
+    const { marks, negativeMarks } = marksForQuestions(
+      [{ categories: ['mathematics'], marks_correct: 2 }],
+      blueprint,
+    );
+    expect(marks).toEqual([2]);
+    expect(negativeMarks).toEqual([0]);
+  });
+
+  it('reports mixed when only some questions state their marking', () => {
+    const { marks, marksSource } = marksForQuestions(
+      [{ categories: ['mathematics'], marks_correct: 2 }, { categories: ['mathematics'] }],
+      blueprint,
+    );
+    expect(marks).toEqual([2, 4]);
+    expect(marksSource).toBe('mixed');
+  });
+
+  it('ignores an unusable stated mark instead of composing a NaN test', () => {
+    const { marks, marksSource } = marksForQuestions(
+      [{ categories: ['mathematics'], marks_correct: 'four' as unknown as number }],
+      blueprint,
+    );
+    expect(marks).toEqual([4]);
+    expect(marksSource).toBe('scheme');
+  });
+
+  it('reads a numeric string, which is how PostgREST can hand back a NUMERIC', () => {
+    const { marks } = marksForQuestions(
+      [{ categories: ['mathematics'], marks_correct: '2.5' as unknown as number }],
+      blueprint,
+    );
+    expect(marks).toEqual([2.5]);
+  });
 });

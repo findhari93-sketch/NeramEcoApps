@@ -60,3 +60,30 @@ export function hasOpenObligation(row: ObligationRow | null | undefined): boolea
 export function watchModeFor(row: ObligationRow | null | undefined): VideoGateMode {
   return hasOpenObligation(row) ? 'gated' : 'revision';
 }
+
+/**
+ * May this student open the OPEN player for a class, the one with no checkpoints?
+ *
+ * Owing the class is not on its own a reason to refuse. The refusal only makes
+ * sense when there is a guided version to send them to instead, and that is what
+ * `hasPublishedRecap` decides. Two situations turn on it:
+ *
+ *   owed, recap published    refuse. The guided screen is where a watch counts,
+ *                            and letting them watch here means watching twice.
+ *   owed, no recap yet       allow. The catch-up screen's own fallback plays
+ *                            through this same route and credits the watch with
+ *                            its mark_watched action, so refusing would leave the
+ *                            student with no way through at all.
+ *
+ * Nothing owed, in either case, is an ordinary rewatch and always allowed.
+ *
+ * Staff are not modelled here. They never owe a class, and the route checks that
+ * before it gets this far.
+ */
+export function mayWatchUngated(
+  row: ObligationRow | null | undefined,
+  hasPublishedRecap: boolean,
+): boolean {
+  if (!hasOpenObligation(row)) return true;
+  return !hasPublishedRecap;
+}

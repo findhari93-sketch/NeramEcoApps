@@ -1,7 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { NexusQBQuestion, NexusQBQuestionOption } from '@neram/database';
 import type { ImageState } from '@/lib/bulk-upload-schema';
-import { questionImageSlots, questionImagesComplete, type SlotType } from '@/lib/qb-image-needs';
+import {
+  questionImageSlots,
+  questionImagesComplete,
+  questionMissingSolutionImage,
+  questionNeedsSolutionImage,
+  type SlotType,
+} from '@/lib/qb-image-needs';
 
 // SlotType now belongs with the rest of the image-need vocabulary. Re-exported
 // so the components that import it from here keep working.
@@ -27,6 +33,7 @@ function filledWithPending(question: NexusQBQuestion, pending: PendingImages) {
     const pendingImg = pending[question.id]?.[slot];
     if (pendingImg !== undefined) return pendingImg !== null; // null means explicitly removed
     if (slot === 'question') return !!question.question_image_url;
+    if (slot === 'solution') return !!question.solution_image_url;
     const options = question.options as NexusQBQuestionOption[] | null;
     return !!options?.find((o) => o.id === slot)?.image_url;
   };
@@ -63,6 +70,11 @@ export function getEffectiveImage(
   if (slot === 'question') {
     return question.question_image_url
       ? { url: question.question_image_url, uploaded: true }
+      : undefined;
+  }
+  if (slot === 'solution') {
+    return question.solution_image_url
+      ? { url: question.solution_image_url, uploaded: true }
       : undefined;
   }
   const options = question.options as NexusQBQuestionOption[] | null;
@@ -221,11 +233,26 @@ export function useBulkImageFlow(
    * The denominator used to be every question in the paper, so a 47-question
    * aptitude paper with 20 figures could never read better than 20/47 and the
    * bar looked stalled at exactly the moment the job was finished.
+   *
+   * Two tracks, never summed. Figures and solutions are different jobs done at
+   * different times, and one bar averaging "40/40 figures, 0/40 solutions" into
+   * a half-full bar would describe neither.
    */
   const stats = (() => {
-    const wanting = questions.filter((q) => questionImageSlots(q).some((s) => s.expected));
+    const wanting = questions.filter((q) =>
+      questionImageSlots(q).some((s) => s.kind === 'figure' && s.expected),
+    );
     const done = wanting.filter((q) => questionImagesComplete(q, filledWithPending(q, pending)));
-    return { total: wanting.length, withImages: done.length };
+    const solutionWanting = questions.filter(questionNeedsSolutionImage);
+    const solutionDone = solutionWanting.filter(
+      (q) => !questionMissingSolutionImage(q, filledWithPending(q, pending)),
+    );
+    return {
+      total: wanting.length,
+      withImages: done.length,
+      solutionTotal: solutionWanting.length,
+      solutionWithImages: solutionDone.length,
+    };
   })();
 
   return {

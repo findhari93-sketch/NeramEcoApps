@@ -440,6 +440,115 @@ describe('NeramVideoPlayer: fullscreen host', () => {
     unmount();
     expect(onFullscreenChange).toHaveBeenCalledWith(null);
   });
+
+  it('publishes the container in the CSS fallback too, not only native fullscreen', () => {
+    // An iPhone has no Element.requestFullscreen, so the player draws its own
+    // full-viewport sheet instead. This used to publish null there, on the
+    // argument that a body-portalled drawer at z-index 1200 already lands on top
+    // of the 1150 sheet. True, and it gave iPhones a different quiz from
+    // everyone else and made the whole thing hostage to a z-index comparison
+    // between two unrelated components.
+    const onFullscreenChange = vi.fn();
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'requestFullscreen');
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      const { container } = render(
+        <NeramVideoPlayer
+          source={{ kind: 'html5', src: 'blob:stream' }}
+          gate={gateFor({ unlocked: 120 })}
+          videoRef={ref}
+          watermark={WATERMARK}
+          allowFullscreen
+          onFullscreenChange={onFullscreenChange}
+        />,
+      );
+      onFullscreenChange.mockClear();
+      fireEvent.click(screen.getByRole('button', { name: 'Fullscreen' }));
+      expect(onFullscreenChange).toHaveBeenCalledWith(container.firstElementChild);
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', original);
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).requestFullscreen;
+    }
+  });
+});
+
+describe('NeramVideoPlayer: the pause at a checkpoint is explained', () => {
+  /**
+   * Until this existed, reaching a checkpoint in fullscreen was a frozen frame
+   * and nothing else: the quiz was portalled somewhere the browser does not
+   * paint. The portal is fixed, but the explanation should not wait on a fetch,
+   * and should not depend on the caller having wired anything at all.
+   */
+  it('says why the video stopped, once it stops at the boundary', () => {
+    const { video, ctl } = setup({ unlocked: 120 });
+    fire(video, 'loadedmetadata');
+    expect(screen.queryByText(/checkpoint reached/i)).toBeNull();
+
+    video.play();
+    fire(video, 'play');
+    ctl.seekTo(120);
+    fire(video, 'timeupdate');
+    // The player pauses the element; the browser answers with a pause event,
+    // which is what the notice waits for. The mock element does not, so fire it.
+    fire(video, 'pause');
+
+    expect(ctl.isPaused()).toBe(true);
+    expect(screen.getByText(/checkpoint reached/i)).toBeTruthy();
+  });
+
+  it('clears itself when the caller passes a gate with the checkpoint behind it', () => {
+    // Nothing to reset and nothing to forget: passing the quiz moves the
+    // boundary, and the notice is derived from where the boundary is.
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    const { rerender } = render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream' }}
+        gate={gateFor({ unlocked: 120 })}
+        videoRef={ref}
+        watermark={WATERMARK}
+      />,
+    );
+    const video = ref.current!;
+    const ctl = instrument(video, 600);
+    fire(video, 'loadedmetadata');
+    video.play();
+    fire(video, 'play');
+    ctl.seekTo(120);
+    fire(video, 'timeupdate');
+    fire(video, 'pause');
+    expect(screen.getByText(/checkpoint reached/i)).toBeTruthy();
+
+    rerender(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream' }}
+        gate={gateFor({ unlocked: 300 })}
+        videoRef={ref}
+        watermark={WATERMARK}
+      />,
+    );
+    expect(screen.queryByText(/checkpoint reached/i)).toBeNull();
+  });
+
+  it('stays quiet on an ungated video, which has no boundary to reach', () => {
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream' }}
+        gate={gateFor({ unlocked: 0, passed: true })}
+        videoRef={ref}
+      />,
+    );
+    const video = ref.current!;
+    const ctl = instrument(video, 600);
+    fire(video, 'loadedmetadata');
+    ctl.seekTo(400);
+    fire(video, 'timeupdate');
+    expect(screen.queryByText(/checkpoint reached/i)).toBeNull();
+  });
 });
 
 describe('NeramVideoPlayer: buffering', () => {

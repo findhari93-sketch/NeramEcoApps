@@ -23,13 +23,19 @@ const MATHS = [1, 2, 3].map((n) => q(n, 'math_mcq'));
 const APT = [4, 5, 6].map((n) => q(n, 'aptitude'));
 const ALL = [...MATHS, ...APT];
 
-const IMAGE_STATS = { total: 0, withImages: 0 };
+const IMAGE_STATS = { total: 0, withImages: 0, solutionTotal: 3, solutionWithImages: 0 };
 const SAVE_PROGRESS = { done: 0, total: 0 };
+
+/** Open the selection bar's overflow, where the rarer bulk actions moved. */
+function openSelectionOverflow() {
+  fireEvent.click(screen.getByLabelText('More actions for the selected questions'));
+}
 
 describe('PaperQuestionList', () => {
   let onChangeSections: ReturnType<typeof vi.fn<[string[], QBQuestionSection], Promise<void>>>;
   let onBulkSetNeedsImage: ReturnType<typeof vi.fn<[string[], boolean], Promise<void>>>;
   let onLinkChoiceGroup: ReturnType<typeof vi.fn<[string[]], Promise<void>>>;
+  let onSetActiveQuestions: ReturnType<typeof vi.fn<[string[], boolean], Promise<void>>>;
   let onDeleteQuestions: ReturnType<
     typeof vi.fn<[string[]], Promise<{ deleted: number; refused: { question_id: string; blockers: string[] }[] }>>
   >;
@@ -38,6 +44,7 @@ describe('PaperQuestionList', () => {
     onChangeSections = vi.fn<[string[], QBQuestionSection], Promise<void>>().mockResolvedValue(undefined);
     onBulkSetNeedsImage = vi.fn<[string[], boolean], Promise<void>>().mockResolvedValue(undefined);
     onLinkChoiceGroup = vi.fn<[string[]], Promise<void>>().mockResolvedValue(undefined);
+    onSetActiveQuestions = vi.fn<[string[], boolean], Promise<void>>().mockResolvedValue(undefined);
     onDeleteQuestions = vi
       .fn<[string[]], Promise<{ deleted: number; refused: { question_id: string; blockers: string[] }[] }>>()
       .mockResolvedValue({ deleted: 1, refused: [] });
@@ -53,13 +60,14 @@ describe('PaperQuestionList', () => {
     onChangeSections,
     mode: 'edit',
     onModeChange: vi.fn(),
-    imageFilter: 'missing',
-    onImageFilterChange: vi.fn(),
+    needsFilter: 'all',
+    onNeedsFilterChange: vi.fn(),
     sectionFilter: null,
     onSectionFilterChange: vi.fn(),
     onBulkSetNeedsImage,
     onLinkChoiceGroup,
     onDeleteQuestions,
+    onSetActiveQuestions,
     imageStats: IMAGE_STATS,
     pendingImageCount: 0,
     onSaveAllImages: vi.fn(),
@@ -184,18 +192,92 @@ describe('PaperQuestionList', () => {
     expect(onModeChange).toHaveBeenCalledWith('images');
   });
 
-  it('narrows to one section when a section filter is set, and shows a chip to clear it', () => {
+  it('narrows to one section when a section filter is set, and the Select says which', () => {
     renderList({ sectionFilter: 'aptitude' });
     expect(screen.queryByText('Mathematics (MCQ) (Q1 to Q3)')).toBeNull();
     expect(screen.getByText('Aptitude (Q4 to Q6)')).not.toBeNull();
-    expect(screen.getByText(/Filtering: Aptitude/)).not.toBeNull();
+    expect(screen.getByLabelText('Filter the list by section').textContent).toContain('Aptitude');
   });
 
-  it('clears the section filter from its own chip', () => {
+  it('sets the section filter from the Select', () => {
+    const onSectionFilterChange = vi.fn();
+    renderList({ onSectionFilterChange });
+    fireEvent.mouseDown(screen.getByLabelText('Filter the list by section'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Aptitude'));
+    expect(onSectionFilterChange).toHaveBeenCalledWith('aptitude');
+  });
+
+  it('clears the section filter back to All sections', () => {
     const onSectionFilterChange = vi.fn();
     renderList({ sectionFilter: 'aptitude', onSectionFilterChange });
-    fireEvent.click(screen.getByTestId('CancelIcon'));
+    fireEvent.mouseDown(screen.getByLabelText('Filter the list by section'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('All sections'));
     expect(onSectionFilterChange).toHaveBeenCalledWith(null);
+  });
+
+  /**
+   * The filters used to render only in Images mode, so a teacher correcting
+   * wording had no way to see just the questions that still needed work.
+   */
+  it('offers the needs filters in Edit mode, not only in Images mode', () => {
+    renderList({ mode: 'edit' });
+    expect(screen.getByRole('button', { name: /^Figure missing/ })).not.toBeNull();
+    expect(screen.getByRole('button', { name: /^Solution missing/ })).not.toBeNull();
+  });
+
+  it('narrows to the maths questions still owing a solution image', () => {
+    renderList({ needsFilter: 'missing-solution' });
+    // Only the three maths questions are in that queue; the aptitude group
+    // disappears entirely rather than showing as an empty heading.
+    expect(screen.getByText('Mathematics (MCQ) (Q1 to Q3)')).not.toBeNull();
+    expect(screen.queryByText('Aptitude (Q4 to Q6)')).toBeNull();
+    expect(screen.getByText('3 of 6 questions')).not.toBeNull();
+  });
+
+  it('counts the solution queue within the section in view, not the whole paper', () => {
+    renderList({ sectionFilter: 'aptitude' });
+    expect(screen.getByRole('button', { name: 'Solution missing 0' })).not.toBeNull();
+  });
+
+  it('hides the solution filter on a paper with no maths at all', () => {
+    renderList({
+      questions: APT,
+      imageStats: { total: 0, withImages: 0, solutionTotal: 0, solutionWithImages: 0 },
+    });
+    expect(screen.queryByRole('button', { name: /^Solution missing/ })).toBeNull();
+  });
+
+  /**
+   * The paper header used to carry a permanently armed, paper-wide
+   * "Deactivate 90". It is scoped to a selection now.
+   */
+  it('deactivates just the ticked questions, with no confirmation dialog', async () => {
+    renderList();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 3' }));
+    // Named by its tooltip: MUI puts the title on aria-label, so the visible
+    // "Deactivate" is not the accessible name.
+    fireEvent.click(screen.getByRole('button', { name: /Hide the selected questions from students/i }));
+
+    expect(onSetActiveQuestions).toHaveBeenCalledWith(['q1', 'q3'], false);
+    // Cleared afterwards, so the bar does not linger over a stale selection.
+    await screen.findByText('6 questions');
+  });
+
+  it('offers Activate from the selection overflow', () => {
+    renderList();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }));
+    openSelectionOverflow();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Activate/ }));
+    expect(onSetActiveQuestions).toHaveBeenCalledWith(['q2'], true);
+  });
+
+  it('keeps the needs-image verdicts reachable from the selection overflow', () => {
+    renderList();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }));
+    openSelectionOverflow();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'No figure needed' }));
+    expect(onBulkSetNeedsImage).toHaveBeenCalledWith(['q2'], false);
   });
 
   it('deletes the ticked questions and reports what was kept', async () => {

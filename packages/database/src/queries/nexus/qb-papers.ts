@@ -394,15 +394,26 @@ export async function generatePaperMockTest(
   const breakdown = await getPaperSectionBreakdown(input.paperId, supabase);
   const blueprint = buildPaperBlueprint(breakdown, paper.exam_type);
 
+  // marks_correct/marks_negative are selected because a question that states
+  // its own marking outranks the scheme. Leaving them out of the select would
+  // not fail: it would quietly mark every paper by the scheme again, which is
+  // the exact bug those columns were added to end.
   const { data: questionRows } = await supabase
     .from('nexus_qb_questions')
-    .select('id, section, categories, question_format')
+    .select('id, section, categories, question_format, marks_correct, marks_negative')
     .in('id', questionIds);
   const byId = new Map((questionRows || []).map((q: any) => [q.id, q]));
   // Aligned with questionIds, in that order: marksForQuestions reads each
   // question's own section rather than assuming sections are contiguous.
   const orderedQuestions = questionIds.map(
-    (id) => byId.get(id) ?? { section: null, categories: null, question_format: null },
+    (id) =>
+      byId.get(id) ?? {
+        section: null,
+        categories: null,
+        question_format: null,
+        marks_correct: null,
+        marks_negative: null,
+      },
   );
   const { marks, negativeMarks } = marksForQuestions(orderedQuestions, blueprint);
 
@@ -1214,6 +1225,15 @@ export interface NexusQBPaperStaffView {
   parsed_question_count: number;
   study_file: { id: string; title: string; file_name: string; folder_id: string } | null;
   test: Omit<NexusQBPaperTest, 'attempts_used' | 'official_attempt_done' | 'best_pct'> | null;
+  /**
+   * How many attempts exist against the placed test, across every student.
+   *
+   * NOT NexusQBPaperTest.attempts_used, which is one student's own count for
+   * the student view. This is the teacher's number, and it is what makes
+   * rebuilding a decision rather than an accident: generatePaperMockTest
+   * composes a new test and relinks, so a rebuild orphans every attempt here.
+   */
+  test_attempt_count: number;
   publish_blocker: string | null;
 }
 
@@ -1251,12 +1271,22 @@ export async function getPaperStaffView(
     }
   }
 
+  // Only worth a query when there is a test to have attempted.
+  const attemptCount = test
+    ? await supabase
+        .from(TEST_ATTEMPTS)
+        .select('id', { count: 'exact', head: true })
+        .eq('test_id', test.test_id)
+        .then((r) => r.count ?? 0)
+    : 0;
+
   return {
     paper,
     question_count: questionIds.length,
     parsed_question_count: parsedCount,
     study_file: studyFile,
     test,
+    test_attempt_count: attemptCount,
     publish_blocker: studyFile || questionIds.length > 0
       ? null
       : 'Link the original PDF or activate at least one question before publishing.',

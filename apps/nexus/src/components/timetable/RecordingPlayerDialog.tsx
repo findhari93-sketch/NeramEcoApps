@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Button,
@@ -30,10 +31,15 @@ import { OPEN_GATE } from '@/lib/video-gate';
  * SharePoint refuses to be iframed, so this points the shared player at a
  * short-lived pre-authenticated URL. Those URLs expire, hence the retry.
  *
- * Ungated: this is a teacher or a student reviewing a class they attended, so
- * there are no checkpoints to earn. It goes through the shared player anyway,
- * which is what removes the native Download and Picture in picture entries that
- * a plain <video controls> was handing out with the file.
+ * Ungated: this is a teacher, or a student reviewing a class they have no debt
+ * on, so there are no checkpoints to earn. That is now a fact the stream route
+ * checks rather than an assumption this component makes. A student who still
+ * owes the class is refused there and sent to the guided recap, because a watch
+ * here is recorded nowhere and would have to be repeated in full to count.
+ *
+ * It goes through the shared player anyway, which is what removes the native
+ * Download and Picture in picture entries that a plain <video controls> was
+ * handing out with the file.
  */
 
 const MAX_RETRIES = 2;
@@ -64,16 +70,27 @@ export default function RecordingPlayerDialog({
   showFallbackLink = false,
 }: RecordingPlayerDialogProps) {
   const theme = useTheme();
+  const router = useRouter();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Set when the route refused because this student still owes the class.
+   *
+   * The refusal arrives with somewhere to go, so this dialog does not need to
+   * know anything about absences to be useful: any caller that opens it, the
+   * dashboard included, gets the way forward without carrying its own copy of
+   * the rule.
+   */
+  const [catchupUrl, setCatchupUrl] = useState<string | null>(null);
   const retryCountRef = useRef(0);
 
   const fetchStreamUrl = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setCatchupUrl(null);
     try {
       const token = await getToken();
       if (!token) {
@@ -89,6 +106,7 @@ export default function RecordingPlayerDialog({
         retryCountRef.current = 0;
       } else {
         setError(data.error || 'Could not load this recording.');
+        if (typeof data.catchup_url === 'string') setCatchupUrl(data.catchup_url);
       }
     } catch {
       setError('Network error, could not load the recording.');
@@ -168,13 +186,29 @@ export default function RecordingPlayerDialog({
               <Typography variant="body2" sx={{ mb: 2 }}>
                 {error}
               </Typography>
-              <Button
-                variant="outlined"
-                onClick={fetchStreamUrl}
-                sx={{ minHeight: 48, textTransform: 'none', color: 'common.white', borderColor: 'grey.600' }}
-              >
-                Try again
-              </Button>
+              {/* Try again is the wrong offer for an obligation: asking twice
+                  gets refused twice. Where the server named a way through, that
+                  is the only button worth showing. */}
+              {catchupUrl ? (
+                <Button
+                  variant="contained"
+                  onClick={() => {
+                    onClose();
+                    router.push(catchupUrl);
+                  }}
+                  sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+                >
+                  Do catch-up
+                </Button>
+              ) : (
+                <Button
+                  variant="outlined"
+                  onClick={fetchStreamUrl}
+                  sx={{ minHeight: 48, textTransform: 'none', color: 'common.white', borderColor: 'grey.600' }}
+                >
+                  Try again
+                </Button>
+              )}
             </Box>
           )}
 

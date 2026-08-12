@@ -168,11 +168,17 @@ export default function BulkUploadPage() {
   );
 
   /**
-   * Activate, then build the test, then land on the paper.
+   * Activate, build the test, land on the paper.
    *
-   * Two existing endpoints in sequence rather than a new one. The test is
-   * built second on purpose: it composes from whatever is active at that
-   * moment, so activating first is what puts the drawing section in it.
+   * One call now. This used to be two fetches in sequence, and the ordering
+   * comment lived here because getting it wrong silently left the drawing
+   * section out of the mock. That ordering is now the import route's own
+   * business (api/question-bank/papers/import), which is also what a re-upload
+   * from the paper page goes through, so the two paths cannot drift.
+   *
+   * Sends no document, only the paper id: the questions are already in from
+   * handleImport, so there is nothing to apply and only the activate-then-build
+   * half is wanted.
    */
   const handleActivateAndBuild = async () => {
     if (!importResult) return;
@@ -183,26 +189,22 @@ export default function BulkUploadPage() {
         setFinishError('Authentication failed');
         return;
       }
-      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-      setFinishing('Activating questions...');
-      const activateRes = await fetch(
-        `/api/question-bank/papers/${importResult.paperId}/activate`,
-        { method: 'POST', headers },
-      );
-      const activateJson = await activateRes.json();
-      if (!activateRes.ok) throw new Error(activateJson.error || 'Could not activate the questions');
-
-      setFinishing('Building the test...');
-      const testRes = await fetch(`/api/question-bank/papers/${importResult.paperId}/test`, {
+      setFinishing('Activating and building the test...');
+      const res = await fetch('/api/question-bank/papers/import', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ generate: true }),
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expect_paper_id: importResult.paperId }),
       });
-      const testJson = await testRes.json();
-      // The questions are activated either way, so a failed test build is
-      // reported against a paper that is still better off than it was.
-      if (!testRes.ok) throw new Error(testJson.error || 'The questions are active, but the test was not built');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'That did not work');
+
+      // The questions are activated either way, so a test that could not be
+      // built is worth saying rather than failing the whole step over.
+      if (!json.data?.test?.test_id) {
+        setFinishError('The questions are active, but the test was not built.');
+        return;
+      }
 
       router.push(`/teacher/question-bank/papers/${importResult.paperId}`);
     } catch (err) {

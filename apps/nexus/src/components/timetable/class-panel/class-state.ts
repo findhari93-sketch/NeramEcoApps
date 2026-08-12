@@ -11,6 +11,7 @@
  */
 
 import { hasClassEnded, classStartDate } from '../date-utils';
+import { hasOpenObligation, type ObligationRow } from '@/lib/recap-obligation';
 import type { ClassCardData } from '../ClassCard';
 
 export type ClassPanelRole = 'teacher' | 'student';
@@ -138,6 +139,61 @@ export function deriveClassState(
     // has already attended.
     canEditDetails: !hasEnded && !isCancelled,
   };
+}
+
+/**
+ * Where this student stands on a class that has already run.
+ *
+ * Read from the obligation row FIRST and the attendance row second, because the
+ * attendance table cannot express a no-show: the Teams sync records who joined,
+ * so a student who missed the class has no row at all. The panel used to test
+ * `myAttended != null` alone, which meant the "You missed this class" chip was
+ * invisible to precisely the students who had missed it.
+ */
+export type AttendanceStanding = 'attended' | 'caught-up' | 'missed' | null;
+
+export function attendanceStanding(
+  myAttended?: boolean | null,
+  myAbsence?: ObligationRow | null,
+): AttendanceStanding {
+  // An excused absence is not a black mark and not a debt, so it reads the same
+  // as having been there.
+  if (myAbsence?.excused_at) return 'attended';
+  if (myAbsence?.caught_up_at) return 'caught-up';
+  if (myAbsence) return 'missed';
+  if (myAttended === true) return 'attended';
+  if (myAttended === false) return 'missed';
+  return null;
+}
+
+/**
+ * What the After tab offers for this class's recording.
+ *
+ * `catch-up` sends the student to the guided screen instead of the open player.
+ * A student who owes the class and watches it ungated gets no credit for it and
+ * has to watch the whole thing again to clear the absence, which is the entire
+ * reason this branch exists.
+ *
+ * Note the asymmetry in what counts as watchable. The catch-up screen can play a
+ * YouTube backup, so either column is enough to send someone there; the open
+ * player streams from SharePoint and its route 404s without `recording_url`, so
+ * the free-watch branch may only promise what that route can actually serve.
+ */
+export type RecordingAction = 'catch-up' | 'not-recorded' | 'watch' | 'none';
+
+export function recordingAction(
+  cls: Pick<ClassCardData, 'recording_url'> & { youtube_url?: string | null },
+  role: ClassPanelRole,
+  myAbsence?: ObligationRow | null,
+): RecordingAction {
+  // Teachers never owe a class, whatever rows exist against their name.
+  if (role === 'teacher') return cls.recording_url ? 'watch' : 'none';
+
+  if (hasOpenObligation(myAbsence)) {
+    return cls.recording_url || cls.youtube_url ? 'catch-up' : 'not-recorded';
+  }
+
+  return cls.recording_url ? 'watch' : 'none';
 }
 
 /** "Live Now", "Starts in 20 min", or nothing worth saying. */

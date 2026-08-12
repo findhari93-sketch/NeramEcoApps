@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
         holidays: {},
         planShapes: [],
         openAbsences: [],
+        absences: {},
       });
     }
 
@@ -132,6 +133,7 @@ export async function GET(request: NextRequest) {
       planResult,
       absenceResult,
       preworkResult,
+      rangeAbsenceResult,
     ] = await Promise.allSettled([
       classIds.length
         ? supabase
@@ -185,6 +187,20 @@ export async function GET(request: NextRequest) {
             .eq('timing', 'prework')
             .eq('status', 'published')
         : Promise.resolve({ data: [] as any[] }),
+      // The obligation state of every class ON SCREEN, which is a different
+      // question from the one above and cannot be answered by it: that query is
+      // capped at 20, drops late joiners and keeps only rows still open, because
+      // it feeds the "you missed N classes" banner. The panel needs the state of
+      // whichever class the student just tapped, including a backlog class, one
+      // beyond the twentieth, and one already cleared (which is what earns the
+      // recording back).
+      classIds.length
+        ? (supabase as any)
+            .from('nexus_class_absences')
+            .select('scheduled_class_id, kind, caught_up_at, excused_at')
+            .eq('student_id', user.id)
+            .in('scheduled_class_id', classIds)
+        : Promise.resolve({ data: [] as any[] }),
     ]);
 
     // Keyed by class id. A class absent from this map is one the student is
@@ -208,6 +224,24 @@ export async function GET(request: NextRequest) {
     if (attendanceResult.status === 'fulfilled') {
       for (const a of (attendanceResult.value.data || []) as any[]) {
         attendance[a.scheduled_class_id] = { attended: !!a.attended, joined_at: a.joined_at ?? null };
+      }
+    }
+
+    // Keyed by class id. A class absent from this map is one the student was in,
+    // because a row exists only for a class they were not in. Both stamps ride
+    // along so the reader can tell "still owed" from "already cleared" without a
+    // second request; lib/recap-obligation owns that distinction.
+    const absences: Record<
+      string,
+      { kind: string; caught_up_at: string | null; excused_at: string | null }
+    > = {};
+    if (rangeAbsenceResult.status === 'fulfilled') {
+      for (const a of (rangeAbsenceResult.value.data || []) as any[]) {
+        absences[a.scheduled_class_id] = {
+          kind: a.kind,
+          caught_up_at: a.caught_up_at ?? null,
+          excused_at: a.excused_at ?? null,
+        };
       }
     }
 
@@ -360,6 +394,7 @@ export async function GET(request: NextRequest) {
       holidays,
       planShapes,
       openAbsences,
+      absences,
       catchupPending,
       prework,
       prep,

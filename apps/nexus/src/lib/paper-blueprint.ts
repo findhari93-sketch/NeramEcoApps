@@ -18,4 +18,5 @@ export {
   sectionOrderFor,
   type BlueprintSection,
   type PaperBlueprintResult,
+  type MarksSource,
 } from '@neram/database';

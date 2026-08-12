@@ -7,6 +7,8 @@ import {
   questionMissingImages,
   questionImagesComplete,
   questionImagesPartial,
+  questionNeedsSolutionImage,
+  questionMissingSolutionImage,
 } from './qb-image-needs';
 
 /**
@@ -140,5 +142,93 @@ describe('questionImagesComplete / questionImagesPartial', () => {
     });
     expect(questionImagesPartial(q)).toBe(true);
     expect(questionImagesComplete(q)).toBe(false);
+  });
+});
+
+describe('the solution-image rule', () => {
+  it('demands one of a maths MCQ', () => {
+    expect(questionNeedsSolutionImage(mcq({ section: 'math_mcq' }))).toBe(true);
+  });
+
+  it('demands one of a maths numerical', () => {
+    expect(
+      questionNeedsSolutionImage(mcq({ section: 'math_numerical', question_format: 'NUMERICAL' })),
+    ).toBe(true);
+  });
+
+  it('does not demand one of an aptitude question', () => {
+    expect(questionNeedsSolutionImage(mcq({ section: 'aptitude' }))).toBe(false);
+  });
+
+  it('does not demand one of a drawing prompt, even in a maths section', () => {
+    expect(
+      questionNeedsSolutionImage(mcq({ section: 'math_mcq', question_format: 'DRAWING_PROMPT' })),
+    ).toBe(false);
+  });
+
+  it('does not nag a question with no section yet: the unsectioned warning owns that', () => {
+    expect(questionNeedsSolutionImage(mcq({ section: null }))).toBe(false);
+  });
+
+  it('is missing while the maths question has no solution image', () => {
+    expect(questionMissingSolutionImage(mcq({ section: 'math_mcq' }))).toBe(true);
+  });
+
+  it('is satisfied once the image is there', () => {
+    const q = mcq({ section: 'math_mcq', solution_image_url: 'https://x/sol.png' });
+    expect(questionMissingSolutionImage(q)).toBe(false);
+  });
+
+  it('a written explanation does not excuse it', () => {
+    const q = mcq({
+      section: 'math_mcq',
+      explanation_detailed: 'Substitute x = 2 and expand, then compare coefficients.',
+    });
+    expect(questionMissingSolutionImage(q)).toBe(true);
+  });
+
+  it("a teacher's 'no figure needed' does not clear the solution debt", () => {
+    // needs_image is the verdict on the *figure*, and "this maths question
+    // needs no diagram" is a common and correct thing to say about a question
+    // that still owes its working.
+    const q = mcq({ section: 'math_mcq', needs_image: false });
+    expect(questionMissingSolutionImage(q)).toBe(true);
+    expect(questionMissingImages(q)).toBe(false);
+  });
+
+  it('reads unsaved work through the isFilled override, like every other slot', () => {
+    const q = mcq({ section: 'math_mcq' });
+    expect(questionMissingSolutionImage(q, (slot) => slot === 'solution')).toBe(false);
+  });
+});
+
+describe('the two backlogs stay separate', () => {
+  it('appends a solution slot for maths and none for aptitude', () => {
+    const maths = questionImageSlots(mcq({ section: 'math_mcq' }));
+    expect(maths.filter((s) => s.kind === 'solution')).toHaveLength(1);
+    expect(questionImageSlots(mcq({ section: 'aptitude' })).some((s) => s.kind === 'solution')).toBe(
+      false,
+    );
+  });
+
+  it('keeps a stray solution image reachable even where none is demanded', () => {
+    // Somebody attached working to an aptitude question. The slot has to exist
+    // so the image is visible and removable, but it is not expected.
+    const slot = questionImageSlots(
+      mcq({ section: 'aptitude', solution_image_url: 'https://x/sol.png' }),
+    ).find((s) => s.kind === 'solution');
+    expect(slot).toBeDefined();
+    expect(slot!.expected).toBe(false);
+    expect(slot!.filled).toBe(true);
+  });
+
+  it('a missing solution does not make the figure backlog claim the question', () => {
+    // The whole point of `kind`: forty maths questions owing solutions must not
+    // turn the "N missing an image" count into forty overnight.
+    const q = mcq({ section: 'math_mcq', question_text: 'Plain text question.' });
+    expect(questionMissingSolutionImage(q)).toBe(true);
+    expect(questionMissingImages(q)).toBe(false);
+    expect(questionImagesComplete(q)).toBe(false);
+    expect(questionImagesPartial(q)).toBe(false);
   });
 });

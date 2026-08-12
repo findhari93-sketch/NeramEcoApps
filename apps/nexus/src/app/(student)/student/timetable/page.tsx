@@ -105,6 +105,16 @@ export default function StudentTimetable() {
   >([]);
   /** Backlog items for a student who joined mid-course. Count only, on purpose. */
   const [catchupPending, setCatchupPending] = useState(0);
+  /**
+   * Obligation state for the classes on screen, keyed by class id.
+   *
+   * Separate from openAbsences above, which is a banner list and therefore
+   * capped, late-joiner-free and open-only. The panel needs the state of the one
+   * class the student tapped, whichever of those it happens to be.
+   */
+  const [absences, setAbsences] = useState<
+    Record<string, { kind: string; caught_up_at: string | null; excused_at: string | null }>
+  >({});
   /** Work due BEFORE a class, with this student's submission and reason state. */
   const [prework, setPrework] = useState<PreworkItem[]>([]);
   const [prep, setPrep] = useState<Record<string, ClassPrepSummaryClient>>({});
@@ -283,6 +293,7 @@ export default function StudentTimetable() {
         setHolidays(data.holidays || {});
         setPlanShapes(data.planShapes || []);
         setOpenAbsences(data.openAbsences || []);
+        setAbsences(data.absences || {});
         setCatchupPending(data.catchupPending || 0);
         setPrework(data.prework || []);
         // Keyed by class id, and absent for every class the gate never applied
@@ -475,9 +486,12 @@ export default function StudentTimetable() {
     setRsvpReasonTarget(null);
   };
 
-  // Catch-up gets its own guided screen in a later phase. Until then, opening
-  // the class detail is the honest thing to do: it already holds the recording.
-  const handleCatchUp = (cls: ClassCardData) => setSelectedClass(cls);
+  // Straight to the guided screen. This used to open the class drawer, which
+  // held the ungated recording: a student could watch the whole class there,
+  // have none of it recorded anywhere, and then be asked to watch it again to
+  // clear the absence. The guided screen is the only place a watch counts.
+  const handleCatchUp = (cls: ClassCardData) =>
+    router.push(`/student/timetable/${cls.id}/catch-up`);
 
   const handleOpenRate = async (cls: ClassCardData) => {
     setReviewClass(cls);
@@ -991,6 +1005,8 @@ export default function StudentTimetable() {
         }
         myRsvp={selectedClass ? myRsvps[selectedClass.id] : null}
         myAttended={selectedClass ? (myAttendance[selectedClass.id] ?? null) : null}
+        myAbsence={selectedClass ? (absences[selectedClass.id] ?? null) : null}
+        onCatchUp={handleCatchUp}
         assignments={selectedClass ? assignmentsForPanel(selectedClass.id) : undefined}
         onOpenAssignment={(id) => router.push(`/student/assignments/${id}`)}
         onPreworkReason={(a) => {

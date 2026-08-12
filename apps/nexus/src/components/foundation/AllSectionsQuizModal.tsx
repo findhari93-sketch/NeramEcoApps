@@ -5,16 +5,14 @@ import {
   Box,
   Typography,
   Button,
-  Drawer,
-  SwipeableDrawer,
   Divider,
   alpha,
   useTheme,
-  useMediaQuery,
   CircularProgress,
 } from '@neram/ui';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
+import QuizSurface from '@/components/video/QuizSurface';
 import QuizQuestion from './QuizQuestion';
 import type { NexusFoundationSectionWithQuiz } from '@neram/database/types';
 
@@ -34,6 +32,12 @@ interface AllSectionsQuizModalProps {
   onClose: () => void;
   onSubmitSection: (sectionId: string, answers: Record<string, string>) => Promise<any>;
   onComplete: () => void;
+  /**
+   * The player's container while it is fullscreen, null otherwise. Without it
+   * this drawer portals to document.body, which a fullscreen browser does not
+   * paint, so the student taps "All quizzes" and nothing happens.
+   */
+  container?: HTMLElement | null;
 }
 
 export default function AllSectionsQuizModal({
@@ -43,9 +47,9 @@ export default function AllSectionsQuizModal({
   onClose,
   onSubmitSection,
   onComplete,
+  container,
 }: AllSectionsQuizModalProps) {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<SectionResult[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -103,8 +107,9 @@ export default function AllSectionsQuizModal({
   const allAnswered = Object.keys(answers).length >= totalQuestions;
   const allPassed = results?.every(r => r.passed);
 
+  // Scrolling belongs to QuizSurface, which owns the panel height.
   const content = (
-    <Box sx={{ p: { xs: 2.5, sm: 3 }, height: '100%', overflow: 'auto' }}>
+    <Box sx={{ p: { xs: 2.5, sm: 3 } }}>
       {/* Header */}
       <Box sx={{ mb: 2.5 }}>
         <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>
@@ -246,45 +251,14 @@ export default function AllSectionsQuizModal({
     </Box>
   );
 
-  if (isMobile) {
-    return (
-      <SwipeableDrawer
-        anchor="bottom"
-        open={open}
-        onClose={onClose}
-        onOpen={() => {}}
-        disableSwipeToOpen
-        PaperProps={{
-          sx: {
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            maxHeight: '90vh',
-          },
-        }}
-      >
-        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1.5, pb: 0.5 }}>
-          <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: alpha(theme.palette.text.primary, 0.2) }} />
-        </Box>
-        {content}
-      </SwipeableDrawer>
-    );
-  }
-
   return (
-    <Drawer
-      anchor="right"
+    <QuizSurface
       open={open}
-      onClose={onClose}
-      PaperProps={{
-        sx: {
-          width: { md: 480, lg: 520 },
-          maxWidth: '100vw',
-          borderTopLeftRadius: 16,
-          borderBottomLeftRadius: 16,
-        },
-      }}
+      container={container}
+      onDismiss={onClose}
+      ariaLabel={`All section quizzes for chapter ${chapterNumber}`}
     >
       {content}
-    </Drawer>
+    </QuizSurface>
   );
 }

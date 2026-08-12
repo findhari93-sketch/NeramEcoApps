@@ -6,6 +6,7 @@ import { resolveClassStaffAccess } from '@/lib/class-staff-access';
 import { isGraphApiUrl } from '@/lib/class-links';
 import { isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
 import { grantVideoAccess, isProtectedVideoEnabled } from '@/lib/video-grant';
+import { mayWatchUngated } from '@/lib/recap-obligation';
 
 /**
  * GET /api/timetable/[classId]/recording-stream
@@ -77,6 +78,55 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     }
 
     const staff = isInternalStaff(resolveStaffRole(access.user)) || access.canEdit;
+
+    // A student who owes this class gets the guided recap, not the open player.
+    //
+    // This sits ABOVE the branch below on purpose. That branch decides whether
+    // the URL is proxied, which is a question about leaking a file; this is a
+    // question about whether the class has been done. Folding the second into
+    // the first would mean turning the protection flag off also handed every
+    // absentee an uncredited watch.
+    //
+    // It is checked here rather than only in the panel because the panel is not
+    // the only door: the student dashboard opens this same route, and a rule
+    // that lives in one button is a rule any other button can miss.
+    if (!staff) {
+      const [{ data: absence }, { data: recap }] = await Promise.all([
+        supabase
+          .from('nexus_class_absences')
+          .select('caught_up_at, excused_at')
+          .eq('scheduled_class_id', params.classId)
+          .eq('student_id', access.userId)
+          .maybeSingle(),
+        // `status`, matching loadClassFacts. `readiness` is the authoring
+        // pipeline's own progress and says nothing about whether a student may
+        // open it.
+        //
+        // limit(1) because nothing stops a class carrying two published recaps,
+        // and a bare maybeSingle ERRORS on the second row rather than returning
+        // it. That error would read here as "no recap exists", which is the one
+        // wrong answer that fails open and hands the absentee a free watch.
+        supabase
+          .from('nexus_class_recaps')
+          .select('id')
+          .eq('scheduled_class_id', params.classId)
+          .eq('status', 'published')
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      if (!mayWatchUngated(absence, !!recap)) {
+        return NextResponse.json(
+          {
+            error:
+              'You missed this class, so its recording opens through catch-up, where the checkpoints record that you finished it.',
+            catchup_url: `/student/timetable/${params.classId}/catch-up`,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     if (staff || !(await isProtectedVideoEnabled())) {
       const streamUrl = await getSharePointStreamUrl(recordingUrl);
       return NextResponse.json(

@@ -4,6 +4,8 @@ import {
   getTimeIndicator,
   visibleTabs,
   defaultTab,
+  attendanceStanding,
+  recordingAction,
   type ClassPanelRole,
 } from './class-state';
 import type { ClassCardData } from '../ClassCard';
@@ -273,5 +275,90 @@ describe('defaultTab', () => {
   it('falls back to Class when the preferred tab is not on offer', () => {
     // Cancelled: no Prep to dock onto.
     expect(pick(makeClass({ status: 'cancelled' }), 'teacher', 'docked', BEFORE_20MIN)).toBe('class');
+  });
+});
+
+const OPEN = { caught_up_at: null, excused_at: null };
+const DONE = { caught_up_at: '2026-08-02T10:00:00Z', excused_at: null };
+const EXCUSED = { caught_up_at: null, excused_at: '2026-08-02T10:00:00Z' };
+
+describe('attendanceStanding', () => {
+  // The bug this function exists to kill. A genuine no-show has NO attendance
+  // row, because the Teams sync only records who joined, so myAttended is
+  // undefined for exactly the students who missed. Reading it alone meant the
+  // "You missed this class" chip was invisible to all of them.
+  it('reads a miss off the absence row when no attendance row exists', () => {
+    expect(attendanceStanding(undefined, OPEN)).toBe('missed');
+    expect(attendanceStanding(null, OPEN)).toBe('missed');
+  });
+
+  it('says caught up once the obligation is closed', () => {
+    expect(attendanceStanding(undefined, DONE)).toBe('caught-up');
+  });
+
+  // Being let off is not a debt and not a black mark.
+  it('treats an excused absence as attended', () => {
+    expect(attendanceStanding(undefined, EXCUSED)).toBe('attended');
+  });
+
+  it('says attended when a row says they joined', () => {
+    expect(attendanceStanding(true, null)).toBe('attended');
+  });
+
+  it('still trusts an explicit attended:false with no absence row', () => {
+    expect(attendanceStanding(false, null)).toBe('missed');
+  });
+
+  it('says nothing when nothing is known', () => {
+    expect(attendanceStanding(null, null)).toBe(null);
+    expect(attendanceStanding(undefined, undefined)).toBe(null);
+  });
+});
+
+describe('recordingAction', () => {
+  const recorded = { recording_url: 'https://sharepoint/rec.mp4' };
+  const youtubeOnly = { recording_url: null, youtube_url: 'https://youtu.be/x' };
+  const nothing = { recording_url: null, youtube_url: null };
+
+  it('sends a student who owes the class to catch-up', () => {
+    expect(recordingAction(recorded, 'student', OPEN)).toBe('catch-up');
+  });
+
+  // The catch-up screen can play the YouTube backup, so a class with only that
+  // is still work the student can do.
+  it('sends them to catch-up for a YouTube-only class too', () => {
+    expect(recordingAction(youtubeOnly, 'student', OPEN)).toBe('catch-up');
+  });
+
+  // A button onto a screen that can only say "there is nothing here to finish"
+  // is worse than a sentence saying so directly.
+  it('offers no button when the class was never recorded', () => {
+    expect(recordingAction(nothing, 'student', OPEN)).toBe('not-recorded');
+  });
+
+  it('gives the free watch back once the student has caught up', () => {
+    expect(recordingAction(recorded, 'student', DONE)).toBe('watch');
+  });
+
+  it('gives the free watch to an excused student', () => {
+    expect(recordingAction(recorded, 'student', EXCUSED)).toBe('watch');
+  });
+
+  it('leaves a student who attended exactly as they were', () => {
+    expect(recordingAction(recorded, 'student', null)).toBe('watch');
+    expect(recordingAction(nothing, 'student', null)).toBe('none');
+  });
+
+  // Teachers never owe a class, whatever rows exist against their name.
+  it('never asks a teacher to catch up', () => {
+    expect(recordingAction(recorded, 'teacher', OPEN)).toBe('watch');
+  });
+
+  // The open player streams from SharePoint and its route 404s without
+  // recording_url, so the free-watch branch must not promise a YouTube-only
+  // class it cannot actually serve.
+  it('does not offer the open player for a YouTube-only class', () => {
+    expect(recordingAction(youtubeOnly, 'student', null)).toBe('none');
+    expect(recordingAction(youtubeOnly, 'teacher', null)).toBe('none');
   });
 });

@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBStaff } from '@/lib/qb-auth';
-import {
-  getSupabaseAdminClient,
-  bulkActivateQuestions,
-} from '@neram/database';
-import { createDrawingQuestionFromQB } from '@neram/database/queries/nexus';
+import { activatePaperQuestions } from '@/lib/activate-paper';
 
 import { describeError } from '@/lib/api-errors';
 
@@ -18,33 +14,12 @@ export async function POST(
 
     const access = await verifyQBStaff(authHeader);
     if (!access.ok) return access.response;
-    const supabase = getSupabaseAdminClient();
 
-    const result = await bulkActivateQuestions(params.id);
-
-    // Auto-create drawing_questions rows for DRAWING_PROMPT questions
-    const { data: drawingQuestions } = await supabase
-      .from('nexus_qb_questions')
-      .select('id')
-      .eq('original_paper_id', params.id)
-      .eq('question_format', 'DRAWING_PROMPT')
-      .eq('is_active', true);
-
-    let drawingBridgeCount = 0;
-    if (drawingQuestions && drawingQuestions.length > 0) {
-      for (const dq of drawingQuestions) {
-        try {
-          await createDrawingQuestionFromQB(dq.id);
-          drawingBridgeCount++;
-        } catch {
-          // Non-fatal: log but don't fail the activation
-          console.warn(`[Activate API] Failed to bridge drawing question ${dq.id}`);
-        }
-      }
-    }
+    const result = await activatePaperQuestions(params.id);
+    const drawingBridgeCount = result.drawing_questions_bridged;
 
     return NextResponse.json({
-      data: { ...result, drawing_questions_bridged: drawingBridgeCount },
+      data: result,
       message: `${result.activated} questions activated${drawingBridgeCount > 0 ? `, ${drawingBridgeCount} drawing questions linked to practice module` : ''}`,
     }, { status: 200 });
   } catch (err) {

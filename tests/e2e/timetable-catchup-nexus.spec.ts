@@ -15,6 +15,10 @@
  *  - A student cannot mark themselves caught up before doing the work; the gate
  *    is enforced server-side, not only by a disabled button.
  *  - An open absence follows the student on their timetable until it is closed.
+ *  - The class panel is told which classes are owed, so it can offer the guided
+ *    catch-up instead of the open player, and hand the open player back once the
+ *    class is cleared. A student who watches ungated earns nothing for it and
+ *    would have to watch the whole class again to clear the absence.
  *
  * Creates one past-dated class in the E2E classroom and deletes it in afterAll,
  * which cascades the absence rows away.
@@ -153,6 +157,45 @@ test.describe('Catch-up loop', () => {
     expect((openAbsences || []).some((a: any) => a.class_id === classId)).toBe(true);
   });
 
+  test('AC4b: the class panel is told this class is owed, not just the banner', async ({ request }) => {
+    test.skip(!classId, 'No class');
+
+    // A different map from openAbsences above, and the panel needs this one:
+    // openAbsences is capped at 20, drops late joiners and keeps only open rows,
+    // because it feeds the "you missed N classes" banner. The drawer has to know
+    // the state of whichever class was tapped, which is how it decides between
+    // offering the guided catch-up and the open player.
+    const res = await request.get(
+      `${NEXUS}/api/timetable/my-schedule?start=${istToday()}&end=${istToday()}`,
+      { headers: { Authorization: `Bearer ${studentToken}` } },
+    );
+    const { absences } = await res.json();
+    expect(absences?.[classId!], 'the panel must see an obligation row').toBeTruthy();
+    expect(absences[classId!].caught_up_at).toBeNull();
+    expect(absences[classId!].excused_at).toBeNull();
+  });
+
+  test('AC4c: with no recap built, the open player stays open to the absentee', async ({ request }) => {
+    test.skip(!classId, 'No class');
+
+    // The regression this guards is severe and silent. A student who owes a class
+    // is normally sent to the guided recap, but this class has none, and the
+    // catch-up screen's own fallback player streams through THIS route. Refusing
+    // here on the strength of the absence alone would leave such a student with
+    // no way to watch the class at all and no way to clear it.
+    //
+    // The refusal itself (owed AND a recap published) is proved in the unit tests
+    // for mayWatchUngated. It is not reachable from here: publishing a recap is
+    // not something any API in this suite's reach can do.
+    const res = await request.get(`${NEXUS}/api/timetable/${classId}/recording-stream`, {
+      headers: { Authorization: `Bearer ${studentToken}` },
+    });
+    // The seeded recording_url is deliberately unresolvable, so this cannot
+    // assert 200. What matters is that it was not turned away as an obligation.
+    expect(res.status()).not.toBe(409);
+    expect((await res.json().catch(() => ({}))).catchup_url).toBeUndefined();
+  });
+
   test('AC5: marking caught up is refused before the recording is watched', async ({ request }) => {
     test.skip(!classId, 'No class');
 
@@ -241,8 +284,14 @@ test.describe('Catch-up loop', () => {
       `${NEXUS}/api/timetable/my-schedule?start=${istToday()}&end=${istToday()}`,
       { headers: { Authorization: `Bearer ${studentToken}` } },
     );
-    const { openAbsences } = await schedule.json();
+    const { openAbsences, absences } = await schedule.json();
     expect((openAbsences || []).some((a: any) => a.class_id === classId)).toBe(false);
+
+    // The row survives with its stamp set, and that stamp is what earns the
+    // ungated recording back: the panel reads it to put "Watch Recording" where
+    // "Do catch-up" used to be. A cleared class must not vanish from this map,
+    // or the panel could not tell "finished it" from "was never absent".
+    expect(absences?.[classId!]?.caught_up_at).toBeTruthy();
   });
 
   test.afterAll(async ({ request }) => {

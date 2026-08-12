@@ -25,7 +25,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Typography, Stack, Skeleton, Chip, Button, EmptyState, Alert, alpha } from '@neram/ui';
+import { Box, Typography, Stack, Skeleton, Chip, Button, EmptyState, alpha } from '@neram/ui';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
@@ -227,6 +227,15 @@ export default function RecapWatch({
       // while the student sits at it, so the guard stops a second fetch
       // stacking on the first.
       if (loadingQuiz) return;
+      // Same reason, one step later: once this checkpoint's panel is up there is
+      // nothing left to fetch. A standing error is the exception, because that
+      // is what "Try again" comes back through.
+      if (activeIdx === index && !quizError) return;
+      // Opened before the fetch, not after. The drawer carries the spinner and
+      // the failure, and in fullscreen it is the only thing the student can see:
+      // the page underneath, where those used to live, is not painted.
+      setActiveIdx(index);
+      setQuizQuestions([]);
       setLoadingQuiz(true);
       setQuizError(null);
       try {
@@ -234,7 +243,6 @@ export default function RecapWatch({
           `/api/student/class-recaps/${recapId}/sections/${section.id}/quiz`,
         );
         setQuizQuestions(res.questions as StrippedQuestion[]);
-        setActiveIdx(index);
       } catch (err) {
         // Deliberately NOT errorMsg. That replaces the whole component with an
         // empty state, which unmounts the player and loses the position, so one
@@ -244,7 +252,7 @@ export default function RecapWatch({
         setLoadingQuiz(false);
       }
     },
-    [authFetch, recap, recapId, passedIds, flushNow, loadingQuiz, watchMode],
+    [authFetch, recap, recapId, passedIds, flushNow, loadingQuiz, watchMode, activeIdx, quizError],
   );
 
   const submitQuiz = useCallback(
@@ -285,6 +293,7 @@ export default function RecapWatch({
   const handleContinue = useCallback(() => {
     setActiveIdx(null);
     setQuizQuestions([]);
+    setQuizError(null);
     setTimeout(() => (window as any).__recapPlayer?.play(), 150);
   }, []);
 
@@ -296,6 +305,7 @@ export default function RecapWatch({
     const section = recap?.sections[activeIdx ?? -1];
     setActiveIdx(null);
     setQuizQuestions([]);
+    setQuizError(null);
     if (!section) return;
     const p = (window as any).__recapPlayer;
     if (p) {
@@ -343,27 +353,9 @@ export default function RecapWatch({
         </Button>
       )}
 
-      {quizError && (
-        <Alert
-          severity="warning"
-          sx={{ mb: 2, borderRadius: 2 }}
-          action={
-            <Button
-              size="small"
-              disabled={loadingQuiz}
-              onClick={() => {
-                const idx = recap.sections.findIndex((s) => !passedIds.has(s.id));
-                if (idx >= 0) openQuiz(idx);
-              }}
-              sx={{ textTransform: 'none', minHeight: 40, whiteSpace: 'nowrap' }}
-            >
-              {loadingQuiz ? 'Loading...' : 'Try again'}
-            </Button>
-          }
-        >
-          {quizError}
-        </Alert>
-      )}
+      {/* The load failure and its retry used to be an Alert here. They moved
+          into the quiz drawer itself, because this spot is on the page below
+          the player and a fullscreen student cannot see any of it. */}
 
       <Box
         sx={{
@@ -517,6 +509,9 @@ export default function RecapWatch({
           onRetry={handleRewatch}
           onContinue={handleContinue}
           container={quizHost}
+          loadingQuestions={loadingQuiz}
+          loadError={quizError}
+          onRetryLoad={() => openQuiz(activeIdx!)}
         />
       )}
     </Box>

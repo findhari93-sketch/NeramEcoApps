@@ -12,7 +12,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   LinearProgress,
+  ListItemIcon,
+  ListItemText,
+  Menu,
   MenuItem,
   Paper,
   Select,
@@ -27,16 +31,42 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import LinkIcon from '@mui/icons-material/Link';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import type { NexusQBQuestion, QBQuestionSection } from '@neram/database';
 import { QB_SECTION_ORDER, qbSectionLabel, QB_SECTIONS } from '@neram/database';
-import { questionReferencesFigure, questionMissingImages } from '@/lib/qb-image-needs';
+import {
+  questionReferencesFigure,
+  questionMissingImages,
+  questionMissingSolutionImage,
+} from '@/lib/qb-image-needs';
 import PaperQuestionRow from './PaperQuestionRow';
 
 export type PaperQuestionMode = 'edit' | 'images';
-export type ImageFilter = 'all' | 'figures' | 'missing';
+
+/**
+ * What outstanding work the list is narrowed to.
+ *
+ * Was `ImageFilter`, and only applied in Images mode. It covers two backlogs
+ * now (figures and worked solutions) and applies in both modes: "show me what
+ * still needs doing" is not a thing a teacher only wants while pasting.
+ */
+export type NeedsFilter = 'all' | 'figures' | 'missing-figure' | 'missing-solution';
 
 /** A section the list can be narrowed to, or '__none__' for unsectioned rows. */
 export type PaperSectionFilter = QBQuestionSection | '__none__';
+
+/**
+ * The Select's "no filter" value. A sentinel rather than '', because MUI treats
+ * an empty string as "nothing chosen" and drops the rendered value.
+ */
+const ALL_SECTIONS = '__all__';
+
+function sectionOptionLabel(section: PaperSectionFilter): string {
+  return section === '__none__' ? 'Unsectioned' : qbSectionLabel(section);
+}
 
 export interface DeleteRefusal {
   question_id: string;
@@ -51,14 +81,22 @@ export interface PaperQuestionListProps {
   onChangeSections: (questionIds: string[], section: QBQuestionSection) => Promise<void>;
   mode: PaperQuestionMode;
   onModeChange: (mode: PaperQuestionMode) => void;
-  imageFilter: ImageFilter;
-  onImageFilterChange: (filter: ImageFilter) => void;
-  /** Set from the paper header's section chips; cleared here or there. */
+  needsFilter: NeedsFilter;
+  onNeedsFilterChange: (filter: NeedsFilter) => void;
+  /** Also settable from the paper header's section chips; cleared from either end. */
   sectionFilter: PaperSectionFilter | null;
   onSectionFilterChange: (filter: PaperSectionFilter | null) => void;
   onBulkSetNeedsImage: (questionIds: string[], value: boolean) => Promise<void>;
-  /** Progress across questions that want a picture, counting unsaved work. */
-  imageStats: { total: number; withImages: number };
+  /**
+   * Progress on both picture backlogs, counting unsaved work. Two tracks, never
+   * summed: figures and worked solutions are different jobs.
+   */
+  imageStats: {
+    total: number;
+    withImages: number;
+    solutionTotal: number;
+    solutionWithImages: number;
+  };
   pendingImageCount: number;
   onSaveAllImages: () => void;
   savingImages: boolean;
@@ -67,6 +105,8 @@ export interface PaperQuestionListProps {
   onLinkChoiceGroup: (questionIds: string[]) => Promise<void>;
   /** Permanent delete, guarded server-side. Refused rows are reported back, not silently skipped. */
   onDeleteQuestions: (questionIds: string[]) => Promise<{ deleted: number; refused: DeleteRefusal[] }>;
+  /** Hide or re-show just the ticked questions. Replaces the header's paper-wide Deactivate. */
+  onSetActiveQuestions: (questionIds: string[], active: boolean) => Promise<void>;
 }
 
 /** Is the user typing? Then Ctrl+A should select their text, not every row. */
@@ -93,8 +133,8 @@ export default function PaperQuestionList({
   onChangeSections,
   mode,
   onModeChange,
-  imageFilter,
-  onImageFilterChange,
+  needsFilter,
+  onNeedsFilterChange,
   sectionFilter,
   onSectionFilterChange,
   onBulkSetNeedsImage,
@@ -105,6 +145,7 @@ export default function PaperQuestionList({
   saveImageProgress,
   onLinkChoiceGroup,
   onDeleteQuestions,
+  onSetActiveQuestions,
 }: PaperQuestionListProps) {
   const theme = useTheme();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -112,9 +153,13 @@ export default function PaperQuestionList({
   const [applyingSection, setApplyingSection] = useState(false);
   const [applyingNeedsImage, setApplyingNeedsImage] = useState<'needed' | 'not-needed' | null>(null);
   const [linking, setLinking] = useState(false);
+  const [settingActive, setSettingActive] = useState<'activate' | 'deactivate' | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteRefused, setDeleteRefused] = useState<DeleteRefusal[]>([]);
+  // The selection bar's overflow. Six inline controls is already two rows at
+  // 375px; the eight it used to carry were three.
+  const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null);
 
   // Explorer-style range selection. Only shift is special: it re-derives the
   // selection as base ∪ [anchor..clicked], so dragging it up and down grows
@@ -209,6 +254,22 @@ export default function PaperQuestionList({
     }
   };
 
+  /**
+   * No confirmation dialog, unlike the paper-wide version this replaces. The
+   * teacher ticked these rows, the count is on the bar in front of them, and
+   * the opposite action sits two buttons away.
+   */
+  const applySetActive = async (active: boolean) => {
+    if (selected.size === 0) return;
+    setSettingActive(active ? 'activate' : 'deactivate');
+    try {
+      await onSetActiveQuestions(Array.from(selected), active);
+      clearSelection();
+    } finally {
+      setSettingActive(null);
+    }
+  };
+
   const openDeleteDialog = () => {
     if (selected.size === 0) return;
     setDeleteRefused([]);
@@ -244,10 +305,9 @@ export default function PaperQuestionList({
     return map;
   }, [questions]);
 
-  // The section chips in the paper header filter this same list, so the
-  // section narrowing has to happen before the image filter, and both the
-  // image filter chips and the counts below should reflect whatever section
-  // is currently in view rather than the whole paper.
+  // Section narrowing happens first, so the "needs" chip counts below describe
+  // whatever section is in view rather than the whole paper: "12 missing a
+  // figure" while filtered to Aptitude has to mean twelve aptitude questions.
   const bySection = useMemo(() => {
     if (!sectionFilter) return questions;
     return questions.filter((q) => (q.section ?? '__none__') === sectionFilter);
@@ -258,12 +318,38 @@ export default function PaperQuestionList({
     () => bySection.filter((q) => questionMissingImages(q)).length,
     [bySection],
   );
+  const missingSolutionCount = useMemo(
+    () => bySection.filter((q) => questionMissingSolutionImage(q)).length,
+    [bySection],
+  );
 
+  /**
+   * Every section actually present on this paper, for the Section select.
+   *
+   * In QB_SECTIONS order, not first-seen order, so the menu reads in the order
+   * the paper is sat. Unsectioned goes last: it is a state to clear, not a
+   * section.
+   */
+  const sectionOptions = useMemo<PaperSectionFilter[]>(() => {
+    const seen = new Set<PaperSectionFilter>();
+    for (const q of questions) seen.add(q.section ?? '__none__');
+    const options: PaperSectionFilter[] = QB_SECTIONS.filter((s) => seen.has(s));
+    if (seen.has('__none__')) options.push('__none__');
+    return options;
+  }, [questions]);
+
+  // Applies in both modes. It used to be Images-only, so a teacher fixing
+  // wording had no way to see just the questions that still needed work.
   const visibleQuestions = useMemo(() => {
-    if (mode !== 'images' || imageFilter === 'all') return bySection;
-    const predicate = imageFilter === 'missing' ? (q: NexusQBQuestion) => questionMissingImages(q) : questionReferencesFigure;
+    if (needsFilter === 'all') return bySection;
+    const predicate: (q: NexusQBQuestion) => boolean =
+      needsFilter === 'missing-figure'
+        ? (q) => questionMissingImages(q)
+        : needsFilter === 'missing-solution'
+          ? (q) => questionMissingSolutionImage(q)
+          : questionReferencesFigure;
     return bySection.filter(predicate);
-  }, [bySection, mode, imageFilter]);
+  }, [bySection, needsFilter]);
 
   const sections = useMemo(() => {
     const groups = new Map<string, { order: number; questions: NexusQBQuestion[] }>();
@@ -289,106 +375,187 @@ export default function PaperQuestionList({
 
   const allSelected = selected.size > 0 && selected.size === questions.length;
   const someSelected = selected.size > 0 && !allSelected;
-  const progress = imageStats.total > 0 ? (imageStats.withImages / imageStats.total) * 100 : 0;
+
+  /**
+   * The work queues, in the order a paper is actually worked through: see
+   * everything, then the figures, then the solutions.
+   *
+   * "Solution missing" is hidden on a paper with no maths at all (a NATA
+   * aptitude paper), rather than sitting there permanently reading 0.
+   */
+  const needsChips: {
+    value: NeedsFilter;
+    label: string;
+    count: number;
+    color: 'primary' | 'warning' | 'secondary';
+  }[] = [
+    { value: 'all', label: 'All', count: bySection.length, color: 'primary' },
+    { value: 'figures', label: 'Figures', count: figureCount, color: 'primary' },
+    { value: 'missing-figure', label: 'Figure missing', count: missingCount, color: 'warning' },
+    ...(imageStats.solutionTotal > 0 || needsFilter === 'missing-solution'
+      ? ([
+          {
+            value: 'missing-solution' as const,
+            label: 'Solution missing',
+            count: missingSolutionCount,
+            color: 'secondary' as const,
+          },
+        ])
+      : []),
+  ];
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <Paper
-        variant="outlined"
-        sx={{ p: 1, mb: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, borderRadius: 1.5 }}
-      >
-        <Checkbox
-          size="small"
-          checked={allSelected}
-          indeterminate={someSelected}
-          onChange={() => (selected.size > 0 ? clearSelection() : selectAll())}
-          inputProps={{ 'aria-label': allSelected ? 'Clear selection' : 'Select every question' }}
-          sx={{ p: 0.75 }}
-        />
-        <Box aria-live="polite" sx={{ minWidth: 0 }}>
-          <Typography variant="caption" color="text.secondary" fontWeight={600} noWrap>
-            {selected.size > 0
-              ? `${selected.size} of ${questions.length} selected`
-              : `${questions.length} question${questions.length === 1 ? '' : 's'}`}
-          </Typography>
+      {/*
+        The one filter home. Section and Needs both live here, directly above
+        the list they narrow, instead of the old split where sections were set
+        in the header card, the image filters here, and the chip reporting the
+        section filter in a third place again.
+      */}
+      <Paper variant="outlined" sx={{ p: 1, mb: 1, borderRadius: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Checkbox
+            size="small"
+            checked={allSelected}
+            indeterminate={someSelected}
+            onChange={() => (selected.size > 0 ? clearSelection() : selectAll())}
+            inputProps={{ 'aria-label': allSelected ? 'Clear selection' : 'Select every question' }}
+            sx={{ p: 0.75 }}
+          />
+          <Box aria-live="polite" sx={{ minWidth: 0 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600} noWrap>
+              {selected.size > 0
+                ? `${selected.size} of ${questions.length} selected`
+                : visibleQuestions.length === questions.length
+                  ? `${questions.length} question${questions.length === 1 ? '' : 's'}`
+                  : `${visibleQuestions.length} of ${questions.length} questions`}
+            </Typography>
+          </Box>
+
+          <Box sx={{ flex: 1 }} />
+
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={mode}
+            onChange={(_, next) => next && onModeChange(next)}
+            sx={{ height: 36, flexShrink: 0 }}
+          >
+            <ToggleButton value="edit" sx={{ px: 1, textTransform: 'none' }}>
+              <EditOutlinedIcon sx={{ fontSize: 16, mr: 0.5 }} />
+              Edit
+            </ToggleButton>
+            <ToggleButton value="images" sx={{ px: 1, textTransform: 'none' }}>
+              <CollectionsOutlinedIcon sx={{ fontSize: 16, mr: 0.5 }} />
+              Images
+            </ToggleButton>
+          </ToggleButtonGroup>
         </Box>
 
-        {/* Set from the paper header's section chips (or the "missing an
-            image" chip); cleared from either end. */}
-        {sectionFilter && (
-          <Chip
-            label={`Filtering: ${sectionFilter === '__none__' ? 'Unsectioned' : qbSectionLabel(sectionFilter)}`}
-            size="small"
-            color="primary"
-            onDelete={() => onSectionFilterChange(null)}
-            sx={{ fontSize: '0.7rem' }}
-          />
-        )}
-
-        <Box sx={{ flex: 1 }} />
-
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={mode}
-          onChange={(_, next) => next && onModeChange(next)}
-          sx={{ height: 32 }}
+        {/*
+          One line that scrolls sideways rather than wrapping into a three-row
+          wall at 375px. The strip clips itself, so nothing here can make the
+          page scroll horizontally.
+        */}
+        <Box
+          role="group"
+          aria-label="Filter the question list"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
+            flexWrap: 'nowrap',
+            overflowX: 'auto',
+            mt: 0.75,
+            pb: 0.25,
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
+          }}
         >
-          <ToggleButton value="edit" sx={{ px: 1, textTransform: 'none' }}>
-            <EditOutlinedIcon sx={{ fontSize: 16, mr: 0.5 }} />
-            Edit
-          </ToggleButton>
-          <ToggleButton value="images" sx={{ px: 1, textTransform: 'none' }}>
-            <CollectionsOutlinedIcon sx={{ fontSize: 16, mr: 0.5 }} />
-            Images
-          </ToggleButton>
-        </ToggleButtonGroup>
+          {sectionOptions.length > 1 && (
+            <Select
+              size="small"
+              value={sectionFilter ?? ALL_SECTIONS}
+              onChange={(e) => {
+                const next = e.target.value as string;
+                onSectionFilterChange(next === ALL_SECTIONS ? null : (next as PaperSectionFilter));
+              }}
+              renderValue={(value) =>
+                value === ALL_SECTIONS ? 'All sections' : sectionOptionLabel(value as PaperSectionFilter)
+              }
+              SelectDisplayProps={{ 'aria-label': 'Filter the list by section' }}
+              sx={{
+                flexShrink: 0,
+                height: { xs: 44, sm: 36 },
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                ...(sectionFilter ? { color: 'primary.main' } : null),
+              }}
+            >
+              <MenuItem value={ALL_SECTIONS} sx={{ minHeight: 44, fontSize: '0.85rem' }}>
+                All sections
+              </MenuItem>
+              {sectionOptions.map((s) => (
+                <MenuItem key={s} value={s} sx={{ minHeight: 44, fontSize: '0.85rem' }}>
+                  {sectionOptionLabel(s)}
+                </MenuItem>
+              ))}
+            </Select>
+          )}
 
-        {mode === 'images' && (
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Chip
-              label={`All (${questions.length})`}
-              size="small"
-              onClick={() => onImageFilterChange('all')}
-              variant={imageFilter === 'all' ? 'filled' : 'outlined'}
-              sx={{ fontSize: '0.7rem' }}
-            />
-            <Chip
-              label={`Figures (${figureCount})`}
-              size="small"
-              onClick={() => onImageFilterChange('figures')}
-              variant={imageFilter === 'figures' ? 'filled' : 'outlined'}
-              color={imageFilter === 'figures' ? 'primary' : 'default'}
-              sx={{ fontSize: '0.7rem' }}
-            />
-            <Chip
-              label={`Missing (${missingCount})`}
-              size="small"
-              onClick={() => onImageFilterChange('missing')}
-              variant={imageFilter === 'missing' ? 'filled' : 'outlined'}
-              color={imageFilter === 'missing' ? 'warning' : 'default'}
-              sx={{ fontSize: '0.7rem' }}
-            />
-          </Box>
-        )}
+          {needsChips.map(({ value, label, count, color }) => {
+            const active = needsFilter === value;
+            return (
+              <Chip
+                key={value}
+                label={`${label} ${count}`}
+                size="small"
+                clickable
+                onClick={() => onNeedsFilterChange(value)}
+                variant={active ? 'filled' : 'outlined'}
+                color={active ? color : 'default'}
+                aria-pressed={active}
+                sx={{
+                  flexShrink: 0,
+                  // 44 on a phone, where this is a thumb target and the row has
+                  // the space; 34 from sm up, where it is a mouse target next
+                  // to a 36px Select and 44 would look oversized.
+                  height: { xs: 44, sm: 34 },
+                  borderRadius: 999,
+                  fontSize: '0.75rem',
+                  fontWeight: active ? 700 : 500,
+                  // A queue that is empty is not the one to reach for, but it
+                  // still has to be readable: 4.5:1 rules out disabled grey.
+                  ...(count === 0 && !active ? { color: 'text.secondary' } : null),
+                }}
+              />
+            );
+          })}
+        </Box>
       </Paper>
 
-      {mode === 'images' && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, px: 0.5 }}>
-          <Typography variant="caption" fontWeight={600} sx={{ whiteSpace: 'nowrap' }}>
-            {imageStats.withImages}/{imageStats.total}
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={progress}
-            sx={{
-              flex: 1,
-              height: 6,
-              borderRadius: 3,
-              bgcolor: alpha(theme.palette.success.main, 0.12),
-              '& .MuiLinearProgress-bar': { bgcolor: 'success.main', borderRadius: 3 },
-            }}
-          />
+      {/*
+        Two tracks, never summed. "40/40 figures, 0/40 solutions" averaged into
+        one half-full bar would describe neither job.
+      */}
+      {mode === 'images' && (imageStats.total > 0 || imageStats.solutionTotal > 0) && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 1, px: 0.5 }}>
+          {imageStats.total > 0 && (
+            <TrackBar
+              label="Figures"
+              done={imageStats.withImages}
+              total={imageStats.total}
+              color={theme.palette.success.main}
+            />
+          )}
+          {imageStats.solutionTotal > 0 && (
+            <TrackBar
+              label="Solutions"
+              done={imageStats.solutionWithImages}
+              total={imageStats.solutionTotal}
+              color={theme.palette.secondary.main}
+            />
+          )}
         </Box>
       )}
 
@@ -475,39 +642,25 @@ export default function PaperQuestionList({
                   </Button>
                 </>
               )}
-              <Tooltip title="Mark every selected question as needing a figure" arrow>
+              {/* The paper header used to carry "Deactivate 90" on every visit.
+                  It belongs here, scoped to rows the teacher actually ticked,
+                  next to the other things you do to a selection. */}
+              <Tooltip title="Hide the selected questions from students. Nothing is deleted." arrow>
                 <Button
                   size="small"
-                  onClick={() => applyBulkNeedsImage(true)}
-                  disabled={applyingNeedsImage !== null}
+                  color="warning"
+                  startIcon={
+                    settingActive === 'deactivate'
+                      ? <CircularProgress size={16} color="inherit" />
+                      : <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />
+                  }
+                  onClick={() => applySetActive(false)}
+                  disabled={settingActive !== null}
                   sx={{ textTransform: 'none', minHeight: 44 }}
                 >
-                  {applyingNeedsImage === 'needed' ? 'Marking...' : 'Needs a figure'}
+                  {settingActive === 'deactivate' ? 'Hiding...' : 'Deactivate'}
                 </Button>
               </Tooltip>
-              <Tooltip title="Mark every selected question as not needing a figure" arrow>
-                <Button
-                  size="small"
-                  onClick={() => applyBulkNeedsImage(false)}
-                  disabled={applyingNeedsImage !== null}
-                  sx={{ textTransform: 'none', minHeight: 44 }}
-                >
-                  {applyingNeedsImage === 'not-needed' ? 'Marking...' : 'No figure needed'}
-                </Button>
-              </Tooltip>
-              {mode === 'edit' && selected.size >= 2 && (
-                <Tooltip title="Attempt any one of these on the paper" arrow>
-                  <Button
-                    size="small"
-                    onClick={applyLinkChoiceGroup}
-                    disabled={linking}
-                    startIcon={linking ? <CircularProgress size={16} color="inherit" /> : undefined}
-                    sx={{ textTransform: 'none', minHeight: 44 }}
-                  >
-                    {linking ? 'Linking...' : 'Link as either/or'}
-                  </Button>
-                </Tooltip>
-              )}
               <Tooltip title="Permanently remove questions that never really belonged on this paper" arrow>
                 <Button
                   size="small"
@@ -519,6 +672,56 @@ export default function PaperQuestionList({
                   Delete
                 </Button>
               </Tooltip>
+              <IconButton
+                aria-label="More actions for the selected questions"
+                aria-haspopup="true"
+                onClick={(e) => setMoreAnchor(e.currentTarget)}
+                sx={{ minWidth: 44, minHeight: 44, border: '1px solid', borderColor: 'divider' }}
+              >
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+              <Menu anchorEl={moreAnchor} open={!!moreAnchor} onClose={() => setMoreAnchor(null)}>
+                <MenuItem
+                  onClick={() => { setMoreAnchor(null); applySetActive(true); }}
+                  disabled={settingActive !== null}
+                  sx={{ minHeight: 44 }}
+                >
+                  <ListItemIcon><PlayArrowIcon fontSize="small" color="success" /></ListItemIcon>
+                  <ListItemText
+                    primary="Activate"
+                    secondary="Only the ones that already have an answer key"
+                    secondaryTypographyProps={{ variant: 'caption' }}
+                  />
+                </MenuItem>
+                <MenuItem
+                  onClick={() => { setMoreAnchor(null); applyBulkNeedsImage(true); }}
+                  disabled={applyingNeedsImage !== null}
+                  sx={{ minHeight: 44 }}
+                >
+                  <ListItemText>Needs a figure</ListItemText>
+                </MenuItem>
+                <MenuItem
+                  onClick={() => { setMoreAnchor(null); applyBulkNeedsImage(false); }}
+                  disabled={applyingNeedsImage !== null}
+                  sx={{ minHeight: 44 }}
+                >
+                  <ListItemText>No figure needed</ListItemText>
+                </MenuItem>
+                {mode === 'edit' && selected.size >= 2 && (
+                  <MenuItem
+                    onClick={() => { setMoreAnchor(null); applyLinkChoiceGroup(); }}
+                    disabled={linking}
+                    sx={{ minHeight: 44 }}
+                  >
+                    <ListItemIcon><LinkIcon fontSize="small" /></ListItemIcon>
+                    <ListItemText
+                      primary="Link as either/or"
+                      secondary="Attempt any one of these on the paper"
+                      secondaryTypographyProps={{ variant: 'caption' }}
+                    />
+                  </MenuItem>
+                )}
+              </Menu>
               <Button onClick={clearSelection} disabled={applyingSection} sx={{ textTransform: 'none', minHeight: 44 }}>
                 Clear
               </Button>
@@ -587,6 +790,52 @@ export default function PaperQuestionList({
           </Button>
         </DialogActions>
       </Dialog>
+    </Box>
+  );
+}
+
+/**
+ * One labelled progress track.
+ *
+ * Labelled, because there are two of them now and an unlabelled pair of bars
+ * is a puzzle. The count leads: "3/40" is the number a teacher is watching.
+ */
+function TrackBar({
+  label,
+  done,
+  total,
+  color,
+}: {
+  label: string;
+  done: number;
+  total: number;
+  color: string;
+}) {
+  const value = total > 0 ? (done / total) * 100 : 0;
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ whiteSpace: 'nowrap', minWidth: 62 }}
+      >
+        {label}
+      </Typography>
+      <Typography variant="caption" fontWeight={600} sx={{ whiteSpace: 'nowrap', minWidth: 44 }}>
+        {done}/{total}
+      </Typography>
+      <LinearProgress
+        variant="determinate"
+        value={value}
+        aria-label={`${label}: ${done} of ${total} done`}
+        sx={{
+          flex: 1,
+          height: 6,
+          borderRadius: 3,
+          bgcolor: alpha(color, 0.12),
+          '& .MuiLinearProgress-bar': { bgcolor: color, borderRadius: 3 },
+        }}
+      />
     </Box>
   );
 }

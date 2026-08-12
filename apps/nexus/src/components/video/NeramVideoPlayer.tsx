@@ -7,9 +7,11 @@ import Html5Surface from './transports/Html5Surface';
 import YouTubeSurface from './transports/YouTubeSurface';
 import ControlBar from './controls/ControlBar';
 import CenterOverlay from './controls/CenterOverlay';
+import CheckpointNotice from './controls/CheckpointNotice';
 import Nudge from './controls/Nudge';
 import TitleBar from './controls/TitleBar';
 import type { SeekMark } from './controls/SeekBar';
+import { VIDEO_OVERLAY_DIALOG_ATTR, isInsideVideoOverlayDialog } from './overlay-dialog';
 import useFullscreen, { PSEUDO_FULLSCREEN_Z_INDEX } from './hooks/useFullscreen';
 import usePlayerChrome from './hooks/usePlayerChrome';
 import useBuffered from './hooks/useBuffered';
@@ -104,9 +106,9 @@ export interface NeramVideoPlayerProps {
    */
   allowPictureInPicture?: boolean;
   /**
-   * Fires with the player's container while it is genuinely native-fullscreen,
-   * and null otherwise. Hand it to a useState setter and pass the result to
-   * QuizModal's `container`.
+   * Fires with the player's container while it is fullscreen by either route,
+   * native or the CSS fallback, and null otherwise. Hand it to a useState setter
+   * and pass the result to QuizModal's `container`.
    *
    * Required in practice for any gated caller. In native fullscreen the browser
    * paints only the fullscreen element's subtree, so a quiz portalled to
@@ -487,17 +489,61 @@ export default function NeramVideoPlayer({
     setPipSupported(pipPermitted && !!transportRef.current?.supportsPictureInPicture());
   }, [pipPermitted, duration, transportRef]);
 
+  /**
+   * Whether something has portalled a dialog into this container. The checkpoint
+   * quiz does exactly that while the player is fullscreen, and once it is up it
+   * explains the pause better than the notice does, so the notice steps aside
+   * rather than repeating itself beside the panel.
+   *
+   * A MutationObserver rather than a prop, because a portal into this node is
+   * not a render of this component and a caller should not have to tell the
+   * player something it can see for itself.
+   */
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node || typeof MutationObserver === 'undefined') return;
+    const read = () => setOverlayOpen(!!node.querySelector(`[${VIDEO_OVERLAY_DIALOG_ATTR}]`));
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(node, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  /**
+   * Playback has stopped at a checkpoint and nothing has covered the picture
+   * yet. Derived rather than stored, so it clears itself: passing the quiz hands
+   * the caller a new gate with a later boundary, and this is false on the next
+   * render with no reset to forget.
+   */
+  const atCheckpoint =
+    gate.unlockedUntil > 0 && !playing && current >= gate.unlockedUntil && !overlayOpen;
+
+  /**
+   * The quiz is a DOM child of this container while fullscreen, so its taps and
+   * swipes bubble into the gesture handlers below. A swipe across the answers
+   * would seek the video underneath them.
+   */
+  const fromOverlay = (e: React.SyntheticEvent) => isInsideVideoOverlayDialog(e.target);
+
   return (
     <Box
       ref={containerRef}
       tabIndex={0}
       onMouseMove={chrome.bump}
       onTouchStart={(e) => {
+        if (fromOverlay(e)) return;
         chrome.bump();
         gestures.handlers.onTouchStart(e);
       }}
-      onTouchMove={gestures.handlers.onTouchMove}
-      onTouchEnd={gestures.handlers.onTouchEnd}
+      onTouchMove={(e) => {
+        if (fromOverlay(e)) return;
+        gestures.handlers.onTouchMove(e);
+      }}
+      onTouchEnd={(e) => {
+        if (fromOverlay(e)) return;
+        gestures.handlers.onTouchEnd(e);
+      }}
       onContextMenu={(e) => e.preventDefault()}
       sx={{
         position: 'relative',
@@ -554,6 +600,8 @@ export default function NeramVideoPlayer({
       {title && fullscreen.isFullscreen && chrome.visible && <TitleBar title={title} />}
 
       {nudge && <Nudge message={nudge} />}
+
+      {atCheckpoint && <CheckpointNotice />}
 
       <CenterOverlay
         playing={playing}

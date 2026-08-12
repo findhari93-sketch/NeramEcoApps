@@ -86,7 +86,95 @@ test.describe('QB paper workspace', () => {
 
   test('AC5: the bulk answer-key upload survived the tab it used to live in', async () => {
     // It was launched from inside the Answer Key tab, which no longer exists.
-    await expect(page.getByRole('button', { name: /Upload Answer Key/ })).toBeVisible();
+    // It lives in the paper's actions menu now, so it has to be opened to be
+    // seen, and it is a menuitem rather than a button.
+    await page.getByRole('button', { name: 'More paper actions' }).click();
+    await expect(page.getByRole('menuitem', { name: /Upload Answer Key/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
+
+  /**
+   * "Deactivate 90" used to sit in the header on every visit: one click, and
+   * every question on the paper is pulled off a live exam. It is behind the
+   * actions menu now, and the per-question version is on the selection bar.
+   */
+  test('the header no longer carries a one-click paper-wide Deactivate', async () => {
+    await expect(page.getByRole('button', { name: /^Deactivate \d+$/ })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'More paper actions' }).click();
+    // Only rendered when something is active, so this is a presence check on
+    // the menu itself rather than on the fixture's activation state.
+    await expect(page.getByRole('menuitem', { name: /Fill in missing sections/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
+
+  /**
+   * The header used to carry a second copy of the list's own filters: a
+   * Sections accordion that set the same Section select, and "N need a figure"
+   * / "N need a solution" chips that set the same Needs chips. Two controls for
+   * one job means reading both to know what the list is showing, and on a phone
+   * all of it came before a single question did.
+   */
+  test('the header does not repeat the filter bar below it', async () => {
+    await closeAnyOpenQuestion();
+    await expect(page.getByRole('button', { name: /^Sections \(\d+\)$/ })).toHaveCount(0);
+    await expect(page.getByText('Tap a section to narrow the list below.')).toHaveCount(0);
+    await expect(page.getByText(/\d+ need a (figure|solution)/)).toHaveCount(0);
+
+    // What the filter bar cannot state stays: the Section select lists
+    // Unsectioned but never how many, and never that leaving them unset is what
+    // stops the paper being scheduled. Presence only, since a fully sectioned
+    // fixture is correct and renders nothing.
+    const filters = page.getByRole('group', { name: 'Filter the question list' });
+    await expect(filters.getByRole('button', { name: /^Figure missing \d+$/ })).toBeVisible();
+  });
+
+  test('ticking a row reveals Deactivate next to Delete on the selection bar', async () => {
+    await closeAnyOpenQuestion();
+    // Named by its tooltip: MUI puts a Tooltip title on the child's aria-label.
+    const deactivate = page.getByRole('button', {
+      name: /Hide the selected questions from students/i,
+    });
+    await expect(deactivate).toHaveCount(0);
+
+    await page.getByRole('checkbox', { name: /^Select question / }).first().check();
+    await expect(deactivate).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.getByRole('button', { name: /never really belonged on this paper/i }),
+    ).toBeVisible();
+
+    // Nothing is clicked: this asserts the affordance, and the suite must not
+    // pull a real paper's questions off a live exam as a side effect.
+    await page.getByRole('button', { name: 'Clear' }).click();
+    await expect(deactivate).toHaveCount(0);
+  });
+
+  /**
+   * The needs filters used to render only in Images mode, so a teacher fixing
+   * wording could not narrow the list to outstanding work at all.
+   */
+  test('the filter bar has one home, above the list, and works in Edit mode', async () => {
+    await closeAnyOpenQuestion();
+    const filters = page.getByRole('group', { name: 'Filter the question list' });
+    await expect(filters).toBeVisible();
+    await expect(filters.getByRole('button', { name: /^Figure missing \d+$/ })).toBeVisible();
+
+    // The old "Filtering: X" chip is gone; the Section select reports it now.
+    await expect(page.getByText(/^Filtering:/)).toHaveCount(0);
+  });
+
+  test('a needs filter narrows the list and says how much of the paper is left', async () => {
+    await closeAnyOpenQuestion();
+    const filters = page.getByRole('group', { name: 'Filter the question list' });
+    await filters.getByRole('button', { name: /^Figure missing \d+$/ }).click();
+
+    // Either every question is in the queue (count unchanged) or some are, in
+    // which case the toolbar switches to the "N of M" form. Both are correct;
+    // which one depends on the fixture, so accept either rather than pin the
+    // seed data.
+    await expect(page.getByText(/^\d+( of \d+)? questions?$/)).toBeVisible({ timeout: 30_000 });
+
+    await filters.getByRole('button', { name: /^All \d+$/ }).click();
   });
 
   test('AC2: opening a question loads it into the pane', async () => {
@@ -136,6 +224,44 @@ test.describe('QB paper workspace', () => {
     await expect(page.getByText(/^\d+ of \d+$/)).toBeVisible({ timeout: 30_000 });
     page.off('console', listener as never);
     expect(errors).toEqual([]);
+  });
+
+  /**
+   * The filter row is one line that scrolls sideways rather than wrapping into
+   * a three-row wall. The strip has to clip itself: if it does not, the whole
+   * page scrolls horizontally, which is the exact failure this asserts against.
+   */
+  test('mobile: the filter strip scrolls itself instead of the page', async () => {
+    await closeAnyOpenQuestion();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await assertNoHorizontalOverflow(page);
+
+    const strip = page.getByRole('group', { name: 'Filter the question list' });
+    await expect(strip).toBeVisible();
+    const overflows = await strip.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+    if (overflows) {
+      await strip.evaluate((el) => el.scrollBy({ left: 200 }));
+      expect(await strip.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    }
+    await assertNoHorizontalOverflow(page);
+
+    // Thumb targets, not mouse targets: the chips are 44px tall below sm.
+    await assertTouchTargetSize(page, '[role="group"][aria-label="Filter the question list"] .MuiChip-root');
+  });
+
+  /**
+   * The paper's actions sit on the title row now rather than on a row of their
+   * own, and are pushed right with `ml: auto`. That is the arrangement most
+   * likely to push the page sideways at 375px, so it is the one worth asserting:
+   * the group has to wrap as a unit, not stretch the row.
+   */
+  test('mobile: the header actions wrap instead of widening the page', async () => {
+    await closeAnyOpenQuestion();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await assertNoHorizontalOverflow(page);
+
+    await assertTouchTargetSize(page, '[aria-label="More paper actions"]');
+    await assertTouchTargetSize(page, '[aria-label="Back to all papers"]');
   });
 
   test('mobile: the pane opens as a full-screen sheet with no horizontal overflow', async () => {

@@ -7,7 +7,15 @@ import WrapUpSection from '../WrapUpSection';
 import ClassFeedbackSection from './ClassFeedbackSection';
 import RecordingSection from './RecordingSection';
 import { SECTION_LABEL_SX } from '../timetable-theme';
+import { attendanceStanding, recordingAction } from './class-state';
 import type { ClassPanelTabProps } from './types';
+
+/** What each standing says, and in what colour. Text always carries the meaning. */
+const STANDING_CHIP = {
+  attended: { label: 'You attended this class', color: 'success' },
+  'caught-up': { label: 'You caught up on this class', color: 'success' },
+  missed: { label: 'You missed this class', color: 'error' },
+} as const;
 
 /**
  * What the class left behind.
@@ -25,18 +33,25 @@ export default function AfterTab(props: ClassPanelTabProps) {
     rsvpSummary,
     attendanceSummary,
     myAttended,
+    myAbsence,
     getToken,
     getTeacherToken,
     onOpenAttendance,
     onSyncRecording,
     onRate,
     onOpenRecording,
+    onCatchUp,
     onNotify,
     onChanged,
   } = props;
 
   const isTeacher = role === 'teacher';
   const { hasRecording, hasMeeting } = state;
+
+  // Both derived in class-state, so the chip and the button can never tell the
+  // student two different stories about the same class.
+  const standing = isTeacher ? null : attendanceStanding(myAttended, myAbsence);
+  const action = recordingAction(cls, role, myAbsence);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -115,10 +130,10 @@ export default function AfterTab(props: ClassPanelTabProps) {
         </Box>
       )}
 
-      {!isTeacher && myAttended != null && (
+      {standing && (
         <Chip
-          label={myAttended ? 'You attended this class' : 'You missed this class'}
-          color={myAttended ? 'success' : 'error'}
+          label={STANDING_CHIP[standing].label}
+          color={STANDING_CHIP[standing].color}
           variant="outlined"
           sx={{ alignSelf: 'flex-start' }}
         />
@@ -143,9 +158,11 @@ export default function AfterTab(props: ClassPanelTabProps) {
         <RecordingSection
           cls={cls}
           isTeacher={isTeacher}
+          action={action}
           hasRecording={hasRecording}
           hasMeeting={hasMeeting}
           onOpenRecording={onOpenRecording}
+          onCatchUp={onCatchUp ? () => onCatchUp(cls) : undefined}
           onSyncRecording={onSyncRecording}
           getToken={getToken}
           classroomId={classroomId}

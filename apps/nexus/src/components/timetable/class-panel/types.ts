@@ -73,6 +73,21 @@ export interface ClassPanelProps {
   myRsvp?: 'attending' | 'not_attending' | null;
   averageRating?: number | null;
   myAttended?: boolean | null;
+  /**
+   * This student's obligation row for this class, when one exists.
+   *
+   * No row means they were in the class, which is why this is the signal the
+   * After tab reads rather than `myAttended`: a genuine no-show has no
+   * attendance row at all (the Teams sync only records who joined), so
+   * `myAttended` is undefined for exactly the students who missed.
+   */
+  myAbsence?: { kind: string; caught_up_at: string | null; excused_at: string | null } | null;
+  /**
+   * Open the guided catch-up screen for this class. Navigation stays with the
+   * caller, as onRate and onOpenAssignment do, because the panel is mounted by
+   * pages that route differently.
+   */
+  onCatchUp?: (cls: ClassCardData) => void;
 
   /** Assignments attached to this class, so a student sees the work set in it. */
   assignments?: PanelAssignment[];

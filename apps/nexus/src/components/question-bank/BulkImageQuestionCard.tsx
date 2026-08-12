@@ -69,7 +69,8 @@ export default function BulkImageQuestionCard({
   const allDone = wanted.length > 0 && wanted.every((s) => s.filled);
   const someDone = wanted.some((s) => s.filled) && !allDone;
 
-  const optionSlots = slots.filter((s) => s.slot !== 'question');
+  const optionSlots = slots.filter((s) => s.kind === 'figure' && s.slot !== 'question');
+  const solutionSlot = slots.find((s) => s.kind === 'solution');
   /**
    * Show the option grid when a picture is expected in one, or when one is
    * already there. A teacher can still open it by hand for the case the guess
@@ -96,7 +97,13 @@ export default function BulkImageQuestionCard({
     [onPendingChange]
   );
 
-  const visibleSlots = showOptions ? slots : slots.filter((s) => s.slot === 'question');
+  // The solution slot is always shown when the question has one at all: it is
+  // only appended for maths questions in the first place, so hiding it behind
+  // the same "are the options pictures?" guess the option grid uses would hide
+  // it on exactly the questions that must have it.
+  const visibleSlots = showOptions
+    ? slots
+    : slots.filter((s) => s.slot === 'question' || s.kind === 'solution');
 
   return (
     <Paper
@@ -307,6 +314,42 @@ export default function BulkImageQuestionCard({
         >
           The options are pictures too
         </Button>
+      )}
+
+      {/* The worked solution, in the assembly line rather than four clicks away
+          in the Edit form. Forty maths questions is forty screenshots of a
+          worked answer, which is the same paste-Tab-paste job the figures
+          above already are. */}
+      {solutionSlot && (
+        <Box sx={{ mt: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              Solution Image
+            </Typography>
+            {solutionSlot.expected && !solutionSlot.filled && (
+              <Typography variant="caption" color="warning.main" fontWeight={600}>
+                required for maths
+              </Typography>
+            )}
+          </Box>
+          <SlotWrapper
+            questionId={question.id}
+            slot="solution"
+            isActive={activeSlot === 'solution'}
+            registerRef={registerSlotRef}
+            label="Solution Image"
+          >
+            <ImageUploadZone
+              image={getEffectiveImage(question, 'solution', pending)}
+              onChange={handleChange('solution')}
+              label="Paste or drop the worked solution"
+              height={120}
+              getToken={getToken}
+              enableGlobalPaste={activeSlot === 'solution'}
+              subfolder="solutions"
+            />
+          </SlotWrapper>
+        </Box>
       )}
     </Paper>
   );

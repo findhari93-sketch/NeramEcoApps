@@ -5,7 +5,6 @@ import { useRouter, useParams } from 'next/navigation';
 import {
   Box,
   Typography,
-  Paper,
   Button,
   Skeleton,
   Chip,
@@ -23,7 +22,8 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
-  Collapse,
+  Divider,
+  Tooltip,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -31,34 +31,32 @@ import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import TranslateIcon from '@mui/icons-material/Translate';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import {
-  QB_EXAM_TYPE_LABELS,
-  qbPaperSectionRuns,
-  qbSectionLabel,
-} from '@neram/database';
+import { QB_EXAM_TYPE_LABELS, qbSectionLabel } from '@neram/database';
 import type {
   NexusQBOriginalPaper,
   NexusQBQuestion,
   NexusQBQuestionSource,
   QBQuestionSection,
 } from '@neram/database';
-import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
-import { questionMissingImages } from '@/lib/qb-image-needs';
 import HindiMergeDialog from '@/components/question-bank/HindiMergeDialog';
 import AnswerKeyUpload from '@/components/question-bank/AnswerKeyUpload';
 import PaperWorkspace, {
   type PaperQuestionMode,
-  type ImageFilter,
+  type NeedsFilter,
   type PaperSectionFilter,
 } from '@/components/question-bank/paper/PaperWorkspace';
 import BulkVideoLinksDialog from '@/components/question-bank/BulkVideoLinksDialog';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import PaperStudentAccessPanel from '@/components/question-bank/PaperStudentAccessPanel';
+import PaperJSONDialog from '@/components/question-bank/PaperJSONDialog';
 
 export default function PaperDetailPage() {
   const router = useRouter();
@@ -81,18 +79,20 @@ export default function PaperDetailPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [hindiMergeOpen, setHindiMergeOpen] = useState(false);
   const [videoLinksOpen, setVideoLinksOpen] = useState(false);
+  const [jsonUploadOpen, setJsonUploadOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [message, setMessage] = useState('');
   const [answerKeyOpen, setAnswerKeyOpen] = useState(false);
   const [reclassifying, setReclassifying] = useState(false);
   const [redoSectionsOpen, setRedoSectionsOpen] = useState(false);
   const [actionsMenuAnchor, setActionsMenuAnchor] = useState<HTMLElement | null>(null);
-  const [sectionsOpen, setSectionsOpen] = useState(false);
   const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false);
-  // Edit/Images mode and the section filter live here, not inside
-  // PaperWorkspace, so a click on a section chip or the missing-image chip
-  // above can drive the list directly instead of only being readable by it.
+  // Edit/Images mode and both filters live here rather than inside
+  // PaperWorkspace so the header can still drive the list, which is what the
+  // unsectioned warning below does: it is the one thing up here that sets a
+  // filter, now that the duplicate work-queue chips are gone.
   const [paperMode, setPaperMode] = useState<PaperQuestionMode>('edit');
-  const [paperImageFilter, setPaperImageFilter] = useState<ImageFilter>('missing');
+  const [needsFilter, setNeedsFilter] = useState<NeedsFilter>('all');
   const [sectionFilter, setSectionFilter] = useState<PaperSectionFilter | null>(null);
 
   const fetchData = useCallback(async (background = false) => {
@@ -131,6 +131,48 @@ export default function PaperDetailPage() {
   const patchQuestionLocally = useCallback((questionId: string, patch: Partial<NexusQBQuestion>) => {
     setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, ...patch } : q)));
   }, []);
+
+  /**
+   * Save the paper as one JSON file.
+   *
+   * Fetched rather than linked, because the route needs a bearer token and an
+   * anchor href cannot carry one. Same blob-and-click as the test editor's
+   * download in components/tests/TestQuestionEditorDialog.tsx.
+   */
+  const handleDownloadJSON = useCallback(async () => {
+    setDownloading(true);
+    setMessage('');
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/question-bank/papers/${paperId}/json?download=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setMessage(json.error || 'Could not build the JSON');
+        return;
+      }
+
+      // The filename the server chose, so the file is named after the paper
+      // rather than after its uuid.
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const name = /filename="([^"]+)"/.exec(disposition)?.[1] || `paper-${paperId}.json`;
+
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download paper JSON:', err);
+      setMessage('Could not build the JSON');
+    } finally {
+      setDownloading(false);
+    }
+  }, [paperId, getToken]);
 
   /**
    * Move one or more questions into a different section.
@@ -362,44 +404,53 @@ export default function PaperDetailPage() {
   const activeCount = questions.filter((q) => q.status === 'active' && q.is_active).length;
   const shiftSuffix = paper.shift ? ` (${paper.shift === 'forenoon' ? 'Forenoon' : 'Afternoon'})` : '';
   const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}${shiftSuffix}`;
-  // The backlog, not "how many questions mention a figure". The old count
-  // never fell as images were uploaded because it answered a different
-  // question; this one answers "what is left to do".
-  const missingImageCount = questions.filter((q) => questionMissingImages(q)).length;
   // Not memoized: this runs after the loading/not-found early returns above,
   // so a hook here would be conditional. ~100 entries is cheap enough plain.
   const tagCounts = Object.fromEntries(Object.entries(tagsByQuestion).map(([id, ids]) => [id, ids.length]));
 
-  // How this paper is laid out, read from the section stored on each question
-  // rather than re-derived from categories or question numbers. qbPaperSectionRuns
-  // is the same function the exam scheduler uses, so a teacher sees here exactly
-  // the shape a student will sit.
-  const sectionRuns = qbPaperSectionRuns(
-    questions.map((q) => ({
-      id: q.id,
-      question_number: q.display_order ?? null,
-      question_format: q.question_format,
-      section: q.section,
-      section_order: q.section_order,
-    })),
-  );
+  // The figure and solution backlogs are not counted here any more: the filter
+  // bar above the list already states both, scoped to whatever section is in
+  // view, and two counts of the same thing is one to keep in sync and one to
+  // read twice. This one stays because nothing below states it, see the chip.
   const unsectionedCount = questions.filter((q) => !q.section).length;
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <IconButton size="small" onClick={() => router.push('/teacher/question-bank/papers')}>
+      {/*
+        One header block, where there used to be a title row and a status card
+        under it.
+
+        The card repeated the list's own filter bar: a Sections accordion that
+        set the same Section filter, and "N need a figure" / "N need a
+        solution" chips that set the same Needs chips. Two controls for one job
+        means reading both to know what the list is showing, and on a phone all
+        of it came before a single question did. The filters have one home now,
+        directly above the list they narrow. What is left here is what never
+        needed a card around it: what this paper is, how far along it is, and
+        what you can do to it.
+      */}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 2 }}>
+        <IconButton
+          size="small"
+          aria-label="Back to all papers"
+          onClick={() => router.push('/teacher/question-bank/papers')}
+          sx={{ minWidth: 44, minHeight: 44 }}
+        >
           <ArrowBackIcon />
         </IconButton>
-        <Box sx={{ flex: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          {/* Title and actions share one row, so the actions cost no height of
+              their own. They wrap as a group rather than splitting up, and stay
+              right-aligned when they do, which is where a thumb is. */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Chip
               label={QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type}
               size="small"
               color="primary"
             />
-            <Typography variant="h6" fontWeight={700}>
+            {/* The page's only heading, so it is the h1. It reads as "JEE
+                Paper 2 2024 January (FN)" with the chips either side of it. */}
+            <Typography variant="h6" component="h1" fontWeight={700}>
               {paper.year}
             </Typography>
             {paper.session && (
@@ -411,195 +462,195 @@ export default function PaperDetailPage() {
                 variant="outlined"
               />
             )}
-          </Box>
-          <Typography variant="caption" color="text.secondary">
-            Uploaded {formatDate(paper.created_at)}
-          </Typography>
-        </Box>
-      </Box>
 
-      {/* Progress */}
-      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-        <PaperProgressBar
-          total={total}
-          draft={draft > 0 ? draft : 0}
-          answerKeyed={answerKeyedOnly > 0 ? answerKeyedOnly : 0}
-          complete={complete - activeCount > 0 ? complete - activeCount : 0}
-          active={activeCount}
-          showLabels
-        />
-        {/* No separate counts line: the progress bar's own segment labels
-            already say "Active: N", "Complete: N" and so on, each with a
-            tooltip giving "N/total" on hover, so a second line restating the
-            same numbers was pure repetition. */}
-        {missingImageCount > 0 && (
-          <Chip
-            icon={<ImageNotSupportedOutlinedIcon sx={{ fontSize: 14 }} />}
-            label={`${missingImageCount} missing an image`}
-            size="small"
-            clickable
-            onClick={() => {
-              setPaperMode('images');
-              setPaperImageFilter('missing');
-              setSectionFilter(null);
-              setTab(0);
-            }}
-            sx={{
-              mt: 1,
-              bgcolor: '#F59E0B20',
-              color: '#D97706',
-              fontWeight: 600,
-              fontSize: '0.75rem',
-              '& .MuiChip-icon': { color: '#D97706' },
-            }}
-          />
-        )}
+            {/*
+              Activate is the only action that stays labelled: it is the
+              constructive one, and the one a teacher comes here to press.
+              Everything else is behind the overflow, including the paper-wide
+              Deactivate, because "hide all 90 from students" does not belong
+              one stray click away on every visit.
 
-        {/* How the paper is sectioned. Collapsed by default: this is the
-            slowest-changing part of the header and the one a teacher checks
-            least often, so it should not cost vertical space on every visit. */}
-        {(sectionRuns.length > 0 || unsectionedCount > 0) && (
-          <Box sx={{ mt: 1 }}>
-            <Button
-              size="small"
-              onClick={() => setSectionsOpen((v) => !v)}
-              endIcon={
-                <ExpandMoreIcon
-                  sx={{ transition: 'transform 150ms', transform: sectionsOpen ? 'rotate(180deg)' : 'none' }}
-                />
-              }
-              sx={{ fontSize: '0.75rem', minHeight: 32, textTransform: 'none', color: 'text.secondary' }}
-            >
-              Sections ({sectionRuns.length}){unsectionedCount > 0 ? `, ${unsectionedCount} unsectioned` : ''}
-            </Button>
-            <Collapse in={sectionsOpen}>
-              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', mt: 0.5 }}>
-                {sectionRuns.map((run, i) => {
-                  const key = run.section ?? '__none__';
-                  const isFiltered = sectionFilter === key;
-                  return (
-                    <Chip
-                      key={`${key}-${i}`}
-                      label={
-                        run.first_question != null && run.last_question != null
-                          ? `${run.label}: Q${run.first_question} to Q${run.last_question}`
-                          : `${run.label}: ${run.count}`
-                      }
-                      size="small"
-                      clickable
-                      onClick={() => {
-                        setSectionFilter(isFiltered ? null : key);
-                        setTab(0);
-                      }}
-                      variant={isFiltered ? 'filled' : 'outlined'}
-                      color={isFiltered ? 'primary' : run.section ? 'default' : 'warning'}
-                      sx={{ height: 22, fontSize: '0.65rem' }}
-                    />
-                  );
-                })}
+              The overflow sits up here rather than in the filter bar below for
+              two reasons: these are things you do to the paper, not ways to
+              narrow the list, and the Student access tab has no filter bar, so
+              down there Upload Answer Key and Delete Paper would vanish
+              whenever that tab was open.
+            */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: 'auto' }}>
+              {completeCount > 0 && (
                 <Button
+                  variant="contained"
                   size="small"
-                  onClick={() => handleReclassifySections(false)}
-                  disabled={reclassifying}
-                  sx={{ fontSize: '0.65rem', minHeight: 22, py: 0 }}
+                  color="success"
+                  startIcon={<PlayArrowIcon />}
+                  onClick={handleActivate}
+                  disabled={activating}
+                  sx={{ minHeight: 44, textTransform: 'none' }}
                 >
-                  {reclassifying ? 'Working...' : 'Fill in missing sections'}
+                  {activating ? 'Activating...' : `Activate ${completeCount}`}
                 </Button>
-                <Button
-                  size="small"
-                  color="warning"
-                  onClick={() => setRedoSectionsOpen(true)}
-                  disabled={reclassifying}
-                  sx={{ fontSize: '0.65rem', minHeight: 22, py: 0 }}
-                >
-                  Redo all sections
-                </Button>
-              </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                Click a section to filter the list below. &quot;Fill in&quot; only adds sections
-                that are missing; &quot;Redo all&quot; re-detects and replaces every section,
-                including ones you set by hand.
-              </Typography>
-
-              {unsectionedCount > 0 && (
-                <Alert severity="warning" sx={{ mt: 1, py: 0.25 }}>
-                  {unsectionedCount} question{unsectionedCount === 1 ? ' is' : 's are'} not in a section
-                  yet. A scheduled exam shuffles within sections, so set these before using this paper as
-                  an exam.
-                </Alert>
               )}
-            </Collapse>
+              <IconButton
+                size="small"
+                aria-label="More paper actions"
+                aria-haspopup="true"
+                onClick={(e) => setActionsMenuAnchor(e.currentTarget)}
+                sx={{ border: '1px solid', borderColor: 'divider', minWidth: 44, minHeight: 44 }}
+              >
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+            </Box>
           </Box>
-        )}
 
-        {/* Action buttons. Activate/Deactivate stay inline since they are the
-            two a teacher reaches for on every visit; everything else moved
-            behind the menu below so the header stops eating the list's room. */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
-          {completeCount > 0 && (
-            <Button
-              variant="contained"
-              size="small"
-              color="success"
-              startIcon={<PlayArrowIcon />}
-              onClick={handleActivate}
-              disabled={activating}
-            >
-              {activating ? 'Activating...' : `Activate ${completeCount}`}
-            </Button>
-          )}
-          {activeCount > 0 && (
-            <Button
-              variant="outlined"
-              size="small"
-              color="warning"
-              startIcon={<VisibilityOffOutlinedIcon />}
-              onClick={() => setDeactivateConfirmOpen(true)}
-              disabled={deactivating}
-            >
-              {deactivating ? 'Deactivating...' : `Deactivate ${activeCount}`}
-            </Button>
-          )}
-          <IconButton
-            size="small"
-            aria-label="More paper actions"
-            aria-haspopup="true"
-            onClick={(e) => setActionsMenuAnchor(e.currentTarget)}
-            sx={{ border: '1px solid', borderColor: 'divider' }}
-          >
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
-          <Menu
-            anchorEl={actionsMenuAnchor}
-            open={!!actionsMenuAnchor}
-            onClose={() => setActionsMenuAnchor(null)}
-          >
-            <MenuItem
-              onClick={() => { setActionsMenuAnchor(null); setAnswerKeyOpen(true); }}
-              disabled={saving}
-            >
-              <ListItemIcon><UploadFileIcon fontSize="small" /></ListItemIcon>
-              <ListItemText>{saving ? 'Saving answers...' : 'Upload Answer Key'}</ListItemText>
-            </MenuItem>
-            <MenuItem onClick={() => { setActionsMenuAnchor(null); setVideoLinksOpen(true); }}>
-              <ListItemIcon><ContentPasteIcon fontSize="small" sx={{ color: '#7c3aed' }} /></ListItemIcon>
-              <ListItemText>Paste Video Links</ListItemText>
-            </MenuItem>
-            <MenuItem onClick={() => { setActionsMenuAnchor(null); setHindiMergeOpen(true); }}>
-              <ListItemIcon><TranslateIcon fontSize="small" sx={{ color: '#e65100' }} /></ListItemIcon>
-              <ListItemText>Upload Hindi</ListItemText>
-            </MenuItem>
-            <MenuItem
-              onClick={() => { setActionsMenuAnchor(null); setDeleteConfirmOpen(true); }}
-              disabled={deleting}
-              sx={{ color: 'error.main' }}
-            >
-              <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
-              <ListItemText>{deleting ? 'Deleting...' : 'Delete Paper'}</ListItemText>
-            </MenuItem>
-          </Menu>
+          {/* The one backlog the filter bar below cannot state. Its Section
+              select lists Unsectioned, but never how many, and never that
+              leaving them unset is what stops this paper being scheduled as an
+              exam. It renders only when something is wrong, so a healthy paper
+              pays no height for it. */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="caption" color="text.secondary">
+              Uploaded {formatDate(paper.created_at)}
+            </Typography>
+            {unsectionedCount > 0 && (
+              <Tooltip
+                title="A scheduled exam shuffles within sections, so set these before using this paper as an exam."
+                arrow
+              >
+                <Chip
+                  icon={<CategoryOutlinedIcon sx={{ fontSize: 15 }} />}
+                  label={`${unsectionedCount} unsectioned`}
+                  size="small"
+                  clickable
+                  onClick={() => {
+                    setSectionFilter('__none__');
+                    setNeedsFilter('all');
+                    setTab(0);
+                  }}
+                  color="warning"
+                  variant="outlined"
+                  sx={{ flexShrink: 0, height: { xs: 44, sm: 30 }, fontWeight: 600, fontSize: '0.72rem' }}
+                />
+              </Tooltip>
+            )}
+          </Box>
+
+          {/* Aligned to the title's own left edge instead of floating in a card
+              of its own: it describes this paper, so it should read as part of
+              the heading rather than as a separate panel. Each segment names
+              itself and its count underneath, so colour is never the only thing
+              saying what is done. */}
+          <Box sx={{ mt: 1 }}>
+            <PaperProgressBar
+              total={total}
+              draft={draft > 0 ? draft : 0}
+              answerKeyed={answerKeyedOnly > 0 ? answerKeyedOnly : 0}
+              complete={complete - activeCount > 0 ? complete - activeCount : 0}
+              active={activeCount}
+              showLabels
+            />
+          </Box>
         </Box>
-      </Paper>
+
+        {/* Portaled, so it is a sibling of the header rather than nested in the
+            row it is anchored to. */}
+        <Menu
+          anchorEl={actionsMenuAnchor}
+          open={!!actionsMenuAnchor}
+          onClose={() => setActionsMenuAnchor(null)}
+        >
+          {/* The round trip, first because it is the superset of the three
+              narrow uploads below: answer key, video links and Hindi are each
+              one column of the same document. */}
+          <MenuItem
+            onClick={() => { setActionsMenuAnchor(null); handleDownloadJSON(); }}
+            disabled={downloading}
+            sx={{ minHeight: 44 }}
+          >
+            <ListItemIcon><DownloadOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText
+              primary={downloading ? 'Preparing...' : 'Download JSON'}
+              secondary="The whole paper in one file: answers, marks, explanations, videos, image links"
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+          </MenuItem>
+          <MenuItem
+            onClick={() => { setActionsMenuAnchor(null); setJsonUploadOpen(true); }}
+            sx={{ minHeight: 44 }}
+          >
+            <ListItemIcon><UploadFileOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText
+              primary="Upload edited JSON"
+              secondary="Applies your edits and rebuilds the test. Never deletes anything"
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+          </MenuItem>
+          <Divider />
+          {activeCount > 0 && (
+            <MenuItem
+              onClick={() => { setActionsMenuAnchor(null); setDeactivateConfirmOpen(true); }}
+              disabled={deactivating}
+              sx={{ minHeight: 44 }}
+            >
+              <ListItemIcon><VisibilityOffOutlinedIcon fontSize="small" color="warning" /></ListItemIcon>
+              <ListItemText
+                primary={deactivating ? 'Deactivating...' : `Deactivate all ${activeCount}`}
+                secondary="Hides every active question from students"
+                secondaryTypographyProps={{ variant: 'caption' }}
+              />
+            </MenuItem>
+          )}
+          {activeCount > 0 && <Divider />}
+          <MenuItem
+            onClick={() => { setActionsMenuAnchor(null); handleReclassifySections(false); }}
+            disabled={reclassifying}
+            sx={{ minHeight: 44 }}
+          >
+            <ListItemIcon><CategoryOutlinedIcon fontSize="small" /></ListItemIcon>
+            <ListItemText
+              primary={reclassifying ? 'Working...' : 'Fill in missing sections'}
+              secondary="Only adds what is missing, never touches a section you set"
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+          </MenuItem>
+          <MenuItem
+            onClick={() => { setActionsMenuAnchor(null); setRedoSectionsOpen(true); }}
+            disabled={reclassifying}
+            sx={{ minHeight: 44 }}
+          >
+            <ListItemIcon><RestartAltIcon fontSize="small" color="warning" /></ListItemIcon>
+            <ListItemText
+              primary="Redo all sections"
+              secondary="Re-detects every section, including ones you set by hand"
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+          </MenuItem>
+          <Divider />
+          <MenuItem
+            onClick={() => { setActionsMenuAnchor(null); setAnswerKeyOpen(true); }}
+            disabled={saving}
+            sx={{ minHeight: 44 }}
+          >
+            <ListItemIcon><UploadFileIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>{saving ? 'Saving answers...' : 'Upload Answer Key'}</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={() => { setActionsMenuAnchor(null); setVideoLinksOpen(true); }} sx={{ minHeight: 44 }}>
+            <ListItemIcon><ContentPasteIcon fontSize="small" sx={{ color: '#7c3aed' }} /></ListItemIcon>
+            <ListItemText>Paste Video Links</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={() => { setActionsMenuAnchor(null); setHindiMergeOpen(true); }} sx={{ minHeight: 44 }}>
+            <ListItemIcon><TranslateIcon fontSize="small" sx={{ color: '#e65100' }} /></ListItemIcon>
+            <ListItemText>Upload Hindi</ListItemText>
+          </MenuItem>
+          <MenuItem
+            onClick={() => { setActionsMenuAnchor(null); setDeleteConfirmOpen(true); }}
+            disabled={deleting}
+            sx={{ color: 'error.main', minHeight: 44 }}
+          >
+            <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>{deleting ? 'Deleting...' : 'Delete Paper'}</ListItemText>
+          </MenuItem>
+        </Menu>
+      </Box>
 
       {message && (
         <Alert
@@ -645,8 +696,8 @@ export default function PaperDetailPage() {
           sources={sources}
           mode={paperMode}
           onModeChange={setPaperMode}
-          imageFilter={paperImageFilter}
-          onImageFilterChange={setPaperImageFilter}
+          needsFilter={needsFilter}
+          onNeedsFilterChange={setNeedsFilter}
           sectionFilter={sectionFilter}
           onSectionFilterChange={setSectionFilter}
           getToken={getToken}
@@ -754,6 +805,18 @@ export default function PaperDetailPage() {
         open={videoLinksOpen}
         onClose={() => setVideoLinksOpen(false)}
         questions={questions}
+        paperId={paperId}
+        getToken={getToken}
+        onSuccess={(msg) => {
+          setMessage(msg);
+          fetchData(true);
+        }}
+      />
+
+      {/* The round trip's other half */}
+      <PaperJSONDialog
+        open={jsonUploadOpen}
+        onClose={() => setJsonUploadOpen(false)}
         paperId={paperId}
         getToken={getToken}
         onSuccess={(msg) => {

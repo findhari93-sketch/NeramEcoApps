@@ -93,6 +93,34 @@ describe('PaperQuestionRow', () => {
     expect(onActivate).not.toHaveBeenCalled();
   });
 
+  /**
+   * Its own glyph, not folded into the figure warning: they are two different
+   * jobs, and one amber triangle meaning either is a triangle you stop reading.
+   */
+  it('flags a maths question with no worked solution', () => {
+    render(
+      <PaperQuestionRow question={q()} selected={false} active={false} tagCount={1}
+        onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    expect(screen.getByLabelText('Solution image missing')).not.toBeNull();
+  });
+
+  it('drops the flag once the solution image is there', () => {
+    render(
+      <PaperQuestionRow question={q({ solution_image_url: 'https://x/sol.png' })} selected={false}
+        active={false} tagCount={1} onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    expect(screen.queryByLabelText('Solution image missing')).toBeNull();
+  });
+
+  it('never flags an aptitude question', () => {
+    render(
+      <PaperQuestionRow question={q({ section: 'aptitude' })} selected={false} active={false}
+        tagCount={1} onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    expect(screen.queryByLabelText('Solution image missing')).toBeNull();
+  });
+
   it('the status is a colour, not a chip, but still has a name a screen reader can announce', () => {
     render(
       <PaperQuestionRow question={q({ status: 'active' })} selected={false} active={false} tagCount={1}

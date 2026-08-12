@@ -6640,6 +6640,14 @@ export interface NexusQBQuestion {
   nta_question_id: string | null;
   is_active: boolean;
   /**
+   * What this question is worth, when the paper does not follow the published
+   * scheme. Null means nobody has stated it, and marksForQuestions falls back
+   * to SCHEME in paper-marking.ts.
+   */
+  marks_correct: number | null;
+  /** Deduction for a wrong answer, stored positive. Null falls back to the scheme. */
+  marks_negative: number | null;
+  /**
    * Does this question need a figure? Tri-state, and a teacher's answer wins.
    *
    * NULL means nobody has looked, so the keyword guess in

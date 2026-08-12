@@ -1,7 +1,7 @@
-import type { NexusQBQuestion, NexusQBQuestionOption } from '@neram/database';
+import type { NexusQBQuestion, NexusQBQuestionOption, QBQuestionSection } from '@neram/database';
 
 /**
- * Which questions are still waiting for a figure, and which slots that means.
+ * Which questions are still waiting for a picture, and which slots that means.
  *
  * One module because the answer was being computed in five places and three of
  * them disagreed. The paper header counted questions that merely mention a
@@ -9,11 +9,17 @@ import type { NexusQBQuestion, NexusQBQuestionOption } from '@neram/database';
  * border used a third rule again, so a 47-question paper reported "28 need
  * images" while exactly one was actually empty.
  *
+ * Two jobs live here, and they are deliberately kept apart by `kind`. A figure
+ * is what makes a question *readable*, guessed from its wording and overridable
+ * per question. A solution image is what makes the answer *explainable*, and it
+ * is a flat rule: every maths question needs one. Mixing them would make the
+ * figure backlog jump by forty overnight and stop meaning anything.
+ *
  * Everything here is derived from `questionImageSlots`. Add a caller, do not add
  * a predicate.
  */
 
-export type SlotType = 'question' | 'a' | 'b' | 'c' | 'd';
+export type SlotType = 'question' | 'a' | 'b' | 'c' | 'd' | 'solution';
 
 export interface ImageSlot {
   slot: SlotType;
@@ -22,7 +28,22 @@ export interface ImageSlot {
   /** Do we believe this slot is supposed to hold a picture? */
   expected: boolean;
   filled: boolean;
+  /**
+   * Which backlog this slot belongs to. The figure counts, the amber row icon
+   * and the images progress bar all read 'figure' only, so adding the solution
+   * slot below left every one of those numbers untouched.
+   */
+  kind: 'figure' | 'solution';
 }
+
+/**
+ * The sections whose questions must carry a worked solution image.
+ *
+ * Maths only. An aptitude question's answer is the reasoning, which the brief
+ * explanation already carries; a maths answer is the working, and nobody types
+ * six lines of LaTeX per question for a ninety-question paper.
+ */
+export const QB_MATH_SECTIONS: QBQuestionSection[] = ['math_mcq', 'math_numerical'];
 
 /**
  * A word that means an actual picture.
@@ -66,7 +87,24 @@ function optionMentionsFigure(option: NexusQBQuestionOption): boolean {
 
 function filledOnServer(question: NexusQBQuestion, slot: SlotType): boolean {
   if (slot === 'question') return !!question.question_image_url;
+  if (slot === 'solution') return !!question.solution_image_url;
   return !!optionsOf(question).find((o) => o.id === slot)?.image_url;
+}
+
+/**
+ * Must this question carry a worked solution image?
+ *
+ * Read off the stored section, never guessed from the question number: that
+ * guess has one home in qb-section-inference.ts, and a paper that does not
+ * follow the current JEE numbering would be mislabelled by a second copy.
+ *
+ * A question with no section yet is not nagged. The paper header already has an
+ * "unsectioned" warning for those, and nagging twice for one missing field is
+ * how a teacher learns to ignore both.
+ */
+export function questionNeedsSolutionImage(question: NexusQBQuestion): boolean {
+  if (question.question_format === 'DRAWING_PROMPT') return false;
+  return !!question.section && QB_MATH_SECTIONS.includes(question.section);
 }
 
 /**
@@ -122,6 +160,7 @@ export function questionImageSlots(
           question.question_format === 'IMAGE_BASED' ||
           textMentionsFigure(question.question_text)),
       filled: filled('question'),
+      kind: 'figure',
     },
   ];
 
@@ -136,23 +175,48 @@ export function questionImageSlots(
         // option images is what kept it permanently amber.
         expected: !ruledOut && optionMentionsFigure(option),
         filled: filled(slot),
+        kind: 'figure',
       });
     }
+  }
+
+  // Appended only when it is wanted or already there, rather than on every
+  // question. A dead slot on all fifty aptitude questions would be one more
+  // Tab stop each in the paste assembly line, spent confirming that an
+  // aptitude question still does not want a worked solution.
+  //
+  // `needs_image` deliberately does not gate this: that toggle is the teacher's
+  // verdict on the *figure*, and "no figure needed" is a common and correct
+  // thing to say about a maths question that still owes its working.
+  const solutionExpected = questionNeedsSolutionImage(question);
+  if (solutionExpected || question.solution_image_url) {
+    slots.push({
+      slot: 'solution',
+      label: 'Solution',
+      expected: solutionExpected,
+      filled: filled('solution'),
+      kind: 'solution',
+    });
   }
 
   return slots;
 }
 
-/** Is a slot this question is supposed to have still empty? */
+/** Only the figure slots. The three predicates below are the figure backlog. */
+function figureSlots(question: NexusQBQuestion, isFilled?: (slot: SlotType) => boolean): ImageSlot[] {
+  return questionImageSlots(question, isFilled).filter((s) => s.kind === 'figure');
+}
+
+/** Is a figure slot this question is supposed to have still empty? */
 export function questionMissingImages(
   question: NexusQBQuestion,
   isFilled?: (slot: SlotType) => boolean,
 ): boolean {
-  return questionImageSlots(question, isFilled).some((s) => s.expected && !s.filled);
+  return figureSlots(question, isFilled).some((s) => s.expected && !s.filled);
 }
 
 /**
- * Every wanted slot is filled, and at least one was wanted.
+ * Every wanted figure slot is filled, and at least one was wanted.
  *
  * A question needing no picture is not "complete", it is not in the race. The
  * progress bar counts only questions that are.
@@ -161,16 +225,32 @@ export function questionImagesComplete(
   question: NexusQBQuestion,
   isFilled?: (slot: SlotType) => boolean,
 ): boolean {
-  const slots = questionImageSlots(question, isFilled);
-  const wanted = slots.filter((s) => s.expected);
+  const wanted = figureSlots(question, isFilled).filter((s) => s.expected);
   return wanted.length > 0 && wanted.every((s) => s.filled);
 }
 
-/** Some but not all of the wanted slots are filled. Drives the amber border. */
+/** Some but not all of the wanted figure slots are filled. Drives the amber border. */
 export function questionImagesPartial(
   question: NexusQBQuestion,
   isFilled?: (slot: SlotType) => boolean,
 ): boolean {
-  const wanted = questionImageSlots(question, isFilled).filter((s) => s.expected);
+  const wanted = figureSlots(question, isFilled).filter((s) => s.expected);
   return wanted.some((s) => s.filled) && wanted.some((s) => !s.filled);
+}
+
+/**
+ * A maths question still owing its worked solution.
+ *
+ * Its own predicate rather than a branch of questionMissingImages, because the
+ * two answer different questions and are worked through at different times: a
+ * paper is made readable on the day it is imported and explainable in the weeks
+ * after.
+ */
+export function questionMissingSolutionImage(
+  question: NexusQBQuestion,
+  isFilled?: (slot: SlotType) => boolean,
+): boolean {
+  return questionImageSlots(question, isFilled).some(
+    (s) => s.kind === 'solution' && s.expected && !s.filled,
+  );
 }

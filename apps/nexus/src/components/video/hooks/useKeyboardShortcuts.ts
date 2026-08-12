@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { isInsideVideoOverlayDialog } from '../overlay-dialog';
 
 /**
  * The shortcuts everyone already knows from YouTube.
@@ -60,6 +61,11 @@ export default function useKeyboardShortcuts(
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
+      // The checkpoint quiz is a child of this container while fullscreen, so
+      // its keystrokes bubble here. Space on a focused answer button would
+      // otherwise start the video underneath it. See overlay-dialog.ts for why
+      // the overlay cannot just stop propagation.
+      if (isInsideVideoOverlayDialog(e.target)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const a = actionsRef.current;
       const take = (fn: () => void) => {

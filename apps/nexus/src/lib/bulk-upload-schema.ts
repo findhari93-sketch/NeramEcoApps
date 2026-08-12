@@ -356,7 +356,7 @@ export function validateAndConvertJSON(data: unknown): ValidationResult {
   return { valid: errors.length === 0, errors, warnings, questions };
 }
 
-function normalizeFormat(raw: string | undefined): QBQuestionFormat {
+export function normalizeFormat(raw: string | undefined): QBQuestionFormat {
   if (!raw) return 'MCQ';
   const upper = raw.toUpperCase();
   if (upper === 'MCQ') return 'MCQ';
@@ -380,7 +380,7 @@ function normalizeFormat(raw: string | undefined): QBQuestionFormat {
  * disagree the format wins and the section falls back to the one it can
  * actually be.
  */
-function reconcileSection(
+export function reconcileSection(
   section: ReviewQuestion['section'],
   format: QBQuestionFormat,
 ): ReviewQuestion['section'] {
@@ -392,7 +392,7 @@ function reconcileSection(
   return section;
 }
 
-function inferSectionKey(name: string): ReviewQuestion['section'] {
+export function inferSectionKey(name: string): ReviewQuestion['section'] {
   const lower = (name || '').toLowerCase();
   if (lower.includes('math') && (lower.includes('mcq') || lower.includes('objective'))) return 'math_mcq';
   if (lower.includes('math') && (lower.includes('num') || lower.includes('integer'))) return 'math_numerical';
@@ -402,7 +402,7 @@ function inferSectionKey(name: string): ReviewQuestion['section'] {
   return 'aptitude';
 }
 
-function inferCategories(sectionKey: ReviewQuestion['section']): string[] {
+export function inferCategories(sectionKey: ReviewQuestion['section']): string[] {
   switch (sectionKey) {
     case 'math_mcq':
     case 'math_numerical':

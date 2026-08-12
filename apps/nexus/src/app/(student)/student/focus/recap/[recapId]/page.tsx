@@ -67,13 +67,17 @@ export default function FocusRecapPage() {
   const [started, setStarted] = useState(false);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<StrippedQuestion[]>([]);
+  /**
+   * Separate from `error`, which replaces this whole page and unmounts the
+   * player. A quiz that will not load must cost the student a retry, not their
+   * place in the class.
+   */
+  const [quizError, setQuizError] = useState<string | null>(null);
+  const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [furthest, setFurthest] = useState(0);
   /**
-   * Where the quiz drawer portals: the player's container while it is genuinely
-   * fullscreen, null otherwise. In pseudo-fullscreen (an iPhone, where there is
-   * no element Fullscreen API) this stays null and the drawer lands on
-   * document.body, which is correct because the sheet sits below MUI's drawer
-   * layer. One rule covers both platforms.
+   * Where the quiz is drawn: the player's container while it is fullscreen by
+   * either route, null otherwise. Null means the ordinary viewport drawer.
    */
   const [quizHost, setQuizHost] = useState<HTMLElement | null>(null);
   /**
@@ -177,17 +181,29 @@ export default function FocusRecapPage() {
     if (watchMode !== 'gated') return;
     const idx = sections.findIndex((s) => !s.passed);
     if (idx < 0) return;
+    // The player re-fires the boundary on every tick while the student sits at
+    // it. Once the panel is up there is nothing left to fetch, unless a standing
+    // error is what "Try again" is coming back through.
+    if (loadingQuiz) return;
+    if (activeIdx === idx && !quizError) return;
     flushNow();
+    // Opened before the fetch: the drawer carries the spinner and the failure,
+    // and while fullscreen it is the only surface the student can see.
+    setActiveIdx(idx);
+    setQuizQuestions([]);
+    setLoadingQuiz(true);
+    setQuizError(null);
     try {
       const res = await authFetch(
         `/api/student/class-recaps/${recapId}/sections/${sections[idx].id}/quiz`,
       );
       setQuizQuestions(res.questions as StrippedQuestion[]);
-      setActiveIdx(idx);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the checkpoint quiz');
+      setQuizError(err instanceof Error ? err.message : 'Could not load the checkpoint quiz');
+    } finally {
+      setLoadingQuiz(false);
     }
-  }, [authFetch, flushNow, recapId, sections, watchMode]);
+  }, [authFetch, flushNow, recapId, sections, watchMode, loadingQuiz, activeIdx, quizError]);
 
   const submitQuiz = useCallback(
     async (answers: Record<string, string>) => {
@@ -218,6 +234,7 @@ export default function FocusRecapPage() {
   const handleContinue = useCallback(() => {
     setActiveIdx(null);
     setQuizQuestions([]);
+    setQuizError(null);
     setTimeout(() => videoRef.current?.play().catch(() => {}), 150);
   }, []);
 
@@ -226,6 +243,7 @@ export default function FocusRecapPage() {
     const section = sections[activeIdx ?? -1];
     setActiveIdx(null);
     setQuizQuestions([]);
+    setQuizError(null);
     if (!section || !videoRef.current) return;
     videoRef.current.currentTime = section.start_timestamp_seconds;
     setTimeout(() => videoRef.current?.play().catch(() => {}), 150);
@@ -410,6 +428,9 @@ export default function FocusRecapPage() {
           onRetry={handleRewatch}
           onContinue={handleContinue}
           container={quizHost}
+          loadingQuestions={loadingQuiz}
+          loadError={quizError}
+          onRetryLoad={openQuiz}
         />
       )}
     </Shell>

@@ -33,9 +33,10 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { question_image_url, option_images } = body as {
+    const { question_image_url, option_images, solution_image_url } = body as {
       question_image_url?: string | null;
       option_images?: Record<string, string | null>;
+      solution_image_url?: string | null;
     };
 
     // Fetch current question
@@ -56,6 +57,13 @@ export async function PATCH(
     // Update question image
     if (question_image_url !== undefined) {
       updates.question_image_url = question_image_url;
+    }
+
+    // The worked solution. Same lightweight path as the stem's own figure, so a
+    // teacher pasting forty maths solutions in a row does not pay for a full
+    // question PATCH (and its answer/option/tag round trip) each time.
+    if (solution_image_url !== undefined) {
+      updates.solution_image_url = solution_image_url;
     }
 
     // Update option images by merging into existing options JSONB

@@ -16,6 +16,7 @@ import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import LinkIcon from '@mui/icons-material/Link';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import type { ClassCardData } from '../ClassCard';
+import type { RecordingAction } from './class-state';
 
 /**
  * The recording, and an honest account of where it is.
@@ -34,10 +35,14 @@ import type { ClassCardData } from '../ClassCard';
 interface RecordingSectionProps {
   cls: ClassCardData;
   isTeacher: boolean;
+  /** What this viewer is offered. Decided in class-state, never here. */
+  action: RecordingAction;
   hasRecording: boolean;
   hasMeeting: boolean;
   /** Opens the in-app player. */
   onOpenRecording?: () => void;
+  /** Sends a student who owes this class to the guided catch-up screen. */
+  onCatchUp?: () => void;
   /** Ask Teams again, now. */
   onSyncRecording?: (cls: ClassCardData) => void;
   getToken: () => Promise<string | null>;
@@ -64,9 +69,11 @@ function whenFetched(iso?: string | null): string | null {
 export default function RecordingSection({
   cls,
   isTeacher,
+  action,
   hasRecording,
   hasMeeting,
   onOpenRecording,
+  onCatchUp,
   onSyncRecording,
   getToken,
   classroomId,
@@ -114,6 +121,9 @@ export default function RecordingSection({
 
   /** One sentence about where the automatic hunt has got to. */
   const statusLine = (() => {
+    // The catch-up branch already carries its own caption, and where the file
+    // came from is not what that student needs to read under the button.
+    if (action === 'catch-up' || action === 'not-recorded') return null;
     if (hasRecording) {
       if (status === 'manual') return 'Added by hand';
       return fetchedAt ? `Found automatically, ${fetchedAt}` : null;
@@ -130,11 +140,45 @@ export default function RecordingSection({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {/* A student who missed this class is sent to the guided screen instead.
+          Watching here would record nothing, so they would finish the whole
+          class and still be asked to watch it again to clear the absence.
+          Deliberately not offered alongside the open player: an escape hatch is
+          the uncredited watch, just with a smaller font.
+
+          Primary rather than success, because green here means "this is yours,
+          open it" and this is owed work. */}
+      {action === 'catch-up' && (
+        <>
+          <Button
+            variant="contained"
+            color="primary"
+            fullWidth
+            onClick={onCatchUp}
+            startIcon={<PlayCircleOutlineIcon />}
+            sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+          >
+            Do catch-up
+          </Button>
+          <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
+            Watch with the checkpoints to clear this class.
+          </Typography>
+        </>
+      )}
+
+      {/* Nothing was ever recorded, so there is no work here to do. Saying so is
+          kinder than a button onto the catch-up screen's dead end. */}
+      {action === 'not-recorded' && (
+        <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
+          This class was not recorded, so there is nothing to catch up on.
+        </Typography>
+      )}
+
       {/* Opens the in-app player rather than linking out to Microsoft: a
           recording that lives in the organizer's OneDrive is shared only with
           the meeting invitees, so the outbound link refuses most students and
           any teacher who was not invited. */}
-      {hasRecording && (
+      {action === 'watch' && (
         <Button
           variant="contained"
           color="success"

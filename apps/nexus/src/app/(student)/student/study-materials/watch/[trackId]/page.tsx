@@ -91,6 +91,12 @@ export default function StudyTrackWatchPage() {
 
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<StrippedQuestion[]>([]);
+  /**
+   * Separate from `error`, which replaces the page and unmounts the player. A
+   * quiz that will not load must cost a retry, not the student's position.
+   */
+  const [quizError, setQuizError] = useState<string | null>(null);
+  const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   /** The player's container while it is fullscreen, so the quiz renders inside it. */
   const [quizHost, setQuizHost] = useState<HTMLElement | null>(null);
@@ -178,23 +184,41 @@ export default function StudyTrackWatchPage() {
     [onTick],
   );
 
+  const closeQuiz = useCallback(() => {
+    setActiveIdx(null);
+    setQuizQuestions([]);
+    setQuizError(null);
+  }, []);
+
   const openQuiz = useCallback(async () => {
     // Revision has no checkpoints to answer; the boundary never fires there, but
     // the ended event still does.
     if (mode === 'revision') return;
     const idx = sections.findIndex((s) => !s.passed);
     if (idx < 0) return;
+    // The player re-fires the boundary on every tick while the student sits at
+    // it. Once the panel is up there is nothing left to fetch, unless a standing
+    // error is what "Try again" is coming back through.
+    if (loadingQuiz) return;
+    if (activeIdx === idx && !quizError) return;
     flushNow();
+    // Opened before the fetch: the drawer carries the spinner and the failure,
+    // and while fullscreen it is the only surface the student can see.
+    setActiveIdx(idx);
+    setQuizQuestions([]);
+    setLoadingQuiz(true);
+    setQuizError(null);
     try {
       const res = await authFetch(
         `/api/student/study-videos/tracks/${trackId}/sections/${sections[idx].id}/quiz`,
       );
       setQuizQuestions(res.questions as StrippedQuestion[]);
-      setActiveIdx(idx);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the checkpoint quiz');
+      setQuizError(err instanceof Error ? err.message : 'Could not load the checkpoint quiz');
+    } finally {
+      setLoadingQuiz(false);
     }
-  }, [authFetch, flushNow, mode, sections, trackId]);
+  }, [authFetch, flushNow, mode, sections, trackId, loadingQuiz, activeIdx, quizError]);
 
   const submitQuiz = useCallback(
     async (answers: Record<string, string>) => {
@@ -401,12 +425,15 @@ export default function StudyTrackWatchPage() {
           sectionTitle={sections[activeIdx].title}
           questions={quizQuestions}
           onSubmit={submitQuiz}
-          onClose={() => setActiveIdx(null)}
-          onRetry={() => setActiveIdx(null)}
-          onContinue={() => setActiveIdx(null)}
+          onClose={closeQuiz}
+          onRetry={closeQuiz}
+          onContinue={closeQuiz}
           // The whole point of a checkpoint. Dismissing it would be the skip.
           dismissable={false}
           container={quizHost}
+          loadingQuestions={loadingQuiz}
+          loadError={quizError}
+          onRetryLoad={openQuiz}
         />
       )}
     </Box>

@@ -6,9 +6,10 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import LinkIcon from '@mui/icons-material/Link';
+import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
-import { questionImageSlots } from '@/lib/qb-image-needs';
+import { questionImageSlots, questionMissingSolutionImage } from '@/lib/qb-image-needs';
 import MathText from '@/components/common/MathText';
 
 export interface PaperQuestionRowProps {
@@ -61,10 +62,13 @@ export default function PaperQuestionRow({
   const statusColor = QB_QUESTION_STATUS_COLORS[question.status] || '#9e9e9e';
   const statusLabel = QB_QUESTION_STATUS_LABELS[question.status] || question.status;
 
-  const imageSlots = questionImageSlots(question);
-  const wantedSlots = imageSlots.filter((s) => s.expected);
+  // Figures only. The solution image has its own glyph below, because a maths
+  // question that needs no figure and is missing its solution is not a
+  // question with "no images expected".
+  const wantedSlots = questionImageSlots(question).filter((s) => s.kind === 'figure' && s.expected);
   const imageState: 'none' | 'complete' | 'missing' =
     wantedSlots.length === 0 ? 'none' : wantedSlots.every((s) => s.filled) ? 'complete' : 'missing';
+  const solutionMissing = questionMissingSolutionImage(question);
 
   const handleRowClick = (e: React.MouseEvent) => {
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -166,9 +170,13 @@ export default function PaperQuestionRow({
           )}
         </Box>
 
-        {imageState !== 'none' && (
+        {/* Two fixed cells, always rendered, so the glyphs line up into columns
+            down the list instead of sliding left and right row by row. */}
+        {imageState === 'none' ? (
+          <Box sx={{ flexShrink: 0, width: 18 }} />
+        ) : (
           <Tooltip
-            title={imageState === 'complete' ? 'Every expected image is uploaded' : 'Missing an expected image'}
+            title={imageState === 'complete' ? 'Every expected figure is uploaded' : 'Missing an expected figure'}
             arrow
           >
             <Box sx={{ flexShrink: 0, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -179,6 +187,23 @@ export default function PaperQuestionRow({
               )}
             </Box>
           </Tooltip>
+        )}
+
+        {/* A maths question with no worked solution. Its own glyph rather than
+            folded into the figure warning above: they are two different jobs,
+            and one amber triangle meaning either is a triangle you stop
+            reading. */}
+        {solutionMissing ? (
+          <Tooltip title="No solution image yet, and maths questions need one" arrow>
+            <Box sx={{ flexShrink: 0, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <LightbulbOutlinedIcon
+                aria-label="Solution image missing"
+                sx={{ fontSize: 15, color: 'warning.main' }}
+              />
+            </Box>
+          </Tooltip>
+        ) : (
+          <Box sx={{ flexShrink: 0, width: 18 }} />
         )}
 
         <Tooltip title={tagCount > 0 ? `${tagCount} tags` : 'No tags'} arrow>

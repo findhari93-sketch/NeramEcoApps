@@ -19,23 +19,32 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * The distinction the caller actually cares about is `hostElement`, not the mode.
  * In native fullscreen the browser paints only the fullscreen element's subtree,
  * so anything portalled to document.body (the checkpoint quiz, chiefly) has to be
- * redirected into the container. In pseudo mode nothing is redirected: the sheet
- * sits at z-index 1150, below MUI's drawer layer at 1200, so a body-portalled
- * quiz lands on top by itself. So `hostElement` is the container in native mode
- * and null in pseudo mode, and the caller has one rule to follow rather than two.
+ * redirected into the container. The host is published in pseudo mode too, and
+ * for the same reason it is published at all: one rule for the caller, and one
+ * shape on screen. This used to be native-only, on the argument that a
+ * body-portalled drawer at z-index 1200 already lands on top of the 1150 sheet.
+ * That was true and still gave iPhones a different quiz from everyone else, and
+ * it made the whole thing hostage to a z-index comparison between two unrelated
+ * components. QuizSurface draws an `inset: 0` child of the container instead,
+ * which the container's `overflow: hidden` does not clip and no MUI layer can
+ * out-stack.
  */
 
 export type FullscreenMode = 'native' | 'pseudo';
 
-/** Below MUI's drawer (1200) so a body-portalled quiz still paints on top. */
+/**
+ * Above MUI's app bar (1100), below its drawer (1200) and modal (1300) layers,
+ * so anything else on the page that legitimately portals to document.body while
+ * the player is in the CSS fallback still paints over it.
+ */
 export const PSEUDO_FULLSCREEN_Z_INDEX = 1150;
 
 export interface UseFullscreenOptions {
   /** Turns the whole thing off; the button is not rendered. */
   enabled: boolean;
   /**
-   * Called with the container while it is genuinely native-fullscreen, and null
-   * otherwise. Drives where the checkpoint quiz portals.
+   * Called with the container while the player is fullscreen by either route,
+   * and null otherwise. Drives where the checkpoint quiz is drawn.
    */
   onHostChange?: (el: HTMLElement | null) => void;
 }
@@ -70,8 +79,8 @@ export default function useFullscreen(
    * would otherwise keep portalling into a node that is no longer in the document.
    */
   useEffect(() => {
-    onHostChangeRef.current?.(isNative ? containerRef.current : null);
-  }, [isNative, containerRef]);
+    onHostChangeRef.current?.(isNative || isPseudo ? containerRef.current : null);
+  }, [isNative, isPseudo, containerRef]);
 
   useEffect(() => () => onHostChangeRef.current?.(null), []);
 

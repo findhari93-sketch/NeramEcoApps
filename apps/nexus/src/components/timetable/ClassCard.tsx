@@ -45,6 +45,15 @@ export interface ClassCardData {
   teams_meeting_degraded?: boolean | null;
   recording_url: string | null;
   /**
+   * The YouTube backup, where one was uploaded.
+   *
+   * A class can have this and no `recording_url`, so anything asking "is there
+   * anything here to watch" must read both. The catch-up route already does;
+   * the panel could not, because the field was missing from this type while
+   * being present on the wire.
+   */
+  youtube_url?: string | null;
+  /**
    * What the nightly recording sweep has made of this class.
    *
    * `null` means it has not looked yet (the class is inside the 60 minute grace,

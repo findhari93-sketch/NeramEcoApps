@@ -1177,6 +1177,7 @@ export default function StudentItemLearningPage() {
           onClose={() => setAllQuizMode(false)}
           onSubmitSection={handleAllQuizSubmitSection}
           onComplete={handleAllQuizComplete}
+          container={quizHost}
         />
       )}
 

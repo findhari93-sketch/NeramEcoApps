@@ -13,8 +13,8 @@ const base = {
   questions,
   mode: 'edit' as const,
   onModeChange: vi.fn(),
-  imageFilter: 'missing' as const,
-  onImageFilterChange: vi.fn(),
+  needsFilter: 'all' as const,
+  onNeedsFilterChange: vi.fn(),
   sectionFilter: null,
   onSectionFilterChange: vi.fn(),
   getToken: async () => 'token',
@@ -22,6 +22,12 @@ const base = {
   onChangeSections: vi.fn().mockResolvedValue(undefined),
   onOptimisticPatch: vi.fn(),
 };
+
+/** The needs-image verdicts live in the selection bar's overflow menu now. */
+function clickNeedsImageOverflow(label: 'Needs a figure' | 'No figure needed') {
+  fireEvent.click(screen.getByLabelText('More actions for the selected questions'));
+  fireEvent.click(screen.getByRole('menuitem', { name: label }));
+}
 
 describe('PaperWorkspace', () => {
   /**
@@ -101,7 +107,7 @@ describe('PaperWorkspace needs-image bulk action', () => {
 
     render(<PaperWorkspace {...base} onOptimisticPatch={onOptimisticPatch} />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Mark every selected question as not needing a figure' }));
+    clickNeedsImageOverflow('No figure needed');
 
     await screen.findByText('Forbidden');
     expect(onOptimisticPatch).toHaveBeenCalledWith('q1', { needs_image: false });
@@ -115,10 +121,76 @@ describe('PaperWorkspace needs-image bulk action', () => {
 
     render(<PaperWorkspace {...base} onOptimisticPatch={onOptimisticPatch} onSaved={onSaved} />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Mark every selected question as not needing a figure' }));
+    clickNeedsImageOverflow('No figure needed');
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(onOptimisticPatch).toHaveBeenCalledWith('q1', { needs_image: false });
     expect(onOptimisticPatch).not.toHaveBeenCalledWith('q1', { needs_image: null });
+  });
+});
+
+/**
+ * The paper header's permanently armed "Deactivate 90" moved onto the selection
+ * bar. It goes through the same bulk-update endpoint every other batch action
+ * uses, so the only thing worth pinning is that it sends the ticked ids and the
+ * right action.
+ */
+describe('PaperWorkspace activate/deactivate from the selection', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('deactivates only the ticked questions', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { updated: 1 } }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<PaperWorkspace {...base} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }));
+    fireEvent.click(screen.getByRole('button', { name: /Hide the selected questions from students/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/question-bank/questions/bulk-update');
+    expect(JSON.parse(init.body)).toEqual({ action: 'deactivate', question_ids: ['q2'] });
+  });
+
+  it('says how many activated when some had no answer key', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { updated: 1 } }) }),
+    );
+
+    render(<PaperWorkspace {...base} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }));
+    fireEvent.click(screen.getByLabelText('More actions for the selected questions'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Activate/ }));
+
+    await screen.findByText('1 of 2 activated, the rest have no answer key yet');
+  });
+});
+
+/**
+ * A worked solution is a maths question's real answer, and it used to be four
+ * clicks away in the Edit form. It is a slot in the paste assembly line now, so
+ * saving has to route it to its own column rather than into option_images.
+ */
+describe('PaperWorkspace solution images', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('offers a Solution paste slot on a maths question in Images mode', () => {
+    render(<PaperWorkspace {...base} mode="images" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open question 1' }));
+    expect(screen.getByText('Solution Image')).not.toBeNull();
+    expect(screen.getByText('required for maths')).not.toBeNull();
+  });
+
+  it('offers no Solution slot on an aptitude question', () => {
+    const aptitude = questions.map((q) => ({ ...q, section: 'aptitude' })) as NexusQBQuestion[];
+    render(<PaperWorkspace {...base} mode="images" questions={aptitude} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open question 1' }));
+    expect(screen.queryByText('Solution Image')).toBeNull();
   });
 });

@@ -56,6 +56,8 @@ interface StaffView {
     duration_minutes: number | null;
     passing_pct: number | null;
   } | null;
+  /** Every student's attempts on the placed test, not just the caller's. */
+  test_attempt_count: number;
   publish_blocker: string | null;
 }
 
@@ -79,6 +81,8 @@ export default function PaperStudentAccessPanel({
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [examOpen, setExamOpen] = useState(false);
+  /** Armed once, when a rebuild would orphan attempts. */
+  const [rebuildConfirm, setRebuildConfirm] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -146,13 +150,22 @@ export default function PaperStudentAccessPanel({
       (json) => json.data,
     );
 
-  const generateTest = () =>
-    write(
+  const generateTest = () => {
+    // Rebuilding composes a NEW test and relinks the placement, so every
+    // attempt against the old one stops being reachable from this paper. Free
+    // while nobody has sat it; a decision once somebody has.
+    if (view?.test && (view.test_attempt_count ?? 0) > 0 && !rebuildConfirm) {
+      setRebuildConfirm(true);
+      return;
+    }
+    setRebuildConfirm(false);
+    return write(
       'test',
       `/api/question-bank/papers/${paperId}/test`,
       { method: 'POST', body: JSON.stringify({ generate: true }) },
       () => null,
     );
+  };
 
   const removeTest = () =>
     write('test', `/api/question-bank/papers/${paperId}/test`, { method: 'DELETE' }, () => null);
@@ -267,6 +280,22 @@ export default function PaperStudentAccessPanel({
               >
                 Edit
               </Button>
+              {/* Repair, not routine. Uploading a JSON rebuilds the test on its
+                  own; this is the door for a paper whose questions were edited
+                  some other way. */}
+              <Button
+                size="small"
+                variant="outlined"
+                color={rebuildConfirm ? 'warning' : 'inherit'}
+                onClick={generateTest}
+                disabled={view.question_count === 0 || busy === 'test'}
+                startIcon={
+                  busy === 'test' ? <CircularProgress size={14} color="inherit" /> : undefined
+                }
+                sx={{ minHeight: 40, textTransform: 'none', borderRadius: 2 }}
+              >
+                {rebuildConfirm ? 'Rebuild anyway' : 'Rebuild'}
+              </Button>
               <IconButton
                 aria-label="Remove the test from this paper"
                 onClick={removeTest}
@@ -294,6 +323,23 @@ export default function PaperStudentAccessPanel({
           )
         }
       />
+
+      {/* The one thing a teacher must know before pressing Rebuild. Shown as
+          soon as anyone has sat the test, not only after the press, so the
+          consequence arrives before the decision rather than after it. */}
+      {view.test && view.test_attempt_count > 0 && (
+        <Alert
+          severity={rebuildConfirm ? 'warning' : 'info'}
+          sx={{ borderRadius: 2 }}
+          {...(rebuildConfirm ? { onClose: () => setRebuildConfirm(false) } : {})}
+        >
+          {view.test_attempt_count} attempt{view.test_attempt_count === 1 ? ' has' : 's have'} been
+          made on this test.{' '}
+          {rebuildConfirm
+            ? 'Rebuilding replaces it, and those results will no longer be reachable from this paper. Press Rebuild anyway to go ahead.'
+            : 'Rebuilding it would replace the test, and those results would no longer be reachable from this paper. Uploading a JSON will leave the test alone while this is true.'}
+        </Alert>
+      )}
 
       {/* The gap that hid the drawing section. When a paper has parsed more
           questions than it has activated, say so here rather than reporting a

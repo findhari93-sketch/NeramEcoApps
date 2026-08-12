@@ -16,6 +16,7 @@ export * from './qb-drawing-practice';
 export * from './qb-tags';
 export * from './qb-category-proposals';
 export * from './qb-papers';
+export * from './qb-paper-io';
 export * from './test-repository';
 export * from './test-provenance';
 export * from './question-draw';
