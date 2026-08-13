@@ -55,6 +55,7 @@ export * from './drawing-checklist';
 export * from './drawing-gallery';
 export * from './drawing-references';
 export * from './study-materials';
+export * from './study-annotations';
 export * from './study-tests';
 export * from './study-videos';
 export * from './study-reports';

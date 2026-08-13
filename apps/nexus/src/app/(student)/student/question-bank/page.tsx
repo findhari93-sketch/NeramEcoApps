@@ -105,7 +105,7 @@ export default function QuestionBankHome() {
     router.push(`/student/question-bank/papers/${paper.id}`);
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 900, mx: 'auto' }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1040, mx: 'auto' }}>
       <Typography variant="h5" fontWeight={700} sx={{ mb: 0.5 }}>
         Question Bank
       </Typography>
@@ -115,75 +115,87 @@ export default function QuestionBankHome() {
       </Box>
 
       {/*
-        Search is an outlined row, not a filled button. It is the secondary path
-        now that papers carry the page, and a full-width contained button here
-        outranked the entire grid below it.
+        Search and Drawing practice sit side by side from `sm` up instead of
+        each claiming a full-width row: two related entry points into the same
+        bank, so they read as a pair rather than a queue.
       */}
-      <Button
-        variant="outlined"
-        size="large"
-        fullWidth
-        startIcon={<SearchIcon />}
-        onClick={() => router.push('/student/question-bank/questions')}
+      <Box
         sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+          gap: 1.5,
           mb: 3,
-          py: 1.5,
-          minHeight: 52,
-          justifyContent: 'flex-start',
-          fontWeight: 600,
-          borderRadius: 2,
-          textTransform: 'none',
-          color: 'text.primary',
-          borderColor: 'divider',
-          '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
         }}
       >
-        <Box sx={{ textAlign: 'left', minWidth: 0 }}>
-          <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.2 }}>
-            Search every question
-          </Typography>
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-            {totalQuestions > 0
-              ? `${totalQuestions.toLocaleString()} questions by subject, chapter, year, difficulty`
-              : 'By subject, chapter, year, difficulty'}
-          </Typography>
-        </Box>
-      </Button>
+        {/*
+          Search is an outlined row, not a filled button. It is the secondary path
+          now that papers carry the page, and a full-width contained button here
+          outranked the entire grid below it.
+        */}
+        <Button
+          variant="outlined"
+          size="large"
+          fullWidth
+          startIcon={<SearchIcon />}
+          onClick={() => router.push('/student/question-bank/questions')}
+          sx={{
+            py: 1.5,
+            minHeight: 52,
+            justifyContent: 'flex-start',
+            fontWeight: 600,
+            borderRadius: 2,
+            textTransform: 'none',
+            color: 'text.primary',
+            borderColor: 'divider',
+            '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
+          }}
+        >
+          <Box sx={{ textAlign: 'left', minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+              Search every question
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+              {totalQuestions > 0
+                ? `${totalQuestions.toLocaleString()} questions by subject, chapter, year, difficulty`
+                : 'By subject, chapter, year, difficulty'}
+            </Typography>
+          </Box>
+        </Button>
 
-      {/* Drawing practice.
-          The question_format filter has always worked; what was missing was a
-          door to it. A drawing is the one question type a student cannot answer
-          by tapping, so burying it in a filter drawer hid the whole section. */}
-      <Button
-        variant="outlined"
-        size="large"
-        fullWidth
-        startIcon={<BrushOutlinedIcon />}
-        onClick={() =>
-          router.push('/student/question-bank/questions?fmt=DRAWING_PROMPT')
-        }
-        sx={{
-          mb: 3,
-          py: 1.5,
-          minHeight: 52,
-          justifyContent: 'flex-start',
-          fontWeight: 600,
-          borderRadius: 2,
-          textTransform: 'none',
-          color: 'text.primary',
-          borderColor: 'divider',
-          '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
-        }}
-      >
-        <Box sx={{ textAlign: 'left', minWidth: 0 }}>
-          <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.2 }}>
-            Drawing practice
-          </Typography>
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-            Draw it, upload a photo, and your teacher marks it
-          </Typography>
-        </Box>
-      </Button>
+        {/* Drawing practice.
+            The question_format filter has always worked; what was missing was a
+            door to it. A drawing is the one question type a student cannot answer
+            by tapping, so burying it in a filter drawer hid the whole section. */}
+        <Button
+          variant="outlined"
+          size="large"
+          fullWidth
+          startIcon={<BrushOutlinedIcon />}
+          onClick={() =>
+            router.push('/student/question-bank/questions?fmt=DRAWING_PROMPT')
+          }
+          sx={{
+            py: 1.5,
+            minHeight: 52,
+            justifyContent: 'flex-start',
+            fontWeight: 600,
+            borderRadius: 2,
+            textTransform: 'none',
+            color: 'text.primary',
+            borderColor: 'divider',
+            '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
+          }}
+        >
+          <Box sx={{ textAlign: 'left', minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+              Drawing practice
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+              Draw it, upload a photo, and your teacher marks it
+            </Typography>
+          </Box>
+        </Button>
+      </Box>
 
       {(presetsLoading || presets.length > 0) && (
         <Box sx={{ mb: 3 }}>

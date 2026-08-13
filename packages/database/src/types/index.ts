@@ -4861,6 +4861,41 @@ export interface NexusStudyFileFavorite {
   created_at: string;
 }
 
+export type NexusStudyAnnotationKind = 'pen' | 'highlighter' | 'note';
+
+/** A fractional (0..1) point on a page, resolution-independent of the reader's render scale. */
+export interface NexusStudyAnnotationPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * One freehand stroke or sticky note on a study-materials PDF. Ink, not a text-selection
+ * range: PDFReader renders pages to opaque <canvas> with no selectable text layer by
+ * design, so a highlight is drawn, not selected. See migration 20260901090000.
+ */
+export interface NexusStudyFileAnnotation {
+  id: string;
+  file_id: string;
+  student_id: string;
+  page_number: number;
+  kind: NexusStudyAnnotationKind;
+  color: string;
+  stroke_width: number | null;
+  /** Sampled stroke points; null for 'note'. */
+  points: NexusStudyAnnotationPoint[] | null;
+  /** Single anchor point; used by 'note' only. */
+  anchor_x: number | null;
+  anchor_y: number | null;
+  /** Required for 'note'; optional margin comment on a pen/highlighter stroke. */
+  note_text: string | null;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NexusStudyAnnotationDTO = Omit<NexusStudyFileAnnotation, 'is_deleted'>;
+
 /** A flat search hit across folders + files. */
 export interface NexusStudySearchResult {
   kind: 'folder' | 'file';

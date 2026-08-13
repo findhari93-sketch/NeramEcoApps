@@ -28,15 +28,18 @@ import CloseIcon from '@mui/icons-material/Close';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
 import PDFReader from '@/components/reader/PDFReader';
 import ProtectedContent from '@/components/ProtectedContent';
 import StudyCommentPanel from '@/components/study-materials/StudyCommentPanel';
+import PDFAnnotationsPanel from '@/components/study-materials/PDFAnnotationsPanel';
 import ChapterVideoPanel from '@/components/study-materials/ChapterVideoPanel';
 import ChapterWorkspaceRail, {
   type ChapterManageActions,
   type WorkspaceTab,
 } from '@/components/study-materials/ChapterWorkspaceRail';
 import { useStudyTimeTracker } from '@/hooks/useStudyTimeTracker';
+import { useFileAnnotations } from '@/hooks/useFileAnnotations';
 import { takeTestHref } from '@/lib/test-return';
 import type { NexusStudyFileDTO } from '@neram/database/types';
 
@@ -48,7 +51,7 @@ export interface StudyFileManage {
   refreshKey?: number;
 }
 
-type ViewerTab = 'doc' | WorkspaceTab;
+type ViewerTab = 'doc' | 'notes' | WorkspaceTab;
 
 interface StudyFileViewerProps {
   file: NexusStudyFileDTO | null;
@@ -96,10 +99,12 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
   const [tab, setTab] = useState<ViewerTab>('doc');
   const [startingTest, setStartingTest] = useState(false);
   const [testError, setTestError] = useState('');
+  const [jumpToPage, setJumpToPage] = useState<number | undefined>(undefined);
 
   // Reset to the document tab whenever a new file opens. A teacher opening a
   // chapter is still reading it first; Setup is one tap away, not in the way.
-  useEffect(() => { if (file) { setTab('doc'); setTestError(''); } }, [file]);
+  // A stale jump target must not survive into the next file's page count.
+  useEffect(() => { if (file) { setTab('doc'); setTestError(''); setJumpToPage(undefined); } }, [file]);
 
   /**
    * Which panel the side rail shows.
@@ -108,7 +113,15 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
    * it falls through to whatever that viewer's rail leads with. On mobile the
    * tabs are exclusive and 'doc' means the document fills the screen.
    */
-  const railTab: WorkspaceTab = tab === 'doc' ? (manage ? 'setup' : 'comments') : tab;
+  const railTab: ViewerTab = tab === 'doc' ? (manage ? 'setup' : 'comments') : tab;
+
+  // Personal ink annotations (Pen/Highlighter/Note). Teachers manage a chapter, they
+  // don't mark it up, so this only fetches for the plain student viewer.
+  const annotationsHook = useFileAnnotations({
+    fileId: file?.id ?? null,
+    getToken,
+    enabled: !manage && !!file,
+  });
 
   // Silently accrue reading time for the student while this file is open.
   useStudyTimeTracker({ fileId: track && file ? file.id : null, token, enabled: !!track });
@@ -235,6 +248,11 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
                   <GroupsOutlinedIcon fontSize="small" /> Students
                 </ToggleButton>
               )}
+              {!manage && (
+                <ToggleButton value="notes">
+                  <StickyNote2OutlinedIcon fontSize="small" /> Notes
+                </ToggleButton>
+              )}
               <ToggleButton value="comments">
                 <ChatBubbleOutlineIcon fontSize="small" /> Comments
               </ToggleButton>
@@ -248,7 +266,39 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
                 {/* ProtectedContent blocks right-click, text selection, Ctrl+S/P and printing while viewing. */}
                 <ProtectedContent disableScreenshot sx={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', width: '100%' }}>
                   {file.kind === 'pdf' ? (
-                    <PDFReader pdfUrl={contentUrl()} watermark={watermark} />
+                    <PDFReader
+                      pdfUrl={contentUrl()}
+                      watermark={watermark}
+                      initialPage={jumpToPage}
+                      annotations={
+                        !manage
+                          ? {
+                              items: annotationsHook.annotations,
+                              onCreateStroke: (page, kind, points, color) =>
+                                annotationsHook
+                                  .createAnnotation({ page_number: page, kind, color, points })
+                                  .then((a) => a?.id ?? null),
+                              onCreateNote: (page, anchor, text, color) =>
+                                annotationsHook
+                                  .createAnnotation({
+                                    page_number: page,
+                                    kind: 'note',
+                                    color,
+                                    anchor_x: anchor.x,
+                                    anchor_y: anchor.y,
+                                    note_text: text,
+                                  })
+                                  .then((a) => a?.id ?? null),
+                              onUpdateNote: (id, text) => {
+                                annotationsHook.updateAnnotationNote(id, { note_text: text });
+                              },
+                              onDelete: (id) => {
+                                annotationsHook.deleteAnnotation(id);
+                              },
+                            }
+                          : undefined
+                      }
+                    />
                   ) : (
                     <Box
                       onContextMenu={(e) => e.preventDefault()}
@@ -293,7 +343,7 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
               >
                 {/* Desktop keeps the document on screen, so the rail carries its
                     own tabs. On mobile the row above has already chosen. */}
-                {manage && !isMobile && (
+                {!isMobile && (
                   <ToggleButtonGroup
                     value={railTab}
                     exclusive
@@ -306,8 +356,12 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
                       '& .MuiToggleButton-root': { minHeight: 40, textTransform: 'none', gap: 0.5, fontSize: 12 },
                     }}
                   >
-                    <ToggleButton value="setup"><TuneRoundedIcon fontSize="small" /> Setup</ToggleButton>
-                    <ToggleButton value="students"><GroupsOutlinedIcon fontSize="small" /> Students</ToggleButton>
+                    {manage ? (
+                      <ToggleButton value="setup"><TuneRoundedIcon fontSize="small" /> Setup</ToggleButton>
+                    ) : (
+                      <ToggleButton value="notes"><StickyNote2OutlinedIcon fontSize="small" /> Notes</ToggleButton>
+                    )}
+                    {manage && <ToggleButton value="students"><GroupsOutlinedIcon fontSize="small" /> Students</ToggleButton>}
                     <ToggleButton value="comments"><ChatBubbleOutlineIcon fontSize="small" /> Comments</ToggleButton>
                   </ToggleButtonGroup>
                 )}
@@ -319,11 +373,23 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
                       file={file}
                       classroomId={manage.classroomId}
                       getToken={getToken}
-                      tab={railTab}
+                      // 'notes'/'doc' are unreachable here: this branch's own tab row above
+                      // never offers them, so railTab is always a real WorkspaceTab value.
+                      tab={railTab as WorkspaceTab}
                       actions={manage.actions}
                       refreshKey={manage.refreshKey}
                     />
                   </Box>
+                ) : railTab === 'notes' ? (
+                  <PDFAnnotationsPanel
+                    annotations={annotationsHook.annotations}
+                    loading={annotationsHook.loading}
+                    onJumpToPage={(page) => {
+                      setJumpToPage(page);
+                      if (isMobile) setTab('doc');
+                    }}
+                    onDelete={(id) => annotationsHook.deleteAnnotation(id)}
+                  />
                 ) : (
                   <StudyCommentPanel fileId={file.id} getToken={getToken} />
                 )}

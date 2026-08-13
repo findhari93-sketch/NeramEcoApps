@@ -114,12 +114,10 @@ export default function PaperDetailPage() {
     setDrillBusy(true);
     setError(null);
     try {
-      const res = await authFetch(`/api/question-bank/student-papers/${paperId}/drill`, {
+      const json = await authFetch(`/api/question-bank/student-papers/${paperId}/drill`, {
         method: 'POST',
         body: JSON.stringify({ classroom_id: classroomId }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Could not build the drill.');
       router.push(
         takeTestHref({ testId: json.data.test_id, returnTo, returnLabel: 'Back to paper' }),
       );
@@ -140,7 +138,7 @@ export default function PaperDetailPage() {
     */
     const missing = loadError?.status === 404 || (!loadError && !paper);
     return (
-      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: 'auto' }}>
+      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1040, mx: 'auto' }}>
         <BackButton onClick={() => router.push('/student/question-bank')} />
         <Alert severity={missing ? 'info' : 'warning'} sx={{ borderRadius: 2 }}>
           {missing
@@ -154,7 +152,7 @@ export default function PaperDetailPage() {
   const bestPct = paper.test?.best_pct ?? null;
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: 'auto' }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1040, mx: 'auto' }}>
       <BackButton onClick={() => router.push('/student/question-bank')} />
 
       <Typography variant="h5" fontWeight={700} sx={{ mb: 0.25 }}>
@@ -183,7 +181,22 @@ export default function PaperDetailPage() {
         </Alert>
       )}
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      {/*
+        A grid, not a column: on a phone this is one card under the next, same
+        as before. From `sm` up it fills the width the shell's Container
+        already gives the page instead of clamping to a narrow strip and
+        leaving the rest of a desktop screen blank. `repeat(3, 1fr)` at `md`
+        matches the three possible faces exactly, so a full row is the common
+        case, not a coincidence.
+      */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+          gap: 1.5,
+          alignItems: 'stretch',
+        }}
+      >
         {/* Hidden, not disabled, when there is no PDF. A card that opens nothing
             is a worse answer than no card. */}
         {paper.study_file && (
@@ -191,11 +204,7 @@ export default function PaperDetailPage() {
             icon={<MenuBookOutlinedIcon />}
             color={theme.palette.info.main}
             title="Read original paper"
-            body={
-              paper.study_file.page_count
-                ? `The real exam paper, ${paper.study_file.page_count} pages, view only`
-                : 'The real exam paper, view only'
-            }
+            body={paper.study_file.page_count ? `${paper.study_file.page_count} pages · view only` : 'View only'}
             done={paper.faces.read === 'done'}
             onClick={openReader}
           />
@@ -208,8 +217,8 @@ export default function PaperDetailPage() {
             title="Practice questions"
             body={
               paper.attempted_count > 0
-                ? `${paper.attempted_count} of ${paper.question_count} attempted. Pick up where you left off.`
-                : `All ${paper.question_count} questions, one at a time, with solutions.`
+                ? `${paper.attempted_count} of ${paper.question_count} attempted`
+                : `${paper.question_count} questions · with solutions`
             }
             done={paper.faces.practice === 'done'}
             onClick={() => router.push(practiceHref)}
@@ -222,6 +231,9 @@ export default function PaperDetailPage() {
             sx={{
               p: 2,
               borderRadius: 3,
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
               borderColor:
                 paper.faces.test === 'done'
                   ? alpha(theme.palette.success.main, 0.4)
@@ -237,11 +249,9 @@ export default function PaperDetailPage() {
                   Take as test
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {paper.test.official_attempt_done && bestPct != null
-                    ? `You scored ${Math.round(bestPct)}%. Retakes are practice and do not change it.`
-                    : paper.test.duration_minutes
-                      ? `${paper.test.question_count} questions in ${paper.test.duration_minutes} minutes, exam conditions.`
-                      : `${paper.test.question_count} questions, untimed.`}
+                  {paper.test.duration_minutes
+                    ? `${paper.test.question_count} questions · ${paper.test.duration_minutes} min`
+                    : `${paper.test.question_count} questions · untimed`}
                 </Typography>
               </Box>
               {paper.faces.test === 'done' && (
@@ -249,7 +259,19 @@ export default function PaperDetailPage() {
               )}
             </Box>
 
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
+            {/* Buttons only go side by side once a card actually has the room:
+                at `sm` this card is one of two in the row (~half the page
+                width), too narrow for two labelled buttons, so it waits for
+                `md`, where the card is one of three and has space to spare. */}
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: { xs: 'column', md: 'row' },
+                gap: 1,
+                mt: 'auto',
+                pt: 1.5,
+              }}
+            >
               <Button
                 variant="contained"
                 color="success"
@@ -369,6 +391,7 @@ function ActionCard({
         alignItems: 'center',
         gap: 1.5,
         minHeight: 84,
+        height: '100%',
         borderColor: done ? alpha(theme.palette.success.main, 0.4) : 'divider',
         transition: theme.transitions.create(['border-color', 'box-shadow'], { duration: 180 }),
         '&:hover': { borderColor: color, boxShadow: `0 2px 10px ${alpha(color, 0.16)}` },
@@ -478,14 +501,22 @@ function ProgressHero({
 
 function PaperDetailSkeleton() {
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: 'auto' }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1040, mx: 'auto' }}>
       <Skeleton variant="text" width={140} height={40} sx={{ mb: 1 }} />
       <Skeleton variant="text" width="70%" height={34} />
       <Skeleton variant="text" width="45%" height={20} sx={{ mb: 2.5 }} />
       <Skeleton variant="rounded" height={116} sx={{ borderRadius: 3, mb: 2.5 }} />
-      {[0, 1, 2].map((i) => (
-        <Skeleton key={i} variant="rounded" height={84} sx={{ borderRadius: 3, mb: 1.5 }} />
-      ))}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+          gap: 1.5,
+        }}
+      >
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} variant="rounded" height={84} sx={{ borderRadius: 3 }} />
+        ))}
+      </Box>
     </Box>
   );
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFileById, getChapterReport } from '@neram/database';
+import { getFileById, getChapterReport, getAnnotationCountsForFile } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 
 /**
@@ -24,13 +24,25 @@ export async function GET(request: NextRequest, { params }: { params: { fileId: 
     const classroom = request.nextUrl.searchParams.get('classroom');
     const { rows, requires_video } = await getChapterReport(params.fileId, classroom);
 
+    // Annotation counts are looked up separately (not threaded through getChapterReport)
+    // so this report's roster/read/watch-facts pipeline stays untouched by a concern that
+    // has nothing to do with completion. Merged onto each row by student_id.
+    const annotationCounts = await getAnnotationCountsForFile(
+      params.fileId,
+      rows.map((r) => r.student_id),
+    );
+    const rowsWithAnnotations = rows.map((r) => ({
+      ...r,
+      annotation_count: annotationCounts[r.student_id] || 0,
+    }));
+
     const completed = rows.filter((r) => r.status === 'completed');
     const scores = completed.map((r) => r.best_score_pct).filter((v): v is number => v != null);
 
     return NextResponse.json({
       file: { id: file.id, title: file.title },
       requires_video,
-      rows,
+      rows: rowsWithAnnotations,
       stats: {
         total: rows.length,
         completed: completed.length,

@@ -21,15 +21,19 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Box, Typography, Button, Chip, Skeleton, Alert, Divider, alpha, useTheme,
+  Box, Typography, Button, Chip, Skeleton, Alert, Divider, Dialog, IconButton, alpha, useTheme, useMediaQuery,
 } from '@neram/ui';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
+import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
+import CloseIcon from '@mui/icons-material/Close';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import StudyCommentPanel from '@/components/study-materials/StudyCommentPanel';
+import PDFAnnotationsPanel from '@/components/study-materials/PDFAnnotationsPanel';
+import { useFileAnnotations } from '@/hooks/useFileAnnotations';
 import { ChapterStatusChip, WatchHonesty, type ChapterStatus } from '@/components/study-materials/chapter-status';
 import {
   chapterReadiness,
@@ -71,6 +75,8 @@ interface ReportRow {
   watched_seconds?: number;
   blocked_seeks?: number;
   checkpoint_attempts?: number;
+  /** Personal highlights/pen marks/notes this student has made on the chapter PDF. */
+  annotation_count?: number;
 }
 
 interface ReportBody {
@@ -160,11 +166,20 @@ export default function ChapterWorkspaceRail({
   refreshKey = 0,
 }: Props) {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [tracks, setTracks] = useState<WorkspaceTrack[] | null>(null);
   const [placedTest, setPlacedTest] = useState<PlacedChapterTest | null>(null);
   const [report, setReport] = useState<ReportBody | null>(null);
   const [error, setError] = useState('');
+  // A student's marks, viewed read-only from the roster row's annotation-count chip.
+  const [notesFor, setNotesFor] = useState<{ id: string; name: string | null } | null>(null);
+  const notesHook = useFileAnnotations({
+    fileId,
+    getToken,
+    enabled: !!notesFor,
+    studentId: notesFor?.id,
+  });
 
   // Which (fileId, refreshKey) each panel has already loaded, so switching tabs
   // back and forth does not refetch and a save does.
@@ -400,6 +415,16 @@ export default function ChapterWorkspaceRail({
                       }
                     />
                   )}
+                  {!!r.annotation_count && (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      icon={<StickyNote2OutlinedIcon sx={{ fontSize: 14 }} />}
+                      label={`${r.annotation_count} mark${r.annotation_count === 1 ? '' : 's'}`}
+                      onClick={() => setNotesFor({ id: r.student_id, name: r.name })}
+                      sx={{ cursor: 'pointer' }}
+                    />
+                  )}
                 </Box>
                 {(r.watched_seconds || r.blocked_seeks || r.checkpoint_attempts) ? (
                   <Box sx={{ mt: 0.5 }}>
@@ -430,6 +455,34 @@ export default function ChapterWorkspaceRail({
           Open the full report
         </Button>
       </Box>
+
+      {/* A student's marks, read-only: this rail already shows the roster, not the PDF
+          itself, so this is a list (PDFAnnotationsPanel), not a second reader. */}
+      <Dialog
+        open={!!notesFor}
+        onClose={() => setNotesFor(null)}
+        fullScreen={isMobile}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { height: isMobile ? '100%' : 480, borderRadius: isMobile ? 0 : 2 } }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${theme.palette.divider}` }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1 }} noWrap>
+              {notesFor?.name || 'Student'}'s marks on this chapter
+            </Typography>
+            <IconButton size="small" onClick={() => setNotesFor(null)} aria-label="Close" sx={{ width: 40, height: 40 }}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          <PDFAnnotationsPanel
+            annotations={notesHook.annotations}
+            loading={notesHook.loading}
+            readOnly
+            onJumpToPage={() => {}}
+          />
+        </Box>
+      </Dialog>
     </Box>
   );
 }

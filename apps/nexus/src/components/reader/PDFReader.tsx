@@ -1,9 +1,32 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Box, Typography, CircularProgress, IconButton, Tooltip, Button } from '@neram/ui';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import PDFAnnotationLayer, { type AnnotationTool } from './PDFAnnotationLayer';
+import PDFAnnotationToolbar, { ANNOTATION_COLORS } from './PDFAnnotationToolbar';
+import type { NexusStudyAnnotationDTO, NexusStudyAnnotationPoint } from '@neram/database/types';
+
+/** Personal ink annotations for this file. Omit entirely for a plain, non-annotatable reader. */
+export interface PDFReaderAnnotations {
+  items: NexusStudyAnnotationDTO[];
+  onCreateStroke?: (
+    page: number,
+    kind: 'pen' | 'highlighter',
+    points: NexusStudyAnnotationPoint[],
+    color: string,
+  ) => Promise<string | null>;
+  onCreateNote?: (
+    page: number,
+    anchor: NexusStudyAnnotationPoint,
+    text: string,
+    color: string,
+  ) => Promise<string | null>;
+  onUpdateNote?: (id: string, text: string) => void;
+  onDelete?: (id: string) => void;
+}
 
 interface PDFReaderProps {
   pdfUrl: string;
@@ -16,6 +39,7 @@ interface PDFReaderProps {
    * rendered page so it survives screenshots. Leave undefined for trusted viewers (teachers).
    */
   watermark?: string;
+  annotations?: PDFReaderAnnotations;
 }
 
 /**
@@ -33,17 +57,72 @@ export default function PDFReader({
   onPageChange,
   onRetry,
   watermark,
+  annotations,
 }: PDFReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [numPages, setNumPages] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // Also kept as state (not just a ref) so it can be passed as the Drawer's portal
+  // `container`: a bare ref can't trigger the re-render needed to hand the toolbar
+  // a real DOM node once it exists.
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
+  const setRootRef = useCallback((node: HTMLDivElement | null) => {
+    containerRef.current = node;
+    setContainerEl(node);
+  }, []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<any>(null);
   const renderedRef = useRef<Set<number>>(new Set());
   const pageElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  // --- Annotate mode (Pen / Highlighter / Note / Eraser) --------------------
+  const canAnnotate = !!annotations;
+  const [annotateMode, setAnnotateMode] = useState(false);
+  const [tool, setTool] = useState<AnnotationTool>('highlighter');
+  const [annotateColor, setAnnotateColor] = useState<string>(ANNOTATION_COLORS[0]);
+  const lastCreatedIdRef = useRef<string | null>(null);
+
+  // Leaving annotate mode when the file itself changes, not just re-rendering: a stale
+  // "last created" id from a different file must never be undo-able against this one.
+  useEffect(() => {
+    setAnnotateMode(false);
+    lastCreatedIdRef.current = null;
+  }, [pdfUrl]);
+
+  const annotationsByPage = useMemo(() => {
+    const map = new Map<number, NexusStudyAnnotationDTO[]>();
+    for (const a of annotations?.items || []) {
+      const list = map.get(a.page_number);
+      if (list) list.push(a);
+      else map.set(a.page_number, [a]);
+    }
+    return map;
+  }, [annotations?.items]);
+
+  const handleCreateStroke = useCallback(
+    async (page: number, kind: 'pen' | 'highlighter', points: NexusStudyAnnotationPoint[]) => {
+      const id = await annotations?.onCreateStroke?.(page, kind, points, annotateColor);
+      lastCreatedIdRef.current = id || null;
+    },
+    [annotations, annotateColor],
+  );
+
+  const handleCreateNote = useCallback(
+    async (page: number, anchor: NexusStudyAnnotationPoint, text: string) => {
+      const id = await annotations?.onCreateNote?.(page, anchor, text, annotateColor);
+      lastCreatedIdRef.current = id || null;
+    },
+    [annotations, annotateColor],
+  );
+
+  const handleUndo = useCallback(() => {
+    if (!lastCreatedIdRef.current) return;
+    annotations?.onDelete?.(lastCreatedIdRef.current);
+    lastCreatedIdRef.current = null;
+  }, [annotations]);
 
   // --- Load the document ---------------------------------------------------
   useEffect(() => {
@@ -241,7 +320,7 @@ export default function PDFReader({
 
   return (
     <Box
-      ref={containerRef}
+      ref={setRootRef}
       onContextMenu={(e) => e.preventDefault()}
       sx={{
         position: 'relative',
@@ -277,12 +356,43 @@ export default function PDFReader({
         >
           PDF Viewer
         </Typography>
+        {canAnnotate && (
+          <Tooltip title={annotateMode ? 'Stop marking up' : 'Highlight, underline or add a note'}>
+            <IconButton
+              size="small"
+              color={annotateMode ? 'primary' : 'default'}
+              onClick={() => setAnnotateMode((v) => !v)}
+              aria-label={annotateMode ? 'Stop marking up' : 'Highlight, underline or add a note'}
+              sx={{ width: 40, height: 40 }}
+            >
+              <EditOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-          <IconButton size="small" onClick={handleFullscreen}>
+          <IconButton
+            size="small"
+            onClick={handleFullscreen}
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          >
             {isFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
           </IconButton>
         </Tooltip>
       </Box>
+
+      {canAnnotate && (
+        <PDFAnnotationToolbar
+          open={annotateMode}
+          container={containerEl}
+          tool={tool}
+          color={annotateColor}
+          canUndo={!!lastCreatedIdRef.current}
+          onToolChange={setTool}
+          onColorChange={setAnnotateColor}
+          onUndo={handleUndo}
+          onDone={() => setAnnotateMode(false)}
+        />
+      )}
 
       {/* Loading overlay */}
       {loading && (
@@ -351,6 +461,18 @@ export default function PDFReader({
                 }}
                 sx={{ position: 'relative', width: '100%' }}
               />
+              {annotations && (
+                <PDFAnnotationLayer
+                  annotations={annotationsByPage.get(pageNum) || []}
+                  active={annotateMode}
+                  tool={tool}
+                  color={annotateColor}
+                  onCreateStroke={(kind, points) => handleCreateStroke(pageNum, kind, points)}
+                  onCreateNote={(anchor, text) => handleCreateNote(pageNum, anchor, text)}
+                  onUpdateNote={(id, text) => annotations.onUpdateNote?.(id, text)}
+                  onDelete={(id) => annotations.onDelete?.(id)}
+                />
+              )}
             </Box>
           ))}
         </Box>
