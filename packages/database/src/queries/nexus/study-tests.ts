@@ -457,7 +457,9 @@ import {
   getComposedTestQuestions,
   getPlacementsByContext,
   getServedTestQuestions,
+  getTestDraw,
   getTestMeta,
+  gradeAgainstDraw,
   gradeTestOneShot,
 } from './test-repository';
 
@@ -613,6 +615,114 @@ export async function gradePlacedChapterAttempt(
       explanation: explanationById.get(r.question_id) ?? null,
     })),
   };
+}
+
+/** One question, as answered on one attempt — the "Google Forms response sheet" row. */
+export interface StudyFileAttemptReviewItem {
+  question_id: string;
+  question_text: string | null;
+  options: unknown;
+  correct_answer: string | null;
+  selected: string | null;
+  is_correct: boolean;
+  is_gradable: boolean;
+  explanation: string | null;
+  explanation_detailed: string | null;
+}
+
+/** One sitting of the chapter test, fully replayed. */
+export interface StudyFileAttempt {
+  attempt_id: string;
+  attempt_number: number;
+  mode: 'official' | 'revision';
+  submitted_at: string | null;
+  score: number;
+  total_marks: number;
+  percentage: number;
+  passed: boolean;
+  review: StudyFileAttemptReviewItem[];
+}
+
+/**
+ * Every submitted attempt a student has made on a chapter's test, each
+ * replayed into a full per-question review — a teacher's response sheet.
+ *
+ * The attempt row only ever stored the raw answers (`{questionId: 'a'}`),
+ * never which were right. This is the read-only counterpart to
+ * gradeAgainstDraw, the same core submitAttempt uses, so a replayed review can
+ * never disagree with what the student was actually shown when they
+ * submitted. The composed paper (with the answer key and explanations) is
+ * fetched once and reused across every attempt, rather than once per
+ * attempt: it is the same paper for all of them, only the draw and the
+ * answers differ sitting to sitting.
+ *
+ * `score`/`total_marks`/`percentage` are read off the attempt row as stored
+ * (what the student was actually told), not recomputed — a teacher reviewing
+ * an old attempt should see the number that attempt was graded at, even if
+ * a question's answer key has since been edited. `passed` is compared
+ * against the chapter's CURRENT passing_pct, matching how the rest of this
+ * feature treats passing_pct as the live configured threshold.
+ */
+export async function getStudyFileAttemptReview(
+  fileId: string,
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<{
+  test: { test_id: string; title: string; passing_pct: number } | null;
+  attempts: StudyFileAttempt[];
+}> {
+  const supabase = client || getSupabaseAdminClient();
+  const placed = await getPlacedChapterTest(fileId, supabase);
+  if (!placed) return { test: null, attempts: [] };
+
+  const { data: rows, error } = await supabase
+    .from('nexus_test_attempts')
+    .select('id, attempt_number, mode, answers, score, total_marks, percentage, submitted_at')
+    .eq('test_id', placed.test_id)
+    .eq('student_id', studentId)
+    .eq('status', 'submitted')
+    .order('attempt_number', { ascending: true });
+  if (error) throw error;
+  if (!rows || rows.length === 0) {
+    return { test: { test_id: placed.test_id, title: placed.title, passing_pct: placed.passing_pct }, attempts: [] };
+  }
+
+  const composed = await getComposedTestQuestions(placed.test_id, true, supabase);
+
+  const attempts = await Promise.all(
+    rows.map(async (a: any): Promise<StudyFileAttempt> => {
+      const draw = await getTestDraw(placed.test_id, studentId, Number(a.attempt_number) || 1, supabase);
+      const graded = gradeAgainstDraw(composed, draw, (a.answers as Record<string, string>) || {}, placed.passing_pct);
+      const byId = new Map(graded.questions.map((q) => [q.question_id, q]));
+
+      return {
+        attempt_id: a.id,
+        attempt_number: Number(a.attempt_number) || 1,
+        mode: (a.mode as 'official' | 'revision') ?? 'official',
+        submitted_at: a.submitted_at,
+        score: Number(a.score) || 0,
+        total_marks: Number(a.total_marks) || 0,
+        percentage: Number(a.percentage) || 0,
+        passed: (Number(a.percentage) || 0) >= placed.passing_pct,
+        review: graded.review.map((r) => {
+          const q = byId.get(r.question_id);
+          return {
+            question_id: r.question_id,
+            question_text: q?.question_text ?? null,
+            options: q?.options ?? null,
+            correct_answer: r.correct_answer,
+            selected: r.selected,
+            is_correct: r.is_correct,
+            is_gradable: r.is_gradable,
+            explanation: q?.explanation_brief ?? null,
+            explanation_detailed: q?.explanation_detailed ?? null,
+          };
+        }),
+      };
+    }),
+  );
+
+  return { test: { test_id: placed.test_id, title: placed.title, passing_pct: placed.passing_pct }, attempts };
 }
 
 /**

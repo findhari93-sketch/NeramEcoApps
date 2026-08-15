@@ -18,6 +18,7 @@ export * from './qb-category-proposals';
 export * from './qb-papers';
 export * from './qb-paper-io';
 export * from './test-repository';
+export * from './test-attempt-violations';
 export * from './test-provenance';
 export * from './question-draw';
 export * from './paper-marking';

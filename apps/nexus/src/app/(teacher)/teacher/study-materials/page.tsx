@@ -56,7 +56,6 @@ import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
 import StudyUploadDialog from '@/components/study-materials/StudyUploadDialog';
 import DownloadGrantDialog, { type GrantTarget } from '@/components/study-materials/DownloadGrantDialog';
 import StudyTestAuthorDialog from '@/components/study-materials/StudyTestAuthorDialog';
@@ -97,9 +96,6 @@ function TeacherStudyMaterials() {
 
   const [token, setToken] = useState<string | null>(null);
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [viewerFile, setViewerFile] = useState<NexusStudyFileDTO | null>(null);
-  /** Bumped on every successful load, so the open chapter's rail re-reads. */
-  const [railRefresh, setRailRefresh] = useState(0);
   const [uploadOpen, setUploadOpen] = useState(false);
 
   // Menus
@@ -237,10 +233,6 @@ function TeacherStudyMaterials() {
       });
       if (!res.ok) throw new Error('Failed to load');
       setData(await res.json());
-      // Every dialog calls load() when it saves. Bumping here is what makes the
-      // open chapter's rail re-read its recordings and its report, instead of
-      // going on showing what was true when the chapter was opened.
-      setRailRefresh((n) => n + 1);
     } catch {
       setSnack({ msg: 'Could not load this folder', sev: 'error' });
     } finally {
@@ -260,7 +252,7 @@ function TeacherStudyMaterials() {
 
   const openFile = (file: FileDTO) => {
     if (file.kind === 'pdf' || file.kind === 'image') {
-      setViewerFile(file);
+      router.push(`/teacher/study-materials/${file.id}`);
     } else if (token) {
       // Non-previewable types: staff can always download.
       window.open(`/api/study-materials/files/${file.id}/content?token=${encodeURIComponent(token)}&download=1`, '_blank');
@@ -568,59 +560,6 @@ function TeacherStudyMaterials() {
   const folders = data?.folders || [];
   const files = data?.files || [];
   const atRoot = !folderId;
-
-  /**
-   * Keep the open chapter in step with the folder it came from.
-   *
-   * viewerFile is a snapshot taken when the card was tapped. Attaching a test
-   * from inside the viewer reloads the folder, and without this the Setup
-   * checklist would go on reporting "no test yet" against a chapter that now
-   * has one, which is exactly the kind of lie the checklist exists to stop.
-   */
-  useEffect(() => {
-    if (!viewerFile) return;
-    const fresh = files.find((f) => f.id === viewerFile.id);
-    if (fresh && fresh !== viewerFile) setViewerFile(fresh);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [files]);
-
-  /**
-   * What the rail's buttons do. The page keeps owning every dialog, so the rail
-   * is a second way in rather than a second implementation.
-   */
-  const manageActions = {
-    onTest: () => {
-      if (!viewerFile) return;
-      // Same rule as the card menu: with a test already linked the honest
-      // action is to edit that one, not to quietly build a second.
-      if (viewerFile.file_type === 'application/pdf' && !viewerFile.has_test && !viewerFile.qb_paper) {
-        setGenerateFile({ id: viewerFile.id, title: viewerFile.title });
-      } else {
-        setTestFile({ id: viewerFile.id, title: viewerFile.title, qb_paper: viewerFile.qb_paper });
-      }
-    },
-    // A paper already exists: open it where everything about it lives, rather
-    // than adding a third place to edit questions.
-    onOpenTest: (testId: string) => router.push(`/teacher/tests/${testId}`),
-    onRecordings: () => {
-      if (!viewerFile) return;
-      setTracksFile({
-        id: viewerFile.id,
-        title: viewerFile.title,
-        recording: viewerFile.recording ?? null,
-      });
-    },
-    onDownloadAccess: () =>
-      viewerFile &&
-      setGrantTarget({
-        kind: 'file',
-        id: viewerFile.id,
-        name: viewerFile.title,
-        folderId: viewerFile.folder_id,
-      }),
-    onOpenReport: () =>
-      viewerFile && router.push(`/teacher/study-materials/completion/${viewerFile.id}`),
-  };
 
   /**
    * Always-on drag handle (desktop). Touch users reorder/move via the ... menu.
@@ -1145,7 +1084,7 @@ function TeacherStudyMaterials() {
             secondaryTypographyProps={{ variant: 'caption' }}
           />
         </MenuItem>
-        <MenuItem onClick={() => { if (fileMenu) router.push(`/teacher/study-materials/completion/${fileMenu.file.id}`); setFileMenu(null); }}>
+        <MenuItem onClick={() => { if (fileMenu) router.push(`/teacher/study-materials/${fileMenu.file.id}?tab=students`); setFileMenu(null); }}>
           <ListItemIcon><GroupsOutlinedIcon fontSize="small" /></ListItemIcon>
           <ListItemText>View completion</ListItemText>
         </MenuItem>
@@ -1209,20 +1148,6 @@ function TeacherStudyMaterials() {
         folderId={folderId}
         authFetch={authFetch}
         onUploaded={load}
-      />
-
-      {/* The same viewer students use, plus the teacher rail: what this chapter
-          is missing, who is getting through it, and the comments. */}
-      <StudyFileViewer
-        file={viewerFile}
-        token={token}
-        getToken={getToken}
-        onClose={() => setViewerFile(null)}
-        manage={{
-          classroomId: activeClassroom?.id ?? null,
-          actions: manageActions,
-          refreshKey: railRefresh,
-        }}
       />
 
       {/* Time-limited download grants (file or folder) */}

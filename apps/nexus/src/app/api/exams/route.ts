@@ -3,8 +3,12 @@ import {
   createExamSeries,
   listExamsForClassroom,
   getSupabaseAdminClient,
+  EXAM_ATTEMPT_LIMIT,
 } from '@neram/database';
 import { resolveExamCaller, isStaff } from '@/lib/exam-access';
+import { extractBearerToken } from '@/lib/ms-verify';
+import { announceScheduledTestToTeams } from '@/lib/teams-class-announcements';
+import { notifyStudents } from '@/lib/notify-students';
 
 /**
  * Schedule an exam, or list the ones a classroom has.
@@ -75,6 +79,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'That paper no longer exists' }, { status: 404 });
     }
 
+    const mode = body?.mode === 'practice' ? 'practice' : undefined;
+    // Distinguish "not sent" (undefined, keeps the ranked-exam default) from
+    // an explicit null ("unlimited", practice mode only) from a chosen number.
+    const attemptLimit =
+      typeof body?.attempt_limit === 'number'
+        ? body.attempt_limit
+        : body?.attempt_limit === null
+          ? null
+          : undefined;
+
     const result = await createExamSeries({
       classroomIds,
       testId,
@@ -86,7 +100,75 @@ export async function POST(request: NextRequest) {
       passingPct: body?.passing_pct ?? null,
       teacherId: resolved.caller.id,
       createdBy: resolved.caller.id,
+      mode,
+      attemptLimit,
+      proctoringEnabled: body?.proctoring_enabled === true,
+      violationLimit: typeof body?.violation_limit === 'number' ? body.violation_limit : undefined,
     });
+
+    // Announce + notify, best-effort: a Graph hiccup here must never fail an
+    // exam that has already been created. One classroom's failure must not
+    // stop the next one's announcement either, so each exam gets its own
+    // try/catch rather than one around the whole loop.
+    const effectiveMode = mode ?? 'ranked';
+    const effectiveAttemptLimit =
+      effectiveMode === 'practice' ? (attemptLimit === undefined ? EXAM_ATTEMPT_LIMIT : attemptLimit) : null;
+
+    // The caller's own bearer token IS the delegated Graph token needed to
+    // post a channel/chat message (an app-only token cannot), same reasoning
+    // as api/exams/[examId]/publish/route.ts. Test/impersonation/parent
+    // tokens are never real Microsoft tokens, so the channel post is skipped
+    // for them -- the in-app/Teams-activity student notify below still runs,
+    // since that goes through app-level credentials, not this token.
+    const graphToken = extractBearerToken(request.headers.get('Authorization'));
+    const canPostToChannel = Boolean(graphToken) && !/^(test_|imp_|par_)/.test(graphToken || '');
+
+    for (const exam of result.exams) {
+      const { data: cls } = await supabase
+        .from('nexus_scheduled_classes' as any)
+        .select('scheduled_date, start_time, end_time')
+        .eq('id', exam.scheduled_class_id)
+        .maybeSingle();
+      const clsRow = cls as { scheduled_date: string; start_time: string; end_time: string } | null;
+
+      if (canPostToChannel && clsRow) {
+        try {
+          const posted = await announceScheduledTestToTeams(graphToken as string, supabase, exam.classroom_id, {
+            title: exam.title || 'Exam',
+            scheduled_date: clsRow.scheduled_date,
+            start_time: clsRow.start_time,
+            end_time: clsRow.end_time,
+            duration_minutes: exam.duration_minutes,
+            mode: effectiveMode,
+            attempt_limit: effectiveAttemptLimit,
+          });
+          if (posted) {
+            await supabase
+              .from('nexus_scheduled_classes' as any)
+              .update({
+                teams_channel_id: posted.channelId,
+                teams_channel_message_id: posted.channelMessageId,
+                teams_group_chat_message_id: posted.chatMessageId,
+              })
+              .eq('id', exam.scheduled_class_id);
+          }
+        } catch (teamsErr) {
+          console.error('[Exams API] Teams announcement failed (non-blocking):', teamsErr);
+        }
+      }
+
+      try {
+        const when = clsRow ? `${clsRow.scheduled_date}, ${clsRow.start_time}-${clsRow.end_time} IST` : 'soon';
+        await notifyStudents({
+          classroomId: exam.classroom_id,
+          eventType: 'test_scheduled',
+          title: `${effectiveMode === 'practice' ? 'Practice test' : 'Exam'} scheduled: ${exam.title || 'Exam'}`,
+          message: `Opens ${when}.`,
+        });
+      } catch (notifyErr) {
+        console.error('[Exams API] Student notify failed (non-blocking):', notifyErr);
+      }
+    }
 
     return NextResponse.json({ data: result }, { status: 201 });
   } catch (err) {

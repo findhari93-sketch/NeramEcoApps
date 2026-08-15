@@ -30,7 +30,8 @@ export interface NotifyStudentsInput {
     | 'class_created'
     | 'recording_available'
     | 'week_published'
-    | 'absence_reason_needed';
+    | 'absence_reason_needed'
+    | 'test_scheduled';
   /** Bell headline. */
   title: string;
   /** Bell body, and the Teams preview line. */

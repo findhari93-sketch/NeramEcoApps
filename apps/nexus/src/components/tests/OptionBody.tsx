@@ -1,6 +1,7 @@
 'use client';
 
-import { Box } from '@neram/ui';
+import { useState } from 'react';
+import { Box, ImageViewerDialog } from '@neram/ui';
 import MathText from '@/components/common/MathText';
 
 export interface TestOption {
@@ -32,6 +33,7 @@ interface OptionBodyProps {
  */
 export default function OptionBody({ option, letter, compact }: OptionBodyProps) {
   const hasText = Boolean(option.text && option.text.trim());
+  const [zoomed, setZoomed] = useState(false);
   return (
     <>
       {hasText && (
@@ -47,6 +49,12 @@ export default function OptionBody({ option, letter, compact }: OptionBodyProps)
           src={option.image_url}
           alt={`Option ${letter}`}
           loading="lazy"
+          // The option sits inside a clickable Paper that selects it as the
+          // answer on click, so a tap meant to zoom must not also answer.
+          onClick={(e) => {
+            e.stopPropagation();
+            setZoomed(true);
+          }}
           sx={{
             display: 'block',
             mt: hasText ? 0.75 : 0,
@@ -59,7 +67,16 @@ export default function OptionBody({ option, letter, compact }: OptionBodyProps)
             borderRadius: 1,
             // Bank figures are line art on transparent, invisible on a dark card.
             bgcolor: 'common.white',
+            cursor: 'zoom-in',
           }}
+        />
+      )}
+      {option.image_url && (
+        <ImageViewerDialog
+          open={zoomed}
+          onClose={() => setZoomed(false)}
+          src={option.image_url}
+          alt={`Option ${letter}`}
         />
       )}
     </>

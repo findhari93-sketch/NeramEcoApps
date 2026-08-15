@@ -9,9 +9,11 @@
  *
  * Three things fix that, and nothing more: a folder to file a paper in, a way to
  * move it, and a way to delete it. Deliberately NOT a second test library. The
- * teacher's TestLibraryView has paging, search, a folder sidebar and a rename
- * flow because a teacher browses hundreds of papers they did not write; a
- * student has a dozen they wrote themselves and wants them off the screen.
+ * teacher's TestLibraryView has paging, search and a rename flow because a
+ * teacher browses hundreds of papers they did not write; a student has a dozen
+ * they wrote themselves and wants them off the screen. It does, however, share
+ * the same folder sidebar (FolderTreeNav) rather than a cramped chip rail, so
+ * the layout does not feel like a smaller, worse version of the teacher's.
  *
  * The cards come from the caller's already-loaded overview payload rather than a
  * fetch of /api/question-bank/tests/library. Same rows, but the overview shape
@@ -25,7 +27,7 @@ import {
   Typography,
   Button,
   Paper,
-  Chip,
+  IconButton,
   Menu,
   MenuItem,
   Dialog,
@@ -35,25 +37,21 @@ import {
   TextField,
   Alert,
   CircularProgress,
+  Drawer,
+  Divider,
+  useMediaQuery,
+  useTheme,
 } from '@neram/ui';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import CreateNewFolderOutlinedIcon from '@mui/icons-material/CreateNewFolderOutlined';
 import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutline';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import FolderOffOutlinedIcon from '@mui/icons-material/FolderOffOutlined';
+import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import StudentTestCard, { type StudentTest } from './StudentTestCard';
+import FolderTreeNav, { ALL_FOLDERS, UNFILED, type FolderNode } from './FolderTreeNav';
 import { flattenTestFolders, type FlatTestFolder } from '@/lib/test-folder-path';
-
-/** Matches the tree /api/test-folders returns. */
-interface FolderNode {
-  id: string;
-  name: string;
-  parent_id: string | null;
-  test_count: number;
-  children: FolderNode[];
-}
-
-const ALL = '__all__';
-const UNFILED = '__unfiled__';
 
 export interface MyTestsLibraryProps {
   tests: StudentTest[];
@@ -74,8 +72,12 @@ export default function MyTestsLibrary({
   onNotify,
   onNew,
 }: MyTestsLibraryProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
   const [tree, setTree] = useState<FolderNode[]>([]);
-  const [folder, setFolder] = useState<string>(ALL);
+  const [folder, setFolder] = useState<string>(ALL_FOLDERS);
+  const [foldersOpen, setFoldersOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [menuFor, setMenuFor] = useState<StudentTest | null>(null);
@@ -121,7 +123,9 @@ export default function MyTestsLibrary({
    *
    * The tree counts every paper the student owns; this list is what the page is
    * currently showing. Mixing the two produces a chip reading "Week 3 (4)" above
-   * three cards, and the student is left to work out which number lied.
+   * three cards, and the student is left to work out which number lied. The same
+   * reasoning applies now that folders render through the shared FolderTreeNav:
+   * its node counts are overridden below rather than trusted as-is.
    */
   const countsByFolder = useMemo(() => {
     const counts = new Map<string, number>();
@@ -129,11 +133,25 @@ export default function MyTestsLibrary({
     return counts;
   }, [tests]);
 
+  /** The tree, with each node's count swapped for the on-screen count above. */
+  const displayTree = useMemo(() => {
+    const relabel = (nodes: FolderNode[]): FolderNode[] =>
+      nodes.map((n) => ({ ...n, test_count: countsByFolder.get(n.id) || 0, children: relabel(n.children) }));
+    return relabel(tree);
+  }, [tree, countsByFolder]);
+
   const visible = useMemo(() => {
-    if (folder === ALL) return tests;
+    if (folder === ALL_FOLDERS) return tests;
     if (folder === UNFILED) return tests.filter((t) => !t.folder_id);
     return tests.filter((t) => t.folder_id === folder);
   }, [tests, folder]);
+
+  const selectedFolderName =
+    folder === ALL_FOLDERS
+      ? 'All tests'
+      : folder === UNFILED
+        ? 'Unfiled'
+        : flatFolders.find((f) => f.id === folder)?.label || 'Folder';
 
   const closeMenu = () => {
     setMenuAnchor(null);
@@ -225,144 +243,177 @@ export default function MyTestsLibrary({
 
   if (tests.length === 0) {
     return (
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, textAlign: 'center' }}>
-        <Typography variant="body2" color="text.secondary">
+      <Paper variant="outlined" sx={{ py: 5, px: 2.5, borderRadius: 2, textAlign: 'center' }}>
+        <FolderOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Build a test from the question bank to drill exactly what you want.
         </Typography>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<AddOutlinedIcon />}
+          onClick={onNew}
+          sx={{ textTransform: 'none', minHeight: 44 }}
+        >
+          Build a test
+        </Button>
       </Paper>
     );
   }
 
-  const hasFolders = flatFolders.length > 0;
+  const folderPanel = (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1, pt: 1 }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, flex: 1, color: 'text.secondary' }}>
+          FOLDERS
+        </Typography>
+        <IconButton
+          size="small"
+          aria-label="New folder"
+          onClick={() => {
+            setNewFolderName('');
+            setNewFolderError(null);
+            setNewFolderOpen(true);
+          }}
+          sx={{ minWidth: 40, minHeight: 40 }}
+        >
+          <CreateNewFolderOutlinedIcon sx={{ fontSize: 20 }} />
+        </IconButton>
+      </Box>
+      <FolderTreeNav
+        tree={displayTree}
+        unfiledCount={countsByFolder.get(UNFILED) || 0}
+        selected={folder}
+        totalCount={tests.length}
+        onSelect={(id) => {
+          setFolder(id);
+          setFoldersOpen(false);
+        }}
+        sx={{ p: 1 }}
+      />
+    </Box>
+  );
 
   return (
     <Box>
-      {/* Folder rail. Horizontal scroll rather than a wrap, so a student with
-          eight folders still sees one row of cards above the fold on a phone. */}
-      {hasFolders && (
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 1,
-            overflowX: 'auto',
-            pb: 1,
-            mb: 1,
-            // The scrollbar is chrome on a phone and clutter on a desktop where
-            // the rail rarely overflows at all.
-            '&::-webkit-scrollbar': { display: 'none' },
-            scrollbarWidth: 'none',
-          }}
-        >
-          <Chip
-            label={`All (${tests.length})`}
-            size="small"
-            color={folder === ALL ? 'primary' : 'default'}
-            variant={folder === ALL ? 'filled' : 'outlined'}
-            onClick={() => setFolder(ALL)}
-            sx={{ height: 32, flexShrink: 0, cursor: 'pointer' }}
-          />
-          {flatFolders.map((f) => (
-            <Chip
-              key={f.id}
-              label={`${f.name} (${countsByFolder.get(f.id) || 0})`}
-              size="small"
-              color={folder === f.id ? 'primary' : 'default'}
-              variant={folder === f.id ? 'filled' : 'outlined'}
-              onClick={() => setFolder(f.id)}
-              sx={{ height: 32, flexShrink: 0, cursor: 'pointer' }}
-            />
-          ))}
-          {(countsByFolder.get(UNFILED) || 0) > 0 && (
-            <Chip
-              label={`Unfiled (${countsByFolder.get(UNFILED)})`}
-              size="small"
-              color={folder === UNFILED ? 'primary' : 'default'}
-              variant={folder === UNFILED ? 'filled' : 'outlined'}
-              onClick={() => setFolder(UNFILED)}
-              sx={{ height: 32, flexShrink: 0, cursor: 'pointer' }}
-            />
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+        {!isMobile && (
+          <Paper
+            variant="outlined"
+            sx={{ width: 260, flexShrink: 0, borderRadius: 2, position: 'sticky', top: 8, maxHeight: '75vh', overflowY: 'auto' }}
+          >
+            {folderPanel}
+          </Paper>
+        )}
+
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
+            {selecting ? (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>
+                  {selected.size} selected
+                </Typography>
+                <Button
+                  size="small"
+                  onClick={() => setSelected(new Set(visible.map((t) => t.id)))}
+                  sx={{ textTransform: 'none', minHeight: 40 }}
+                >
+                  Select all
+                </Button>
+                <Button size="small" onClick={exitSelection} sx={{ textTransform: 'none', minHeight: 40 }}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1 }}>
+                  {selectedFolderName}
+                  <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1, fontWeight: 400 }}>
+                    {visible.length} test{visible.length !== 1 ? 's' : ''}
+                  </Typography>
+                </Typography>
+                {isMobile && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<FolderOutlinedIcon />}
+                    onClick={() => setFoldersOpen(true)}
+                    sx={{ textTransform: 'none', minHeight: 44, flexShrink: 0 }}
+                  >
+                    Folders
+                  </Button>
+                )}
+                <Button size="small" onClick={() => setSelecting(true)} sx={{ textTransform: 'none', minHeight: 40 }}>
+                  Select
+                </Button>
+              </>
+            )}
+          </Box>
+
+          {visible.length === 0 ? (
+            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, textAlign: 'center' }}>
+              {folder === UNFILED ? (
+                <FolderOffOutlinedIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1 }} />
+              ) : (
+                <FolderOutlinedIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1 }} />
+              )}
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Nothing in this folder yet.
+              </Typography>
+              <Button
+                size="small"
+                startIcon={<AddOutlinedIcon />}
+                onClick={onNew}
+                sx={{ textTransform: 'none', minHeight: 44 }}
+              >
+                Build a test
+              </Button>
+            </Paper>
+          ) : (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
+                // Room for the fixed action bar, so the last card is never trapped
+                // underneath it.
+                pb: selecting ? 10 : 0,
+              }}
+            >
+              {visible.map((t) => (
+                <StudentTestCard
+                  key={t.id}
+                  test={t}
+                  onStart={onStart}
+                  selectable={selecting}
+                  selected={selected.has(t.id)}
+                  onToggleSelect={toggleSelect}
+                  onMenu={(test, anchor) => {
+                    setMenuFor(test);
+                    setMenuAnchor(anchor);
+                  }}
+                />
+              ))}
+            </Box>
           )}
         </Box>
-      )}
-
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
-        {selecting ? (
-          <>
-            <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>
-              {selected.size} selected
-            </Typography>
-            <Button
-              size="small"
-              onClick={() => setSelected(new Set(visible.map((t) => t.id)))}
-              sx={{ textTransform: 'none', minHeight: 40 }}
-            >
-              Select all
-            </Button>
-            <Button size="small" onClick={exitSelection} sx={{ textTransform: 'none', minHeight: 40 }}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              size="small"
-              startIcon={<CreateNewFolderOutlinedIcon />}
-              onClick={() => {
-                setNewFolderName('');
-                setNewFolderError(null);
-                setNewFolderOpen(true);
-              }}
-              sx={{ textTransform: 'none', minHeight: 40, flex: 1, justifyContent: 'flex-start' }}
-            >
-              New folder
-            </Button>
-            <Button size="small" onClick={() => setSelecting(true)} sx={{ textTransform: 'none', minHeight: 40 }}>
-              Select
-            </Button>
-          </>
-        )}
       </Box>
 
-      {visible.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Nothing in this folder yet.
-          </Typography>
-          <Button
-            size="small"
-            startIcon={<AddOutlinedIcon />}
-            onClick={onNew}
-            sx={{ textTransform: 'none', minHeight: 44 }}
-          >
-            Build a test
-          </Button>
-        </Paper>
-      ) : (
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
-            // Room for the fixed action bar, so the last card is never trapped
-            // underneath it.
-            pb: selecting ? 10 : 0,
-          }}
-        >
-          {visible.map((t) => (
-            <StudentTestCard
-              key={t.id}
-              test={t}
-              onStart={onStart}
-              selectable={selecting}
-              selected={selected.has(t.id)}
-              onToggleSelect={toggleSelect}
-              onMenu={(test, anchor) => {
-                setMenuFor(test);
-                setMenuAnchor(anchor);
-              }}
-            />
-          ))}
-        </Box>
+      {isMobile && (
+        <Drawer anchor="left" open={foldersOpen} onClose={() => setFoldersOpen(false)}>
+          <Box sx={{ width: 280 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, py: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1 }}>
+                Folders
+              </Typography>
+              <IconButton onClick={() => setFoldersOpen(false)} aria-label="Close folders" sx={{ minWidth: 44, minHeight: 44 }}>
+                <CloseOutlinedIcon />
+              </IconButton>
+            </Box>
+            <Divider />
+            {folderPanel}
+          </Box>
+        </Drawer>
       )}
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>

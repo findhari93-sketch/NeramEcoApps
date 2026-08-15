@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { gradeComposedAnswers } from './test-repository';
+import { gradeComposedAnswers, gradeAgainstDraw } from './test-repository';
+import type { NexusTestDraw } from './test-repository';
 
 /**
  * negative_marks has been stored on nexus_test_questions since the table was
@@ -110,5 +111,65 @@ describe('gradeComposedAnswers with negative marking', () => {
     expect(out.score).toBe(7);
     expect(out.total_marks).toBe(16);
     expect(out.percentage).toBe(43.75);
+  });
+});
+
+/**
+ * gradeAgainstDraw is the grading core factored out of submitAttempt so a
+ * read-only replay of a past attempt (the teacher response sheet) can never
+ * disagree with what the student was actually told at submit time.
+ */
+describe('gradeAgainstDraw', () => {
+  it('matches gradeComposedAnswers exactly when there is no draw', () => {
+    const questions = [q('1', 'a', 4, 1), q('2', 'a', 4, 1)];
+    const answers = { '1': 'a', '2': 'b' };
+    const direct = gradeComposedAnswers(questions, answers, 50);
+    const viaDraw = gradeAgainstDraw(questions, null, answers, 50);
+
+    expect(viaDraw.score).toBe(direct.score);
+    expect(viaDraw.total_marks).toBe(direct.total_marks);
+    expect(viaDraw.percentage).toBe(direct.percentage);
+    expect(viaDraw.passed).toBe(direct.passed);
+    expect(viaDraw.review).toEqual(direct.review);
+  });
+
+  it('translates a permuted submission back to the bank lettering to grade, then back to displayed lettering for the review', () => {
+    // Question 1's correct answer is originally 'a'. This draw relabels its
+    // options so displayed 'b' is the one the student must click, and
+    // displayed 'a' is what used to be option 'b'.
+    const question = q('1', 'a', 4, 0);
+    const draw: NexusTestDraw = {
+      attempt_number: 1,
+      question_ids: ['1'],
+      option_maps: { '1': ['b', 'a', 'c', 'd'] },
+    };
+
+    // The student, shown the permuted paper, clicks displayed 'b' — the
+    // option that is actually correct under this permutation.
+    const out = gradeAgainstDraw([question], draw, { '1': 'b' }, null);
+
+    expect(out.review[0].is_correct).toBe(true);
+    expect(out.score).toBe(4);
+    // The review is handed back in DISPLAYED lettering, the same the student
+    // saw: what they clicked and what was correct both read 'b'.
+    expect(out.review[0].selected).toBe('b');
+    expect(out.review[0].correct_answer).toBe('b');
+  });
+
+  it('grades a wrong permuted answer as wrong, in displayed lettering', () => {
+    const question = q('1', 'a', 4, 0);
+    const draw: NexusTestDraw = {
+      attempt_number: 1,
+      question_ids: ['1'],
+      option_maps: { '1': ['b', 'a', 'c', 'd'] },
+    };
+
+    // The student clicks displayed 'a' — under this permutation, the option
+    // that used to be 'b', which is wrong.
+    const out = gradeAgainstDraw([question], draw, { '1': 'a' }, null);
+
+    expect(out.review[0].is_correct).toBe(false);
+    expect(out.review[0].selected).toBe('a');
+    expect(out.review[0].correct_answer).toBe('b');
   });
 });

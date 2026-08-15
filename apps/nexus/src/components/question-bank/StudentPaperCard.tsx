@@ -23,6 +23,21 @@ export interface StudentPaperCardProps {
   onOpen: (paper: NexusQBPaperCard) => void;
 }
 
+/**
+ * What to put under a paper's title. Best mock score beats practice progress:
+ * a student who has sat the paper cares about the mark, not the coverage.
+ *
+ * Shared between the card grid and the table view so the two densities never
+ * describe the same paper differently.
+ */
+export function getPaperSubline(paper: NexusQBPaperCard): string {
+  return paper.best_test_pct != null
+    ? `Best score ${Math.round(paper.best_test_pct)}%`
+    : paper.question_count > 0
+      ? `${paper.attempted_count} of ${paper.question_count} attempted`
+      : 'Original paper';
+}
+
 export default function StudentPaperCard({ paper, onOpen }: StudentPaperCardProps) {
   const theme = useTheme();
 
@@ -31,14 +46,7 @@ export default function StudentPaperCard({ paper, onOpen }: StudentPaperCardProp
   );
   const allDone = provided.length > 0 && provided.every((f) => paper.faces[f] === 'done');
 
-  // What to put under the title. Best mock score beats practice progress: a
-  // student who has sat the paper cares about the mark, not the coverage.
-  const subline =
-    paper.best_test_pct != null
-      ? `Best score ${Math.round(paper.best_test_pct)}%`
-      : paper.question_count > 0
-        ? `${paper.attempted_count} of ${paper.question_count} attempted`
-        : 'Original paper';
+  const subline = getPaperSubline(paper);
 
   const open = () => onOpen(paper);
 

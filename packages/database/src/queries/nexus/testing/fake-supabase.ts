@@ -66,7 +66,16 @@ export function createFakeDb(seed: FakeTables, defaults: FakeDefaults = {}): Fak
             conflictCols.every((c) => r[c] !== null && r[c] !== undefined) &&
             rows().find((existing) => conflictCols.every((c) => existing[c] === r[c]));
           if (collides) {
-            if (!ignoreDuplicates) Object.assign(collides, r);
+            // A real upsert-with-select returns the row whether it was inserted
+            // or updated by the conflict, so a caller doing
+            // `.upsert(...).select().single()` to re-read a just-granted row
+            // (e.g. re-granting a makeup or an attempt override) gets it back.
+            // ON CONFLICT DO NOTHING (ignoreDuplicates) truly returns nothing
+            // for the skipped row, so that case stays excluded.
+            if (!ignoreDuplicates) {
+              Object.assign(collides, r);
+              created.push(collides);
+            }
             continue;
           }
           const row = { id: r.id ?? `${table}-${++autoId}`, ...(defaults[table] || {}), ...r };

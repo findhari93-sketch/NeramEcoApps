@@ -18,6 +18,8 @@ import {
   catchupDueOn,
   catchupDaysLeft,
   catchupWindowDays,
+  shouldUnlockCatchupTest,
+  unlockCatchupTestForRecap,
   type CatchupKind,
 } from '@neram/database';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
@@ -162,6 +164,28 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       access.cls,
       item,
     );
+
+    // Self-heal, same reason as the item creation above. The catch-up test's
+    // unlock is normally a one-shot write fired from inside the last
+    // checkpoint quiz's POST handler; if this item did not exist yet at that
+    // moment, or that write failed, nothing else will ever set
+    // test_unlocked_at. Checking on every read and repairing it here means a
+    // student is never stuck looking at a finished recap and a test that will
+    // never unlock itself.
+    if (
+      item &&
+      recap &&
+      test?.source === 'catchup' &&
+      shouldUnlockCatchupTest({
+        hasRecap: true,
+        recapCheckpointsComplete: facts.completedRecaps.has(recap.id),
+        testUnlockedAt: item.test_unlocked_at,
+        testPassedAt: item.test_passed_at,
+      })
+    ) {
+      const unlockedNow = await unlockCatchupTestForRecap(access.userId, recap.id, supabase);
+      if (unlockedNow) item.test_unlocked_at = new Date().toISOString();
+    }
 
     const journey = item?.journey_id
       ? await getCatchupJourney(access.userId, access.cls.classroom_id, supabase)

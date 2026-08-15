@@ -14,7 +14,10 @@ import {
   Divider,
   MenuItem,
   Stack,
+  Switch,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
   useMediaQuery,
   useTheme,
@@ -50,6 +53,17 @@ interface LibraryTest {
   total_marks?: number | null;
 }
 
+/** From GET /api/question-bank/tests/[id]: the paper's own settings, plus how
+ * many other placements would be affected by changing its subset/shuffle. */
+interface TestDetail {
+  testType: string | null;
+  durationMinutes: number | null;
+  questionsToServe: number | null;
+  shuffleQuestions: boolean;
+  questionCount: number;
+  placementCount: number;
+}
+
 export interface ExamScheduleDialogProps {
   open: boolean;
   onClose: () => void;
@@ -80,6 +94,18 @@ function toIso(date: string, time: string): string {
   return new Date(`${date}T${time}:00+05:30`).toISOString();
 }
 
+/** Today or tomorrow, as an IST calendar date -- the quick-pick's two chips. */
+function istDatePlusDays(offset: number): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(Date.now() + offset * 86_400_000));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 export default function ExamScheduleDialog({
   open,
   onClose,
@@ -104,6 +130,14 @@ export default function ExamScheduleDialog({
   const [passingPct, setPassingPct] = useState<string>('40');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [testDetail, setTestDetail] = useState<TestDetail | null>(null);
+  const [subsetSize, setSubsetSize] = useState<string>('');
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  const [practiceMode, setPracticeMode] = useState(false);
+  const [attemptLimit, setAttemptLimit] = useState<'1' | '3' | 'unlimited'>('1');
+  const [proctoringEnabled, setProctoringEnabled] = useState(false);
+  const [violationLimit, setViolationLimit] = useState('3');
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -151,6 +185,44 @@ export default function ExamScheduleDialog({
     };
   }, [open, authFetch, initialClassroomId]);
 
+  // The paper's own pool/shuffle/timer settings, fetched fresh whenever the
+  // teacher picks a different paper: the library list above is deliberately
+  // light (title, question_count) and does not carry these.
+  useEffect(() => {
+    if (!open || !testId) {
+      setTestDetail(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const json = await authFetch(`/api/question-bank/tests/${testId}`);
+        if (cancelled) return;
+        const meta = json?.data?.test || {};
+        const questionCount = Array.isArray(json?.data?.questions) ? json.data.questions.length : 0;
+        const placementCount = Array.isArray(json?.data?.placements) ? json.data.placements.length : 0;
+        const detail: TestDetail = {
+          testType: meta.test_type ?? null,
+          durationMinutes: meta.duration_minutes ?? null,
+          questionsToServe: meta.questions_to_serve ?? null,
+          shuffleQuestions: Boolean(meta.shuffle_questions),
+          questionCount,
+          placementCount,
+        };
+        setTestDetail(detail);
+        setSubsetSize(String(detail.questionsToServe || detail.questionCount || ''));
+        setShuffleQuestions(detail.shuffleQuestions);
+      } catch {
+        // The dialog still works with the library's lighter row; the subset
+        // and shuffle controls just fall back to their own defaults below.
+        setTestDetail(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, testId, authFetch]);
+
   const chosenTest = useMemo(() => tests.find((t) => t.id === testId), [tests, testId]);
 
   // The window in minutes, so the duration field can be checked against it
@@ -164,13 +236,38 @@ export default function ExamScheduleDialog({
   const durationMinutes = Number(duration) || chosenTest?.duration_minutes || null;
   const durationTooLong = Boolean(durationMinutes && windowMinutes > 0 && durationMinutes > windowMinutes);
 
+  const poolSize = testDetail?.questionCount || chosenTest?.question_count || 0;
+  const subsetTooLarge = Boolean(subsetSize && poolSize > 0 && Number(subsetSize) > poolSize);
+  // Only sent as a paper edit when it actually differs from what is stored,
+  // so picking a paper and leaving everything alone writes nothing extra.
+  const subsetOrShuffleChanged = Boolean(
+    testDetail &&
+      (Number(subsetSize || 0) !== (testDetail.questionsToServe || testDetail.questionCount) ||
+        shuffleQuestions !== testDetail.shuffleQuestions),
+  );
+
   const canSave =
-    selectedClassrooms.length > 0 && Boolean(testId) && windowMinutes > 0 && !durationTooLong && !saving;
+    selectedClassrooms.length > 0 &&
+    Boolean(testId) &&
+    windowMinutes > 0 &&
+    !durationTooLong &&
+    !subsetTooLarge &&
+    !saving;
 
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
+      if (subsetOrShuffleChanged) {
+        await authFetch(`/api/question-bank/tests/${testId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            questions_to_serve: Number(subsetSize) || null,
+            shuffle_questions: shuffleQuestions,
+          }),
+        });
+      }
+
       const json = await authFetch('/api/exams', {
         method: 'POST',
         body: JSON.stringify({
@@ -181,6 +278,10 @@ export default function ExamScheduleDialog({
           closes_at: toIso(date, endTime),
           duration_minutes: durationMinutes,
           passing_pct: Number(passingPct) || null,
+          mode: practiceMode ? 'practice' : 'ranked',
+          attempt_limit: !practiceMode ? undefined : attemptLimit === 'unlimited' ? null : Number(attemptLimit),
+          proctoring_enabled: proctoringEnabled,
+          violation_limit: Number(violationLimit) || 3,
         }),
       });
       onScheduled?.(json.data);
@@ -259,8 +360,148 @@ export default function ExamScheduleDialog({
           <Divider />
 
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            How it is taken
+          </Typography>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Chip
+              size="small"
+              label={
+                testDetail?.testType && testDetail.testType !== 'untimed'
+                  ? `Timed · ${testDetail.durationMinutes ?? '?'} min`
+                  : 'Untimed'
+              }
+              variant="outlined"
+            />
+            {testDetail && testDetail.testType === 'untimed' && (
+              <Typography variant="caption" color="text.secondary">
+                This paper has no built-in timer, so students will not see a countdown. The window
+                above still closes at the time you set.
+              </Typography>
+            )}
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
+            <TextField
+              label="Questions to serve"
+              type="number"
+              value={subsetSize}
+              onChange={(e) => setSubsetSize(e.target.value)}
+              fullWidth
+              disabled={!testId}
+              error={subsetTooLarge}
+              helperText={
+                subsetTooLarge
+                  ? `This paper only has ${poolSize} questions.`
+                  : poolSize
+                    ? `Shuffled from the ${poolSize} in this paper.`
+                    : 'Pick a paper first.'
+              }
+              inputProps={{ inputMode: 'numeric', min: 1, max: poolSize || undefined }}
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 160 }}>
+              <Switch
+                checked={shuffleQuestions}
+                onChange={(e) => setShuffleQuestions(e.target.checked)}
+                disabled={!testId}
+              />
+              <Typography variant="body2">Shuffle order</Typography>
+            </Box>
+          </Box>
+
+          {testDetail && testDetail.placementCount > 1 && subsetOrShuffleChanged && (
+            <Alert severity="warning">
+              This paper is used in {testDetail.placementCount} other places. Changing the question
+              count or shuffle changes it everywhere, not just this exam.
+            </Alert>
+          )}
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Switch checked={practiceMode} onChange={(e) => setPracticeMode(e.target.checked)} />
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Practice test
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Scored, but not ranked or announced with a leaderboard.
+              </Typography>
+            </Box>
+          </Box>
+
+          {practiceMode && (
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Attempts allowed
+              </Typography>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={attemptLimit}
+                onChange={(_, v) => {
+                  if (v !== null) setAttemptLimit(v);
+                }}
+              >
+                <ToggleButton value="1" sx={{ minHeight: 44, px: 2 }}>
+                  1
+                </ToggleButton>
+                <ToggleButton value="3" sx={{ minHeight: 44, px: 2 }}>
+                  3
+                </ToggleButton>
+                <ToggleButton value="unlimited" sx={{ minHeight: 44, px: 2, textTransform: 'none' }}>
+                  Unlimited
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+          )}
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Switch checked={proctoringEnabled} onChange={(e) => setProctoringEnabled(e.target.checked)} />
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Proctor this test
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Best-effort: requires fullscreen where the student's browser supports it, warns on a
+                tab switch or exiting fullscreen, and auto-submits after repeated violations. Not
+                supported on iPhone browsers, which fall back to tab-switch tracking alone.
+              </Typography>
+            </Box>
+          </Box>
+
+          {proctoringEnabled && (
+            <TextField
+              label="Violations before auto-submit"
+              type="number"
+              value={violationLimit}
+              onChange={(e) => setViolationLimit(e.target.value)}
+              sx={{ maxWidth: 260 }}
+              inputProps={{ inputMode: 'numeric', min: 1, max: 10 }}
+              helperText="Each one is logged and shown to you on the live roster."
+            />
+          )}
+
+          <Divider />
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
             When it is sat
           </Typography>
+
+          <Box sx={{ display: 'flex', gap: 1, mb: -1 }}>
+            <Chip
+              size="small"
+              label="Today"
+              clickable
+              color={date === istDatePlusDays(0) ? 'primary' : 'default'}
+              onClick={() => setDate(istDatePlusDays(0))}
+            />
+            <Chip
+              size="small"
+              label="Tomorrow"
+              clickable
+              color={date === istDatePlusDays(1) ? 'primary' : 'default'}
+              onClick={() => setDate(istDatePlusDays(1))}
+            />
+          </Box>
 
           <TextField
             label="Date"
@@ -335,19 +576,20 @@ export default function ExamScheduleDialog({
               have to discover that from a student's complaint. */}
           <Alert severity="info" icon={false}>
             <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-              How an exam behaves
+              {practiceMode ? 'How a practice test behaves' : 'How an exam behaves'}
             </Typography>
             <Typography variant="caption" component="div">
-              One attempt each. The door closes at the finish time and a student who did not sit it
-              is marked absent, not late. You can grant a second window to anyone who genuinely
-              missed it.
+              {practiceMode
+                ? 'Scored like any test, but there is no rank or leaderboard. The door closes at the finish time; a student who did not sit it is marked absent, not late.'
+                : 'One attempt each. The door closes at the finish time and a student who did not sit it is marked absent, not late. You can grant a second window to anyone who genuinely missed it.'}
             </Typography>
           </Alert>
 
           {selectedClassrooms.length > 1 && (
             <Alert severity="info">
-              This creates one exam in each of the {selectedClassrooms.length} classrooms you picked,
-              sharing the same paper and window. Each classroom is ranked and announced separately.
+              This creates one {practiceMode ? 'test' : 'exam'} in each of the {selectedClassrooms.length}{' '}
+              classrooms you picked, sharing the same paper and window.
+              {!practiceMode && ' Each classroom is ranked and announced separately.'}
             </Alert>
           )}
         </Stack>

@@ -325,6 +325,34 @@ export function isCatchupItemComplete(f: CatchupItemFacts): boolean {
   return true;
 }
 
+export interface CatchupTestUnlockFacts {
+  hasRecap: boolean;
+  recapCheckpointsComplete: boolean;
+  testUnlockedAt: string | null;
+  testPassedAt: string | null;
+}
+
+/**
+ * Should the catch-up test's `test_unlocked_at` be (re)written right now?
+ *
+ * The unlock is normally a one-shot write fired from inside the last
+ * checkpoint quiz's POST handler, the instant it is answered. If the
+ * backlog item did not exist yet at that moment, or that call failed, there
+ * is no other code path that will ever set it, and a student can be left
+ * with a green "Class Recap" step and a permanently locked test. This is the
+ * gate a caller checks before self-healing that column at read time.
+ *
+ * Keyed on `recapCheckpointsComplete` (every checkpoint quiz passed), not the
+ * broader "watched" flag: a legacy `recording_watched_at` self-declaration
+ * made before a recap existed also counts as watched, but must not unlock a
+ * test built from checkpoint questions the student never answered.
+ */
+export function shouldUnlockCatchupTest(f: CatchupTestUnlockFacts): boolean {
+  if (!f.hasRecap) return false;
+  if (f.testUnlockedAt || f.testPassedAt) return false;
+  return f.recapCheckpointsComplete;
+}
+
 /**
  * The next step, in the order the gates are enforced: watch it, do the work,
  * then prove it. A class with no test placed on it finishes at the assignment,

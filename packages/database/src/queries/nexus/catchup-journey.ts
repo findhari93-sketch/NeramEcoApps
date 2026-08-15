@@ -11,6 +11,7 @@ import {
   classifyCatchupCandidate,
   isCatchupItemComplete,
   resolveCatchupBacklog,
+  shouldUnlockCatchupTest,
   summariseCatchupBacklog,
   summariseCatchupClock,
   summariseMissedClasses,
@@ -462,6 +463,16 @@ export async function getCatchupBacklog(
   // own statement that they are done. That is not ours to withdraw.
   const toStamp: string[] = [];
   const toClear: string[] = [];
+  // Fourth list: the catch-up test's one-shot unlock write was missed.
+  //
+  // unlockCatchupTestForRecap only ever fires from inside the last checkpoint
+  // quiz's POST handler, at the instant it is answered. If this item did not
+  // exist yet at that moment (created lazily, right here, by a later read),
+  // or that call failed, nothing else will ever set test_unlocked_at, and a
+  // student is left with a green "Class Recap" step and a permanently locked
+  // test. See shouldUnlockCatchupTest for why this is keyed on
+  // completedRecaps (every checkpoint passed) rather than `watched`.
+  const toUnlock: string[] = [];
   // Third list: a clock still running on something the student can no longer do.
   //
   // It holds the single active slot, so without this the student cannot start
@@ -474,6 +485,17 @@ export async function getCatchupBacklog(
     const r = resolved[idx];
     if (i.activated_on && !r.active) {
       toRelease.push({ id: i.id, days_used: bankCatchupClock(toClock(i), today) });
+    }
+    const recap = facts.recapByClass.get(i.scheduled_class_id) || null;
+    if (
+      shouldUnlockCatchupTest({
+        hasRecap: !!recap,
+        recapCheckpointsComplete: !!recap && facts.completedRecaps.has(recap.id),
+        testUnlockedAt: i.test_unlocked_at,
+        testPassedAt: i.test_passed_at,
+      })
+    ) {
+      toUnlock.push(i.id);
     }
     const done = r.status === 'done';
     if (done && !i.caught_up_at) {
@@ -495,6 +517,13 @@ export async function getCatchupBacklog(
     await supabase.from(ITEMS).update({ caught_up_at: null }).in('id', toClear);
     items.forEach((i: any) => {
       if (toClear.includes(i.id)) i.caught_up_at = null;
+    });
+  }
+  if (toUnlock.length) {
+    const unlockedAt = new Date().toISOString();
+    await supabase.from(ITEMS).update({ test_unlocked_at: unlockedAt }).in('id', toUnlock);
+    items.forEach((i: any) => {
+      if (toUnlock.includes(i.id)) i.test_unlocked_at = unlockedAt;
     });
   }
   // One statement each: the banked total differs per row, so these cannot be

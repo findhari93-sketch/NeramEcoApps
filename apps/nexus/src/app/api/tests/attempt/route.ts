@@ -10,9 +10,10 @@ import {
   saveAttemptAnswers,
   startOrResumeAttempt,
   submitAttempt,
-  getExamByClass,
+  getExam,
   getExamMakeup,
   resolveExamWindowForStudent,
+  getExamAttemptOverride,
 } from '@neram/database';
 import { attemptSeed, seededShuffle } from '@/lib/seeded-shuffle';
 
@@ -107,6 +108,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Test has expired' }, { status: 403 });
     }
 
+    // Populated only inside the exam branch below. Every other context_type
+    // leaves both at their defaults, which is what makes an ordinary,
+    // non-exam test completely unaffected by proctoring/attempt overrides.
+    let proctoring: { enabled: boolean; violation_limit: number } | null = null;
+    let extraAttempts = 0;
+
     // A placement carries its own window and visibility on top of the test's.
     if (placementId) {
       const placement = await getPlacementById(placementId);
@@ -130,8 +137,18 @@ export async function GET(request: NextRequest) {
          * exam this student was absent for, and the code says so.
          */
         if (placement.context_type === 'exam') {
-          const exam = await getExamByClass(placement.context_id);
+          // context_id on an exam placement is the scheduled_class_id, not the
+          // exam's own id -- gating.exam_id is the one field that always names
+          // the exam directly (see the same fix in attempt/violation/route.ts).
+          const examId = (placement.gating as { exam_id?: string } | null)?.exam_id;
+          const exam = examId ? await getExam(examId) : null;
           if (exam) {
+            // A live makeup sitting resolves to this SAME exam row, so
+            // proctoring_enabled already covers it with no extra plumbing.
+            proctoring = { enabled: exam.proctoring_enabled, violation_limit: exam.violation_limit };
+            const override = await getExamAttemptOverride(exam.id, user.id);
+            extraAttempts = override?.extra_attempts || 0;
+
             const makeup = await getExamMakeup(exam.id, user.id);
             const window = resolveExamWindowForStudent(exam, makeup);
 
@@ -204,7 +221,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const started = await startOrResumeAttempt({ testId, studentId: user.id, placementId, mode });
+    const started = await startOrResumeAttempt({ testId, studentId: user.id, placementId, mode, extraAttempts });
     // Cut to this sitting's draw when the test is a pool: the drawn questions,
     // in the drawn order, with their options permuted and relabelled. A test
     // without a pool comes back whole, which is what all of them did before.
@@ -266,6 +283,9 @@ export async function GET(request: NextRequest) {
       previous_attempts: started.previous_attempts,
       best_percentage: started.best_percentage,
       resumed: started.resumed,
+      // null for every non-exam context, which is what makes an ordinary test
+      // completely unaffected by the proctoring UI in take/page.tsx.
+      proctoring,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load test';

@@ -20,11 +20,45 @@ const ATTEMPTS = 'nexus_test_attempts';
 const TESTS = 'nexus_tests';
 const TEST_QUESTIONS = 'nexus_test_questions';
 const QUESTIONS = 'nexus_qb_questions';
+const PLACEMENTS = 'nexus_test_placements';
+
+/** The three buckets a performance view groups attempts into. */
+export type NexusAttemptKind = 'practice' | 'class' | 'exam';
+
+/**
+ * Which bucket an attempt belongs in.
+ *
+ * "Exam" is not a test_kind, it is a placement context_type
+ * (nexus_test_placements.context_type = 'exam'), so this can only be resolved
+ * from the placement the attempt was taken through, never from the test row
+ * alone. A null context (no placement, e.g. a student's own paper) is practice.
+ */
+function classifyAttemptKind(contextType: string | null | undefined): NexusAttemptKind {
+  if (contextType === 'exam') return 'exam';
+  if (contextType === 'classroom_assignment' || contextType === 'class_test') return 'class';
+  return 'practice';
+}
+
+/** Batched placement_id -> context_type lookup, for classifying a page of attempts at once. */
+async function getPlacementKindMap(
+  placementIds: string[],
+  supabase: TypedSupabaseClient,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const ids = [...new Set(placementIds)].filter(Boolean);
+  if (ids.length === 0) return map;
+  const { data, error } = await supabase.from(PLACEMENTS).select('id, context_type').in('id', ids);
+  if (error) throw error;
+  for (const row of (data || []) as any[]) map.set(row.id, row.context_type);
+  return map;
+}
 
 export interface NexusStudentAttemptSummary {
   attempt_id: string;
   test_id: string;
   test_title: string;
+  test_kind: string | null;
+  kind: NexusAttemptKind;
   attempt_number: number;
   score: number | null;
   total_marks: number | null;
@@ -50,7 +84,10 @@ export async function listStudentAttempts(
     // this a parent would see a revision score reported as their child's mark.
     .eq('mode', 'official')
     .order('submitted_at', { ascending: false })
-    .limit(Math.min(Math.max(opts?.limit ?? 25, 1), 200));
+    // 200 was tuned for the recency lists (recent results, history page). The
+    // performance dashboard's lifetime rollup needs a year's worth for a busy
+    // student, so the ceiling goes up; the default stays 25 for every existing caller.
+    .limit(Math.min(Math.max(opts?.limit ?? 25, 1), 500));
   if (opts?.testId) query = query.eq('test_id', opts.testId);
 
   const { data, error } = await query;
@@ -59,7 +96,11 @@ export async function listStudentAttempts(
   if (rows.length === 0) return [];
 
   const testIds = [...new Set(rows.map((r: any) => r.test_id))];
-  const { data: tests } = await supabase.from(TESTS).select('id, title, passing_marks, total_marks').in('id', testIds);
+  const placementIds = rows.map((r: any) => r.placement_id).filter(Boolean);
+  const [{ data: tests }, kindByPlacement] = await Promise.all([
+    supabase.from(TESTS).select('id, title, test_kind, passing_marks, total_marks').in('id', testIds),
+    getPlacementKindMap(placementIds, supabase),
+  ]);
   const testMap = new Map((tests || []).map((t: any) => [t.id, t]));
 
   return rows.map((r: any) => {
@@ -74,6 +115,8 @@ export async function listStudentAttempts(
       attempt_id: r.id,
       test_id: r.test_id,
       test_title: test?.title || 'Test',
+      test_kind: test?.test_kind ?? null,
+      kind: classifyAttemptKind(r.placement_id ? kindByPlacement.get(r.placement_id) : null),
       attempt_number: Number(r.attempt_number) || 1,
       score: r.score,
       total_marks: r.total_marks,
@@ -249,6 +292,124 @@ export async function getStudentAccuracy(
     answered: total,
     correct,
     accuracy_pct: total > 0 ? Math.round((correct / total) * 100) : 0,
+  };
+}
+
+export interface NexusStudentPerformanceSummary {
+  total_attempts: number;
+  overall_average_pct: number | null;
+  attempts_this_month: number;
+  average_this_month: number | null;
+  by_kind_totals: Record<NexusAttemptKind, number>;
+  /** Newest month first. A month with zero attempts is simply absent, not a
+   * zero-scored entry, so a trend chart can render it as a gap. */
+  monthly: Array<{
+    month: string;
+    label: string;
+    attempts: number;
+    average_pct: number | null;
+    by_kind: Record<NexusAttemptKind, number>;
+  }>;
+}
+
+const emptyKindTotals = (): Record<NexusAttemptKind, number> => ({ practice: 0, class: 0, exam: 0 });
+
+const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat('en-IN', {
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'Asia/Kolkata',
+});
+
+/**
+ * Lifetime rollup for the performance dashboard: how many tests, how well, and
+ * whether that is trending. One raw fetch plus a JS reduce, the same shape as
+ * getStudentTestStats above, rather than SQL aggregation, so "official
+ * submitted attempts only" stays defined in exactly one place in this file.
+ */
+export async function getStudentPerformanceSummary(
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<NexusStudentPerformanceSummary> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(ATTEMPTS)
+    .select('placement_id, percentage, submitted_at')
+    .eq('student_id', studentId)
+    .eq('status', 'submitted')
+    .eq('mode', 'official')
+    .order('submitted_at', { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  const rows = (data || []) as any[];
+
+  const kindByPlacement = await getPlacementKindMap(
+    rows.map((r) => r.placement_id).filter(Boolean),
+    supabase,
+  );
+
+  const byKindTotals = emptyKindTotals();
+  const monthly = new Map<
+    string,
+    { month: string; label: string; attempts: number; sumPct: number; scored: number; by_kind: Record<NexusAttemptKind, number> }
+  >();
+
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  let scoredCount = 0;
+  let scoredSum = 0;
+  let attemptsThisMonth = 0;
+  let scoredThisMonth = 0;
+  let sumThisMonth = 0;
+
+  for (const r of rows) {
+    const kind = classifyAttemptKind(r.placement_id ? kindByPlacement.get(r.placement_id) : null);
+    byKindTotals[kind] += 1;
+
+    const month: string = (r.submitted_at || '').slice(0, 7) || 'unknown';
+    if (!monthly.has(month)) {
+      monthly.set(month, {
+        month,
+        label: month === 'unknown' ? 'Unknown' : MONTH_LABEL_FORMATTER.format(new Date(`${month}-01T00:00:00Z`)),
+        attempts: 0,
+        sumPct: 0,
+        scored: 0,
+        by_kind: emptyKindTotals(),
+      });
+    }
+    const bucket = monthly.get(month)!;
+    bucket.attempts += 1;
+    bucket.by_kind[kind] += 1;
+
+    const pct = r.percentage == null ? null : Number(r.percentage);
+    if (pct != null) {
+      bucket.sumPct += pct;
+      bucket.scored += 1;
+      scoredSum += pct;
+      scoredCount += 1;
+      if (month === nowMonth) {
+        sumThisMonth += pct;
+        scoredThisMonth += 1;
+      }
+    }
+    if (month === nowMonth) attemptsThisMonth += 1;
+  }
+
+  const monthlyList = [...monthly.values()]
+    .sort((a, b) => b.month.localeCompare(a.month))
+    .map((m) => ({
+      month: m.month,
+      label: m.label,
+      attempts: m.attempts,
+      average_pct: m.scored > 0 ? Math.round(m.sumPct / m.scored) : null,
+      by_kind: m.by_kind,
+    }));
+
+  return {
+    total_attempts: rows.length,
+    overall_average_pct: scoredCount > 0 ? Math.round(scoredSum / scoredCount) : null,
+    attempts_this_month: attemptsThisMonth,
+    average_this_month: scoredThisMonth > 0 ? Math.round(sumThisMonth / scoredThisMonth) : null,
+    by_kind_totals: byKindTotals,
+    monthly: monthlyList,
   };
 }
 

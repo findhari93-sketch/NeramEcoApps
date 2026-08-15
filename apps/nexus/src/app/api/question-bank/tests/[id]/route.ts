@@ -54,7 +54,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 /**
  * PATCH /api/question-bank/tests/[id]   (teacher/admin)
- * Whitelisted edits: { title?, description?, is_published?, passing_marks?, test_kind? }
+ * Whitelisted edits: { title?, description?, is_published?, passing_marks?, test_kind?,
+ * questions_to_serve?, shuffle_questions?, shuffle_sections? }
  */
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -70,6 +71,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       // updateTestMeta ignores anything outside the teacher-choosable list, so
       // a stray value here relabels nothing rather than 400ing.
       testKind: body?.test_kind || undefined,
+      // Shared by every placement of this test (see updateTestMeta's own
+      // comment) -- the Schedule dialog warns the teacher before sending these.
+      questionsToServe: body?.questions_to_serve !== undefined ? body.questions_to_serve : undefined,
+      shuffleQuestions: typeof body?.shuffle_questions === 'boolean' ? body.shuffle_questions : undefined,
+      shuffleSections: typeof body?.shuffle_sections === 'boolean' ? body.shuffle_sections : undefined,
     });
     if (!updated) return NextResponse.json({ error: 'Test not found' }, { status: 404 });
     return NextResponse.json({ data: updated });

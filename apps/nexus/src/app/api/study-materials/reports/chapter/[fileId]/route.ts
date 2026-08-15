@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFileById, getChapterReport, getAnnotationCountsForFile } from '@neram/database';
+import { getFileById, getChapterReport, getAnnotationCountsForFile, hasPlacedTestForFiles } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 
 /**
@@ -22,7 +22,10 @@ export async function GET(request: NextRequest, { params }: { params: { fileId: 
     if (!file) return NextResponse.json({ error: 'Chapter not found' }, { status: 404 });
 
     const classroom = request.nextUrl.searchParams.get('classroom');
-    const { rows, requires_video } = await getChapterReport(params.fileId, classroom);
+    const [{ rows, requires_video }, testSet] = await Promise.all([
+      getChapterReport(params.fileId, classroom),
+      hasPlacedTestForFiles([params.fileId]),
+    ]);
 
     // Annotation counts are looked up separately (not threaded through getChapterReport)
     // so this report's roster/read/watch-facts pipeline stays untouched by a concern that
@@ -40,7 +43,9 @@ export async function GET(request: NextRequest, { params }: { params: { fileId: 
     const scores = completed.map((r) => r.best_score_pct).filter((v): v is number => v != null);
 
     return NextResponse.json({
-      file: { id: file.id, title: file.title },
+      // has_test comes from the same live placement/publish join the folder grid's
+      // card chip uses, so this banner can never again disagree with that chip.
+      file: { id: file.id, title: file.title, has_test: testSet.has(file.id) },
       requires_video,
       rows: rowsWithAnnotations,
       stats: {

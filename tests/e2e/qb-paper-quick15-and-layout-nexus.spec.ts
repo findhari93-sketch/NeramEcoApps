@@ -75,12 +75,18 @@ test.describe('Question Bank paper: Quick 15 and desktop layout', () => {
     attachedTestId: string | null;
     staffToken: string | null;
     linkedClassroomId: string | null;
+    /** A second published paper, purely so the flatten test has two rows to
+     * compare. Not used by the pre-existing Quick 15 / action-card tests. */
+    secondPaperId: string | null;
+    secondWasVisible: boolean;
   } = {
     paperId: null,
     wasVisible: false,
     attachedTestId: null,
     staffToken: null,
     linkedClassroomId: null,
+    secondPaperId: null,
+    secondWasVisible: false,
   };
 
   test.beforeAll(async ({ playwright }) => {
@@ -113,10 +119,26 @@ test.describe('Question Bank paper: Quick 15 and desktop layout', () => {
         .then((r) => r.json())
         .catch(() => ({ data: [] }));
 
-      const paper = (papers.data || []).find((p: any) => (p.question_count ?? 0) > 0);
+      // NexusQBOriginalPaper (the non-breakdown shape this route returns by
+      // default) has no `question_count` field at all, only breakdown=1's
+      // NexusQBPaperWithBreakdown does; checking it here always missed, so
+      // this fixture silently published nothing. questions_parsed is the
+      // right proxy for "has real content" on the cheap list.
+      const candidates = (papers.data || []).filter((p: any) => (p.questions_parsed ?? 0) > 0);
+      const paper = candidates[0];
       if (!paper) return;
       fixture.paperId = paper.id;
       fixture.wasVisible = !!paper.is_student_visible;
+
+      const second = candidates.find((p: any) => p.id !== paper.id);
+      if (second) {
+        fixture.secondPaperId = second.id;
+        fixture.secondWasVisible = !!second.is_student_visible;
+        await api.patch(`${NEXUS}/api/question-bank/papers/${second.id}/access`, {
+          headers,
+          data: { is_student_visible: true },
+        });
+      }
 
       const existing = await api
         .get(`${NEXUS}/api/question-bank/papers/${paper.id}/test`, { headers })
@@ -168,6 +190,12 @@ test.describe('Question Bank paper: Quick 15 and desktop layout', () => {
       }
       if (fixture.paperId && !fixture.wasVisible) {
         await api.patch(`${NEXUS}/api/question-bank/papers/${fixture.paperId}/access`, {
+          headers,
+          data: { is_student_visible: false },
+        });
+      }
+      if (fixture.secondPaperId && !fixture.secondWasVisible) {
+        await api.patch(`${NEXUS}/api/question-bank/papers/${fixture.secondPaperId}/access`, {
           headers,
           data: { is_student_visible: false },
         });
@@ -324,6 +352,129 @@ test.describe('Question Bank paper: Quick 15 and desktop layout', () => {
       Math.abs(searchBox!.y - drawingBox!.y),
       'Search and Drawing practice are not on the same row at desktop width',
     ).toBeLessThan(20);
+
+    await assertNoHorizontalOverflow(page);
+  });
+
+  /**
+   * BUG 3 (this same file, later fix) — "Past papers" grouped every year into
+   * its own mini grid, so a year with one paper reserved a full-width row and
+   * showed a single ~200px card with everything else on it blank. Repeated
+   * across 15+ years this was the "wasting a lot of space, difficult to
+   * navigate vertically" the papers were flattened into one continuous grid
+   * per exam tab (no more per-year sub-grids), and a Table view was added
+   * alongside it, mirroring the teacher's own paper table.
+   */
+  test('1440px: Past papers grid packs multiple papers into the same row instead of one per row', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ viewport: DESKTOP });
+    const page = await context.newPage();
+
+    const injected = await injectAuthForPage(page, 'student');
+    test.skip(!injected, 'Nexus test-login unavailable');
+
+    await page.goto(`${NEXUS}/student/question-bank`, { waitUntil: 'domcontentloaded' });
+    await dismissWelcome(page);
+    const ready = await settle(page, /question bank|past papers|coming soon|classroom/i);
+    test.skip(!ready, 'Question Bank home did not render in this environment');
+
+    // Grid is the non-default view now (table is default); switch to it. The
+    // toggle only renders once papersLoading resolves, which on a cold dev
+    // compile can take well past a short timeout, so this uses the file's
+    // default (20s) rather than a tight one.
+    const gridToggle = page.getByRole('button', { name: /grid view/i }).filter({ visible: true }).first();
+    test.skip(!(await appears(gridToggle)), 'No past papers to switch views on');
+    await gridToggle.click();
+
+    const cards = page.getByRole('button', { name: /attempted|best score|original paper/i }).filter({ visible: true });
+    await cards.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
+    const count = await cards.count();
+    test.skip(count < 2, 'Fewer than 2 published papers in this environment, cannot compare row positions');
+
+    const [firstBox, secondBox] = await Promise.all([
+      cards.nth(0).boundingBox(),
+      cards.nth(1).boundingBox(),
+    ]);
+    expect(firstBox).not.toBeNull();
+    expect(secondBox).not.toBeNull();
+
+    // The old per-year grid put every paper alone on its own row (same X, Y
+    // stepping down the page every time). The flattened grid packs the first
+    // two papers into the same row at this width.
+    expect(
+      Math.abs(firstBox!.y - secondBox!.y),
+      'The first two papers are not on the same row, grid did not flatten',
+    ).toBeLessThan(20);
+    expect(
+      Math.abs(firstBox!.x - secondBox!.x),
+      'The first two papers share an X position',
+    ).toBeGreaterThan(50);
+
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test('1440px: Past papers table view lists papers as rows and opens the paper on click', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ viewport: DESKTOP });
+    const page = await context.newPage();
+
+    const injected = await injectAuthForPage(page, 'student');
+    test.skip(!injected, 'Nexus test-login unavailable');
+
+    await page.goto(`${NEXUS}/student/question-bank`, { waitUntil: 'domcontentloaded' });
+    await dismissWelcome(page);
+    const ready = await settle(page, /question bank|past papers|coming soon|classroom/i);
+    test.skip(!ready, 'Question Bank home did not render in this environment');
+
+    // Table is the default view; the toggle should already be selected. If
+    // it did not persist as the default in this environment, force it. As
+    // above, this waits on the file's default timeout rather than a tight
+    // one, since the toggle only renders once papersLoading resolves.
+    const tableToggle = page.getByRole('button', { name: /table view/i }).filter({ visible: true }).first();
+    if (await appears(tableToggle)) await tableToggle.click();
+
+    // The welcome dialog can pop up on its own delay, any time after data
+    // finishes loading, and MUI's Modal aria-hides the rest of the page while
+    // it is open. That removes the table from the accessibility tree even
+    // though it is on screen, so getByRole('table') never resolves until the
+    // dialog is gone. Poll for both: dismiss the dialog the instant it shows,
+    // keep checking for the table in between.
+    const table = page.getByRole('table').filter({ visible: true }).first();
+    let tableSeen = false;
+    for (let i = 0; i < 20 && !tableSeen; i++) {
+      await dismissWelcome(page);
+      tableSeen = await appears(table, 1_000);
+    }
+    test.skip(!tableSeen, 'No past papers to render as a table');
+
+    await expect(page.getByRole('columnheader', { name: /^paper$/i })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /^progress$/i })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /^status$/i })).toBeVisible();
+
+    // Not getByRole('button', {name: /^open /i}): the header's "Open profile
+    // menu" button also matches "Open " and sorts before the table in the
+    // DOM, so .first() grabbed it instead of a row. Scope to the table rows
+    // directly.
+    const firstRow = table.locator('tr[role="button"]').first();
+    test.skip(!(await appears(firstRow)), 'No paper rows rendered');
+    await firstRow.click();
+
+    await page.waitForURL(/\/student\/question-bank\/papers\/[^/?]+/, { timeout: 15_000 });
+  });
+
+  test('375px: Past papers list fits the phone regardless of the stored view', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: PHONE });
+    const page = await context.newPage();
+
+    const injected = await injectAuthForPage(page, 'student');
+    test.skip(!injected, 'Nexus test-login unavailable');
+
+    await page.goto(`${NEXUS}/student/question-bank`, { waitUntil: 'domcontentloaded' });
+    await dismissWelcome(page);
+    const ready = await settle(page, /question bank|past papers|coming soon|classroom/i);
+    test.skip(!ready, 'Question Bank home did not render in this environment');
 
     await assertNoHorizontalOverflow(page);
   });

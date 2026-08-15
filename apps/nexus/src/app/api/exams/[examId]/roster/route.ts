@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, listExamMakeups } from '@neram/database';
+import {
+  getSupabaseAdminClient,
+  listExamMakeups,
+  getExamPlacement,
+  getExamAttemptOverrides,
+  getViolationCountsForTest,
+} from '@neram/database';
 import { requireExamStaff, loadExamRoster } from '@/lib/exam-access';
 import {
   buildExamRoster,
@@ -29,20 +35,25 @@ export async function GET(
     const exam = access.exam;
     const supabase = getSupabaseAdminClient();
 
-    const [students, makeupRows] = await Promise.all([
+    const [students, makeupRows, placement] = await Promise.all([
       loadExamRoster(exam.classroom_id),
       listExamMakeups(params.examId),
+      getExamPlacement(params.examId),
     ]);
 
     const studentIds = students.map((s) => s.id);
-    const { data: attempts } = await supabase
-      .from('nexus_test_attempts' as any)
-      .select(
-        'student_id, status, started_at, submitted_at, score, percentage, final_percentage, finalised_at',
-      )
-      .eq('test_id', exam.test_id)
-      .eq('mode', 'official')
-      .in('student_id', studentIds.length > 0 ? studentIds : ['00000000-0000-0000-0000-000000000000']);
+    const [{ data: attempts }, attemptOverrides, violationCounts] = await Promise.all([
+      supabase
+        .from('nexus_test_attempts' as any)
+        .select(
+          'student_id, status, started_at, submitted_at, score, percentage, final_percentage, finalised_at',
+        )
+        .eq('test_id', exam.test_id)
+        .eq('mode', 'official')
+        .in('student_id', studentIds.length > 0 ? studentIds : ['00000000-0000-0000-0000-000000000000']),
+      getExamAttemptOverrides(params.examId),
+      getViolationCountsForTest(exam.test_id, studentIds),
+    ]);
 
     const makeups = new Map<string, ExamRosterMakeup>(
       makeupRows.map((m) => [
@@ -50,6 +61,9 @@ export async function GET(
         { opens_at: m.opens_at, closes_at: m.closes_at, revoked_at: m.revoked_at },
       ]),
     );
+
+    const placementRow = placement as { gating?: Record<string, unknown> } | null;
+    const baseAttemptLimit = Number(placementRow?.gating?.attempt_limit);
 
     const rows = sortExamRoster(
       buildExamRoster({
@@ -59,6 +73,9 @@ export async function GET(
         window: { opens_at: exam.opens_at, closes_at: exam.closes_at },
         durationMinutes: exam.duration_minutes,
         now: Date.now(),
+        baseAttemptLimit: Number.isFinite(baseAttemptLimit) ? baseAttemptLimit : null,
+        attemptOverrides,
+        violationCounts,
       }),
     );
 

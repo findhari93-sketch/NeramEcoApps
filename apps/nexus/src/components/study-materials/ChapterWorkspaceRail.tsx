@@ -1,43 +1,32 @@
 'use client';
 
 /**
- * The teacher's side of an open chapter.
+ * The teacher's side of an open chapter: what's still missing to make it
+ * completable (Setup), and the running conversation about it (Comments).
  *
- * Everything here was already reachable, from the grid card's menu, which meant
- * closing the document first. Worse, none of it answered the question a teacher
- * actually opens a chapter with: does this chapter work, and is anyone getting
- * through it. On production every one of the twelve chapters had been opened by
- * students and not one had ever been completed, and nothing on any screen said
- * why.
+ * "Who's getting through it" used to live here too, as a second, 360px-wide
+ * implementation of the same report the full completion page already had at
+ * full width — the two independently forgot to agree on whether a test was
+ * attached. That roster is gone from this file; it lives once, in
+ * ChapterCompletionPanel, as the Students tab of the chapter workspace page.
  *
  * Nothing is fetched until the tab that needs it is opened, and nothing is
- * fetched twice. Most opens are reading, and a reader should not pay for a
- * cohort report.
+ * fetched twice.
  *
  * The actions do not own their dialogs. Every button calls back up to the page,
- * which already holds the test sheet, the recordings board, the link dialog and
- * the download grant, so this rail adds a way in rather than a second copy.
+ * which already holds the test sheet, the recordings board, and the download
+ * grant, so this rail adds a way in rather than a second copy.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Box, Typography, Button, Chip, Skeleton, Alert, Divider, Dialog, IconButton, alpha, useTheme, useMediaQuery,
-} from '@neram/ui';
+import { Box, Typography, Button, Skeleton, Alert, Divider } from '@neram/ui';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
-import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
-import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
-import CloseIcon from '@mui/icons-material/Close';
-import StudentAvatar from '@/components/students/StudentAvatar';
 import StudyCommentPanel from '@/components/study-materials/StudyCommentPanel';
-import PDFAnnotationsPanel from '@/components/study-materials/PDFAnnotationsPanel';
-import { useFileAnnotations } from '@/hooks/useFileAnnotations';
-import { ChapterStatusChip, WatchHonesty, type ChapterStatus } from '@/components/study-materials/chapter-status';
 import {
   chapterReadiness,
-  summariseWatchLanguages,
   type PlacedChapterTest,
   type ReadinessLine,
   type ReadinessState,
@@ -45,7 +34,7 @@ import {
   type WorkspaceTrack,
 } from '@/lib/chapter-workspace';
 
-export type WorkspaceTab = 'setup' | 'students' | 'comments';
+export type WorkspaceTab = 'setup' | 'comments';
 
 /** What the page does when a line's button is pressed. The page owns the dialogs. */
 export interface ChapterManageActions {
@@ -61,41 +50,11 @@ export interface ChapterManageActions {
   onRecordings: () => void;
   /** Time-limited download grants. */
   onDownloadAccess: () => void;
-  /** The full completion page, with filters, sorting and Message. */
-  onOpenReport: () => void;
-}
-
-interface ReportRow {
-  student_id: string;
-  name: string | null;
-  avatar_url: string | null;
-  status: ChapterStatus;
-  best_score_pct: number | null;
-  video_language?: string | null;
-  watched_seconds?: number;
-  blocked_seeks?: number;
-  checkpoint_attempts?: number;
-  /** Personal highlights/pen marks/notes this student has made on the chapter PDF. */
-  annotation_count?: number;
-}
-
-interface ReportBody {
-  rows: ReportRow[];
-  stats: {
-    total: number;
-    completed: number;
-    video_pending: number;
-    test_pending: number;
-    studying: number;
-    not_opened: number;
-    avg_score: number | null;
-  };
 }
 
 interface Props {
   fileId: string;
   file: WorkspaceFile;
-  classroomId: string | null;
   getToken: () => Promise<string | null>;
   tab: WorkspaceTab;
   actions: ChapterManageActions;
@@ -159,36 +118,23 @@ function ReadinessRow({ line, onAction }: { line: ReadinessLine; onAction: () =>
 export default function ChapterWorkspaceRail({
   fileId,
   file,
-  classroomId,
   getToken,
   tab,
   actions,
   refreshKey = 0,
 }: Props) {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
   const [tracks, setTracks] = useState<WorkspaceTrack[] | null>(null);
   const [placedTest, setPlacedTest] = useState<PlacedChapterTest | null>(null);
-  const [report, setReport] = useState<ReportBody | null>(null);
   const [error, setError] = useState('');
-  // A student's marks, viewed read-only from the roster row's annotation-count chip.
-  const [notesFor, setNotesFor] = useState<{ id: string; name: string | null } | null>(null);
-  const notesHook = useFileAnnotations({
-    fileId,
-    getToken,
-    enabled: !!notesFor,
-    studentId: notesFor?.id,
-  });
 
-  // Which (fileId, refreshKey) each panel has already loaded, so switching tabs
+  // Which (fileId, refreshKey) tracks has already loaded, so switching tabs
   // back and forth does not refetch and a save does.
-  const loaded = useRef<{ tracks: string; report: string }>({ tracks: '', report: '' });
+  const loaded = useRef<string>('');
   const stamp = `${fileId}:${refreshKey}`;
 
   const loadTracks = useCallback(async () => {
-    if (loaded.current.tracks === stamp) return;
-    loaded.current.tracks = stamp;
+    if (loaded.current === stamp) return;
+    loaded.current = stamp;
     try {
       const t = await getToken();
       const res = await fetch(`/api/study-materials/files/${fileId}/video-tracks`, {
@@ -219,270 +165,66 @@ export default function ChapterWorkspaceRail({
     }
   }, [fileId, getToken, stamp]);
 
-  const loadReport = useCallback(async () => {
-    if (loaded.current.report === stamp) return;
-    loaded.current.report = stamp;
-    try {
-      const t = await getToken();
-      // Classroom is optional on this endpoint, and omitting it reports across
-      // every cohort, which is the right default for Foundation chapters: they
-      // are standard for all of them.
-      const qs = classroomId ? `?classroom=${encodeURIComponent(classroomId)}` : '';
-      const res = await fetch(`/api/study-materials/reports/chapter/${fileId}${qs}`, {
-        headers: { Authorization: `Bearer ${t}` },
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || 'Could not read the report.');
-      setReport(body);
-    } catch (e: any) {
-      setError(e?.message || 'Could not read the report.');
-    }
-  }, [fileId, classroomId, getToken, stamp]);
-
   // Reset when the chapter changes, so the previous chapter's numbers never
   // flash under the new chapter's title.
   useEffect(() => {
     setTracks(null);
     setPlacedTest(null);
-    setReport(null);
     setError('');
-    loaded.current = { tracks: '', report: '' };
+    loaded.current = '';
   }, [fileId, refreshKey]);
 
   useEffect(() => {
     if (tab === 'setup') loadTracks();
-    if (tab === 'students') {
-      loadTracks();
-      loadReport();
-    }
-  }, [tab, loadTracks, loadReport]);
+  }, [tab, loadTracks]);
 
   if (tab === 'comments') {
     return <StudyCommentPanel fileId={fileId} getToken={getToken} />;
   }
 
   // ── Setup ────────────────────────────────────────────────────────────────
-  if (tab === 'setup') {
-    if (tracks === null) {
-      return (
-        <Box sx={{ p: 2 }}>
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rounded" height={56} sx={{ mb: 1 }} />
-          ))}
-        </Box>
-      );
-    }
-
-    const lines = chapterReadiness(file, tracks, placedTest);
-    const action: Record<ReadinessLine['key'], () => void> = {
-      // With a paper already here, Test opens it where the question editor,
-      // the JSON download and its provenance already live. Offering a second
-      // authoring surface from the chapter is how there came to be four.
-      test: placedTest ? () => actions.onOpenTest(placedTest.test_id) : actions.onTest,
-      recordings: actions.onRecordings,
-      // The old ungated link is cleared by moving it into a recording, so its
-      // line leads to the same dialog rather than to an editor for a feature
-      // that no longer exists.
-      quick_link: actions.onRecordings,
-      download: actions.onDownloadAccess,
-    };
-
-    return (
-      <Box sx={{ p: 2, overflowY: 'auto' }}>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          A student finishes a chapter by watching one recording, if there is one, and then
-          passing the test.
-        </Typography>
-        {error && (
-          <Alert severity="warning" sx={{ mb: 1.5 }} onClose={() => setError('')}>
-            {error}
-          </Alert>
-        )}
-        <Divider />
-        {lines.map((line) => (
-          <Box key={line.key}>
-            <ReadinessRow line={line} onAction={action[line.key]} />
-            <Divider />
-          </Box>
-        ))}
-      </Box>
-    );
-  }
-
-  // ── Students ─────────────────────────────────────────────────────────────
-  if (report === null) {
+  if (tracks === null) {
     return (
       <Box sx={{ p: 2 }}>
-        <Skeleton variant="rounded" height={72} sx={{ mb: 1.5 }} />
-        <Skeleton variant="rounded" height={32} sx={{ mb: 1.5 }} />
-        {[0, 1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} variant="rounded" height={52} sx={{ mb: 1 }} />
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} variant="rounded" height={56} sx={{ mb: 1 }} />
         ))}
       </Box>
     );
   }
 
-  const watch = summariseWatchLanguages(report.rows, tracks || []);
-  const tiles = [
-    { label: 'Completed', value: report.stats.completed, color: theme.palette.success.main },
-    { label: 'Needs the test', value: report.stats.test_pending, color: theme.palette.warning.main },
-    { label: 'Studying', value: report.stats.studying, color: theme.palette.info.main },
-    { label: 'Not opened', value: report.stats.not_opened, color: theme.palette.text.secondary },
-  ];
+  const lines = chapterReadiness(file, tracks, placedTest);
+  const action: Record<ReadinessLine['key'], () => void> = {
+    // With a paper already here, Test opens it where the question editor,
+    // the JSON download and its provenance already live. Offering a second
+    // authoring surface from the chapter is how there came to be four.
+    test: placedTest ? () => actions.onOpenTest(placedTest.test_id) : actions.onTest,
+    recordings: actions.onRecordings,
+    // The old ungated link is cleared by moving it into a recording, so its
+    // line leads to the same dialog rather than to an editor for a feature
+    // that no longer exists.
+    quick_link: actions.onRecordings,
+    download: actions.onDownloadAccess,
+  };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
-      <Box sx={{ p: 2, pb: 1, flexShrink: 0 }}>
-        {error && (
-          <Alert severity="warning" sx={{ mb: 1.5 }} onClose={() => setError('')}>
-            {error}
-          </Alert>
-        )}
-
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1, mb: 1.5 }}>
-          {tiles.map((t) => (
-            <Box
-              key={t.label}
-              sx={{ p: 1, borderRadius: 2, border: `1px solid ${theme.palette.divider}` }}
-            >
-              <Typography variant="h6" fontWeight={800} sx={{ color: t.color, lineHeight: 1.2 }}>
-                {t.value}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-                {t.label}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
-
-        {/* The line the report has always had the data for and never drawn. */}
-        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>
-          Watched in
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-          {watch.languages.map((l) => (
-            <Chip
-              key={l.code}
-              size="small"
-              variant="outlined"
-              color={l.count > 0 ? 'success' : 'default'}
-              label={`${l.label} ${l.count}`}
-            />
-          ))}
-          <Chip size="small" variant="outlined" label={`not watched ${watch.notWatched}`} />
-        </Box>
-      </Box>
-
+    <Box sx={{ p: 2, overflowY: 'auto' }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+        A student finishes a chapter by watching one recording, if there is one, and then
+        passing the test.
+      </Typography>
+      {error && (
+        <Alert severity="warning" sx={{ mb: 1.5 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
       <Divider />
-
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 2, py: 1 }}>
-        {report.rows.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
-            No students are enrolled in this classroom yet.
-          </Typography>
-        ) : (
-          report.rows.map((r) => (
-            <Box
-              key={r.student_id}
-              sx={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 1,
-                py: 1,
-                borderBottom: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
-              }}
-            >
-              <StudentAvatar userId={r.student_id} src={r.avatar_url} name={r.name} size={32} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={600} noWrap>
-                  {r.name || 'Student'}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap', mt: 0.25 }}>
-                  <ChapterStatusChip status={r.status} />
-                  {r.best_score_pct != null && (
-                    <Typography variant="caption" color="text.secondary">
-                      {Math.round(r.best_score_pct)}%
-                    </Typography>
-                  )}
-                  {r.video_language && (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color="success"
-                      label={
-                        watch.languages.find((l) => l.code === r.video_language)?.label ||
-                        r.video_language
-                      }
-                    />
-                  )}
-                  {!!r.annotation_count && (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      icon={<StickyNote2OutlinedIcon sx={{ fontSize: 14 }} />}
-                      label={`${r.annotation_count} mark${r.annotation_count === 1 ? '' : 's'}`}
-                      onClick={() => setNotesFor({ id: r.student_id, name: r.name })}
-                      sx={{ cursor: 'pointer' }}
-                    />
-                  )}
-                </Box>
-                {(r.watched_seconds || r.blocked_seeks || r.checkpoint_attempts) ? (
-                  <Box sx={{ mt: 0.5 }}>
-                    <WatchHonesty
-                      watchedSeconds={r.watched_seconds || 0}
-                      blockedSeeks={r.blocked_seeks || 0}
-                      attempts={r.checkpoint_attempts || 0}
-                    />
-                  </Box>
-                ) : null}
-              </Box>
-            </Box>
-          ))
-        )}
-      </Box>
-
-      <Box sx={{ p: 1.5, flexShrink: 0, borderTop: `1px solid ${theme.palette.divider}` }}>
-        {/* Filtering, sorting, multi-select and Message stay on the full page.
-            Rebuilding them in a 360px rail would be a second implementation of
-            a screen that already works. */}
-        <Button
-          fullWidth
-          variant="outlined"
-          endIcon={<OpenInNewRoundedIcon />}
-          onClick={actions.onOpenReport}
-          sx={{ textTransform: 'none', minHeight: 48 }}
-        >
-          Open the full report
-        </Button>
-      </Box>
-
-      {/* A student's marks, read-only: this rail already shows the roster, not the PDF
-          itself, so this is a list (PDFAnnotationsPanel), not a second reader. */}
-      <Dialog
-        open={!!notesFor}
-        onClose={() => setNotesFor(null)}
-        fullScreen={isMobile}
-        maxWidth="xs"
-        fullWidth
-        PaperProps={{ sx: { height: isMobile ? '100%' : 480, borderRadius: isMobile ? 0 : 2 } }}
-      >
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${theme.palette.divider}` }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1 }} noWrap>
-              {notesFor?.name || 'Student'}'s marks on this chapter
-            </Typography>
-            <IconButton size="small" onClick={() => setNotesFor(null)} aria-label="Close" sx={{ width: 40, height: 40 }}>
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          <PDFAnnotationsPanel
-            annotations={notesHook.annotations}
-            loading={notesHook.loading}
-            readOnly
-            onJumpToPage={() => {}}
-          />
+      {lines.map((line) => (
+        <Box key={line.key}>
+          <ReadinessRow line={line} onAction={action[line.key]} />
+          <Divider />
         </Box>
-      </Dialog>
+      ))}
     </Box>
   );
 }

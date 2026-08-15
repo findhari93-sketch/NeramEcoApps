@@ -62,6 +62,14 @@ export interface ExamRosterRow {
   /** True while any drawing on their paper is unmarked. */
   provisional: boolean;
   is_makeup: boolean;
+  /** Proctoring signals logged across every attempt this student has made. */
+  violation_count: number;
+  /** How many attempts this student has SUBMITTED (not counting the live one). */
+  attempts_used: number;
+  /** Base limit + any teacher-granted override. Null means unlimited. */
+  attempts_allowed: number | null;
+  /** attempts_allowed reached and nothing currently in progress -- the "+1 attempt" button shows for this row. */
+  exhausted: boolean;
 }
 
 export interface ExamRosterSummary {
@@ -79,17 +87,34 @@ export interface BuildExamRosterInput {
   window: { opens_at: string; closes_at: string };
   durationMinutes: number | null;
   now: number;
+  /** The placement's own gating.attempt_limit. Omit or null for unlimited. */
+  baseAttemptLimit?: number | null;
+  /** Per-student +N grants from nexus_exam_attempt_overrides (getExamAttemptOverrides). */
+  attemptOverrides?: Map<string, number>;
+  /** Per-student totals from nexus_test_attempt_violations (getViolationCountsForTest). */
+  violationCounts?: Map<string, number>;
 }
 
 export function buildExamRoster(input: BuildExamRosterInput): ExamRosterRow[] {
   const byStudent = new Map<string, ExamRosterAttempt>();
+  // How many attempts each student has SUBMITTED, independent of which one
+  // "wins" the display row above -- a retake must still count against the limit.
+  const submittedCountByStudent = new Map<string, number>();
   for (const a of input.attempts) {
     const prior = byStudent.get(a.student_id);
     // A submitted attempt always wins over an abandoned or in-progress one.
     if (!prior || (prior.status !== 'submitted' && a.status === 'submitted')) {
       byStudent.set(a.student_id, a);
     }
+    if (a.status === 'submitted') {
+      submittedCountByStudent.set(a.student_id, (submittedCountByStudent.get(a.student_id) || 0) + 1);
+    }
   }
+
+  const attemptOverrides = input.attemptOverrides || new Map<string, number>();
+  const violationCounts = input.violationCounts || new Map<string, number>();
+  const baseLimit =
+    typeof input.baseAttemptLimit === 'number' && input.baseAttemptLimit > 0 ? input.baseAttemptLimit : null;
 
   const mainClose = new Date(input.window.closes_at).getTime();
 
@@ -100,6 +125,10 @@ export function buildExamRoster(input: BuildExamRosterInput): ExamRosterRow[] {
 
     const closeAt = liveMakeup ? new Date(liveMakeup.closes_at).getTime() : mainClose;
     const windowClosed = input.now > closeAt;
+
+    const violationCount = violationCounts.get(student.id) || 0;
+    const attemptsUsed = submittedCountByStudent.get(student.id) || 0;
+    const attemptsAllowed = baseLimit === null ? null : baseLimit + (attemptOverrides.get(student.id) || 0);
 
     if (attempt?.status === 'submitted') {
       const provisional = !attempt.finalised_at;
@@ -115,6 +144,10 @@ export function buildExamRoster(input: BuildExamRosterInput): ExamRosterRow[] {
         percentage: provisional ? attempt.percentage : (attempt.final_percentage ?? attempt.percentage),
         provisional,
         is_makeup: Boolean(liveMakeup),
+        violation_count: violationCount,
+        attempts_used: attemptsUsed,
+        attempts_allowed: attemptsAllowed,
+        exhausted: attemptsAllowed !== null && attemptsUsed >= attemptsAllowed,
       };
     }
 
@@ -139,6 +172,12 @@ export function buildExamRoster(input: BuildExamRosterInput): ExamRosterRow[] {
         percentage: null,
         provisional: false,
         is_makeup: Boolean(liveMakeup),
+        violation_count: violationCount,
+        attempts_used: attemptsUsed,
+        attempts_allowed: attemptsAllowed,
+        // Never exhausted while a sitting is live: the +1 button is for
+        // deciding whether to let a student START another, not this one.
+        exhausted: false,
       };
     }
 
@@ -161,6 +200,10 @@ export function buildExamRoster(input: BuildExamRosterInput): ExamRosterRow[] {
       started_at: null,
       submitted_at: null,
       percentage: null,
+      violation_count: violationCount,
+      attempts_used: attemptsUsed,
+      attempts_allowed: attemptsAllowed,
+      exhausted: attemptsAllowed !== null && attemptsUsed >= attemptsAllowed,
       provisional: false,
       is_makeup: Boolean(liveMakeup),
     };

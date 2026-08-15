@@ -52,6 +52,24 @@ export interface StudentTest {
   required?: boolean | null;
   class_id?: string | null;
   class_title?: string | null;
+  /**
+   * Scheduled exams only (model tests with a hard window and a published
+   * rank). Absent on every ordinary test, so every existing caller renders
+   * exactly what it rendered before.
+   */
+  is_exam?: boolean;
+  /** This student is sitting inside a granted makeup window, not the main one. */
+  is_makeup?: boolean;
+  results_state?: 'unpublished' | 'provisional' | 'final';
+  exam_result?: {
+    rank: number | null;
+    total_ranked: number;
+    score: number | null;
+    total_marks: number | null;
+    percentage: number | null;
+    is_provisional: boolean;
+    absent: boolean;
+  } | null;
 }
 
 export function formatWhen(iso: string | null): string {
@@ -101,6 +119,29 @@ export function windowChip(
   return null;
 }
 
+/**
+ * Where this student's exam result stands. Exam-only, and null on everything
+ * else (including an exam not yet attempted with nothing published), so the
+ * chip only ever appears when it has something true to say.
+ */
+export function examResultChip(
+  t: StudentTest,
+): { label: string; color: 'error' | 'warning' | 'default' | 'success' } | null {
+  if (!t.is_exam) return null;
+  const r = t.exam_result;
+  if (r?.absent) return { label: 'Absent', color: 'error' };
+  if (r) {
+    const label = `Rank ${r.rank ?? '-'} of ${r.total_ranked}`;
+    return r.is_provisional
+      ? { label: `${label} · Provisional`, color: 'warning' }
+      : { label, color: 'success' };
+  }
+  // Attempted (status reads 'done') but results_state has not moved past
+  // 'unpublished' yet: say so rather than leaving the card silent about it.
+  if (t.status === 'done') return { label: 'Result not published yet', color: 'default' };
+  return null;
+}
+
 export interface StudentTestCardProps {
   test: StudentTest;
   onStart: (t: StudentTest) => void;
@@ -123,6 +164,7 @@ export default function StudentTestCard({
   onMenu,
 }: StudentTestCardProps) {
   const chip = windowChip(test);
+  const resultChip = examResultChip(test);
   const notOpenYet = Boolean(test.available_from && new Date(test.available_from).getTime() > Date.now());
   const closed = Boolean(test.available_until && new Date(test.available_until).getTime() < Date.now());
   const outOfAttempts = Boolean(test.attempt_limit && test.attempts >= test.attempt_limit);
@@ -259,6 +301,19 @@ export default function StudentTestCard({
             size="small"
             label={`${test.attempts} attempt${test.attempts !== 1 ? 's' : ''}`}
             sx={{ height: 22, fontSize: '0.7rem' }}
+          />
+        )}
+        {/* Exam-only: a granted makeup sitting, and where the result stands.
+            Both are opt-in on is_exam, so no other card is affected. */}
+        {test.is_exam && test.is_makeup && (
+          <Chip size="small" variant="outlined" color="warning" label="Makeup" sx={{ height: 22, fontSize: '0.7rem' }} />
+        )}
+        {resultChip && (
+          <Chip
+            size="small"
+            label={resultChip.label}
+            color={resultChip.color}
+            sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700 }}
           />
         )}
       </Box>

@@ -12,6 +12,12 @@
  * Worse, it recorded a percentage and nothing else, while the app's real player
  * captures why each answer was wrong and why a paper was abandoned. Pressing
  * Take test now goes to that player and comes back here afterwards.
+ *
+ * This used to also carry a teacher "manage" mode (Setup/Students/Comments
+ * rail bolted onto this Dialog). That mode moved to a real page,
+ * `/teacher/study-materials/[fileId]`, so a teacher managing a chapter gets a
+ * URL and a working back button instead of a modal stacked on a modal. This
+ * component is purely the student reading view again.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -26,32 +32,18 @@ import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutl
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
-import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
 import PDFReader from '@/components/reader/PDFReader';
 import ProtectedContent from '@/components/ProtectedContent';
 import StudyCommentPanel from '@/components/study-materials/StudyCommentPanel';
 import PDFAnnotationsPanel from '@/components/study-materials/PDFAnnotationsPanel';
 import ChapterVideoPanel from '@/components/study-materials/ChapterVideoPanel';
-import ChapterWorkspaceRail, {
-  type ChapterManageActions,
-  type WorkspaceTab,
-} from '@/components/study-materials/ChapterWorkspaceRail';
 import { useStudyTimeTracker } from '@/hooks/useStudyTimeTracker';
 import { useFileAnnotations } from '@/hooks/useFileAnnotations';
 import { takeTestHref } from '@/lib/test-return';
 import type { NexusStudyFileDTO } from '@neram/database/types';
 
-/** Everything the teacher rail needs. Absent, this is the plain student viewer. */
-export interface StudyFileManage {
-  classroomId: string | null;
-  actions: ChapterManageActions;
-  /** Bumped by the page after a dialog saves, so the rail re-reads. */
-  refreshKey?: number;
-}
-
-type ViewerTab = 'doc' | 'notes' | WorkspaceTab;
+type ViewerTab = 'doc' | 'notes' | 'comments';
 
 interface StudyFileViewerProps {
   file: NexusStudyFileDTO | null;
@@ -65,12 +57,6 @@ interface StudyFileViewerProps {
   watermark?: string;
   /** Silently record the student's reading time on this file while the viewer is open. */
   track?: boolean;
-  /**
-   * Teacher mode. The comments panel becomes a three-tab rail (Setup, Students,
-   * Comments) and, on mobile, the Document / Comments toggle grows to four.
-   * Omitted by both student callers, which therefore behave exactly as before.
-   */
-  manage?: StudyFileManage;
 }
 
 /** A tiled, low-opacity diagonal watermark background (for images; PDFs bake it onto the canvas). */
@@ -92,7 +78,7 @@ function Glyph({ kind, size = 22 }: { kind: string; size?: number }) {
   return <InsertDriveFileOutlinedIcon sx={{ fontSize: size, color: 'text.secondary' }} />;
 }
 
-export default function StudyFileViewer({ file, token, getToken, onClose, watermark, track, manage }: StudyFileViewerProps) {
+export default function StudyFileViewer({ file, token, getToken, onClose, watermark, track }: StudyFileViewerProps) {
   const theme = useTheme();
   const router = useRouter();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -110,17 +96,16 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
    * Which panel the side rail shows.
    *
    * On desktop the document is always on screen, so 'doc' is not a rail state:
-   * it falls through to whatever that viewer's rail leads with. On mobile the
-   * tabs are exclusive and 'doc' means the document fills the screen.
+   * it falls through to Comments. On mobile the tabs are exclusive and 'doc'
+   * means the document fills the screen.
    */
-  const railTab: ViewerTab = tab === 'doc' ? (manage ? 'setup' : 'comments') : tab;
+  const railTab: ViewerTab = tab === 'doc' ? 'comments' : tab;
 
-  // Personal ink annotations (Pen/Highlighter/Note). Teachers manage a chapter, they
-  // don't mark it up, so this only fetches for the plain student viewer.
+  // Personal ink annotations (Pen/Highlighter/Note).
   const annotationsHook = useFileAnnotations({
     fileId: file?.id ?? null,
     getToken,
-    enabled: !manage && !!file,
+    enabled: !!file,
   });
 
   // Silently accrue reading time for the student while this file is open.
@@ -212,13 +197,7 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
             </IconButton>
           </Box>
 
-          {/*
-            Mobile tabs.
-
-            Two for a student, unchanged. Four for a teacher, stacked icon over
-            label so all four still clear 48px and read at 375px, where a single
-            row of side-by-side icon-and-word buttons would not fit.
-          */}
+          {/* Mobile tabs. */}
           {isMobile && (
             <ToggleButtonGroup
               value={tab}
@@ -229,30 +208,16 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
               sx={{
                 p: 1,
                 flexShrink: 0,
-                '& .MuiToggleButton-root': manage
-                  ? { minHeight: 52, textTransform: 'none', flexDirection: 'column', gap: 0.25, fontSize: 10, px: 0.5 }
-                  : { minHeight: 48, textTransform: 'none', gap: 0.5 },
+                '& .MuiToggleButton-root': { minHeight: 48, textTransform: 'none', gap: 0.5 },
               }}
             >
               <ToggleButton value="doc">
                 {file.kind === 'pdf' ? <PictureAsPdfOutlinedIcon fontSize="small" /> : <ImageOutlinedIcon fontSize="small" />}
-                {manage ? 'Doc' : 'Document'}
+                Document
               </ToggleButton>
-              {manage && (
-                <ToggleButton value="setup">
-                  <TuneRoundedIcon fontSize="small" /> Setup
-                </ToggleButton>
-              )}
-              {manage && (
-                <ToggleButton value="students">
-                  <GroupsOutlinedIcon fontSize="small" /> Students
-                </ToggleButton>
-              )}
-              {!manage && (
-                <ToggleButton value="notes">
-                  <StickyNote2OutlinedIcon fontSize="small" /> Notes
-                </ToggleButton>
-              )}
+              <ToggleButton value="notes">
+                <StickyNote2OutlinedIcon fontSize="small" /> Notes
+              </ToggleButton>
               <ToggleButton value="comments">
                 <ChatBubbleOutlineIcon fontSize="small" /> Comments
               </ToggleButton>
@@ -270,34 +235,30 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
                       pdfUrl={contentUrl()}
                       watermark={watermark}
                       initialPage={jumpToPage}
-                      annotations={
-                        !manage
-                          ? {
-                              items: annotationsHook.annotations,
-                              onCreateStroke: (page, kind, points, color) =>
-                                annotationsHook
-                                  .createAnnotation({ page_number: page, kind, color, points })
-                                  .then((a) => a?.id ?? null),
-                              onCreateNote: (page, anchor, text, color) =>
-                                annotationsHook
-                                  .createAnnotation({
-                                    page_number: page,
-                                    kind: 'note',
-                                    color,
-                                    anchor_x: anchor.x,
-                                    anchor_y: anchor.y,
-                                    note_text: text,
-                                  })
-                                  .then((a) => a?.id ?? null),
-                              onUpdateNote: (id, text) => {
-                                annotationsHook.updateAnnotationNote(id, { note_text: text });
-                              },
-                              onDelete: (id) => {
-                                annotationsHook.deleteAnnotation(id);
-                              },
-                            }
-                          : undefined
-                      }
+                      annotations={{
+                        items: annotationsHook.annotations,
+                        onCreateStroke: (page, kind, points, color) =>
+                          annotationsHook
+                            .createAnnotation({ page_number: page, kind, color, points })
+                            .then((a) => a?.id ?? null),
+                        onCreateNote: (page, anchor, text, color) =>
+                          annotationsHook
+                            .createAnnotation({
+                              page_number: page,
+                              kind: 'note',
+                              color,
+                              anchor_x: anchor.x,
+                              anchor_y: anchor.y,
+                              note_text: text,
+                            })
+                            .then((a) => a?.id ?? null),
+                        onUpdateNote: (id, text) => {
+                          annotationsHook.updateAnnotationNote(id, { note_text: text });
+                        },
+                        onDelete: (id) => {
+                          annotationsHook.deleteAnnotation(id);
+                        },
+                      }}
                     />
                   ) : (
                     <Box
@@ -356,31 +317,12 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
                       '& .MuiToggleButton-root': { minHeight: 40, textTransform: 'none', gap: 0.5, fontSize: 12 },
                     }}
                   >
-                    {manage ? (
-                      <ToggleButton value="setup"><TuneRoundedIcon fontSize="small" /> Setup</ToggleButton>
-                    ) : (
-                      <ToggleButton value="notes"><StickyNote2OutlinedIcon fontSize="small" /> Notes</ToggleButton>
-                    )}
-                    {manage && <ToggleButton value="students"><GroupsOutlinedIcon fontSize="small" /> Students</ToggleButton>}
+                    <ToggleButton value="notes"><StickyNote2OutlinedIcon fontSize="small" /> Notes</ToggleButton>
                     <ToggleButton value="comments"><ChatBubbleOutlineIcon fontSize="small" /> Comments</ToggleButton>
                   </ToggleButtonGroup>
                 )}
 
-                {manage ? (
-                  <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                    <ChapterWorkspaceRail
-                      fileId={file.id}
-                      file={file}
-                      classroomId={manage.classroomId}
-                      getToken={getToken}
-                      // 'notes'/'doc' are unreachable here: this branch's own tab row above
-                      // never offers them, so railTab is always a real WorkspaceTab value.
-                      tab={railTab as WorkspaceTab}
-                      actions={manage.actions}
-                      refreshKey={manage.refreshKey}
-                    />
-                  </Box>
-                ) : railTab === 'notes' ? (
+                {railTab === 'notes' ? (
                   <PDFAnnotationsPanel
                     annotations={annotationsHook.annotations}
                     loading={annotationsHook.loading}

@@ -11,11 +11,13 @@ import {
   Chip,
   SwipeableDrawer,
   Snackbar,
+  Alert,
   IconButton,
   Divider,
   alpha,
   useTheme,
   useMediaQuery,
+  ImageViewerDialog,
 } from '@neram/ui';
 import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
 import NavigateBeforeOutlinedIcon from '@mui/icons-material/NavigateBeforeOutlined';
@@ -25,15 +27,17 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import CloseIcon from '@mui/icons-material/Close';
+import FullscreenOutlinedIcon from '@mui/icons-material/FullscreenOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useTestErrorReporter } from '@/hooks/useTestErrorReporter';
+import { useTestProctoring, type ProctoringViolationKind } from '@/hooks/useTestProctoring';
 import { useSearchParams, useRouter } from 'next/navigation';
 import MathText from '@/components/common/MathText';
 import AnswerInput from '@/components/tests/AnswerInput';
-import ExplanationPanel from '@/components/tests/ExplanationPanel';
+import GradedReviewList, { type GradedReviewItem } from '@/components/tests/GradedReviewList';
 import OptionBody, { type TestOption } from '@/components/tests/OptionBody';
 import SectionStrip, { buildSectionRuns } from '@/components/tests/SectionStrip';
-import { optionKeyAt, sameChoice } from '@/lib/option-keys';
+import { optionKeyAt } from '@/lib/option-keys';
 import {
   DEFAULT_TEST_RETURN,
   DEFAULT_TEST_RETURN_LABEL,
@@ -82,30 +86,18 @@ interface AttemptInfo {
 // Side panel width
 const SIDE_PANEL_W = 280;
 
+const PROCTORING_VIOLATION_COPY: Record<ProctoringViolationKind, string> = {
+  tab_switch: 'You switched away from the test tab.',
+  window_blur: 'This window lost focus.',
+  fullscreen_exit: 'You exited fullscreen.',
+};
+
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 /** The graded result the submit response returns, review included. */
-interface GradedReviewItem {
-  question_id: string;
-  question_text: string | null;
-  /**
-   * The same option shape the paper was served with, image and all. Typed as
-   * `{ id, text }` it silently dropped `image_url`, so a student reviewing a
-   * "pick the correct top view" question saw four blank rows where the figures
-   * they had just chosen between should be.
-   */
-  options: Option[] | null;
-  correct_answer: string | null;
-  selected: string | null;
-  is_correct: boolean;
-  is_gradable: boolean;
-  explanation: string | null;
-  /** Only present once someone has asked the AI for the worked version. */
-  explanation_detailed?: string | null;
-}
 interface GradedResult {
   attempt_id: string;
   attempt_number: number;
@@ -180,6 +172,13 @@ export default function TakeTestPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [submitSheetOpen, setSubmitSheetOpen] = useState(false);
   const [snackMessage, setSnackMessage] = useState<string | null>(null);
+  const [snackSeverity, setSnackSeverity] = useState<'info' | 'warning'>('info');
+  const [questionImageZoomed, setQuestionImageZoomed] = useState(false);
+
+  /** null for every non-exam context -- see the GET route's own comment. */
+  const [proctoringInfo, setProctoringInfo] = useState<{ enabled: boolean; violation_limit: number } | null>(
+    null,
+  );
 
   // Timers
   const [timeLeftSeconds, setTimeLeftSeconds] = useState<number | null>(null);
@@ -237,6 +236,7 @@ export default function TakeTestPage() {
       setQuestions((data.questions || []).filter((q: any) => q.question != null));
       setAttempt(data.attempt);
       setAnswers(data.attempt?.answers || {});
+      setProctoringInfo(data.proctoring ?? null);
 
       if (data.test?.test_type === 'timed' && data.test?.duration_minutes && data.attempt?.started_at) {
         const startedAt = new Date(data.attempt.started_at).getTime();
@@ -292,6 +292,7 @@ export default function TakeTestPage() {
       setQuestionTimeLeft((prev) => {
         if (prev === null || prev <= 1) {
           if (questionTimerRef.current) clearInterval(questionTimerRef.current);
+          setSnackSeverity('info');
           setSnackMessage("Time's up! Moving to next question...");
           if (currentIndex < questions.length - 1) {
             setCurrentIndex((i) => i + 1);
@@ -370,6 +371,31 @@ export default function TakeTestPage() {
       window.removeEventListener('popstate', handlePopState);
     };
   }, [submitted, loading]);
+
+  // -------------------------------------------------------------------------
+  // Proctoring (only active when the GET response's proctoring.enabled is
+  // true, i.e. only for a teacher-scheduled proctored test -- see this
+  // route's own comment on why every other context leaves it null/false).
+  // -------------------------------------------------------------------------
+
+  const proctoring = useTestProctoring({
+    attemptId: attempt?.id ?? null,
+    enabled: Boolean(proctoringInfo?.enabled),
+    getToken,
+    active: !loading && !submitted,
+    onViolation: (kind, count, limit) => {
+      setSnackSeverity('warning');
+      setSnackMessage(
+        `${PROCTORING_VIOLATION_COPY[kind]} Warning ${count}${limit ? ` of ${limit}` : ''} — the test submits automatically if this continues.`,
+      );
+    },
+    onThresholdReached: () => {
+      setSnackSeverity('warning');
+      setSnackMessage('Too many warnings — submitting your test now.');
+      handleSubmit(true);
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    },
+  });
 
   // -------------------------------------------------------------------------
   // Actions
@@ -668,107 +694,7 @@ export default function TakeTestPage() {
               </Button>
 
               {reviewOpen && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
-                  {review.map((r: GradedReviewItem, i: number) => {
-                    const options = Array.isArray(r.options) ? r.options : [];
-                    return (
-                      <Paper
-                        key={r.question_id}
-                        variant="outlined"
-                        sx={{
-                          p: 1.75,
-                          borderRadius: 2,
-                          borderColor: !r.is_gradable
-                            ? 'divider'
-                            : r.is_correct
-                              ? 'success.light'
-                              : 'error.light',
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                            {i + 1}
-                          </Typography>
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <MathText
-                              text={r.question_text || 'Question'}
-                              variant="body2"
-                              sx={{ fontWeight: 600 }}
-                            />
-                          </Box>
-                          <Chip
-                            size="small"
-                            label={!r.is_gradable ? 'Not marked' : r.is_correct ? 'Correct' : 'Wrong'}
-                            color={!r.is_gradable ? 'default' : r.is_correct ? 'success' : 'error'}
-                            sx={{ height: 22, fontSize: '0.68rem', flexShrink: 0 }}
-                          />
-                        </Box>
-
-                        {options.length > 0 ? (
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, mb: 1 }}>
-                            {options.map((o: Option, oi: number) => {
-                              // The same key the paper was answered with, matched
-                              // the way the grader matches it (case-insensitive).
-                              // Comparing o.id alone marked the right answer wrong
-                              // on every question whose options carry a label.
-                              const key = optionKeyAt(o, oi);
-                              const isCorrect = sameChoice(key, r.correct_answer);
-                              const isChosen = sameChoice(key, r.selected);
-                              return (
-                                <Box
-                                  key={key}
-                                  sx={{
-                                    display: 'flex',
-                                    alignItems: 'flex-start',
-                                    gap: 1,
-                                    px: 1,
-                                    py: 0.5,
-                                    borderRadius: 1,
-                                    bgcolor: isCorrect
-                                      ? alpha(theme.palette.success.main, 0.12)
-                                      : isChosen
-                                        ? alpha(theme.palette.error.main, 0.1)
-                                        : 'transparent',
-                                  }}
-                                >
-                                  <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
-                                    {key}
-                                  </Typography>
-                                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                                    <OptionBody option={o} letter={String(key)} compact />
-                                  </Box>
-                                  {isCorrect && (
-                                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'success.dark' }}>
-                                      Correct
-                                    </Typography>
-                                  )}
-                                  {isChosen && !isCorrect && (
-                                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'error.dark' }}>
-                                      You
-                                    </Typography>
-                                  )}
-                                </Box>
-                              );
-                            })}
-                          </Box>
-                        ) : (
-                          <Typography variant="body2" sx={{ mb: 1 }}>
-                            Answer: <strong>{r.correct_answer || '-'}</strong>
-                            {r.selected ? ` · you wrote ${r.selected}` : ' · you left this blank'}
-                          </Typography>
-                        )}
-
-                        <ExplanationPanel
-                          questionId={r.question_id}
-                          brief={r.explanation}
-                          detailed={r.explanation_detailed}
-                          classroomId={activeClassroom?.id}
-                          getToken={getToken}
-                        />
-                      </Paper>
-                    );
-                  })}
-                </Box>
+                <GradedReviewList review={review} getToken={getToken} classroomId={activeClassroom?.id} />
               )}
             </>
           )}
@@ -849,6 +775,52 @@ export default function TakeTestPage() {
             {returnLabel}
           </Button>
         </Box>
+      </Box>
+    );
+  }
+
+  // =========================================================================
+  // RENDER: Fullscreen gate (proctored tests, where the browser supports it)
+  //
+  // Never blocks test start: on a browser without Fullscreen API support
+  // (fullscreenSupported false, notably iOS Safari) this branch is simply
+  // never reached, and the paper renders with tab-switch/blur detection alone.
+  // =========================================================================
+
+  if (proctoring.needsFullscreenGate) {
+    const returning = proctoring.violationCount > 0;
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1200,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 3,
+          textAlign: 'center',
+          bgcolor: 'background.default',
+        }}
+      >
+        <FullscreenOutlinedIcon sx={{ fontSize: 56, color: returning ? 'warning.main' : 'primary.main', mb: 2 }} />
+        <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+          {returning ? 'Return to fullscreen to continue' : 'This test is proctored'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 420 }}>
+          {returning
+            ? 'Leaving fullscreen has been logged as a warning. Enter fullscreen again to keep going.'
+            : `Switching tabs or leaving fullscreen is tracked. The test submits automatically after ${proctoringInfo?.violation_limit ?? 3} warnings.`}
+        </Typography>
+        <Button
+          variant="contained"
+          size="large"
+          onClick={proctoring.enterFullscreen}
+          sx={{ textTransform: 'none', minHeight: 48 }}
+        >
+          {returning ? 'Return to fullscreen' : 'Start in fullscreen'}
+        </Button>
       </Box>
     );
   }
@@ -1137,6 +1109,18 @@ export default function TakeTestPage() {
     return null;
   })();
 
+  // ----- Proctoring chip: violations logged so far this sitting -----
+  const proctoringChip = proctoringInfo?.enabled ? (
+    <Chip
+      size="small"
+      icon={<WarningAmberOutlinedIcon />}
+      label={`${proctoring.violationCount}/${proctoringInfo.violation_limit}`}
+      color={proctoring.violationCount > 0 ? 'warning' : 'default'}
+      variant={proctoring.violationCount > 0 ? 'filled' : 'outlined'}
+      sx={{ fontWeight: 600 }}
+    />
+  ) : null;
+
   return (
     <Box sx={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       {/* ================================================================= */}
@@ -1164,6 +1148,7 @@ export default function TakeTestPage() {
           </Typography>
         </Box>
 
+        {proctoringChip}
         {timerChip}
 
         {/* Mobile: palette trigger */}
@@ -1277,15 +1262,31 @@ export default function TakeTestPage() {
                   <Box
                     sx={{
                       mb: 2,
-                      borderRadius: 2,
-                      overflow: 'hidden',
-                      maxWidth: 480,
+                      display: 'flex',
+                      justifyContent: 'flex-start',
                     }}
                   >
-                    <img
+                    <Box
+                      component="img"
                       src={currentQuestion.question.question_image_url}
                       alt="Question"
-                      style={{ width: '100%', height: 'auto', display: 'block' }}
+                      onClick={() => setQuestionImageZoomed(true)}
+                      sx={{
+                        display: 'block',
+                        width: 'auto',
+                        maxWidth: '100%',
+                        // Capped well under viewport height so the question text
+                        // and first answer options stay visible without scrolling
+                        // past the figure on a 375px-tall mobile screen.
+                        maxHeight: { xs: 240, md: 320 },
+                        objectFit: 'contain',
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        // Bank figures are line art on transparent, invisible on a dark card.
+                        bgcolor: 'common.white',
+                        cursor: 'zoom-in',
+                      }}
                       // A figure that does not load makes a spatial-reasoning
                       // question unanswerable, and the student has no way to say
                       // so beyond giving up. This is the single most common and
@@ -1564,12 +1565,24 @@ export default function TakeTestPage() {
       {/* Snackbar toast */}
       <Snackbar
         open={!!snackMessage}
-        autoHideDuration={2000}
+        autoHideDuration={snackSeverity === 'warning' ? 4000 : 2000}
         onClose={() => setSnackMessage(null)}
-        message={snackMessage}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         sx={{ mb: 8 }}
-      />
+      >
+        <Alert severity={snackSeverity} variant="filled" onClose={() => setSnackMessage(null)}>
+          {snackMessage}
+        </Alert>
+      </Snackbar>
+
+      {currentQuestion?.question.question_image_url && (
+        <ImageViewerDialog
+          open={questionImageZoomed}
+          onClose={() => setQuestionImageZoomed(false)}
+          src={currentQuestion.question.question_image_url}
+          alt="Question"
+        />
+      )}
     </Box>
   );
 }

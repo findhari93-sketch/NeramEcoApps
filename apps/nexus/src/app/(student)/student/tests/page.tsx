@@ -3,59 +3,40 @@
 /**
  * A student's tests.
  *
- * Built around what a student actually opens the app to do, in that order:
- * finish what is due, practise the chapter they are on, run their own drills,
- * and see how they did. The old page was a flat list of everything, next to a
- * question bank of 1121 loose questions, which is not something anyone works
- * through.
+ * Three tabs, one per concern that used to blur together on one long scroll:
+ * Class Tests (what your teacher set, plus exams), My Tests (papers you built
+ * yourself), My Performance (every score you have ever earned). The mistake
+ * banner and the unfinished-attempt prompt sit above all three, because both
+ * are time-sensitive and neither belongs to just one tab.
  *
- * Class prep and catch-up papers are deliberately not here. They are opened from
- * the class they gate, which is where their unlock rules live.
+ * Class prep and catch-up papers are deliberately not here. They are opened
+ * from the class they gate, which is where their unlock rules live.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  Box,
-  Typography,
-  Button,
-  Paper,
-  Chip,
-  Skeleton,
-  Alert,
-  Snackbar,
-  Divider,
-  LinearProgress,
-  CircularProgress,
-} from '@neram/ui';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { Box, Typography, Button, Paper, Skeleton, Alert, Snackbar, CircularProgress, Tabs, Tab } from '@neram/ui';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
-import FitnessCenterOutlinedIcon from '@mui/icons-material/FitnessCenterOutlined';
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
-import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
-import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { pickUnexplainedAttempt } from '@/lib/unfinished-test-prompt';
 import UnfinishedTestSheet, { type UnfinishedAttempt } from '@/components/tests/UnfinishedTestSheet';
-import StudentTestCard, { formatWhen, type StudentTest, type TestStatus } from '@/components/tests/StudentTestCard';
+import { type StudentTest } from '@/components/tests/StudentTestCard';
 import MyTestsLibrary from '@/components/tests/MyTestsLibrary';
+import TestsSection from '@/components/tests/TestsSection';
+import ClassTestsTab, { type RecentAttempt } from '@/components/tests/ClassTestsTab';
+import PerformanceTab, { type PerformanceTabData } from '@/components/tests/PerformanceTab';
 
 interface Overview {
   due: StudentTest[];
   all?: StudentTest[];
+  exams?: StudentTest[];
   has_classroom?: boolean;
   practice_groups: Array<{ key: string; label: string; tests: StudentTest[] }>;
   mine: StudentTest[];
-  recent: Array<{
-    attempt_id: string;
-    test_id: string;
-    test_title: string;
-    attempt_number: number;
-    percentage: number | null;
-    passed: boolean | null;
-    submitted_at: string | null;
-  }>;
+  recent: RecentAttempt[];
   /**
    * Sittings this student walked away from and has not explained. Asked about
    * here because abandoning happens on page unload, where there is no UI to ask
@@ -64,50 +45,13 @@ interface Overview {
   needs_reason?: UnfinishedAttempt[];
 }
 
-const STATUS_FILTERS: Array<{ key: TestStatus | 'all'; label: string }> = [
-  { key: 'all', label: 'All' },
-  { key: 'open', label: 'To do' },
-  { key: 'upcoming', label: 'Coming up' },
-  { key: 'done', label: 'Done' },
-  { key: 'closed', label: 'Closed' },
-];
-
-function Section({
-  icon,
-  title,
-  subtitle,
-  action,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <Box sx={{ mb: 4 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-        <Box sx={{ color: 'primary.main', display: 'flex' }}>{icon}</Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            {title}
-          </Typography>
-          {subtitle && (
-            <Typography variant="caption" color="text.secondary">
-              {subtitle}
-            </Typography>
-          )}
-        </Box>
-        {action}
-      </Box>
-      {children}
-    </Box>
-  );
-}
+type TabKey = 'class' | 'mine' | 'performance';
+const TAB_KEYS: TabKey[] = ['class', 'mine', 'performance'];
 
 export default function StudentTestsPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { getToken, activeClassroom, loading: authLoading } = useNexusAuthContext() as any;
 
   const [data, setData] = useState<Overview | null>(null);
@@ -126,23 +70,33 @@ export default function StudentTestsPage() {
     [],
   );
   const setError = useCallback((message: string) => setNotice({ message, severity: 'error' }), []);
-  const [statusFilter, setStatusFilter] = useState<TestStatus | 'all'>('all');
   /**
    * Whether the student has already been asked about an abandoned attempt
-   * this visit, one way or another.
-   *
-   * Held in component state rather than written to the server, deliberately.
-   * "Not now" means not now, not never: the question comes back next visit,
-   * which is the right cadence for something worth asking but not worth
-   * demanding. Persisting a dismissal would silently turn one skipped tap into
-   * permanent silence about a test that may well be broken.
-   *
-   * A single flag, not a per-attempt set: up to three attempts can need a
-   * reason at once, and answering or dismissing one must not immediately
-   * surface the next in the same session, that reads as the same modal
-   * refusing to close. One prompt per visit; the rest wait for the next load.
+   * this visit, one way or another. See the original comment history on this
+   * flag: it is deliberately session state, never persisted.
    */
   const [askedThisVisit, setAskedThisVisit] = useState(false);
+
+  const tabParam = searchParams.get('tab');
+  const tab: TabKey = TAB_KEYS.includes(tabParam as TabKey) ? (tabParam as TabKey) : 'class';
+  const setTab = useCallback(
+    (next: TabKey) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === 'class') params.delete('tab');
+      else params.set('tab', next);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
+
+  // My Performance's payload is the one genuinely expensive read in this
+  // feature, so it is fetched only the first time this tab is opened, not on
+  // initial page load with everything else. Mirrors the teacher tests hub's
+  // "By location" tab: gated on tab === 'performance' && data === null, so
+  // switching away and back does not re-fetch.
+  const [performanceData, setPerformanceData] = useState<PerformanceTabData | null>(null);
+  const [performanceError, setPerformanceError] = useState<string | null>(null);
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -173,7 +127,7 @@ export default function StudentTestsPage() {
       setData(json.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load your tests');
-      setData({ due: [], all: [], practice_groups: [], mine: [], recent: [], needs_reason: [] });
+      setData({ due: [], all: [], exams: [], practice_groups: [], mine: [], recent: [], needs_reason: [] });
     }
     try {
       const m = await authFetch(`/api/student/tests/mistakes${classroomParam}`);
@@ -187,6 +141,22 @@ export default function StudentTestsPage() {
     if (authLoading) return;
     load();
   }, [authLoading, load]);
+
+  useEffect(() => {
+    if (tab !== 'performance' || performanceData !== null || performanceError) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const json = await authFetch(`/api/student/tests/performance${classroomParam}`);
+        if (!cancelled) setPerformanceData(json.data);
+      } catch (err) {
+        if (!cancelled) setPerformanceError(err instanceof Error ? err.message : 'Could not load your performance');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, performanceData, performanceError, authFetch, classroomParam]);
 
   const start = useCallback(
     (t: StudentTest) => {
@@ -247,12 +217,7 @@ export default function StudentTestsPage() {
     () => (data?.practice_groups || []).reduce((n, g) => n + g.tests.length, 0),
     [data],
   );
-
   const allTests = useMemo(() => data?.all || [], [data]);
-  const visibleAllTests = useMemo(
-    () => (statusFilter === 'all' ? allTests : allTests.filter((t) => t.status === statusFilter)),
-    [allTests, statusFilter],
-  );
 
   if (authLoading || data === null) {
     return (
@@ -267,6 +232,8 @@ export default function StudentTestsPage() {
     );
   }
 
+  // `all` already carries every teacher-set test, exams included, so this
+  // does not need its own separate exams check.
   const nothingAtAll =
     data.due.length === 0 &&
     allTests.length === 0 &&
@@ -275,7 +242,9 @@ export default function StudentTestsPage() {
     data.recent.length === 0;
 
   return (
-    <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 800, mx: 'auto', pb: 8 }}>
+    // My Tests gets the teacher-page's full width for its folder sidebar; the
+    // other tabs are single-column content that stays readable narrower.
+    <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: tab === 'mine' ? 1100 : 800, mx: 'auto', pb: 8 }}>
       <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 0.25 }}>
         Tests
       </Typography>
@@ -283,7 +252,7 @@ export default function StudentTestsPage() {
         Take a test as many times as you like. Your best score is the one that counts.
       </Typography>
 
-      {nothingAtAll && (
+      {nothingAtAll ? (
         <Paper variant="outlined" sx={{ py: 6, px: 3, textAlign: 'center', borderRadius: 2 }}>
           <AssignmentOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
@@ -302,187 +271,96 @@ export default function StudentTestsPage() {
             Build your own practice test
           </Button>
         </Paper>
-      )}
-
-      {/* Rendered even when empty. Unmounting it is what made teacher-set tests
-          look as though they did not exist: a student with nothing assigned saw
-          no trace of the idea anywhere on the page. */}
-      {!nothingAtAll && (
-        <Section
-          icon={<AssignmentOutlinedIcon />}
-          title="Due now"
-          subtitle="Set by your teacher, soonest first"
-        >
-          {data.due.length === 0 ? (
-            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, textAlign: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                {!activeClassroom?.id
-                  ? 'Pick your class at the top of the screen to see the tests set for it.'
-                  : 'Nothing due right now. Weekly tests, model tests and chapter tests appear here when your teacher sets one.'}
-              </Typography>
-            </Paper>
-          ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              {data.due.map((t) => (
-                <StudentTestCard key={t.id} test={t} onStart={start} emphasis />
-              ))}
-            </Box>
-          )}
-        </Section>
-      )}
-
-      {mistakeCount > 0 && (
-        <Paper
-          variant="outlined"
-          sx={{ p: 2, mb: 4, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}
-        >
-          <AutoFixHighOutlinedIcon sx={{ color: 'warning.main' }} />
-          <Box sx={{ flex: 1, minWidth: 160 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              Fix what you got wrong
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {mistakeCount} question{mistakeCount !== 1 ? 's' : ''} you missed and have not got right since
-            </Typography>
-          </Box>
-          <Button
-            variant="contained"
-            onClick={practiseMistakes}
-            disabled={buildingMistakes}
-            startIcon={buildingMistakes ? <CircularProgress size={15} color="inherit" /> : undefined}
-            sx={{ textTransform: 'none', minHeight: 44 }}
-          >
-            Practise these
-          </Button>
-        </Paper>
-      )}
-
-      {totalPractice > 0 && (
-        <Section
-          icon={<FitnessCenterOutlinedIcon />}
-          title="Practice"
-          subtitle="Grouped by chapter, take them whenever you like"
-        >
-          {data.practice_groups.map((g) => (
-            <Box key={g.key} sx={{ mb: 2 }}>
-              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.75 }}>
-                {g.label}
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {g.tests.map((t) => (
-                  <StudentTestCard key={t.id} test={t} onStart={start} />
-                ))}
+      ) : (
+        <>
+          {mistakeCount > 0 && (
+            <Paper
+              variant="outlined"
+              sx={{ p: 2, mb: 3, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}
+            >
+              <AutoFixHighOutlinedIcon sx={{ color: 'warning.main' }} />
+              <Box sx={{ flex: 1, minWidth: 160 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  Fix what you got wrong
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {mistakeCount} question{mistakeCount !== 1 ? 's' : ''} you missed and have not got right since
+                </Typography>
               </Box>
-            </Box>
-          ))}
-        </Section>
-      )}
+              <Button
+                variant="contained"
+                onClick={practiseMistakes}
+                disabled={buildingMistakes}
+                startIcon={buildingMistakes ? <CircularProgress size={15} color="inherit" /> : undefined}
+                sx={{ textTransform: 'none', minHeight: 44 }}
+              >
+                Practise these
+              </Button>
+            </Paper>
+          )}
 
-      {/* The consolidated record. Everything the class has had, closed included,
-          so "did I miss one" has an answer. */}
-      {allTests.length > 0 && (
-        <Section
-          icon={<ClassOutlinedIcon />}
-          title="All class tests"
-          subtitle={`Everything your teacher has set, ${allTests.length} in total`}
-        >
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
-            {STATUS_FILTERS.map((f) => {
-              const n = f.key === 'all' ? allTests.length : allTests.filter((t) => t.status === f.key).length;
-              if (n === 0 && f.key !== 'all') return null;
-              return (
-                <Chip
-                  key={f.key}
-                  label={`${f.label} (${n})`}
+          <Tabs
+            value={tab}
+            onChange={(_, v) => setTab(v as TabKey)}
+            variant="fullWidth"
+            sx={{
+              mb: 3,
+              minHeight: 44,
+              borderBottom: 1,
+              borderColor: 'divider',
+              '& .MuiTab-root': { minHeight: 44, textTransform: 'none', fontWeight: 600, fontSize: { xs: '0.8125rem', sm: '0.875rem' } },
+            }}
+          >
+            <Tab label="Class Tests" value="class" />
+            <Tab label="My Tests" value="mine" />
+            <Tab label="My Performance" value="performance" />
+          </Tabs>
+
+          {tab === 'class' && (
+            <ClassTestsTab
+              data={{ due: data.due, all: allTests, exams: data.exams || [], practice_groups: data.practice_groups }}
+              hasActiveClassroom={Boolean(activeClassroom?.id)}
+              onStart={start}
+              recentAttempt={data.recent[0]}
+              onViewPerformance={() => setTab('performance')}
+            />
+          )}
+
+          {tab === 'mine' && (
+            <TestsSection
+              icon={<PersonOutlineOutlinedIcon />}
+              title="My tests"
+              subtitle="Papers you built yourself"
+              action={
+                <Button
                   size="small"
-                  color={statusFilter === f.key ? 'primary' : 'default'}
-                  variant={statusFilter === f.key ? 'filled' : 'outlined'}
-                  onClick={() => setStatusFilter(f.key)}
-                  sx={{ height: 32, cursor: 'pointer' }}
-                />
-              );
-            })}
-          </Box>
-
-          {visibleAllTests.length === 0 ? (
-            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, textAlign: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                Nothing here with that filter.
-              </Typography>
-            </Paper>
-          ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {visibleAllTests.map((t) => (
-                <StudentTestCard key={`${t.id}-${t.placement_id}`} test={t} onStart={start} />
-              ))}
-            </Box>
+                  startIcon={<AddOutlinedIcon />}
+                  onClick={() => router.push('/student/tests/new')}
+                  sx={{ textTransform: 'none', minHeight: 40 }}
+                >
+                  New
+                </Button>
+              }
+            >
+              <MyTestsLibrary
+                tests={data.mine}
+                onStart={start}
+                authFetch={authFetch}
+                onChanged={load}
+                onNotify={notify}
+                onNew={() => router.push('/student/tests/new')}
+              />
+            </TestsSection>
           )}
-        </Section>
-      )}
 
-      <Section
-        icon={<PersonOutlineOutlinedIcon />}
-        title="My tests"
-        subtitle="Papers you built yourself"
-        action={
-          <Button
-            size="small"
-            startIcon={<AddOutlinedIcon />}
-            onClick={() => router.push('/student/tests/new')}
-            sx={{ textTransform: 'none', minHeight: 40 }}
-          >
-            New
-          </Button>
-        }
-      >
-        <MyTestsLibrary
-          tests={data.mine}
-          onStart={start}
-          authFetch={authFetch}
-          onChanged={load}
-          onNotify={notify}
-          onNew={() => router.push('/student/tests/new')}
-        />
-      </Section>
-
-      {data.recent.length > 0 && (
-        <Section icon={<HistoryOutlinedIcon />} title="Recent results">
-          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-            {data.recent.map((r, i) => (
-              <Box key={r.attempt_id}>
-                {i > 0 && <Divider />}
-                <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                      {r.test_title}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Attempt {r.attempt_number} · {formatWhen(r.submitted_at)}
-                    </Typography>
-                  </Box>
-                  <Chip
-                    size="small"
-                    label={r.percentage == null ? '-' : `${Math.round(r.percentage)}%`}
-                    color={r.passed === true ? 'success' : r.passed === false ? 'default' : 'primary'}
-                    sx={{ height: 24, fontWeight: 700 }}
-                  />
-                </Box>
-              </Box>
-            ))}
-          </Paper>
-          <Button
-            size="small"
-            onClick={() => router.push('/student/tests/history')}
-            sx={{ textTransform: 'none', mt: 1, minHeight: 40 }}
-          >
-            See all results
-          </Button>
-        </Section>
+          {tab === 'performance' && <PerformanceTab data={performanceData} error={performanceError} />}
+        </>
       )}
 
       {/* Asked once per visit, one paper at a time, and always skippable. See
           UnfinishedTestSheet for why this lives here rather than at the moment
-          the test was abandoned. */}
+          the test was abandoned. Above every tab, not inside one: it is not
+          about Class Tests, My Tests, or Performance specifically. */}
       <UnfinishedTestSheet attempt={askAbout} onDismiss={() => setAskedThisVisit(true)} onSubmit={submitReason} />
 
       <Snackbar

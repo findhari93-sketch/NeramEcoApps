@@ -6,6 +6,7 @@ import {
   getSupabaseAdminClient,
   getStudentTestStats,
   listStudentAttempts,
+  listStudentExams,
   listTestFolderTree,
   NEXUS_GATED_TEST_KINDS,
 } from '@neram/database';
@@ -124,6 +125,14 @@ export async function GET(request: NextRequest) {
         examPlacements.push(...((examRows || []) as any[]));
       }
     }
+
+    // Per-student exam facts shapeExam() below cannot derive from a placement
+    // alone: the makeup-resolved window (a live grant REPLACES the shared
+    // window, see resolveExamWindowForStudent), and the published rank/result
+    // once results_state moves off 'unpublished'. Batched once per classroom,
+    // not once per exam placement.
+    const examViews = classroomId ? await listStudentExams(studentId, classroomId, supabase) : [];
+    const examViewByClass = new Map(examViews.map((e) => [e.scheduled_class_id, e]));
 
     // 2. The student's own papers.
     const { data: ownTests } = await supabase
@@ -277,13 +286,18 @@ export async function GET(request: NextRequest) {
       const item = shape(p.test_id, p);
       if (!item) return null;
       const cls = classById.get(p.context_id);
-      const from = p.available_from ?? null;
-      const until = p.available_until ?? null;
+      const ev = examViewByClass.get(p.context_id);
+      // A live makeup grant REPLACES the shared window (resolveExamWindowForStudent
+      // in exams.ts), so ev's window is preferred over the placement's own when
+      // present. Without this a makeup student's card would show as missed.
+      const from = ev?.opens_at ?? p.available_from ?? null;
+      const until = ev?.closes_at ?? p.available_until ?? null;
+      const attempted = ev ? ev.attempted : item.attempts > 0;
 
       const status: 'upcoming' | 'missed' | 'done' | 'open' =
         from && from > now
           ? 'upcoming'
-          : item.attempts > 0
+          : attempted
             ? 'done'
             : until && until < now
               ? 'missed'
@@ -295,9 +309,17 @@ export async function GET(request: NextRequest) {
         is_exam: true as const,
         // The window IS the deadline here, unlike everywhere else in this file.
         due_at: until,
+        available_from: from,
+        available_until: until,
         required: true,
         class_id: p.context_id,
         class_title: cls?.title ?? item.title,
+        // Facts shape() cannot know from a placement alone: whether this is a
+        // makeup sitting, and the published result once results_state moves off
+        // 'unpublished'. A null exam_result means "not out yet", not an error.
+        is_makeup: ev?.is_makeup ?? false,
+        results_state: ev?.results_state ?? 'unpublished',
+        exam_result: ev?.result ?? null,
       };
     };
 
@@ -331,6 +353,14 @@ export async function GET(request: NextRequest) {
     // Exams. A missed one stays in `all` so the student can see what happened,
     // but it leaves the To do list: there is nothing they can do about it now,
     // and leaving it there would be a permanent task they can never clear.
+    //
+    // These items also stay in `all` on purpose even though the student UI's
+    // "All class tests" section filters is_exam items out of what it renders
+    // (they get their own Exams section instead, sourced from `exams` below).
+    // Do not "clean up" this push into `all` without checking the client: it
+    // is the traceability record ("did I miss one"), the client-side filter is
+    // the display decision, and removing this would silently duplicate every
+    // exam back into the generic list.
     for (const p of examPlacements) {
       const item = shapeExam(p);
       if (!item) continue;
@@ -380,6 +410,12 @@ export async function GET(request: NextRequest) {
 
     const recent = await listStudentAttempts(studentId, { limit: 5 }, supabase);
 
+    // The dedicated Exams section is just the exam items already in `all`,
+    // in the same order `all` was already sorted into (open/upcoming first,
+    // then done, missed last). Deriving it here rather than re-fetching or
+    // re-shaping keeps exactly one definition of what an exam card looks like.
+    const exams = all.filter((item: any) => item.is_exam);
+
     /**
      * Sittings this student walked away from and has not explained.
      *
@@ -426,6 +462,7 @@ export async function GET(request: NextRequest) {
       data: {
         due,
         all,
+        exams,
         practice_groups: [...practiceGroups.values()].sort((a, b) => a.label.localeCompare(b.label)),
         mine,
         recent,

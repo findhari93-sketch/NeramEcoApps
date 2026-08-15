@@ -1182,6 +1182,15 @@ export interface UpdateTestMetaInput {
    * one through this path would take it out of the flow that enforces its rules.
    */
   testKind?: NexusTestKind;
+  /**
+   * These three are shared by every placement of this test (there is no
+   * placement-level home for them). A schedule-time change here changes the
+   * paper everywhere it is placed, not just the placement being scheduled --
+   * callers should warn when the test has more than one active placement.
+   */
+  questionsToServe?: number | null;
+  shuffleQuestions?: boolean;
+  shuffleSections?: boolean;
 }
 
 export async function updateTestMeta(
@@ -1197,6 +1206,22 @@ export async function updateTestMeta(
   if (updates.passingMarks !== undefined) patch.passing_marks = updates.passingMarks;
   if (updates.testKind && NEXUS_TEACHER_TEST_KINDS.some((k) => k.value === updates.testKind)) {
     patch.test_kind = updates.testKind;
+  }
+  if (typeof updates.shuffleQuestions === 'boolean') patch.shuffle_questions = updates.shuffleQuestions;
+  if (typeof updates.shuffleSections === 'boolean') patch.shuffle_sections = updates.shuffleSections;
+  if (updates.questionsToServe !== undefined) {
+    if (typeof updates.questionsToServe === 'number' && updates.questionsToServe > 0) {
+      // Clamped against the pool size, same reasoning as composeTest's own
+      // clamp: a serve count above the question count is the same as serving
+      // everything, and storing it that way would read back as a pool it is not.
+      const { count } = await supabase
+        .from(TEST_QUESTIONS)
+        .select('id', { count: 'exact', head: true })
+        .eq('test_id', testId);
+      patch.questions_to_serve = Math.min(Math.floor(updates.questionsToServe), count ?? Infinity);
+    } else {
+      patch.questions_to_serve = null;
+    }
   }
   const { data, error } = await supabase.from(TESTS).update(patch).eq('id', testId).select('*').maybeSingle();
   if (error) throw error;
@@ -1528,6 +1553,45 @@ export function gradeComposedAnswers(
 }
 
 /**
+ * Apply a draw (if any) to a composed paper and grade already-collected
+ * answers against it. Pure: no reads, no writes.
+ *
+ * This is the one place permutation and its reverse happen, shared by the
+ * live submit path (submitAttempt) and any read-only replay of a past
+ * attempt (a teacher's response-sheet view). Before this was factored out,
+ * only submitAttempt could reconstruct a review at all, which meant "what did
+ * this student actually answer" could only ever be asked once, at the moment
+ * of submission.
+ *
+ * `submittedAnswers` is in the lettering the student clicked (permuted, if
+ * the paper was drawn) — the same raw shape stored on the attempt row.
+ * `questions` in the return value carries composed-with-answer data (still
+ * useful to a caller enriching the review with question text/options/
+ * explanation); `review[].selected`/`correct_answer` are translated to
+ * displayed lettering, matching what the student actually saw.
+ */
+export function gradeAgainstDraw(
+  composed: NexusComposedQuestionWithAnswer[],
+  draw: NexusTestDraw | null,
+  submittedAnswers: Record<string, string>,
+  passingPct: number | null,
+): Omit<NexusTestGradeResult, 'attempt_id'> & { questions: NexusComposedQuestionWithAnswer[] } {
+  const questions = applyTestDraw(composed, draw);
+  const answers = draw
+    ? translateDrawnAnswers(submittedAnswers, draw.question_ids, draw.option_maps)
+    : submittedAnswers;
+  const graded = gradeComposedAnswers(questions, answers, passingPct);
+  const review = draw
+    ? graded.review.map((r) => ({
+        ...r,
+        selected: originalToDisplayedId(r.selected, draw.option_maps?.[r.question_id]),
+        correct_answer: originalToDisplayedId(r.correct_answer, draw.option_maps?.[r.question_id]),
+      }))
+    : graded.review;
+  return { ...graded, review, questions };
+}
+
+/**
  * Fire the side-effect that belongs to the placement's context.
  *
  * Deliberately NOT nested inside a passed check. A catch-up class test has a
@@ -1694,6 +1758,12 @@ export async function startOrResumeAttempt(
     placementId?: string | null;
     /** 'revision' is practice after completion and never touches the record. */
     mode?: 'official' | 'revision';
+    /**
+     * A teacher-granted bump to the placement's own gating.attempt_limit
+     * (nexus_exam_attempt_overrides). Every non-exam caller omits this and is
+     * byte-identical to before; an unlimited base limit ignores it entirely.
+     */
+    extraAttempts?: number;
   },
   client?: TypedSupabaseClient,
 ): Promise<StartAttemptResult> {
@@ -1726,7 +1796,9 @@ export async function startOrResumeAttempt(
     null,
   );
 
-  const limit = Number((placement?.gating as any)?.attempt_limit);
+  const baseLimit = Number((placement?.gating as any)?.attempt_limit);
+  const limit =
+    Number.isFinite(baseLimit) && baseLimit > 0 ? baseLimit + (input.extraAttempts || 0) : baseLimit;
   if (Number.isFinite(limit) && limit > 0 && submitted.length >= limit) {
     throw new Error('ATTEMPT_LIMIT_REACHED');
   }
@@ -1939,22 +2011,12 @@ export async function submitAttempt(
   if (questions.length === 0) throw new Error('TEST_HAS_NO_QUESTIONS');
 
   const submitted = input.answers || (attempt.answers as Record<string, string>) || {};
-  const answers = draw
-    ? translateDrawnAnswers(submitted, draw.question_ids, draw.option_maps)
-    : submitted;
   const totalPossible = questions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
-  const graded = gradeComposedAnswers(questions, answers, resolvePassingPct(placement, meta, totalPossible));
-
-  // Grading ran in the question's own lettering; the student only ever saw the
-  // permuted one. Handing back an untranslated review would highlight a
-  // different option than they clicked and name a different one as correct.
-  if (draw) {
-    graded.review = graded.review.map((r) => ({
-      ...r,
-      selected: originalToDisplayedId(r.selected, draw.option_maps?.[r.question_id]),
-      correct_answer: originalToDisplayedId(r.correct_answer, draw.option_maps?.[r.question_id]),
-    }));
-  }
+  // gradeAgainstDraw does the permutation, the grading, and the reverse
+  // translation of the review back to displayed lettering in one call — the
+  // exact same core a read-only attempt replay uses, so the two can never
+  // disagree about how a review is built.
+  const graded = gradeAgainstDraw(composed, draw, submitted, resolvePassingPct(placement, meta, totalPossible));
 
   const startedAt = new Date(attempt.started_at || Date.now()).getTime();
   const timeSpent = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
@@ -2000,8 +2062,31 @@ export async function submitAttempt(
     // permutes them the same way the paper was, rather than re-reading the
     // bank and pairing displayed answers with original lettering.
     draw,
-    ...graded,
+    score: graded.score,
+    total_marks: graded.total_marks,
+    percentage: graded.percentage,
+    passed: graded.passed,
+    passing_pct: graded.passing_pct,
+    review: graded.review,
   };
+}
+
+/** One attempt, scoped to the student who owns it -- used by the proctoring
+ * violation route to check ownership before logging anything against it. */
+export async function getAttemptById(
+  attemptId: string,
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<Pick<NexusAttemptRow, 'id' | 'test_id' | 'placement_id' | 'student_id' | 'status'> | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(ATTEMPTS)
+    .select('id, test_id, placement_id, student_id, status')
+    .eq('id', attemptId)
+    .eq('student_id', studentId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as any) || null;
 }
 
 /** Mark an open attempt abandoned. Called on page unload via sendBeacon. */

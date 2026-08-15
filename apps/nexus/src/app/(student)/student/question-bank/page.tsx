@@ -29,6 +29,9 @@ import {
   Skeleton,
   Tab,
   Tabs,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
   alpha,
   useTheme,
@@ -36,13 +39,17 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
+import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined';
+import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
+import { useStoredViewMode } from '@/hooks/useStoredViewMode';
 import StatsRow from '@/components/question-bank/StatsRow';
 import PresetChips from '@/components/question-bank/PresetChips';
 import StudentPaperCard, {
   StudentPaperCardSkeleton,
 } from '@/components/question-bank/StudentPaperCard';
+import StudentPaperTable from '@/components/question-bank/StudentPaperTable';
 import type {
   NexusQBPaperCard,
   NexusQBPaperGroup,
@@ -60,11 +67,20 @@ const GRID = {
   gap: 1.5,
 } as const;
 
+const PAPER_VIEWS = ['table', 'grid'] as const;
+type PaperListView = (typeof PAPER_VIEWS)[number];
+const PAPER_VIEW_STORAGE_KEY = 'nexus:qbStudentPapers:view';
+
 export default function QuestionBankHome() {
   const router = useRouter();
   const theme = useTheme();
   const { activeClassroom, loading: authLoading } = useNexusAuthContext();
   const [examIndex, setExamIndex] = useState(0);
+  const [view, setView] = useStoredViewMode<PaperListView>(
+    PAPER_VIEW_STORAGE_KEY,
+    PAPER_VIEWS,
+    'table',
+  );
 
   /**
    * The key is null until the classroom resolves, so SWR skips the request
@@ -97,6 +113,10 @@ export default function QuestionBankHome() {
   // Clamped rather than trusted: the tab index survives a refetch that returns
   // fewer exams, and an out-of-range index would render a blank body.
   const activeGroup = groups[Math.min(examIndex, Math.max(groups.length - 1, 0))];
+  // Flattened, not grouped by year: a year with one paper used to get its own
+  // near-empty grid row. The API already sorts newest-year-first, and every
+  // card's own short_title already names its year, so nothing is lost.
+  const papers = useMemo(() => activeGroup?.years.flatMap((y) => y.papers) ?? [], [activeGroup]);
 
   const waitingForClassroom = authLoading || (!classroomId && !papersRes);
   const loading = waitingForClassroom || papersLoading;
@@ -209,9 +229,54 @@ export default function QuestionBankHome() {
         </Box>
       )}
 
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
-        Past papers
-      </Typography>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+          mb: 1,
+        }}
+      >
+        <Typography variant="subtitle1" fontWeight={700}>
+          Past papers
+        </Typography>
+
+        {!loading && !papersError && groups.length > 0 && (
+          <ToggleButtonGroup
+            value={view}
+            exclusive
+            onChange={(_e, next: PaperListView | null) => {
+              if (next) setView(next);
+            }}
+            size="small"
+            aria-label="Past papers layout"
+            sx={{
+              bgcolor: 'background.paper',
+              borderRadius: 2,
+              '& .MuiToggleButton-root': {
+                minWidth: 44,
+                minHeight: 44,
+                px: 1.25,
+                borderRadius: 2,
+                color: 'text.secondary',
+              },
+              '& .Mui-selected': {
+                bgcolor: alpha(theme.palette.primary.main, 0.14),
+                color: 'primary.main',
+                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) },
+              },
+            }}
+          >
+            <ToggleButton value="table" aria-label="Table view">
+              <Tooltip title="Table" arrow><TableRowsOutlinedIcon fontSize="small" /></Tooltip>
+            </ToggleButton>
+            <ToggleButton value="grid" aria-label="Grid view">
+              <Tooltip title="Grid" arrow><GridViewOutlinedIcon fontSize="small" /></Tooltip>
+            </ToggleButton>
+          </ToggleButtonGroup>
+        )}
+      </Box>
 
       {loading ? (
         <PapersSkeleton />
@@ -252,21 +317,15 @@ export default function QuestionBankHome() {
             </Tabs>
           )}
 
-          {activeGroup?.years.map(({ year, papers }) => (
-            <Box key={year} sx={{ mb: 3 }}>
-              <Typography
-                variant="overline"
-                sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 0.8 }}
-              >
-                {year}
-              </Typography>
-              <Box sx={{ ...GRID, mt: 0.5 }}>
-                {papers.map((paper) => (
-                  <StudentPaperCard key={paper.id} paper={paper} onOpen={openPaper} />
-                ))}
-              </Box>
+          {view === 'table' ? (
+            <StudentPaperTable papers={papers} onOpen={openPaper} />
+          ) : (
+            <Box sx={GRID}>
+              {papers.map((paper) => (
+                <StudentPaperCard key={paper.id} paper={paper} onOpen={openPaper} />
+              ))}
             </Box>
-          ))}
+          )}
         </>
       )}
     </Box>
@@ -277,7 +336,6 @@ function PapersSkeleton() {
   return (
     <Box>
       <Skeleton variant="rounded" height={48} sx={{ mb: 2, borderRadius: 1 }} />
-      <Skeleton variant="text" width={60} height={20} sx={{ mb: 0.5 }} />
       <Box sx={GRID}>
         {[0, 1, 2, 3].map((i) => (
           <StudentPaperCardSkeleton key={i} />

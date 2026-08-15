@@ -60,9 +60,12 @@ function formatRemaining(seconds: number | null): string {
 export default function ExamInvigilationRoster({
   examId,
   onGrantMakeup,
+  onGrantAttempt,
 }: {
   examId: string;
   onGrantMakeup?: (studentId: string, studentName: string) => void;
+  /** Shown per row when row.exhausted -- the teacher's one-click "+1 attempt". */
+  onGrantAttempt?: (studentId: string, studentName: string) => void;
 }) {
   const theme = useTheme();
   const { getToken } = useNexusAuthContext();
@@ -242,20 +245,50 @@ export default function ExamInvigilationRoster({
                         ? ` · ${Math.round(row.percentage)}%${row.provisional ? ' provisional' : ''}`
                         : ''}
                       {row.is_makeup ? ' · makeup' : ''}
+                      {/* A limit of exactly 1 is the ordinary ranked-exam case,
+                          already explained by "one attempt each" elsewhere --
+                          only worth a line here once it differs. */}
+                      {row.attempts_allowed !== 1
+                        ? ` · Attempts ${row.attempts_used}${row.attempts_allowed != null ? `/${row.attempts_allowed}` : ''}`
+                        : ''}
                     </Typography>
                   </Box>
                 </Box>
 
-                {row.status === 'absent' && onGrantMakeup && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => onGrantMakeup(row.student_id, row.name)}
-                    sx={{ minHeight: 40, flexShrink: 0 }}
-                  >
-                    Second window
-                  </Button>
-                )}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
+                  {row.violation_count > 0 && (
+                    <Chip
+                      size="small"
+                      color="warning"
+                      variant="outlined"
+                      label={`⚠ ${row.violation_count}`}
+                      sx={{ height: 26 }}
+                    />
+                  )}
+
+                  {row.status === 'absent' && onGrantMakeup && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => onGrantMakeup(row.student_id, row.name)}
+                      sx={{ minHeight: 40, flexShrink: 0 }}
+                    >
+                      Second window
+                    </Button>
+                  )}
+
+                  {row.exhausted && onGrantAttempt && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      onClick={() => onGrantAttempt(row.student_id, row.name)}
+                      sx={{ minHeight: 40, flexShrink: 0 }}
+                    >
+                      +1 attempt
+                    </Button>
+                  )}
+                </Box>
               </Paper>
             );
           })}

@@ -9,6 +9,7 @@
  * different conversations with different students.
  */
 
+import { useState } from 'react';
 import { Chip, Tooltip, Box, Typography } from '@neram/ui';
 
 export type ChapterStatus =
@@ -99,7 +100,16 @@ export function ChapterStatusCell({
  * A rewatch on a phone with a fat thumb produces a couple of refused seeks
  * honestly. It is worth a conversation at eleven, not at two, so only a run of
  * them is coloured.
+ *
+ * The explanation lives in one place (HINTS) so the hover tooltip and the
+ * tap-revealed caption can never say different things. Hover alone was never
+ * enough: most of this report is read on a phone, where nothing hovers.
  */
+const HINTS = {
+  skips: 'Tried to skip past a checkpoint and was stopped. A few is normal on a phone.',
+  tries: 'Checkpoint quiz attempts, including retries.',
+} as const;
+
 export function WatchHonesty({
   watchedSeconds,
   blockedSeeks,
@@ -110,25 +120,43 @@ export function WatchHonesty({
   attempts: number;
 }) {
   const mins = Math.round(watchedSeconds / 60);
+  const [openHint, setOpenHint] = useState<keyof typeof HINTS | null>(null);
+  const toggleHint = (key: keyof typeof HINTS) => setOpenHint((h) => (h === key ? null : key));
+
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-      <Typography variant="caption" color="text.secondary">
-        {mins > 0 ? `${mins}m watched` : 'not watched'}
-      </Typography>
-      {blockedSeeks > 0 && (
-        <Tooltip title="Tried to skip past a checkpoint and was stopped. A few is normal on a phone.">
-          <Chip
-            size="small"
-            variant="outlined"
-            color={blockedSeeks >= 5 ? 'warning' : 'default'}
-            label={`${blockedSeeks} skips blocked`}
-          />
-        </Tooltip>
-      )}
-      {attempts > 0 && (
-        <Tooltip title="Checkpoint quiz attempts, including retries.">
-          <Chip size="small" variant="outlined" label={`${attempts} tries`} />
-        </Tooltip>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+        <Typography variant="caption" color="text.secondary">
+          {mins > 0 ? `${mins}m watched` : 'not watched'}
+        </Typography>
+        {blockedSeeks > 0 && (
+          <Tooltip title={HINTS.skips}>
+            <Chip
+              size="small"
+              variant="outlined"
+              clickable
+              color={blockedSeeks >= 5 ? 'warning' : 'default'}
+              label={`${blockedSeeks} skips blocked`}
+              onClick={() => toggleHint('skips')}
+            />
+          </Tooltip>
+        )}
+        {attempts > 0 && (
+          <Tooltip title={HINTS.tries}>
+            <Chip
+              size="small"
+              variant="outlined"
+              clickable
+              label={`${attempts} tries`}
+              onClick={() => toggleHint('tries')}
+            />
+          </Tooltip>
+        )}
+      </Box>
+      {openHint && (
+        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+          {HINTS[openHint]}
+        </Typography>
       )}
     </Box>
   );

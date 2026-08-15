@@ -1,9 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken } from '@/lib/ms-verify';
 import { deleteFromSharePoint } from '@/lib/sharepoint';
-import { getFileById, updateFile, softDeleteFile } from '@neram/database';
+import {
+  getFileById,
+  getFolderById,
+  updateFile,
+  softDeleteFile,
+  fileKind,
+  fileRecording,
+  effectiveDownloadable,
+  isNewFile,
+  hasPlacedTestForFiles,
+  getCommentCounts,
+  getStudyVideoSummaryMap,
+  getLinkedPapersForFiles,
+} from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { extractYouTubeId } from '@/lib/youtube';
+
+/**
+ * GET /api/study-materials/files/[id]  (staff)
+ *
+ * One chapter's full DTO, staff-shaped, the same fields `folders/route.ts`
+ * computes for a whole batch. Needed because the chapter workspace page
+ * (`/teacher/study-materials/[fileId]`) is a direct, refreshable route rather
+ * than a modal handed an in-memory file object from the grid.
+ */
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const user = await getRequestUser(request.headers.get('Authorization'));
+    assertStaff(user);
+
+    const file = await getFileById(params.id);
+    if (!file) return NextResponse.json({ error: 'File not found' }, { status: 404 });
+    const folder = await getFolderById(file.folder_id);
+    if (!folder) return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
+
+    const [testSet, commentCounts, videoLanguages, linkedPapers] = await Promise.all([
+      hasPlacedTestForFiles([file.id]),
+      getCommentCounts([file.id]),
+      getStudyVideoSummaryMap([file.id]),
+      getLinkedPapersForFiles([file.id]),
+    ]);
+
+    return NextResponse.json({
+      file: {
+        id: file.id,
+        folder_id: file.folder_id,
+        title: file.title,
+        file_name: file.file_name,
+        file_type: file.file_type,
+        file_size_bytes: file.file_size_bytes,
+        page_count: file.page_count,
+        kind: fileKind(file.file_type),
+        downloadable: effectiveDownloadable(file, folder),
+        has_test: testSet.has(file.id),
+        recording: fileRecording(file),
+        video_languages: videoLanguages.get(file.id)?.languages ?? [],
+        sort_order: file.sort_order,
+        created_at: file.created_at,
+        is_new: isNewFile(file.created_at, Date.now()),
+        comment_count: commentCounts[file.id] || 0,
+        allow_download: file.allow_download,
+        qb_paper: linkedPapers.get(file.id) ?? null,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to load file';
+    return NextResponse.json({ error: message }, { status: message === 'Not authorized' ? 403 : 500 });
+  }
+}
 
 /**
  * PATCH /api/study-materials/files/[id]  (staff)

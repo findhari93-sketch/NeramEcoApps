@@ -86,6 +86,81 @@ export function buildRescheduledHtml(
 }
 
 /**
+ * Card shown in the channel/chat when a test is scheduled. Carries no join
+ * link: an exam/scheduled test has no Teams meeting, per the file header.
+ */
+export function buildScheduledTestHtml(exam: {
+  title: string;
+  scheduled_date: string;
+  start_time: string;
+  end_time: string;
+  duration_minutes: number | null;
+  mode: 'ranked' | 'practice';
+  /** null means unlimited. Only meaningful when mode is 'practice'. */
+  attempt_limit: number | null;
+}): string {
+  const kind = exam.mode === 'practice' ? 'Practice test' : 'Exam';
+  const attempts =
+    exam.mode === 'practice'
+      ? exam.attempt_limit == null
+        ? 'unlimited attempts'
+        : `${exam.attempt_limit} attempt${exam.attempt_limit === 1 ? '' : 's'}`
+      : 'one attempt';
+  return `<h3>📝 ${kind} scheduled: ${esc(exam.title)}</h3>
+<p><strong>When:</strong> ${esc(exam.scheduled_date)}, ${esc(exam.start_time)} to ${esc(exam.end_time)} (IST)</p>
+<p>${exam.duration_minutes ? `${exam.duration_minutes} minutes, ` : ''}${attempts}.</p>`;
+}
+
+/**
+ * Announce a newly scheduled test to a classroom's Teams channel and group
+ * chat (best-effort, non-blocking). Unlike announceCancellationToTeams and
+ * announceRescheduleToTeams, there is no prior card to remove: this is the
+ * first announcement for this exam. Returns the resolved channel id alongside
+ * the message ids so the caller can persist all three onto the scheduled
+ * class row for a later cancel/reschedule to reuse and soft-delete.
+ */
+export async function announceScheduledTestToTeams(
+  token: string,
+  supabase: AdminClient,
+  classroomId: string,
+  cls: {
+    title: string;
+    scheduled_date: string;
+    start_time: string;
+    end_time: string;
+    duration_minutes: number | null;
+    mode: 'ranked' | 'practice';
+    attempt_limit: number | null;
+  },
+): Promise<{ channelId: string | null; channelMessageId: string | null; chatMessageId: string | null } | null> {
+  const { data: classroom } = await supabase
+    .from('nexus_classrooms')
+    .select('ms_team_id, ms_group_chat_id')
+    .eq('id', classroomId)
+    .single();
+
+  if (!classroom?.ms_team_id && !classroom?.ms_group_chat_id) return null;
+
+  const html = buildScheduledTestHtml(cls);
+  let channelId: string | null = null;
+  let channelMessageId: string | null = null;
+  let chatMessageId: string | null = null;
+
+  if (classroom?.ms_team_id) {
+    channelId = await resolveMeetingChannelId(token, classroom.ms_team_id);
+    if (channelId) {
+      channelMessageId = await postChannelMessage(token, classroom.ms_team_id, channelId, html);
+    }
+  }
+
+  if (classroom?.ms_group_chat_id) {
+    chatMessageId = await postChatMessage(token, classroom.ms_group_chat_id, html);
+  }
+
+  return { channelId, channelMessageId, chatMessageId };
+}
+
+/**
  * The "what we actually covered" card, shown once a class has been wrapped up.
  *
  * States what happened, never what was planned. A student reading this three

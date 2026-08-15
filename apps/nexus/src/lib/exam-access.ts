@@ -52,7 +52,7 @@ export async function resolveExamCaller(
   const supabase = getSupabaseAdminClient();
   const { data: user } = await supabase
     .from('users')
-    .select('id, user_type, staff_role, can_teach, full_name')
+    .select('id, user_type, staff_role, can_teach, name')
     .eq('ms_oid', oid)
     .maybeSingle();
 
@@ -67,7 +67,7 @@ export async function resolveExamCaller(
       user_type: (user as any).user_type,
       staff_role: (user as any).staff_role ?? null,
       can_teach: Boolean((user as any).can_teach),
-      name: (user as any).full_name ?? null,
+      name: (user as any).name ?? null,
     },
   };
 }

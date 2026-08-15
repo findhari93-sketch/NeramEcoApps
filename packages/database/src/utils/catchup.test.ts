@@ -3,6 +3,7 @@ import {
   classifyCatchupCandidate,
   catchupItemStep,
   isCatchupItemComplete,
+  shouldUnlockCatchupTest,
   resolveCatchupBacklog,
   summariseCatchupBacklog,
   summariseMissedClasses,
@@ -20,6 +21,7 @@ import {
   planCatchupActivation,
   DEFAULT_CATCHUP_WINDOWS,
   type CatchupItemFacts,
+  type CatchupTestUnlockFacts,
   type ResolveCatchupContext,
 } from './catchup';
 
@@ -143,6 +145,41 @@ describe('catchupItemStep', () => {
     // Only the finished ones move. Nothing here excuses the steps themselves.
     expect(isCatchupItemComplete(open({ notReady: true }))).toBe(false);
     expect(catchupItemStep(open({ notReady: true }))).toBe('watch');
+  });
+});
+
+describe('shouldUnlockCatchupTest', () => {
+  const unlockable = (over: Partial<CatchupTestUnlockFacts> = {}): CatchupTestUnlockFacts => ({
+    hasRecap: true,
+    recapCheckpointsComplete: true,
+    testUnlockedAt: null,
+    testPassedAt: null,
+    ...over,
+  });
+
+  it('unlocks once every checkpoint quiz is passed and nothing is set yet', () => {
+    expect(shouldUnlockCatchupTest(unlockable())).toBe(true);
+  });
+
+  it('does not unlock a class with no recap at all', () => {
+    expect(shouldUnlockCatchupTest(unlockable({ hasRecap: false }))).toBe(false);
+  });
+
+  it('leaves it locked while checkpoints are still outstanding', () => {
+    // The reported bug: `watched` can be true via the legacy self-declared
+    // recording_watched_at fallback without the guided checkpoints ever
+    // being answered. Unlocking a test built from those questions would be
+    // wrong, so this stays keyed on the checkpoint signal, not `watched`.
+    expect(shouldUnlockCatchupTest(unlockable({ recapCheckpointsComplete: false }))).toBe(false);
+  });
+
+  it('is a no-op once already unlocked or already passed', () => {
+    expect(shouldUnlockCatchupTest(unlockable({ testUnlockedAt: '2026-08-11T10:00:00Z' }))).toBe(
+      false,
+    );
+    expect(shouldUnlockCatchupTest(unlockable({ testPassedAt: '2026-08-11T10:00:00Z' }))).toBe(
+      false,
+    );
   });
 });
 

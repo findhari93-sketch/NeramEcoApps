@@ -40,6 +40,7 @@ const RESULTS = 'nexus_exam_results' as any;
 const CLASSES = 'nexus_scheduled_classes' as any;
 const PLACEMENTS = 'nexus_test_placements' as any;
 const ATTEMPTS = 'nexus_test_attempts' as any;
+const OVERRIDES = 'nexus_exam_attempt_overrides' as any;
 
 const CONTEXT = 'exam';
 
@@ -48,6 +49,14 @@ export const EXAM_ATTEMPT_LIMIT = 1;
 export const EXAM_DEFAULT_PASSING_PCT = 40;
 
 export type ExamResultsState = 'unpublished' | 'provisional' | 'final';
+
+/**
+ * ranked: a formal exam with rank + results-publish flow (every pre-existing
+ * row, and the default for every caller that does not opt in otherwise).
+ * practice: a scored but unranked class test -- results_state/rank publishing
+ * stay unused for it. See 20260901090100_nexus_scheduled_test_practice_proctoring.
+ */
+export type ExamMode = 'ranked' | 'practice';
 
 export interface NexusExam {
   id: string;
@@ -65,9 +74,21 @@ export interface NexusExam {
   results_published_by: string | null;
   teams_results_message_id: string | null;
   teams_results_posted_at: string | null;
+  mode: ExamMode;
+  proctoring_enabled: boolean;
+  violation_limit: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ExamAttemptOverride {
+  id: string;
+  exam_id: string;
+  student_id: string;
+  extra_attempts: number;
+  granted_by: string | null;
+  granted_at: string;
 }
 
 export interface ExamMakeup {
@@ -284,6 +305,67 @@ export async function revokeExamMakeup(
 }
 
 /**
+ * A teacher-granted +1 (or more) attempt for one student on one exam, on top
+ * of the placement's own gating.attempt_limit. Read-then-upsert rather than an
+ * atomic increment: supabase-js cannot express `col = col + 1` in an upsert,
+ * and a single teacher click has low enough concurrency that this is fine.
+ */
+export async function grantExamAttemptOverride(
+  examId: string,
+  studentId: string,
+  grantedBy: string | null,
+  client?: TypedSupabaseClient,
+): Promise<ExamAttemptOverride> {
+  const supabase = client || getSupabaseAdminClient();
+  const existing = await getExamAttemptOverride(examId, studentId, supabase);
+  const { data, error } = await supabase
+    .from(OVERRIDES)
+    .upsert(
+      {
+        exam_id: examId,
+        student_id: studentId,
+        extra_attempts: (existing?.extra_attempts ?? 0) + 1,
+        granted_by: grantedBy,
+        granted_at: new Date().toISOString(),
+      },
+      { onConflict: 'exam_id,student_id' },
+    )
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as unknown as ExamAttemptOverride;
+}
+
+export async function getExamAttemptOverride(
+  examId: string,
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<ExamAttemptOverride | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(OVERRIDES)
+    .select('*')
+    .eq('exam_id', examId)
+    .eq('student_id', studentId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as unknown as ExamAttemptOverride) || null;
+}
+
+/** Every override on one exam, batched for the invigilation roster. */
+export async function getExamAttemptOverrides(
+  examId: string,
+  client?: TypedSupabaseClient,
+): Promise<Map<string, number>> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase.from(OVERRIDES).select('student_id, extra_attempts').eq('exam_id', examId);
+  if (error) throw error;
+  const map = new Map<string, number>();
+  for (const row of (data || []) as any[]) map.set(row.student_id, row.extra_attempts);
+  return map;
+}
+
+/**
  * Rewrite the two mirrors of the exam window.
  *
  * The ONLY writer of the placement window and the scheduled class's date and
@@ -324,6 +406,134 @@ export async function syncExamWindow(examId: string, client?: TypedSupabaseClien
   if (placementErr) throw placementErr;
 }
 
+/* ───────────────────────── Student view ───────────────────────────────── */
+
+export interface NexusStudentExamView {
+  exam_id: string;
+  scheduled_class_id: string;
+  test_id: string;
+  title: string | null;
+  /** The window that actually applies to THIS student: the main window, or a
+   * live makeup grant in its place. */
+  opens_at: string;
+  closes_at: string;
+  is_makeup: boolean;
+  duration_minutes: number | null;
+  passing_pct: number | null;
+  results_state: ExamResultsState;
+  attempted: boolean;
+  attempt_id: string | null;
+  /** Null until results_state moves off 'unpublished'. */
+  result: {
+    rank: number | null;
+    /** Count of non-absent candidates, for rendering "Rank 3 of 42". */
+    total_ranked: number;
+    score: number | null;
+    total_marks: number | null;
+    percentage: number | null;
+    is_provisional: boolean;
+    absent: boolean;
+  } | null;
+}
+
+/**
+ * One student's view of every exam their classroom has had: the window that
+ * actually applies to them (makeup-aware), whether they have sat it, and
+ * their published result once results_state has moved off 'unpublished'.
+ *
+ * Unlike getExamResults (the teacher's cohort-wide roster), this never exposes
+ * another student's row, only the count needed for "Rank 3 of 42".
+ *
+ * Every lookup is batched across the classroom's exams in ONE query each,
+ * never one query per exam, because this runs on every Class Tests tab load.
+ */
+export async function listStudentExams(
+  studentId: string,
+  classroomId: string,
+  client?: TypedSupabaseClient,
+): Promise<NexusStudentExamView[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const exams = await listExamsForClassroom(classroomId, undefined, supabase);
+  if (exams.length === 0) return [];
+
+  const examIds = exams.map((e) => e.id);
+  const testIds = [...new Set(exams.map((e) => e.test_id))];
+
+  const makeupMap = new Map<string, ExamMakeup>();
+  {
+    const { data, error } = await supabase.from(MAKEUPS).select('*').in('exam_id', examIds).eq('student_id', studentId);
+    if (error) throw error;
+    for (const m of (data || []) as any[]) makeupMap.set(m.exam_id, m as ExamMakeup);
+  }
+
+  const attemptByTest = new Map<string, { id: string }>();
+  {
+    const { data, error } = await supabase
+      .from(ATTEMPTS)
+      .select('id, test_id')
+      .eq('student_id', studentId)
+      .eq('status', 'submitted')
+      .eq('mode', 'official')
+      .in('test_id', testIds);
+    if (error) throw error;
+    for (const a of (data || []) as any[]) attemptByTest.set(a.test_id, { id: a.id });
+  }
+
+  const publishedExamIds = exams.filter((e) => e.results_state !== 'unpublished').map((e) => e.id);
+  const resultsByExam = new Map<string, ExamResultRow[]>();
+  if (publishedExamIds.length > 0) {
+    const { data, error } = await supabase
+      .from(RESULTS)
+      .select('exam_id, student_id, rank, score, total_marks, percentage, is_provisional, absent')
+      .in('exam_id', publishedExamIds);
+    if (error) throw error;
+    for (const raw of (data || []) as any[]) {
+      const r = raw as ExamResultRow;
+      const list = resultsByExam.get(r.exam_id) || [];
+      list.push(r);
+      resultsByExam.set(r.exam_id, list);
+    }
+  }
+
+  return exams.map((exam) => {
+    const window = resolveExamWindowForStudent(exam, makeupMap.get(exam.id) || null);
+    const attempt = attemptByTest.get(exam.test_id) || null;
+
+    let result: NexusStudentExamView['result'] = null;
+    if (exam.results_state !== 'unpublished') {
+      const rows = resultsByExam.get(exam.id) || [];
+      const mine = rows.find((r) => r.student_id === studentId) || null;
+      if (mine) {
+        result = {
+          rank: mine.rank,
+          total_ranked: rows.filter((r) => !r.absent).length,
+          score: mine.score,
+          total_marks: mine.total_marks,
+          percentage: mine.percentage,
+          is_provisional: mine.is_provisional,
+          absent: mine.absent,
+        };
+      }
+    }
+
+    return {
+      exam_id: exam.id,
+      scheduled_class_id: exam.scheduled_class_id,
+      test_id: exam.test_id,
+      title: exam.title,
+      opens_at: window.opens_at,
+      closes_at: window.closes_at,
+      is_makeup: window.is_makeup,
+      duration_minutes: exam.duration_minutes,
+      passing_pct: exam.passing_pct,
+      results_state: exam.results_state,
+      attempted: Boolean(attempt),
+      attempt_id: attempt?.id ?? null,
+      result,
+    };
+  });
+}
+
 /* ──────────────────────────── Creation ────────────────────────────────── */
 
 export interface CreateExamSeriesInput {
@@ -336,6 +546,12 @@ export interface CreateExamSeriesInput {
   passingPct?: number | null;
   teacherId?: string | null;
   createdBy?: string | null;
+  /** Defaults to 'ranked', which is byte-identical to every pre-existing caller. */
+  mode?: ExamMode;
+  /** Only meaningful when mode is 'practice' -- a ranked exam stays fixed at EXAM_ATTEMPT_LIMIT. */
+  attemptLimit?: number | null;
+  proctoringEnabled?: boolean;
+  violationLimit?: number;
 }
 
 export interface CreateExamSeriesResult {
@@ -384,6 +600,13 @@ export async function createExamSeries(
   const seriesId = crypto.randomUUID();
   const title = input.title.trim() || 'Exam';
   const passingPct = input.passingPct ?? EXAM_DEFAULT_PASSING_PCT;
+  const mode: ExamMode = input.mode ?? 'ranked';
+  const proctoringEnabled = input.proctoringEnabled ?? false;
+  const violationLimit = input.violationLimit ?? 3;
+  // A ranked exam stays fixed at one attempt, whatever attemptLimit was passed.
+  // Only practice mode may raise it -- undefined falls back to EXAM_ATTEMPT_LIMIT
+  // inside upsertExamPlacement, explicit null means unlimited.
+  const attemptLimit: number | null | undefined = mode === 'practice' ? input.attemptLimit : undefined;
 
   const exams: NexusExam[] = [];
 
@@ -419,6 +642,9 @@ export async function createExamSeries(
         closes_at: input.closesAt,
         duration_minutes: duration,
         passing_pct: passingPct,
+        mode,
+        proctoring_enabled: proctoringEnabled,
+        violation_limit: violationLimit,
         created_by: input.createdBy ?? null,
       })
       .select('*')
@@ -434,6 +660,7 @@ export async function createExamSeries(
         opensAt: input.opensAt,
         closesAt: input.closesAt,
         passingPct,
+        attemptLimit,
         createdBy: input.createdBy ?? null,
       },
       supabase,
@@ -461,6 +688,14 @@ async function upsertExamPlacement(
     opensAt: string;
     closesAt: string;
     passingPct: number | null;
+    /**
+     * A number caps attempts at that many. null means unlimited (practice mode
+     * only -- startOrResumeAttempt treats a missing attempt_limit key as no
+     * limit, same as the wizard's own 'unlimited' choice writes gating = {}).
+     * undefined (every ranked-exam caller, and any caller written before this
+     * feature existed) keeps the historical EXAM_ATTEMPT_LIMIT default.
+     */
+    attemptLimit?: number | null;
     createdBy: string | null;
   },
   supabase: TypedSupabaseClient,
@@ -474,7 +709,10 @@ async function upsertExamPlacement(
     .eq('context_id', input.scheduledClassId)
     .eq('is_active', true);
 
-  const gating = { attempt_limit: EXAM_ATTEMPT_LIMIT, exam_id: input.examId, required: true };
+  const gating: Record<string, unknown> = { exam_id: input.examId, required: true };
+  if (input.attemptLimit !== null) {
+    gating.attempt_limit = input.attemptLimit ?? EXAM_ATTEMPT_LIMIT;
+  }
 
   const { data: prior } = await supabase
     .from(PLACEMENTS)
@@ -571,6 +809,11 @@ export async function updateExam(
   const updated = data as any;
 
   if (patch.testId && patch.testId !== exam.test_id) {
+    // Swapping the paper must not silently reset a practice exam's attempt
+    // limit back to the ranked default: carry the prior placement's gating
+    // forward exactly, including "no attempt_limit key" (unlimited).
+    const priorPlacement = (await getExamPlacement(examId, supabase)) as { gating?: Record<string, unknown> } | null;
+    const priorGating = priorPlacement?.gating || {};
     await upsertExamPlacement(
       {
         scheduledClassId: exam.scheduled_class_id,
@@ -579,6 +822,7 @@ export async function updateExam(
         opensAt,
         closesAt,
         passingPct: updated.passing_pct,
+        attemptLimit: 'attempt_limit' in priorGating ? (priorGating.attempt_limit as number) : null,
         createdBy: exam.created_by,
       },
       supabase,

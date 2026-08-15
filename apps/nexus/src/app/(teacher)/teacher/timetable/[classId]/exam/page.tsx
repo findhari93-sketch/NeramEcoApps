@@ -107,6 +107,18 @@ export default function TeacherExamPage() {
     load();
   }, [load]);
 
+  const grantAttempt = async (studentId: string, studentName: string) => {
+    if (!exam) return;
+    try {
+      await authFetch(`/api/exams/${exam.id}/attempt-override`, {
+        method: 'POST',
+        body: JSON.stringify({ student_id: studentId }),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Could not grant another attempt to ${studentName}`);
+    }
+  };
+
   const grantMakeup = async () => {
     if (!exam || !makeupFor || !makeupDate) return;
     try {
@@ -235,6 +247,7 @@ export default function TeacherExamPage() {
             setMakeupFor({ id, name });
             setMakeupDate(new Date().toISOString().slice(0, 10));
           }}
+          onGrantAttempt={grantAttempt}
         />
       )}
 

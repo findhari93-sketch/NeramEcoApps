@@ -1,0 +1,19 @@
+-- ============================================
+-- NOTIFICATION EVENT TYPE: exam attempt override granted
+--
+-- sendNudge always writes an in-app row to user_notifications, whose
+-- event_type is the enum notification_event_type. A value missing from the
+-- enum makes that insert throw and be swallowed, so the student's bell stays
+-- empty while the sender sees success (see 20260721100000 for the last time
+-- this bit us) -- the exact same trap 'exam_makeup_granted' was added to
+-- avoid for the makeup feature next door.
+--
+--   exam_attempt_override_granted  a teacher granted +1 attempt on a
+--                                   scheduled/practice test from the
+--                                   invigilation roster
+--
+-- Additive + idempotent. ADD VALUE IF NOT EXISTS is safe to re-run, and must
+-- live in its own migration file (ALTER TYPE ... ADD VALUE cannot run in the
+-- same transaction as other statements).
+-- ============================================
+ALTER TYPE notification_event_type ADD VALUE IF NOT EXISTS 'exam_attempt_override_granted';

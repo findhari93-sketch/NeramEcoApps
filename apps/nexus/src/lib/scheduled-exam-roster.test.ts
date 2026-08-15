@@ -148,6 +148,79 @@ describe('buildExamRoster', () => {
   });
 });
 
+describe('buildExamRoster: attempts allowed, exhaustion and violations', () => {
+  it('defaults to unlimited when no baseAttemptLimit is given -- every pre-existing caller', () => {
+    const rows = buildExamRoster({
+      ...base,
+      attempts: [
+        { student_id: 's1', status: 'submitted', started_at: OPENS, submitted_at: CLOSES, score: 1, percentage: 50 },
+      ],
+      now: AFTER,
+    });
+    const arun = rows.find((r) => r.student_id === 's1')!;
+    expect(arun.attempts_allowed).toBeNull();
+    expect(arun.attempts_used).toBe(1);
+    expect(arun.exhausted).toBe(false);
+    expect(arun.violation_count).toBe(0);
+  });
+
+  it('is exhausted once submitted attempts reach the base limit', () => {
+    const attempts: ExamRosterAttempt[] = [
+      { student_id: 's1', status: 'submitted', started_at: OPENS, submitted_at: CLOSES, score: 1, percentage: 50 },
+    ];
+    const rows = buildExamRoster({ ...base, attempts, baseAttemptLimit: 1, now: AFTER });
+    const arun = rows.find((r) => r.student_id === 's1')!;
+    expect(arun.attempts_allowed).toBe(1);
+    expect(arun.exhausted).toBe(true);
+  });
+
+  it('a teacher-granted override raises attempts_allowed and clears exhausted', () => {
+    const attempts: ExamRosterAttempt[] = [
+      { student_id: 's1', status: 'submitted', started_at: OPENS, submitted_at: CLOSES, score: 1, percentage: 50 },
+    ];
+    const rows = buildExamRoster({
+      ...base,
+      attempts,
+      baseAttemptLimit: 1,
+      attemptOverrides: new Map([['s1', 2]]),
+      now: AFTER,
+    });
+    const arun = rows.find((r) => r.student_id === 's1')!;
+    expect(arun.attempts_allowed).toBe(3);
+    expect(arun.exhausted).toBe(false);
+  });
+
+  it('counts every submitted attempt toward attempts_used, not just the one shown', () => {
+    const attempts: ExamRosterAttempt[] = [
+      { student_id: 's1', status: 'submitted', started_at: OPENS, submitted_at: CLOSES, score: 1, percentage: 40 },
+      { student_id: 's1', status: 'submitted', started_at: OPENS, submitted_at: CLOSES, score: 2, percentage: 70 },
+    ];
+    const rows = buildExamRoster({ ...base, attempts, baseAttemptLimit: 3, now: AFTER });
+    expect(rows.find((r) => r.student_id === 's1')!.attempts_used).toBe(2);
+  });
+
+  it('is never exhausted while a sitting is currently in progress', () => {
+    const attempts: ExamRosterAttempt[] = [
+      { student_id: 's1', status: 'in_progress', started_at: OPENS, submitted_at: null, score: null, percentage: null },
+    ];
+    const rows = buildExamRoster({ ...base, attempts, baseAttemptLimit: 1, now: DURING });
+    const arun = rows.find((r) => r.student_id === 's1')!;
+    expect(arun.status).toBe('in_progress');
+    expect(arun.exhausted).toBe(false);
+  });
+
+  it('surfaces the violation count from getViolationCountsForTest', () => {
+    const rows = buildExamRoster({
+      ...base,
+      attempts: [],
+      violationCounts: new Map([['s2', 3]]),
+      now: DURING,
+    });
+    expect(rows.find((r) => r.student_id === 's1')!.violation_count).toBe(0);
+    expect(rows.find((r) => r.student_id === 's2')!.violation_count).toBe(3);
+  });
+});
+
 describe('summariseExamRoster', () => {
   it('counts each state once', () => {
     const rows = buildExamRoster({
