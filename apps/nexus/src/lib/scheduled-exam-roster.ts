@@ -93,6 +93,15 @@ export interface BuildExamRosterInput {
   attemptOverrides?: Map<string, number>;
   /** Per-student totals from nexus_test_attempt_violations (getViolationCountsForTest). */
   violationCounts?: Map<string, number>;
+  /**
+   * True for a student the exam-eligibility engine has excused (still
+   * catching up, joined too recently, or a teacher override). Shown as soon
+   * as it is known, window open or closed -- a not_started row for someone
+   * nobody expects to sit the paper reads as a problem the teacher does not
+   * actually have. An excused student who sits it anyway is not stopped: any
+   * attempt they make is checked FIRST and always wins over this flag.
+   */
+  excused?: Map<string, boolean>;
 }
 
 export function buildExamRoster(input: BuildExamRosterInput): ExamRosterRow[] {
@@ -113,6 +122,7 @@ export function buildExamRoster(input: BuildExamRosterInput): ExamRosterRow[] {
 
   const attemptOverrides = input.attemptOverrides || new Map<string, number>();
   const violationCounts = input.violationCounts || new Map<string, number>();
+  const excusedMap = input.excused || new Map<string, boolean>();
   const baseLimit =
     typeof input.baseAttemptLimit === 'number' && input.baseAttemptLimit > 0 ? input.baseAttemptLimit : null;
 
@@ -181,9 +191,13 @@ export function buildExamRoster(input: BuildExamRosterInput): ExamRosterRow[] {
       };
     }
 
-    // No attempt worth counting. Which of the three "nothing yet" states?
+    // No attempt worth counting. Which of the four "nothing yet" states?
     let status: ExamRosterStatus = 'not_started';
-    if (windowClosed) {
+    if (excusedMap.get(student.id)) {
+      // Checked before windowClosed/absent on purpose: someone nobody expects
+      // to sit this paper should never read as having failed to show up.
+      status = 'excused';
+    } else if (windowClosed) {
       status = 'absent';
     } else if (liveMakeup && input.now > mainClose) {
       // The main door has shut and theirs is still open: a granted second sitting.

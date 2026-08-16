@@ -110,15 +110,17 @@ export interface ExamRosterStudent {
  * absentees a teacher needs to see.
  */
 export async function loadExamRoster(classroomId: string): Promise<ExamRosterStudent[]> {
-  const roster = await loadClassroomRoster(classroomId, {
-    includeDormant: true,
-    userColumns: 'id, full_name, avatar_url',
-  });
+  // No userColumns needed: id, name and avatar_url are already in
+  // loadClassroomRoster's BASE_USER_COLUMNS. `name` is the real display
+  // column on users -- there is no full_name, and asking for one makes
+  // PostgREST reject the whole request (see the identical trap documented in
+  // test-analytics.ts, which this file had drifted back into).
+  const roster = await loadClassroomRoster(classroomId, { includeDormant: true });
 
   return roster.members
     .map((m: any) => ({
       id: m.user?.id ?? m.user_id,
-      name: m.user?.full_name || 'Student',
+      name: m.user?.name || 'Student',
       avatar_url: m.user?.avatar_url ?? null,
     }))
     .filter((s) => Boolean(s.id));

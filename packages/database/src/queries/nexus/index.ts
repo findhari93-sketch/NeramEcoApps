@@ -24,6 +24,7 @@ export * from './question-draw';
 export * from './paper-marking';
 export * from './exam-score';
 export * from './exams';
+export * from './exam-eligibility';
 export * from './exam-results';
 export * from './exam-drawings';
 export * from './test-folders';

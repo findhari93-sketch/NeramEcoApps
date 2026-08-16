@@ -27,6 +27,7 @@ import { type StudentTest } from '@/components/tests/StudentTestCard';
 import MyTestsLibrary from '@/components/tests/MyTestsLibrary';
 import TestsSection from '@/components/tests/TestsSection';
 import ClassTestsTab, { type RecentAttempt } from '@/components/tests/ClassTestsTab';
+import StudentRescheduleSheet from '@/components/tests/StudentRescheduleSheet';
 import PerformanceTab, { type PerformanceTabData } from '@/components/tests/PerformanceTab';
 
 interface Overview {
@@ -76,6 +77,9 @@ export default function StudentTestsPage() {
    * flag: it is deliberately session state, never persisted.
    */
   const [askedThisVisit, setAskedThisVisit] = useState(false);
+
+  /** The exam a self-serve-eligible excused student is picking a date for. */
+  const [rescheduleTest, setRescheduleTest] = useState<StudentTest | null>(null);
 
   const tabParam = searchParams.get('tab');
   const tab: TabKey = TAB_KEYS.includes(tabParam as TabKey) ? (tabParam as TabKey) : 'class';
@@ -321,6 +325,7 @@ export default function StudentTestsPage() {
               data={{ due: data.due, all: allTests, exams: data.exams || [], practice_groups: data.practice_groups }}
               hasActiveClassroom={Boolean(activeClassroom?.id)}
               onStart={start}
+              onReschedule={setRescheduleTest}
               recentAttempt={data.recent[0]}
               onViewPerformance={() => setTab('performance')}
             />
@@ -362,6 +367,16 @@ export default function StudentTestsPage() {
           the test was abandoned. Above every tab, not inside one: it is not
           about Class Tests, My Tests, or Performance specifically. */}
       <UnfinishedTestSheet attempt={askAbout} onDismiss={() => setAskedThisVisit(true)} onSubmit={submitReason} />
+
+      <StudentRescheduleSheet
+        test={rescheduleTest}
+        onClose={() => setRescheduleTest(null)}
+        onRescheduled={() => {
+          setRescheduleTest(null);
+          notify('Your make-up date is set. Come back once you have caught up.', 'success');
+          load();
+        }}
+      />
 
       <Snackbar
         open={Boolean(notice)}

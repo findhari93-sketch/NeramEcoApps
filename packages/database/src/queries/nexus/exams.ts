@@ -28,6 +28,7 @@
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { createPlacement } from './test-repository';
+import { linkExamToClasses } from './exam-eligibility';
 
 // The generated Supabase types do not know these tables until
 // `pnpm supabase:gen:types` is run against a database the exam migrations
@@ -91,6 +92,14 @@ export interface ExamAttemptOverride {
   granted_at: string;
 }
 
+/**
+ * teacher_grant (default, every pre-existing row): a staff member opened this
+ * window from the invigilation roster. self_serve_new_joiner: the student
+ * picked their own date because they enrolled after the exam's covered
+ * class(es) -- no teacher approval needed for that bucket.
+ */
+export type ExamMakeupSource = 'teacher_grant' | 'self_serve_new_joiner';
+
 export interface ExamMakeup {
   id: string;
   exam_id: string;
@@ -101,6 +110,7 @@ export interface ExamMakeup {
   granted_by: string | null;
   granted_at: string;
   revoked_at: string | null;
+  source: ExamMakeupSource;
 }
 
 /** IST wall clock from a timestamptz, for writing the timetable mirror. */
@@ -259,6 +269,8 @@ export async function grantExamMakeup(
     closesAt: string;
     reason?: string | null;
     grantedBy?: string | null;
+    /** Defaults to 'teacher_grant', byte-identical to every pre-existing caller. */
+    source?: ExamMakeupSource;
   },
   client?: TypedSupabaseClient,
 ): Promise<ExamMakeup> {
@@ -281,6 +293,7 @@ export async function grantExamMakeup(
         granted_by: input.grantedBy ?? null,
         granted_at: new Date().toISOString(),
         revoked_at: null,
+        source: input.source ?? 'teacher_grant',
       },
       { onConflict: 'exam_id,student_id' },
     )
@@ -552,6 +565,14 @@ export interface CreateExamSeriesInput {
   attemptLimit?: number | null;
   proctoringEnabled?: boolean;
   violationLimit?: number;
+  /**
+   * The lecture(s) this exam tests on -- only meaningful (and only accepted
+   * by the API route) when scheduling to a single classroom, since each
+   * classroom has its own lecture instances. Omitted or empty is a complete
+   * no-op: every exam behaves exactly as it did before this feature existed,
+   * with every enrolled student mandatory.
+   */
+  coveredClassIds?: string[];
 }
 
 export interface CreateExamSeriesResult {
@@ -665,6 +686,14 @@ export async function createExamSeries(
       },
       supabase,
     );
+
+    // Only meaningful for a single-classroom schedule (the API route enforces
+    // this), but linkExamToClasses itself also only links classes that
+    // actually belong to `classroomId`, so a stray multi-classroom call would
+    // silently link nothing rather than cross-link the wrong classroom.
+    if (input.coveredClassIds && input.coveredClassIds.length > 0) {
+      await linkExamToClasses(examRow.id, classroomId, input.coveredClassIds, supabase);
+    }
 
     exams.push(examRow as NexusExam);
   }

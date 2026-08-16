@@ -97,6 +97,7 @@
     "dns:status": "C:/PROGRA~1/Git/bin/bash.exe scripts/dns-migration/migrate.sh status"
   },
   "devDependencies": {
+    "@neram/database": "workspace:*",
     "@playwright/test": "^1.51.0",
     "@supabase/supabase-js": "^2.39.0",
     "@testing-library/jest-dom": "^6.4.0",

@@ -70,6 +70,33 @@ export interface StudentTest {
     is_provisional: boolean;
     absent: boolean;
   } | null;
+  /**
+   * Exams only, and only when the exam is linked to specific class(es). The
+   * scheduled exam's own id (distinct from `class_id`, which is the exam's
+   * OWN timetable slot, not the lecture(s) it covers) -- what the self-serve
+   * reschedule routes key on.
+   */
+  exam_id?: string | null;
+  /**
+   * Whether this test is actually required of THIS student: attended or
+   * caught up (mandatory), still catching up or joined too recently
+   * (excused). Null on every exam with nothing linked, and on every
+   * non-exam test -- same "absent changes nothing" contract as is_makeup.
+   */
+  eligibility_bucket?:
+    | 'mandatory_attended'
+    | 'mandatory_caught_up'
+    | 'excused_pending_catchup'
+    | 'excused_new_joiner'
+    | 'teacher_override_mandatory'
+    | 'teacher_override_excused'
+    | null;
+  eligibility_auto_bucket?:
+    | 'mandatory_attended'
+    | 'mandatory_caught_up'
+    | 'excused_pending_catchup'
+    | 'excused_new_joiner'
+    | null;
 }
 
 export function formatWhen(iso: string | null): string {
@@ -120,6 +147,34 @@ export function windowChip(
 }
 
 /**
+ * This test is not actually required of this student (still catching up, or
+ * enrolled too recently to have had a fair shot), and they have not sat it.
+ * Once attempted or resulted, the outcome speaks for itself and this stops
+ * mattering -- an excused chip beside a published rank would just be noise.
+ */
+export function isExcused(t: StudentTest): boolean {
+  return Boolean(
+    t.is_exam &&
+      (t.eligibility_bucket === 'excused_pending_catchup' ||
+        t.eligibility_bucket === 'excused_new_joiner' ||
+        t.eligibility_bucket === 'teacher_override_excused') &&
+      !t.exam_result &&
+      t.attempts === 0,
+  );
+}
+
+/**
+ * The one excused reason that needs no teacher: enrolled after the exam's
+ * covered class(es), so nobody ever expected them to be ready. Every other
+ * excused reason (still catching up, a teacher's own override) routes
+ * through a teacher, which this app does not yet have a request/approve
+ * inbox for.
+ */
+export function canSelfServeReschedule(t: StudentTest): boolean {
+  return isExcused(t) && t.eligibility_auto_bucket === 'excused_new_joiner';
+}
+
+/**
  * Where this student's exam result stands. Exam-only, and null on everything
  * else (including an exam not yet attempted with nothing published), so the
  * chip only ever appears when it has something true to say.
@@ -152,6 +207,12 @@ export interface StudentTestCardProps {
   onToggleSelect?: (id: string) => void;
   /** Provide to render the overflow kebab. Omit and no kebab appears. */
   onMenu?: (test: StudentTest, anchor: HTMLElement) => void;
+  /**
+   * Provide to let a self-serve-eligible excused student pick their own
+   * make-up date. Omit and the card renders exactly as it did before this
+   * existed -- see canSelfServeReschedule.
+   */
+  onReschedule?: (test: StudentTest) => void;
 }
 
 export default function StudentTestCard({
@@ -162,9 +223,12 @@ export default function StudentTestCard({
   selected = false,
   onToggleSelect,
   onMenu,
+  onReschedule,
 }: StudentTestCardProps) {
   const chip = windowChip(test);
   const resultChip = examResultChip(test);
+  const excused = isExcused(test);
+  const selfServe = canSelfServeReschedule(test) && Boolean(onReschedule);
   const notOpenYet = Boolean(test.available_from && new Date(test.available_from).getTime() > Date.now());
   const closed = Boolean(test.available_until && new Date(test.available_until).getTime() < Date.now());
   const outOfAttempts = Boolean(test.attempt_limit && test.attempts >= test.attempt_limit);
@@ -308,6 +372,19 @@ export default function StudentTestCard({
         {test.is_exam && test.is_makeup && (
           <Chip size="small" variant="outlined" color="warning" label="Makeup" sx={{ height: 22, fontSize: '0.7rem' }} />
         )}
+        {excused && (
+          <Chip
+            size="small"
+            variant="outlined"
+            color={test.eligibility_bucket === 'excused_new_joiner' ? 'info' : 'warning'}
+            label={
+              test.eligibility_bucket === 'excused_new_joiner'
+                ? "Excused: you joined after this"
+                : 'Excused: finish catch-up first'
+            }
+            sx={{ height: 22, fontSize: '0.7rem' }}
+          />
+        )}
         {resultChip && (
           <Chip
             size="small"
@@ -338,7 +415,22 @@ export default function StudentTestCard({
       {/* Hidden while selecting: a Start button inside a card whose job is to be
           ticked is a trap, and tapping it would take the student out of the
           selection they were halfway through building. */}
-      {!selectable && (
+      {/* A self-serve-eligible excused student gets their own door instead of
+          the normal Start/Closed ladder: nothing above says this test is even
+          theirs to sit until they have picked a date for it. */}
+      {!selectable && selfServe && (
+        <Button
+          fullWidth
+          variant={emphasis ? 'contained' : 'outlined'}
+          color="info"
+          onClick={() => onReschedule?.(test)}
+          sx={{ textTransform: 'none', minHeight: 44 }}
+        >
+          Pick your make-up date
+        </Button>
+      )}
+
+      {!selectable && !selfServe && (
         <Button
           fullWidth
           variant={emphasis ? 'contained' : 'outlined'}

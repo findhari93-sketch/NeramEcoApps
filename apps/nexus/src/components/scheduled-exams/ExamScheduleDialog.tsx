@@ -14,6 +14,7 @@ import {
   Divider,
   MenuItem,
   Stack,
+  SwipeableDrawer,
   Switch,
   TextField,
   ToggleButton,
@@ -23,6 +24,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import EligibilityRosterPanel from './EligibilityRosterPanel';
 
 /**
  * Schedule a paper as an exam.
@@ -43,6 +45,12 @@ interface Classroom {
   id: string;
   name: string;
   academic_year?: string | null;
+}
+
+interface CandidateClass {
+  id: string;
+  title: string;
+  scheduled_date: string;
 }
 
 interface LibraryTest {
@@ -139,6 +147,10 @@ export default function ExamScheduleDialog({
   const [proctoringEnabled, setProctoringEnabled] = useState(false);
   const [violationLimit, setViolationLimit] = useState('3');
 
+  const [candidateClasses, setCandidateClasses] = useState<CandidateClass[]>([]);
+  const [coveredClasses, setCoveredClasses] = useState<CandidateClass[]>([]);
+  const [eligibilityOpen, setEligibilityOpen] = useState(false);
+
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
       const token = await getToken();
@@ -169,7 +181,7 @@ export default function ExamScheduleDialog({
         ]);
         if (cancelled) return;
 
-        const rooms: Classroom[] = classroomJson?.data?.classrooms || classroomJson?.data || [];
+        const rooms: Classroom[] = classroomJson?.classrooms || [];
         setClassrooms(rooms);
         if (initialClassroomId) {
           const match = rooms.find((c) => c.id === initialClassroomId);
@@ -184,6 +196,45 @@ export default function ExamScheduleDialog({
       cancelled = true;
     };
   }, [open, authFetch, initialClassroomId]);
+
+  // What this test could cover. Only meaningful for a single classroom: each
+  // classroom has its own lecture instances, so scheduling across several at
+  // once has no one answer to "which class(es) does this cover" (see the
+  // scoping note on covered_class_ids in the exams API route). Reuses the
+  // timetable route rather than a new endpoint -- it already returns exactly
+  // the recent lecture rows needed here.
+  const soloClassroomId = selectedClassrooms.length === 1 ? selectedClassrooms[0].id : null;
+  useEffect(() => {
+    setCoveredClasses([]);
+    if (!open || !soloClassroomId) {
+      setCandidateClasses([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const end = istDatePlusDays(0);
+        const start = istDatePlusDays(-45);
+        const json = await authFetch(
+          `/api/timetable?classroom=${soloClassroomId}&start=${start}&end=${end}`,
+        );
+        if (cancelled) return;
+        const classes = ((json?.classes || []) as any[])
+          .filter((c) => c.kind !== 'exam' && c.status !== 'cancelled')
+          .map((c) => ({ id: c.id, title: c.title, scheduled_date: c.scheduled_date }))
+          .sort((a, b) => (a.scheduled_date < b.scheduled_date ? 1 : -1));
+        setCandidateClasses(classes);
+      } catch {
+        // The dialog still works with no "What this covers" section -- an
+        // exam with nothing linked is simply mandatory for everyone, exactly
+        // as it was before this feature existed.
+        setCandidateClasses([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, soloClassroomId, authFetch]);
 
   // The paper's own pool/shuffle/timer settings, fetched fresh whenever the
   // teacher picks a different paper: the library list above is deliberately
@@ -282,6 +333,7 @@ export default function ExamScheduleDialog({
           attempt_limit: !practiceMode ? undefined : attemptLimit === 'unlimited' ? null : Number(attemptLimit),
           proctoring_enabled: proctoringEnabled,
           violation_limit: Number(violationLimit) || 3,
+          covered_class_ids: coveredClasses.map((c) => c.id),
         }),
       });
       onScheduled?.(json.data);
@@ -356,6 +408,42 @@ export default function ExamScheduleDialog({
               <TextField {...paramsInput} label="Classrooms" required placeholder="Pick one or more" />
             )}
           />
+
+          {soloClassroomId && candidateClasses.length > 0 && (
+            <Box>
+              <Autocomplete
+                multiple
+                options={candidateClasses}
+                value={coveredClasses}
+                onChange={(_, next) => setCoveredClasses(next as CandidateClass[])}
+                getOptionLabel={(c) => `${(c as CandidateClass).title} · ${(c as CandidateClass).scheduled_date}`}
+                isOptionEqualToValue={(a, b) => (a as CandidateClass).id === (b as CandidateClass).id}
+                renderTags={(value, getTagProps) =>
+                  value.map((c, i) => (
+                    <Chip
+                      label={(c as CandidateClass).title}
+                      size="small"
+                      {...getTagProps({ index: i })}
+                      key={(c as CandidateClass).id}
+                    />
+                  ))
+                }
+                renderInput={(paramsInput) => (
+                  <TextField
+                    {...paramsInput}
+                    label="What this covers"
+                    placeholder="Optional: pick the class(es) this tests on"
+                    helperText="Only students who attended or caught up on these are required to take it. Leave blank and everyone enrolled is mandatory, as today."
+                  />
+                )}
+              />
+              {coveredClasses.length > 0 && (
+                <Button size="small" onClick={() => setEligibilityOpen(true)} sx={{ mt: 1, minHeight: 44 }}>
+                  Preview who this is mandatory for
+                </Button>
+              )}
+            </Box>
+          )}
 
           <Divider />
 
@@ -607,6 +695,26 @@ export default function ExamScheduleDialog({
               : 'Schedule exam'}
         </Button>
       </DialogActions>
+
+      {soloClassroomId && (
+        <SwipeableDrawer
+          anchor="bottom"
+          open={eligibilityOpen}
+          onOpen={() => setEligibilityOpen(true)}
+          onClose={() => setEligibilityOpen(false)}
+          PaperProps={{ sx: { maxHeight: '80vh', borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
+        >
+          <Box sx={{ p: 2, pb: 0 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Who this is mandatory for
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              A preview -- nothing is saved until you press Schedule exam.
+            </Typography>
+          </Box>
+          <EligibilityRosterPanel classroomId={soloClassroomId} coveredClassIds={coveredClasses.map((c) => c.id)} readOnly />
+        </SwipeableDrawer>
+      )}
     </Dialog>
   );
 }

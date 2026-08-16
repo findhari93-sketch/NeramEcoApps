@@ -20,9 +20,12 @@ import TestsSection from './TestsSection';
 export default function ExamsSection({
   exams,
   onStart,
+  onReschedule,
 }: {
   exams: StudentTest[];
   onStart: (t: StudentTest) => void;
+  /** Opt-in: see StudentTestCard's onReschedule. Omit and no card offers it. */
+  onReschedule?: (t: StudentTest) => void;
 }) {
   if (exams.length === 0) return null;
 
@@ -38,6 +41,7 @@ export default function ExamsSection({
             key={`${t.id}-${t.placement_id}`}
             test={t}
             onStart={onStart}
+            onReschedule={onReschedule}
             emphasis={t.status === 'open' || t.status === 'upcoming'}
           />
         ))}

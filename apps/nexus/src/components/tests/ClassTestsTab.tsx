@@ -44,12 +44,15 @@ export default function ClassTestsTab({
   data,
   hasActiveClassroom,
   onStart,
+  onReschedule,
   recentAttempt,
   onViewPerformance,
 }: {
   data: ClassTestsTabData;
   hasActiveClassroom: boolean;
   onStart: (t: StudentTest) => void;
+  /** Opt-in: see StudentTestCard's onReschedule. Omit and no card offers it. */
+  onReschedule?: (t: StudentTest) => void;
   /** Newest attempt, if any. Powers the teaser at the bottom of this tab. */
   recentAttempt?: RecentAttempt;
   onViewPerformance: () => void;
@@ -87,13 +90,13 @@ export default function ClassTestsTab({
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             {data.due.map((t) => (
-              <StudentTestCard key={t.id} test={t} onStart={onStart} emphasis />
+              <StudentTestCard key={t.id} test={t} onStart={onStart} onReschedule={onReschedule} emphasis />
             ))}
           </Box>
         )}
       </TestsSection>
 
-      <ExamsSection exams={data.exams} onStart={onStart} />
+      <ExamsSection exams={data.exams} onStart={onStart} onReschedule={onReschedule} />
 
       {totalPractice > 0 && (
         <TestsSection

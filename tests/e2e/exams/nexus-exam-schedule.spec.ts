@@ -17,7 +17,7 @@ async function firstClassroom(request: any, token: string): Promise<string | nul
   });
   if (!res.ok()) return null;
   const json = await res.json();
-  const rooms = json?.data?.classrooms ?? json?.data ?? [];
+  const rooms = json?.classrooms ?? [];
   return Array.isArray(rooms) && rooms.length > 0 ? rooms[0].id : null;
 }
 

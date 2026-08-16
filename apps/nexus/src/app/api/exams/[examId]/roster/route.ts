@@ -5,6 +5,7 @@ import {
   getExamPlacement,
   getExamAttemptOverrides,
   getViolationCountsForTest,
+  loadExamEligibilityFacts,
 } from '@neram/database';
 import { requireExamStaff, loadExamRoster } from '@/lib/exam-access';
 import {
@@ -13,6 +14,7 @@ import {
   sortExamRoster,
   type ExamRosterMakeup,
 } from '@/lib/scheduled-exam-roster';
+import { buildExamEligibilityRoster } from '@/lib/exam-eligibility-roster';
 
 /**
  * Who is sitting the exam right now.
@@ -35,11 +37,16 @@ export async function GET(
     const exam = access.exam;
     const supabase = getSupabaseAdminClient();
 
-    const [students, makeupRows, placement] = await Promise.all([
+    const [students, makeupRows, placement, eligibilityFacts] = await Promise.all([
       loadExamRoster(exam.classroom_id),
       listExamMakeups(params.examId),
       getExamPlacement(params.examId),
+      loadExamEligibilityFacts(params.examId, exam.classroom_id),
     ]);
+
+    const excused = new Map<string, boolean>(
+      buildExamEligibilityRoster(eligibilityFacts).map((row) => [row.student_id, !row.is_mandatory]),
+    );
 
     const studentIds = students.map((s) => s.id);
     const [{ data: attempts }, attemptOverrides, violationCounts] = await Promise.all([
@@ -76,6 +83,7 @@ export async function GET(
         baseAttemptLimit: Number.isFinite(baseAttemptLimit) ? baseAttemptLimit : null,
         attemptOverrides,
         violationCounts,
+        excused,
       }),
     );
 

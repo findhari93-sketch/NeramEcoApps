@@ -8,8 +8,10 @@ import {
   listStudentAttempts,
   listStudentExams,
   listTestFolderTree,
+  loadStudentExamFacts,
   NEXUS_GATED_TEST_KINDS,
 } from '@neram/database';
+import { buildExamEligibilityRoster, type EligibilityRosterRow } from '@/lib/exam-eligibility-roster';
 
 /**
  * GET /api/student/tests/overview?classroom=<id>
@@ -133,6 +135,41 @@ export async function GET(request: NextRequest) {
     // not once per exam placement.
     const examViews = classroomId ? await listStudentExams(studentId, classroomId, supabase) : [];
     const examViewByClass = new Map(examViews.map((e) => [e.scheduled_class_id, e]));
+
+    // Whether each exam is actually mandatory for THIS student -- attended or
+    // caught up on what it covers, still-catching-up (excused), or too new to
+    // have had a fair shot (excused, and self-serve reschedule-able). Batched
+    // once across every exam the classroom has run, never once per card. An
+    // exam with nothing linked (facts.coveredClassesByExam has no entry for
+    // it) resolves to mandatory for everyone, exactly as before this feature
+    // existed -- see buildExamEligibilityRoster's empty-coveredClasses default.
+    const eligibilityByExam = new Map<string, EligibilityRosterRow>();
+    if (classroomId && examViews.length > 0) {
+      const [{ data: myEnrollment }, facts] = await Promise.all([
+        supabase
+          .from('nexus_enrollments')
+          .select('enrolled_at')
+          .eq('user_id', studentId)
+          .eq('classroom_id', classroomId)
+          .eq('role', 'student')
+          .maybeSingle(),
+        loadStudentExamFacts(studentId, examViews.map((e) => e.exam_id), supabase),
+      ]);
+      const enrolledAt = (myEnrollment as any)?.enrolled_at ?? new Date(0).toISOString();
+
+      for (const ev of examViews) {
+        const rows = buildExamEligibilityRoster({
+          students: [{ student_id: studentId, name: null, avatar_url: null, enrolled_at: enrolledAt }],
+          coveredClasses: facts.coveredClassesByExam.get(ev.exam_id) || [],
+          attendance: facts.attendance,
+          absences: facts.absences,
+          overrides: facts.overrides.has(ev.exam_id)
+            ? new Map([[studentId, facts.overrides.get(ev.exam_id)!]])
+            : new Map(),
+        });
+        eligibilityByExam.set(ev.exam_id, rows[0]);
+      }
+    }
 
     // 2. The student's own papers.
     const { data: ownTests } = await supabase
@@ -287,6 +324,7 @@ export async function GET(request: NextRequest) {
       if (!item) return null;
       const cls = classById.get(p.context_id);
       const ev = examViewByClass.get(p.context_id);
+      const eligibility = ev ? eligibilityByExam.get(ev.exam_id) : undefined;
       // A live makeup grant REPLACES the shared window (resolveExamWindowForStudent
       // in exams.ts), so ev's window is preferred over the placement's own when
       // present. Without this a makeup student's card would show as missed.
@@ -320,6 +358,13 @@ export async function GET(request: NextRequest) {
         is_makeup: ev?.is_makeup ?? false,
         results_state: ev?.results_state ?? 'unpublished',
         exam_result: ev?.result ?? null,
+        // Additive, and null on every exam with nothing linked -- same
+        // "opt-in, absent changes nothing" contract as is_makeup/results_state.
+        // exam_id (not to be confused with class_id above, the exam's OWN
+        // scheduled_class_id) is what the reschedule routes key on.
+        exam_id: ev?.exam_id ?? null,
+        eligibility_bucket: eligibility?.bucket ?? null,
+        eligibility_auto_bucket: eligibility?.auto_bucket ?? null,
       };
     };
 

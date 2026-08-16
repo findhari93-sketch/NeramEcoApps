@@ -66,6 +66,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'An exam needs a window' }, { status: 400 });
     }
 
+    const coveredClassIds: string[] = Array.isArray(body?.covered_class_ids)
+      ? body.covered_class_ids.filter((x: unknown) => typeof x === 'string')
+      : [];
+    // Each classroom has its own lecture instances, so "which class(es) does
+    // this cover" only makes sense scoped to one classroom at a time.
+    if (coveredClassIds.length > 0 && classroomIds.length > 1) {
+      return NextResponse.json(
+        { error: 'Pick one classroom to link this exam to specific classes' },
+        { status: 400 },
+      );
+    }
+
     // The paper has to exist and be usable before N timetable rows are created
     // for it: failing after the third classroom would leave a half-scheduled
     // exam nobody asked for.
@@ -104,6 +116,7 @@ export async function POST(request: NextRequest) {
       attemptLimit,
       proctoringEnabled: body?.proctoring_enabled === true,
       violationLimit: typeof body?.violation_limit === 'number' ? body.violation_limit : undefined,
+      coveredClassIds,
     });
 
     // Announce + notify, best-effort: a Graph hiccup here must never fail an
