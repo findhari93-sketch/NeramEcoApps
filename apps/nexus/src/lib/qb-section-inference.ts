@@ -87,7 +87,7 @@ const APTITUDE_PATTERN = new RegExp(
 );
 
 /** Does this question read like maths, aptitude, or neither? */
-function contentSignal(q: QBSectionInferenceInput): -1 | 0 | 1 {
+export function contentSignal(q: QBSectionInferenceInput): -1 | 0 | 1 {
   const text = [q.question_text ?? '', ...(q.options ?? []).map((o) => o?.text ?? '')]
     .join(' ')
     .trim();
