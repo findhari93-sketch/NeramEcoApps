@@ -143,10 +143,27 @@ if [[ -f .vercel/project.json ]]; then
 fi
 cp -f "$APP_DIR/.vercel/project.json" .vercel/project.json
 echo -e "${YELLOW}Running: vercel deploy ${VERCEL_FLAGS} (project: ${APP})${NC}"
-DEPLOY_URL=$(vercel deploy $VERCEL_FLAGS 2>&1)
-# Restore original .vercel/project.json
+
+# Stream output live (so a failure is visible) instead of swallowing it into a
+# variable: under `set -e`, a failing `VAR=$(cmd)` exits the script before the
+# variable is ever printed AND before the project.json restore below runs.
+DEPLOY_LOG="$(mktemp)"
+set +e
+vercel deploy $VERCEL_FLAGS 2>&1 | tee "$DEPLOY_LOG"
+DEPLOY_STATUS=${PIPESTATUS[0]}
+set -e
+DEPLOY_URL=$(grep -Eo 'https://[a-zA-Z0-9.-]+\.vercel\.app' "$DEPLOY_LOG" | tail -n 1)
+rm -f "$DEPLOY_LOG"
+
+# Restore original .vercel/project.json -- must happen on failure too, or the
+# next unrelated `vercel` command in this repo silently targets this app.
 if [[ -n "$ORIG_PROJECT" ]]; then
   echo "$ORIG_PROJECT" > .vercel/project.json
+fi
+
+if [[ $DEPLOY_STATUS -ne 0 ]]; then
+  echo -e "${RED}=== ${APP^^} deploy to ${TARGET^^} FAILED (see output above) ===${NC}"
+  exit 1
 fi
 
 echo -e "\n${GREEN}=== ${APP^^} deployed to ${TARGET^^} ===${NC}"
