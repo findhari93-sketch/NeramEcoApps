@@ -1,6 +1,7 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { expandQBCategorySlugs } from './qb-tags';
 import { QB_SECTION_ORDER } from '../../types';
+import { fetchAllRows } from '../../utils/paged-rows';
 import type {
   QBQuestionSection,
   NexusQBPaperSectionRow,
@@ -2312,6 +2313,109 @@ export async function setQuestionSections(
       } as any)
       .eq('original_paper_id', paperId)
       .in('id', questionIds)
+      .select('id');
+    if (error) throw error;
+    updated += (data || []).length;
+  }
+
+  return { updated };
+}
+
+/** One question implicated in a section/number collision. */
+export interface QBSectionOrderCollisionCandidate {
+  id: string;
+  original_paper_id: string;
+  section: QBQuestionSection;
+  display_order: number;
+  question_text: string | null;
+  question_format: QBQuestionFormat;
+  categories: string[];
+}
+
+/** Two or more questions on one paper sharing the same section and number. */
+export interface QBSectionOrderCollisionGroup {
+  original_paper_id: string;
+  section: QBQuestionSection;
+  display_order: number;
+  candidates: QBSectionOrderCollisionCandidate[];
+}
+
+/**
+ * Find every question-bank paper where two or more questions share the same
+ * (section, display_order): a parser that lost its place on a multi-column PDF
+ * stamped unrelated questions with the same row-position number.
+ *
+ * Reads every sectioned question bank-wide (about 2,000 rows at time of
+ * writing), so this goes through fetchAllRows rather than a bare .select():
+ * PostgREST silently truncates a single page at 1000 rows with no error, which
+ * is exactly the failure mode this tool exists to catch, not repeat.
+ */
+export async function findSectionOrderCollisions(
+  client?: TypedSupabaseClient
+): Promise<QBSectionOrderCollisionGroup[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const rows = await fetchAllRows<any>(() =>
+    (supabase as any)
+      .from('nexus_qb_questions')
+      .select('id, original_paper_id, section, display_order, question_text, question_format, categories')
+      .not('display_order', 'is', null)
+      .not('section', 'is', null)
+  );
+
+  const groups = new Map<string, QBSectionOrderCollisionGroup>();
+  for (const row of rows) {
+    const key = `${row.original_paper_id}::${row.section}::${row.display_order}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        original_paper_id: row.original_paper_id,
+        section: row.section,
+        display_order: row.display_order,
+        candidates: [],
+      });
+    }
+    groups.get(key)!.candidates.push({
+      id: row.id,
+      original_paper_id: row.original_paper_id,
+      section: row.section,
+      display_order: row.display_order,
+      question_text: row.question_text ?? null,
+      question_format: row.question_format,
+      categories: row.categories ?? [],
+    });
+  }
+
+  return Array.from(groups.values()).filter((g) => g.candidates.length > 1);
+}
+
+/**
+ * Write a batch of confirmed section/number reassignments.
+ *
+ * Scoped by paperId on every write, matching setQuestionSections: a stray
+ * question id from another paper can never be touched through this call. Each
+ * resolution writes section, section_order (derived, never accepted from the
+ * caller, same rule as setQuestionSections) and display_order together, since
+ * a collision fix always changes both at once.
+ */
+export async function resolveSectionOrderCollisions(
+  paperId: string,
+  resolutions: Array<{ question_id: string; section: QBQuestionSection; display_order: number }>,
+  client?: TypedSupabaseClient
+): Promise<{ updated: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  if (resolutions.length === 0) return { updated: 0 };
+
+  let updated = 0;
+  for (const r of resolutions) {
+    const { data, error } = await (supabase as any)
+      .from('nexus_qb_questions')
+      .update({
+        section: r.section,
+        section_order: QB_SECTION_ORDER[r.section] ?? null,
+        display_order: r.display_order,
+      })
+      .eq('original_paper_id', paperId)
+      .eq('id', r.question_id)
       .select('id');
     if (error) throw error;
     updated += (data || []).length;
