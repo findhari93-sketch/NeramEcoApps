@@ -64,11 +64,21 @@ export async function PATCH(
       clsBefore = data as ScheduledClassTeamsSnapshot | null;
     }
 
+    const rawTimerMode = body?.timer_mode;
+    const timerMode: 'inherit' | 'untimed' | 'timed' | undefined =
+      rawTimerMode === 'untimed' || rawTimerMode === 'timed' || rawTimerMode === 'inherit'
+        ? rawTimerMode
+        : undefined;
+    if (timerMode === 'timed' && !(typeof body?.duration_minutes === 'number' && body.duration_minutes > 0)) {
+      return NextResponse.json({ error: 'A timed exam needs a duration' }, { status: 400 });
+    }
+
     const exam = await updateExam(params.examId, {
       title: typeof body?.title === 'string' ? body.title : undefined,
       opensAt: body?.opens_at ?? undefined,
       closesAt: body?.closes_at ?? undefined,
       durationMinutes: body?.duration_minutes ?? undefined,
+      timerMode,
       passingPct: body?.passing_pct ?? undefined,
       testId: typeof body?.test_id === 'string' ? body.test_id : undefined,
     });

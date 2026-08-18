@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Autocomplete,
@@ -12,9 +12,9 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  IconButton,
   MenuItem,
   Stack,
-  SwipeableDrawer,
   Switch,
   TextField,
   ToggleButton,
@@ -23,6 +23,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
+import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import EligibilityRosterPanel from './EligibilityRosterPanel';
 
@@ -83,7 +84,7 @@ export interface ExamScheduleDialogProps {
   onScheduled?: (result: { series_id: string; exams: Array<{ id: string }> }) => void;
 }
 
-/** 09:00 to 21:00 in 15-minute steps. Enough for any sitting anyone schedules. */
+/** 06:00 to 22:45 in 15-minute steps. Enough for any sitting anyone schedules. */
 function timeOptions(): string[] {
   const out: string[] = [];
   for (let h = 6; h <= 22; h++) {
@@ -92,6 +93,19 @@ function timeOptions(): string[] {
     }
   }
   return out;
+}
+
+/** Half an hour up to three hours: the durations any real sitting needs. */
+const DURATION_PRESETS = [30, 60, 90, 120, 180] as const;
+type TimerChoice = 'untimed' | '30' | '60' | '90' | '120' | '180';
+
+/** The preset nearest the paper's own current timer, as a starting point only. */
+function defaultTimerChoiceFor(detail: TestDetail | null): TimerChoice {
+  if (!detail?.testType || detail.testType === 'untimed' || !detail.durationMinutes) return 'untimed';
+  const nearest = DURATION_PRESETS.reduce((best, preset) =>
+    Math.abs(preset - detail.durationMinutes!) < Math.abs(best - detail.durationMinutes!) ? preset : best,
+  );
+  return String(nearest) as TimerChoice;
 }
 
 /** A local date and time in IST, as an instant. */
@@ -134,7 +148,10 @@ export default function ExamScheduleDialog({
   const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime] = useState('10:00');
   const [endTime, setEndTime] = useState('13:00');
-  const [duration, setDuration] = useState<string>('');
+  const [timerChoice, setTimerChoice] = useState<TimerChoice>('untimed');
+  // Once the teacher has picked, re-fetching testDetail (a paper swap) must
+  // not silently overwrite their choice with the new paper's own default.
+  const timerTouchedRef = useRef(false);
   const [passingPct, setPassingPct] = useState<string>('40');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +166,19 @@ export default function ExamScheduleDialog({
 
   const [candidateClasses, setCandidateClasses] = useState<CandidateClass[]>([]);
   const [coveredClasses, setCoveredClasses] = useState<CandidateClass[]>([]);
-  const [eligibilityOpen, setEligibilityOpen] = useState(false);
+  /** The dialog swaps its own content in place rather than stacking a second
+   * overlay on top, two MUI portals (Dialog + Drawer) never nest in the DOM,
+   * they land as siblings and the drawer always loses the z-index compare. */
+  const [view, setView] = useState<'form' | 'roster'>('form');
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) setView('form');
+  }, [open]);
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [view]);
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -242,6 +271,11 @@ export default function ExamScheduleDialog({
   useEffect(() => {
     if (!open || !testId) {
       setTestDetail(null);
+      // A fresh scheduling session (dialog reopened, or the paper cleared
+      // out) starts fresh too -- a choice from a previous open must not
+      // silently carry into a different exam.
+      timerTouchedRef.current = false;
+      setTimerChoice('untimed');
       return;
     }
     let cancelled = false;
@@ -263,6 +297,7 @@ export default function ExamScheduleDialog({
         setTestDetail(detail);
         setSubsetSize(String(detail.questionsToServe || detail.questionCount || ''));
         setShuffleQuestions(detail.shuffleQuestions);
+        if (!timerTouchedRef.current) setTimerChoice(defaultTimerChoiceFor(detail));
       } catch {
         // The dialog still works with the library's lighter row; the subset
         // and shuffle controls just fall back to their own defaults below.
@@ -284,8 +319,10 @@ export default function ExamScheduleDialog({
     return eh * 60 + em - (sh * 60 + sm);
   }, [startTime, endTime]);
 
-  const durationMinutes = Number(duration) || chosenTest?.duration_minutes || null;
-  const durationTooLong = Boolean(durationMinutes && windowMinutes > 0 && durationMinutes > windowMinutes);
+  const selectedDurationMinutes = timerChoice === 'untimed' ? null : Number(timerChoice);
+  const durationTooLong = Boolean(
+    selectedDurationMinutes && windowMinutes > 0 && selectedDurationMinutes > windowMinutes,
+  );
 
   const poolSize = testDetail?.questionCount || chosenTest?.question_count || 0;
   const subsetTooLarge = Boolean(subsetSize && poolSize > 0 && Number(subsetSize) > poolSize);
@@ -327,7 +364,8 @@ export default function ExamScheduleDialog({
           title: title.trim() || chosenTest?.title || 'Exam',
           opens_at: toIso(date, startTime),
           closes_at: toIso(date, endTime),
-          duration_minutes: durationMinutes,
+          timer_mode: timerChoice === 'untimed' ? 'untimed' : 'timed',
+          duration_minutes: selectedDurationMinutes,
           passing_pct: Number(passingPct) || null,
           mode: practiceMode ? 'practice' : 'ranked',
           attempt_limit: !practiceMode ? undefined : attemptLimit === 'unlimited' ? null : Number(attemptLimit),
@@ -346,11 +384,38 @@ export default function ExamScheduleDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth="sm">
-      <DialogTitle sx={{ fontWeight: 700 }}>Schedule an exam</DialogTitle>
+    <Dialog
+      open={open}
+      onClose={() => (view === 'roster' ? setView('form') : onClose())}
+      fullScreen={fullScreen}
+      fullWidth
+      maxWidth="sm"
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 700 }}>
+        {view === 'roster' ? (
+          <>
+            <IconButton
+              onClick={() => setView('form')}
+              aria-label="Back to exam form"
+              sx={{ ml: -1, width: 48, height: 48, flexShrink: 0 }}
+            >
+              <ArrowBackOutlinedIcon />
+            </IconButton>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 700 }}>Who this is mandatory for</Typography>
+              <Typography variant="caption" color="text.secondary">
+                A preview: nothing is saved until you press Schedule exam.
+              </Typography>
+            </Box>
+          </>
+        ) : (
+          'Schedule an exam'
+        )}
+      </DialogTitle>
 
-      <DialogContent dividers>
-        <Stack spacing={2.5}>
+      <DialogContent dividers ref={contentRef} sx={view === 'roster' ? { p: 0 } : undefined}>
+        {view === 'form' && (
+          <Stack spacing={2.5}>
           {error && (
             <Alert severity="error" role="alert" onClose={() => setError(null)}>
               {error}
@@ -438,7 +503,7 @@ export default function ExamScheduleDialog({
                 )}
               />
               {coveredClasses.length > 0 && (
-                <Button size="small" onClick={() => setEligibilityOpen(true)} sx={{ mt: 1, minHeight: 44 }}>
+                <Button size="small" onClick={() => setView('roster')} sx={{ mt: 1, minHeight: 44 }}>
                   Preview who this is mandatory for
                 </Button>
               )}
@@ -451,21 +516,39 @@ export default function ExamScheduleDialog({
             How it is taken
           </Typography>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Chip
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              Timer for this exam
+            </Typography>
+            <ToggleButtonGroup
+              exclusive
               size="small"
-              label={
-                testDetail?.testType && testDetail.testType !== 'untimed'
-                  ? `Timed · ${testDetail.durationMinutes ?? '?'} min`
-                  : 'Untimed'
-              }
-              variant="outlined"
-            />
-            {testDetail && testDetail.testType === 'untimed' && (
-              <Typography variant="caption" color="text.secondary">
-                This paper has no built-in timer, so students will not see a countdown. The window
-                above still closes at the time you set.
-              </Typography>
+              value={timerChoice}
+              onChange={(_, v: TimerChoice | null) => {
+                if (v === null) return;
+                timerTouchedRef.current = true;
+                setTimerChoice(v);
+              }}
+            >
+              <ToggleButton value="untimed" sx={{ minHeight: 44, px: 2, textTransform: 'none' }}>
+                Untimed
+              </ToggleButton>
+              {DURATION_PRESETS.map((minutes) => (
+                <ToggleButton key={minutes} value={String(minutes)} sx={{ minHeight: 44, px: 2 }}>
+                  {minutes}m
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              {testDetail?.testType && testDetail.testType !== 'untimed'
+                ? `This paper's own default is Timed · ${testDetail.durationMinutes ?? '?'} min, but the exam's own timer above is what students get.`
+                : "This paper's own default is Untimed, but the exam's own timer above is what students get."}{' '}
+              The clock starts when each student starts, not when the window opens.
+            </Typography>
+            {durationTooLong && (
+              <Alert severity="warning" sx={{ mt: 1 }}>
+                The window is only {windowMinutes} minutes long.
+              </Alert>
             )}
           </Box>
 
@@ -633,31 +716,27 @@ export default function ExamScheduleDialog({
             </TextField>
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
-            <TextField
-              label="Minutes allowed"
-              type="number"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              fullWidth
-              placeholder={String(chosenTest?.duration_minutes ?? windowMinutes)}
-              error={durationTooLong}
-              helperText={
-                durationTooLong
-                  ? `The window is only ${windowMinutes} minutes long.`
-                  : 'The clock starts when each student starts.'
-              }
-              inputProps={{ inputMode: 'numeric' }}
-            />
-            <TextField
-              label="Pass mark %"
-              type="number"
-              value={passingPct}
-              onChange={(e) => setPassingPct(e.target.value)}
-              fullWidth
-              inputProps={{ inputMode: 'numeric', min: 0, max: 100 }}
+          <Box sx={{ display: 'flex', gap: 1, mt: -1 }}>
+            <Chip
+              size="small"
+              label="Full day"
+              clickable
+              color={startTime === '06:00' && endTime === '22:45' ? 'primary' : 'default'}
+              onClick={() => {
+                setStartTime('06:00');
+                setEndTime('22:45');
+              }}
             />
           </Box>
+
+          <TextField
+            label="Pass mark %"
+            type="number"
+            value={passingPct}
+            onChange={(e) => setPassingPct(e.target.value)}
+            fullWidth
+            inputProps={{ inputMode: 'numeric', min: 0, max: 100 }}
+          />
 
           {/* The rules, stated once, where the decision is made. An exam behaves
               differently from every other test in Nexus and a teacher should not
@@ -680,40 +759,31 @@ export default function ExamScheduleDialog({
               {!practiceMode && ' Each classroom is ranked and announced separately.'}
             </Alert>
           )}
-        </Stack>
+          </Stack>
+        )}
+
+        {view === 'roster' && soloClassroomId && (
+          <EligibilityRosterPanel
+            classroomId={soloClassroomId}
+            coveredClassIds={coveredClasses.map((c) => c.id)}
+            readOnly
+          />
+        )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-        <Button onClick={onClose} sx={{ minHeight: 48 }}>
-          Cancel
-        </Button>
-        <Button variant="contained" onClick={handleSave} disabled={!canSave} sx={{ minHeight: 48 }}>
-          {saving
-            ? 'Scheduling...'
-            : selectedClassrooms.length > 1
-              ? `Schedule in ${selectedClassrooms.length} classrooms`
-              : 'Schedule exam'}
-        </Button>
-      </DialogActions>
-
-      {soloClassroomId && (
-        <SwipeableDrawer
-          anchor="bottom"
-          open={eligibilityOpen}
-          onOpen={() => setEligibilityOpen(true)}
-          onClose={() => setEligibilityOpen(false)}
-          PaperProps={{ sx: { maxHeight: '80vh', borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
-        >
-          <Box sx={{ p: 2, pb: 0 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              Who this is mandatory for
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              A preview -- nothing is saved until you press Schedule exam.
-            </Typography>
-          </Box>
-          <EligibilityRosterPanel classroomId={soloClassroomId} coveredClassIds={coveredClasses.map((c) => c.id)} readOnly />
-        </SwipeableDrawer>
+      {view === 'form' && (
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button onClick={onClose} sx={{ minHeight: 48 }}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleSave} disabled={!canSave} sx={{ minHeight: 48 }}>
+            {saving
+              ? 'Scheduling...'
+              : selectedClassrooms.length > 1
+                ? `Schedule in ${selectedClassrooms.length} classrooms`
+                : 'Schedule exam'}
+          </Button>
+        </DialogActions>
       )}
     </Dialog>
   );

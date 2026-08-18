@@ -23,6 +23,7 @@ export * from './test-provenance';
 export * from './question-draw';
 export * from './paper-marking';
 export * from './exam-score';
+export * from './exam-timer';
 export * from './exams';
 export * from './exam-eligibility';
 export * from './exam-results';

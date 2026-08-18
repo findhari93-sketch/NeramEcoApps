@@ -6,6 +6,8 @@ import {
   getExamAttemptOverrides,
   getViolationCountsForTest,
   loadExamEligibilityFacts,
+  getTestMeta,
+  resolveExamTimer,
 } from '@neram/database';
 import { requireExamStaff, loadExamRoster } from '@/lib/exam-access';
 import {
@@ -37,11 +39,12 @@ export async function GET(
     const exam = access.exam;
     const supabase = getSupabaseAdminClient();
 
-    const [students, makeupRows, placement, eligibilityFacts] = await Promise.all([
+    const [students, makeupRows, placement, eligibilityFacts, testMeta] = await Promise.all([
       loadExamRoster(exam.classroom_id),
       listExamMakeups(params.examId),
       getExamPlacement(params.examId),
       loadExamEligibilityFacts(params.examId, exam.classroom_id),
+      getTestMeta(exam.test_id),
     ]);
 
     const excused = new Map<string, boolean>(
@@ -78,7 +81,11 @@ export async function GET(
         attempts: (attempts || []) as any[],
         makeups,
         window: { opens_at: exam.opens_at, closes_at: exam.closes_at },
-        durationMinutes: exam.duration_minutes,
+        // The paper can be Untimed while the exam's raw duration_minutes still
+        // carries a stale/inert number -- resolve through the same rule the
+        // student's own countdown uses, or the roster and the student screen
+        // can disagree about whether this sitting is timed at all.
+        durationMinutes: resolveExamTimer(exam, testMeta ?? {}).duration_minutes,
         now: Date.now(),
         baseAttemptLimit: Number.isFinite(baseAttemptLimit) ? baseAttemptLimit : null,
         attemptOverrides,

@@ -2,6 +2,7 @@
 // yet in the generated Supabase types. Regenerate after 20260713190000 is applied.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { countRowsByKey } from '../../utils/paged-rows';
+import { resolveExamTimer } from './exam-timer';
 import { storeContentSummary, type NexusTestSourceFilters } from './test-provenance';
 import { recordCatchupTestAttempt } from './catchup-journey';
 import { gradeQBAnswerStrict, normaliseQuestionFormat } from './question-bank';
@@ -1778,6 +1779,25 @@ export async function startOrResumeAttempt(
   if (questions.length === 0) throw new Error('TEST_HAS_NO_QUESTIONS');
   if (placement && placement.test_id !== input.testId) throw new Error('PLACEMENT_TEST_MISMATCH');
 
+  // An exam's own timer_mode can override the paper's fixed test_type -- see
+  // resolveExamTimer() in exam-timer.ts. Every other context leaves timerMeta
+  // identical to meta, so a non-exam sitting is completely unaffected.
+  let timerMeta = meta;
+  if (placement?.context_type === 'exam') {
+    const examId = (placement.gating as { exam_id?: string } | null)?.exam_id;
+    if (examId) {
+      // Imported lazily: exams.ts imports createPlacement from this module, so
+      // a top-level import here would close the cycle (same reasoning as the
+      // class-prep/exam-drawings imports elsewhere in this file).
+      const { getExam } = await import('./exams');
+      const exam = await getExam(examId, supabase);
+      if (exam) {
+        const resolved = resolveExamTimer(exam, meta);
+        timerMeta = { ...meta, test_type: resolved.test_type, duration_minutes: resolved.duration_minutes };
+      }
+    }
+  }
+
   const { data: history, error: histErr } = await supabase
     .from(ATTEMPTS)
     .select(
@@ -1836,7 +1856,7 @@ export async function startOrResumeAttempt(
     // attempt who starts a revision would resume the official one, and passing
     // it would overwrite their real best score with a practice result.
     const sameMode = (open.mode ?? 'official') === mode;
-    if (sameMode && !attemptIsStale(open, meta, servedCount)) {
+    if (sameMode && !attemptIsStale(open, timerMeta, servedCount)) {
       return {
         attempt: open,
         resumed: true,

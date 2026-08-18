@@ -101,6 +101,19 @@ export async function POST(request: NextRequest) {
           ? null
           : undefined;
 
+    // Undefined (not sent) keeps createExamSeries' own 'inherit' default,
+    // which is byte-identical to today's real behavior: duration_minutes in
+    // this body has never had any effect on the student's actual timer, so
+    // no caller written before this needs to change.
+    const rawTimerMode = body?.timer_mode;
+    const timerMode: 'inherit' | 'untimed' | 'timed' | undefined =
+      rawTimerMode === 'untimed' || rawTimerMode === 'timed' || rawTimerMode === 'inherit'
+        ? rawTimerMode
+        : undefined;
+    if (timerMode === 'timed' && !(typeof body?.duration_minutes === 'number' && body.duration_minutes > 0)) {
+      return NextResponse.json({ error: 'A timed exam needs a duration' }, { status: 400 });
+    }
+
     const result = await createExamSeries({
       classroomIds,
       testId,
@@ -109,6 +122,7 @@ export async function POST(request: NextRequest) {
       closesAt: body.closes_at,
       durationMinutes:
         body?.duration_minutes ?? (test as any).duration_minutes ?? null,
+      timerMode,
       passingPct: body?.passing_pct ?? null,
       teacherId: resolved.caller.id,
       createdBy: resolved.caller.id,

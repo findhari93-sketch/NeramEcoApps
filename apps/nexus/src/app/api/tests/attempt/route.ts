@@ -14,6 +14,7 @@ import {
   getExamMakeup,
   resolveExamWindowForStudent,
   getExamAttemptOverride,
+  resolveExamTimer,
 } from '@neram/database';
 import { attemptSeed, seededShuffle } from '@/lib/seeded-shuffle';
 
@@ -109,10 +110,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Populated only inside the exam branch below. Every other context_type
-    // leaves both at their defaults, which is what makes an ordinary,
-    // non-exam test completely unaffected by proctoring/attempt overrides.
+    // leaves these at their defaults, which is what makes an ordinary,
+    // non-exam test completely unaffected by proctoring/attempt overrides/timer.
     let proctoring: { enabled: boolean; violation_limit: number } | null = null;
     let extraAttempts = 0;
+    let examForTimer: Awaited<ReturnType<typeof getExam>> = null;
 
     // A placement carries its own window and visibility on top of the test's.
     if (placementId) {
@@ -142,6 +144,7 @@ export async function GET(request: NextRequest) {
           // the exam directly (see the same fix in attempt/violation/route.ts).
           const examId = (placement.gating as { exam_id?: string } | null)?.exam_id;
           const exam = examId ? await getExam(examId) : null;
+          examForTimer = exam;
           if (exam) {
             // A live makeup sitting resolves to this SAME exam row, so
             // proctoring_enabled already covers it with no extra plumbing.
@@ -265,13 +268,18 @@ export async function GET(request: NextRequest) {
       questions = seededShuffle(questions, seed);
     }
 
+    // An exam's own timer_mode can override the paper's fixed test_type -- see
+    // resolveExamTimer() in exam-timer.ts. null examForTimer resolves as
+    // "inherit," which is exactly test.test_type/duration_minutes unchanged.
+    const resolvedTimer = resolveExamTimer(examForTimer, test);
+
     return NextResponse.json({
       test: {
         id: test.id,
         title: test.title,
         description: test.description,
-        test_type: test.test_type,
-        duration_minutes: test.duration_minutes,
+        test_type: resolvedTimer.test_type,
+        duration_minutes: resolvedTimer.duration_minutes,
         per_question_seconds: test.per_question_seconds,
         total_marks: test.total_marks,
       },

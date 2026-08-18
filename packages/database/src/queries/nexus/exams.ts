@@ -29,6 +29,7 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { createPlacement } from './test-repository';
 import { linkExamToClasses } from './exam-eligibility';
+import type { ExamTimerMode } from './exam-timer';
 
 // The generated Supabase types do not know these tables until
 // `pnpm supabase:gen:types` is run against a database the exam migrations
@@ -69,6 +70,8 @@ export interface NexusExam {
   opens_at: string;
   closes_at: string;
   duration_minutes: number | null;
+  /** See resolveExamTimer() in exam-timer.ts for how this and duration_minutes combine. */
+  timer_mode: ExamTimerMode;
   passing_pct: number | null;
   results_state: ExamResultsState;
   results_published_at: string | null;
@@ -556,6 +559,13 @@ export interface CreateExamSeriesInput {
   opensAt: string;
   closesAt: string;
   durationMinutes?: number | null;
+  /**
+   * Defaults to 'inherit', which is byte-identical to every pre-existing
+   * caller: today durationMinutes on this input has no effect on the
+   * student's actual timer regardless of what is passed, so leaving this
+   * unset changes nothing. See resolveExamTimer() in exam-timer.ts.
+   */
+  timerMode?: ExamTimerMode;
   passingPct?: number | null;
   teacherId?: string | null;
   createdBy?: string | null;
@@ -611,8 +621,9 @@ export async function createExamSeries(
   // The sitting cannot be longer than the window it sits in, or the timer
   // promises time the door will not stay open for.
   const windowMinutes = Math.floor((closesAt.getTime() - opensAt.getTime()) / 60000);
+  const timerMode: ExamTimerMode = input.timerMode ?? 'inherit';
   const duration =
-    typeof input.durationMinutes === 'number' && input.durationMinutes > 0
+    timerMode !== 'untimed' && typeof input.durationMinutes === 'number' && input.durationMinutes > 0
       ? Math.min(Math.floor(input.durationMinutes), windowMinutes)
       : null;
 
@@ -662,6 +673,7 @@ export async function createExamSeries(
         opens_at: input.opensAt,
         closes_at: input.closesAt,
         duration_minutes: duration,
+        timer_mode: timerMode,
         passing_pct: passingPct,
         mode,
         proctoring_enabled: proctoringEnabled,
@@ -788,6 +800,7 @@ export interface UpdateExamInput {
   opensAt?: string;
   closesAt?: string;
   durationMinutes?: number | null;
+  timerMode?: ExamTimerMode;
   passingPct?: number | null;
   testId?: string;
 }
@@ -825,6 +838,13 @@ export async function updateExam(
       typeof patch.durationMinutes === 'number' && patch.durationMinutes > 0
         ? Math.min(Math.floor(patch.durationMinutes), windowMinutes)
         : null;
+  }
+  if (patch.timerMode !== undefined) {
+    update.timer_mode = patch.timerMode;
+    // A switch to untimed must not leave a stale duration behind for a future
+    // inherit-or-timed toggle (or the roster/detail-page timer readers) to
+    // misread; overrides whatever durationMinutes was set above, if any.
+    if (patch.timerMode === 'untimed') update.duration_minutes = null;
   }
   if (patch.testId !== undefined) update.test_id = patch.testId;
 
