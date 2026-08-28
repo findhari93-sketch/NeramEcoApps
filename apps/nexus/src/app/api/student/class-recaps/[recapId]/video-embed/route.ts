@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { extractYouTubeId } from '@/lib/youtube';
 import { grantVideoAccess } from '@/lib/video-grant';
 import { isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
+import { errorResponse } from '@/lib/api-errors';
 
 /**
  * GET /api/student/class-recaps/[recapId]/video-embed
@@ -157,7 +158,7 @@ export async function GET(
       );
     }
     console.error('Recap video stream error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, 'Failed to resolve recording');
   }
 }
 

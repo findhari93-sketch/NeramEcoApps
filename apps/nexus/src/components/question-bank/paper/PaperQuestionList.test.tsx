@@ -248,6 +248,44 @@ describe('PaperQuestionList', () => {
   });
 
   /**
+   * There was previously no way to tell which questions were deactivated
+   * short of opening each one, so this queue exists to let a teacher find
+   * the handful hidden from students without scanning the whole paper.
+   */
+  it('counts the questions hidden from students', () => {
+    const withInactive = [
+      { ...MATHS[0], is_active: false },
+      MATHS[1],
+      MATHS[2],
+      ...APT,
+    ] as unknown as NexusQBQuestion[];
+
+    renderList({ questions: withInactive });
+    expect(screen.getByRole('button', { name: 'Inactive 1' })).not.toBeNull();
+  });
+
+  it('narrows to just the questions hidden from students', () => {
+    const withInactive = [
+      { ...MATHS[0], is_active: false },
+      MATHS[1],
+      MATHS[2],
+      ...APT,
+    ] as unknown as NexusQBQuestion[];
+
+    renderList({ questions: withInactive, needsFilter: 'inactive' });
+    expect(screen.getByText('1 of 6 questions')).not.toBeNull();
+    expect(screen.getByText('Mathematics (MCQ) (Q1 to Q1)')).not.toBeNull();
+    expect(screen.queryByText('Aptitude (Q4 to Q6)')).toBeNull();
+  });
+
+  it('sets the inactive filter when its chip is clicked', () => {
+    const onNeedsFilterChange = vi.fn();
+    renderList({ onNeedsFilterChange });
+    fireEvent.click(screen.getByRole('button', { name: /^Inactive/ }));
+    expect(onNeedsFilterChange).toHaveBeenCalledWith('inactive');
+  });
+
+  /**
    * The paper header used to carry a permanently armed, paper-wide
    * "Deactivate 90". It is scoped to a selection now.
    */

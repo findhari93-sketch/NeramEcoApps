@@ -35,6 +35,7 @@ interface TodayClass {
   status: string;
   teams_meeting_url: string | null;
   topic: { title: string } | null;
+  kind: string | null;
 }
 
 interface TeacherDashboardData {
@@ -272,6 +273,11 @@ export default function TeacherDashboard() {
               <Paper
                 key={cls.id}
                 elevation={0}
+                onClick={() =>
+                  router.push(
+                    cls.kind === 'exam' ? `/teacher/timetable/${cls.id}/exam` : '/teacher/timetable',
+                  )
+                }
                 sx={{
                   p: 2,
                   borderRadius: 2.5,
@@ -282,11 +288,13 @@ export default function TeacherDashboard() {
                   alignItems: { xs: 'flex-start', sm: 'center' },
                   flexDirection: { xs: 'column', sm: 'row' },
                   gap: 1.5,
+                  cursor: 'pointer',
                   animation: `fadeInUp 350ms cubic-bezier(0.05, 0.7, 0.1, 1) ${i * 50}ms both`,
                   '@keyframes fadeInUp': {
                     from: { opacity: 0, transform: 'translateY(8px)' },
                     to: { opacity: 1, transform: 'translateY(0)' },
                   },
+                  '&:hover': { borderColor: theme.palette.primary.main },
                 }}
               >
                 <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -333,6 +341,7 @@ export default function TeacherDashboard() {
                       size="small"
                       href={cls.teams_meeting_url}
                       target="_blank"
+                      onClick={(e) => e.stopPropagation()}
                       startIcon={<VideocamOutlinedIcon sx={{ fontSize: '1rem !important' }} />}
                       sx={{
                         textTransform: 'none',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, upsertRecapProgress } from '@neram/database';
+import { errorResponse } from '@/lib/api-errors';
 
 /**
  * POST /api/student/class-recaps/[recapId]/progress
@@ -67,7 +68,6 @@ export async function POST(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to save progress';
-    return NextResponse.json({ error: message }, { status: 401 });
+    return errorResponse(err, 'Failed to save progress');
   }
 }

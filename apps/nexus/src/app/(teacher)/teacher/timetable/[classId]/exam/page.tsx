@@ -61,7 +61,7 @@ export default function TeacherExamPage() {
   const router = useRouter();
   const params = useParams();
   const classId = params.classId as string;
-  const { getToken } = useNexusAuthContext();
+  const { getToken, getTeacherToken } = useNexusAuthContext();
 
   const [exam, setExam] = useState<ExamRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,6 +71,8 @@ export default function TeacherExamPage() {
   const [makeupFor, setMakeupFor] = useState<{ id: string; name: string } | null>(null);
   const [makeupDate, setMakeupDate] = useState('');
   const [makeupReason, setMakeupReason] = useState('');
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -119,6 +121,38 @@ export default function TeacherExamPage() {
     }
   };
 
+  /**
+   * Wrong classroom, wrong paper, or scheduled twice by mistake: this is the
+   * only place a teacher can undo that. Uses the teacher token (not the plain
+   * one `authFetch` carries) because a successful cancel also replaces the
+   * Teams announcement with a "cancelled" card, which needs delegated Graph
+   * scopes, same as the class-cancel flow on the main timetable.
+   */
+  const handleCancelExam = async () => {
+    if (!exam) return;
+    setCancelling(true);
+    setError(null);
+    try {
+      const token = await getTeacherToken();
+      if (!token) {
+        setError('Please sign in again to cancel this exam (extended permissions needed).');
+        return;
+      }
+      const res = await fetch(`/api/exams/${exam.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Could not cancel this exam');
+      router.push('/teacher/timetable');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not cancel this exam');
+    } finally {
+      setCancelling(false);
+      setCancelConfirmOpen(false);
+    }
+  };
+
   const grantMakeup = async () => {
     if (!exam || !makeupFor || !makeupDate) return;
     try {
@@ -163,7 +197,7 @@ export default function TeacherExamPage() {
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-        <IconButton size="small" onClick={() => router.push(`/teacher/timetable/${classId}`)} aria-label="Back to the class">
+        <IconButton size="small" onClick={() => router.push('/teacher/timetable')} aria-label="Back to the timetable">
           <ArrowBackIcon />
         </IconButton>
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -228,6 +262,14 @@ export default function TeacherExamPage() {
             Close exam now
           </Button>
         )}
+        <Button
+          variant="outlined"
+          color="error"
+          onClick={() => setCancelConfirmOpen(true)}
+          sx={{ minHeight: 48 }}
+        >
+          Cancel exam
+        </Button>
       </Box>
 
       <Tabs
@@ -290,6 +332,31 @@ export default function TeacherExamPage() {
           </Button>
           <Button variant="contained" onClick={grantMakeup} disabled={!makeupDate} sx={{ minHeight: 48 }}>
             Open it
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={cancelConfirmOpen} onClose={() => !cancelling && setCancelConfirmOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight: 700 }}>Cancel this exam?</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary">
+            This removes {exam.title || 'this exam'} from the timetable and posts a cancellation notice to
+            the classroom&apos;s Teams channel and group chat. Students will no longer be able to open the
+            test. This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setCancelConfirmOpen(false)} disabled={cancelling} sx={{ minHeight: 48 }}>
+            Keep it
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleCancelExam}
+            disabled={cancelling}
+            sx={{ minHeight: 48 }}
+          >
+            {cancelling ? 'Cancelling...' : 'Cancel exam'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   createExamSeries,
   listExamsForClassroom,
+  listCoveredClasses,
   getSupabaseAdminClient,
   EXAM_ATTEMPT_LIMIT,
 } from '@neram/database';
@@ -9,6 +10,8 @@ import { resolveExamCaller, isStaff } from '@/lib/exam-access';
 import { extractBearerToken } from '@/lib/ms-verify';
 import { announceScheduledTestToTeams } from '@/lib/teams-class-announcements';
 import { notifyStudents } from '@/lib/notify-students';
+import { takeTestHref } from '@/lib/test-return';
+import { classShareLinks, shareBaseUrl } from '@/lib/class-share-links';
 
 /**
  * Schedule an exam, or list the ones a classroom has.
@@ -150,6 +153,8 @@ export async function POST(request: NextRequest) {
     const graphToken = extractBearerToken(request.headers.get('Authorization'));
     const canPostToChannel = Boolean(graphToken) && !/^(test_|imp_|par_)/.test(graphToken || '');
 
+    const shareBase = shareBaseUrl(request.nextUrl.origin);
+
     for (const exam of result.exams) {
       const { data: cls } = await supabase
         .from('nexus_scheduled_classes' as any)
@@ -160,6 +165,15 @@ export async function POST(request: NextRequest) {
 
       if (canPostToChannel && clsRow) {
         try {
+          const takeTestUrl = shareBase + takeTestHref({ testId: exam.test_id });
+          const coveredClasses =
+            coveredClassIds.length > 0
+              ? (await listCoveredClasses(exam.id)).map((c) => ({
+                  ...c,
+                  catchUpUrl: classShareLinks(shareBase).catchUp(c.id),
+                }))
+              : [];
+
           const posted = await announceScheduledTestToTeams(graphToken as string, supabase, exam.classroom_id, {
             title: exam.title || 'Exam',
             scheduled_date: clsRow.scheduled_date,
@@ -168,6 +182,8 @@ export async function POST(request: NextRequest) {
             duration_minutes: exam.duration_minutes,
             mode: effectiveMode,
             attempt_limit: effectiveAttemptLimit,
+            takeTestUrl,
+            coveredClasses,
           });
           if (posted) {
             await supabase

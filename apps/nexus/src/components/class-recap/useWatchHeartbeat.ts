@@ -16,20 +16,20 @@ import useVideoProgress, {
 
 interface UseWatchHeartbeatOptions {
   recapId: string;
-  /** Microsoft access token. The hook stays idle until this is non-null. */
-  token: string | null;
+  /** Fetched fresh before every flush; see useVideoProgress. */
+  getToken: () => Promise<string | null>;
   /** Set false to stop persisting, e.g. once the recap is fully completed. */
   enabled?: boolean;
 }
 
 export function useWatchHeartbeat({
   recapId,
-  token,
+  getToken,
   enabled = true,
 }: UseWatchHeartbeatOptions): VideoProgressHeartbeat {
   return useVideoProgress({
     endpoint: recapId ? `/api/student/class-recaps/${recapId}/progress` : null,
-    token,
+    getToken,
     enabled,
   });
 }

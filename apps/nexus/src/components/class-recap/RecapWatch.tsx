@@ -107,7 +107,6 @@ export default function RecapWatch({
    */
   const [watchMode, setWatchMode] = useState<VideoGateMode>('gated');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [passedIds, setPassedIds] = useState<Set<string>>(new Set());
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<StrippedQuestion[]>([]);
@@ -134,8 +133,6 @@ export default function RecapWatch({
 
   const load = useCallback(async () => {
     try {
-      const t = await getToken();
-      setToken(t);
       const res = await authFetch(`/api/student/class-recaps/${recapId}`);
       const r = res.recap as Recap;
       setRecap(r);
@@ -156,7 +153,7 @@ export default function RecapWatch({
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to load the recap');
     }
-  }, [authFetch, getToken, recapId]);
+  }, [authFetch, recapId]);
 
   useEffect(() => {
     if (!authLoading && recapId) load();
@@ -175,7 +172,7 @@ export default function RecapWatch({
   // Persists the resume point and how much genuinely played. Without this the
   // stored position stays 0, which is what stopped the post-fail test re-arm
   // from ever unlocking.
-  const { onTick, flushNow } = useWatchHeartbeat({ recapId, token });
+  const { onTick, flushNow } = useWatchHeartbeat({ recapId, getToken });
 
   /**
    * Desktop opens a chromeless popup; anything narrow navigates in place, since
@@ -370,7 +367,6 @@ export default function RecapWatch({
       >
         <RecapPlayer
           recapId={recap.id}
-          token={token}
           sections={playerSections}
           onSectionEnd={openQuiz}
           onTimeUpdate={onTick}

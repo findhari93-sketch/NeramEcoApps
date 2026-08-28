@@ -55,7 +55,6 @@ export default function FocusRecapPage() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const [token, setToken] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [sections, setSections] = useState<Section[]>([]);
   const [src, setSrc] = useState<string | null>(null);
@@ -88,13 +87,10 @@ export default function FocusRecapPage() {
    */
   const [watchMode, setWatchMode] = useState<VideoGateMode>('gated');
 
-  const { onTick, flushNow } = useWatchHeartbeat({ recapId, token });
+  const { onTick, flushNow } = useWatchHeartbeat({ recapId, getToken });
 
   const load = useCallback(async () => {
     try {
-      const t = await getToken();
-      setToken(t);
-
       const [recapRes, embedRes] = await Promise.all([
         authFetch(`/api/student/class-recaps/${recapId}`),
         authFetch(`/api/student/class-recaps/${recapId}/video-embed`),
@@ -116,7 +112,7 @@ export default function FocusRecapPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open this recording');
     }
-  }, [authFetch, getToken, recapId]);
+  }, [authFetch, recapId]);
 
   useEffect(() => {
     if (!authLoading && recapId) load();

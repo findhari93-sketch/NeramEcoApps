@@ -456,8 +456,12 @@ export default function PaperDetailPage() {
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexShrink: 0 }}>
         <IconButton
           size="small"
-          aria-label="Back to all papers"
-          onClick={() => router.push('/teacher/question-bank/papers')}
+          aria-label="Back to the question bank"
+          // Always the hub, not the flat /papers table: that table is a separate
+          // destination a teacher rarely visits directly, and landing there
+          // after opening a paper from the hub's Original papers tab put you on
+          // a page you never navigated to in this session.
+          onClick={() => router.push('/teacher/question-bank')}
           sx={{ minWidth: 44, minHeight: 44 }}
         >
           <ArrowBackIcon />

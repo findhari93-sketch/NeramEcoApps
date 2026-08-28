@@ -5,6 +5,7 @@ import { Box, Typography, CircularProgress, Button } from '@neram/ui';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
 import { computeGate, type VideoGateMode } from '@/lib/video-gate';
 import type { VideoTransport } from '@/components/video/types';
+import { useAuthFetch } from '@/components/curriculum/shared';
 
 /**
  * Gated player for a class recording, inline on the recap page.
@@ -49,7 +50,6 @@ export interface RecapPlayerSection {
 
 interface RecapPlayerProps {
   recapId: string;
-  token?: string | null;
   sections: RecapPlayerSection[];
   /** Fires with the index of the checkpoint whose quiz should open. */
   onSectionEnd: (sectionIndex: number) => void;
@@ -80,7 +80,6 @@ interface Watermark {
 
 export default function RecapPlayer({
   recapId,
-  token,
   sections,
   onSectionEnd,
   onTimeUpdate,
@@ -88,6 +87,7 @@ export default function RecapPlayer({
   onFullscreenChange,
   mode = 'gated',
 }: RecapPlayerProps) {
+  const authFetch = useAuthFetch();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Whichever surface is live. The checkpoint list drives playback through this,
   // so it has to work on the YouTube path too.
@@ -190,38 +190,34 @@ export default function RecapPlayer({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/student/class-recaps/${recapId}/video-embed${token ? `?token=${encodeURIComponent(token)}` : ''}`,
-        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setWatermark(data.watermark || { name: 'Neram student', code: 'NX-000000' });
-        if (data.video_source === 'youtube' || data.mode === 'youtube') {
-          setYoutubeId(data.youtube_id);
-          setStreamUrl(null);
-        } else {
-          setStreamUrl(data.streamUrl || data.src);
-          setYoutubeId(null);
-        }
-        // Only seed the resume point on the first load. A re-mint mid-class sets
-        // it from the live playhead instead (see handleVideoError), and taking
-        // the server's stale value there would jump the student backwards.
-        setResumeAt((prev) => (prev > 0 ? prev : Number(data.resume_at) || 0));
-        // Deliberately NOT resetting the retry counter here. A successful mint
-        // says nothing about whether the video then plays, and resetting on the
-        // fetch turns "fails instantly, every time" into an endless refetch loop.
-        // It resets on real playback progress instead, in the tick handler.
+      // authFetch fetches a fresh Microsoft token on every call and turns a
+      // 401 into a friendly "session expired" message plus a rate-limited
+      // re-auth, instead of a raw upstream error rendered straight into the
+      // player. That matters here because this same call is what "Try again"
+      // and the auto-retry-on-video-error path both re-run.
+      const data = await authFetch(`/api/student/class-recaps/${recapId}/video-embed`);
+      setWatermark(data.watermark || { name: 'Neram student', code: 'NX-000000' });
+      if (data.video_source === 'youtube' || data.mode === 'youtube') {
+        setYoutubeId(data.youtube_id);
+        setStreamUrl(null);
       } else {
-        const errData = await res.json().catch(() => ({ error: 'Failed to load recording' }));
-        setError(errData.error || 'Failed to load recording');
+        setStreamUrl(data.streamUrl || data.src);
+        setYoutubeId(null);
       }
-    } catch {
-      setError('Network error, could not load the recording');
+      // Only seed the resume point on the first load. A re-mint mid-class sets
+      // it from the live playhead instead (see handleVideoError), and taking
+      // the server's stale value there would jump the student backwards.
+      setResumeAt((prev) => (prev > 0 ? prev : Number(data.resume_at) || 0));
+      // Deliberately NOT resetting the retry counter here. A successful mint
+      // says nothing about whether the video then plays, and resetting on the
+      // fetch turns "fails instantly, every time" into an endless refetch loop.
+      // It resets on real playback progress instead, in the tick handler.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load recording');
     } finally {
       setLoading(false);
     }
-  }, [recapId, token]);
+  }, [recapId, authFetch]);
 
   useEffect(() => {
     fetchStreamUrl();

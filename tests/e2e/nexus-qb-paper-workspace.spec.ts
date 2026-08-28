@@ -261,7 +261,7 @@ test.describe('QB paper workspace', () => {
     await assertNoHorizontalOverflow(page);
 
     await assertTouchTargetSize(page, '[aria-label="More paper actions"]');
-    await assertTouchTargetSize(page, '[aria-label="Back to all papers"]');
+    await assertTouchTargetSize(page, '[aria-label="Back to the question bank"]');
   });
 
   test('mobile: the pane opens as a full-screen sheet with no horizontal overflow', async () => {

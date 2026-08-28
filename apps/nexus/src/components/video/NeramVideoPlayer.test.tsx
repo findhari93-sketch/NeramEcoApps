@@ -357,6 +357,33 @@ describe('NeramVideoPlayer: resuming', () => {
     expect(ctl.now()).toBe(120);
   });
 
+  it('does not open the checkpoint quiz from the silent resume-seek on mount (NXS-0120)', () => {
+    // The resume-seek in onLoadedMetadata is programmatic: nothing was played.
+    // But setting currentTime still fires a native timeupdate once the seek
+    // settles, and that timeupdate must not be read as "reached the boundary
+    // by watching." Landing resumeAt at/past an unpassed checkpoint's boundary
+    // (banked by a previous session that reached but never passed it) must not
+    // open the quiz before the student has watched anything this session.
+    const { video, ctl, onCheckpointReached } = setup({ unlocked: 120, resumeAt: 400 });
+    fire(video, 'loadedmetadata');
+    expect(ctl.now()).toBe(120); // clamped, as before
+    fire(video, 'timeupdate'); // the synthetic tick the resume-seek produces
+    expect(onCheckpointReached).not.toHaveBeenCalled();
+  });
+
+  it('still opens the checkpoint quiz on the very next genuine tick once the student presses play', () => {
+    // The suppression above is one-shot, not a latch. Choosing to continue
+    // from exactly the checkpoint is a real gesture and must fire immediately
+    // - that is honest UX, not a regression of the fix above.
+    const { video, ctl, onCheckpointReached } = setup({ unlocked: 120, resumeAt: 400 });
+    fire(video, 'loadedmetadata');
+    fire(video, 'timeupdate'); // consumed by the suppression, no call
+    video.play();
+    fire(video, 'timeupdate'); // a genuine tick after an explicit play press
+    expect(onCheckpointReached).toHaveBeenCalledTimes(1);
+    expect(ctl.isPaused()).toBe(true);
+  });
+
   it('honours a resume point that is inside the unlocked stretch', () => {
     const { video, ctl } = setup({ unlocked: 300, resumeAt: 90 });
     fire(video, 'loadedmetadata');

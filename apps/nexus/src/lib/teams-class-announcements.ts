@@ -88,6 +88,13 @@ export function buildRescheduledHtml(
 /**
  * Card shown in the channel/chat when a test is scheduled. Carries no join
  * link: an exam/scheduled test has no Teams meeting, per the file header.
+ *
+ * `coveredClasses` links each class this test sits on straight to its
+ * catch-up page, so a student who missed (or wants to revise) the lecture
+ * gets there in one tap rather than hunting through the timetable. Any
+ * revision material a teacher tagged onto that class already surfaces on
+ * that same catch-up page through the app's own secure reader, so this card
+ * deliberately never links a study file directly.
  */
 export function buildScheduledTestHtml(exam: {
   title: string;
@@ -98,6 +105,10 @@ export function buildScheduledTestHtml(exam: {
   mode: 'ranked' | 'practice';
   /** null means unlimited. Only meaningful when mode is 'practice'. */
   attempt_limit: number | null;
+  /** Absolute URL to the test player. Omitted only if it could not be built. */
+  takeTestUrl?: string | null;
+  /** The lecture(s) this test sits on, each with its catch-up URL. */
+  coveredClasses?: { id: string; title: string | null; scheduled_date: string; catchUpUrl: string }[];
 }): string {
   const kind = exam.mode === 'practice' ? 'Practice test' : 'Exam';
   const attempts =
@@ -106,9 +117,16 @@ export function buildScheduledTestHtml(exam: {
         ? 'unlimited attempts'
         : `${exam.attempt_limit} attempt${exam.attempt_limit === 1 ? '' : 's'}`
       : 'one attempt';
+  const covered = exam.coveredClasses ?? [];
   return `<h3>📝 ${kind} scheduled: ${esc(exam.title)}</h3>
 <p><strong>When:</strong> ${esc(exam.scheduled_date)}, ${esc(exam.start_time)} to ${esc(exam.end_time)} (IST)</p>
-<p>${exam.duration_minutes ? `${exam.duration_minutes} minutes, ` : ''}${attempts}.</p>`;
+<p>${exam.duration_minutes ? `${exam.duration_minutes} minutes, ` : ''}${attempts}.</p>${
+    covered.length
+      ? `\n<p><strong>Covers</strong></p>\n<ul>${covered
+          .map((c) => `<li><a href="${c.catchUpUrl}">${esc(c.title || 'Class')} (${esc(c.scheduled_date)})</a></li>`)
+          .join('')}</ul>\n<p>Catch up on the class${covered.length === 1 ? '' : 'es'} above first (revision material is there too, if your teacher added any), then take the test.</p>`
+      : ''
+  }${exam.takeTestUrl ? `\n<p><a href="${exam.takeTestUrl}">📝 Take the test</a></p>` : ''}`;
 }
 
 /**
@@ -131,6 +149,8 @@ export async function announceScheduledTestToTeams(
     duration_minutes: number | null;
     mode: 'ranked' | 'practice';
     attempt_limit: number | null;
+    takeTestUrl?: string | null;
+    coveredClasses?: { id: string; title: string | null; scheduled_date: string; catchUpUrl: string }[];
   },
 ): Promise<{ channelId: string | null; channelMessageId: string | null; chatMessageId: string | null } | null> {
   const { data: classroom } = await supabase

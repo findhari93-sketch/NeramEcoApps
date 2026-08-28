@@ -189,6 +189,16 @@ export default function NeramVideoPlayer({
   cbRef.current = { onTimeUpdate, onCheckpointReached, onLoadedMetadata, onBlockedSeek, onError, onFullscreenChange };
   const resumeRef = useRef(resumeAt);
   resumeRef.current = resumeAt;
+  // One-shot: set only when onLoadedMetadata issues the silent mount-time
+  // resume-seek, consumed unconditionally by the very next onTick regardless
+  // of what that tick does. A programmatic seek fires a native timeupdate even
+  // though nothing has been played (video.paused stays true throughout), so
+  // without this, landing resumeAt on or past an owed checkpoint's boundary
+  // opens the quiz before the student has watched anything this session. Not
+  // a latch: it does not survive past that one tick, so a genuine re-crossing
+  // of the boundary for any other reason still fires every time, per rule
+  // (d)'s no-latch guarantee above.
+  const suppressNextCheckpointRef = useRef(false);
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
   const speedRef = useRef(speed);
@@ -261,6 +271,11 @@ export default function NeramVideoPlayer({
         if (dur > 0) setDuration(dur);
         cbRef.current.onTimeUpdate?.(seconds, dur);
 
+        // Consumed here, unconditionally, before any branch below can return
+        // early - so it can only ever suppress the one tick it was set for.
+        const suppressCheckpoint = suppressNextCheckpointRef.current;
+        suppressNextCheckpointRef.current = false;
+
         if (clampIfBeyond(seconds)) {
           transportRef.current?.pause();
           return;
@@ -278,7 +293,9 @@ export default function NeramVideoPlayer({
           if (!cbRef.current.onFullscreenChange && document.fullscreenElement === containerRef.current) {
             void document.exitFullscreen?.()?.catch(() => {});
           }
-          cbRef.current.onCheckpointReached?.();
+          // The synthetic tick from the silent mount-time resume-seek must not
+          // open the quiz with zero playback (NXS-0120).
+          if (!suppressCheckpoint) cbRef.current.onCheckpointReached?.();
         }
       },
       onSeeked: (seconds) => {
@@ -296,7 +313,10 @@ export default function NeramVideoPlayer({
         const unlocked = gateRef.current.unlockedUntil;
         const ceiling = unlocked > 0 ? Math.min(unlocked, dur) : dur;
         const target = Math.min(resumeRef.current, ceiling);
-        if (target > 0 && target < dur - 1) transportRef.current?.seek(target);
+        if (target > 0 && target < dur - 1) {
+          suppressNextCheckpointRef.current = true;
+          transportRef.current?.seek(target);
+        }
       },
       // A checkpoint whose end runs past the file is never reached by the tick
       // handler, so without this the last quiz would simply never open.

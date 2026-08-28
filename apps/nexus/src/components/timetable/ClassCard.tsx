@@ -21,6 +21,12 @@ export interface ClassCardData {
   start_time: string;
   end_time: string;
   status: string;
+  /**
+   * 'exam' for a scheduled test's timetable row, absent/'lecture' otherwise.
+   * An exam row has no Teams meeting of its own (see createExamSeries) and is
+   * managed on its own page, not through the generic class panel.
+   */
+  kind?: string | null;
   teams_meeting_url: string | null;
   teams_meeting_join_url: string | null;
   teams_meeting_id: string | null;

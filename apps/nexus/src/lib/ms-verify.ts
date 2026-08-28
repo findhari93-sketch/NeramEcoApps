@@ -253,7 +253,12 @@ export async function verifyMsToken(
     // Failures are never cached. A token rejected once may be accepted a moment later
     // (a clock skew, a transient Graph 5xx), and caching the rejection would strand a
     // signed-in teacher for the length of the TTL.
-    throw new Error(`Invalid Microsoft token: ${response.status} ${errorText}`);
+    //
+    // The raw Graph body is logged, not thrown: it once ended up verbatim in a
+    // route's JSON response and from there rendered as literal text inside a
+    // student's video player.
+    console.error(`[ms-verify] Graph token check failed: ${response.status} ${errorText}`);
+    throw new Error(`Invalid Microsoft token: ${response.status}`);
   }
 
   const profile = await response.json();

@@ -145,4 +145,31 @@ describe('verifyMsToken identity cache', () => {
     await expect(verifyMsToken(null)).rejects.toThrow(/Missing or invalid/);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('never leaks the raw Graph error body into the thrown message', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchSpy = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: async () =>
+        '{"error":{"code":"InvalidAuthenticationToken","message":"Lifetime validation failed, the token is expired."}}',
+    });
+    vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
+
+    let caught: Error | null = null;
+    try {
+      await verifyMsToken('Bearer dead-token');
+    } catch (err) {
+      caught = err as Error;
+    }
+
+    expect(caught).not.toBeNull();
+    expect(caught!.message).toMatch(/^Invalid Microsoft token: 401$/);
+    expect(caught!.message).not.toContain('InvalidAuthenticationToken');
+    expect(caught!.message).not.toContain('Lifetime validation');
+    // The raw body is still logged server-side, just not returned to a caller.
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('InvalidAuthenticationToken'));
+
+    consoleSpy.mockRestore();
+  });
 });

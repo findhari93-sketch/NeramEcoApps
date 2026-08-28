@@ -71,7 +71,6 @@ export default function StudyTrackWatchPage() {
   const { getToken, loading: authLoading } = useNexusAuthContext();
   const authFetch = useAuthFetch();
 
-  const [token, setToken] = useState<string | null>(null);
   const [track, setTrack] = useState<{
     id: string;
     study_file_id: string;
@@ -103,7 +102,7 @@ export default function StudyTrackWatchPage() {
 
   const { onTick, onBlockedSeek, flushNow } = useVideoProgress({
     endpoint: trackId ? `/api/student/study-videos/tracks/${trackId}/progress` : null,
-    token,
+    getToken,
     // A finished track keeps no further progress: revision is not watching.
     enabled: mode === 'gated',
   });
@@ -112,8 +111,6 @@ export default function StudyTrackWatchPage() {
     setLoading(true);
     setError(null);
     try {
-      const t = await getToken();
-      setToken(t);
       const data = await authFetch(`/api/student/study-videos/tracks/${trackId}`);
       setTrack(data.track);
       setSections(data.sections || []);
@@ -135,7 +132,7 @@ export default function StudyTrackWatchPage() {
     } finally {
       setLoading(false);
     }
-  }, [authFetch, getToken, trackId]);
+  }, [authFetch, trackId]);
 
   useEffect(() => {
     if (!authLoading && trackId) load();

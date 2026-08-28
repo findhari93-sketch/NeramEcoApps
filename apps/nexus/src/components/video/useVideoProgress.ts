@@ -31,6 +31,16 @@ import { createWatchAccumulator } from '@/lib/watch-progress';
  * a URL ends up in access logs, proxy logs and the Referer of anything the page
  * loads afterwards. keepalive survives unload the same way and carries a normal
  * Authorization header, so that query parameter stays unused here.
+ *
+ * The token is fetched fresh on every periodic/explicit flush rather than
+ * handed in once, because a caller that captured it at mount and held it in
+ * state left every heartbeat after the Microsoft token's ~60-90 minute
+ * lifetime silently failing for the rest of a long class, since this hook
+ * never inspected the response. The one path that still reads a cached token
+ * is the keepalive/unload flush: a page can tear down before a fresh
+ * `getToken()` promise resolves, which would drop that flush entirely, so it
+ * synchronously reuses whatever the most recent periodic flush obtained
+ * instead of awaiting a new one.
  */
 
 const FLUSH_INTERVAL_MS = 10_000;
@@ -38,8 +48,11 @@ const FLUSH_INTERVAL_MS = 10_000;
 export interface UseVideoProgressOptions {
   /** Where to POST. Null keeps the hook idle, e.g. before the id is known. */
   endpoint: string | null;
-  /** Microsoft access token. The hook stays idle until this is non-null. */
-  token: string | null;
+  /**
+   * Fetched fresh before every periodic/explicit flush, never cached by the
+   * caller. Resolving to null is treated like there being no session yet.
+   */
+  getToken: () => Promise<string | null>;
   /** Set false to stop persisting, e.g. once the video is fully completed. */
   enabled?: boolean;
 }
@@ -59,12 +72,16 @@ export interface VideoProgressHeartbeat {
 
 export function useVideoProgress({
   endpoint,
-  token,
+  getToken,
   enabled = true,
 }: UseVideoProgressOptions): VideoProgressHeartbeat {
   const accumulatorRef = useRef(createWatchAccumulator());
-  const tokenRef = useRef(token);
-  tokenRef.current = token;
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+  // The most recent token a periodic/explicit flush actually obtained. Read
+  // synchronously by the keepalive path instead of awaiting a fresh one, so an
+  // unloading page cannot drop a flush by tearing down mid-lookup.
+  const lastTokenRef = useRef<string | null>(null);
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
   const endpointRef = useRef(endpoint);
@@ -74,47 +91,94 @@ export function useVideoProgress({
   const inFlightRef = useRef(false);
   const blockedRef = useRef(0);
 
-  const flush = useCallback((useKeepalive: boolean) => {
-    const accumulator = accumulatorRef.current;
-    const authToken = tokenRef.current;
-    const url = endpointRef.current;
-    if (!enabledRef.current || !authToken || !url) return;
-    // A burst of refused seeks with no playback still deserves a write: it is
-    // the case a tutor most wants to see.
-    if (!accumulator.hasPending() && blockedRef.current === 0) return;
-    if (inFlightRef.current && !useKeepalive) return;
+  const send = useCallback(
+    (url: string, authToken: string, useKeepalive: boolean, payload: Record<string, number>) => {
+      inFlightRef.current = true;
+      void fetch(url, {
+        method: 'POST',
+        keepalive: useKeepalive,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+        .catch(() => {
+          // Offline or unloading. The next tick re-dirties the accumulator, so
+          // there is nothing useful to do here and nothing worth alarming the
+          // student about.
+        })
+        .finally(() => {
+          inFlightRef.current = false;
+        });
+    },
+    [],
+  );
 
-    const { position, watchedDelta, duration } = accumulator.snapshot();
-    const blocked = blockedRef.current;
-    // Cleared optimistically. Losing one flush costs at most a few seconds of
-    // resume accuracy, whereas holding the delta until a response arrives would
-    // double-count it against the next flush on a slow connection.
-    accumulator.markFlushed();
-    blockedRef.current = 0;
-    inFlightRef.current = true;
+  const flush = useCallback(
+    (useKeepalive: boolean) => {
+      const accumulator = accumulatorRef.current;
+      const url = endpointRef.current;
+      if (!enabledRef.current || !url) return;
+      // A burst of refused seeks with no playback still deserves a write: it is
+      // the case a tutor most wants to see.
+      if (!accumulator.hasPending() && blockedRef.current === 0) return;
+      if (inFlightRef.current && !useKeepalive) return;
 
-    void fetch(url, {
-      method: 'POST',
-      keepalive: useKeepalive,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify({
+      const { position, watchedDelta, duration } = accumulator.snapshot();
+      const blocked = blockedRef.current;
+      // Cleared optimistically. Losing one flush costs at most a few seconds of
+      // resume accuracy, whereas holding the delta until a response arrives would
+      // double-count it against the next flush on a slow connection.
+      accumulator.markFlushed();
+      blockedRef.current = 0;
+
+      const payload = {
         last_video_position_seconds: Math.round(position),
         watched_delta_seconds: Math.round(watchedDelta),
         duration_seconds: Math.round(duration),
         blocked_seeks_delta: blocked,
-      }),
-    })
-      .catch(() => {
-        // Offline or unloading. The next tick re-dirties the accumulator, so
-        // there is nothing useful to do here and nothing worth alarming the
-        // student about.
+      };
+
+      if (useKeepalive) {
+        // No await here on purpose. A page tearing down mid-lookup would mean
+        // fetch() never gets called at all, which is worse than reusing a
+        // token that is at most ~10 seconds old, harmless given a Microsoft
+        // access token lives 60-90+ minutes.
+        const authToken = lastTokenRef.current;
+        if (authToken) send(url, authToken, true, payload);
+        return;
+      }
+
+      inFlightRef.current = true; // reentrancy guard while the token resolves
+      void getTokenRef
+        .current()
+        .then((authToken) => {
+          inFlightRef.current = false;
+          if (!authToken) return;
+          lastTokenRef.current = authToken;
+          send(url, authToken, false, payload);
+        })
+        .catch(() => {
+          inFlightRef.current = false;
+        });
+    },
+    [send],
+  );
+
+  // Seeds the keepalive fallback before the first periodic tick would
+  // otherwise have a chance to (up to FLUSH_INTERVAL_MS after mount).
+  useEffect(() => {
+    let cancelled = false;
+    void getTokenRef
+      .current()
+      .then((t) => {
+        if (!cancelled && t) lastTokenRef.current = t;
       })
-      .finally(() => {
-        inFlightRef.current = false;
-      });
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const onTick = useCallback((seconds: number, duration: number) => {

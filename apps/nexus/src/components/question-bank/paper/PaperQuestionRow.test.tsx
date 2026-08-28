@@ -137,4 +137,25 @@ describe('PaperQuestionRow', () => {
     );
     expect(screen.getByLabelText('Self-assessed')).not.toBeNull();
   });
+
+  /**
+   * There was previously nothing on the row itself distinguishing an
+   * inactive question from an active one, so a teacher browsing "All" could
+   * not tell which questions students could actually see.
+   */
+  it('flags a deactivated question as hidden from students', () => {
+    render(
+      <PaperQuestionRow question={q({ is_active: false })} selected={false} active={false} tagCount={1}
+        onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    expect(screen.getByLabelText('Hidden from students')).not.toBeNull();
+  });
+
+  it('does not flag an active question', () => {
+    render(
+      <PaperQuestionRow question={q({ is_active: true })} selected={false} active={false} tagCount={1}
+        onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    expect(screen.queryByLabelText('Hidden from students')).toBeNull();
+  });
 });

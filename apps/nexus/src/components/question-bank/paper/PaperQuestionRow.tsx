@@ -7,6 +7,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import LinkIcon from '@mui/icons-material/Link';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
 import { questionImageSlots, questionMissingSolutionImage } from '@/lib/qb-image-needs';
@@ -204,6 +205,22 @@ export default function PaperQuestionRow({
           </Tooltip>
         ) : (
           <Box sx={{ flexShrink: 0, width: 18 }} />
+        )}
+
+        {/* A fixed cell like the two above, so an inactive question stands out
+            while browsing "All" instead of only when the Inactive filter is
+            on. Blank when active, so the column stays quiet for the common case. */}
+        {question.is_active ? (
+          <Box sx={{ flexShrink: 0, width: 18 }} />
+        ) : (
+          <Tooltip title="Deactivated: students cannot see this question" arrow>
+            <Box sx={{ flexShrink: 0, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <VisibilityOffOutlinedIcon
+                aria-label="Hidden from students"
+                sx={{ fontSize: 14, color: 'text.disabled' }}
+              />
+            </Box>
+          </Tooltip>
         )}
 
         <Tooltip title={tagCount > 0 ? `${tagCount} tags` : 'No tags'} arrow>

@@ -52,8 +52,10 @@ export type PaperQuestionMode = 'edit' | 'images';
  * Was `ImageFilter`, and only applied in Images mode. It covers two backlogs
  * now (figures and worked solutions) and applies in both modes: "show me what
  * still needs doing" is not a thing a teacher only wants while pasting.
+ * `'inactive'` narrows to questions hidden from students, so a teacher can
+ * find the handful that got deactivated without scanning the whole paper.
  */
-export type NeedsFilter = 'all' | 'figures' | 'missing-figure' | 'missing-solution';
+export type NeedsFilter = 'all' | 'figures' | 'missing-figure' | 'missing-solution' | 'inactive';
 
 /** A section the list can be narrowed to, or '__none__' for unsectioned rows. */
 export type PaperSectionFilter = QBQuestionSection | '__none__';
@@ -322,6 +324,7 @@ export default function PaperQuestionList({
     () => bySection.filter((q) => questionMissingSolutionImage(q)).length,
     [bySection],
   );
+  const inactiveCount = useMemo(() => bySection.filter((q) => !q.is_active).length, [bySection]);
 
   /**
    * Every section actually present on this paper, for the Section select.
@@ -347,7 +350,9 @@ export default function PaperQuestionList({
         ? (q) => questionMissingImages(q)
         : needsFilter === 'missing-solution'
           ? (q) => questionMissingSolutionImage(q)
-          : questionReferencesFigure;
+          : needsFilter === 'inactive'
+            ? (q) => !q.is_active
+            : questionReferencesFigure;
     return bySection.filter(predicate);
   }, [bySection, needsFilter]);
 
@@ -402,6 +407,7 @@ export default function PaperQuestionList({
           },
         ])
       : []),
+    { value: 'inactive', label: 'Inactive', count: inactiveCount, color: 'secondary' },
   ];
 
   return (

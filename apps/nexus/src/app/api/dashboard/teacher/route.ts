@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       // Today's classes
       supabase
         .from('nexus_scheduled_classes')
-        .select('id, title, start_time, end_time, status, teams_meeting_url, topic:nexus_topics(title)')
+        .select('id, title, start_time, end_time, status, teams_meeting_url, kind, topic:nexus_topics(title)')
         .eq('classroom_id', classroomId)
         .eq('scheduled_date', today)
         .order('start_time', { ascending: true }),

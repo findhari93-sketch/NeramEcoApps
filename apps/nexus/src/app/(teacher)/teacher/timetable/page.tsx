@@ -659,6 +659,13 @@ export default function TeacherTimetable() {
   }, [activeClassroom?.id, activeClassroom?.ms_team_id, getToken]);
 
   const handleClassClick = (cls: ClassCardData) => {
+    // An exam has no Teams meeting, no reschedule and no "cancel class" of its
+    // own: it is managed on its own page (roster, results, cancel), not the
+    // generic class panel built for lectures.
+    if (cls.kind === 'exam') {
+      router.push(`/teacher/timetable/${cls.id}/exam`);
+      return;
+    }
     setSelectedClassId(cls.id);
     setPanelOpen(true);
   };
