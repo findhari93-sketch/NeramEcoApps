@@ -14,6 +14,7 @@ import {
   Alert,
   IconButton,
   Divider,
+  TextField,
   alpha,
   useTheme,
   useMediaQuery,
@@ -138,6 +139,11 @@ export default function TakeTestPage() {
       : safeReturnLabel(searchParams.get('return_label'));
 
   const [loadError, setLoadError] = useState<string | null>(null);
+  // A closed class test can be asked about, unlike an expired link.
+  const [canRequestReopen, setCanRequestReopen] = useState(false);
+  const [reopenNote, setReopenNote] = useState('');
+  const [reopenBusy, setReopenBusy] = useState(false);
+  const [reopenAsked, setReopenAsked] = useState(false);
 
   /**
    * What broke while this student was sitting this paper.
@@ -219,6 +225,10 @@ export default function TakeTestPage() {
         console.error('Failed to load test:', res.status);
         const j = await res.json().catch(() => ({}));
         if (j?.error) setLoadError(j.error);
+        // A closed class test is not a dead link: the student can ask their
+        // teacher to reopen it, and the refusal carries whether that offer is
+        // still available (they may have asked already).
+        setCanRequestReopen(j?.code === 'CLASS_TEST_CLOSED' && j?.can_request === true);
         // A paper that will not open never creates an attempt row, so this
         // failure was previously invisible to everyone: the student saw an
         // error, walked away, and the teacher's screen said "0 attempts".
@@ -725,6 +735,12 @@ export default function TakeTestPage() {
               {returnLabel}
             </Button>
           </Box>
+
+          {/* Pressing Try again used to lose this review for good. It no longer
+              does, but a student has no way to know that unless told. */}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
+            You can reopen these answers any time from My Performance.
+          </Typography>
         </Box>
       </Box>
     );
@@ -767,6 +783,54 @@ export default function TakeTestPage() {
           <Typography variant="body1" color="text.secondary">
             {loadError || 'Unable to load test. Please go back and try again.'}
           </Typography>
+          {/* A closed class test has a way back in, so the refusal offers it
+              rather than leaving the student at a dead end. */}
+          {canRequestReopen && placementId && (
+            <Box sx={{ mt: 2, maxWidth: 420, mx: 'auto' }}>
+              {reopenAsked ? (
+                <Typography variant="body2" color="success.main">
+                  Asked. Your teacher will see this on their class list.
+                </Typography>
+              ) : (
+                <>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    multiline
+                    minRows={2}
+                    placeholder="Tell your teacher why (optional)"
+                    value={reopenNote}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReopenNote(e.target.value)}
+                    sx={{ mb: 1 }}
+                  />
+                  <Button
+                    variant="contained"
+                    disabled={reopenBusy}
+                    onClick={async () => {
+                      setReopenBusy(true);
+                      try {
+                        const token = await getToken();
+                        await fetch(`/api/tests/runs/${placementId}/access/request`, {
+                          method: 'POST',
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify({ note: reopenNote }),
+                        });
+                        setReopenAsked(true);
+                      } finally {
+                        setReopenBusy(false);
+                      }
+                    }}
+                    sx={{ textTransform: 'none', minHeight: 48 }}
+                  >
+                    Ask my teacher to reopen it
+                  </Button>
+                </>
+              )}
+            </Box>
+          )}
           <Button
             variant="outlined"
             onClick={() => router.push(returnTo)}

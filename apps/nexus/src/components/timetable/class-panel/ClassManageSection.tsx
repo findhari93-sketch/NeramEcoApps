@@ -30,7 +30,7 @@ export default function ClassManageSection({
 }: ClassPanelTabProps) {
   if (role !== 'teacher') return null;
 
-  const { isUpcoming, isCancelled, hasCalendarEntry, isRealChannelMeeting, needsCalendarRepair } = state;
+  const { isUpcoming, isPast, isCancelled, hasCalendarEntry, isRealChannelMeeting, needsCalendarRepair } = state;
 
   return (
     <>
@@ -80,6 +80,26 @@ export default function ClassManageSection({
         )}
 
         {isCancelled && onDeletePermanent && (
+          <Button
+            variant="outlined"
+            fullWidth
+            color="error"
+            startIcon={<DeleteForeverIcon />}
+            onClick={() => onConfirm('delete')}
+            sx={{ minHeight: 48, textTransform: 'none' }}
+          >
+            Delete Permanently
+          </Button>
+        )}
+
+        {/* A class that ran out the clock without ever being cancelled (typically
+            one scheduled onto a date that had already passed) satisfies neither
+            condition above: not upcoming, so no Cancel; never cancelled, so no
+            Delete either. Left as-is it is unrecoverable from the UI, so it gets
+            its own direct path straight to permanent delete, skipping the "mark
+            cancelled" step entirely since the class never happened in the first
+            place and a "Cancelled" card for a bygone slot would only confuse. */}
+        {isPast && !isCancelled && onDeletePermanent && (
           <Button
             variant="outlined"
             fullWidth

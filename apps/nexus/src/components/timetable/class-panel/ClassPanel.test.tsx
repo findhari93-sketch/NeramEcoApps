@@ -145,6 +145,23 @@ describe('ClassPanel shell', () => {
     expect(screen.getByRole('tab', { name: 'Prep' })).toBeTruthy();
   });
 
+  it('offers Delete Permanently, not Cancel or Edit, for a past class that was never cancelled', () => {
+    // The exact state the stray "Untitled topic class" landed in: created for a
+    // date already gone by, so it is past but nothing ever marked it cancelled.
+    // isUpcoming is false (no Cancel/Edit) and isCancelled is false (no Delete
+    // via that branch either), so this state needs its own direct path.
+    renderPanel({
+      cls: makeClass({ scheduled_date: PAST_DAY, status: 'scheduled' }),
+      onEdit: () => {},
+      onDelete: () => {},
+      onDeletePermanent: () => {},
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Class' }));
+    expect(screen.getByRole('button', { name: /delete permanently/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /cancel class/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^edit$/i })).toBeNull();
+  });
+
   it('keeps teacher-only management off the student panel', () => {
     renderPanel({ role: 'student', onEdit: () => {}, onReschedule: () => {} });
     expect(screen.queryByRole('button', { name: /reschedule/i })).toBeNull();

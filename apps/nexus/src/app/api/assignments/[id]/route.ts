@@ -32,7 +32,10 @@ import {
 import type { GalleryReactionType } from '@neram/database/types';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
-import { notifyAssignmentPublished, notifyAssignmentReviewed } from '@/lib/timetable-notifications';
+import { notifyAssignmentReviewed } from '@/lib/timetable-notifications';
+import { announceAssignment } from '@/lib/teams-assignment-announcements';
+import { extractBearerToken } from '@/lib/ms-verify';
+import { shareBaseUrl } from '@/lib/class-share-links';
 import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
 import { classStartIso } from '@/lib/prework';
 import { resolveSubmitMode, lockedReason } from '@/lib/assignment-submit-window';
@@ -382,12 +385,32 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           status: 'published',
           published_at: new Date().toISOString(),
         });
-        notifyAssignmentPublished(
-          assignment.classroom_id,
-          updated.title,
-          params.id,
-          updated.due_at,
-        ).catch((e) => console.error('notifyAssignmentPublished failed:', e));
+        // Publishing is the moment students may see this work, so it is the
+        // moment they get told about it: Teams assignment channel, group chat,
+        // Teams activity ping and both bells. Fired without awaiting, because a
+        // Graph round trip must not slow down (or fail) the publish itself.
+        //
+        // The card names the class when the assignment already carries one,
+        // which is why an assignment created FROM the timetable produces a
+        // single complete message here rather than a generic one now and a
+        // "linked to a class" one later.
+        announceAssignment({
+          assignment: {
+            id: params.id,
+            classroom_id: assignment.classroom_id,
+            scheduled_class_id: (updated as any).scheduled_class_id ?? null,
+            title: updated.title,
+            assignment_type: (updated as any).assignment_type === 'drawing' ? 'drawing' : 'document',
+            due_at: updated.due_at,
+            evaluation_type: (updated as any).evaluation_type === 'stars' ? 'stars' : 'marks',
+            max_marks: (updated as any).max_marks ?? null,
+            instructions: (updated as any).instructions ?? null,
+          },
+          kind: 'published',
+          token: extractBearerToken(request.headers.get('Authorization')),
+          shareBase: shareBaseUrl(request.nextUrl.origin),
+          supabase: getSupabaseAdminClient(),
+        }).catch((e) => console.error('announceAssignment (publish) failed:', e));
         return NextResponse.json({ assignment: updated });
       }
 

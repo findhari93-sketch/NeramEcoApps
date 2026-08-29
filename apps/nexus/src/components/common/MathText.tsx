@@ -11,6 +11,61 @@ interface MathTextProps {
   component?: React.ElementType;
   sx?: Record<string, unknown>;
   color?: string;
+  /**
+   * Search terms to mark in the rendered output.
+   *
+   * Applied ONLY to plain-text segments. Math segments are handed to KaTeX
+   * untouched, because injecting a <mark> inside `$...$` corrupts the LaTeX
+   * and KaTeX renders the whole formula as red raw source. Doing the
+   * highlighting here, after parseSegments has already separated the two, is
+   * what makes that failure impossible rather than merely unlikely.
+   */
+  highlight?: string[];
+}
+
+/** Terms come from user input, so they must not be trusted as regex source. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Wrap each occurrence of a search term in a <mark>.
+ *
+ * Substring matching is deliberate: the search engine matches prefixes, so a
+ * student who typed "parabo" should see the first six letters of "parabola"
+ * lit up rather than nothing at all.
+ */
+function markTerms(text: string, terms: string[]): React.ReactNode {
+  if (terms.length === 0) return text;
+
+  const pattern = terms
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length) // longest first, so "parabola" wins over "para"
+    .map(escapeRegExp)
+    .join('|');
+  if (!pattern) return text;
+
+  const parts = text.split(new RegExp(`(${pattern})`, 'gi'));
+  // split() with one capture group puts the matches at every odd index.
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <Box
+        key={i}
+        component="mark"
+        sx={{
+          bgcolor: 'warning.light',
+          color: 'text.primary',
+          px: 0.25,
+          borderRadius: 0.5,
+          fontWeight: 600,
+        }}
+      >
+        {part}
+      </Box>
+    ) : (
+      part
+    ),
+  );
 }
 
 interface Segment {
@@ -106,8 +161,12 @@ function renderMath(latex: string, displayMode: boolean): string {
  * Renders text with inline ($...$) and block ($$...$$) LaTeX math formulas.
  * Falls back gracefully on malformed LaTeX.
  */
-export default function MathText({ text, variant, component, sx, color }: MathTextProps) {
+export default function MathText({ text, variant, component, sx, color, highlight }: MathTextProps) {
   const segments = useMemo(() => parseSegments(text), [text]);
+  const terms = useMemo(
+    () => (highlight ?? []).filter((t) => t && t.length >= 2),
+    [highlight],
+  );
 
   // Fast path: no math detected, render plain text
   const hasMath = segments.some((s) => s.type === 'math');
@@ -116,7 +175,7 @@ export default function MathText({ text, variant, component, sx, color }: MathTe
   if (!hasMath) {
     return (
       <Typography variant={variant} color={color} sx={mergedSx} {...(component ? { component } : {})}>
-        {text}
+        {markTerms(text, terms)}
       </Typography>
     );
   }
@@ -130,9 +189,9 @@ export default function MathText({ text, variant, component, sx, color }: MathTe
     >
       {segments.map((seg, i) => {
         if (seg.type === 'text') {
-          return <span key={i}>{seg.content}</span>;
+          return <span key={i}>{markTerms(seg.content, terms)}</span>;
         }
-        // Math segment
+        // Math segment: never highlighted, see the `highlight` prop docs.
         const html = renderMath(seg.content, seg.displayMode);
         if (seg.displayMode) {
           return (

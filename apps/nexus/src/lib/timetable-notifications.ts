@@ -10,6 +10,7 @@ type TimetableEventType =
   | 'recording_available'
   | 'review_submitted'
   | 'assignment_published'
+  | 'assignment_linked'
   | 'assignment_reviewed'
   | 'week_published';
 
@@ -193,28 +194,16 @@ export async function notifyRecordingAvailable(
   });
 }
 
-/**
- * Notify all enrolled students when an assignment is published.
+/*
+ * notifyAssignmentPublished used to live here. It wrote ONE row into this
+ * table, the per-classroom timetable bell, and that was the entire reach of a
+ * published assignment: no Teams post, no activity ping, no top-bar bell. It
+ * is why students kept missing new work.
+ *
+ * Its replacement is announceAssignment in lib/teams-assignment-announcements.ts,
+ * which owns the whole fan-out. Do not reintroduce a bell-only variant here:
+ * one chokepoint is the point.
  */
-export async function notifyAssignmentPublished(
-  classroomId: string,
-  assignmentTitle: string,
-  assignmentId: string,
-  dueAt?: string | null
-) {
-  const studentIds = await getEnrolledUsers(classroomId, 'student');
-  const dueLine = dueAt
-    ? ` Due ${new Date(dueAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}.`
-    : '';
-  await insertNotifications({
-    classroomId,
-    eventType: 'assignment_published',
-    title: 'New Assignment',
-    message: `"${assignmentTitle}" has been assigned.${dueLine}`,
-    metadata: { assignment_id: assignmentId },
-    recipientUserIds: studentIds,
-  });
-}
 
 /**
  * Notify a single student when their submission has been reviewed.

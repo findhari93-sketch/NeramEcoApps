@@ -50,6 +50,7 @@ import DifficultyChip from '@/components/question-bank/DifficultyChip';
 import SourceBadges from '@/components/question-bank/SourceBadges';
 import CategoryChips from '@/components/question-bank/CategoryChips';
 import MathText from '@/components/common/MathText';
+import QBSearchStatus, { type QBMatchKind } from '@/components/question-bank/QBSearchStatus';
 import PageHeader from '@/components/PageHeader';
 import TeacherFilterBar from '@/components/question-bank/TeacherFilterBar';
 import TagPicker from '@/components/question-bank/TagPicker';
@@ -63,6 +64,10 @@ function QuestionsListContent() {
 
   const [questions, setQuestions] = useState<NexusQBQuestionListItem[]>([]);
   const [total, setTotal] = useState(0);
+  // How the last search was answered: exact, broadened, or a spelling guess.
+  const [matchKind, setMatchKind] = useState<QBMatchKind | null>(null);
+  const [didYouMean, setDidYouMean] = useState<string | null>(null);
+  const [matchedTerms, setMatchedTerms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
@@ -160,6 +165,9 @@ function QuestionsListContent() {
             setSelectedIds(new Set()); // Clear selection on filter change
           }
           setTotal(fetchedTotal);
+          setMatchKind(json.data?.search?.match_kind ?? null);
+          setDidYouMean(json.data?.search?.did_you_mean ?? null);
+          setMatchedTerms(json.data?.search?.matched_terms ?? []);
         }
       } catch (err) {
         console.error('Failed to fetch questions:', err);
@@ -457,17 +465,33 @@ function QuestionsListContent() {
 
       {/* Search */}
       <TextField
-        placeholder="Search questions..."
+        placeholder="Search questions, formulas, tags..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         size="small"
         fullWidth
+        inputProps={{ 'aria-label': 'Search questions' }}
         InputProps={{
           startAdornment: (
-            <SearchOutlinedIcon sx={{ color: 'text.secondary', mr: 1 }} fontSize="small" />
+            <SearchOutlinedIcon
+              sx={{ color: 'text.secondary', mr: 1 }}
+              fontSize="small"
+              aria-hidden="true"
+            />
           ),
         }}
         sx={{ mb: 1 }}
+      />
+
+      {/* How that search was answered: exact, broadened, or a spelling guess. */}
+      <QBSearchStatus
+        query={debouncedSearch}
+        matchKind={matchKind}
+        didYouMean={didYouMean}
+        total={total}
+        loading={loading}
+        onUseSuggestion={(term) => setSearch(term)}
+        onClear={() => setSearch('')}
       />
 
       {/* Filter Chips */}
@@ -656,7 +680,7 @@ function QuestionsListContent() {
                           ? (q as any).question_text_hi
                           : q.question_text;
                         return displayText ? (
-                          <MathText text={displayText} variant="body2" />
+                          <MathText text={displayText} variant="body2" highlight={matchedTerms} />
                         ) : (
                           <Typography variant="body2">
                             {q.nta_question_id ? `NTA ID: ${q.nta_question_id}` : 'Image-based question'}

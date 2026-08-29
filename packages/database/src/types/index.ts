@@ -5526,6 +5526,19 @@ export interface NexusScheduledClass extends Timestamps {
   recurrence_group_id: string | null;
   lobby_bypass: string | null;
   allowed_presenters: string | null;
+  /**
+   * Lecture or exam. An exam is a first-class timetable row that carries no
+   * Teams meeting, so every reader of this table now sees exam rows too and
+   * must decide whether it means them.
+   *
+   * Declared here because it was previously reached only through `as any` casts
+   * (see apps/nexus/src/app/api/timetable/route.ts), which left each new reader
+   * to rediscover that the column exists at all. Nullable rather than defaulted,
+   * because rows written before the column landed have no value for it.
+   */
+  kind: 'lecture' | 'exam' | null;
+  /** Draft rows are invisible to students. Same reason for being declared here. */
+  publish_state: 'draft' | 'published' | null;
 }
 
 /** Where the stored transcript came from. */
@@ -7084,7 +7097,15 @@ export const NEXUS_TEACHER_TEST_KINDS: ReadonlyArray<{
   label: string;
   hint: string;
 }> = [
-  { value: 'classroom_assigned', label: 'Class test', hint: 'A test you set for the class' },
+  // NOT "Class test". test_kind says what a paper COVERS; whether it is a
+  // dated, rostered class test is a property of its RUN (the placement), and
+  // calling both by the same name is what made the two indistinguishable on
+  // every teacher screen. See project_test_runs_and_results.
+  {
+    value: 'classroom_assigned',
+    label: 'General paper',
+    hint: 'No fixed syllabus scope. Pick this if none of the others fit.',
+  },
   { value: 'weekly', label: 'Weekly test', hint: "Covers the week's syllabus" },
   { value: 'chapter', label: 'Chapter test', hint: 'Everything from one chapter or topic' },
   { value: 'mock', label: 'Model test', hint: 'Full-length rehearsal of the real exam' },
@@ -7095,7 +7116,7 @@ export const NEXUS_TEACHER_TEST_KINDS: ReadonlyArray<{
 export const NEXUS_TEST_KIND_LABELS: Record<NexusTestKind, string> = {
   class_prep: 'Before class',
   catchup_class: 'Catch-up',
-  classroom_assigned: 'Class test',
+  classroom_assigned: 'General paper',
   practice_pool: 'Practice',
   student_custom: 'My own',
   content_gate: 'Chapter quiz',

@@ -720,7 +720,9 @@ export async function listTestsGroupedByContext(
   //    teacher needs to know which.
   const GROUP_ORDER: { key: NexusTestOverviewGroupKey; label: string }[] = [
     { key: 'class_prep', label: 'Before class' },
-    { key: 'class_test', label: 'After class' },
+    // "After class" described when it is set, not what it is. A teacher looking
+    // for the paper their class sat was scanning for "Class tests".
+    { key: 'class_test', label: 'Class tests' },
     { key: 'study_materials', label: 'Study Materials' },
     { key: 'class_recaps', label: 'Class Recaps' },
     { key: 'foundation', label: 'Foundation' },

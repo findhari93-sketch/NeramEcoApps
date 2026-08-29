@@ -89,9 +89,21 @@ interface DetailPlacement {
   available_until: string | null;
 }
 
+/**
+ * What each run of this paper is called.
+ *
+ * A "run" is one scheduled use: who it is for, when it closes, and how they
+ * did. The class-linked contexts were missing here entirely, so a class test
+ * rendered as the raw string `class_test` on the very screen a teacher goes to
+ * to find out where a paper is being used.
+ */
 const CONTEXT_LABELS: Record<string, string> = {
-  classroom_assignment: 'Assigned to class',
-  student_practice: 'Practice pool',
+  classroom_assignment: 'Class test (whole class, no class linked)',
+  class_test: 'Class test',
+  exam: 'Exam',
+  class_prep_test: 'Before class',
+  catchup_class: 'Catch-up',
+  student_practice: 'Practice (always open)',
   study_file: 'Study chapter',
   foundation_section: 'Foundation section',
   module_item: 'Module section',
@@ -152,6 +164,8 @@ export default function TestDetailPage() {
   const [renameValue, setRenameValue] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [tab, setTab] = useState<'overview' | 'results'>('overview');
+  /** Which run the Results tab opens on, set by "See results" in the runs list. */
+  const [resultsRunId, setResultsRunId] = useState('');
   const [duplicating, setDuplicating] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [examOpen, setExamOpen] = useState(false);
@@ -561,7 +575,17 @@ export default function TestDetailPage() {
         <Tab value="results" label={attemptsCount > 0 ? `Results (${attemptsCount})` : 'Results'} />
       </Tabs>
 
-      {tab === 'results' && <TestResultsPanel testId={test.id} authFetch={authFetch} />}
+      {tab === 'results' && (
+        // Keyed on the run so picking a different one from the runs list
+        // remounts the panel rather than leaving it on the previous selection.
+        <TestResultsPanel
+          key={resultsRunId || 'all'}
+          testId={test.id}
+          authFetch={authFetch}
+          getToken={getToken}
+          initialRunId={resultsRunId}
+        />
+      )}
 
       <Box sx={{ display: tab === 'overview' ? 'block' : 'none' }}>
 
@@ -570,14 +594,18 @@ export default function TestDetailPage() {
           is in it. Renders nothing when nothing is wrong. */}
       <TestHealthPanel testId={test.id} getToken={getToken} />
 
-      {/* Placements */}
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-        Where it is used
+      {/* Runs */}
+      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.25 }}>
+        Runs of this paper
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+        A run is one scheduled use of this paper: who it is for, when it closes, and how they did. The same
+        paper can have many runs.
       </Typography>
       {placements.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 3 }}>
           <Typography variant="body2" color="text.secondary">
-            Not placed anywhere yet. Use Assign to give it to your class or add it to the practice pool.
+            No runs yet. Use Assign to set it for your class or add it to the practice pool.
           </Typography>
         </Paper>
       ) : (
@@ -605,6 +633,20 @@ export default function TestDetailPage() {
                   {!p.is_visible && <Chip size="small" label="Hidden" sx={{ height: 20, fontSize: '0.7rem' }} />}
                 </Box>
               </Box>
+              {/* The link the library never had. Results used to mean every
+                  sitting of the paper through every door at once, so a teacher
+                  asking "how did my class do" was shown every stranger who had
+                  ever practised it. */}
+              <Button
+                size="small"
+                onClick={() => {
+                  setResultsRunId(p.id);
+                  setTab('results');
+                }}
+                sx={{ textTransform: 'none', minHeight: 44, flexShrink: 0 }}
+              >
+                See results
+              </Button>
               {(p.context_type === 'classroom_assignment' || p.context_type === 'student_practice') && (
                 <IconButton
                   aria-label="Remove placement"
@@ -826,12 +868,15 @@ export default function TestDetailPage() {
             select
             size="small"
             fullWidth
-            label="Test type"
+            label="Syllabus scope"
             value={kindDraft}
             onChange={(e) => saveKind(e.target.value as NexusTestKind)}
             disabled={busy}
             sx={{ mt: 0.5, mb: 2 }}
-            helperText="Students see this on the test card"
+            // "Test type" read as though it decided how students got the paper,
+            // which is what the buttons below actually do. This field only says
+            // what the paper covers.
+            helperText="What the paper covers. Students see this on the test card."
           >
             {NEXUS_TEACHER_TEST_KINDS.map((k) => (
               <MenuItem key={k.value} value={k.value}>

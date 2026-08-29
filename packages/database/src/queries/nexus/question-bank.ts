@@ -1,5 +1,11 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { expandQBCategorySlugs } from './qb-tags';
+import {
+  searchQBQuestionIds,
+  intersectIdFilters,
+  orderByIds,
+  type QBSearchMeta,
+} from './qb-search';
 import { QB_SECTION_ORDER } from '../../types';
 import type {
   QBQuestionSection,
@@ -410,7 +416,7 @@ export async function getQBQuestions(
   pageSize: number,
   studentId?: string,
   client?: TypedSupabaseClient
-): Promise<{ questions: NexusQBQuestionListItem[]; total: number }> {
+): Promise<{ questions: NexusQBQuestionListItem[]; total: number; search?: QBSearchMeta }> {
   const supabase = client || getSupabaseAdminClient();
   const offset = (page - 1) * pageSize;
 
@@ -441,9 +447,9 @@ export async function getQBQuestions(
   if (filters.topic_ids && filters.topic_ids.length > 0) {
     query = query.in('topic_id', filters.topic_ids);
   }
-  if (filters.search_text) {
-    query = query.ilike('question_text', `%${filters.search_text}%`);
-  }
+  // NOTE: search_text is deliberately NOT applied here. It is handled by the
+  // nexus_qb_search RPC below, under the 'student' role so that explanation
+  // text is neither matchable nor returnable. See queries/nexus/qb-search.ts.
   if (filters.confidence_tier && filters.confidence_tier.length > 0) {
     query = query.in('confidence_tier', filters.confidence_tier);
   }
@@ -487,18 +493,24 @@ export async function getQBQuestions(
   }
 
   // Tag-based filter (managed registry). OR-semantics: question carries any selected tag.
+  let tagFilteredIds: string[] | null = null;
   if (filters.tag_ids && filters.tag_ids.length > 0) {
     const { data: tagRows, error: tagErr } = await supabase
       .from('nexus_qb_question_tags' as any)
       .select('question_id')
       .in('tag_id', filters.tag_ids);
     if (tagErr) throw tagErr;
-    const tagFilteredIds = [...new Set((tagRows || []).map((r: any) => r.question_id))];
+    tagFilteredIds = [...new Set((tagRows || []).map((r: any) => r.question_id))];
     if (tagFilteredIds.length === 0) {
       return { questions: [], total: 0 };
     }
     query = query.in('id', tagFilteredIds);
   }
+
+  // Attempt status resolves to an id set the ranked search path needs too:
+  // 'correct'/'incorrect' restrict, 'unattempted' excludes.
+  let attemptRestrictIds: string[] | null = null;
+  let attemptExcludeIds: string[] | null = null;
 
   // Attempt-status filter, resolved into the query rather than applied to the
   // page afterwards.
@@ -531,13 +543,16 @@ export async function getQBQuestions(
 
     if (filters.attempt_status === 'correct') {
       if (everCorrect.size === 0) return { questions: [], total: 0 };
-      query = query.in('id', [...everCorrect]);
+      attemptRestrictIds = [...everCorrect];
+      query = query.in('id', attemptRestrictIds);
     } else if (filters.attempt_status === 'incorrect') {
       // Attempted at least once, never got it right.
       const wrongOnly = [...attempted].filter((id) => !everCorrect.has(id));
       if (wrongOnly.length === 0) return { questions: [], total: 0 };
+      attemptRestrictIds = wrongOnly;
       query = query.in('id', wrongOnly);
     } else if (filters.attempt_status === 'unattempted' && attempted.size > 0) {
+      attemptExcludeIds = [...attempted];
       // A NOT IN list is only viable while it stays URL-sized. Past that the
       // filter is skipped rather than silently returning a wrong page, and the
       // caller still gets a correct (unfiltered) result set.
@@ -551,18 +566,65 @@ export async function getQBQuestions(
     }
   }
 
-  // Order and paginate
-  query = query
-    .order('display_order', { ascending: true, nullsFirst: false })
-    .order('created_at', { ascending: false })
-    .range(offset, offset + pageSize - 1);
+  let questions: NexusQBQuestion[];
+  let count: number | null;
+  let searchMeta: QBSearchMeta | null = null;
 
-  const { data: questionsRaw, error: questionsError, count } = await query;
-  if (questionsError) throw questionsError;
+  if (filters.search_text) {
+    // Ranked path, under the 'student' role: the RPC reads
+    // search_vector_public, which excludes explanations, so a student can
+    // neither match nor be handed solution text.
+    const search = await searchQBQuestionIds(supabase, filters, {
+      query: filters.search_text,
+      role: 'student',
+      restrictIds: intersectIdFilters([
+        sourceFilteredIds,
+        yearFilteredIds,
+        tagFilteredIds,
+        attemptRestrictIds,
+      ]),
+      excludeIds: attemptExcludeIds,
+      onlyActive: true,
+      limit: pageSize,
+      offset,
+    });
 
-  const questions = (questionsRaw || []) as NexusQBQuestion[];
+    searchMeta = {
+      match_kind: search.match_kind,
+      did_you_mean: search.did_you_mean,
+      matched_terms: search.matched_terms,
+    };
+
+    if (search.ids.length === 0) {
+      return { questions: [], total: 0, search: searchMeta };
+    }
+
+    const { data: rankedRaw, error: rankedErr } = await supabase
+      .from('nexus_qb_questions')
+      .select('*')
+      .in('id', search.ids);
+    if (rankedErr) throw rankedErr;
+
+    // .in() gives no ordering guarantee, so the RPC's ranking has to be
+    // reapplied here or the page comes back ranked and then shuffled.
+    questions = orderByIds((rankedRaw || []) as NexusQBQuestion[], search.ids);
+    count = search.total;
+  } else {
+    // Order and paginate
+    query = query
+      .order('display_order', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    const { data: questionsRaw, error: questionsError, count: browseCount } = await query;
+    if (questionsError) throw questionsError;
+
+    questions = (questionsRaw || []) as NexusQBQuestion[];
+    count = browseCount;
+  }
+
   if (questions.length === 0) {
-    return { questions: [], total: count || 0 };
+    return { questions: [], total: count || 0, ...(searchMeta ? { search: searchMeta } : {}) };
   }
 
   const questionIds = questions.map(q => q.id);
@@ -640,7 +702,7 @@ export async function getQBQuestions(
 
   // attempt_status was already applied as an id constraint before pagination,
   // so `count` is exact and needs no adjustment.
-  return { questions: result, total: count || 0 };
+  return { questions: result, total: count || 0, ...(searchMeta ? { search: searchMeta } : {}) };
 }
 
 // ============================================
@@ -1947,7 +2009,7 @@ export async function getTeacherQBQuestions(
   page: number,
   pageSize: number,
   client?: TypedSupabaseClient
-): Promise<{ questions: NexusQBQuestionListItem[]; total: number }> {
+): Promise<{ questions: NexusQBQuestionListItem[]; total: number; search?: QBSearchMeta }> {
   const supabase = client || getSupabaseAdminClient();
   const offset = (page - 1) * pageSize;
 
@@ -1980,9 +2042,9 @@ export async function getTeacherQBQuestions(
   if (filters.topic_ids && filters.topic_ids.length > 0) {
     query = query.in('topic_id', filters.topic_ids);
   }
-  if (filters.search_text) {
-    query = query.ilike('question_text', `%${filters.search_text}%`);
-  }
+  // NOTE: search_text is deliberately NOT applied here. It is handled by the
+  // nexus_qb_search RPC below, which ranks results instead of substring
+  // matching one column. See queries/nexus/qb-search.ts.
   if (filters.origin && filters.origin.length > 0) {
     query = query.in('origin' as any, filters.origin);
   }
@@ -2017,29 +2079,71 @@ export async function getTeacherQBQuestions(
   }
 
   // Tag-based filter (managed registry). OR-semantics: question carries any selected tag.
+  let tagFilteredIds: string[] | null = null;
   if (filters.tag_ids && filters.tag_ids.length > 0) {
     const { data: tagRows, error: tagErr } = await supabase
       .from('nexus_qb_question_tags' as any)
       .select('question_id')
       .in('tag_id', filters.tag_ids);
     if (tagErr) throw tagErr;
-    const tagFilteredIds = [...new Set((tagRows || []).map((r: any) => r.question_id))];
+    tagFilteredIds = [...new Set((tagRows || []).map((r: any) => r.question_id))];
     if (tagFilteredIds.length === 0) {
       return { questions: [], total: 0 };
     }
     query = query.in('id', tagFilteredIds);
   }
 
-  query = query
-    .order('created_at', { ascending: false })
-    .range(offset, offset + pageSize - 1);
+  let questions: NexusQBQuestion[];
+  let count: number | null;
+  let searchMeta: QBSearchMeta | null = null;
 
-  const { data: questionsRaw, error: questionsError, count } = await query;
-  if (questionsError) throw questionsError;
+  if (filters.search_text) {
+    // Ranked path. The RPC evaluates the column filters and the search itself,
+    // so it only needs the id sets resolved above, which it cannot compute.
+    const search = await searchQBQuestionIds(supabase, filters, {
+      query: filters.search_text,
+      role: 'teacher',
+      restrictIds: intersectIdFilters([sourceFilteredIds, tagFilteredIds]),
+      statuses: filters.status ?? null,
+      onlyActive: false,
+      limit: pageSize,
+      offset,
+    });
 
-  const questions = (questionsRaw || []) as NexusQBQuestion[];
+    searchMeta = {
+      match_kind: search.match_kind,
+      did_you_mean: search.did_you_mean,
+      matched_terms: search.matched_terms,
+    };
+
+    if (search.ids.length === 0) {
+      return { questions: [], total: 0, search: searchMeta };
+    }
+
+    const { data: rankedRaw, error: rankedErr } = await supabase
+      .from('nexus_qb_questions')
+      .select('*')
+      .in('id', search.ids);
+    if (rankedErr) throw rankedErr;
+
+    // .in() gives no ordering guarantee, so the RPC's ranking has to be
+    // reapplied here or the page comes back ranked and then shuffled.
+    questions = orderByIds((rankedRaw || []) as NexusQBQuestion[], search.ids);
+    count = search.total;
+  } else {
+    query = query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    const { data: questionsRaw, error: questionsError, count: browseCount } = await query;
+    if (questionsError) throw questionsError;
+
+    questions = (questionsRaw || []) as NexusQBQuestion[];
+    count = browseCount;
+  }
+
   if (questions.length === 0) {
-    return { questions: [], total: count || 0 };
+    return { questions: [], total: count || 0, ...(searchMeta ? { search: searchMeta } : {}) };
   }
 
   const questionIds = questions.map((q) => q.id);
@@ -2126,7 +2230,7 @@ export async function getTeacherQBQuestions(
     ...(filters.includeUsage ? { used_in_tests: usageMap.get(q.id) || 0 } : {}),
   }));
 
-  return { questions: result, total: count || 0 };
+  return { questions: result, total: count || 0, ...(searchMeta ? { search: searchMeta } : {}) };
 }
 
 /**

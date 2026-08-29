@@ -8,10 +8,12 @@
  * keeps the fetch firing once per visit, not once per tab switch.
  */
 
+import { useState } from 'react';
 import { Box, Typography, Skeleton, Alert } from '@neram/ui';
 import PerformanceStatTiles from './PerformanceStatTiles';
 import PerformanceTrendChart from './PerformanceTrendChart';
 import PerformanceMonthlyList, { type PerformanceAttemptRow } from './PerformanceMonthlyList';
+import StudentAttemptSheet from './StudentAttemptSheet';
 import type { NexusStudentPerformanceSummary } from '@neram/database';
 
 export interface PerformanceTabData {
@@ -19,7 +21,21 @@ export interface PerformanceTabData {
   attempts: PerformanceAttemptRow[];
 }
 
-export default function PerformanceTab({ data, error }: { data: PerformanceTabData | null; error: string | null }) {
+export default function PerformanceTab({
+  data,
+  error,
+  getToken,
+  me,
+}: {
+  data: PerformanceTabData | null;
+  error: string | null;
+  /** Present enables the response sheet. Omitted leaves the list read-only. */
+  getToken?: () => Promise<string | null>;
+  me?: { id: string; name: string | null; avatar_url: string | null } | null;
+}) {
+  // Which test's history is open. Keyed on the test rather than the attempt,
+  // because the sheet shows every sitting of that paper anyway.
+  const [openRow, setOpenRow] = useState<PerformanceAttemptRow | null>(null);
   if (error) {
     return (
       <Alert severity="error" sx={{ borderRadius: 2 }}>
@@ -64,7 +80,30 @@ export default function PerformanceTab({ data, error }: { data: PerformanceTabDa
       <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
         By month
       </Typography>
-      <PerformanceMonthlyList attempts={data.attempts} />
+      {getToken && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Tap any attempt to see your answers.
+        </Typography>
+      )}
+      <PerformanceMonthlyList
+        attempts={data.attempts}
+        onOpen={getToken ? (row) => setOpenRow(row) : undefined}
+      />
+
+      {getToken && (
+        <StudentAttemptSheet
+          open={openRow != null}
+          endpoint={openRow ? `/api/student/tests/${openRow.test_id}/attempts` : ''}
+          subtitle={openRow ? `${openRow.test_title}, your attempts` : undefined}
+          student={me ?? { id: '', name: 'You', avatar_url: null }}
+          getToken={getToken}
+          onClose={() => setOpenRow(null)}
+          onPrev={() => {}}
+          onNext={() => {}}
+          hasPrev={false}
+          hasNext={false}
+        />
+      )}
     </Box>
   );
 }

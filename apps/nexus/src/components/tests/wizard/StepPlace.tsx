@@ -57,11 +57,23 @@ export default function StepPlace({
   const { rules } = draft;
   const noClassroom = !classroomId;
 
+  /**
+   * Each row says which of the three doors it is, and what that means for a
+   * deadline and a roster.
+   *
+   * These rows are not all the same shape underneath: "Class test" is tied to
+   * one lecture and knows who attended it, while "Weekly" and "Full mock" are
+   * classroom-wide with nobody linked. A teacher had no way to tell those apart
+   * from the old subtitles, which is how a paper meant as a class test ended up
+   * set as a weekly slot with no roster behind it.
+   */
   const rows: PlacementRowSpec[] = [
     {
       kind: 'class_test',
       title: 'Class test',
-      subtitle: classroomName ? `Set for ${classroomName}, due at the time you pick` : '',
+      subtitle: classroomName
+        ? `Follows one class in ${classroomName}. Knows who attended, and who caught up.`
+        : 'Follows one class. Knows who attended, and who caught up.',
       disabledReason: noClassroom ? 'Choose a classroom first' : undefined,
       schedulable: true,
     },
@@ -77,21 +89,21 @@ export default function StepPlace({
     {
       kind: 'weekly',
       title: 'Weekly or monthly slot',
-      subtitle: 'Appears on every student timetable at the time you set',
+      subtitle: 'Set for the whole class, with no class linked. Everyone enrolled is expected.',
       disabledReason: noClassroom ? 'Choose a classroom first' : undefined,
       schedulable: true,
     },
     {
       kind: 'mock',
       title: 'Full mock',
-      subtitle: 'On the mocks shelf, optionally scheduled as an exam day',
+      subtitle: 'Whole class, no class linked. Use Schedule as exam for a fixed window and ranking.',
       disabledReason: noClassroom ? 'Choose a classroom first' : undefined,
       schedulable: true,
     },
     {
       kind: 'practice',
       title: 'Practice pool',
-      subtitle: 'Optional self-practice, never due',
+      subtitle: 'Open to everyone, always. No deadline, no roster, unlimited retries.',
       disabledReason: noClassroom ? 'Choose a classroom first' : undefined,
     },
   ];

@@ -1,16 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
-import { getQuestionAnalysis, getTestResults } from '@neram/database';
+import {
+  getQuestionAnalysis,
+  getSupabaseAdminClient,
+  getTestResults,
+  listPlacementsForTest,
+  listRunCoveredClasses,
+  loadAccessRequestsForRun,
+  loadEligibilityFactsForPreview,
+  loadRunEligibilityOverrides,
+  resolvePlacementLabels,
+  type NexusTestResultsOptions,
+} from '@neram/database';
+import { buildExamEligibilityRoster } from '@/lib/exam-eligibility-roster';
+import {
+  CLASSROOM_ANCHORED_CONTEXTS,
+  CLASS_ANCHORED_CONTEXTS,
+  buildRunLabel,
+  canBuildRoster,
+  classifyRunDoor,
+} from '@/lib/test-run-scope';
 
 /**
- * GET /api/question-bank/tests/[id]/results   (staff)
+ * GET /api/question-bank/tests/[id]/results            (staff)
+ * GET /api/question-bank/tests/[id]/results?placement_id=<uuid>
  *
  * Who sat the test and how they did, plus the per-question breakdown.
  *
- * The question breakdown is the part that matters at scale: a question almost
- * nobody gets right is usually ambiguous rather than hard, and without this the
- * bank quietly accumulates broken questions nobody can find.
+ * Two shapes. Without placement_id this is the paper wide view it has always
+ * been: everyone who ever sat this paper, through any door. With one it becomes
+ * a report on a single RUN, and the students who never sat it are the whole
+ * point of it, because "who has not done it" was the question the results tab
+ * could not answer at all.
+ *
+ * The eligibility engine that decides who owed the paper is a pure module in
+ * this app (lib/exam-eligibility-roster.ts) while its batched I/O lives in the
+ * database package. Neither can import the other, so this route is where they
+ * meet. That keeps one set of bucket rules for exams and class tests instead of
+ * a second copy growing inside the package.
+ *
+ * Deliberately not polled and deliberately not force-dynamic. This is a report,
+ * not an invigilation screen, and the 20s refresh the live exam roster needs
+ * would cost invocations for data that does not move minute to minute.
  */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -20,17 +52,212 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: 'Only staff can see test results' }, { status: 403 });
     }
 
-    const [results, questions] = await Promise.all([
-      getTestResults(params.id),
-      getQuestionAnalysis(params.id),
+    const supabase = getSupabaseAdminClient();
+    const placementId = request.nextUrl.searchParams.get('placement_id');
+
+    const placements = await listPlacementsForTest(params.id, supabase);
+    const selected = placementId
+      ? placements.find((p: any) => p.id === placementId) || null
+      : null;
+
+    if (placementId && !selected) {
+      // Either it belongs to another paper or it has been detached. Saying so
+      // beats silently falling back to the paper wide numbers under a heading
+      // that claims to be one class.
+      return NextResponse.json({ error: 'That run is not on this paper' }, { status: 404 });
+    }
+
+    const opts = selected ? await buildRunOptions(selected, supabase) : undefined;
+
+    const [results, questions, runs] = await Promise.all([
+      getTestResults(params.id, opts, supabase),
+      getQuestionAnalysis(params.id, { placementId }, supabase),
+      buildRuns(params.id, placements, supabase),
     ]);
 
-    return NextResponse.json({
-      data: { rows: results.rows, stats: results.stats, questions },
-    });
+    return NextResponse.json(
+      {
+        data: {
+          rows: results.rows,
+          stats: results.stats,
+          questions,
+          runs,
+          run: selected
+            ? {
+                placement_id: (selected as any).id,
+                door: classifyRunDoor((selected as any).context_type),
+                context_type: (selected as any).context_type,
+                closes_at: (selected as any).available_until ?? null,
+                passing_pct: (selected as any).passing_pct ?? null,
+              }
+            : null,
+        },
+      },
+      { headers: { 'Cache-Control': 'private, max-age=0, must-revalidate' } },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load results';
     console.error('Test results error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+/**
+ * Turn one placement into the roster and window that scope the results.
+ *
+ * context_id is polymorphic with no FK, so which id it holds depends entirely
+ * on context_type. See lib/test-run-scope.ts for the mapping and why it is
+ * written down rather than inferred at each call site.
+ */
+async function buildRunOptions(
+  placement: any,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+): Promise<NexusTestResultsOptions> {
+  const contextType = String(placement.context_type);
+  const base: NexusTestResultsOptions = {
+    placementId: placement.id,
+    passingPct: placement.passing_pct ?? null,
+    closesAt: placement.available_until ?? null,
+  };
+
+  if (!canBuildRoster(contextType)) return base;
+
+  let classroomId: string | null = null;
+  let coveredClassIds: string[] = [];
+
+  if (CLASSROOM_ANCHORED_CONTEXTS.has(contextType)) {
+    classroomId = placement.context_id;
+    // No linked lecture, so decideAutoBucket makes everyone enrolled mandatory,
+    // which is the correct reading of what "Assign to the class" always meant.
+    coveredClassIds = [];
+  } else if (CLASS_ANCHORED_CONTEXTS.has(contextType)) {
+    const { data, error } = await supabase
+      .from('nexus_scheduled_classes' as any)
+      .select('id, classroom_id')
+      .eq('id', placement.context_id)
+      .maybeSingle();
+    // Loud rather than degraded: a swallowed error here would show a teacher an
+    // empty roster and no reason why, which reads as "nobody was set this".
+    if (error) throw error;
+    classroomId = (data as any)?.classroom_id ?? null;
+    coveredClassIds = data ? [placement.context_id] : [];
+  }
+
+  // Per-student access: who the teacher (or catch-up) let back in, and who is
+  // still waiting on an answer. Without these the roster would report a
+  // reopened student as "missed", which is the opposite of what happened.
+  const [access, overrides] = await Promise.all([
+    loadAccessRequestsForRun(placement.id, supabase).catch(() => []),
+    loadRunEligibilityOverrides(placement.id, supabase).catch(() => new Map()),
+  ]);
+  const windowsByStudent: Record<string, string | null> = {};
+  const pendingRequestStudentIds: string[] = [];
+  for (const a of access) {
+    if (a.status === 'granted') windowsByStudent[a.student_id] = a.closes_at;
+    else if (a.status === 'pending') pendingRequestStudentIds.push(a.student_id);
+  }
+  const withAccess = { ...base, windowsByStudent, pendingRequestStudentIds };
+
+  if (!classroomId) return withAccess;
+
+  // The run's own covered classes when it has them, falling back to the host
+  // class. A run created before nexus_test_run_covered_classes existed has no
+  // rows until the migration's backfill gives it the host one.
+  let covered = coveredClassIds;
+  try {
+    const stored = await listRunCoveredClasses(placement.id, supabase);
+    if (stored.length > 0) covered = stored;
+  } catch {
+    // Table missing on this environment. The host class is still a correct
+    // answer, so fall through rather than showing an empty roster.
+  }
+
+  const facts = await loadEligibilityFactsForPreview(classroomId, covered, supabase);
+  const roster = buildExamEligibilityRoster({
+    students: facts.students as any,
+    coveredClasses: facts.coveredClasses as any,
+    attendance: facts.attendance as any,
+    absences: facts.absences as any,
+    overrides: overrides as any,
+  });
+
+  return {
+    ...withAccess,
+    roster: roster.map((r) => ({
+      student_id: r.student_id,
+      name: r.name,
+      avatar_url: r.avatar_url,
+      bucket: r.bucket,
+      is_mandatory: r.is_mandatory,
+    })),
+  };
+}
+
+/**
+ * Every run of this paper, so the teacher can move between them.
+ *
+ * Attempt counts come from one grouped read rather than one query per run. The
+ * "Unassigned" entry matters more than it looks: attempts recorded before
+ * placements existed carry a null placement_id, and without somewhere to show
+ * them they would simply vanish from every scoped view with no explanation.
+ */
+async function buildRuns(
+  testId: string,
+  placements: any[],
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+) {
+  const [{ data: attempts, error }, labels] = await Promise.all([
+    supabase
+      .from('nexus_test_attempts' as any)
+      .select('placement_id')
+      .eq('test_id', testId)
+      .eq('status', 'submitted')
+      .eq('mode', 'official'),
+    resolvePlacementLabels(
+      placements.map((p) => ({ context_type: p.context_type, context_id: p.context_id })),
+      supabase,
+    ),
+  ]);
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  let unassigned = 0;
+  for (const a of (attempts || []) as any[]) {
+    if (!a.placement_id) {
+      unassigned += 1;
+      continue;
+    }
+    counts.set(a.placement_id, (counts.get(a.placement_id) || 0) + 1);
+  }
+
+  const runs = placements.map((p) => ({
+    placement_id: p.id,
+    door: classifyRunDoor(p.context_type),
+    context_type: p.context_type,
+    label: buildRunLabel({
+      contextType: p.context_type,
+      contextLabel: labels.get(`${p.context_type}:${p.context_id}`)?.label ?? null,
+      opensAt: p.available_from ?? null,
+      closesAt: p.available_until ?? null,
+    }),
+    opens_at: p.available_from ?? null,
+    closes_at: p.available_until ?? null,
+    attempts: counts.get(p.id) || 0,
+    is_active: p.is_active !== false,
+  }));
+
+  if (unassigned > 0) {
+    runs.push({
+      placement_id: null as any,
+      door: 'other',
+      context_type: null,
+      label: `Unassigned attempts (${unassigned})`,
+      opens_at: null,
+      closes_at: null,
+      attempts: unassigned,
+      is_active: true,
+    });
+  }
+
+  return runs;
 }

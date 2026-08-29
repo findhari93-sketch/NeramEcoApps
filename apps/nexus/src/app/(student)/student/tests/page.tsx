@@ -358,7 +358,9 @@ export default function StudentTestsPage() {
             </TestsSection>
           )}
 
-          {tab === 'performance' && <PerformanceTab data={performanceData} error={performanceError} />}
+          {tab === 'performance' && (
+            <PerformanceTab data={performanceData} error={performanceError} getToken={getToken} />
+          )}
         </>
       )}
 

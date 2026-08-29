@@ -15,6 +15,8 @@ import {
   resolveExamWindowForStudent,
   getExamAttemptOverride,
   resolveExamTimer,
+  getLiveAccessRequest,
+  resolveTestRunWindow,
 } from '@neram/database';
 import { attemptSeed, seededShuffle } from '@/lib/seeded-shuffle';
 
@@ -173,6 +175,47 @@ export async function GET(request: NextRequest) {
                 { status: 403 },
               );
             }
+          }
+        } else if (placement.context_type === 'class_test') {
+          /**
+           * A class test resolves its own window BEFORE the generic check, for
+           * exactly the reason the exam branch above does.
+           *
+           * The shared placement closes at its due date. A student let back in
+           * by catch-up, by a teacher, or by an approved request is sitting a
+           * DIFFERENT window, so running the generic available_until check
+           * first would refuse every reopened student before their grant was
+           * ever read. That bug looks like "the reopen feature does nothing".
+           *
+           * The copy matters too: a closed class test is not a dead link, it is
+           * a door the student can ask to have opened, and the code says so.
+           */
+          const grant = await getLiveAccessRequest(placement.id, user.id);
+          const window = resolveTestRunWindow({
+            opensAt: placement.available_from ?? null,
+            closesAt: placement.available_until ?? null,
+            grant: grant?.status === 'granted' ? grant : null,
+            now: now.getTime(),
+          });
+
+          if (!window.open) {
+            if (window.reason === 'not_yet') {
+              return NextResponse.json({ error: 'This test is not open yet' }, { status: 403 });
+            }
+            const asked = grant?.status === 'pending';
+            return NextResponse.json(
+              {
+                error:
+                  window.reason === 'grant_expired'
+                    ? 'The extra time your teacher gave you has run out. You can ask again.'
+                    : asked
+                      ? 'This class test has closed. Your teacher has your request.'
+                      : 'This class test has closed. You can ask your teacher to reopen it.',
+                code: 'CLASS_TEST_CLOSED',
+                can_request: !asked,
+              },
+              { status: 403 },
+            );
           }
         } else {
           if (placement.available_from && new Date(placement.available_from) > now) {

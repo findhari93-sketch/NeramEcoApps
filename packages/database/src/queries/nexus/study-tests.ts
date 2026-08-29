@@ -462,6 +462,8 @@ import {
   gradeAgainstDraw,
   gradeTestOneShot,
 } from './test-repository';
+// The attempt replay is shared with the teacher's per-run response sheet.
+import { getStudentTestAttemptReview } from './test-analytics';
 
 export interface NexusPlacedChapterTest {
   placement_id: string;
@@ -675,54 +677,30 @@ export async function getStudyFileAttemptReview(
   const placed = await getPlacedChapterTest(fileId, supabase);
   if (!placed) return { test: null, attempts: [] };
 
-  const { data: rows, error } = await supabase
-    .from('nexus_test_attempts')
-    .select('id, attempt_number, mode, answers, score, total_marks, percentage, submitted_at')
-    .eq('test_id', placed.test_id)
-    .eq('student_id', studentId)
-    .eq('status', 'submitted')
-    .order('attempt_number', { ascending: true });
-  if (error) throw error;
-  if (!rows || rows.length === 0) {
-    return { test: { test_id: placed.test_id, title: placed.title, passing_pct: placed.passing_pct }, attempts: [] };
-  }
-
-  const composed = await getComposedTestQuestions(placed.test_id, true, supabase);
-
-  const attempts = await Promise.all(
-    rows.map(async (a: any): Promise<StudyFileAttempt> => {
-      const draw = await getTestDraw(placed.test_id, studentId, Number(a.attempt_number) || 1, supabase);
-      const graded = gradeAgainstDraw(composed, draw, (a.answers as Record<string, string>) || {}, placed.passing_pct);
-      const byId = new Map(graded.questions.map((q) => [q.question_id, q]));
-
-      return {
-        attempt_id: a.id,
-        attempt_number: Number(a.attempt_number) || 1,
-        mode: (a.mode as 'official' | 'revision') ?? 'official',
-        submitted_at: a.submitted_at,
-        score: Number(a.score) || 0,
-        total_marks: Number(a.total_marks) || 0,
-        percentage: Number(a.percentage) || 0,
-        passed: (Number(a.percentage) || 0) >= placed.passing_pct,
-        review: graded.review.map((r) => {
-          const q = byId.get(r.question_id);
-          return {
-            question_id: r.question_id,
-            question_text: q?.question_text ?? null,
-            options: q?.options ?? null,
-            correct_answer: r.correct_answer,
-            selected: r.selected,
-            is_correct: r.is_correct,
-            is_gradable: r.is_gradable,
-            explanation: q?.explanation_brief ?? null,
-            explanation_detailed: q?.explanation_detailed ?? null,
-          };
-        }),
-      };
-    }),
+  // The replay itself is not chapter specific and now lives in test-analytics,
+  // where the teacher's per-run response sheet uses the same code. Only the
+  // "which test does this chapter hold" lookup above was ever specific to here.
+  const { attempts } = await getStudentTestAttemptReview(
+    { testId: placed.test_id, studentId, passingPct: placed.passing_pct },
+    supabase,
   );
 
-  return { test: { test_id: placed.test_id, title: placed.title, passing_pct: placed.passing_pct }, attempts };
+  return {
+    test: { test_id: placed.test_id, title: placed.title, passing_pct: placed.passing_pct },
+    // Narrowed back to this module's published shape, so the chapter report
+    // route and StudentAttemptSheet see byte-identical JSON to before.
+    attempts: attempts.map((a) => ({
+      attempt_id: a.attempt_id,
+      attempt_number: a.attempt_number,
+      mode: a.mode,
+      submitted_at: a.submitted_at,
+      score: a.score,
+      total_marks: a.total_marks,
+      percentage: a.percentage,
+      passed: a.passed,
+      review: a.review,
+    })),
+  };
 }
 
 /**

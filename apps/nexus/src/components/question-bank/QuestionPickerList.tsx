@@ -16,6 +16,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import QBSearchStatus, { type QBMatchKind } from '@/components/question-bank/QBSearchStatus';
 import TagPicker from '@/components/question-bank/TagPicker';
 import type { NexusQBQuestionListItem, QBDifficulty } from '@neram/database';
 
@@ -84,6 +85,8 @@ export default function QuestionPickerList({
 
   const [questions, setQuestions] = useState<NexusQBQuestionListItem[]>([]);
   const [total, setTotal] = useState(0);
+  const [matchKind, setMatchKind] = useState<QBMatchKind | null>(null);
+  const [didYouMean, setDidYouMean] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -129,6 +132,8 @@ export default function QuestionPickerList({
         const list: NexusQBQuestionListItem[] = json.data?.questions || [];
         const nextTotal = json.data?.total || 0;
         setTotal(nextTotal);
+        setMatchKind(json.data?.search?.match_kind ?? null);
+        setDidYouMean(json.data?.search?.did_you_mean ?? null);
         onTotalChange?.(nextTotal);
         setQuestions((prev) => (append ? [...prev, ...list] : list));
         setPage(pageNum);
@@ -193,6 +198,16 @@ export default function QuestionPickerList({
           ))}
         </ToggleButtonGroup>
       </Box>
+
+      <QBSearchStatus
+        query={search}
+        matchKind={matchKind}
+        didYouMean={didYouMean}
+        total={total}
+        loading={loading}
+        onUseSuggestion={(term) => setSearch(term)}
+        onClear={() => setSearch('')}
+      />
 
       <Box sx={{ mb: 1.5 }}>
         <TagPicker value={tagIds} onChange={setTagIds} getToken={getToken} />

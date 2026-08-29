@@ -47,10 +47,13 @@ function MonthGroup({
   label,
   rows,
   defaultOpen,
+  onOpen,
 }: {
   label: string;
   rows: PerformanceAttemptRow[];
   defaultOpen: boolean;
+  /** Opens this attempt's own response sheet. Omitted leaves rows inert. */
+  onOpen?: (row: PerformanceAttemptRow) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const scored = rows.filter((r) => r.percentage != null);
@@ -89,7 +92,40 @@ function MonthGroup({
           {rows.map((r, i) => (
             <Box key={r.attempt_id}>
               {i > 0 && <Divider />}
-              <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box
+                role={onOpen ? 'button' : undefined}
+                tabIndex={onOpen ? 0 : undefined}
+                aria-label={onOpen ? `See your answers for ${r.test_title}` : undefined}
+                onClick={onOpen ? () => onOpen(r) : undefined}
+                onKeyDown={
+                  onOpen
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onOpen(r);
+                        }
+                      }
+                    : undefined
+                }
+                sx={{
+                  p: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  minHeight: 48,
+                  ...(onOpen
+                    ? {
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: 'action.hover' },
+                        '&:focus-visible': {
+                          outline: '2px solid',
+                          outlineColor: 'primary.main',
+                          outlineOffset: -2,
+                        },
+                      }
+                    : {}),
+                }}
+              >
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
                     {r.test_title}
@@ -121,7 +157,18 @@ function MonthGroup({
   );
 }
 
-export default function PerformanceMonthlyList({ attempts }: { attempts: PerformanceAttemptRow[] }) {
+export default function PerformanceMonthlyList({
+  attempts,
+  onOpen,
+}: {
+  attempts: PerformanceAttemptRow[];
+  /**
+   * Opens one attempt's response sheet. Before this, a student saw their review
+   * once, right after submitting, and it was gone the moment they pressed Try
+   * again or navigated away.
+   */
+  onOpen?: (row: PerformanceAttemptRow) => void;
+}) {
   const groups = useMemo(() => {
     const map = new Map<string, { key: string; label: string; rows: PerformanceAttemptRow[] }>();
     // Attempts arrive newest-first, and Map preserves insertion order, so the
@@ -145,7 +192,7 @@ export default function PerformanceMonthlyList({ attempts }: { attempts: Perform
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {groups.map((g, i) => (
-        <MonthGroup key={g.key} label={g.label} rows={g.rows} defaultOpen={i === 0} />
+        <MonthGroup key={g.key} label={g.label} rows={g.rows} defaultOpen={i === 0} onOpen={onOpen} />
       ))}
     </Box>
   );

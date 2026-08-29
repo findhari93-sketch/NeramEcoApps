@@ -11,6 +11,7 @@ import {
   GRID_PAD_TOP,
   PX_PER_HOUR,
   blockGeometry,
+  classStartDate,
   effectiveWeekdays,
   formatCountdown,
   formatDateISO,
@@ -357,6 +358,22 @@ describe('blockGeometry', () => {
 
   it('does not throw on unparseable times', () => {
     expect(() => blockGeometry('bad', 'worse', band)).not.toThrow();
+  });
+});
+
+describe('classStartDate', () => {
+  it('builds the instant in IST, not the test runner\'s local zone', () => {
+    expect(classStartDate('2026-08-29', '19:00').getTime()).toBe(
+      new Date('2026-08-29T19:00:00+05:30').getTime(),
+    );
+  });
+
+  it('backs the past-date/time guard the Add Class dialog now applies', () => {
+    const now = new Date('2026-08-29T10:00:00+05:30');
+    // The exact mistake this guard exists to stop: a date three days gone by.
+    expect(classStartDate('2026-08-26', '19:00').getTime() < now.getTime()).toBe(true);
+    // A same-day class still ahead of "now" must not be blocked.
+    expect(classStartDate('2026-08-29', '19:00').getTime() < now.getTime()).toBe(false);
   });
 });
 

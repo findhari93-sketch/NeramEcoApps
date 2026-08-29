@@ -1,21 +1,26 @@
 'use client';
 
 /**
- * One student's response sheet for a chapter test: every attempt they sat,
- * question by question, what they answered and what was correct.
+ * One student's response sheet: every attempt they sat, question by question,
+ * what they answered and what was correct.
  *
- * Before this, a teacher watching a student pass a chapter test could see one
- * number, a best score. Nothing showed what they actually answered, or let a
- * teacher tell a lucky guess from real understanding, or see a student who
- * failed twice before passing on the third try. Prev/next walks the same
- * roster the teacher was just looking at, so grading (or just checking) a
- * class does not mean reopening this sheet from scratch for each student.
+ * Before this, a teacher watching a student pass a test could see one number, a
+ * best score. Nothing showed what they actually answered, or let a teacher tell
+ * a lucky guess from real understanding, or see a student who failed twice
+ * before passing on the third try. Prev/next walks the same roster the teacher
+ * was just looking at, so checking a class does not mean reopening this sheet
+ * from scratch for each student.
+ *
+ * Lives under components/tests rather than components/study-materials because
+ * it is no longer about chapters: the chapter report and the teacher's per-run
+ * results tab open the same drawer, differing only in the `endpoint` they pass.
+ * Both are served by getStudentTestAttemptReview.
  */
 
 import { useEffect, useState } from 'react';
 import {
   Box, Drawer, Stack, Typography, IconButton, Chip, Skeleton, Alert,
-  ToggleButton, ToggleButtonGroup, alpha, useTheme, useMediaQuery,
+  ToggleButton, ToggleButtonGroup, alpha, useTheme,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -32,17 +37,24 @@ interface AttemptRow {
   total_marks: number;
   percentage: number;
   passed: boolean;
+  /** Only sent by the generalised route; the chapter report omits it. */
+  provisional?: boolean;
   review: GradedReviewItem[];
 }
 
 interface ResponseSheetData {
-  test: { test_id: string; title: string; passing_pct: number } | null;
+  test: { test_id: string; title: string; passing_pct: number | null } | null;
   attempts: AttemptRow[];
 }
 
 interface StudentAttemptSheetProps {
   open: boolean;
-  fileId: string;
+  /**
+   * Where to read this student's attempts from. The caller owns the URL because
+   * the same drawer serves a chapter report, a teacher's run results and (later)
+   * a student's own history, which are three different authorisation stories.
+   */
+  endpoint: string;
   student: { id: string; name: string | null; avatar_url: string | null } | null;
   getToken: () => Promise<string | null>;
   onClose: () => void;
@@ -50,11 +62,19 @@ interface StudentAttemptSheetProps {
   onNext: () => void;
   hasPrev: boolean;
   hasNext: boolean;
+  /** Overrides the subtitle when the caller knows the run's name. */
+  subtitle?: string;
+}
+
+/** A percentage never travels alone. See formatScore in TestResultsPanel. */
+function scoreLabel(a: { percentage: number; score: number; total_marks: number }): string {
+  const pct = Math.round(a.percentage);
+  return a.total_marks > 0 ? `${pct}% (${a.score}/${a.total_marks})` : `${pct}%`;
 }
 
 export default function StudentAttemptSheet({
   open,
-  fileId,
+  endpoint,
   student,
   getToken,
   onClose,
@@ -62,9 +82,9 @@ export default function StudentAttemptSheet({
   onNext,
   hasPrev,
   hasNext,
+  subtitle,
 }: StudentAttemptSheetProps) {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [data, setData] = useState<ResponseSheetData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -80,16 +100,17 @@ export default function StudentAttemptSheet({
     (async () => {
       try {
         const t = await getToken();
-        const res = await fetch(`/api/study-materials/reports/chapter/${fileId}/student/${student.id}`, {
-          headers: { Authorization: `Bearer ${t}` },
-        });
+        const res = await fetch(endpoint, { headers: { Authorization: `Bearer ${t}` } });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body?.error || 'Could not load this student’s responses.');
         if (cancelled) return;
-        setData(body);
+        // The chapter report replies at the top level; the generalised route
+        // wraps its payload in `data`, as every other question-bank route does.
+        const payload: ResponseSheetData = body?.data ?? body;
+        setData(payload);
         // Default to the latest attempt: the one that answers "did they
         // eventually get it," which every earlier attempt already led to.
-        setAttemptIndex(Math.max(0, (body.attempts?.length || 1) - 1));
+        setAttemptIndex(Math.max(0, (payload.attempts?.length || 1) - 1));
       } catch (e: any) {
         if (!cancelled) setError(e?.message || 'Could not load this student’s responses.');
       } finally {
@@ -99,7 +120,7 @@ export default function StudentAttemptSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, student, fileId, getToken]);
+  }, [open, student, endpoint, getToken]);
 
   const attempt = data?.attempts?.[attemptIndex] ?? null;
 
@@ -122,7 +143,7 @@ export default function StudentAttemptSheet({
               {student?.name || 'Student'}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {data?.test?.title || 'Chapter test'} responses
+              {subtitle || `${data?.test?.title || 'Test'} responses`}
             </Typography>
           </Box>
           <IconButton onClick={onNext} disabled={!hasNext} sx={{ minWidth: 44, minHeight: 44 }} aria-label="Next student">
@@ -141,6 +162,8 @@ export default function StudentAttemptSheet({
         ) : error ? (
           <Alert severity="warning">{error}</Alert>
         ) : !data?.attempts?.length ? (
+          /* A student who never sat it still opens the sheet, so the drill-down
+             from a "Not started" row is never a dead end. */
           <Box sx={{ textAlign: 'center', py: 5 }}>
             <Typography color="text.secondary">No test attempts yet.</Typography>
           </Box>
@@ -158,7 +181,7 @@ export default function StudentAttemptSheet({
                 {data.attempts.map((a, i) => (
                   <ToggleButton key={a.attempt_id} value={i}>
                     Attempt {a.attempt_number}
-                    {a.mode === 'revision' ? ' · practice' : ''} · {Math.round(a.percentage)}%
+                    {a.mode === 'revision' ? ' · practice' : ''} · {scoreLabel(a)}
                   </ToggleButton>
                 ))}
               </ToggleButtonGroup>
@@ -186,6 +209,7 @@ export default function StudentAttemptSheet({
                             day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
                           })
                         : 'Submitted'}
+                      {attempt.provisional ? ' · provisional, drawings still being marked' : ''}
                     </Typography>
                   </Box>
                   <Chip

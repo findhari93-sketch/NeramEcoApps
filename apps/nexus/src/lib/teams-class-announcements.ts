@@ -555,15 +555,21 @@ export async function refreshClassAnnouncement(
  * Remove the Teams announcement cards a class posted (best-effort, non-blocking).
  *
  * Channel and chat messages cannot be hard-deleted via Graph; softDelete removes
- * them from view. Any failure is swallowed with a log.
+ * them from view. A single target failing (wrong/expired scope, the caller no
+ * longer being a member of that chat, etc.) must not abort the others, so each
+ * is logged and swallowed independently. The caller still gets to know WHICH
+ * targets failed via the returned `failures` list, so a permanent delete can
+ * say "deleted, but the Teams post is still there" instead of reporting a
+ * clean success while a card sits untouched in Teams.
  */
 export async function removeTeamsAnnouncements(
   token: string,
   supabase: AdminClient,
   classroomId: string,
   cls: TeamsAnnouncementRefs | null,
-): Promise<void> {
-  if (!cls) return;
+): Promise<{ failures: string[] }> {
+  const failures: string[] = [];
+  if (!cls) return { failures };
   const needsChannel = !!(cls.teams_channel_id && cls.teams_channel_message_id);
   const needsChat = !!cls.teams_group_chat_message_id;
   // A teacher-shared card advertises the class the same way the join card does,
@@ -571,7 +577,7 @@ export async function removeTeamsAnnouncements(
   // predates these columns pass undefined and skip this, unchanged.
   const needsShareChannel = !!(cls.teams_channel_id && cls.teams_share_message_id);
   const needsShareChat = !!cls.teams_share_chat_message_id;
-  if (!needsChannel && !needsChat && !needsShareChannel && !needsShareChat) return;
+  if (!needsChannel && !needsChat && !needsShareChannel && !needsShareChat) return { failures };
 
   const { data: classroom } = await supabase
     .from('nexus_classrooms')
@@ -585,39 +591,59 @@ export async function removeTeamsAnnouncements(
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
         console.error(`softDelete ${label} failed (non-blocking):`, res.status, errText);
+        failures.push(label);
       }
     } catch (err) {
       console.error(`softDelete ${label} errored (non-blocking):`, err);
+      failures.push(label);
     }
   };
 
-  if (needsChannel && classroom?.ms_team_id) {
-    await softDelete(
-      `https://graph.microsoft.com/v1.0/teams/${classroom.ms_team_id}/channels/${cls.teams_channel_id}/messages/${cls.teams_channel_message_id}/softDelete`,
-      'channel post',
-    );
+  if (needsChannel) {
+    if (classroom?.ms_team_id) {
+      await softDelete(
+        `https://graph.microsoft.com/v1.0/teams/${classroom.ms_team_id}/channels/${cls.teams_channel_id}/messages/${cls.teams_channel_message_id}/softDelete`,
+        'channel post',
+      );
+    } else {
+      failures.push('channel post');
+    }
   }
 
-  if (needsChat && classroom?.ms_group_chat_id) {
-    await softDelete(
-      `https://graph.microsoft.com/v1.0/chats/${classroom.ms_group_chat_id}/messages/${cls.teams_group_chat_message_id}/softDelete`,
-      'group chat post',
-    );
+  if (needsChat) {
+    if (classroom?.ms_group_chat_id) {
+      await softDelete(
+        `https://graph.microsoft.com/v1.0/chats/${classroom.ms_group_chat_id}/messages/${cls.teams_group_chat_message_id}/softDelete`,
+        'group chat post',
+      );
+    } else {
+      failures.push('group chat post');
+    }
   }
 
-  if (needsShareChannel && classroom?.ms_team_id) {
-    await softDelete(
-      `https://graph.microsoft.com/v1.0/teams/${classroom.ms_team_id}/channels/${cls.teams_channel_id}/messages/${cls.teams_share_message_id}/softDelete`,
-      'shared class card (channel)',
-    );
+  if (needsShareChannel) {
+    if (classroom?.ms_team_id) {
+      await softDelete(
+        `https://graph.microsoft.com/v1.0/teams/${classroom.ms_team_id}/channels/${cls.teams_channel_id}/messages/${cls.teams_share_message_id}/softDelete`,
+        'shared class card (channel)',
+      );
+    } else {
+      failures.push('shared class card (channel)');
+    }
   }
 
-  if (needsShareChat && classroom?.ms_group_chat_id) {
-    await softDelete(
-      `https://graph.microsoft.com/v1.0/chats/${classroom.ms_group_chat_id}/messages/${cls.teams_share_chat_message_id}/softDelete`,
-      'shared class card (chat)',
-    );
+  if (needsShareChat) {
+    if (classroom?.ms_group_chat_id) {
+      await softDelete(
+        `https://graph.microsoft.com/v1.0/chats/${classroom.ms_group_chat_id}/messages/${cls.teams_share_chat_message_id}/softDelete`,
+        'shared class card (chat)',
+      );
+    } else {
+      failures.push('shared class card (chat)');
+    }
   }
+
+  return { failures };
 }
 
 /**

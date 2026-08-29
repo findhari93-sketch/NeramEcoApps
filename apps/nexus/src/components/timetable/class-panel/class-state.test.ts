@@ -49,6 +49,11 @@ describe('deriveClassState', () => {
     expect(state.isPast).toBe(true);
     expect(state.isUpcoming).toBe(false);
     expect(state.displayStatus).toBe('completed');
+    // isPast + !isCancelled together is the state a class lands in when it was
+    // scheduled onto a date already gone by and nobody ever cancelled it.
+    // ClassManageSection keys its "Delete Permanently" recovery branch off
+    // exactly this combination.
+    expect(state.isCancelled).toBe(false);
   });
 
   it('keeps a class mid-session upcoming, not past', () => {

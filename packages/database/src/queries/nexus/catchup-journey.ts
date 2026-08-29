@@ -18,6 +18,8 @@ import {
   DEFAULT_CATCHUP_WINDOWS,
   type CatchupWindows,
 } from '../../utils/catchup';
+// Pure of this module: test-access.ts imports nothing from here, so no cycle.
+import { grantCatchupTestWindow } from './test-access';
 
 const JOURNEYS = 'nexus_catchup_journeys';
 const ITEMS = 'nexus_class_absences';
@@ -1228,11 +1230,59 @@ export async function recordCatchupTestAttempt(
 }
 
 /**
+ * Open the buffer on a closed class test for a student who has caught up.
+ *
+ * The founder's rule: a student who missed the class gets their own window
+ * automatically once they finish catching up, with nobody asked.
+ *
+ * Deliberately its own function, called independently of the absence-row
+ * unlock below. Both are triggered by the same event but neither is a
+ * precondition of the other, and folding this into the early returns of
+ * unlockCatchupTestForRecap was a real trap: a student who finished the recap
+ * yesterday (so test_unlocked_at is already set) and whose class test closed
+ * today would have got nothing at all.
+ *
+ * Silent on every failure. This runs as a side effect of finishing a recap, and
+ * a student must never see their catch-up fail because a window could not be
+ * written.
+ */
+export async function grantClassTestWindowForClass(
+  studentId: string,
+  scheduledClassId: string,
+  client?: TypedSupabaseClient,
+): Promise<boolean> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  try {
+    const { data: placement } = await supabase
+      .from('nexus_test_placements')
+      .select('id, available_until')
+      .eq('context_type', 'class_test')
+      .eq('context_id', scheduledClassId)
+      .eq('is_active', true)
+      .maybeSingle();
+    // No class test set, or one that never shuts. Either way there is no door
+    // to open, and granting a window would be noise on the teacher's roster.
+    if (!placement?.available_until) return false;
+
+    return await grantCatchupTestWindow(
+      { placementId: placement.id, studentId },
+      supabase,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Open the class test once the gated recap is finished.
  *
  * Called from the recap checkpoint route the moment the last checkpoint passes.
  * Never re-opens a test that has already been passed, and never overwrites an
  * unlock that is already standing.
+ *
+ * Two independent steps sharing one lookup: the absence row's own unlock, and
+ * the class test window. See grantClassTestWindowForClass for why the second
+ * must not sit behind the first one's early returns.
  */
 export async function unlockCatchupTestForRecap(
   studentId: string,
@@ -1249,6 +1299,10 @@ export async function unlockCatchupTestForRecap(
   // An ad-hoc recap has no class, so it can never be a backlog item.
   if (!recap?.scheduled_class_id) return false;
 
+  // Step one, on its own: the teacher-set class test, if it has shut.
+  await grantClassTestWindowForClass(studentId, recap.scheduled_class_id, supabase);
+
+  // Step two: the auto-generated catch-up paper's own unlock.
   const { data: item } = await supabase
     .from(ITEMS)
     .select('id, test_unlocked_at, test_passed_at')
@@ -1324,6 +1378,11 @@ export async function rearmCatchupTest(
     .from(ITEMS)
     .update({ test_unlocked_at: new Date().toISOString(), rewatch_count: rewatchCount })
     .eq('id', item.id);
+
+  // A rewatch reopens the teacher's class test too, on the same terms. Without
+  // this, a student sent back through the recording would clear the catch-up
+  // paper and still find the class test shut.
+  await grantClassTestWindowForClass(studentId, classId, supabase);
 
   return { ok: true, rewatchCount };
 }

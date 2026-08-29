@@ -31,7 +31,9 @@ export interface NotifyStudentsInput {
     | 'recording_available'
     | 'week_published'
     | 'absence_reason_needed'
-    | 'test_scheduled';
+    | 'test_scheduled'
+    | 'assignment_published'
+    | 'assignment_linked';
   /** Bell headline. */
   title: string;
   /** Bell body, and the Teams preview line. */
@@ -41,12 +43,23 @@ export interface NotifyStudentsInput {
   metadata?: Record<string, unknown>;
   /** Set false to write the bell notification only. */
   teams?: boolean;
+  /**
+   * Also write the TOP-BAR bell (`user_notifications`), the one visible on every
+   * page rather than only inside a classroom's timetable.
+   *
+   * Off by default so the existing class-lifecycle callers keep their current
+   * reach. Turn it on for things a student must not miss by simply never
+   * opening the timetable, which is exactly how new assignments went unnoticed.
+   */
+  topBar?: boolean;
 }
 
 export interface NotifyStudentsResult {
   recipients: number;
   teamsDelivered: number;
   inAppDelivered: number;
+  /** Rows written to the top-bar bell. 0 when `topBar` was not requested. */
+  topBarDelivered: number;
 }
 
 export async function notifyStudents(input: NotifyStudentsInput): Promise<NotifyStudentsResult> {
@@ -65,7 +78,7 @@ export async function notifyStudents(input: NotifyStudentsInput): Promise<Notify
 
   const ids = [...new Set(studentIds || [])];
   if (ids.length === 0) {
-    return { recipients: 0, teamsDelivered: 0, inAppDelivered: 0 };
+    return { recipients: 0, teamsDelivered: 0, inAppDelivered: 0, topBarDelivered: 0 };
   }
 
   // The bell first: it is the record, so it should not depend on Teams working.
@@ -81,6 +94,26 @@ export async function notifyStudents(input: NotifyStudentsInput): Promise<Notify
     })),
   );
   if (!bellError) inAppDelivered = ids.length;
+
+  // The top-bar bell, when the caller asked for it. Separate table, separate
+  // failure: a rejected enum value here must not cost the classroom bell above.
+  let topBarDelivered = 0;
+  if (input.topBar) {
+    const { error: topBarError } = await supabase.from('user_notifications').insert(
+      ids.map((userId) => ({
+        user_id: userId,
+        event_type: input.eventType,
+        title: input.title,
+        message: input.message,
+        metadata: input.metadata || null,
+        is_read: false,
+      })),
+    );
+    // Never swallow this silently: the enum behind user_notifications.event_type
+    // rejects unknown values, and that failure is otherwise invisible.
+    if (topBarError) console.error(`${input.eventType} top-bar notify failed:`, topBarError.message);
+    else topBarDelivered = ids.length;
+  }
 
   let teamsDelivered = 0;
   const catalogAppId = process.env.TEAMS_APP_CATALOG_ID;
@@ -101,5 +134,5 @@ export async function notifyStudents(input: NotifyStudentsInput): Promise<Notify
     teamsDelivered = results.filter((r) => r.status === 'fulfilled' && (r.value as any)?.ok).length;
   }
 
-  return { recipients: ids.length, teamsDelivered, inAppDelivered };
+  return { recipients: ids.length, teamsDelivered, inAppDelivered, topBarDelivered };
 }

@@ -68,6 +68,8 @@ interface ClassroomDetail {
   ms_channel_id: string | null;
   ms_channel_name: string | null;
   ms_group_chat_id: string | null;
+  ms_assignment_channel_id: string | null;
+  ms_assignment_channel_name: string | null;
   created_at: string;
 }
 
@@ -395,6 +397,33 @@ export default function ClassroomDetailPage() {
         open: true,
         severity: channelId ? 'success' : 'info',
         message: channelId ? `Class meetings will post to "${channelName}"` : 'Channel unlinked',
+      });
+      await fetchClassroom();
+    }
+  };
+
+  // Teams: where assignment cards post. Deliberately a SEPARATE channel from the
+  // meeting one: students read the meeting channel for "am I joining a call now",
+  // and assignment cards in there are noise. Unset is valid and means the cards
+  // go to the group chat only.
+  const handleLinkAssignmentChannel = async (channelId: string | null, channelName: string | null) => {
+    const token = await getToken();
+    if (!token) return;
+    const res = await fetch(`/api/classrooms/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ms_assignment_channel_id: channelId,
+        ms_assignment_channel_name: channelName,
+      }),
+    });
+    if (res.ok) {
+      setSnackbar({
+        open: true,
+        severity: channelId ? 'success' : 'info',
+        message: channelId
+          ? `New assignments will post to "${channelName}"`
+          : 'Assignment channel unlinked, cards will post to the group chat only',
       });
       await fetchClassroom();
     }
@@ -853,7 +882,7 @@ export default function ClassroomDetailPage() {
                         }}
                       />
                     )}
-                    sx={{ mb: 1 }}
+                    sx={{ mb: 1, '& .MuiInputBase-root': { minHeight: 48 } }}
                   />
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                     <TextField
@@ -875,6 +904,50 @@ export default function ClassroomDetailPage() {
                       Create
                     </Button>
                   </Box>
+                </Box>
+
+                {/* Assignment channel: where new-assignment cards post */}
+                <Box sx={{ pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                    <TagIcon fontSize="small" color="action" />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Assignment channel</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    New assignments post here when they are published. Leave unset to post in the group chat only.
+                  </Typography>
+                  <Autocomplete
+                    size="small"
+                    options={availableChannels}
+                    loading={channelsLoading}
+                    value={
+                      availableChannels.find((c) => c.id === classroom.ms_assignment_channel_id) ||
+                      (classroom.ms_assignment_channel_id
+                        ? {
+                            id: classroom.ms_assignment_channel_id,
+                            displayName: classroom.ms_assignment_channel_name || 'Linked channel',
+                          }
+                        : null)
+                    }
+                    getOptionLabel={(o) => o.displayName}
+                    isOptionEqualToValue={(o, v) => o.id === v.id}
+                    onChange={(_e, val) => handleLinkAssignmentChannel(val?.id ?? null, val?.displayName ?? null)}
+                    renderInput={(paramsIn) => (
+                      <TextField
+                        {...paramsIn}
+                        placeholder="Select a channel"
+                        InputProps={{
+                          ...paramsIn.InputProps,
+                          endAdornment: (
+                            <>
+                              {channelsLoading ? <CircularProgress size={16} /> : null}
+                              {paramsIn.InputProps.endAdornment}
+                            </>
+                          ),
+                        }}
+                      />
+                    )}
+                    sx={{ mb: 1, '& .MuiInputBase-root': { minHeight: 48 } }}
+                  />
                 </Box>
 
                 {/* Group chat: where meeting announcements are posted for students */}

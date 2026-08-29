@@ -102,6 +102,7 @@ export async function PUT(
       name, type, description,
       ms_team_id, ms_team_name, ms_team_sync_enabled,
       ms_channel_id, ms_channel_name, ms_group_chat_id,
+      ms_assignment_channel_id, ms_assignment_channel_name,
       is_active,
     } = body;
 
@@ -115,12 +116,24 @@ export async function PUT(
     if (ms_channel_id !== undefined) updateData.ms_channel_id = ms_channel_id;
     if (ms_channel_name !== undefined) updateData.ms_channel_name = ms_channel_name;
     if (ms_group_chat_id !== undefined) updateData.ms_group_chat_id = ms_group_chat_id;
+    // Where assignment cards post. Separate from ms_channel_id on purpose: that
+    // one is the meeting channel, and assignments must not land in it.
+    if (ms_assignment_channel_id !== undefined) {
+      updateData.ms_assignment_channel_id = ms_assignment_channel_id;
+    }
+    if (ms_assignment_channel_name !== undefined) {
+      updateData.ms_assignment_channel_name = ms_assignment_channel_name;
+    }
     if (is_active !== undefined) updateData.is_active = is_active;
 
-    // Clearing the team link should also clear its dependent channel link.
+    // Clearing the team link should also clear its dependent channel links.
+    // Both of them: a stale assignment channel id on a team that is no longer
+    // linked would have assignment cards posting into nowhere, silently.
     if (ms_team_id === null) {
       updateData.ms_channel_id = null;
       updateData.ms_channel_name = null;
+      updateData.ms_assignment_channel_id = null;
+      updateData.ms_assignment_channel_name = null;
     }
 
     const { data: classroom, error } = await supabase

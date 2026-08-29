@@ -44,7 +44,10 @@ export async function GET(request: NextRequest) {
       return null;
     };
     const formatParam = first('question_format', 'format');
-    const searchParam = first('search_text', 'search');
+    // Three names existed for one concept: the teacher page sent `search`, this
+    // route read `search_text`, and the student page's shareable URL used `q`.
+    // Accept all three so a link copied from either page keeps working.
+    const searchParam = first('search_text', 'search', 'q');
     const attemptParam = first('attempt_status', 'status');
 
     const filters: import('@neram/database').QBFilterState = {

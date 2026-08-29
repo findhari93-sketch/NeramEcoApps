@@ -33,6 +33,9 @@ import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentAttemptSheet from '@/components/tests/StudentAttemptSheet';
+
+type ResultStatus = 'submitted' | 'in_progress' | 'not_started' | 'missed' | 'excused';
 
 interface ResultRow {
   student_id: string;
@@ -40,11 +43,66 @@ interface ResultRow {
   /** The route has always sent this; the panel simply never asked for it. */
   avatar_url: string | null;
   attempts: number;
+  first_percentage: number | null;
+  first_score: number | null;
+  first_total_marks: number | null;
+  first_submitted_at: string | null;
   best_percentage: number | null;
+  best_score: number | null;
+  best_total_marks: number | null;
   last_percentage: number | null;
   last_submitted_at: string | null;
   passed: boolean | null;
+  status: ResultStatus;
+  bucket: string | null;
+  is_mandatory: boolean | null;
+  provisional: boolean;
+  window_open_until: string | null;
+  access_request_pending: boolean;
 }
+
+interface RunSummary {
+  placement_id: string | null;
+  door: 'practice' | 'class' | 'exam' | 'other';
+  context_type: string | null;
+  label: string;
+  opens_at: string | null;
+  closes_at: string | null;
+  attempts: number;
+  is_active: boolean;
+}
+
+/**
+ * Group headings for the roster, in the order a teacher reads them: the people
+ * who were there, then the people who caught up, then the people nothing is
+ * owed by yet. Naming the reason a student is excused is what stops the chase
+ * list being ignored.
+ */
+const BUCKET_LABELS: Record<string, string> = {
+  mandatory_attended: 'In the class',
+  mandatory_caught_up: 'Caught up later',
+  excused_pending_catchup: 'Still catching up, not required yet',
+  excused_new_joiner: 'Joined after this class',
+  teacher_override_mandatory: 'Required by you',
+  teacher_override_excused: 'Excused by you',
+};
+
+const BUCKET_ORDER = [
+  'mandatory_attended',
+  'mandatory_caught_up',
+  'teacher_override_mandatory',
+  'excused_pending_catchup',
+  'excused_new_joiner',
+  'teacher_override_excused',
+];
+
+const STATUS_TEXT: Record<ResultStatus, string> = {
+  submitted: '',
+  in_progress: 'In progress',
+  not_started: 'Not started',
+  missed: 'Missed the date',
+  excused: 'Not required',
+};
 
 interface QuestionRow {
   question_id: string;
@@ -62,6 +120,16 @@ interface Stats {
   attempts: number;
   average: number | null;
   passed: number;
+  roster_total: number | null;
+  mandatory: number | null;
+  submitted: number | null;
+  not_started: number | null;
+  missed: number | null;
+  excused: number | null;
+  average_first: number | null;
+  average_first_marks: { score: number; total: number } | null;
+  average_best_marks: { score: number; total: number } | null;
+  pass_mark_pct: number | null;
 }
 
 function formatWhen(iso: string | null): string {
@@ -69,6 +137,20 @@ function formatWhen(iso: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+}
+
+/**
+ * A percentage always travels with the marks it came from.
+ *
+ * The whole reason this panel was rebuilt: a bare "100%" told a teacher nothing
+ * about how many questions that was, or out of what. Never render a percentage
+ * without calling this.
+ */
+function formatScore(pct: number | null, score: number | null, total: number | null): string {
+  if (pct == null) return '-';
+  const rounded = Math.round(pct);
+  if (score == null || total == null || total <= 0) return `${rounded}%`;
+  return `${rounded}% (${score}/${total})`;
 }
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -92,9 +174,15 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint?:
 export default function TestResultsPanel({
   testId,
   authFetch,
+  getToken,
+  initialRunId = '',
 }: {
   testId: string;
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
+  /** For the response sheet drawer, which fetches directly rather than via authFetch. */
+  getToken: () => Promise<string | null>;
+  /** Open straight onto one run, for "See results" links from the runs list. */
+  initialRunId?: string;
 }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -103,20 +191,35 @@ export default function TestResultsPanel({
   const [rows, setRows] = useState<ResultRow[] | null>(null);
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [runId, setRunId] = useState<string>(initialRunId);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Which number leads each row. First is the honest measure of what a student
+  // knew when the paper was set; best is how far they got after retries.
+  const [scoreShown, setScoreShown] = useState<'first' | 'best'>('best');
+  // Index into the flattened, grouped list, so prev/next walks what the teacher
+  // is actually looking at rather than the unsorted rows behind it.
+  const [sheetIndex, setSheetIndex] = useState<number | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const json = await authFetch(`/api/question-bank/tests/${testId}/results`);
+      const qs = runId ? `?placement_id=${encodeURIComponent(runId)}` : '';
+      const json = await authFetch(`/api/question-bank/tests/${testId}/results${qs}`);
       setRows(json.data?.rows || []);
       setQuestions(json.data?.questions || []);
       setStats(json.data?.stats || null);
+      setRuns(json.data?.runs || []);
+      // A dated run is about what the class knew on the day, so it leads with
+      // the first sitting. An always-open practice pool has no such day.
+      const door = json.data?.run?.door;
+      setScoreShown(door === 'class' || door === 'exam' ? 'first' : 'best');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load results');
       setRows([]);
     }
-  }, [authFetch, testId]);
+  }, [authFetch, testId, runId]);
 
   useEffect(() => {
     load();
@@ -126,17 +229,106 @@ export default function TestResultsPanel({
     !search.trim() ? true : (r.student_name || '').toLowerCase().includes(search.trim().toLowerCase()),
   );
 
+  const isRunScoped = Boolean(stats?.roster_total);
+
+  /**
+   * Grouped rather than filtered, so the whole picture is one scroll. A teacher
+   * looking for who to chase should not have to know which tab it hides behind.
+   */
+  const groups = isRunScoped
+    ? BUCKET_ORDER.map((bucket) => ({
+        bucket,
+        label: BUCKET_LABELS[bucket] || bucket,
+        rows: filtered.filter((r) => r.bucket === bucket),
+      })).filter((g) => g.rows.length > 0)
+    : [{ bucket: '', label: '', rows: filtered }];
+
+  // The reading order on screen, which is what prev/next in the drawer follows.
+  const walk = groups.flatMap((g) => g.rows);
+  const sheetRow = sheetIndex == null ? null : walk[sheetIndex] ?? null;
+
+  /**
+   * Open or close the run for one student.
+   *
+   * Only offered on a run, because there is no window to open on the paper wide
+   * view. Reloads rather than patching the row in place: the status a student
+   * ends up in depends on the run's own close time as well as their grant, and
+   * recomputing that here would be a second opinion that drifts.
+   */
+  async function setAccess(studentId: string, action: 'open' | 'close') {
+    if (!runId) return;
+    setActing(studentId);
+    try {
+      await authFetch(`/api/tests/runs/${runId}/access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: studentId, action }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not change access');
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function decide(studentId: string, decision: 'granted' | 'declined') {
+    if (!runId) return;
+    setActing(studentId);
+    try {
+      const live = await authFetch(`/api/tests/runs/${runId}/access`);
+      const mine = (live.data?.requests || []).find(
+        (r: any) => r.student_id === studentId && r.status === 'pending',
+      );
+      if (mine) {
+        await authFetch(`/api/tests/runs/${runId}/access`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request_id: mine.id, decision }),
+        });
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not answer that request');
+    } finally {
+      setActing(null);
+    }
+  }
+
+  const waiting = (rows || []).filter((r) => r.access_request_pending);
+
   function exportCsv() {
-    const header = ['Student', 'Attempts', 'Best %', 'Latest %', 'Passed', 'Last attempt'];
+    const header = [
+      'Student',
+      'Group',
+      'Status',
+      'Attempts',
+      'First %',
+      'First marks',
+      'Best %',
+      'Best marks',
+      'Passed',
+      'First attempt at',
+      'Last attempt at',
+    ];
+    const marks = (score: number | null, total: number | null) =>
+      score == null || total == null ? '' : `${score}/${total}`;
     const lines = [header.join(',')];
+    // Walks `rows`, not `filtered`: the export is the whole run, which is the
+    // single most useful thing about it now that non-attempters are in there.
     for (const r of rows || []) {
       lines.push(
         [
           `"${(r.student_name || 'Unknown').replace(/"/g, '""')}"`,
+          `"${BUCKET_LABELS[r.bucket || ''] || ''}"`,
+          `"${r.status === 'submitted' ? 'Done' : STATUS_TEXT[r.status]}"`,
           r.attempts,
+          r.first_percentage ?? '',
+          marks(r.first_score, r.first_total_marks),
           r.best_percentage ?? '',
-          r.last_percentage ?? '',
+          marks(r.best_score, r.best_total_marks),
           r.passed == null ? '' : r.passed ? 'yes' : 'no',
+          r.first_submitted_at ?? '',
           r.last_submitted_at ?? '',
         ].join(','),
       );
@@ -168,7 +360,9 @@ export default function TestResultsPanel({
     );
   }
 
-  if (stats && stats.attempts === 0) {
+  // A run with a roster is never empty, even before anyone sits it: the list of
+  // people who have not is exactly what the teacher came for.
+  if (stats && stats.attempts === 0 && !stats.roster_total) {
     return (
       <Paper variant="outlined" sx={{ py: 6, px: 3, textAlign: 'center', borderRadius: 2 }}>
         <GroupsOutlinedIcon sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
@@ -180,16 +374,91 @@ export default function TestResultsPanel({
   }
 
   const flagged = questions.filter((q) => q.needs_review);
+  const notDone = (stats?.not_started ?? 0) + (stats?.missed ?? 0);
 
   return (
     <Box>
+      {runs.length > 0 && (
+        <TextField
+          select
+          size="small"
+          label="Showing"
+          value={runId}
+          onChange={(e) => setRunId(e.target.value)}
+          SelectProps={{ native: true }}
+          sx={{ mb: 2, minWidth: 240, width: { xs: '100%', sm: 'auto' } }}
+          helperText="A run is one scheduled use of this paper: who it is for, when it closes, and how they did."
+        >
+          <option value="">Everyone, all time</option>
+          {runs.map((r) => (
+            <option key={r.placement_id || 'unassigned'} value={r.placement_id || ''}>
+              {r.label} ({r.attempts})
+            </option>
+          ))}
+        </TextField>
+      )}
+
       {stats && (
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-          <StatTile label="STUDENTS" value={String(stats.students)} />
-          <StatTile label="ATTEMPTS" value={String(stats.attempts)} hint="retakes included" />
-          <StatTile label="AVERAGE" value={stats.average == null ? '-' : `${stats.average}%`} hint="best score each" />
-          <StatTile label="PASSED" value={String(stats.passed)} />
+          {isRunScoped ? (
+            <>
+              <StatTile
+                label="DONE"
+                value={`${stats.submitted ?? 0} of ${stats.mandatory ?? stats.roster_total ?? 0}`}
+                hint="of the students this is set for"
+              />
+              <StatTile
+                label="NOT DONE"
+                value={String(notDone)}
+                hint={`${stats.not_started ?? 0} not started, ${stats.missed ?? 0} missed the date`}
+              />
+              <StatTile
+                label="AVERAGE"
+                value={
+                  scoreShown === 'first'
+                    ? stats.average_first == null
+                      ? '-'
+                      : `${stats.average_first}%`
+                    : stats.average == null
+                      ? '-'
+                      : `${stats.average}%`
+                }
+                hint={
+                  scoreShown === 'first'
+                    ? stats.average_first_marks
+                      ? `first attempt, ${stats.average_first_marks.score} of ${stats.average_first_marks.total} marks`
+                      : 'first attempt'
+                    : stats.average_best_marks
+                      ? `best each, ${stats.average_best_marks.score} of ${stats.average_best_marks.total} marks`
+                      : 'best score each'
+                }
+              />
+              <StatTile
+                label="PASSED"
+                value={String(stats.passed)}
+                hint={stats.pass_mark_pct == null ? undefined : `pass mark ${Math.round(stats.pass_mark_pct)}%`}
+              />
+            </>
+          ) : (
+            <>
+              <StatTile label="STUDENTS" value={String(stats.students)} />
+              <StatTile label="ATTEMPTS" value={String(stats.attempts)} hint="retakes included" />
+              <StatTile
+                label="AVERAGE"
+                value={stats.average == null ? '-' : `${stats.average}%`}
+                hint="best score each"
+              />
+              <StatTile label="PASSED" value={String(stats.passed)} />
+            </>
+          )}
         </Box>
+      )}
+
+      {waiting.length > 0 && view === 'students' && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {waiting.length} student{waiting.length !== 1 ? 's' : ''} asked to reopen this test.
+          Approve or decline on their row below.
+        </Alert>
       )}
 
       {flagged.length > 0 && view === 'students' && (
@@ -240,13 +509,29 @@ export default function TestResultsPanel({
                 ),
               }}
             />
+            {isRunScoped && (
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={scoreShown}
+                onChange={(_, v) => v && setScoreShown(v)}
+                aria-label="Score shown"
+              >
+                <ToggleButton value="first" sx={{ textTransform: 'none', px: 1.5, minHeight: 44 }}>
+                  First attempt
+                </ToggleButton>
+                <ToggleButton value="best" sx={{ textTransform: 'none', px: 1.5, minHeight: 44 }}>
+                  Best attempt
+                </ToggleButton>
+              </ToggleButtonGroup>
+            )}
             <Button
               variant="outlined"
               startIcon={<DownloadOutlinedIcon />}
               onClick={exportCsv}
               sx={{ textTransform: 'none', minHeight: 44 }}
             >
-              CSV
+              CSV (all students)
             </Button>
           </Box>
 
@@ -256,42 +541,158 @@ export default function TestResultsPanel({
                 No student matches that search.
               </Typography>
             ) : (
-              filtered.map((r, i) => (
-                <Box key={r.student_id}>
-                  {i > 0 && <Divider />}
-                  <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-                    <StudentAvatar
-                      userId={r.student_id}
-                      name={r.student_name}
-                      src={r.avatar_url}
-                      size={32}
-                    />
-                    <Box sx={{ flex: 1, minWidth: 120 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                        {r.student_name || 'Unknown student'}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {r.attempts} attempt{r.attempts !== 1 ? 's' : ''}
-                        {r.last_submitted_at ? ` · last ${formatWhen(r.last_submitted_at)}` : ''}
+              groups.map((group) => (
+                <Box key={group.bucket || 'all'}>
+                  {group.label && (
+                    <Box sx={{ px: 1.5, py: 1, bgcolor: 'action.hover' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, letterSpacing: 0.3 }}>
+                        {group.label.toUpperCase()} ({group.rows.length})
                       </Typography>
                     </Box>
-                    {!isMobile && r.best_percentage != null && (
-                      <Box sx={{ width: 120 }}>
-                        <LinearProgress
-                          variant="determinate"
-                          value={Math.min(100, r.best_percentage)}
-                          color={r.passed === false ? 'warning' : 'success'}
-                          sx={{ height: 6, borderRadius: 3 }}
-                        />
+                  )}
+                  {group.rows.map((r, i) => {
+                    const lead =
+                      scoreShown === 'first'
+                        ? { pct: r.first_percentage, score: r.first_score, total: r.first_total_marks }
+                        : { pct: r.best_percentage, score: r.best_score, total: r.best_total_marks };
+                    const other =
+                      scoreShown === 'first'
+                        ? { label: 'Best', pct: r.best_percentage, score: r.best_score, total: r.best_total_marks }
+                        : { label: 'First', pct: r.first_percentage, score: r.first_score, total: r.first_total_marks };
+                    const sat = r.attempts > 0;
+
+                    return (
+                      <Box key={r.student_id}>
+                        {i > 0 && <Divider />}
+                        <Box
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`See ${r.student_name || 'this student'}'s answers`}
+                          onClick={() => setSheetIndex(walk.indexOf(r))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSheetIndex(walk.indexOf(r));
+                            }
+                          }}
+                          sx={{
+                            p: 1.5,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1.5,
+                            flexWrap: 'wrap',
+                            minHeight: 48,
+                            cursor: 'pointer',
+                            '&:hover': { bgcolor: 'action.hover' },
+                            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+                          }}
+                        >
+                          <StudentAvatar
+                            userId={r.student_id}
+                            name={r.student_name}
+                            src={r.avatar_url}
+                            size={32}
+                          />
+                          <Box sx={{ flex: 1, minWidth: 140 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                              {r.student_name || 'Unknown student'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {sat ? (
+                                <>
+                                  {scoreShown === 'first' ? 'First' : 'Best'}{' '}
+                                  {formatScore(lead.pct, lead.score, lead.total)}
+                                  {other.pct != null && other.pct !== lead.pct
+                                    ? ` · ${other.label} ${formatScore(other.pct, other.score, other.total)}`
+                                    : ''}
+                                  {` · ${r.attempts} attempt${r.attempts !== 1 ? 's' : ''}`}
+                                  {r.last_submitted_at ? ` · last ${formatWhen(r.last_submitted_at)}` : ''}
+                                  {r.provisional ? ' · provisional' : ''}
+                                </>
+                              ) : (
+                                <>
+                                  {STATUS_TEXT[r.status]}
+                                  {r.window_open_until ? ` · open until ${formatWhen(r.window_open_until)}` : ''}
+                                  {r.access_request_pending ? ' · asked to reopen' : ''}
+                                </>
+                              )}
+                            </Typography>
+                          </Box>
+                          {!isMobile && sat && lead.pct != null && (
+                            <Box sx={{ width: 120 }}>
+                              <LinearProgress
+                                variant="determinate"
+                                value={Math.min(100, lead.pct)}
+                                color={r.passed === false ? 'warning' : 'success'}
+                                sx={{ height: 6, borderRadius: 3 }}
+                              />
+                            </Box>
+                          )}
+                          {/* The teacher's half of the reopen flow, right on
+                              the row where they noticed the problem. */}
+                          {isRunScoped && runId && !sat && (
+                            <Box
+                              sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {r.access_request_pending ? (
+                                <>
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    disabled={acting === r.student_id}
+                                    onClick={() => decide(r.student_id, 'granted')}
+                                    sx={{ textTransform: 'none', minHeight: 44 }}
+                                  >
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    disabled={acting === r.student_id}
+                                    onClick={() => decide(r.student_id, 'declined')}
+                                    sx={{ textTransform: 'none', minHeight: 44 }}
+                                  >
+                                    Decline
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  size="small"
+                                  disabled={acting === r.student_id}
+                                  onClick={() =>
+                                    setAccess(r.student_id, r.window_open_until ? 'close' : 'open')
+                                  }
+                                  sx={{ textTransform: 'none', minHeight: 44 }}
+                                >
+                                  {r.window_open_until ? 'Close' : 'Open for them'}
+                                </Button>
+                              )}
+                            </Box>
+                          )}
+                          <Chip
+                            size="small"
+                            label={
+                              sat
+                                ? formatScore(lead.pct, lead.score, lead.total)
+                                : STATUS_TEXT[r.status]
+                            }
+                            color={
+                              !sat
+                                ? r.status === 'missed'
+                                  ? 'warning'
+                                  : 'default'
+                                : r.passed === true
+                                  ? 'success'
+                                  : r.passed === false
+                                    ? 'default'
+                                    : 'primary'
+                            }
+                            sx={{ height: 26, fontWeight: 700, minWidth: 56 }}
+                          />
+                        </Box>
                       </Box>
-                    )}
-                    <Chip
-                      size="small"
-                      label={r.best_percentage == null ? '-' : `${Math.round(r.best_percentage)}%`}
-                      color={r.passed === true ? 'success' : r.passed === false ? 'default' : 'primary'}
-                      sx={{ height: 26, fontWeight: 700, minWidth: 56 }}
-                    />
-                  </Box>
+                    );
+                  })}
                 </Box>
               ))
             )}
@@ -347,6 +748,30 @@ export default function TestResultsPanel({
           )}
         </Paper>
       )}
+
+      {/* The drill-down. "7 attempts" was a dead end until this existed. */}
+      <StudentAttemptSheet
+        open={sheetRow != null}
+        endpoint={
+          sheetRow
+            ? `/api/question-bank/tests/${testId}/attempts/${sheetRow.student_id}${
+                runId ? `?placement_id=${encodeURIComponent(runId)}` : ''
+              }`
+            : ''
+        }
+        subtitle={runs.find((r) => r.placement_id === runId)?.label || 'Every attempt, all time'}
+        student={
+          sheetRow
+            ? { id: sheetRow.student_id, name: sheetRow.student_name, avatar_url: sheetRow.avatar_url }
+            : null
+        }
+        getToken={getToken}
+        onClose={() => setSheetIndex(null)}
+        onPrev={() => setSheetIndex((i) => (i != null && i > 0 ? i - 1 : i))}
+        onNext={() => setSheetIndex((i) => (i != null && i < walk.length - 1 ? i + 1 : i))}
+        hasPrev={sheetIndex != null && sheetIndex > 0}
+        hasNext={sheetIndex != null && sheetIndex < walk.length - 1}
+      />
     </Box>
   );
 }

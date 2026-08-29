@@ -18,6 +18,8 @@ interface InlineQuestionCardProps {
   loading: boolean;
   questionIndex: number;
   lang?: 'en' | 'hi';
+  /** Search terms to mark in the question stem. Plain-text segments only. */
+  highlight?: string[];
   onToggleExpand: () => void;
   onSubmit: (answer: string) => Promise<void>;
   onStudyToggle: () => void;
@@ -32,6 +34,7 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
   loading,
   questionIndex,
   lang = 'en',
+  highlight,
   onToggleExpand,
   onSubmit,
   onStudyToggle,
@@ -124,6 +127,7 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
                   <MathText
                     text={displayText}
                     variant="body2"
+                    highlight={highlight}
                     sx={{ color: 'text.primary' }}
                   />
                 ) : (

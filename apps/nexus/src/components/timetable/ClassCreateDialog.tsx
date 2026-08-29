@@ -39,7 +39,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import { type ClassCardData } from './ClassCard';
-import { type HolidayInfo } from './date-utils';
+import { type HolidayInfo, classStartDate } from './date-utils';
 import { buildClassDraftPrompt, parseClassDraft } from '@/lib/class-ai-draft';
 
 interface TopicOption {
@@ -456,6 +456,10 @@ export default function ClassCreateDialog({
       setError('Please fill in all required fields');
       return;
     }
+    if (classStartDate(formData.scheduled_date, formData.start_time).getTime() < Date.now()) {
+      setError('This date and time has already passed. Pick a date and time that is still ahead.');
+      return;
+    }
     if (formData.classroom_ids.length === 0) {
       setError('Please select at least one classroom');
       return;
@@ -689,6 +693,7 @@ export default function ClassCreateDialog({
             value={formData.scheduled_date}
             onChange={(e) => setFormData((f) => ({ ...f, scheduled_date: e.target.value }))}
             InputLabelProps={{ shrink: true }}
+            inputProps={{ min: todayStr() }}
             helperText={formData.scheduled_date === todayStr() ? 'Today' : undefined}
           />
 

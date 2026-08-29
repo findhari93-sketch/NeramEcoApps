@@ -4,13 +4,27 @@
  * The after-class counterpart of class-prep.ts, and the two are deliberately
  * asymmetric in three ways that are easy to "tidy" back into bugs:
  *
- *   1. THE DEADLINE IS SOFT. It lives in gating.due_at, never in the placement's
- *      available_until. api/tests/attempt refuses a placement whose
- *      available_until has passed, so putting the due date there would mean a
- *      student who misses it can never sit the paper again: the reminder we send
- *      them would point at a locked door, and a required test would become
- *      impossible to clear from a catch-up backlog. Late is late; the door stays
- *      open. Same rule the prep gate settled on, for the same reason.
+ *   1. THE DEADLINE MAY NOW BE HARD, BUT ONLY WITH A WAY BACK IN.
+ *
+ *      This rule was the opposite until nexus_test_access_requests existed. The
+ *      deadline lived only in gating.due_at and never in available_until,
+ *      because api/tests/attempt refuses a placement whose available_until has
+ *      passed: a student who missed it could never sit the paper again, the
+ *      reminder we sent would point at a locked door, and a required test would
+ *      be stuck in their catch-up backlog forever.
+ *
+ *      That reason held only while there was no reopening mechanism. There now
+ *      is one (test-access.ts): finishing catch-up opens a per-student buffer
+ *      automatically, a student can ask to be let back in, and a teacher can
+ *      open or close it for anyone. So `hardClose` writes available_until
+ *      ALONGSIDE gating.due_at, and the run really does shut.
+ *
+ *      gating.due_at is still written either way, because every existing reader
+ *      (ClassPrepTestSection, getCatchupBacklog, the nudge route) reads it.
+ *      Existing placements keep available_until = NULL and stay soft; only new
+ *      runs opt in. Do NOT backfill: silently shutting a door on students who
+ *      were told it would stay open is the one change here that a teacher could
+ *      not undo from their side.
  *
  *   2. THERE IS NO PER-STUDENT STATE TABLE. Completion is derived live from
  *      nexus_test_attempts. The prep gate needs nexus_class_prep_state because it
@@ -30,6 +44,7 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { countRowsByKey } from '../../utils/paged-rows';
 import { composeTest, createPlacement } from './test-repository';
+import { setRunCoveredClasses } from './test-access';
 import { prepPassSummary } from './class-prep';
 import type { NexusTestKind } from '../../types';
 
@@ -198,6 +213,17 @@ export interface AttachClassTestInput {
   required?: boolean;
   /** The class's own start, used only to default the deadline. */
   classDateIso?: string | null;
+  /**
+   * Shut the run at the due date rather than leaving it open indefinitely.
+   * Safe only because test-access.ts gives a shut-out student three ways back
+   * in. Defaults false, so nothing about an existing call site changes.
+   */
+  hardClose?: boolean;
+  /**
+   * The lecture(s) this paper tests on, which decides who it is mandatory for.
+   * The host class is always included whether or not it is listed here.
+   */
+  coveredClassIds?: string[];
   createdBy?: string | null;
 }
 
@@ -298,7 +324,10 @@ export async function attachClassTest(
 
   await deactivateClassTestPlacements(supabase, input.scheduledClassId);
 
-  const gating = { required, due_at: dueAt };
+  // gating.due_at is written either way: it is what every existing reader looks
+  // at. available_until is what actually shuts the door, and only when asked.
+  const gating = { required, due_at: dueAt, hard_close: input.hardClose === true };
+  const availableUntil = input.hardClose === true ? dueAt : null;
 
   // Revive rather than insert when this exact test has been on this exact class
   // before. See the reader's warning in 20260823090100_nexus_class_test.sql: the
@@ -313,21 +342,44 @@ export async function attachClassTest(
     .eq('test_id', testId)
     .maybeSingle();
 
+  let placementId: string | null = null;
   if (prior) {
     const { error } = await supabase
       .from(PLACEMENTS)
-      .update({ is_active: true, is_visible: true, passing_pct: passingPct, gating })
+      .update({
+        is_active: true,
+        is_visible: true,
+        passing_pct: passingPct,
+        gating,
+        available_until: availableUntil,
+      })
       .eq('id', prior.id);
     if (error) throw error;
+    placementId = prior.id;
   } else {
-    await createPlacement(
+    const created = await createPlacement(
       {
         testId: testId as string,
         contextType: CONTEXT,
         contextId: input.scheduledClassId,
         passingPct,
         gating,
+        availableUntil,
         createdBy: input.createdBy ?? null,
+      },
+      supabase,
+    );
+    placementId = (created as any)?.id ?? null;
+  }
+
+  // Who the paper is answerable for. The host class is always in the list, so
+  // every reader has one place to look and never has to union it back in.
+  if (placementId) {
+    await setRunCoveredClasses(
+      {
+        placementId,
+        scheduledClassIds: input.coveredClassIds || [],
+        hostClassId: input.scheduledClassId,
       },
       supabase,
     );

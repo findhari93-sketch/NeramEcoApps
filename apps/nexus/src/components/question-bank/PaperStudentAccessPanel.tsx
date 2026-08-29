@@ -404,7 +404,7 @@ export default function PaperStudentAccessPanel({
           <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
             Results
           </Typography>
-          <TestResultsPanel testId={view.test.test_id} authFetch={authFetch} />
+          <TestResultsPanel testId={view.test.test_id} authFetch={authFetch} getToken={getToken} />
         </Box>
       )}
 

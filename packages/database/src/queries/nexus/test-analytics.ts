@@ -13,14 +13,16 @@
  * the analytics instead of leaving them disagreeing with the score.
  */
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { effectiveAttemptScore } from './exam-score';
 import { gradeQBAnswerStrict } from './question-bank';
-import { composeTest, getComposedTestQuestions } from './test-repository';
+import { composeTest, getComposedTestQuestions, gradeAgainstDraw } from './test-repository';
 
 const ATTEMPTS = 'nexus_test_attempts';
 const TESTS = 'nexus_tests';
 const TEST_QUESTIONS = 'nexus_test_questions';
 const QUESTIONS = 'nexus_qb_questions';
 const PLACEMENTS = 'nexus_test_placements';
+const DRAWINGS = 'drawing_submissions';
 
 /** The three buckets a performance view groups attempts into. */
 export type NexusAttemptKind = 'practice' | 'class' | 'exam';
@@ -422,65 +424,319 @@ export interface NexusTestResultRow {
   student_name: string | null;
   avatar_url: string | null;
   attempts: number;
+  /**
+   * The first official sitting. This is the headline on a run, because it is the
+   * only number that says what the student knew when the paper was set. Best
+   * says how far they got afterwards, which is a different and also useful
+   * question, so both are carried rather than one being chosen here.
+   */
+  first_percentage: number | null;
+  first_score: number | null;
+  first_total_marks: number | null;
+  first_submitted_at: string | null;
   best_percentage: number | null;
+  best_score: number | null;
+  best_total_marks: number | null;
   last_percentage: number | null;
   last_submitted_at: string | null;
   passed: boolean | null;
+  status: NexusTestResultStatus;
+  /** The eligibility bucket this student fell in, echoed from the caller's roster. */
+  bucket: string | null;
+  is_mandatory: boolean | null;
+  /** True while a human still has drawings to mark on the winning attempt. */
+  provisional: boolean;
+  /** A window of this student's own, beyond the run's shared close time. */
+  window_open_until: string | null;
+  access_request_pending: boolean;
+}
+
+export type NexusTestResultStatus =
+  | 'submitted'
+  | 'in_progress'
+  | 'not_started'
+  | 'missed'
+  | 'excused';
+
+export interface NexusTestResultStats {
+  students: number;
+  attempts: number;
+  average: number | null;
+  passed: number;
+  /** All null unless the caller supplied a roster, so the paper wide shape is unchanged. */
+  roster_total: number | null;
+  mandatory: number | null;
+  submitted: number | null;
+  not_started: number | null;
+  missed: number | null;
+  excused: number | null;
+  average_first: number | null;
+  /** Mean marks behind average_first, so the tile never shows a bare percentage. */
+  average_first_marks: { score: number; total: number } | null;
+  average_best_marks: { score: number; total: number } | null;
+  pass_mark_pct: number | null;
+}
+
+export interface NexusTestResultsOptions {
+  /** Scope to one run. Omit for the paper wide view, which is the original behaviour. */
+  placementId?: string | null;
+  /**
+   * Who this run is answerable for, so students with no attempt can be listed.
+   * Omit and no zero attempt row appears, which is exactly what every caller
+   * got before this option existed.
+   *
+   * `bucket` is an opaque string echoed straight back out. The eligibility
+   * engine that produces it lives in apps/nexus and this package must not
+   * import from an app, so the route composes the two rather than this file
+   * growing a second copy of the bucket rules.
+   */
+  roster?: Array<{
+    student_id: string;
+    name: string | null;
+    avatar_url: string | null;
+    bucket: string;
+    is_mandatory: boolean;
+  }>;
+  /** The run's own bar, which overrides the test's passing_marks when set. */
+  passingPct?: number | null;
+  /** When the run shut. Drives "missed" for anyone who never sat it. */
+  closesAt?: string | null;
+  /** student_id -> their own window's end, from an approved reopen or catch up. */
+  windowsByStudent?: Record<string, string | null>;
+  /** Students who have asked to be let back in and are still waiting. */
+  pendingRequestStudentIds?: string[];
 }
 
 /**
- * Who has sat this test and how they did. Best score is what counts, because
- * retakes are unlimited, but the attempt count is shown next to it so effort
- * stays visible rather than being flattened into one number.
+ * What to tell a teacher about one student on one run.
+ *
+ * The rule is borrowed verbatim from buildExamRoster in
+ * apps/nexus/src/lib/scheduled-exam-roster.ts: a student with no attempt is not
+ * a failure while the door is still open, and becomes "missed" only once it has
+ * shut. The two live apart because that one is an app module carrying exam only
+ * concerns (proctoring, makeups, per attempt countdowns) and this package
+ * cannot import from an app. Kept in step by this comment and by
+ * test-analytics.status.test.ts.
+ */
+export function resolveResultStatus(input: {
+  hasSubmitted: boolean;
+  hasInProgress: boolean;
+  isMandatory: boolean | null;
+  closesAt: string | null;
+  windowOpenUntil: string | null;
+  now: number;
+}): NexusTestResultStatus {
+  if (input.hasSubmitted) return 'submitted';
+  if (input.hasInProgress) return 'in_progress';
+  // Not required means nothing is outstanding. Listing them in the chase list is
+  // how a teacher learns to stop trusting the chase list.
+  if (input.isMandatory === false) return 'excused';
+
+  // A student let back in is sitting their own window, so the run's shared close
+  // time has stopped describing them.
+  const deadline = input.windowOpenUntil ?? input.closesAt;
+  if (!deadline) return 'not_started';
+  const shut = Date.parse(deadline);
+  if (Number.isNaN(shut) || shut > input.now) return 'not_started';
+  // No roster means no opinion about who owed this paper, so nobody can be
+  // missing from a list that was never drawn up.
+  return input.isMandatory === true ? 'missed' : 'not_started';
+}
+
+/**
+ * The mean marks behind a mean percentage, so no tile shows a bare number.
+ * One decimal: a class average of 28.4 out of 45 is honest, 28 is not quite.
+ */
+function meanMarks(
+  rows: NexusTestResultRow[],
+  scoreKey: 'first_score' | 'best_score',
+  totalKey: 'first_total_marks' | 'best_total_marks',
+): { score: number; total: number } | null {
+  if (rows.length === 0) return null;
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  return {
+    score: round1(rows.reduce((s, r) => s + (r[scoreKey] || 0), 0) / rows.length),
+    total: round1(rows.reduce((s, r) => s + (r[totalKey] || 0), 0) / rows.length),
+  };
+}
+
+function emptyRow(studentId: string): NexusTestResultRow {
+  return {
+    student_id: studentId,
+    student_name: null,
+    avatar_url: null,
+    attempts: 0,
+    first_percentage: null,
+    first_score: null,
+    first_total_marks: null,
+    first_submitted_at: null,
+    best_percentage: null,
+    best_score: null,
+    best_total_marks: null,
+    last_percentage: null,
+    last_submitted_at: null,
+    passed: null,
+    status: 'not_started',
+    bucket: null,
+    is_mandatory: null,
+    provisional: false,
+    window_open_until: null,
+    access_request_pending: false,
+  };
+}
+
+/**
+ * Which attempts still have a drawing nobody has marked.
+ *
+ * Asked of drawing_submissions rather than inferred from finalised_at, because
+ * finalised_at is null on every ordinary MCQ attempt too. Reading it as
+ * "provisional" would put a Provisional chip on every class test in the
+ * product. This returns an empty set for any paper without a drawing section,
+ * which is nearly all of them.
+ */
+async function loadUnmarkedDrawingAttemptIds(
+  attemptIds: string[],
+  supabase: TypedSupabaseClient,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (attemptIds.length === 0) return out;
+  const { data, error } = await supabase
+    .from(DRAWINGS as any)
+    .select('exam_attempt_id')
+    .in('exam_attempt_id', attemptIds)
+    .is('tutor_marks', null);
+  // A missing drawing table or column must not take the whole results tab down
+  // with it. The score itself is already correct via effectiveAttemptScore; all
+  // that is lost here is the chip explaining why it might still move.
+  if (error) return out;
+  for (const row of (data || []) as any[]) out.add(row.exam_attempt_id);
+  return out;
+}
+
+/**
+ * Who has sat this test and how they did.
+ *
+ * Two shapes from one function. Without `opts.roster` this is the paper wide
+ * view it has always been: only students who actually sat it, and the same four
+ * stats. With a roster it becomes a report on one run, and the students who
+ * never sat it are the whole point of it.
+ *
+ * Scores read through effectiveAttemptScore rather than off `percentage`,
+ * because a paper with a drawing section is marked in two stages and the raw
+ * column holds only the objective half. Reading it directly reported a half
+ * marked exam as a real score, which is the bug this replaced.
  */
 export async function getTestResults(
   testId: string,
+  opts?: NexusTestResultsOptions,
   client?: TypedSupabaseClient,
-): Promise<{ rows: NexusTestResultRow[]; stats: { students: number; attempts: number; average: number | null; passed: number } }> {
+): Promise<{ rows: NexusTestResultRow[]; stats: NexusTestResultStats }> {
   const supabase = client || getSupabaseAdminClient();
+  const now = Date.now();
+
+  let attemptQuery = supabase
+    .from(ATTEMPTS)
+    .select(
+      'id, student_id, score, total_marks, percentage, submitted_at, attempt_number, status, final_score, final_total_marks, final_percentage, finalised_at',
+    )
+    .eq('test_id', testId)
+    // In progress sittings are read for status only and never touch a score
+    // aggregate, so a student mid paper shows as working rather than as absent.
+    .in('status', ['submitted', 'in_progress'])
+    // Cohort stats. A student practising after completion must not move the
+    // class average or the pass rate.
+    .eq('mode', 'official')
+    .order('submitted_at', { ascending: true })
+    // There is no unique constraint on (test_id, student_id, attempt_number),
+    // and an in-progress row has no submitted_at at all, so ties need a second
+    // key or "first" is whichever row the planner happened to return first.
+    .order('attempt_number', { ascending: true });
+  if (opts?.placementId) attemptQuery = attemptQuery.eq('placement_id', opts.placementId);
 
   const [{ data: attempts, error }, { data: test }] = await Promise.all([
-    supabase
-      .from(ATTEMPTS)
-      .select('student_id, percentage, submitted_at, attempt_number')
-      .eq('test_id', testId)
-      .eq('status', 'submitted')
-      // Cohort stats. A student practising after completion must not move the
-      // class average or the pass rate.
-      .eq('mode', 'official')
-      .order('submitted_at', { ascending: true }),
+    attemptQuery,
     supabase.from(TESTS).select('passing_marks, total_marks').eq('id', testId).maybeSingle(),
   ]);
   if (error) throw error;
 
   const bar =
-    test?.passing_marks != null && Number(test.total_marks) > 0
-      ? (Number(test.passing_marks) / Number(test.total_marks)) * 100
-      : null;
+    opts?.passingPct != null
+      ? Number(opts.passingPct)
+      : test?.passing_marks != null && Number(test.total_marks) > 0
+        ? (Number(test.passing_marks) / Number(test.total_marks)) * 100
+        : null;
+
+  const submitted = (attempts || []).filter((a: any) => a.status === 'submitted');
+  const unmarked = await loadUnmarkedDrawingAttemptIds(
+    submitted.map((a: any) => a.id).filter(Boolean),
+    supabase,
+  );
 
   const byStudent = new Map<string, NexusTestResultRow>();
-  for (const a of attempts || []) {
-    const pct = a.percentage == null ? null : Number(a.percentage);
-    const row = byStudent.get(a.student_id) || {
-      student_id: a.student_id,
-      student_name: null,
-      avatar_url: null,
-      attempts: 0,
-      best_percentage: null,
-      last_percentage: null,
-      last_submitted_at: null,
-      passed: null,
-    };
+  const inProgressBy = new Set<string>();
+  // Which attempt currently owns each student's best, so the provisional flag
+  // describes the score actually on screen rather than any attempt at all.
+  const bestAttemptId = new Map<string, string>();
+
+  for (const a of (attempts || []) as any[]) {
+    const row = byStudent.get(a.student_id) || emptyRow(a.student_id);
+    if (a.status === 'in_progress') {
+      inProgressBy.add(a.student_id);
+      byStudent.set(a.student_id, row);
+      continue;
+    }
+    const eff = effectiveAttemptScore(a);
+    const pct = a.percentage == null && a.final_percentage == null ? null : eff.percentage;
+
     row.attempts += 1;
     if (pct != null) {
-      row.best_percentage = row.best_percentage == null ? pct : Math.max(row.best_percentage, pct);
+      if (row.first_percentage == null) {
+        row.first_percentage = pct;
+        row.first_score = eff.score;
+        row.first_total_marks = eff.total_marks;
+        row.first_submitted_at = a.submitted_at;
+      }
+      if (row.best_percentage == null || pct > row.best_percentage) {
+        row.best_percentage = pct;
+        row.best_score = eff.score;
+        row.best_total_marks = eff.total_marks;
+        bestAttemptId.set(a.student_id, a.id);
+      }
       row.last_percentage = pct;
     }
     row.last_submitted_at = a.submitted_at;
     byStudent.set(a.student_id, row);
   }
 
+  // Everyone the run was set for, whether they turned up or not. This is the
+  // half the results tab never had, and the reason a teacher could not tell a
+  // finished class from a class that ignored the paper.
+  for (const member of opts?.roster || []) {
+    const row = byStudent.get(member.student_id) || emptyRow(member.student_id);
+    row.student_name = member.name;
+    row.avatar_url = member.avatar_url;
+    row.bucket = member.bucket;
+    row.is_mandatory = member.is_mandatory;
+    byStudent.set(member.student_id, row);
+  }
+
+  const pending = new Set(opts?.pendingRequestStudentIds || []);
   const rows = [...byStudent.values()];
+
+  for (const r of rows) {
+    r.window_open_until = opts?.windowsByStudent?.[r.student_id] ?? null;
+    r.access_request_pending = pending.has(r.student_id);
+    r.provisional = unmarked.has(bestAttemptId.get(r.student_id) || '');
+    r.status = resolveResultStatus({
+      hasSubmitted: r.attempts > 0,
+      hasInProgress: inProgressBy.has(r.student_id),
+      isMandatory: r.is_mandatory,
+      closesAt: opts?.closesAt ?? null,
+      windowOpenUntil: r.window_open_until,
+      now,
+    });
+  }
+
   if (rows.length > 0) {
     // `name` is the display column on users; there is no full_name. Asking for
     // one makes PostgREST reject the whole request, and because this call used
@@ -498,23 +754,222 @@ export async function getTestResults(
     const userMap = new Map((users || []).map((u: any) => [u.id, u]));
     for (const r of rows) {
       const u = userMap.get(r.student_id);
-      r.student_name = u?.name ?? null;
-      r.avatar_url = u?.avatar_url ?? null;
+      // The roster already carried a name for anyone on it. Only fall back to
+      // the lookup, so a roster entry is never blanked by a missing users row.
+      r.student_name = u?.name ?? r.student_name ?? null;
+      r.avatar_url = u?.avatar_url ?? r.avatar_url ?? null;
       r.passed = bar == null ? null : r.best_percentage != null && r.best_percentage >= bar;
     }
   }
 
   rows.sort((a, b) => (b.best_percentage ?? -1) - (a.best_percentage ?? -1));
   const scored = rows.filter((r) => r.best_percentage != null);
+  const firstScored = rows.filter((r) => r.first_percentage != null);
+  const hasRoster = (opts?.roster?.length ?? 0) > 0;
+
   return {
     rows,
     stats: {
-      students: rows.length,
-      attempts: (attempts || []).length,
-      average: scored.length > 0 ? Math.round(scored.reduce((s, r) => s + (r.best_percentage || 0), 0) / scored.length) : null,
+      // Unchanged, so the paper wide view reads exactly as it always has: these
+      // four count the people who actually sat it, never the roster, even when
+      // a roster has added rows for the students who did not.
+      students: rows.filter((r) => r.attempts > 0).length,
+      attempts: submitted.length,
+      average:
+        scored.length > 0
+          ? Math.round(scored.reduce((s, r) => s + (r.best_percentage || 0), 0) / scored.length)
+          : null,
       passed: rows.filter((r) => r.passed).length,
+      // Null without a roster, because there is no list to be absent from.
+      roster_total: hasRoster ? rows.length : null,
+      mandatory: hasRoster ? rows.filter((r) => r.is_mandatory === true).length : null,
+      submitted: hasRoster ? rows.filter((r) => r.status === 'submitted').length : null,
+      not_started: hasRoster ? rows.filter((r) => r.status === 'not_started').length : null,
+      missed: hasRoster ? rows.filter((r) => r.status === 'missed').length : null,
+      excused: hasRoster ? rows.filter((r) => r.status === 'excused').length : null,
+      average_first:
+        firstScored.length > 0
+          ? Math.round(firstScored.reduce((s, r) => s + (r.first_percentage || 0), 0) / firstScored.length)
+          : null,
+      average_first_marks: meanMarks(firstScored, 'first_score', 'first_total_marks'),
+      average_best_marks: meanMarks(scored, 'best_score', 'best_total_marks'),
+      pass_mark_pct: bar == null ? null : Math.round(bar * 100) / 100,
     },
   };
+}
+
+/** One question, as answered on one attempt: the response sheet row. */
+export interface NexusAttemptReviewItem {
+  question_id: string;
+  question_text: string | null;
+  options: unknown;
+  correct_answer: string | null;
+  selected: string | null;
+  is_correct: boolean;
+  is_gradable: boolean;
+  explanation: string | null;
+  explanation_detailed: string | null;
+}
+
+/** One sitting, fully replayed. */
+export interface NexusReplayedAttempt {
+  attempt_id: string;
+  attempt_number: number;
+  mode: 'official' | 'revision';
+  status: string | null;
+  placement_id: string | null;
+  started_at: string | null;
+  submitted_at: string | null;
+  time_spent_seconds: number | null;
+  score: number;
+  total_marks: number;
+  percentage: number;
+  passed: boolean;
+  provisional: boolean;
+  review: NexusAttemptReviewItem[];
+}
+
+/**
+ * Every submitted attempt one student made on one paper, each replayed into a
+ * full per-question review.
+ *
+ * The attempt row only ever stored the raw answers (`{questionId: 'a'}`), never
+ * which were right, so a sheet has to be reconstructed. This is the read-only
+ * counterpart to gradeAgainstDraw, the same core submitAttempt uses, which is
+ * what stops a replayed review disagreeing with what the student was actually
+ * shown. The composed paper is fetched once and reused across every attempt:
+ * it is the same paper for all of them, only the draw and the answers differ.
+ *
+ * score/total_marks/percentage are read off the attempt row AS STORED, not
+ * recomputed, so a teacher reviewing an old sitting sees the number it was
+ * graded at even if the answer key has since been edited. They pass through
+ * effectiveAttemptScore only so a two-stage exam reports its marked total
+ * rather than the objective half. `passed` is compared against the CURRENT
+ * configured bar, matching how the rest of the feature treats passing_pct.
+ *
+ * Generalised out of getStudyFileAttemptReview, which now calls it. Everything
+ * that function did after resolving which test a chapter holds was already
+ * test agnostic.
+ */
+export async function getStudentTestAttemptReview(
+  input: {
+    testId: string;
+    studentId: string;
+    /** Restrict to one run. Omit for every attempt on the paper. */
+    placementId?: string | null;
+    /** The bar each attempt is judged against. Defaults to the test's own. */
+    passingPct?: number | null;
+    /** Include revision mode sittings. Default true. */
+    includeRevision?: boolean;
+  },
+  client?: TypedSupabaseClient,
+): Promise<{
+  test: { test_id: string; title: string; passing_pct: number | null } | null;
+  attempts: NexusReplayedAttempt[];
+}> {
+  const supabase = client || getSupabaseAdminClient();
+
+  let query = supabase
+    .from(ATTEMPTS)
+    .select(
+      'id, attempt_number, mode, status, placement_id, answers, score, total_marks, percentage, started_at, submitted_at, time_spent_seconds, final_score, final_total_marks, final_percentage, finalised_at',
+    )
+    .eq('test_id', input.testId)
+    .eq('student_id', input.studentId)
+    .eq('status', 'submitted')
+    .order('attempt_number', { ascending: true });
+  if (input.placementId) query = query.eq('placement_id', input.placementId);
+  if (input.includeRevision === false) query = query.eq('mode', 'official');
+
+  const [{ data: rows, error }, { data: testRow }] = await Promise.all([
+    query,
+    supabase.from(TESTS).select('id, title, passing_marks, total_marks').eq('id', input.testId).maybeSingle(),
+  ]);
+  if (error) throw error;
+
+  const bar =
+    input.passingPct != null
+      ? Number(input.passingPct)
+      : (testRow as any)?.passing_marks != null && Number((testRow as any).total_marks) > 0
+        ? (Number((testRow as any).passing_marks) / Number((testRow as any).total_marks)) * 100
+        : null;
+
+  const test = testRow
+    ? { test_id: input.testId, title: (testRow as any).title || 'Test', passing_pct: bar }
+    : null;
+
+  if (!rows || rows.length === 0) return { test, attempts: [] };
+
+  const numbers = rows.map((a: any) => Number(a.attempt_number) || 1);
+
+  // One read of the draws for every attempt, rather than one per attempt. Seven
+  // retakes used to mean seven round trips to render one drawer.
+  const [composed, { data: drawRows, error: drawError }, unmarked] = await Promise.all([
+    getComposedTestQuestions(input.testId, true, supabase),
+    supabase
+      .from('nexus_test_draws' as any)
+      .select('attempt_number, question_ids, option_maps')
+      .eq('test_id', input.testId)
+      .eq('student_id', input.studentId)
+      .in('attempt_number', numbers),
+    loadUnmarkedDrawingAttemptIds(rows.map((a: any) => a.id).filter(Boolean), supabase),
+  ]);
+  if (drawError) throw drawError;
+
+  const drawByNumber = new Map<number, any>(
+    ((drawRows || []) as any[]).map((d) => [
+      Number(d.attempt_number),
+      {
+        attempt_number: Number(d.attempt_number),
+        question_ids: (d.question_ids as string[]) || [],
+        option_maps: (d.option_maps as Record<string, string[]>) || {},
+      },
+    ]),
+  );
+
+  const attempts: NexusReplayedAttempt[] = (rows as any[]).map((a) => {
+    const attemptNumber = Number(a.attempt_number) || 1;
+    const eff = effectiveAttemptScore(a);
+    const graded = gradeAgainstDraw(
+      composed,
+      drawByNumber.get(attemptNumber) ?? null,
+      (a.answers as Record<string, string>) || {},
+      bar ?? 0,
+    );
+    const byId = new Map(graded.questions.map((q: any) => [q.question_id, q]));
+
+    return {
+      attempt_id: a.id,
+      attempt_number: attemptNumber,
+      mode: (a.mode as 'official' | 'revision') ?? 'official',
+      status: a.status ?? null,
+      placement_id: a.placement_id ?? null,
+      started_at: a.started_at ?? null,
+      submitted_at: a.submitted_at ?? null,
+      time_spent_seconds: a.time_spent_seconds == null ? null : Number(a.time_spent_seconds),
+      score: eff.score,
+      total_marks: eff.total_marks,
+      percentage: eff.percentage,
+      passed: bar == null ? true : eff.percentage >= bar,
+      provisional: unmarked.has(a.id),
+      review: graded.review.map((r: any) => {
+        const q = byId.get(r.question_id) as any;
+        return {
+          question_id: r.question_id,
+          question_text: q?.question_text ?? null,
+          options: q?.options ?? null,
+          correct_answer: r.correct_answer,
+          selected: r.selected,
+          is_correct: r.is_correct,
+          is_gradable: r.is_gradable,
+          explanation: q?.explanation_brief ?? null,
+          explanation_detailed: q?.explanation_detailed ?? null,
+        };
+      }),
+    };
+  });
+
+  return { test, attempts };
 }
 
 export interface NexusQuestionAnalysisRow {
@@ -540,20 +995,27 @@ export const QUESTION_REVIEW_THRESHOLD_PCT = 20;
  */
 export async function getQuestionAnalysis(
   testId: string,
+  opts?: { placementId?: string | null },
   client?: TypedSupabaseClient,
 ): Promise<NexusQuestionAnalysisRow[]> {
   const supabase = client || getSupabaseAdminClient();
 
+  // Per-question difficulty for the teacher. Official attempts only, for the
+  // same reason as the cohort stats above.
+  let attemptQuery = supabase
+    .from(ATTEMPTS)
+    .select('answers')
+    .eq('test_id', testId)
+    .eq('status', 'submitted')
+    .eq('mode', 'official');
+  // Scoped to a run, a self-study cohort's answers stop dragging the class
+  // test's question quality signal around. A question the class found hard is
+  // a different fact from one that a hundred practising strangers found hard.
+  if (opts?.placementId) attemptQuery = attemptQuery.eq('placement_id', opts.placementId);
+
   const [questions, { data: attempts, error }] = await Promise.all([
     getComposedTestQuestions(testId, true, supabase),
-    // Per-question difficulty for the teacher. Official attempts only, for the
-    // same reason as the cohort stats above.
-    supabase
-      .from(ATTEMPTS)
-      .select('answers')
-      .eq('test_id', testId)
-      .eq('status', 'submitted')
-      .eq('mode', 'official'),
+    attemptQuery,
   ]);
   if (error) throw error;
   if (questions.length === 0) return [];

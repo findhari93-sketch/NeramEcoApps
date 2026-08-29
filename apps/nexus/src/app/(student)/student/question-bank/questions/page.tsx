@@ -26,9 +26,11 @@ import {
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import TopFilterBar from '@/components/question-bank/TopFilterBar';
+import QBSearchStatus, { type QBMatchKind } from '@/components/question-bank/QBSearchStatus';
 import InlineQuestionCard from '@/components/question-bank/InlineQuestionCard';
 import FilterDrawer from '@/components/question-bank/FilterDrawer';
 import { countActiveFilters } from '@/components/question-bank/FilterChips';
@@ -104,6 +106,34 @@ export default function QuestionListPage() {
   // Question list state
   const [questions, setQuestions] = useState<NexusQBQuestionListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  // Students had no visible search box at all: search lived inside the filter
+  // drawer and only ran on Apply. This is the always-on bar; filters.search_text
+  // stays the single source of truth so the drawer and the ?q= URL still work.
+  const [searchInput, setSearchInput] = useState(filters.search_text ?? '');
+  const [matchKind, setMatchKind] = useState<QBMatchKind | null>(null);
+  const [didYouMean, setDidYouMean] = useState<string | null>(null);
+  const [matchedTerms, setMatchedTerms] = useState<string[]>([]);
+
+  // Typing -> filters, debounced to match the teacher page's 300ms.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((prev) => {
+        const next = searchInput.trim() || undefined;
+        // No-op guard. Without it this effect and the sync-back below feed
+        // each other and the page re-fetches forever.
+        if (prev.search_text === next) return prev;
+        return { ...prev, search_text: next };
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Filters -> input, for the drawer, a category chip, or the back button.
+  useEffect(() => {
+    setSearchInput((prev) =>
+      (prev.trim() || undefined) === filters.search_text ? prev : (filters.search_text ?? ''),
+    );
+  }, [filters.search_text]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -431,6 +461,9 @@ export default function QuestionListPage() {
 
       setQuestions(items);
       setTotalCount(total);
+      setMatchKind(payload?.search?.match_kind ?? null);
+      setDidYouMean(payload?.search?.did_you_mean ?? null);
+      setMatchedTerms(payload?.search?.matched_terms ?? []);
       setPage(pageNum);
     } catch (err) {
       console.error('Failed to fetch questions:', err);
@@ -772,6 +805,56 @@ export default function QuestionListPage() {
         </Button>
       </Box>
 
+      {/* Search: always visible. It used to be hidden inside the filter drawer,
+          so most students never found it. */}
+      <Box sx={{ px: 2, pb: 1 }}>
+        <TextField
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search questions, formulas, topics..."
+          size="small"
+          fullWidth
+          inputProps={{ 'aria-label': 'Search questions' }}
+          InputProps={{
+            startAdornment: (
+              <SearchOutlinedIcon
+                sx={{ color: 'text.secondary', mr: 1 }}
+                fontSize="small"
+                aria-hidden="true"
+              />
+            ),
+            endAdornment: searchInput ? (
+              <IconButton
+                size="small"
+                aria-label="Clear search"
+                onClick={() => setSearchInput('')}
+                sx={{ minWidth: 44, minHeight: 44 }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            ) : null,
+          }}
+          sx={{
+            // 16px keeps iOS from zooming the viewport on focus, and 48px is
+            // the Material 3 minimum for a primary touch target.
+            '& .MuiInputBase-input': { fontSize: 16 },
+            '& .MuiInputBase-root': { minHeight: 48, borderRadius: 2 },
+          }}
+        />
+      </Box>
+
+      <Box sx={{ px: 2 }}>
+        <QBSearchStatus
+          query={filters.search_text ?? ''}
+          matchKind={matchKind}
+          didYouMean={didYouMean}
+          total={totalCount}
+          loading={loading}
+          onUseSuggestion={(term) => setSearchInput(term)}
+          onClear={() => setSearchInput('')}
+        />
+      </Box>
+
       {/* Top Filter Bar (sticky) */}
       <TopFilterBar
         filters={filters}
@@ -863,6 +946,7 @@ export default function QuestionListPage() {
                     disabled={selectionMode}
                   >
                     <InlineQuestionCard
+                      highlight={matchedTerms}
                       question={q}
                       questionDetail={expandedQuestionId === q.id ? expandedDetail : null}
                       expanded={expandedQuestionId === q.id}

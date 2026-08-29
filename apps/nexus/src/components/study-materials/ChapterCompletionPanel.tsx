@@ -26,7 +26,7 @@ import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
 import CloseIcon from '@mui/icons-material/Close';
 import StudyNudgeDialog from '@/components/study-materials/StudyNudgeDialog';
 import PDFAnnotationsPanel from '@/components/study-materials/PDFAnnotationsPanel';
-import StudentAttemptSheet from '@/components/study-materials/StudentAttemptSheet';
+import StudentAttemptSheet from '@/components/tests/StudentAttemptSheet';
 import { useFileAnnotations } from '@/hooks/useFileAnnotations';
 import {
   ChapterStatusChip,
@@ -474,7 +474,12 @@ export default function ChapterCompletionPanel({ fileId, classroomId, getToken }
       {/* A student's full response sheet: every attempt, question by question. */}
       <StudentAttemptSheet
         open={attemptSheetIndex != null}
-        fileId={fileId}
+        endpoint={
+          attemptSheetIndex != null && rows[attemptSheetIndex]
+            ? `/api/study-materials/reports/chapter/${fileId}/student/${rows[attemptSheetIndex].student_id}`
+            : ''
+        }
+        subtitle="Chapter test responses"
         student={
           attemptSheetIndex != null && rows[attemptSheetIndex]
             ? {

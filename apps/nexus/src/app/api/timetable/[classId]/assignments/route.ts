@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { canRunSession, isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
 import { classStartIso } from '@/lib/prework';
+import { announceAssignment, shouldAnnounceLink } from '@/lib/teams-assignment-announcements';
+import { shareBaseUrl } from '@/lib/class-share-links';
 
 /**
  * The assignments attached to one timetable class.
@@ -21,6 +23,14 @@ interface Ctx {
 
 const ASSIGNMENT_COLS =
   'id, title, assignment_type, status, due_at, class_date, max_marks, evaluation_type, scheduled_class_id, timing';
+
+/**
+ * ASSIGNMENT_COLS plus what an announcement needs: the brief for the card, the
+ * classroom to fan out to, and teams_announced_class_id, the marker that stops
+ * an unlink-then-relink from posting the same card twice.
+ */
+const ASSIGNMENT_COLS_WITH_ANNOUNCE =
+  `${ASSIGNMENT_COLS}, classroom_id, instructions, teams_announced_class_id`;
 
 /** Today in IST as YYYY-MM-DD. class_date is a wall-clock day, not an instant. */
 function istTodayStr(): string {
@@ -178,7 +188,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       .update(update)
       .eq('id', assignment_id)
       .eq('classroom_id', access.cls.classroom_id)
-      .select(ASSIGNMENT_COLS)
+      .select(ASSIGNMENT_COLS_WITH_ANNOUNCE)
       .maybeSingle();
 
     if (error) throw error;
@@ -187,6 +197,29 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         { error: 'That assignment does not belong to this classroom' },
         { status: 404 },
       );
+    }
+
+    // Tell students the assignment now belongs to a class, but only when there
+    // is actually news to tell. See shouldAnnounceLink for which cases are
+    // deliberately silent, the timetable "Create new" path chief among them.
+    if (shouldAnnounceLink(data, params.classId)) {
+      announceAssignment({
+        assignment: {
+          id: data.id,
+          classroom_id: data.classroom_id,
+          scheduled_class_id: params.classId,
+          title: data.title,
+          assignment_type: data.assignment_type === 'drawing' ? 'drawing' : 'document',
+          due_at: data.due_at,
+          evaluation_type: data.evaluation_type === 'stars' ? 'stars' : 'marks',
+          max_marks: data.max_marks ?? null,
+          instructions: data.instructions ?? null,
+        },
+        kind: 'linked',
+        token: extractBearerToken(request.headers.get('Authorization')),
+        shareBase: shareBaseUrl(request.nextUrl.origin),
+        supabase,
+      }).catch((e) => console.error('announceAssignment (link) failed:', e));
     }
 
     return NextResponse.json({ assignment: data });

@@ -6,6 +6,7 @@ import { loadPlanShapes } from '@/lib/plan-shape-query';
 import { applyClassPrepGate } from '@/lib/class-prep-server';
 import { notifyStudents } from '@/lib/notify-students';
 import { generateRecurrenceDates } from './recurrence';
+import { isSlotInPast } from './slot-guards';
 import {
   announceCancellationToTeams,
   announceRescheduleToTeams,
@@ -280,6 +281,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Only the first occurrence needs checking: a recurring series is generated
+    // forward from this date, so every later occurrence is already in the future.
+    if (isSlotInPast(scheduled_date, start_time)) {
+      return NextResponse.json({ error: 'Cannot schedule a class in the past.' }, { status: 400 });
+    }
+
     const supabase = getSupabaseAdminClient();
 
     // Verify the teacher can manage every selected classroom (also blocks archived ones).
@@ -536,6 +543,18 @@ export async function PATCH(request: NextRequest) {
       title: (safeUpdates.title as string) ?? before.title,
     };
 
+    // Reject moving a class's date/time into the past. Only checked when the
+    // slot is actually changing, editing other fields on an already-past class
+    // (e.g. notes) is unrelated to this guard.
+    const changingSlot =
+      'scheduled_date' in safeUpdates || 'start_time' in safeUpdates || 'end_time' in safeUpdates;
+    if (changingSlot && when && isSlotInPast(when.date, when.start)) {
+      return NextResponse.json(
+        { error: 'Cannot move a class to a date/time that has already passed.' },
+        { status: 400 },
+      );
+    }
+
     // Teams FIRST, then the database. This order is load-bearing.
     //
     // The old order wrote the move locally and treated a Graph failure as a
@@ -729,9 +748,16 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Remove the channel/chat announcement cards too, so a deleted class does
-      // not leave a dead "Join Meeting" post behind (best-effort).
+      // not leave a dead "Join Meeting" post behind (best-effort). Surfaced to
+      // the caller rather than only logged: a permanent delete that silently
+      // leaves a card up in Teams is worse than one that says so, because
+      // nothing else will ever prompt anyone to go clean it up by hand.
       if (token) {
-        await removeTeamsAnnouncements(token, supabase, classroom_id, classToDelete);
+        const { failures } = await removeTeamsAnnouncements(token, supabase, classroom_id, classToDelete);
+        if (failures.length > 0) {
+          const note = `Class deleted, but Teams kept its post (${failures.join(', ')}). Delete it there by hand.`;
+          teamsWarning = teamsWarning ? `${teamsWarning} Also: ${note}` : note;
+        }
       }
 
       const { error } = await supabase
