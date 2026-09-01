@@ -96,10 +96,11 @@ describe('resolveExamWindowForStudent', () => {
     granted_by: null,
     granted_at: '2026-08-21T00:00:00Z',
     revoked_at: null,
+    source: 'teacher_grant' as const,
   };
 
   it('uses the exam window when there is no grant', () => {
-    expect(resolveExamWindowForStudent(exam, null)).toEqual({ ...exam, is_makeup: false });
+    expect(resolveExamWindowForStudent(exam, null)).toEqual({ ...exam, is_makeup: false, is_reopen: false });
   });
 
   it('a live grant REPLACES the window rather than extending it', () => {
@@ -109,11 +110,46 @@ describe('resolveExamWindowForStudent', () => {
       opens_at: makeup.opens_at,
       closes_at: makeup.closes_at,
       is_makeup: true,
+      is_reopen: false,
     });
   });
 
   it('ignores a revoked grant entirely', () => {
     const revoked = { ...makeup, revoked_at: '2026-08-21T12:00:00Z' };
-    expect(resolveExamWindowForStudent(exam, revoked)).toEqual({ ...exam, is_makeup: false });
+    expect(resolveExamWindowForStudent(exam, revoked)).toEqual({ ...exam, is_makeup: false, is_reopen: false });
+  });
+
+  /**
+   * THE BUG THIS ARGUMENT WAS ADDED FOR. A teacher pressing "Open for them"
+   * writes a granted nexus_test_access_requests row. This function never read
+   * it, so the roster showed a live window and the student was still refused,
+   * with every screen the teacher could see reporting success.
+   */
+  it('honours a teacher reopening the exam for one student', () => {
+    const reopen = { opens_at: '2026-08-28T00:00:00Z', closes_at: '2026-08-31T00:00:00Z' };
+    expect(resolveExamWindowForStudent(exam, null, reopen)).toEqual({
+      opens_at: reopen.opens_at,
+      closes_at: reopen.closes_at,
+      is_makeup: false,
+      is_reopen: true,
+    });
+  });
+
+  /** A reopen answers what actually happened; a makeup was only ever a plan. */
+  it('prefers the reopen when a makeup is also live', () => {
+    const reopen = { opens_at: '2026-08-28T00:00:00Z', closes_at: '2026-08-31T00:00:00Z' };
+    const out = resolveExamWindowForStudent(exam, makeup, reopen);
+    expect(out.is_reopen).toBe(true);
+    expect(out.closes_at).toBe(reopen.closes_at);
+  });
+
+  /**
+   * An open-ended grant must not inherit the exam's bounds, or it would
+   * re-impose the very window it exists to escape.
+   */
+  it('treats a grant with no end as open until someone closes it', () => {
+    const out = resolveExamWindowForStudent(exam, null, { opens_at: null, closes_at: null });
+    expect(Date.parse(out.opens_at)).toBeLessThan(Date.now());
+    expect(Date.parse(out.closes_at)).toBeGreaterThan(Date.now());
   });
 });

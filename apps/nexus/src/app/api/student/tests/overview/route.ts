@@ -12,6 +12,7 @@ import {
   NEXUS_GATED_TEST_KINDS,
 } from '@neram/database';
 import { buildExamEligibilityRoster, type EligibilityRosterRow } from '@/lib/exam-eligibility-roster';
+import { decideCatchupGate, type CatchupGateDecision } from '@/lib/catchup-test-gate';
 
 /**
  * GET /api/student/tests/overview?classroom=<id>
@@ -365,6 +366,19 @@ export async function GET(request: NextRequest) {
         exam_id: ev?.exam_id ?? null,
         eligibility_bucket: eligibility?.bucket ?? null,
         eligibility_auto_bucket: eligibility?.auto_bucket ?? null,
+        /**
+         * Whether catch-up is standing between this student and this test, and
+         * which classes to finish.
+         *
+         * Surfaced HERE, days ahead, and not only at the door. The attempt route
+         * enforces the same rule, but a refusal that first appears when a
+         * student presses Start on a timed exam costs them the sitting: the
+         * window is fixed and it does not pause while they go and catch up.
+         *
+         * Free of extra queries. The eligibility evidence for every exam on
+         * this page was already loaded above for the bucket.
+         */
+        catchup_gate: eligibility ? nullIfOpen(decideCatchupGate(eligibility.evidence)) : null,
       };
     };
 
@@ -527,4 +541,9 @@ export async function GET(request: NextRequest) {
     console.error('Student tests overview error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+/** Null when the door is open, so the field is present only when it says something. */
+function nullIfOpen(d: CatchupGateDecision): CatchupGateDecision | null {
+  return d.blocked ? d : null;
 }

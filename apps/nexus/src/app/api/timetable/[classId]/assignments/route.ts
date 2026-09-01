@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { canRunSession, isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
-import { classStartIso } from '@/lib/prework';
 import { announceAssignment, shouldAnnounceLink } from '@/lib/teams-assignment-announcements';
+import { buildClassLinkUpdate, normalizeTiming, istTodayStr } from '@/lib/assignment-class-link';
 import { shareBaseUrl } from '@/lib/class-share-links';
 
 /**
@@ -31,11 +31,6 @@ const ASSIGNMENT_COLS =
  */
 const ASSIGNMENT_COLS_WITH_ANNOUNCE =
   `${ASSIGNMENT_COLS}, classroom_id, instructions, teams_announced_class_id`;
-
-/** Today in IST as YYYY-MM-DD. class_date is a wall-clock day, not an instant. */
-function istTodayStr(): string {
-  return new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
-}
 
 /**
  * Resolve the caller and confirm they can see this class.
@@ -144,7 +139,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const body = await request.json();
     const { assignment_id } = body;
-    const timing = body.timing === 'prework' ? 'prework' : 'homework';
+    const timing = normalizeTiming(body.timing);
 
     if (!assignment_id) {
       return NextResponse.json({ error: 'assignment_id is required' }, { status: 400 });
@@ -157,29 +152,18 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: 'Only staff can link assignments' }, { status: 403 });
     }
 
-    const today = istTodayStr();
-    const classDay: string = access.cls.scheduled_date;
-
-    const update: Record<string, unknown> = {
-      scheduled_class_id: params.classId,
+    // The clamp on class_date and the derived prework deadline both live in
+    // assignment-class-link, because the assignment form writes this same
+    // relationship and the two must not drift. See that file for why.
+    const update = buildClassLinkUpdate(
+      {
+        id: params.classId,
+        scheduled_date: access.cls.scheduled_date,
+        start_time: access.cls.start_time,
+      },
       timing,
-      // Never date an assignment into the future.
-      //
-      // class_date is "the day this work entered the student's world": it drives
-      // computeAssignmentClock's personal_start and it is the sort key of the
-      // student's assignment list. Copying a future class's date onto it, which
-      // is what this line used to do unconditionally, pinned the work to the top
-      // of every student's list weeks early, and when the deadline was set before
-      // the class it put personal_start AFTER personal_due, so a late joiner was
-      // granted a catch-up window that began after the deadline had passed.
-      class_date: classDay > today ? today : classDay,
-    };
-
-    if (timing === 'prework') {
-      // Derived, never typed. The teacher does not get a date field for prework,
-      // so there is no way for it to disagree with the class it belongs to.
-      update.due_at = classStartIso(classDay, access.cls.start_time || '00:00');
-    }
+      istTodayStr(),
+    );
 
     // Scope the update to the same classroom so a valid-looking id from another
     // cohort cannot be pulled in.

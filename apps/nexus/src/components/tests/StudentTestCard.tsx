@@ -16,6 +16,7 @@
 
 import { Box, Typography, Button, Paper, Chip, LinearProgress, Checkbox, IconButton } from '@neram/ui';
 import MoreVertOutlinedIcon from '@mui/icons-material/MoreVertOutlined';
+import LockClockOutlinedIcon from '@mui/icons-material/LockClockOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
@@ -91,6 +92,14 @@ export interface StudentTest {
     | 'teacher_override_mandatory'
     | 'teacher_override_excused'
     | null;
+  /**
+   * Set only when catch-up is standing between this student and this test.
+   * Named classes, because "finish 2 catch-up classes" sends them hunting.
+   */
+  catchup_gate?: {
+    blocked: boolean;
+    outstanding: Array<{ id: string; title: string | null; date: string }>;
+  } | null;
   eligibility_auto_bucket?:
     | 'mandatory_attended'
     | 'mandatory_caught_up'
@@ -195,6 +204,22 @@ export function examResultChip(
   // 'unpublished' yet: say so rather than leaving the card silent about it.
   if (t.status === 'done') return { label: 'Result not published yet', color: 'default' };
   return null;
+}
+
+/**
+ * Names the classes rather than counting them. A student told to "finish 2
+ * catch-up classes" still has to work out which two, and the whole value of
+ * saying this early is that it ends in something they can go and do.
+ */
+export function catchupGateLine(outstanding: Array<{ title: string | null }>): string {
+  const names = outstanding.map((o) => o.title).filter((t): t is string => Boolean(t));
+  if (names.length === 0) {
+    const n = outstanding.length;
+    return `Finish your ${n} pending catch-up ${n === 1 ? 'class' : 'classes'} to unlock this test.`;
+  }
+  const list =
+    names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `Finish your catch-up for ${list} to unlock this test.`;
 }
 
 export interface StudentTestCardProps {
@@ -394,6 +419,34 @@ export default function StudentTestCard({
           />
         )}
       </Box>
+
+      {/*
+        The catch-up standing between them and this test, said DAYS AHEAD.
+
+        The attempt route enforces the same rule, but a student who first meets
+        it when they press Start on a timed exam has already lost the sitting:
+        the window is fixed and does not pause while they go and catch up. On
+        the run that prompted this, four of the sixteen who sat the paper had an
+        un-caught-up absence, so this is not a rare corner.
+      */}
+      {test.catchup_gate?.blocked && (
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 0.75,
+            alignItems: 'flex-start',
+            mt: 1,
+            p: 1,
+            borderRadius: 1.5,
+            bgcolor: 'warning.light',
+          }}
+        >
+          <LockClockOutlinedIcon sx={{ fontSize: 16, mt: '2px', flexShrink: 0 }} />
+          <Typography variant="caption" sx={{ fontWeight: 600, lineHeight: 1.4 }}>
+            {catchupGateLine(test.catchup_gate.outstanding)}
+          </Typography>
+        </Box>
+      )}
 
       {test.best_percentage != null && (
         <Box sx={{ mb: 1.5 }}>

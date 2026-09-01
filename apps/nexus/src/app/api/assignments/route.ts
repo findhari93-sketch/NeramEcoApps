@@ -8,7 +8,8 @@ import {
 import { getRequestUser, assertStaff, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { istTodayStr } from '@/lib/assignment-clock';
-import { classStartIso } from '@/lib/prework';
+import { attachClassLabels } from '@/lib/assignment-class-label';
+import { buildClassLinkUpdate, normalizeTiming } from '@/lib/assignment-class-link';
 import { composeDrawingBriefText } from '@/lib/drawing-brief-text';
 
 const FORMATS = ['pdf', 'image', 'pdf_or_image'] as const;
@@ -64,33 +65,14 @@ export async function GET(request: NextRequest) {
       status ? { status } : undefined,
     );
 
-    // Resolved here rather than in the shared query, because touching
-    // packages/database rebuilds all four apps for a label on one page.
+    // Resolved outside the shared query, because touching packages/database
+    // rebuilds all four apps for a label only Nexus renders. See the helper.
     const withClass = await attachClassLabels(assignments as any[]);
 
     return NextResponse.json({ assignments: withClass });
   } catch (err) {
     return errorResponse(err, 'Failed to load assignments');
   }
-}
-
-/** One batched lookup for the class titles, whatever the assignment count. */
-async function attachClassLabels(rows: any[]): Promise<any[]> {
-  const ids = [...new Set(rows.map((a) => a.scheduled_class_id).filter(Boolean))] as string[];
-  if (ids.length === 0) return rows;
-
-  const supabase = getSupabaseAdminClient() as any;
-  const { data } = await supabase
-    .from('nexus_scheduled_classes')
-    .select('id, title, scheduled_date, start_time')
-    .in('id', ids);
-
-  const byId = new Map<string, any>((data || []).map((c: any) => [c.id, c]));
-  return rows.map((a) =>
-    a.scheduled_class_id && byId.has(a.scheduled_class_id)
-      ? { ...a, scheduled_class: byId.get(a.scheduled_class_id) }
-      : a,
-  );
 }
 
 /**
@@ -137,18 +119,27 @@ export async function POST(request: NextRequest) {
     const dueDate = String(body?.due_date || '').slice(0, 10);
     let dueAt = /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? `${dueDate}T23:59:59+05:30` : null;
 
-    if (timing === 'prework' && scheduledClassId) {
+    if (scheduledClassId) {
       const { data: cls } = await (getSupabaseAdminClient() as any)
         .from('nexus_scheduled_classes')
-        .select('scheduled_date, start_time')
+        .select('id, classroom_id, scheduled_date, start_time')
         .eq('id', scheduledClassId)
         .maybeSingle();
       if (!cls) throw new ApiError('That class no longer exists.', 404);
-      dueAt = classStartIso(cls.scheduled_date, cls.start_time || '00:00');
-      // Never date the work into the future: class_date drives the student's
-      // personal clock and the sort order of their assignment list.
-      const today = istTodayStr();
-      classDate = cls.scheduled_date > today ? today : cls.scheduled_date;
+      // A valid-looking id from another cohort must not link through. The
+      // timetable's own link route gets this from its .eq('classroom_id')
+      // scoping; created from the assignment form, it has to be checked.
+      if (cls.classroom_id !== classroomId) {
+        throw new ApiError('That class belongs to a different classroom.', 400);
+      }
+
+      // One rule for what linking does to the dates, shared with the timetable
+      // route: class_date follows the class (clamped to today so work is never
+      // dated into the future) and prework's deadline is derived from the class
+      // start rather than typed. See lib/assignment-class-link.
+      const link = buildClassLinkUpdate(cls, normalizeTiming(timing), istTodayStr());
+      classDate = link.class_date;
+      if (link.due_at) dueAt = link.due_at;
     }
 
     let windowDays = Number(body?.catchup_window_days ?? 7);

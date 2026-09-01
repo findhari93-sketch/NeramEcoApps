@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -144,6 +144,7 @@ function isCorrectOption(
 export default function TestDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const testId = params?.id;
   const { getToken, isTeacher, activeClassroom } = useNexusAuthContext();
 
@@ -163,9 +164,20 @@ export default function TestDetailPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'results'>('overview');
+  /**
+   * Both seeded from the URL so `?tab=results&placement_id=` actually lands
+   * where it says. The Conducted tab and the runs list below both link that
+   * way, and until this read existed every one of those links quietly dropped
+   * the teacher on Overview with no run selected.
+   *
+   * Read once, at first render. Reading it on every render would fight setTab
+   * and pin the page to whichever tab the URL named.
+   */
+  const [tab, setTab] = useState<'overview' | 'results'>(
+    searchParams?.get('tab') === 'results' ? 'results' : 'overview',
+  );
   /** Which run the Results tab opens on, set by "See results" in the runs list. */
-  const [resultsRunId, setResultsRunId] = useState('');
+  const [resultsRunId, setResultsRunId] = useState(searchParams?.get('placement_id') || '');
   const [duplicating, setDuplicating] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [examOpen, setExamOpen] = useState(false);

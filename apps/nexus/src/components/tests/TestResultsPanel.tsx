@@ -32,6 +32,8 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import StudentAttemptSheet from '@/components/tests/StudentAttemptSheet';
 
@@ -59,6 +61,12 @@ interface ResultRow {
   provisional: boolean;
   window_open_until: string | null;
   access_request_pending: boolean;
+  /**
+   * What this student did with the SAME PAPER through a different door.
+   * Self-study is not the class test, so this never changes their status: it
+   * sits beside it as context. See loadElsewhereAttempts in the results route.
+   */
+  elsewhere: { attempts: number; best_percentage: number | null; last_at: string | null } | null;
 }
 
 interface RunSummary {
@@ -151,6 +159,20 @@ function formatScore(pct: number | null, score: number | null, total: number | n
   const rounded = Math.round(pct);
   if (score == null || total == null || total <= 0) return `${rounded}%`;
   return `${rounded}% (${score}/${total})`;
+}
+
+/**
+ * What a student did with this paper somewhere other than this run.
+ *
+ * Says "on their own" rather than naming the placement. A teacher scanning a
+ * chase list needs to know the work happened, not which door it came through,
+ * and the door names are internal vocabulary nobody outside the code uses.
+ */
+function selfStudyLine(e: { attempts: number; best_percentage: number | null }): string {
+  const times = `${e.attempts} time${e.attempts === 1 ? '' : 's'}`;
+  return e.best_percentage == null
+    ? `Did this paper ${times} on their own`
+    : `Did this paper ${times} on their own, best ${Math.round(e.best_percentage)}%`;
 }
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -310,6 +332,10 @@ export default function TestResultsPanel({
       'Passed',
       'First attempt at',
       'Last attempt at',
+      // Carried into the export for the same reason it is on the row: a
+      // "Missed" with no context is the line a teacher acts on wrongly.
+      'Self-study attempts',
+      'Self-study best %',
     ];
     const marks = (score: number | null, total: number | null) =>
       score == null || total == null ? '' : `${score}/${total}`;
@@ -330,6 +356,8 @@ export default function TestResultsPanel({
           r.passed == null ? '' : r.passed ? 'yes' : 'no',
           r.first_submitted_at ?? '',
           r.last_submitted_at ?? '',
+          r.elsewhere?.attempts ?? 0,
+          r.elsewhere?.best_percentage == null ? '' : Math.round(r.elsewhere.best_percentage),
         ].join(','),
       );
     }
@@ -617,6 +645,20 @@ export default function TestResultsPanel({
                                 </>
                               )}
                             </Typography>
+
+                            {/* The fact that used to be missing. Four students
+                                on the run that prompted this read only "Missed
+                                the date", and one of them had done the paper
+                                seven times on her own and scored 100%. Both
+                                were true; only the damning one was on screen. */}
+                            {r.elsewhere && r.elsewhere.attempts > 0 && (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                                <MenuBookOutlinedIcon sx={{ fontSize: 14, color: 'info.main' }} />
+                                <Typography variant="caption" sx={{ color: 'info.main' }}>
+                                  {selfStudyLine(r.elsewhere)}
+                                </Typography>
+                              </Box>
+                            )}
                           </Box>
                           {!isMobile && sat && lead.pct != null && (
                             <Box sx={{ width: 120 }}>
@@ -628,11 +670,20 @@ export default function TestResultsPanel({
                               />
                             </Box>
                           )}
-                          {/* The teacher's half of the reopen flow, right on
-                              the row where they noticed the problem. */}
-                          {isRunScoped && runId && !sat && (
+                          {/*
+                            The teacher's half of the reopen flow, right on the
+                            row where they noticed the problem.
+
+                            Offered on EVERY row, not only rows with no attempt.
+                            The student who prompted this had sat the exam and
+                            scored 0% because something went wrong mid-test, and
+                            gating this on `!sat` meant the one person most
+                            obviously needing another sitting was the one person
+                            the screen could not offer it to.
+                          */}
+                          {isRunScoped && runId && (
                             <Box
-                              sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}
+                              sx={{ display: 'flex', gap: 1, flexShrink: 0 }}
                               onClick={(e) => e.stopPropagation()}
                             >
                               {r.access_request_pending ? (
@@ -659,12 +710,22 @@ export default function TestResultsPanel({
                                 <Button
                                   size="small"
                                   disabled={acting === r.student_id}
+                                  startIcon={
+                                    r.window_open_until ? undefined : <LockOpenOutlinedIcon sx={{ fontSize: 16 }} />
+                                  }
                                   onClick={() =>
                                     setAccess(r.student_id, r.window_open_until ? 'close' : 'open')
                                   }
+                                  aria-label={
+                                    r.window_open_until
+                                      ? `Close this test for ${r.student_name || 'this student'}`
+                                      : `Open this test for ${r.student_name || 'this student'}`
+                                  }
                                   sx={{ textTransform: 'none', minHeight: 44 }}
                                 >
-                                  {r.window_open_until ? 'Close' : 'Open for them'}
+                                  {/* "Open again" for someone who already sat it: they are
+                                      not being let in late, they are getting another go. */}
+                                  {r.window_open_until ? 'Close' : sat ? 'Open again' : 'Open for them'}
                                 </Button>
                               )}
                             </Box>

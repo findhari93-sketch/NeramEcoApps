@@ -17,7 +17,15 @@ import {
   resolveExamTimer,
   getLiveAccessRequest,
   resolveTestRunWindow,
+  loadAttendanceAndAbsences,
+  listRunCoveredClasses,
 } from '@neram/database';
+import {
+  decideCatchupGate,
+  describeCatchupGate,
+  type CatchupGateDecision,
+  type GateClassEvidence,
+} from '@/lib/catchup-test-gate';
 import { attemptSeed, seededShuffle } from '@/lib/seeded-shuffle';
 
 /**
@@ -116,6 +124,10 @@ export async function GET(request: NextRequest) {
     // non-exam test completely unaffected by proctoring/attempt overrides/timer.
     let proctoring: { enabled: boolean; violation_limit: number } | null = null;
     let extraAttempts = 0;
+    // Set by whichever door resolved a live per-student grant. A teacher who
+    // opened the test has already decided this student may sit it, so the
+    // catch-up gate below must not second-guess them.
+    let holdsGrant = false;
     let examForTimer: Awaited<ReturnType<typeof getExam>> = null;
 
     // A placement carries its own window and visibility on top of the test's.
@@ -154,8 +166,20 @@ export async function GET(request: NextRequest) {
             const override = await getExamAttemptOverride(exam.id, user.id);
             extraAttempts = override?.extra_attempts || 0;
 
-            const makeup = await getExamMakeup(exam.id, user.id);
-            const window = resolveExamWindowForStudent(exam, makeup);
+            /**
+             * A reopened student is read here alongside their makeup.
+             *
+             * Without this line the teacher's "Open for them" button wrote a
+             * granted row that nothing ever read: the roster showed a live
+             * window, the student was still refused, and every screen the
+             * teacher could see said it had worked.
+             */
+            const [makeup, grant] = await Promise.all([
+              getExamMakeup(exam.id, user.id),
+              getLiveAccessRequest(placement.id, user.id).catch(() => null),
+            ]);
+            const liveGrant = grant?.status === 'granted' ? grant : null;
+            const window = resolveExamWindowForStudent(exam, makeup, liveGrant);
 
             if (new Date(window.opens_at) > now) {
               return NextResponse.json(
@@ -167,13 +191,30 @@ export async function GET(request: NextRequest) {
               );
             }
             if (new Date(window.closes_at) < now) {
+              const asked = grant?.status === 'pending';
               return NextResponse.json(
                 {
-                  error: 'This exam has closed. Ask your teacher if you need another sitting.',
+                  error: asked
+                    ? 'This exam has closed. Your teacher has your request.'
+                    : 'This exam has closed. You can ask your teacher for another sitting.',
                   code: 'EXAM_CLOSED',
+                  can_request: !asked,
                 },
                 { status: 403 },
               );
+            }
+
+            /**
+             * A reopen is worth exactly one more sitting.
+             *
+             * An exam is sat once, so a window on its own would refuse anyone
+             * who had already attempted -- which is precisely who a teacher
+             * reopens it for. The limit re-binds as soon as this sitting is
+             * used, so one grant stays one sitting rather than an open door.
+             */
+            if (liveGrant) {
+              extraAttempts += 1;
+              holdsGrant = true;
             }
           }
         } else if (placement.context_type === 'class_test') {
@@ -197,6 +238,8 @@ export async function GET(request: NextRequest) {
             grant: grant?.status === 'granted' ? grant : null,
             now: now.getTime(),
           });
+
+          holdsGrant = window.via_grant;
 
           if (!window.open) {
             if (window.reason === 'not_yet') {
@@ -223,6 +266,36 @@ export async function GET(request: NextRequest) {
           }
           if (placement.available_until && new Date(placement.available_until) < now) {
             return NextResponse.json({ error: 'This test has closed' }, { status: 403 });
+          }
+        }
+
+        /**
+         * Catch up first, then sit the test.
+         *
+         * A test set after a lecture assumes the lecture happened. A student who
+         * was absent and has not caught up would be answering on material they
+         * have not met, so the score would measure the gap rather than the
+         * student, and it would land on their record as if it measured them.
+         *
+         * Skipped entirely for a student holding a live grant: a teacher who
+         * opened the door deliberately has already answered this question, and
+         * re-asking it here would overrule them with a rule they never saw.
+         *
+         * decideCatchupGate blocks only on POSITIVE evidence of an un-caught-up
+         * absence. A missing attendance row opens the door. See its header for
+         * why that asymmetry is load-bearing rather than lenient.
+         */
+        if (CLASS_ANCHORED_FOR_GATE.has(String(placement.context_type)) && !holdsGrant) {
+          const gate = await resolveCatchupGate(placement, user.id);
+          if (gate.blocked) {
+            return NextResponse.json(
+              {
+                error: describeCatchupGate(gate),
+                code: 'CATCHUP_REQUIRED',
+                outstanding: gate.outstanding,
+              },
+              { status: 403 },
+            );
           }
         }
 
@@ -413,5 +486,61 @@ export async function POST(request: NextRequest) {
     if (known) return known;
     console.error('Test attempt POST error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * The doors where "was the student in the class" is a meaningful question.
+ *
+ * A practice pool and a chapter test are open to everyone by design, so a
+ * catch-up gate on them would invent a prerequisite nobody set.
+ */
+const CLASS_ANCHORED_FOR_GATE = new Set(['exam', 'class_test']);
+
+/**
+ * One student's catch-up standing on the classes this run covers.
+ *
+ * Two reads, and only for the doors that need it. Falls open on any failure:
+ * refusing a student because a lookup failed would turn an outage into what
+ * looks to them like a rule.
+ */
+async function resolveCatchupGate(placement: any, studentId: string): Promise<CatchupGateDecision> {
+  const OPEN: CatchupGateDecision = { blocked: false, outstanding: [] };
+  try {
+    // context_id on both gated doors is the scheduled class. The run may cover
+    // more than its host class, so the stored list wins where it exists.
+    let classIds: string[] = placement.context_id ? [placement.context_id] : [];
+    try {
+      const stored = await listRunCoveredClasses(placement.id);
+      if (stored.length > 0) classIds = stored;
+    } catch {
+      // Table missing on this environment. The host class is still correct.
+    }
+    if (classIds.length === 0) return OPEN;
+
+    const supabase = getSupabaseAdminClient();
+    const [{ data: classRows }, facts] = await Promise.all([
+      (supabase as any)
+        .from('nexus_scheduled_classes')
+        .select('id, title, scheduled_date')
+        .in('id', classIds),
+      loadAttendanceAndAbsences([studentId], classIds, supabase),
+    ]);
+
+    const attended = facts.attendance.get(studentId);
+    const absences = facts.absences.get(studentId);
+
+    const evidence: GateClassEvidence[] = ((classRows || []) as any[]).map((c) => ({
+      scheduled_class_id: c.id,
+      title: c.title ?? null,
+      scheduled_date: c.scheduled_date,
+      attended: attended?.get(c.id) ?? null,
+      absence: absences?.get(c.id) ?? null,
+    }));
+
+    return decideCatchupGate(evidence);
+  } catch (err) {
+    console.warn('[attempt] catch-up gate skipped:', (err as Error)?.message);
+    return OPEN;
   }
 }

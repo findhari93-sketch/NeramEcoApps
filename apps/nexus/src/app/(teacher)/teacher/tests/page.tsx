@@ -17,6 +17,7 @@ import AddTaskOutlinedIcon from '@mui/icons-material/AddTaskOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import TestLibraryView from '@/components/tests/TestLibraryView';
 import StudentTestsView from '@/components/tests/StudentTestsView';
+import ConductedTab from '@/components/tests/ConductedTab';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
@@ -225,14 +226,31 @@ function GroupSection({
   );
 }
 
-type HubTab = 'library' | 'location' | 'students';
+type HubTab = 'library' | 'conducted' | 'location' | 'students';
 
 export default function TeacherTestsHubPage() {
   const router = useRouter();
-  const { getToken } = useNexusAuthContext();
+  const { getToken, activeClassroom } = useNexusAuthContext();
   const [tab, setTab] = useState<HubTab>('library');
   const [groups, setGroups] = useState<NexusTestOverviewGroup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const authFetch = useCallback(
+    async (url: string, init?: RequestInit) => {
+      const token = await getToken();
+      if (!token) throw new Error('Not signed in');
+      const res = await fetch(url, {
+        ...init,
+        headers: { Authorization: `Bearer ${token}`, ...(init?.headers || {}) },
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || 'Request failed');
+      }
+      return res.json();
+    },
+    [getToken],
+  );
 
   const load = useCallback(async () => {
     setError(null);
@@ -294,6 +312,11 @@ export default function TeacherTestsHubPage() {
         sx={{ mt: 1, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { textTransform: 'none', minHeight: 48 } }}
       >
         <Tab value="library" label="Library" />
+        {/* Second, not first. "What has my class sat" is asked more often than
+            "where is that paper filed", but Library has always been the landing
+            tab and moving it would break every teacher's muscle memory for a
+            gain they did not ask for. */}
+        <Tab value="conducted" label="Conducted" />
         <Tab value="location" label={`By location${groups ? ` (${totalTests})` : ''}`} />
         <Tab value="students" label="Student tests" />
       </Tabs>
@@ -301,6 +324,16 @@ export default function TeacherTestsHubPage() {
       {tab === 'library' && (
         <Box sx={{ mt: 2 }}>
           <TestLibraryView getToken={getToken} onOpenTest={(id) => router.push(`/teacher/tests/${id}`)} />
+        </Box>
+      )}
+
+      {tab === 'conducted' && (
+        <Box sx={{ mt: 2 }}>
+          <ConductedTab
+            classroomId={activeClassroom?.id ?? null}
+            authFetch={authFetch}
+            onOpen={(href) => router.push(href)}
+          />
         </Box>
       )}
 

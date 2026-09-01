@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import NoClassroomWelcome from '@/components/NoClassroomWelcome';
 import ParentNoChildLinked from '@/components/ParentNoChildLinked';
 import { getRoleDashboard } from '@/lib/role-home';
+import { loginUrlWithReturn } from '@/lib/return-path';
 
 interface RoleGuardProps {
   children: React.ReactNode;
@@ -35,13 +36,20 @@ export default function RoleGuard({
   loginPath = '/login',
 }: RoleGuardProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, nexusRole, classrooms, loading } = useNexusAuthContext();
 
   useEffect(() => {
     if (loading) return;
 
     if (!user) {
-      router.push(loginPath);
+      // Carry the destination through sign-in. Without this, a student tapping
+      // a shared assignment link while signed out lands on their dashboard and
+      // the assignment they were sent to is silently lost, which is what made
+      // every shared link useless to anyone not already signed in.
+      const query = searchParams?.toString();
+      router.push(loginUrlWithReturn(loginPath, `${pathname}${query ? `?${query}` : ''}`));
       return;
     }
 
@@ -50,7 +58,18 @@ export default function RoleGuard({
       router.push(target);
       return;
     }
-  }, [user, nexusRole, loading, allowedRoles, redirectTo, loginPath, router, classrooms]);
+  }, [
+    user,
+    nexusRole,
+    loading,
+    allowedRoles,
+    redirectTo,
+    loginPath,
+    router,
+    classrooms,
+    pathname,
+    searchParams,
+  ]);
 
   if (loading) {
     return (

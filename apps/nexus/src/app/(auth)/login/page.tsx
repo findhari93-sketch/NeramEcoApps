@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Button, Typography, CircularProgress, Alert } from '@neram/ui';
 import { getMsalErrorMessage } from '@neram/auth';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { isSafeInternalPath, rememberReturnPath, takeReturnPath } from '@/lib/return-path';
 
 function LoginContent() {
   const router = useRouter();
@@ -13,6 +14,18 @@ function LoginContent() {
   const [signingIn, setSigningIn] = useState(false);
   const [loginError, setLoginError] = useState<{ message: string; canRetry: boolean } | null>(null);
   const [showOnboardingHint, setShowOnboardingHint] = useState(false);
+
+  // Re-stash the destination RoleGuard sent us here with.
+  //
+  // Belt and braces, and each carrier covers a flow the other cannot. The
+  // popup flow returns to THIS page, where the ?next= parameter is still in the
+  // URL; the redirect flow returns to the site root, where only the stash
+  // survives. Landing here with ?next= but an empty stash means the tab was
+  // reloaded or the link was pasted directly, so write it back.
+  useEffect(() => {
+    const next = searchParams.get('next');
+    if (isSafeInternalPath(next)) rememberReturnPath(next);
+  }, [searchParams]);
 
   // Detect app-onboarding flow from query param or sessionStorage
   useEffect(() => {
@@ -30,7 +43,11 @@ function LoginContent() {
 
   useEffect(() => {
     if (user) {
-      router.push('/');
+      // Popup sign-in resolves without leaving the page, so the destination is
+      // consumed here. Redirect sign-in never reaches this line: it returns to
+      // the root, which consumes the same stash.
+      const returnPath = takeReturnPath();
+      router.push(returnPath || '/');
     }
   }, [user, router]);
 

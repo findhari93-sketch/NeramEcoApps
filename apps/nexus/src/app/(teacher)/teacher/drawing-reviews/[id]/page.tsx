@@ -33,6 +33,8 @@ import {
 import { useNavBadges } from '@/components/NavBadgeProvider';
 import type { DrawingSubmission, DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
+import type { Rotation } from '@/lib/image-rotation';
+import { compressImage } from '@/utils/imageCompression';
 import StudentAvatar from '@/components/students/StudentAvatar';
 
 export default function DrawingReviewDetailPage() {
@@ -197,6 +199,95 @@ export default function DrawingReviewDetailPage() {
     const existingTags = ((submission as any).tags as DrawingTag[] | undefined) || [];
     setTagLabels(existingTags.map((t) => t.label));
   }, [submission?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Rotation ───────────────────────────────────────────────────────────────
+
+  const rotatingRef = useRef(false);
+
+  /**
+   * Re-encode one stored image with the turn baked into the pixels and return
+   * the new URL. Going through fetch -> blob -> object URL keeps the canvas
+   * same-origin, so it is never tainted and toBlob always succeeds.
+   */
+  const bakeRotation = async (
+    url: string, rotation: Rotation, bucket: string, token: string,
+  ): Promise<string> => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Could not load the image to rotate');
+    const rotated = await compressImage(await res.blob(), 2400, 0.9, 'drawing.jpg', rotation);
+
+    const form = new FormData();
+    form.append('file', rotated, 'drawing.jpg');
+    form.append('bucket', bucket);
+    const upload = await fetch('/api/drawing/upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!upload.ok) throw new Error('Upload failed while saving the rotation');
+    const { url: newUrl } = await upload.json();
+    return newUrl as string;
+  };
+
+  const handleRotate = useCallback(async (
+    rotation: Rotation,
+    tab: 'original' | 'overlay' | 'corrected',
+    clearAnnotations: boolean,
+  ) => {
+    if (!submission || rotatingRef.current) return;
+    rotatingRef.current = true;
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Your session expired. Please refresh and try again.');
+      const ws = workspaceRef.current;
+      const updates: Record<string, string> = {};
+
+      if (tab === 'corrected') {
+        // A teacher reference is independent artwork, so it turns on its own.
+        if (!ws.correctedImageUrl) throw new Error('There is no reference image to rotate');
+        updates.corrected_image_url =
+          await bakeRotation(ws.correctedImageUrl, rotation, 'drawing-reviewed', token);
+      } else {
+        // The overlay is a flattened raster of the original plus the teacher's
+        // marks at identical dimensions, so the pair has to turn together or
+        // the marks stop lining up with the drawing underneath.
+        updates.original_image_url =
+          await bakeRotation(submission.original_image_url, rotation, 'drawing-uploads', token);
+        if (ws.overlayImageUrl) {
+          updates.reviewed_image_url =
+            await bakeRotation(ws.overlayImageUrl, rotation, 'drawing-reviewed', token);
+        }
+      }
+
+      const res = await fetch(`/api/drawing/submissions/${submission.id}/images`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updates, clear_annotations: clearAnnotations }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not save the rotation');
+      }
+      const { submission: updated } = await res.json();
+
+      // Keep the in-memory workspace in step. Without this the next draft save
+      // would write the pre-rotation URLs back over the ones just stored.
+      const nextWorkspace: WorkspaceData = {
+        ...ws,
+        overlayImageUrl: updates.reviewed_image_url ?? ws.overlayImageUrl,
+        correctedImageUrl: updates.corrected_image_url ?? ws.correctedImageUrl,
+      };
+      workspaceRef.current = nextWorkspace;
+      setWorkspaceData(nextWorkspace);
+      if (clearAnnotations) setRegionAnnotations([]);
+
+      // Merge the fresh row in rather than refetching, so the stage swaps to the
+      // upright image without a full-page loading flash.
+      setSubmission((prev) => (prev ? { ...prev, ...updated } : prev));
+    } finally {
+      rotatingRef.current = false;
+    }
+  }, [submission, getToken]);
 
   const handleWorkspaceChange = useCallback((data: WorkspaceData) => {
     workspaceRef.current = data;
@@ -697,6 +788,7 @@ export default function DrawingReviewDetailPage() {
               questionCategory={submission.question?.category}
               questionContext={questionText}
               onOpenSketch={() => setSketchTrigger(t => t + 1)}
+              onRotate={isEditMode ? handleRotate : undefined}
             />
           </Box>
 
@@ -872,6 +964,7 @@ export default function DrawingReviewDetailPage() {
             questionCategory={submission.question?.category}
             questionContext={questionText}
             onOpenSketch={() => setSketchTrigger(t => t + 1)}
+            onRotate={isEditMode ? handleRotate : undefined}
           />
         </Box>
       </Box>

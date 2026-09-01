@@ -34,9 +34,11 @@ import SendIcon from '@mui/icons-material/Send';
 import ReplayIcon from '@mui/icons-material/Replay';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import IosShareIcon from '@mui/icons-material/IosShare';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import LinkIcon from '@mui/icons-material/Link';
+import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import { Dialog, DialogTitle, DialogContent, DialogActions } from '@neram/ui';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -46,8 +48,13 @@ import AssignmentBrief from '@/components/assignments/AssignmentBrief';
 import AssignmentResultsGrid from '@/components/assignments/AssignmentResultsGrid';
 import GradeDisplay from '@/components/assignments/GradeDisplay';
 import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
+import ShareAssignmentDialog from '@/components/assignments/ShareAssignmentDialog';
 import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 import QuestionsSummaryCard from '@/components/assignments/QuestionsSummaryCard';
+import ClassPickerField, {
+  formatClassDay,
+  type ClassOption,
+} from '@/components/assignments/ClassPickerField';
 import { remindedAgo } from '@/lib/relative-time';
 
 interface AttachmentRow {
@@ -70,6 +77,11 @@ interface AssignmentInfo {
   reference_images?: string[] | null;
   links?: { label: string; url: string }[];
   attachments?: AttachmentRow[];
+  classroom_id?: string;
+  scheduled_class_id?: string | null;
+  /** Resolved server-side, so this page can name the class rather than show an id. */
+  scheduled_class?: ClassOption | null;
+  timing?: 'prework' | 'homework';
 }
 type Bucket = 'submitted' | 'late' | 'missing';
 const BUCKET_LABEL: Record<Bucket, string> = { submitted: 'Submitted', late: 'Late', missing: 'Not submitted' };
@@ -119,6 +131,7 @@ export default function AssignmentReviewPage() {
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [nudgeOpen, setNudgeOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   // When set, the reminder dialog targets a single student; null = the whole
   // not-submitted bucket (the bulk "Message" button).
   const [nudgeRecipient, setNudgeRecipient] = useState<{ id: string; name: string | null } | null>(null);
@@ -126,6 +139,10 @@ export default function AssignmentReviewPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  // Changing the class from here is what removes the round trip through the
+  // timetable for work that is already published.
+  const [classOpen, setClassOpen] = useState(false);
+  const [classDraft, setClassDraft] = useState<ClassOption | null>(null);
 
   const openAttachment = async (studyFileId: string) => {
     const token = await getTeacherToken();
@@ -166,6 +183,34 @@ export default function AssignmentReviewPage() {
       await load();
     } catch (err) {
       setSnack({ msg: err instanceof Error ? err.message : 'Could not update', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openClassDialog = () => {
+    setClassDraft(assignment?.scheduled_class ?? null);
+    setClassOpen(true);
+  };
+
+  const saveClass = async () => {
+    setBusy(true);
+    try {
+      await authFetch(`/api/assignments/${id}`, {
+        method: 'POST',
+        // Explicitly null detaches. The server only leaves the link alone when
+        // the key is absent, so sending it always is what makes both directions
+        // reachable from this one button.
+        body: JSON.stringify({ action: 'update', scheduled_class_id: classDraft?.id ?? null }),
+      });
+      setSnack({
+        msg: classDraft ? `Linked to ${classDraft.title || 'that class'}.` : 'Removed from its class.',
+        sev: 'success',
+      });
+      setClassOpen(false);
+      await load();
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Could not change the class', sev: 'error' });
     } finally {
       setBusy(false);
     }
@@ -382,6 +427,37 @@ export default function AssignmentReviewPage() {
               : ''}
           </Typography>
 
+          {/* The timetable class this work belongs to, changed in place.
+              Reaching this used to mean leaving for the timetable, finding the
+              class and scanning an unsearchable list of assignments. */}
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            sx={{ mb: 2, flexWrap: 'wrap' }}
+            useFlexGap
+          >
+            <EventOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+            <Typography variant="body2" color={assignment.scheduled_class ? 'text.primary' : 'text.secondary'}>
+              {assignment.scheduled_class
+                ? `${assignment.scheduled_class.title || 'Untitled class'}, ${formatClassDay(
+                    assignment.scheduled_class.scheduled_date,
+                  )}`
+                : 'Not linked to a class'}
+            </Typography>
+            {assignment.timing === 'prework' && assignment.scheduled_class && (
+              <Chip label="Before class" size="small" sx={{ height: 22, fontWeight: 700 }} />
+            )}
+            <Button
+              size="small"
+              variant="text"
+              onClick={openClassDialog}
+              sx={{ minHeight: 40, textTransform: 'none' }}
+            >
+              {assignment.scheduled_class ? 'Change' : 'Link a class'}
+            </Button>
+          </Stack>
+
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
             <Chip
               label={assignment.status}
@@ -402,6 +478,11 @@ export default function AssignmentReviewPage() {
             {assignment.status === 'closed' && (
               <Button size="small" variant="contained" disabled={busy} onClick={() => setStatus('reopen')} sx={{ minHeight: 40, textTransform: 'none' }}>
                 Reopen
+              </Button>
+            )}
+            {assignment.status === 'published' && (
+              <Button size="small" variant="outlined" startIcon={<IosShareIcon sx={{ fontSize: 16 }} />} onClick={() => setShareOpen(true)} sx={{ minHeight: 40, textTransform: 'none' }}>
+                Share
               </Button>
             )}
             <Button size="small" variant="outlined" startIcon={<EditOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => setEditOpen(true)} sx={{ minHeight: 40, textTransform: 'none' }}>
@@ -885,6 +966,21 @@ export default function AssignmentReviewPage() {
         />
       )}
 
+      {assignment && (
+        <ShareAssignmentDialog
+          open={shareOpen}
+          onClose={() => {
+            setShareOpen(false);
+            // A group post logs a reminder per tagged student, so the
+            // "reminded x2" hints on the roster are stale until we reload.
+            load();
+          }}
+          assignmentId={assignment.id}
+          getToken={getTeacherToken}
+          onNotify={(msg, sev) => setSnack({ msg, sev: sev === 'error' ? 'error' : 'success' })}
+        />
+      )}
+
       <AssignmentSetupDialog
         open={editOpen}
         onClose={() => setEditOpen(false)}
@@ -898,6 +994,46 @@ export default function AssignmentReviewPage() {
           load();
         }}
       />
+
+      {/* Link, move, or detach the class. Detaching never deletes anything:
+          submissions and marks stay with the assignment. */}
+      <Dialog
+        open={classOpen}
+        onClose={() => setClassOpen(false)}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{ sx: { borderRadius: 3 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>
+          {assignment?.scheduled_class ? 'Change the class' : 'Link a class'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Students see this work on the class, and it shows up on the timetable.
+          </Typography>
+          <ClassPickerField
+            classroomId={assignment?.classroom_id || ''}
+            value={classDraft}
+            onChange={setClassDraft}
+            getToken={getTeacherToken}
+            nearDate={assignment?.class_date}
+            disabled={busy}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={() => setClassOpen(false)} sx={{ minHeight: 44, textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={busy}
+            onClick={saveClass}
+            sx={{ minHeight: 44, textTransform: 'none' }}
+          >
+            {busy ? 'Saving...' : classDraft ? 'Link to this class' : 'Remove from class'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={closeOpen} onClose={() => setCloseOpen(false)} PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ fontWeight: 800 }}>Close this assignment?</DialogTitle>

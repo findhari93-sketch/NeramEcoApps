@@ -43,6 +43,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   provisional: false,
   window_open_until: null,
   access_request_pending: false,
+  elsewhere: null,
   ...over,
 });
 
@@ -255,5 +256,119 @@ describe('TestResultsPanel', () => {
     // ask without scrolling, and the row itself so they know whose it is.
     expect(screen.getByText(/asked to reopen this test/)).not.toBeNull();
     expect(screen.getByText(/· asked to reopen$/)).not.toBeNull();
+  });
+});
+
+/**
+ * Stage 7. Everything below came from one screenshot of the live 18 Aug run:
+ * four students reading only "Missed the date", and the one who had sat it and
+ * scored 0% having no way to be given another go.
+ */
+describe('TestResultsPanel, self-study evidence and reopening', () => {
+  const RUN = { placement_id: 'run-1', door: 'exam', context_type: 'exam', closes_at: null, passing_pct: 80 };
+
+  function mountRun(rows: Record<string, unknown>[]) {
+    const authFetch = vi.fn(async () => ({
+      data: {
+        rows,
+        stats: RUN_STATS,
+        questions: [],
+        runs: [{ placement_id: 'run-1', door: 'exam', context_type: 'exam', label: 'Exam: 18 Aug', opens_at: null, closes_at: null, attempts: 16, is_active: true }],
+        run: RUN,
+      },
+    }));
+    render(
+      <TestResultsPanel
+        testId="test-1"
+        authFetch={authFetch as never}
+        getToken={async () => 'tok'}
+        initialRunId="run-1"
+      />,
+    );
+    return authFetch;
+  }
+
+  const missed = (over: Record<string, unknown> = {}) =>
+    row({
+      student_id: 'stu-missed',
+      student_name: 'Inaya Nizamudeen',
+      attempts: 0,
+      status: 'missed',
+      first_percentage: null,
+      first_score: null,
+      first_total_marks: null,
+      best_percentage: null,
+      best_score: null,
+      best_total_marks: null,
+      last_percentage: null,
+      last_submitted_at: null,
+      passed: null,
+      ...over,
+    });
+
+  /**
+   * The founder's question. She is the top scorer on this paper and the run
+   * reported only that she missed it, which is the line a teacher acts on.
+   */
+  it('says a student did the paper on their own beside "Missed the date"', async () => {
+    mountRun([missed({ elsewhere: { attempts: 7, best_percentage: 100, last_at: '2026-08-19T04:00:00Z' } })]);
+
+    await waitFor(() => expect(screen.getByText('Inaya Nizamudeen')).not.toBeNull());
+    expect(screen.getByText('Did this paper 7 times on their own, best 100%')).not.toBeNull();
+  });
+
+  /** Self-study is not the class test, so it must not quietly become one. */
+  it('still reports them as having missed the run', async () => {
+    mountRun([missed({ elsewhere: { attempts: 7, best_percentage: 100, last_at: null } })]);
+    await waitFor(() => expect(screen.getAllByText('Missed the date').length).toBeGreaterThan(0));
+  });
+
+  it('says nothing when a student has no attempts anywhere else', async () => {
+    mountRun([missed()]);
+    await waitFor(() => expect(screen.getByText('Inaya Nizamudeen')).not.toBeNull());
+    expect(screen.queryByText(/on their own/)).toBeNull();
+  });
+
+  it('handles a single self-study attempt without a plural', async () => {
+    mountRun([missed({ elsewhere: { attempts: 1, best_percentage: null, last_at: null } })]);
+    await waitFor(() => expect(screen.getByText('Did this paper 1 time on their own')).not.toBeNull());
+  });
+
+  /**
+   * Chetana's row. She sat the exam and scored 0% because something went wrong
+   * mid-test, and the control was gated on `!sat`, so the student who most
+   * obviously needed another sitting was the one the screen could not offer it
+   * to.
+   */
+  it('offers another sitting to a student who already attempted', async () => {
+    mountRun([row({ student_id: 'stu-sat', student_name: 'Chetana AjayKumar', attempts: 1, best_percentage: 0, best_score: 0, first_percentage: 0, first_score: 0, passed: false })]);
+
+    await waitFor(() => expect(screen.getByText('Chetana AjayKumar')).not.toBeNull());
+    expect(screen.getByText('Open again')).not.toBeNull();
+  });
+
+  it('still says "Open for them" for a student who never sat it', async () => {
+    mountRun([missed()]);
+    await waitFor(() => expect(screen.getByText('Open for them')).not.toBeNull());
+  });
+
+  it('offers to close a window that is already open', async () => {
+    mountRun([missed({ window_open_until: '2026-09-02T00:00:00Z' })]);
+    await waitFor(() => expect(screen.getByText('Close')).not.toBeNull());
+  });
+
+  /** A pending ask is a decision to make, not a door to open. */
+  it('replaces the open control with approve and decline when a student has asked', async () => {
+    mountRun([missed({ access_request_pending: true })]);
+    await waitFor(() => expect(screen.getByText('Approve')).not.toBeNull());
+    expect(screen.getByText('Decline')).not.toBeNull();
+    expect(screen.queryByText('Open for them')).toBeNull();
+  });
+
+  it('names the student in the control label, for a screen reader on a long roster', async () => {
+    mountRun([missed()]);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open this test for Inaya Nizamudeen')).not.toBeNull(),
+    );
   });
 });

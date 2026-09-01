@@ -27,6 +27,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import GradedReviewList, { type GradedReviewItem } from '@/components/tests/GradedReviewList';
+import { summariseAttempt, formatBreakdown } from '@/lib/attempt-breakdown';
 
 interface AttemptRow {
   attempt_id: string;
@@ -199,9 +200,19 @@ export default function StudentAttemptSheet({
                   <Typography variant="h5" sx={{ fontWeight: 800 }}>
                     {Math.round(attempt.percentage)}%
                   </Typography>
-                  <Box sx={{ flex: 1 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
                       {attempt.score} of {attempt.total_marks} marks
+                    </Typography>
+                    {/*
+                      What the marks were actually made of. "38 of 45" does not
+                      say whether the seven lost marks were seven wrong answers
+                      or seven questions never reached, and with no negative
+                      marking a skipped question is never a choice: it means the
+                      student ran out of time, or something went wrong.
+                    */}
+                    <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>
+                      {formatBreakdown(summariseAttempt(attempt.review))}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {attempt.submitted_at

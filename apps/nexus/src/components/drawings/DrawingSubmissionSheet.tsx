@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Box, Button, Typography, TextField, Paper, IconButton,
-  LinearProgress, Drawer, alpha,
+  LinearProgress, Drawer, alpha, useMediaQuery,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import CameraAltOutlinedIcon from '@mui/icons-material/CameraAltOutlined';
 import PhotoLibraryOutlinedIcon from '@mui/icons-material/PhotoLibraryOutlined';
+import RotateLeftIcon from '@mui/icons-material/RotateLeft';
+import RotateRightIcon from '@mui/icons-material/RotateRight';
 import ClipboardPasteZone from './ClipboardPasteZone';
 import { compressImage } from '@/utils/imageCompression';
+import { nextRotation, prevRotation, rotationTransform, type Rotation } from '@/lib/image-rotation';
 import { useCanCapturePhoto } from '@/hooks/useCanCapturePhoto';
 
 interface DrawingSubmissionSheetProps {
@@ -51,6 +54,43 @@ export default function DrawingSubmissionSheet({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
 
+  // Phone cameras hand us sideways photos often enough that fixing it here,
+  // before submitting, saves the teacher from doing it during review.
+  const [rotation, setRotation] = useState<Rotation>(0);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [fitBox, setFitBox] = useState({ rw: 0, rh: 0, cw: 0, ch: 0 });
+  const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+
+  const measureFit = useCallback(() => {
+    const stage = stageRef.current;
+    const img = imgRef.current;
+    if (!stage || !img) return;
+    setFitBox({
+      rw: img.offsetWidth,
+      rh: img.offsetHeight,
+      cw: stage.clientWidth,
+      ch: stage.clientHeight,
+    });
+  }, []);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !preview) return;
+    measureFit();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measureFit);
+    observer.observe(stage);
+    if (imgRef.current) observer.observe(imgRef.current);
+    return () => observer.disconnect();
+  }, [measureFit, preview]);
+
+  const clearSelection = () => {
+    setFile(null);
+    setPreview(null);
+    setRotation(0);
+  };
+
   const handleFile = (f: File) => {
     if (!f.type.startsWith('image/')) {
       setError('Please select an image file');
@@ -62,6 +102,7 @@ export default function DrawingSubmissionSheet({
     }
     setFile(f);
     setPreview(URL.createObjectURL(f));
+    setRotation(0);
     setError('');
   };
 
@@ -89,9 +130,19 @@ export default function DrawingSubmissionSheet({
       // stays well under that limit (also much faster on mobile networks).
       let toUpload: File;
       try {
-        toUpload = await compressImage(file, 2400, 0.85, 'drawing.jpg');
+        toUpload = await compressImage(file, 2400, 0.85, 'drawing.jpg', rotation);
       } catch {
-        toUpload = file; // fall back to the original if the browser can't decode it
+        // The raw file is a fine fallback when the browser cannot decode the
+        // image, but only while it is already the right way up. Once a rotation
+        // has been asked for, uploading the untouched original would silently
+        // discard it and send the sideways photo anyway, so stop and say so.
+        if (rotation !== 0) {
+          setError('Could not rotate this image on your device. Try retaking the photo the right way up.');
+          setUploading(false);
+          setProgress(0);
+          return;
+        }
+        toUpload = file;
       }
       setProgress(30);
 
@@ -140,8 +191,7 @@ export default function DrawingSubmissionSheet({
       }
       setProgress(100);
 
-      setFile(null);
-      setPreview(null);
+      clearSelection();
       setSelfNote('');
       onSubmitted();
       onClose();
@@ -234,15 +284,66 @@ export default function DrawingSubmissionSheet({
           </Box>
         ) : (
           <Box sx={{ mb: 2 }}>
+            {/* Fixed-height stage so a quarter turn cannot reflow the sheet */}
             <Box
-              component="img"
-              src={preview}
-              alt="Preview"
-              sx={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 1, bgcolor: 'grey.50' }}
-            />
-            <Button size="small" onClick={() => { setFile(null); setPreview(null); }} sx={{ mt: 0.5 }}>
-              Change image
-            </Button>
+              ref={stageRef}
+              sx={{
+                height: 300,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                borderRadius: 1,
+                bgcolor: 'grey.50',
+              }}
+            >
+              <Box
+                component="img"
+                ref={imgRef}
+                src={preview}
+                alt="Preview of the drawing you are about to submit"
+                onLoad={measureFit}
+                sx={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                  display: 'block',
+                  // Rotating alone would overflow the stage, because the box the
+                  // image occupies swaps its axes. The paired scale refits it.
+                  transform: rotationTransform(fitBox.rw, fitBox.rh, fitBox.cw, fitBox.ch, rotation),
+                  transition: prefersReducedMotion ? 'none' : 'transform 0.22s ease',
+                }}
+              />
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+              <IconButton
+                onClick={() => setRotation(prevRotation)}
+                disabled={uploading}
+                aria-label="Rotate left"
+                sx={{ width: 48, height: 48, border: '1px solid', borderColor: 'divider' }}
+              >
+                <RotateLeftIcon />
+              </IconButton>
+              <IconButton
+                onClick={() => setRotation(nextRotation)}
+                disabled={uploading}
+                aria-label="Rotate right"
+                sx={{ width: 48, height: 48, border: '1px solid', borderColor: 'divider' }}
+              >
+                <RotateRightIcon />
+              </IconButton>
+              <Box sx={{ flex: 1 }} />
+              <Button size="small" onClick={clearSelection} disabled={uploading} sx={{ minHeight: 48 }}>
+                Change image
+              </Button>
+            </Box>
+
+            {rotation !== 0 && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Your drawing will be saved the way you see it here.
+              </Typography>
+            )}
           </Box>
         )}
 

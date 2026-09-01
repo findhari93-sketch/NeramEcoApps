@@ -3,8 +3,15 @@
 /**
  * ImageUploadField — the ONE shared image-upload widget for the whole monorepo.
  *
- * Always supports: click-to-choose, drag-and-drop, CLIPBOARD PASTE (Ctrl/⌘+V),
- * optional camera capture, a preview with Replace/Remove, and size/type checks.
+ * Always supports: click-to-choose, drag-and-drop, CLIPBOARD PASTE (a visible
+ * Paste button plus Ctrl/⌘+V), optional camera capture, a preview with
+ * Replace/Remove, and size/type checks.
+ *
+ * The Paste BUTTON matters more than it looks. Ctrl/⌘+V alone is invisible, and
+ * the only element that can receive it is the dropzone, which a mouse user
+ * cannot reach because clicking it opens the file dialog. On a phone, where
+ * most of our users are, there is no Ctrl/⌘+V at all. The shortcut stays; the
+ * button is what makes pasting something a person can actually find.
  * It is endpoint/auth-agnostic: the caller injects `upload(file) => {url, path?}`
  * (which does the fetch + auth for its own API route / bucket). Pass
  * `accept='image/*,.pdf'` to also accept a PDF (shown with a PDF icon).
@@ -20,10 +27,12 @@ import {
   Paper,
   Alert,
   Button,
+  Stack,
 } from '@mui/material';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
+import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
@@ -95,6 +104,23 @@ export function ImageUploadField({
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
+  // Reading the clipboard is its own wait: most browsers raise a permission
+  // prompt before a single byte arrives, and iOS shows a "Paste" popup.
+  const [readingClipboard, setReadingClipboard] = useState(false);
+  /**
+   * Whether this browser can read the clipboard on demand.
+   *
+   * Set in an effect rather than inline so the server render and the first
+   * client render agree (there is no `navigator` during SSR). Firefox has no
+   * `navigator.clipboard.read` at all, and a button that can only ever fail is
+   * worse than no button, so it is hidden there and Ctrl/⌘+V carries on working.
+   */
+  const [canReadClipboard, setCanReadClipboard] = useState(false);
+  useEffect(() => {
+    setCanReadClipboard(
+      typeof navigator !== 'undefined' && typeof navigator.clipboard?.read === 'function',
+    );
+  }, []);
 
   // Only surface the Camera button where it can actually open a camera (touch
   // devices). On desktop `capture` is ignored and it would just re-open the file
@@ -174,6 +200,37 @@ export function ImageUploadField({
       void processFile(file);
     }
   };
+
+  /**
+   * The visible Paste button.
+   *
+   * Deliberately does NOT fall back to opening the file picker when the
+   * clipboard is empty or blocked. This tile already opens the picker when you
+   * click it, so a Paste tap that produces a file dialog reads as a bug rather
+   * than a fallback. Say what went wrong and leave the other two paths alone.
+   */
+  const handleClipboardPaste = useCallback(async () => {
+    if (disabled || uploading || readingClipboard) return;
+    setReadingClipboard(true);
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (!type) continue;
+        const blob = await item.getType(type);
+        const ext = type.split('/')[1]?.split('+')[0] || 'png';
+        setLocalError(null);
+        await processFile(new File([blob], `pasted-image.${ext}`, { type }));
+        return;
+      }
+      setLocalError('Nothing to paste. Copy an image first.');
+    } catch {
+      // Denied permission, an insecure origin, or a clipboard we may not read.
+      setLocalError('Clipboard access was blocked. Drop the image here, or choose a file.');
+    } finally {
+      setReadingClipboard(false);
+    }
+  }, [disabled, uploading, readingClipboard, processFile]);
 
   const openPicker = (withCamera = false) => {
     if (disabled || uploading || !inputRef.current) return;
@@ -256,18 +313,46 @@ export function ImageUploadField({
               <Typography variant="caption" color="text.secondary">
                 {acceptsPdf ? 'Image or PDF' : 'Image'} · up to {maxSizeMB} MB
               </Typography>
-              {showCamera && (
-                <Button
-                  size="small"
-                  startIcon={<PhotoCameraOutlinedIcon sx={{ fontSize: 18 }} />}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openPicker(true);
-                  }}
-                  sx={{ mt: 0.5, minHeight: 40, textTransform: 'none' }}
+              {/* Paste and Camera share one row, so the tile grows by one
+                  button height rather than two. They wrap instead of
+                  overflowing: this same field is the 200px add-tile inside
+                  ImageUploadList. stopPropagation on both, or the click bubbles
+                  to the Paper and opens the file dialog underneath. */}
+              {(canReadClipboard || showCamera) && (
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  useFlexGap
+                  sx={{ mt: 0.5, flexWrap: 'wrap', justifyContent: 'center' }}
                 >
-                  Camera
-                </Button>
+                  {canReadClipboard && (
+                    <Button
+                      size="small"
+                      startIcon={<ContentPasteIcon sx={{ fontSize: 18 }} />}
+                      disabled={disabled || readingClipboard}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleClipboardPaste();
+                      }}
+                      sx={{ minHeight: 48, textTransform: 'none' }}
+                    >
+                      {readingClipboard ? 'Pasting…' : 'Paste'}
+                    </Button>
+                  )}
+                  {showCamera && (
+                    <Button
+                      size="small"
+                      startIcon={<PhotoCameraOutlinedIcon sx={{ fontSize: 18 }} />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openPicker(true);
+                      }}
+                      sx={{ minHeight: 48, textTransform: 'none' }}
+                    >
+                      Camera
+                    </Button>
+                  )}
+                </Stack>
               )}
             </>
           )}
@@ -275,9 +360,14 @@ export function ImageUploadField({
       ) : (
         <Paper
           variant="outlined"
+          // Without a tabIndex this Paper can never hold focus, so its onPaste
+          // was dead code and "paste to replace" silently did nothing.
+          tabIndex={0}
           onPaste={handlePaste}
           sx={{
             position: 'relative',
+            outline: 'none',
+            '&:focus-visible': { borderColor: 'primary.main' },
             minWidth: 0,
             p: 1,
             display: 'flex',
@@ -395,7 +485,7 @@ export function ImageUploadField({
       )}
 
       {(error || localError) && (
-        <Alert severity="error" sx={{ mt: 1, py: 0.25 }}>
+        <Alert severity="error" role="alert" sx={{ mt: 1, py: 0.25 }}>
           {error || localError}
         </Alert>
       )}

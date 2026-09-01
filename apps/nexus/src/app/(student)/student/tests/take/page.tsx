@@ -141,6 +141,8 @@ export default function TakeTestPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   // A closed class test can be asked about, unlike an expired link.
   const [canRequestReopen, setCanRequestReopen] = useState(false);
+  /** Set when the refusal was "finish catching up first", so the dead end gets an exit. */
+  const [catchupBlocked, setCatchupBlocked] = useState(false);
   const [reopenNote, setReopenNote] = useState('');
   const [reopenBusy, setReopenBusy] = useState(false);
   const [reopenAsked, setReopenAsked] = useState(false);
@@ -228,7 +230,15 @@ export default function TakeTestPage() {
         // A closed class test is not a dead link: the student can ask their
         // teacher to reopen it, and the refusal carries whether that offer is
         // still available (they may have asked already).
-        setCanRequestReopen(j?.code === 'CLASS_TEST_CLOSED' && j?.can_request === true);
+        // Both closed doors, not just the class-test one. On production every
+        // test a class sits together is an exam, so keying this on
+        // CLASS_TEST_CLOSED alone meant no real student could ever reach the
+        // ask. The route is the one that decides whether asking is possible;
+        // this only reads its answer.
+        setCanRequestReopen(
+          (j?.code === 'CLASS_TEST_CLOSED' || j?.code === 'EXAM_CLOSED') && j?.can_request === true,
+        );
+        setCatchupBlocked(j?.code === 'CATCHUP_REQUIRED');
         // A paper that will not open never creates an attempt row, so this
         // failure was previously invisible to everyone: the student saw an
         // error, walked away, and the teacher's screen said "0 attempts".
@@ -783,6 +793,18 @@ export default function TakeTestPage() {
           <Typography variant="body1" color="text.secondary">
             {loadError || 'Unable to load test. Please go back and try again.'}
           </Typography>
+          {/* Naming the classes is only half an answer. Sending them where the
+              work actually is turns the refusal into a next step. */}
+          {catchupBlocked && (
+            <Button
+              variant="contained"
+              onClick={() => router.push('/student/catch-up')}
+              sx={{ mt: 2, textTransform: 'none', minHeight: 48 }}
+            >
+              Go to my catch-up
+            </Button>
+          )}
+
           {/* A closed class test has a way back in, so the refusal offers it
               rather than leaving the student at a dead end. */}
           {canRequestReopen && placementId && (

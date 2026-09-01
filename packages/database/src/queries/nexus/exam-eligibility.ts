@@ -178,7 +178,15 @@ function toRosterStudents(members: RosterMember[]): EligibilityRosterStudent[] {
     .filter((s) => Boolean(s.student_id));
 }
 
-async function loadAttendanceAndAbsences(
+/**
+ * Attendance and absence rows for a set of students across a set of classes.
+ *
+ * Exported because the attempt route needs exactly this for ONE student, to
+ * decide whether their catch-up is done before letting them sit a test. Reusing
+ * it keeps a single reader of these two tables; a second copy in the app would
+ * be the thing that quietly disagrees when a column moves.
+ */
+export async function loadAttendanceAndAbsences(
   studentIds: string[],
   coveredClassIds: string[],
   supabase: TypedSupabaseClient,

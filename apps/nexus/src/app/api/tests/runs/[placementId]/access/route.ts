@@ -8,6 +8,7 @@ import {
   loadAccessRequestsForRun,
   setTestAccessForStudent,
 } from '@neram/database';
+import { notifyStudentAccessDecision } from '@/lib/test-access-notify';
 
 /**
  * GET   /api/tests/runs/[placementId]/access   (staff) who is waiting, who holds a window
@@ -73,6 +74,20 @@ export async function POST(request: NextRequest, { params }: { params: { placeme
       actorId: (staff.caller as any).id ?? null,
     });
 
+    // Told, not left to discover. Before this, a student learned their test had
+    // been reopened only by going back and trying it again, which is why the
+    // same student asks twice.
+    if (action === 'open') {
+      await notifyStudentAccessDecision({
+        studentId,
+        testId: (placement as any).test_id,
+        placementId: params.placementId,
+        testTitle: await readTestTitle((placement as any).test_id),
+        decision: 'granted',
+        closesAt: row?.closes_at ?? null,
+      });
+    }
+
     return NextResponse.json({ data: { request: row } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to change access';
@@ -100,10 +115,35 @@ export async function PATCH(request: NextRequest, { params }: { params: { placem
       decidedBy: (staff.caller as any).id ?? null,
     });
 
+    // A decline is worth telling them about too. A student who asked and hears
+    // nothing assumes the ask was lost and asks again.
+    const placement = await getPlacementById(params.placementId, getSupabaseAdminClient());
+    await notifyStudentAccessDecision({
+      studentId: row.student_id,
+      testId: (placement as any)?.test_id ?? '',
+      placementId: params.placementId,
+      testTitle: await readTestTitle((placement as any)?.test_id),
+      decision,
+      closesAt: row.closes_at,
+      note: row.decision_note,
+    });
+
     return NextResponse.json({ data: { request: row } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to answer that request';
     console.error('Test run access decision error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/** The paper's name, for a message a student can act on. Never fatal. */
+async function readTestTitle(testId: string | null | undefined): Promise<string | null> {
+  if (!testId) return null;
+  try {
+    const supabase = getSupabaseAdminClient() as any;
+    const { data } = await supabase.from('nexus_tests').select('title').eq('id', testId).maybeSingle();
+    return (data as any)?.title ?? null;
+  } catch {
+    return null;
   }
 }

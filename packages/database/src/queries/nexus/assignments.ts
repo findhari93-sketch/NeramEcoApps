@@ -129,6 +129,12 @@ export async function updateAssignment(
       | 'published_at'
       | 'topic_id'
       | 'class_date'
+      // The timetable class this work belongs to, and whether it is due before
+      // or after it. Both are written by the link routes; leaving them out of
+      // this list did not stop the write (the body spreads `updates` straight
+      // through) but it did make the signature lie about what the function does.
+      | 'scheduled_class_id'
+      | 'timing'
       | 'content_image_url'
       | 'content_video_url'
       | 'links'

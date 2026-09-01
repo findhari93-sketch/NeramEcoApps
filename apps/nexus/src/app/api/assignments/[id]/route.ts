@@ -33,7 +33,13 @@ import type { GalleryReactionType } from '@neram/database/types';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { notifyAssignmentReviewed } from '@/lib/timetable-notifications';
-import { announceAssignment } from '@/lib/teams-assignment-announcements';
+import { announceAssignment, shouldAnnounceLink } from '@/lib/teams-assignment-announcements';
+import {
+  buildClassLinkUpdate,
+  buildClassUnlinkUpdate,
+  normalizeTiming,
+} from '@/lib/assignment-class-link';
+import { attachClassLabel } from '@/lib/assignment-class-label';
 import { extractBearerToken } from '@/lib/ms-verify';
 import { shareBaseUrl } from '@/lib/class-share-links';
 import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
@@ -124,6 +130,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       // how many reminders + when the last one went out).
       const reminders = await getAssignmentReminderSummary(params.id);
 
+      // The linked class by name, so the detail page and the edit form can show
+      // and change it without a second round trip for one label.
+      const staffDetail = await attachClassLabel(detail as any);
+
       // Drawing-type assignments are graded in the Drawing Review screen; return
       // a roster built from drawing_submissions with the drawing id to open.
       if ((detail as any).assignment_type === 'drawing') {
@@ -136,7 +146,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           },
           { total: 0, submitted: 0, reviewed: 0, missing: 0 } as Record<string, number>,
         );
-        return NextResponse.json({ assignment: detail, drawing_roster: rows, counts, reminders, role: 'staff' });
+        return NextResponse.json({ assignment: staffDetail, drawing_roster: rows, counts, reminders, role: 'staff' });
       }
 
       // Staff see the paper WITH its answer key: they wrote it, and they need it
@@ -163,7 +173,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         { total: 0, submitted: 0, late: 0, missing: 0 } as Record<string, number>,
       );
       return NextResponse.json({
-        assignment: detail,
+        assignment: staffDetail,
         roster: rosterWithUrls,
         counts,
         reminders,
@@ -232,6 +242,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 /**
  * POST /api/assignments/[id]  (staff)
  * body { action: 'update', ...fields }
+ *   `scheduled_class_id` attaches this assignment to a timetable class, or
+ *   detaches it when null. Omit the key entirely to leave the link untouched.
  * body { action: 'publish' } | { action: 'close' } | { action: 'reopen' }
  * body { action: 'add_attachment', study_file_id }
  * body { action: 'remove_attachment', attachment_id }
@@ -289,8 +301,58 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             : ((assignment as any).timing ?? 'homework');
         if (body.timing !== undefined) updates.timing = nextTiming;
 
-        const linkedClassId = (assignment as any).scheduled_class_id as string | null;
-        if (nextTiming === 'prework' && linkedClassId) {
+        /*
+         * Attaching this assignment to a timetable class, from the assignment
+         * side. The timetable route has always been able to do this; doing it
+         * here is what removes the round trip of save, leave, find the class,
+         * scan an unsearchable list.
+         *
+         * An ABSENT key must leave the link alone. Only an explicit null
+         * detaches, or every partial update from the edit form (which sends a
+         * handful of fields at a time) would silently unlink the assignment.
+         */
+        let linkedClassId = (assignment as any).scheduled_class_id as string | null;
+        let linkedClassChanged = false;
+        // Whether the block below already computed the prework deadline from a
+        // class it had in hand, so the re-derivation after it can skip a second
+        // read of the same row.
+        let dueAtDerivedFromLink = false;
+
+        if (body.scheduled_class_id !== undefined) {
+          const requested = String(body.scheduled_class_id || '').trim();
+
+          if (!requested) {
+            Object.assign(updates, buildClassUnlinkUpdate());
+            linkedClassChanged = linkedClassId !== null;
+            linkedClassId = null;
+          } else {
+            const { data: cls } = await (getSupabaseAdminClient() as any)
+              .from('nexus_scheduled_classes')
+              .select('id, classroom_id, scheduled_date, start_time')
+              .eq('id', requested)
+              .maybeSingle();
+            if (!cls) throw new ApiError('That class no longer exists.', 404);
+            // The cross-cohort guard. The timetable route gets this for free
+            // from its .eq('classroom_id'), scoping; here it has to be said out
+            // loud, or a valid-looking id from another cohort links through.
+            if (cls.classroom_id !== (assignment as any).classroom_id) {
+              throw new ApiError('That class belongs to a different classroom.', 400);
+            }
+            const link = buildClassLinkUpdate(cls, normalizeTiming(nextTiming));
+            Object.assign(updates, link);
+            dueAtDerivedFromLink = link.due_at !== undefined;
+            linkedClassChanged = linkedClassId !== cls.id;
+            linkedClassId = cls.id;
+          }
+        }
+
+        // Re-derive the prework deadline against whatever class is linked NOW.
+        //
+        // Gated on the flag, not on `updates.due_at === undefined`: the edit
+        // form always sends due_at, and for prework it sends null (that form has
+        // no date field for it), so testing the value would read "already set"
+        // and leave prework with no deadline at all.
+        if (nextTiming === 'prework' && linkedClassId && !dueAtDerivedFromLink) {
           const { data: cls } = await (getSupabaseAdminClient() as any)
             .from('nexus_scheduled_classes')
             .select('scheduled_date, start_time')
@@ -377,7 +439,43 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             );
           }
         }
-        return NextResponse.json({ assignment: updated });
+
+        /*
+         * Tell students the assignment now belongs to a class, on exactly the
+         * terms the timetable route uses. shouldAnnounceLink already suppresses
+         * a draft (its later publish posts one complete card that names the
+         * class) and an assignment already announced against this same class,
+         * so unlink-then-relink stays silent. Moving to a DIFFERENT class is
+         * news, and does announce.
+         *
+         * Not awaited: a Teams outage must not fail the save that triggered it.
+         */
+        if (
+          linkedClassChanged &&
+          linkedClassId &&
+          shouldAnnounceLink(updated as any, linkedClassId)
+        ) {
+          announceAssignment({
+            assignment: {
+              id: params.id,
+              classroom_id: (assignment as any).classroom_id,
+              scheduled_class_id: linkedClassId,
+              title: updated.title,
+              assignment_type: (updated as any).assignment_type === 'drawing' ? 'drawing' : 'document',
+              due_at: updated.due_at,
+              evaluation_type: (updated as any).evaluation_type === 'stars' ? 'stars' : 'marks',
+              max_marks: updated.max_marks ?? null,
+              instructions: updated.instructions ?? null,
+            },
+            kind: 'linked',
+            token: extractBearerToken(request.headers.get('Authorization')),
+            shareBase: shareBaseUrl(request.nextUrl.origin),
+            supabase: getSupabaseAdminClient(),
+          }).catch((e) => console.error('announceAssignment (link) failed:', e));
+        }
+
+        // The picker on the client needs the class's name back, not just its id.
+        return NextResponse.json({ assignment: await attachClassLabel(updated as any) });
       }
 
       case 'publish': {

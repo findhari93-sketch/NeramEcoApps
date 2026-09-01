@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
+import { takeReturnPath } from '@/lib/return-path';
 
 const STUDY_MATERIALS_PATH = '/student/study-materials';
 
@@ -21,6 +22,20 @@ export default function RootRedirect() {
 
     if (!user) {
       router.replace('/login');
+      return;
+    }
+
+    // Where a shared deep link comes back to land.
+    //
+    // MSAL's redirectUri is the site ORIGIN, not /login, so the redirect sign-in
+    // flow returns HERE. Before this check the switch below sent everyone to
+    // their role's dashboard, which meant a student who tapped an assignment
+    // link in Teams while signed out arrived at Study Zone with no idea what
+    // happened to the link. Single-use, so an ordinary later visit to the root
+    // is unaffected.
+    const returnPath = takeReturnPath();
+    if (returnPath) {
+      router.replace(returnPath);
       return;
     }
 

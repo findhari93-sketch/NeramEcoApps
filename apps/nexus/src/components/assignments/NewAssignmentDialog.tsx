@@ -14,12 +14,12 @@
  * paste a OneDrive link). The field set is the shared AssignmentFormFields (also
  * used by the AI import preview). Mobile bottom-sheet, 48px targets.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box, Button, Typography, TextField, Drawer, IconButton, Stack,
   Chip, LinearProgress, Divider,
-  useMediaQuery, useTheme, alpha,
+  useMediaQuery, useTheme,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
@@ -28,7 +28,6 @@ import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import LinkIcon from '@mui/icons-material/Link';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import { ASSIGNMENT_ATTACHMENTS_FOLDER_ID } from '@/lib/assignment-constants';
 import { istTodayStr } from '@/lib/assignment-clock';
 import type { AssignmentFormat } from '@/lib/assignment-format';
@@ -36,6 +35,11 @@ import StudyFilePicker, { type PickedFile } from './StudyFilePicker';
 import AssignmentFormFields, { type AssignmentDraft, type AssignmentType, blankDraft } from './AssignmentFormFields';
 import QuestionsSummaryCard, { type QuestionsSummary } from './QuestionsSummaryCard';
 import { resolveAssignmentMode } from '@/lib/assignment-mode';
+import ClassPickerField, {
+  formatClassDay,
+  formatClassLabel,
+  type ClassOption,
+} from './ClassPickerField';
 
 interface AttachmentRow {
   id: string;
@@ -59,6 +63,9 @@ interface AssignmentDetail {
   reference_images?: string[] | null;
   recording_url: string | null;
   attachments: AttachmentRow[];
+  scheduled_class_id?: string | null;
+  /** Resolved by the API so the picker can show a name, not an id. */
+  scheduled_class?: ClassOption | null;
 }
 
 export default function NewAssignmentDialog({
@@ -70,6 +77,7 @@ export default function NewAssignmentDialog({
   onCreated,
   assignmentId,
   scheduledClassId,
+  initialClass,
   classContextLabel,
   classStartLabel,
   defaultTiming,
@@ -90,7 +98,12 @@ export default function NewAssignmentDialog({
    * optional and unset everywhere else.
    */
   scheduledClassId?: string | null;
-  /** Human label for that class, shown so the link is never a surprise. */
+  /**
+   * The same class in full, when the caller has it. Lets the picker open
+   * already showing a name rather than resolving an id it was handed.
+   */
+  initialClass?: ClassOption | null;
+  /** Human label for that class, when the caller has only a label. */
   classContextLabel?: string;
   /** "Thu 20 Aug, 7:00 PM", so a prework deadline reads as a real moment. */
   classStartLabel?: string;
@@ -109,6 +122,12 @@ export default function NewAssignmentDialog({
   const isEdit = !!assignmentId;
 
   const [draft, setDraft] = useState<AssignmentDraft>(() => blankDraft(istTodayStr()));
+  /**
+   * The class this work belongs to, now editable here rather than only from the
+   * timetable. Held outside AssignmentDraft on purpose: that type is shared with
+   * the bulk AI-import preview, which has no class to offer.
+   */
+  const [selectedClass, setSelectedClass] = useState<ClassOption | null>(initialClass ?? null);
   const patch = useCallback((p: Partial<AssignmentDraft>) => setDraft((d) => ({ ...d, ...p })), []);
   const type = draft.type;
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -152,6 +171,7 @@ export default function NewAssignmentDialog({
       recordingUrl: a.recording_url || '',
       catchupDays: String(a.catchup_window_days ?? 7),
     });
+    setSelectedClass(a.scheduled_class ?? null);
     setCreated(a);
   }, []);
 
@@ -160,6 +180,8 @@ export default function NewAssignmentDialog({
     // Reset first. defaultTiming lets a caller open this already set to "Before
     // class", e.g. the Add pre-class work action after a class is created.
     setDraft({ ...blankDraft(istTodayStr()), timing: defaultTiming ?? 'homework' });
+    // Edit mode overwrites this from the loaded assignment a moment later.
+    setSelectedClass(initialClass ?? null);
     setShowAdvanced(false);
     setCreated(null);
     setLinkUrl('');
@@ -177,7 +199,7 @@ export default function NewAssignmentDialog({
     }
     // applyPaper is stable enough for this effect: it only ever calls setState.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, assignmentId, authFetch, prefill, defaultTiming]);
+  }, [open, assignmentId, authFetch, prefill, defaultTiming, initialClass]);
 
   /**
    * Read the paper off an assignment response into the summary card, and settle
@@ -276,6 +298,24 @@ export default function NewAssignmentDialog({
     [getToken],
   );
 
+  /**
+   * How the chosen class is named everywhere else in the form: the "recording
+   * comes from" note, and the derived prework deadline. Computed from the live
+   * selection rather than the props, because the selection is now editable and
+   * a label frozen at open time would describe the class the teacher just left.
+   */
+  const classContext = useMemo(() => {
+    if (selectedClass) {
+      return {
+        label: `${selectedClass.title || 'Untitled class'}, ${formatClassDay(selectedClass.scheduled_date)}`,
+        startLabel: formatClassLabel(selectedClass),
+      };
+    }
+    // A caller that handed us a label but no full class (nothing does today,
+    // but the props are public) still gets its text back.
+    return scheduledClassId ? { label: classContextLabel, startLabel: classStartLabel } : {};
+  }, [selectedClass, scheduledClassId, classContextLabel, classStartLabel]);
+
   // Edit mode syncs the reference images immediately so they can't be forgotten.
   const onReferenceChange = (urls: string[]) => {
     patch({ refImageUrls: urls });
@@ -300,11 +340,11 @@ export default function NewAssignmentDialog({
         body: JSON.stringify({
           action: 'create',
           classroom_id: classroomId,
-          ...(scheduledClassId ? { scheduled_class_id: scheduledClassId } : {}),
+          ...(selectedClass ? { scheduled_class_id: selectedClass.id } : {}),
           assignment_type: draft.type,
           // Only meaningful with a class; the server derives a prework deadline
           // from the class start and ignores due_date entirely for one.
-          ...(scheduledClassId ? { timing: draft.timing } : {}),
+          ...(selectedClass ? { timing: draft.timing } : {}),
           title: draft.title.trim(),
           instructions: draft.instructions.trim() || null,
           expected_outcome: draft.expectedOutcome.trim() || null,
@@ -339,6 +379,11 @@ export default function NewAssignmentDialog({
         instructions: draft.instructions.trim() || null,
         expected_outcome: draft.expectedOutcome.trim() || null,
         focus_points: draft.focusPoints.trim() || null,
+        // Explicitly null when nothing is picked, which is how the class gets
+        // detached. The server leaves the link alone only when the key is
+        // absent, so an edit form that always sends it can always change it.
+        scheduled_class_id: selectedClass?.id ?? null,
+        timing: draft.timing,
         class_date: draft.classDate || undefined,
         due_at: draft.dueDate ? `${draft.dueDate}T23:59:59+05:30` : null,
         catchup_window_days: Number(draft.catchupDays) || 7,
@@ -547,9 +592,9 @@ export default function NewAssignmentDialog({
       linkReference={linkReference}
       onReferenceChange={onReferenceChange}
       lockType={isEdit}
-      classContextLabel={scheduledClassId ? classContextLabel : undefined}
-      showTiming={!!scheduledClassId}
-      classStartLabel={classStartLabel}
+      classContextLabel={classContext.label}
+      showTiming={!!selectedClass}
+      classStartLabel={classContext.startLabel}
       showCategory={!isEdit}
       autoFocusTitle={!isEdit}
       enableReferencePaste
@@ -592,27 +637,30 @@ export default function NewAssignmentDialog({
 
         {headerExtra}
 
-        {/* Opened from the timetable: say so, because an assignment that belongs
-            to a class behaves differently from a standalone one. */}
-        {!isEdit && scheduledClassId && classContextLabel && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              px: 1.5,
-              py: 1.25,
-              mb: 2,
-              borderRadius: 2,
-              bgcolor: (t) => alpha(t.palette.primary.main, 0.08),
-            }}
-          >
-            <EventOutlinedIcon sx={{ fontSize: 18, color: 'primary.dark' }} />
-            <Typography variant="body2" sx={{ color: 'primary.dark', fontWeight: 600 }}>
-              Links to {classContextLabel}
-            </Typography>
-          </Box>
-        )}
+        {/*
+          The class this work belongs to, editable here rather than only from
+          the timetable. It sits above the form because it changes what the rest
+          of the form means: picking a class reveals Before class / After class,
+          and a prework deadline is derived from the class instead of typed.
+
+          Opened from a class, it arrives already filled in, so the timetable
+          path reads the same as before and is now also correctable in place.
+        */}
+        <Box sx={{ mb: 2 }}>
+          <ClassPickerField
+            classroomId={classroomId}
+            value={selectedClass}
+            onChange={setSelectedClass}
+            getToken={getToken}
+            nearDate={draft.classDate}
+            disabled={busy}
+            helperText={
+              selectedClass
+                ? 'Students see this on the class too. The class date follows the class.'
+                : 'Link a class so this shows up on the timetable and students find it there.'
+            }
+          />
+        </Box>
 
         {isEdit ? (
           /* ---------- EDIT: one combined form ---------- */

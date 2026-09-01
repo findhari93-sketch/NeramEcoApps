@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { examResultChip, type StudentTest } from './StudentTestCard';
+import { catchupGateLine, examResultChip, type StudentTest } from './StudentTestCard';
 
 /**
  * Where a student's exam result stands is the one genuinely new piece of logic
@@ -66,5 +66,37 @@ describe('examResultChip', () => {
       exam_result: { rank: null, total_ranked: 42, score: null, total_marks: 100, percentage: null, is_provisional: false, absent: true },
     });
     expect(chip).toEqual({ label: 'Absent', color: 'error' });
+  });
+});
+
+/**
+ * Stage 7. On the run that prompted this, four of the sixteen students who sat
+ * the paper had an un-caught-up absence, so a refusal that only appears when
+ * they press Start would cost a quarter of the class their sitting. This line
+ * is what the card says days earlier.
+ */
+describe('catchupGateLine', () => {
+  it('names the class rather than counting it', () => {
+    expect(catchupGateLine([{ title: 'Islamic Architecture' }])).toBe(
+      'Finish your catch-up for Islamic Architecture to unlock this test.',
+    );
+  });
+
+  it('joins two classes readably', () => {
+    expect(catchupGateLine([{ title: 'Islamic Architecture' }, { title: 'Perspective Cube' }])).toBe(
+      'Finish your catch-up for Islamic Architecture and Perspective Cube to unlock this test.',
+    );
+  });
+
+  it('falls back to a count when the classes have no titles', () => {
+    expect(catchupGateLine([{ title: null }, { title: null }])).toBe(
+      'Finish your 2 pending catch-up classes to unlock this test.',
+    );
+  });
+
+  it('keeps the singular for one untitled class', () => {
+    expect(catchupGateLine([{ title: null }])).toBe(
+      'Finish your 1 pending catch-up class to unlock this test.',
+    );
   });
 });

@@ -7,11 +7,13 @@
  * drop + CLIPBOARD PASTE from ImageUploadField. Endpoint/auth-agnostic via the
  * injected `upload(file) => {url, path?}`.
  *
- * Paste note: the add-tile only catches Ctrl/⌘+V once it has focus, which is hard
- * to reach on desktop (clicking it opens the file dialog). Pass `enableGlobalPaste`
- * when this is the only image target on screen so an image on the clipboard is
- * caught anywhere in the surface. It ignores non-image pastes, so text fields keep
- * working. Do NOT enable it for two mounted lists at once, both would grab the paste.
+ * Paste note: the add-tile carries a visible Paste button, which is the path that
+ * works on a phone and the one most people find. Ctrl/⌘+V on the tile itself only
+ * lands once it has focus, which is hard to reach on desktop (clicking it opens the
+ * file dialog), so pass `enableGlobalPaste` when this is the only image target on
+ * screen and an image on the clipboard is caught anywhere in the surface. It ignores
+ * non-image pastes, so text fields keep working. Do NOT enable it for two mounted
+ * lists at once, both would grab the paste.
  */
 import React from 'react';
 import { Box, Typography, IconButton } from '@mui/material';

@@ -12,7 +12,7 @@
  * with no explanation is what sent people looking for a bug, so when nothing is
  * linkable this says why and offers the way forward instead.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogTitle,
   Drawer,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
@@ -30,6 +31,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import SearchIcon from '@mui/icons-material/Search';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import type { ClassCardData } from './ClassCard';
 import { formatTime } from './date-utils';
@@ -79,6 +81,7 @@ export default function LinkAssignmentDialog({
   const [busyId, setBusyId] = useState<string | null>(null);
   // Defaults to After class, which is what every existing link already means.
   const [timing, setTiming] = useState<'prework' | 'homework'>('homework');
+  const [filter, setFilter] = useState('');
 
   const classId = cls?.id ?? null;
 
@@ -105,6 +108,22 @@ export default function LinkAssignmentDialog({
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (open) setFilter('');
+  }, [open]);
+
+  /**
+   * Filtered client-side: the route already caps `linkable` at 50 rows and they
+   * are all in hand, so a round trip per keystroke would buy nothing. Fifty
+   * untitled-looking rows is still too many to scan, which is what made people
+   * give up here and go create a duplicate instead.
+   */
+  const visible = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((a) => a.title.toLowerCase().includes(q));
+  }, [items, filter]);
 
   const link = async (assignmentId: string) => {
     if (!classId) return;
@@ -184,6 +203,20 @@ export default function LinkAssignmentDialog({
         </Typography>
       </Box>
 
+      {!loading && items.length > 5 && (
+        <TextField
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Search assignments"
+          size="small"
+          fullWidth
+          InputProps={{
+            startAdornment: <SearchIcon sx={{ fontSize: 18, mr: 0.75, color: 'text.disabled' }} />,
+          }}
+          sx={{ mb: 1.5, '& .MuiInputBase-root': { minHeight: 48 } }}
+        />
+      )}
+
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress size={24} />
@@ -219,7 +252,12 @@ export default function LinkAssignmentDialog({
         </Box>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {items.map((a) => {
+          {visible.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+              No assignment matches that.
+            </Typography>
+          )}
+          {visible.map((a) => {
             const drawing = a.assignment_type === 'drawing';
             return (
               <Box

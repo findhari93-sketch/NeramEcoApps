@@ -1253,15 +1253,30 @@ export async function grantClassTestWindowForClass(
 ): Promise<boolean> {
   const supabase = (client || getSupabaseAdminClient()) as any;
   try {
-    const { data: placement } = await supabase
+    /**
+     * Both dated doors, not just class_test.
+     *
+     * This looked only for class_test placements, and production has none: on
+     * the real data every test a class sits together is an `exam`. So the
+     * founder's rule -- finish catching up and the test opens by itself -- had
+     * never once fired for a real student. maybeSingle() would also throw on a
+     * class carrying both, so this reads a list and picks.
+     */
+    const { data: rows } = await supabase
       .from('nexus_test_placements')
-      .select('id, available_until')
-      .eq('context_type', 'class_test')
+      .select('id, context_type, available_until')
+      .in('context_type', ['class_test', 'exam'])
       .eq('context_id', scheduledClassId)
-      .eq('is_active', true)
-      .maybeSingle();
-    // No class test set, or one that never shuts. Either way there is no door
-    // to open, and granting a window would be noise on the teacher's roster.
+      .eq('is_active', true);
+
+    // A teacher-set class test beats the exam when a class somehow has both,
+    // matching the precedence loadClassFacts already established.
+    const placements = (rows || []) as Array<{ id: string; context_type: string; available_until: string | null }>;
+    const placement =
+      placements.find((p) => p.context_type === 'class_test') ?? placements.find((p) => p.context_type === 'exam');
+
+    // No test set, or one that never shuts. Either way there is no door to
+    // open, and granting a window would be noise on the teacher's roster.
     if (!placement?.available_until) return false;
 
     return await grantCatchupTestWindow(

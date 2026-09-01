@@ -69,16 +69,21 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const opts = selected ? await buildRunOptions(selected, supabase) : undefined;
 
-    const [results, questions, runs] = await Promise.all([
+    const [results, questions, runs, elsewhere] = await Promise.all([
       getTestResults(params.id, opts, supabase),
       getQuestionAnalysis(params.id, { placementId }, supabase),
       buildRuns(params.id, placements, supabase),
+      selected
+        ? loadElsewhereAttempts(params.id, (selected as any).id, supabase)
+        : Promise.resolve({} as ElsewhereByStudent),
     ]);
+
+    const rows = results.rows.map((r: any) => ({ ...r, elsewhere: elsewhere[r.student_id] ?? null }));
 
     return NextResponse.json(
       {
         data: {
-          rows: results.rows,
+          rows,
           stats: results.stats,
           questions,
           runs,
@@ -260,4 +265,64 @@ async function buildRuns(
   }
 
   return runs;
+}
+
+/**
+ * What each student did with this SAME PAPER through a different door.
+ *
+ * The screen that prompted this showed four students as "Missed the date" and
+ * stopped there. One of them, the top scorer on the paper, had sat it seven
+ * times through the book and got 100%. Both facts were true and only the
+ * damning one was on screen, at exactly the moment a teacher decides who to
+ * chase.
+ *
+ * This does NOT change who counts as having sat the run. Self-study is not the
+ * class test and merging them would destroy the only number that says what the
+ * class knew on the day. It sits beside the status as context, never inside it.
+ *
+ * One grouped read for the whole roster. Submitted official attempts only,
+ * matching every other count on the page.
+ */
+interface ElsewhereFacts {
+  attempts: number;
+  best_percentage: number | null;
+  last_at: string | null;
+}
+type ElsewhereByStudent = Record<string, ElsewhereFacts>;
+
+async function loadElsewhereAttempts(
+  testId: string,
+  placementId: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+): Promise<ElsewhereByStudent> {
+  try {
+    const { data, error } = await (supabase as any)
+      .from('nexus_test_attempts')
+      .select('student_id, percentage, submitted_at, placement_id')
+      .eq('test_id', testId)
+      .eq('status', 'submitted')
+      .eq('mode', 'official');
+    if (error) throw error;
+
+    const out: ElsewhereByStudent = {};
+    for (const a of (data || []) as any[]) {
+      // Everything that is not this run. A null placement_id is a sitting from
+      // before placements existed, which is still not this run.
+      if (a.placement_id === placementId) continue;
+      const cur = out[a.student_id] || { attempts: 0, best_percentage: null, last_at: null };
+      cur.attempts += 1;
+      // percentage is NUMERIC, so PostgREST sends it as a string.
+      const pct = a.percentage == null ? null : Number(a.percentage);
+      if (pct != null && Number.isFinite(pct) && (cur.best_percentage == null || pct > cur.best_percentage)) {
+        cur.best_percentage = pct;
+      }
+      if (a.submitted_at && (!cur.last_at || a.submitted_at > cur.last_at)) cur.last_at = a.submitted_at;
+      out[a.student_id] = cur;
+    }
+    return out;
+  } catch (err) {
+    // Context, not the report. Losing it must never cost the teacher the roster.
+    console.warn('[test results] elsewhere attempts skipped:', (err as Error)?.message);
+    return {};
+  }
 }

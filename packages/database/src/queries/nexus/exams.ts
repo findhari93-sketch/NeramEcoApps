@@ -214,14 +214,37 @@ export interface ResolvedExamWindow {
   closes_at: string;
   /** True when this student is sitting inside a granted makeup rather than the main window. */
   is_makeup: boolean;
+  /** True when the window came from a teacher reopening it, not a makeup. */
+  is_reopen: boolean;
 }
 
 /**
- * Which window applies to one student.
+ * Which window applies to one student. The ONLY function that decides this.
  *
- * A live makeup grant REPLACES the main window rather than extending it, so a
- * student given a makeup for Thursday cannot also sit it on Tuesday and then
- * again on Thursday. A revoked grant is ignored entirely.
+ * Three things can put a student inside a window that is not the exam's own:
+ *
+ *   makeup   nexus_exam_makeups, written by the invigilation roster and by the
+ *            new joiner's self-serve reschedule
+ *   reopen   a granted nexus_test_access_requests row, written when a teacher
+ *            presses "Open for them", when they approve a student's ask, or
+ *            when catch-up completes
+ *
+ * A live grant REPLACES the main window rather than extending it, so a student
+ * given Thursday cannot also sit it on Tuesday and again on Thursday. A revoked
+ * makeup is ignored entirely.
+ *
+ * WHY THE REOPEN ARGUMENT EXISTS. It was missing, and the omission made the
+ * whole reopen feature inert on every exam. The teacher's button wrote a
+ * granted row to nexus_test_access_requests, the roster read it back and showed
+ * a live window, and this function never looked at it, so the student was still
+ * refused. It failed silently and it failed convincingly: everything on the
+ * teacher's screen said it had worked. Anything that can open an exam door must
+ * be an argument here rather than a second check somewhere else, or the next
+ * one will go the same way.
+ *
+ * The reopen wins over the makeup when both are live. A reopen is always the
+ * later, more deliberate act: a makeup is scheduled ahead of time, while a
+ * reopen is someone responding to what actually happened.
  *
  * The attempt route must call this BEFORE its generic available_until check.
  * That ordering is the easiest thing in this feature to get wrong: the shared
@@ -231,11 +254,23 @@ export interface ResolvedExamWindow {
 export function resolveExamWindowForStudent(
   exam: { opens_at: string; closes_at: string },
   makeup: ExamMakeup | null | undefined,
+  reopen?: { opens_at: string | null; closes_at: string | null } | null,
 ): ResolvedExamWindow {
-  if (makeup && !makeup.revoked_at) {
-    return { opens_at: makeup.opens_at, closes_at: makeup.closes_at, is_makeup: true };
+  if (reopen) {
+    // A grant with no end is open until someone closes it, and one with no
+    // start is open from now. Falling back to the exam's own bounds would
+    // re-impose the very window the grant exists to escape.
+    return {
+      opens_at: reopen.opens_at ?? new Date(0).toISOString(),
+      closes_at: reopen.closes_at ?? '9999-12-31T23:59:59.999Z',
+      is_makeup: false,
+      is_reopen: true,
+    };
   }
-  return { opens_at: exam.opens_at, closes_at: exam.closes_at, is_makeup: false };
+  if (makeup && !makeup.revoked_at) {
+    return { opens_at: makeup.opens_at, closes_at: makeup.closes_at, is_makeup: true, is_reopen: false };
+  }
+  return { opens_at: exam.opens_at, closes_at: exam.closes_at, is_makeup: false, is_reopen: false };
 }
 
 export async function getExamMakeup(

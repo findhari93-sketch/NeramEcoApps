@@ -4,6 +4,12 @@
  * One door for putting work in front of a class: write a new assignment, or
  * attach one that already exists.
  *
+ * Note the asymmetry that remains, and why. This chooser exists for the
+ * TIMETABLE, where you start from a class and go looking for work. Starting
+ * from the work, the class is now just a field in the form (ClassPickerField),
+ * which is a better fit for that direction and is why editing needs no link
+ * branch here.
+ *
  * Before this, the two lived in separate components opened from separate
  * buttons, and only the timetable offered both. They already cooperated (the
  * link dialog hands back to the create dialog through onCreateInstead), but a
@@ -104,6 +110,18 @@ export default function AssignmentSetupDialog({
       onCreated={onSaved}
       assignmentId={assignmentId}
       scheduledClassId={scheduledClassId}
+      // The caller already holds the whole class, so the picker inside opens
+      // showing its name instead of resolving the id it was handed.
+      initialClass={
+        cls
+          ? {
+              id: cls.id,
+              title: cls.title,
+              scheduled_date: cls.scheduled_date,
+              start_time: cls.start_time,
+            }
+          : null
+      }
       classContextLabel={classContextLabel}
       classStartLabel={classStartLabel}
       defaultTiming={defaultTiming}
