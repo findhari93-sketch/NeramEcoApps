@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import NoClassroomWelcome from '@/components/NoClassroomWelcome';
@@ -37,7 +37,6 @@ export default function RoleGuard({
 }: RoleGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { user, nexusRole, classrooms, loading } = useNexusAuthContext();
 
   useEffect(() => {
@@ -48,8 +47,15 @@ export default function RoleGuard({
       // a shared assignment link while signed out lands on their dashboard and
       // the assignment they were sent to is silently lost, which is what made
       // every shared link useless to anyone not already signed in.
-      const query = searchParams?.toString();
-      router.push(loginUrlWithReturn(loginPath, `${pathname}${query ? `?${query}` : ''}`));
+      //
+      // Read the query straight off the browser URL rather than through the
+      // useSearchParams hook. That hook opts its whole subtree out of static
+      // prerendering unless a Suspense boundary sits above it, and RoleGuard
+      // wraps essentially every authenticated page, so using it here failed the
+      // production build on 104 routes at once. This effect only ever runs in
+      // the browser, where window.location.search is the identical value.
+      const query = typeof window !== 'undefined' ? window.location.search : '';
+      router.push(loginUrlWithReturn(loginPath, `${pathname}${query}`));
       return;
     }
 
@@ -68,7 +74,6 @@ export default function RoleGuard({
     router,
     classrooms,
     pathname,
-    searchParams,
   ]);
 
   if (loading) {
