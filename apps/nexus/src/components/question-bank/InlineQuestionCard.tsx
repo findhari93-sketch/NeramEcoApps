@@ -15,6 +15,12 @@ interface InlineQuestionCardProps {
   question: NexusQBQuestionListItem;
   questionDetail: NexusQBQuestionDetail | null;
   expanded: boolean;
+  /**
+   * Marked as the one being read in the detail pane beside the list.
+   * Distinct from `expanded`: on a two-pane layout the row stays collapsed and
+   * the question opens next to it, so the row still has to say which one it is.
+   */
+  selected?: boolean;
   loading: boolean;
   questionIndex: number;
   lang?: 'en' | 'hi';
@@ -31,6 +37,7 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
   question,
   questionDetail,
   expanded,
+  selected = false,
   loading,
   questionIndex,
   lang = 'en',
@@ -51,10 +58,15 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
       sx={{
         borderRadius: 1.5,
         transition: 'all 0.15s ease-in-out',
-        borderColor: expanded
+        borderColor: expanded || selected
           ? alpha(theme.palette.primary.main, 0.5)
           : 'divider',
+        // A left rule rather than a fill: the row keeps its contrast in both
+        // themes, and it matches the lesson-card-active variant in the theme.
+        borderLeft: selected ? `3px solid ${theme.palette.primary.main}` : undefined,
+        bgcolor: selected ? alpha(theme.palette.primary.main, 0.06) : undefined,
         boxShadow: expanded ? theme.shadows[1] : 'none',
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         '&:hover': expanded
           ? {}
           : {

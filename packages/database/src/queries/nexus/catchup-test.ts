@@ -14,6 +14,30 @@ const SHORT_TEST_THRESHOLD = 8;
 export const CATCHUP_PASSING_PCT = 85;
 
 /**
+ * How many questions one sitting of the final check actually asks.
+ *
+ * The bank behind it stays whole. This is `nexus_tests.questions_to_serve`, so
+ * `ensureTestDraw` hands each attempt a window of this size and `submitAttempt`
+ * grades against that window rather than the pool.
+ *
+ * It exists because the paper had no ceiling at all. A recap banks 15 questions
+ * per checkpoint and a 97 minute class plans 7 checkpoints, so the union came to
+ * 105 questions needing 90 right, which is not a check at the end of a class, it
+ * is an afternoon. Production averaged 69 questions across 23 of these, and one
+ * student was failed twice at 84.76% (89 of 105, needing 90).
+ *
+ * 15 is deliberately the same size as one checkpoint quiz, so the last thing a
+ * student does looks like the seven things they just did.
+ *
+ * The window also does the work of making a retry meaningful. `pickTestDraw`
+ * slides it by one paper per attempt over a seed-shuffled pool, so a 105
+ * question bank yields 7 disjoint sittings before anything repeats. That matters
+ * because a failed attempt shows the correct answers: without the slide, a resit
+ * would be a memory test of the review screen.
+ */
+export const FINAL_CHECK_QUESTIONS = 15;
+
+/**
  * Every bank question that a recap's checkpoints already own.
  *
  * The recap editor mirrors each checkpoint's questions into nexus_qb_questions
@@ -72,9 +96,12 @@ export async function collectRecapBankQuestionIds(
 export interface BuildClassTestResult {
   test_id: string;
   placement_id: string;
+  /** How many questions ONE sitting asks. Capped at FINAL_CHECK_QUESTIONS. */
   question_count: number;
+  /** How many the bank holds behind it, which is what a retry draws from. */
+  bank_count: number;
   passing_pct: number;
-  /** Questions that must be correct to clear the pass mark. */
+  /** Questions that must be correct to clear the pass mark, out of question_count. */
   must_get_right: number;
   /** Set when the paper is short enough that the pass mark is near-perfect. */
   warning?: string;
@@ -156,6 +183,11 @@ export async function buildClassTestFromRecap(
       // Shuffled per attempt in the student route with a seed, not here: a
       // mid-attempt refresh must keep its order, a new attempt must not.
       shuffle: false,
+      // The whole bank goes in, one window comes out. Keeping every question on
+      // the test rather than sampling at build time is what lets a retry ask
+      // different questions, and it means the 23 papers already live need their
+      // serve size set rather than rebuilding and orphaning past attempts.
+      questionsToServe: FINAL_CHECK_QUESTIONS,
     },
     supabase,
   );
@@ -172,17 +204,21 @@ export async function buildClassTestFromRecap(
     supabase,
   );
 
-  const mustGetRight = Math.ceil((CATCHUP_PASSING_PCT / 100) * questionIds.length);
+  // Both numbers describe the SITTING, not the bank. Reporting the pool size
+  // here is what let a 105 question paper look normal on the teacher's screen.
+  const servedCount = Math.min(FINAL_CHECK_QUESTIONS, questionIds.length);
+  const mustGetRight = Math.ceil((CATCHUP_PASSING_PCT / 100) * servedCount);
 
   return {
     test_id: test.id,
     placement_id: placement.id,
-    question_count: questionIds.length,
+    question_count: servedCount,
+    bank_count: questionIds.length,
     passing_pct: CATCHUP_PASSING_PCT,
     must_get_right: mustGetRight,
     warning:
-      questionIds.length < SHORT_TEST_THRESHOLD
-        ? `Only ${questionIds.length} questions, so ${CATCHUP_PASSING_PCT}% means getting ${mustGetRight} of them right. Add more checkpoints to the recap for a fairer test.`
+      servedCount < SHORT_TEST_THRESHOLD
+        ? `Only ${servedCount} questions, so ${CATCHUP_PASSING_PCT}% means getting ${mustGetRight} of them right. Add more checkpoints to the recap for a fairer test.`
         : undefined,
   };
 }
@@ -191,7 +227,7 @@ export async function buildClassTestFromRecap(
 export async function getClassTestForClass(
   scheduledClassId: string,
   client?: TypedSupabaseClient,
-): Promise<{ placement_id: string; test_id: string; passing_pct: number; question_count: number } | null> {
+): Promise<{ placement_id: string; test_id: string; passing_pct: number; question_count: number; bank_count: number } | null> {
   const supabase = (client || getSupabaseAdminClient()) as any;
 
   const { data: placement } = await supabase
@@ -203,15 +239,32 @@ export async function getClassTestForClass(
     .maybeSingle();
   if (!placement) return null;
 
-  const { count } = await supabase
-    .from('nexus_test_questions')
-    .select('id', { count: 'exact', head: true })
-    .eq('test_id', placement.test_id);
+  const [{ count }, { data: meta }] = await Promise.all([
+    supabase
+      .from('nexus_test_questions')
+      .select('id', { count: 'exact', head: true })
+      .eq('test_id', placement.test_id),
+    supabase
+      .from('nexus_tests')
+      .select('questions_to_serve')
+      .eq('id', placement.test_id)
+      .maybeSingle(),
+  ]);
+
+  // question_count is what the student will be ASKED, which since the serve
+  // window landed is not the same as what the bank holds. A paper built before
+  // that has a null serve and still asks everything, so it falls back to the
+  // pool and reads correctly either way.
+  const bankCount = count || 0;
+  const serve = Number(meta?.questions_to_serve);
+  const servedCount =
+    Number.isFinite(serve) && serve > 0 ? Math.min(serve, bankCount) : bankCount;
 
   return {
     placement_id: placement.id,
     test_id: placement.test_id,
     passing_pct: placement.passing_pct ?? CATCHUP_PASSING_PCT,
-    question_count: count || 0,
+    question_count: servedCount,
+    bank_count: bankCount,
   };
 }

@@ -72,6 +72,32 @@ export function parseSessionKey(key: string): { session: string; shift: QBShift 
 /**
  * Get the exam tree for sidebar navigation: exam_type → year → session with counts.
  */
+/**
+ * Read every matching row, not the first thousand.
+ *
+ * PostgREST caps an unranged select at 1000 rows and says nothing about it, so a
+ * query over the question bank (3,242 active rows and growing) silently returns
+ * a third of the table. That is how the topic counts and the progress stats came
+ * to under-report by roughly two thirds: both looked like plain selects and
+ * neither had a .range().
+ *
+ * The same loop was already inlined inside getQBExamTree; this is that loop,
+ * hoisted so the other callers can stop getting it wrong.
+ */
+async function fetchAllRows<T>(query: any): Promise<T[]> {
+  const PAGE = 1000;
+  let all: T[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await query.range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    all = all.concat((data || []) as T[]);
+    if (!data || data.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
+
 export async function getQBExamTree(
   client?: TypedSupabaseClient
 ): Promise<QBExamTree> {
@@ -226,13 +252,16 @@ export async function getQBTopicCounts(
   client?: TypedSupabaseClient
 ): Promise<Record<string, number>> {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_qb_questions')
-    .select('topic_id')
-    .eq('is_active', true)
-    .eq('status' as any, 'active')
-    .not('topic_id', 'is', null);
-  if (error) throw error;
+  // Unranged, this returned 1000 of 3,242 active questions, so every topic count
+  // a student saw was short by about two thirds.
+  const data = await fetchAllRows<{ topic_id: string }>(
+    supabase
+      .from('nexus_qb_questions')
+      .select('topic_id')
+      .eq('is_active', true)
+      .eq('status' as any, 'active')
+      .not('topic_id', 'is', null),
+  );
 
   const counts: Record<string, number> = {};
   for (const row of data || []) {
@@ -361,6 +390,45 @@ async function getQBCategoryCountsFallback(
 // ============================================
 
 /**
+ * The columns a question list actually renders.
+ *
+ * This existed as select('*'), which was 120kB per 20-question page against 22kB
+ * of usable content. Two thirds of that was search scaffolding the browser has
+ * no use for: search_vector_public, search_vector_full, search_doc_norm and
+ * question_text_norm are how Postgres finds a question, not how a card draws it.
+ *
+ * The rest was the answer key. A browse response carried correct_answer and all
+ * four explanation fields, so a student could read the answer out of the network
+ * tab of the practice list before answering. The search RPC below already takes
+ * care to run under a 'student' role so explanations are neither matchable nor
+ * returnable; select('*') on this path quietly undid that.
+ *
+ * created_at is here only because the browse order sorts on it.
+ */
+export const QB_LIST_COLUMNS =
+  'id, question_text, question_text_hi, question_image_url, question_format, ' +
+  'options, categories, difficulty, topic_id, display_order, created_at, ' +
+  'section, section_order, marks_correct, marks_negative, confidence_tier, ' +
+  'origin, repeat_group_id, needs_image, choice_group_id, choice_group_pick';
+
+/**
+ * Drop the correct answer out of an option list.
+ *
+ * Narrowing the column list is not enough on its own: `options` is JSONB and
+ * every option object carries an `is_correct` boolean, so the answer travels
+ * inside a column the cards genuinely need. The detail and attempt endpoints
+ * return the answer deliberately and must not use this.
+ */
+export function stripOptionAnswers<T>(options: T): T {
+  if (!Array.isArray(options)) return options;
+  return options.map((opt: any) =>
+    opt && typeof opt === 'object' && 'is_correct' in opt
+      ? (({ is_correct, ...rest }) => rest)(opt)
+      : opt,
+  ) as unknown as T;
+}
+
+/**
  * Which questions appeared in a given exam sitting.
  *
  * `nexus_qb_question_sources` is the membership record, so "questions from JEE
@@ -423,7 +491,7 @@ export async function getQBQuestions(
   // --- Build the base query ---
   let query = supabase
     .from('nexus_qb_questions')
-    .select('*', { count: 'exact' })
+    .select(QB_LIST_COLUMNS, { count: 'exact' })
     .eq('is_active', true)
     .eq('status' as any, 'active');
 
@@ -446,6 +514,9 @@ export async function getQBQuestions(
   }
   if (filters.topic_ids && filters.topic_ids.length > 0) {
     query = query.in('topic_id', filters.topic_ids);
+  }
+  if (filters.section && filters.section.length > 0) {
+    query = query.in('section' as any, filters.section);
   }
   // NOTE: search_text is deliberately NOT applied here. It is handled by the
   // nexus_qb_search RPC below, under the 'student' role so that explanation
@@ -601,13 +672,17 @@ export async function getQBQuestions(
 
     const { data: rankedRaw, error: rankedErr } = await supabase
       .from('nexus_qb_questions')
-      .select('*')
+      .select(QB_LIST_COLUMNS)
       .in('id', search.ids);
     if (rankedErr) throw rankedErr;
 
     // .in() gives no ordering guarantee, so the RPC's ranking has to be
     // reapplied here or the page comes back ranked and then shuffled.
-    questions = orderByIds((rankedRaw || []) as NexusQBQuestion[], search.ids);
+    // The select list is a shared const rather than an inline literal, so
+    // postgrest-js cannot infer the row shape and needs the same unknown hop
+    // the rest of this file uses. The columns are narrower than NexusQBQuestion
+    // by design: the answer key and the search vectors are deliberately absent.
+    questions = orderByIds((rankedRaw || []) as unknown as NexusQBQuestion[], search.ids);
     count = search.total;
   } else {
     // Order and paginate
@@ -619,7 +694,7 @@ export async function getQBQuestions(
     const { data: questionsRaw, error: questionsError, count: browseCount } = await query;
     if (questionsError) throw questionsError;
 
-    questions = (questionsRaw || []) as NexusQBQuestion[];
+    questions = (questionsRaw || []) as unknown as NexusQBQuestion[];
     count = browseCount;
   }
 
@@ -695,6 +770,7 @@ export async function getQBQuestions(
   // --- Assemble list items ---
   const result: NexusQBQuestionListItem[] = questions.map(q => ({
     ...q,
+    options: stripOptionAnswers(q.options),
     sources: sourcesMap.get(q.id) || [],
     topic: q.topic_id ? topicMap.get(q.topic_id) || null : null,
     attempt_summary: attemptMap.get(q.id) || null,
@@ -1105,17 +1181,21 @@ export async function getStudentQBStats(
   // Count total active questions
   let totalQuery = supabase
     .from('nexus_qb_questions')
-    .select('id, categories, difficulty', { count: 'exact' })
+    .select('id, categories, difficulty')
     .eq('is_active', true)
     .eq('status' as any, 'active');
   if (examRelevance) {
     totalQuery = totalQuery.eq('exam_relevance', examRelevance);
   }
-  const { data: allQuestions, count: totalCount, error: totalError } = await totalQuery;
-  if (totalError) throw totalError;
-
-  const totalQuestions = totalCount || 0;
-  const questionsData = (allQuestions || []) as Pick<NexusQBQuestion, 'id' | 'categories' | 'difficulty'>[];
+  // This used to take the total from count:'exact' while reading the rows behind
+  // by_category and by_difficulty unranged, so the headline number counted 3,242
+  // questions and the breakdown under it described 1,000 of them. Paging the rows
+  // makes both describe the same set, and once every row is in hand the separate
+  // count is just a second way to be told something we can see.
+  const questionsData = await fetchAllRows<
+    Pick<NexusQBQuestion, 'id' | 'categories' | 'difficulty'>
+  >(totalQuery);
+  const totalQuestions = questionsData.length;
 
   // Build maps for category/difficulty per question
   const questionCategoryMap = new Map<string, string[]>();

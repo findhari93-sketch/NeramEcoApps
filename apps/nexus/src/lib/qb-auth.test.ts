@@ -67,6 +67,7 @@ function makeClient() {
 }
 
 import { verifyQBAccess, verifyQBAccessAnyClassroom } from './qb-auth';
+import { invalidateRequestUser } from './study-materials';
 
 const STUDENT = { id: 'u-student', user_type: 'student', staff_role: null, can_teach: null };
 const TEACHER = { id: 'u-teacher', user_type: 'teacher', staff_role: 'teacher', can_teach: true };
@@ -76,6 +77,11 @@ beforeEach(() => {
   state.enrolments = [];
   state.qbLinks = [];
   state.tokenValid = true;
+  // resolveQBCaller resolves the caller through getRequestUser, which holds the users
+  // row for 30s keyed on ms_oid. Every case here reuses the same oid while swapping the
+  // row behind it, so without this each test would be answered with the previous one's
+  // user. Mirrors __clearGraphIdentityCache in ms-verify.test.ts.
+  invalidateRequestUser('ms-oid-1');
 });
 
 describe('verifyQBAccessAnyClassroom', () => {

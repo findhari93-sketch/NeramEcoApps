@@ -5,12 +5,31 @@ import { Box, TextField, IconButton, Typography, Chip } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
+import {
+  isReady,
+  rectFromCorners,
+  toImageSpace,
+  toStyle,
+  type FittedBox,
+  type NormPoint,
+} from '@/lib/annotation-geometry';
 
 interface RegionAnnotationLayerProps {
   annotations: RegionAnnotation[];
   onChange: (annotations: RegionAnnotation[]) => void;
   disabled?: boolean;
+  /**
+   * Where the drawing actually sits inside this layer, in CSS pixels.
+   *
+   * Required, because without it the layer would have to measure itself, and
+   * measuring itself is exactly the bug: the layer spans the whole stage while
+   * the drawing occupies only the contain-fitted part of it.
+   */
+  box: FittedBox;
 }
+
+/** Smallest side, as a fraction of the drawing, that counts as a deliberate box. */
+const MIN_REGION = 0.03;
 
 interface DragState {
   startX: number;
@@ -20,29 +39,33 @@ interface DragState {
 }
 
 /**
- * Transparent overlay that allows teachers to draw rectangular regions
- * on a student's drawing image and add text comments.
- * Coordinates are stored as percentages (0-100) for resolution independence.
+ * Transparent overlay that lets teachers draw rectangular regions on a
+ * student's drawing and comment on them.
+ *
+ * Coordinates are fractions of the IMAGE, 0 to 1, never of this layer. The
+ * layer is inset:0 on the stage and the drawing is centred inside it with
+ * letterbox bands on two sides, so the two are only the same box by accident.
+ * Measuring against the layer is what made a rectangle drift between the
+ * mobile stage and the desktop one, and it is also why an AI annotation, which
+ * can only ever be image-relative, could not previously share this renderer.
  */
 export default function RegionAnnotationLayer({
   annotations,
   onChange,
   disabled = false,
+  box,
 }: RegionAnnotationLayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
 
-  // Convert pointer event to percentage coordinates relative to container
-  const toPercent = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
+  /** Pointer position to a fraction of the drawing, or null before layout. */
+  const toPoint = useCallback((clientX: number, clientY: number): NormPoint | null => {
     const el = containerRef.current;
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const x = ((clientX - rect.left) / rect.width) * 100;
-    const y = ((clientY - rect.top) / rect.height) * 100;
-    return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) };
-  }, []);
+    if (!el || !isReady(box)) return null;
+    return toImageSpace(clientX, clientY, el.getBoundingClientRect(), box);
+  }, [box]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (disabled) return;
@@ -50,37 +73,37 @@ export default function RegionAnnotationLayer({
     const target = e.target as HTMLElement;
     if (target.closest('[data-annotation-id]') || target.closest('input') || target.closest('textarea')) return;
 
-    const pt = toPercent(e.clientX, e.clientY);
+    const pt = toPoint(e.clientX, e.clientY);
     if (!pt) return;
 
     setEditingId(null);
     setDragging({ startX: pt.x, startY: pt.y, currentX: pt.x, currentY: pt.y });
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  }, [disabled, toPercent]);
+  }, [disabled, toPoint]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragging) return;
-    const pt = toPercent(e.clientX, e.clientY);
+    const pt = toPoint(e.clientX, e.clientY);
     if (!pt) return;
     setDragging(prev => prev ? { ...prev, currentX: pt.x, currentY: pt.y } : null);
-  }, [dragging, toPercent]);
+  }, [dragging, toPoint]);
 
   const handlePointerUp = useCallback(() => {
     if (!dragging) return;
 
-    const x = Math.min(dragging.startX, dragging.currentX);
-    const y = Math.min(dragging.startY, dragging.currentY);
-    const width = Math.abs(dragging.currentX - dragging.startX);
-    const height = Math.abs(dragging.currentY - dragging.startY);
+    const rect = rectFromCorners(
+      { x: dragging.startX, y: dragging.startY },
+      { x: dragging.currentX, y: dragging.currentY },
+    );
 
     setDragging(null);
 
-    // Minimum 3% width/height to prevent accidental tiny regions
-    if (width < 3 || height < 3) return;
+    // A box under 3% of the drawing on either axis is a mistap, not a region.
+    if (rect.width < MIN_REGION || rect.height < MIN_REGION) return;
 
     const newAnnotation: RegionAnnotation = {
       id: crypto.randomUUID(),
-      x, y, width, height,
+      ...rect,
       comment: '',
     };
 
@@ -117,12 +140,12 @@ export default function RegionAnnotationLayer({
   }, []);
 
   // Current drag rectangle
-  const dragRect = dragging ? {
-    x: Math.min(dragging.startX, dragging.currentX),
-    y: Math.min(dragging.startY, dragging.currentY),
-    width: Math.abs(dragging.currentX - dragging.startX),
-    height: Math.abs(dragging.currentY - dragging.startY),
-  } : null;
+  const dragRect = dragging
+    ? rectFromCorners(
+        { x: dragging.startX, y: dragging.startY },
+        { x: dragging.currentX, y: dragging.currentY },
+      )
+    : null;
 
   return (
     <Box
@@ -145,12 +168,11 @@ export default function RegionAnnotationLayer({
           key={ann.id}
           data-annotation-id={ann.id}
           onClick={(e) => { e.stopPropagation(); handleAnnotationClick(ann.id); }}
+          // Position goes through `style`, not `sx`: these are per-rectangle
+          // pixel values, and sx would mint a fresh emotion class for every
+          // distinct box and again on every drag frame.
+          style={{ position: 'absolute', ...toStyle(ann, box) }}
           sx={{
-            position: 'absolute',
-            left: `${ann.x}%`,
-            top: `${ann.y}%`,
-            width: `${ann.width}%`,
-            height: `${ann.height}%`,
             border: '2px dashed',
             borderColor: editingId === ann.id ? '#1976d2' : 'rgba(220, 40, 40, 0.8)',
             bgcolor: editingId === ann.id ? 'rgba(25, 118, 210, 0.08)' : 'rgba(220, 40, 40, 0.08)',
@@ -263,14 +285,10 @@ export default function RegionAnnotationLayer({
       ))}
 
       {/* Active drag rectangle */}
-      {dragRect && dragRect.width >= 1 && dragRect.height >= 1 && (
+      {dragRect && dragRect.width >= 0.01 && dragRect.height >= 0.01 && (
         <Box
+          style={{ position: 'absolute', ...toStyle(dragRect, box) }}
           sx={{
-            position: 'absolute',
-            left: `${dragRect.x}%`,
-            top: `${dragRect.y}%`,
-            width: `${dragRect.width}%`,
-            height: `${dragRect.height}%`,
             border: '2px dashed #1976d2',
             bgcolor: 'rgba(25, 118, 210, 0.12)',
             borderRadius: '4px',

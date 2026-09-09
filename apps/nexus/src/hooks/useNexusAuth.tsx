@@ -134,6 +134,17 @@ interface NexusAuthState {
 
   // Combined loading
   loading: boolean;
+  /**
+   * Can getToken() answer yet? True once MSAL has settled, or immediately when the
+   * session is an impersonation, a parent or a test one, none of which need MSAL.
+   *
+   * Deliberately NOT the same thing as `loading`. `loading` also waits on
+   * /api/auth/me, which a screen fetching its own data does not need: gating a fetch
+   * on `loading` puts that round trip in front of the screen's own, in series. Wait on
+   * this instead, and the two run side by side. Anything that needs the profile itself
+   * (role, classrooms, flags) still wants `loading`.
+   */
+  tokenReady: boolean;
   error: string | null;
   /**
    * Set when the signed-in user has been graduated to alumni and is locked out
@@ -879,6 +890,8 @@ export function useNexusAuth(): NexusAuthState {
     // running behind a usable app instead of in front of an empty one. The moment
     // either says the session is gone, `user` clears and RoleGuard redirects.
     loading: user && booted ? false : testMode || parentToken ? dbLoading : msLoading || dbLoading,
+    // The MSAL half of `loading`, without the /api/auth/me half. See the interface.
+    tokenReady: !!impersonationToken || !!parentToken || testMode || !msLoading,
     error,
     accessEnded,
     isTeacher: nexusRole === 'teacher' || nexusRole === 'admin',

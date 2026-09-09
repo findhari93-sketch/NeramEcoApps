@@ -57,12 +57,19 @@ import type {
   QBProgressStats,
 } from '@neram/database';
 
-/** The grid, at every width. 2 up at 375px, filling out from there. */
+/**
+ * The grid, at every width. 2 up at 375px, filling out from there.
+ *
+ * The md step matters now the page uses the shell's full measure: auto-fill with
+ * a 200px minimum would answer the extra width with more, smaller cards, which
+ * is the opposite of what a bigger screen is for.
+ */
 const GRID = {
   display: 'grid',
   gridTemplateColumns: {
     xs: 'repeat(auto-fill, minmax(150px, 1fr))',
     sm: 'repeat(auto-fill, minmax(200px, 1fr))',
+    md: 'repeat(auto-fill, minmax(260px, 1fr))',
   },
   gap: 1.5,
 } as const;
@@ -125,7 +132,11 @@ export default function QuestionBankHome() {
     router.push(`/student/question-bank/papers/${paper.id}`);
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1040, mx: 'auto' }}>
+    // The shell already supplies px, a pb clear of the bottom nav and a Container
+    // capped at lg. Padding and a second, narrower cap on top of that left the
+    // grid ~160px narrower than the page it sits in, and made this screen and
+    // the paper screen disagree about the measure while linking to each other.
+    <Box>
       <Typography variant="h5" fontWeight={700} sx={{ mb: 0.5 }}>
         Question Bank
       </Typography>

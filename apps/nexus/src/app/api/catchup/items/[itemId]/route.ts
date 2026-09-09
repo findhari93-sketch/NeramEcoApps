@@ -67,9 +67,16 @@ export async function POST(
         if (!canUser(staff, 'teach.recap.publish')) {
           return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
         }
+        // test_reset_at is the one that now does the work. Whether the student
+        // has passed is read off nexus_test_attempts, and a passing attempt
+        // stays on that ledger forever, so nulling test_passed_at alone would
+        // wipe the mirror and change nothing the student sees. The watermark
+        // discounts everything sat up to this moment without deleting any of
+        // it, so a teacher can still see what the student actually did.
         await supabase
           .from('nexus_class_absences')
           .update({
+            test_reset_at: new Date().toISOString(),
             test_passed_at: null,
             test_unlocked_at: new Date().toISOString(),
             caught_up_at: null,

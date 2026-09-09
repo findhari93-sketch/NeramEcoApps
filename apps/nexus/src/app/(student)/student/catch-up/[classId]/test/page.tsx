@@ -244,26 +244,42 @@ export default function CatchUpTestPage() {
                 You need {result.passing_pct ?? meta?.passing_pct}%. You got {Math.round(result.percentage)}%.
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Go back through the class and try again. The test unlocks again when you finish the
-                rewatch.
+                Your answers are below, with the right ones. Have another go when you are ready:
+                the next attempt asks a different set of questions from the same class.
               </Typography>
-              {/* One way forward. A "try again" button here would be refused by
-                  the server, so it is not offered. */}
-              <Button
-                variant="contained"
-                color="warning"
-                startIcon={<ReplayIcon />}
-                onClick={() =>
-                  router.push(
-                    recapId
-                      ? `/student/class-recap/${recapId}?rewatch=1`
-                      : `/student/timetable/${classId}/catch-up`,
-                  )
-                }
-                sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, borderRadius: RADIUS.control }}
-              >
-                Rewatch the class
-              </Button>
+              {/* Two ways forward now, and both are real.
+                  This used to offer only "Rewatch the class" and say the test
+                  would unlock again afterwards, because a fail cleared
+                  test_unlocked_at. That rule never actually held: a read-time
+                  self-heal put the unlock straight back, so the sentence
+                  described a wall nobody ever met and the student was left
+                  wondering why nothing had changed. A fail now costs the
+                  attempt and nothing else. */}
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                <Button
+                  variant="contained"
+                  color="warning"
+                  onClick={() => router.push(`/student/timetable/${classId}/catch-up`)}
+                  sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, borderRadius: RADIUS.control }}
+                >
+                  Try again
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  startIcon={<ReplayIcon />}
+                  onClick={() =>
+                    router.push(
+                      recapId
+                        ? `/student/class-recap/${recapId}?rewatch=1`
+                        : `/student/timetable/${classId}/catch-up`,
+                    )
+                  }
+                  sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, borderRadius: RADIUS.control }}
+                >
+                  Watch the class again
+                </Button>
+              </Stack>
             </>
           )}
         </Box>

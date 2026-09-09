@@ -1,0 +1,146 @@
+/**
+ * The two guarantees the student Question Bank list makes about its payload,
+ * and the arithmetic behind the paper breakdown.
+ *
+ * The payload tests are the important ones. A browse response used to carry the
+ * answer key: correct_answer and all four explanation fields travelled to the
+ * browser on the practice list, so the answer was readable in the network tab
+ * before the student answered. Narrowing the column list fixed most of it, and
+ * options.is_correct was the part narrowing could not reach. If either of these
+ * regresses the leak comes back silently, which is exactly why they are pinned
+ * here rather than left to review.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { QB_LIST_COLUMNS, stripOptionAnswers } from './question-bank';
+import { sectionProgress } from './qb-papers';
+import { QB_SECTION_ORDER, type NexusQBPaperSectionRow } from '../../types';
+
+describe('QB_LIST_COLUMNS', () => {
+  const columns = QB_LIST_COLUMNS.split(',').map((c) => c.trim());
+
+  it.each([
+    'correct_answer',
+    'explanation_brief',
+    'explanation_detailed',
+    'explanation_brief_hi',
+    'explanation_detailed_hi',
+  ])('does not ship %s to a browse response', (col) => {
+    expect(columns).not.toContain(col);
+  });
+
+  it.each([
+    'search_vector_public',
+    'search_vector_full',
+    'search_doc_norm',
+    'question_text_norm',
+  ])('does not ship the search scaffolding column %s', (col) => {
+    // Two thirds of a question row by weight, and nothing renders any of it.
+    expect(columns).not.toContain(col);
+  });
+
+  it.each([
+    'id',
+    'question_text',
+    'question_image_url',
+    'question_format',
+    'options',
+    'categories',
+    'difficulty',
+    'topic_id',
+    'display_order',
+    'created_at',
+  ])('still ships %s, which the list card reads', (col) => {
+    expect(columns).toContain(col);
+  });
+
+  it('keeps created_at, because the browse order sorts on it', () => {
+    expect(columns).toContain('created_at');
+  });
+});
+
+describe('stripOptionAnswers', () => {
+  it('removes is_correct while leaving everything the card renders', () => {
+    const options = [
+      { id: 'a', text: '12 m²', image_url: null, is_correct: false },
+      { id: 'b', text: '16 m²', image_url: null, is_correct: true },
+    ];
+
+    const stripped = stripOptionAnswers(options) as Record<string, unknown>[];
+
+    expect(stripped.every((o) => !('is_correct' in o))).toBe(true);
+    expect(stripped.map((o) => o.text)).toEqual(['12 m²', '16 m²']);
+    expect(stripped.map((o) => o.id)).toEqual(['a', 'b']);
+  });
+
+  it('does not mutate the array it was given', () => {
+    const options = [{ id: 'a', text: 'x', is_correct: true }];
+    stripOptionAnswers(options);
+    expect(options[0]).toHaveProperty('is_correct');
+  });
+
+  it('passes through anything that is not an option array', () => {
+    expect(stripOptionAnswers(null)).toBeNull();
+    expect(stripOptionAnswers(undefined)).toBeUndefined();
+    // A drawing question carries no options at all.
+    expect(stripOptionAnswers([])).toEqual([]);
+  });
+});
+
+describe('sectionProgress', () => {
+  const row = (
+    n: number,
+    section: NexusQBPaperSectionRow['section'],
+  ): NexusQBPaperSectionRow => ({
+    id: `q${n}`,
+    question_number: n,
+    question_format: 'MCQ',
+    section,
+    section_order: section ? QB_SECTION_ORDER[section] : null,
+  });
+
+  const paper = [
+    ...Array.from({ length: 12 }, (_, i) => row(i + 1, 'math_mcq')),
+    ...Array.from({ length: 30 }, (_, i) => row(i + 13, 'aptitude')),
+    ...Array.from({ length: 5 }, (_, i) => row(i + 43, 'drawing')),
+  ];
+
+  it('counts attempts into the run each question belongs to', () => {
+    // Two maths, one aptitude, no drawing.
+    const attempted = new Set(['q1', 'q2', 'q20']);
+    const runs = sectionProgress(paper, attempted);
+
+    expect(runs.map((r) => [r.label, r.attempted, r.count])).toEqual([
+      ['Mathematics (MCQ)', 2, 12],
+      ['Aptitude', 1, 30],
+      ['Drawing', 0, 5],
+    ]);
+  });
+
+  it('reports nothing attempted for a student who has not started', () => {
+    const runs = sectionProgress(paper, new Set());
+    expect(runs.every((r) => r.attempted === 0)).toBe(true);
+    expect(runs.reduce((n, r) => n + r.count, 0)).toBe(47);
+  });
+
+  it('never counts a question into more than one run', () => {
+    const attempted = new Set(paper.map((r) => r.id));
+    const runs = sectionProgress(paper, attempted);
+    expect(runs.reduce((n, r) => n + r.attempted, 0)).toBe(paper.length);
+  });
+
+  it('keeps interleaved sections as separate runs rather than merging them', () => {
+    // A paper classified oddly produces several runs for one section. That is a
+    // signal worth showing, not something to tidy away, and the counts still
+    // have to land in the right run.
+    const odd = [row(1, 'aptitude'), row(2, 'math_mcq'), row(3, 'aptitude')];
+    const runs = sectionProgress(odd, new Set(['q3']));
+
+    expect(runs).toHaveLength(3);
+    expect(runs.map((r) => r.attempted)).toEqual([0, 0, 1]);
+  });
+
+  it('returns nothing for a paper whose questions carry no sections yet', () => {
+    expect(sectionProgress([], new Set())).toEqual([]);
+  });
+});

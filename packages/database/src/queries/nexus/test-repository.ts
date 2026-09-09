@@ -840,6 +840,36 @@ function pushFlat(
 }
 
 /**
+ * How many questions a test holds and what they add up to.
+ *
+ * Split out of getComposedTestQuestions because the paper detail screen wanted
+ * only these two numbers and was paying for the whole paper to get them: the
+ * composed loader fetches question text, images, the full options JSON, correct
+ * answers and both explanation fields for every question, which measured 104kB
+ * on a 90-question paper, to render "90 questions · 180 min".
+ *
+ * nexus_test_questions carries marks itself, so the join was never needed. Note
+ * that marks defaults to 1 when null, matching how the composed loader's
+ * consumers have always summed it.
+ */
+export async function getTestQuestionTotals(
+  testId: string,
+  client?: TypedSupabaseClient,
+): Promise<{ count: number; totalMarks: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(TEST_QUESTIONS)
+    .select('marks')
+    .eq('test_id', testId);
+  if (error) throw error;
+  const rows = data || [];
+  return {
+    count: rows.length,
+    totalMarks: rows.reduce((sum: number, r: any) => sum + (Number(r.marks) || 1), 0),
+  };
+}
+
+/**
  * Load a test's questions resolving both bank (qb_question_id) and legacy
  * verified (question_id) references. withAnswers=true includes the correct answer.
  */

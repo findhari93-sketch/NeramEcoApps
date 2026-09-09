@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box, Typography, Card, CardActionArea, Chip, IconButton, Skeleton, Button, Tooltip,
@@ -17,6 +17,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
 import type { NexusStudyFileDTO } from '@neram/database/types';
 
@@ -46,41 +47,33 @@ function Thumb({ kind, src }: { kind: string; src: string | null }) {
 export default function StarredPage() {
   const theme = useTheme();
   const router = useRouter();
-  const { getToken, user, loading: authLoading } = useNexusAuthContext();
+  const { getToken, user, tokenReady } = useNexusAuthContext();
 
   // Identity stamped over PDFs/images to deter redistribution (name + phone/email).
   const watermark = user
     ? [user.name, user.phone || user.email].filter(Boolean).join('   ·   ')
     : undefined;
 
+  /** Only for the URLs that cannot carry a header: the content stream and thumbnails. */
   const [token, setToken] = useState<string | null>(null);
-  const [files, setFiles] = useState<StarredFile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [viewerFile, setViewerFile] = useState<NexusStudyFileDTO | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const t = await getToken();
-      if (!t) return;
-      setToken(t);
-      const res = await fetch('/api/study-materials/favorites', { headers: { Authorization: `Bearer ${t}` } });
-      if (!res.ok) {
-        const b = await res.json().catch(() => ({}));
-        throw new Error(b.error || 'Could not load your starred files');
-      }
-      const data = await res.json();
-      setFiles(Array.isArray(data.files) ? data.files : []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
-  }, [getToken]);
+  // Waits for MSAL, not for /api/auth/me. See the note on the folder browser.
+  const { data, error, isLoading, mutate } = useAuthSWR<{ files: StarredFile[] }>(
+    tokenReady ? '/api/study-materials/favorites' : null,
+  );
+  const files = Array.isArray(data?.files) ? data!.files : [];
 
-  useEffect(() => { if (!authLoading) load(); }, [authLoading, load]);
+  useEffect(() => {
+    if (!tokenReady) return;
+    let active = true;
+    getToken().then((t) => {
+      if (active && t) setToken(t);
+    });
+    return () => {
+      active = false;
+    };
+  }, [tokenReady, getToken]);
 
   const contentUrl = (fileId: string, download = false) =>
     `/api/study-materials/files/${fileId}/content?token=${encodeURIComponent(token || '')}${download ? '&download=1' : ''}`;
@@ -94,12 +87,16 @@ export default function StarredPage() {
 
   const unstar = async (file: StarredFile, e: React.MouseEvent) => {
     e.stopPropagation();
-    setFiles((prev) => prev.filter((f) => f.id !== file.id));
+    mutate(
+      (prev) => (prev ? { ...prev, files: prev.files.filter((f) => f.id !== file.id) } : prev),
+      { revalidate: false },
+    );
     try {
       const t = token || (await getToken());
       await fetch(`/api/study-materials/files/${file.id}/favorite`, { method: 'POST', headers: { Authorization: `Bearer ${t}` } });
     } catch {
-      load();
+      // Put the card back by asking the server what is actually starred.
+      mutate();
     }
   };
 
@@ -118,7 +115,11 @@ export default function StarredPage() {
     </Box>
   );
 
-  if (loading) {
+  // `!tokenReady` as well as `isLoading`: SWR reports isLoading false while the key is
+  // still null, so without it this would flash the empty state at a student who has not
+  // finished signing in. `&& !data` keeps a background revalidation from replacing the
+  // list they are already reading.
+  if ((isLoading || !tokenReady) && !data) {
     return (
       <Box>
         {header}
@@ -129,12 +130,12 @@ export default function StarredPage() {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <Box>
         {header}
-        <EmptyState title="Could not load starred" description={error} icon={<StarOutlineIcon />}
-          action={<Button variant="outlined" onClick={load}>Try again</Button>} />
+        <EmptyState title="Could not load starred" description={error.message || 'Something went wrong'} icon={<StarOutlineIcon />}
+          action={<Button variant="outlined" onClick={() => mutate()}>Try again</Button>} />
       </Box>
     );
   }

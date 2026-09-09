@@ -11,7 +11,8 @@ import {
   classifyCatchupCandidate,
   isCatchupItemComplete,
   resolveCatchupBacklog,
-  shouldUnlockCatchupTest,
+  resolveCatchupTestState,
+  type CatchupTestAttemptRow,
   summariseCatchupBacklog,
   summariseCatchupClock,
   summariseMissedClasses,
@@ -467,15 +468,16 @@ export async function getCatchupBacklog(
   const toClear: string[] = [];
   // Fourth list: the catch-up test's one-shot unlock write was missed.
   //
-  // unlockCatchupTestForRecap only ever fires from inside the last checkpoint
-  // quiz's POST handler, at the instant it is answered. If this item did not
-  // exist yet at that moment (created lazily, right here, by a later read),
-  // or that call failed, nothing else will ever set test_unlocked_at, and a
-  // student is left with a green "Class Recap" step and a permanently locked
-  // test. See shouldUnlockCatchupTest for why this is keyed on
-  // completedRecaps (every checkpoint passed) rather than `watched`.
-  const toUnlock: string[] = [];
-  // Third list: a clock still running on something the student can no longer do.
+  // The `toUnlock` self-heal is GONE, and its absence is the fix for NXS-0141.
+  //
+  // It re-stamped test_unlocked_at whenever a recap's checkpoints were complete
+  // and nothing was unlocked or passed. That is character for character the
+  // state a FAILED attempt leaves behind, so on every read it handed the failing
+  // student their unlock straight back: measured in production at twenty six
+  // seconds after the fail. Availability is now derived from the checkpoints and
+  // the pass from the attempts, so there is no column here left to repair.
+  //
+  // Second list: a clock still running on something the student can no longer do.
   //
   // It holds the single active slot, so without this the student cannot start
   // anything else without a confirm dialog naming a class that is not even on
@@ -487,17 +489,6 @@ export async function getCatchupBacklog(
     const r = resolved[idx];
     if (i.activated_on && !r.active) {
       toRelease.push({ id: i.id, days_used: bankCatchupClock(toClock(i), today) });
-    }
-    const recap = facts.recapByClass.get(i.scheduled_class_id) || null;
-    if (
-      shouldUnlockCatchupTest({
-        hasRecap: !!recap,
-        recapCheckpointsComplete: !!recap && facts.completedRecaps.has(recap.id),
-        testUnlockedAt: i.test_unlocked_at,
-        testPassedAt: i.test_passed_at,
-      })
-    ) {
-      toUnlock.push(i.id);
     }
     const done = r.status === 'done';
     if (done && !i.caught_up_at) {
@@ -519,13 +510,6 @@ export async function getCatchupBacklog(
     await supabase.from(ITEMS).update({ caught_up_at: null }).in('id', toClear);
     items.forEach((i: any) => {
       if (toClear.includes(i.id)) i.caught_up_at = null;
-    });
-  }
-  if (toUnlock.length) {
-    const unlockedAt = new Date().toISOString();
-    await supabase.from(ITEMS).update({ test_unlocked_at: unlockedAt }).in('id', toUnlock);
-    items.forEach((i: any) => {
-      if (toUnlock.includes(i.id)) i.test_unlocked_at = unlockedAt;
     });
   }
   // One statement each: the banked total differs per row, so these cannot be
@@ -568,13 +552,7 @@ export async function getCatchupBacklog(
         assignments_outstanding: work.filter((a: any) => !facts.submitted.has(a.id)).length,
         assignments_total: work.length,
         has_test: facts.testByClass.has(i.scheduled_class_id),
-        // A class test has no unlock step: there is no recording to finish
-        // first, because the paper was set for the whole class, not for the
-        // backlog. Reporting it as locked would render a step nobody can clear.
-        test_unlocked:
-          facts.testByClass.get(i.scheduled_class_id)?.source === 'class_test'
-            ? true
-            : !!i.test_unlocked_at,
+        test_unlocked: isCatchupTestAvailable(i, facts),
         test_passed: toFacts(i, facts).testPassed,
         test_required: facts.testByClass.get(i.scheduled_class_id)?.required ?? true,
         test_source: facts.testByClass.get(i.scheduled_class_id)?.source ?? null,
@@ -751,8 +729,23 @@ export interface CatchupClassTest {
   source: 'catchup' | 'class_test';
   /** Only a class test can be optional. The catch-up paper is always required. */
   required: boolean;
-  /** Only meaningful for a class test. The catch-up paper reads test_passed_at. */
+  /**
+   * Derived from the attempts, for BOTH kinds of paper.
+   *
+   * It used to be "only meaningful for a class test; the catch-up paper reads
+   * test_passed_at". That split is what NXS-0141 came out of: a stored answer
+   * needs a self-heal to repair the writes that go missing, and the self-heal's
+   * condition turned out to be indistinguishable from a failed attempt, so it
+   * kept handing failed students their unlock back. The attempts are already the
+   * ledger. Read them for both and there is nothing left to reconcile.
+   */
   passed: boolean;
+  /** Counted attempts since the last teacher reset. */
+  attemptCount: number;
+  /** The most recent counted attempt, which is the one the student is shown. */
+  lastAttempt: { percentage: number; submitted_at: string | null } | null;
+  /** The high score. `passed` is decided on this, not on the latest attempt. */
+  bestPercentage: number | null;
 }
 
 export interface ClassFacts {
@@ -807,10 +800,9 @@ export async function loadClassFacts(
     // below, in one place, so no caller can end up holding both.
     supabase
       .from('nexus_test_placements')
-      .select('id, test_id, context_id, context_type, passing_pct, gating')
+      .select('id, test_id, context_id, context_type, passing_pct, gating, is_active')
       .in('context_type', ['catchup_class', 'class_test'])
-      .in('context_id', classIds)
-      .eq('is_active', true),
+      .in('context_id', classIds),
     ]);
 
   // Checked, and the check earned its place the moment 'class_test' joined the
@@ -834,8 +826,12 @@ export async function loadClassFacts(
   // A teacher's class test wins over the auto-generated catch-up paper. Written
   // as an explicit precedence rather than relying on iteration order, because the
   // query returns both context types interleaved.
+  //
+  // Only the ACTIVE placement decides which paper a class has. The retired ones
+  // still matter, but only below, for the attempts.
   const testByClass = new Map<string, CatchupClassTest>();
   for (const p of placements || []) {
+    if (!p.is_active) continue;
     const isClassTest = p.context_type === 'class_test';
     const existing = testByClass.get(p.context_id);
     if (existing && existing.source === 'class_test' && !isClassTest) continue;
@@ -848,43 +844,90 @@ export async function loadClassFacts(
       // The catch-up paper has never had a switch; only a class test can be
       // optional, and only when the teacher said so.
       required: isClassTest ? gating.required !== false : true,
-      // Filled in below for class tests only.
+      // All four filled in below, from the attempts, for both kinds of paper.
       passed: false,
+      attemptCount: 0,
+      lastAttempt: null,
+      bestPercentage: null,
     });
   }
 
-  // Whether a CLASS test is passed lives in the attempts, not on the absence row.
+  // Whether a test is passed lives in the attempts, for BOTH kinds of paper.
+  //
   // A class test is sat through the ordinary take engine along with everyone who
-  // was actually in the class, so nothing writes test_passed_at for it, and
-  // reading that column would report every one of them as outstanding forever.
-  const classTests = [...testByClass.values()].filter((t) => t.source === 'class_test');
-  if (classTests.length > 0) {
-    const barByTest = new Map<string, number | null>(
-      classTests.map((t) => [t.test_id, t.passing_pct]),
+  // was actually in the class, so nothing writes test_passed_at for it. The
+  // catch-up paper used to be the other way round, read off the absence row, and
+  // that asymmetry is what NXS-0141 grew in: a stored answer needs a repair pass,
+  // and the repair pass could not tell a lost write apart from a failed attempt.
+  if (testByClass.size > 0) {
+    // Every test this class has EVER placed, not just the active one.
+    // `buildClassTestFromRecap` soft-deletes the old test and deactivates its
+    // placement on every rebuild, so counting only the active paper would hand
+    // a student who already failed a clean slate the moment a teacher
+    // republishes the recap, and silently erase the score we are about to show
+    // them.
+    const classOfTest = new Map<string, string>();
+    for (const p of placements || []) {
+      if (!testByClass.has(p.context_id)) continue;
+      // Do not mix a teacher's class test into the catch-up paper's history, or
+      // the other way round. They are different papers with different bars.
+      if (testByClass.get(p.context_id)!.source !== (p.context_type === 'class_test' ? 'class_test' : 'catchup')) {
+        continue;
+      }
+      classOfTest.set(p.test_id, p.context_id);
+    }
+
+    // A teacher reset is a watermark rather than a delete, so the ledger stays
+    // readable. Only the catch-up paper has one.
+    //
+    // The error is deliberately NOT thrown here, unlike the attempts read below.
+    // Before this feature's migration lands the column does not exist, PostgREST
+    // answers with an error and no rows, and the resulting empty map means "no
+    // resets", which is exactly right on a database where none can have been
+    // recorded yet. Throwing would take the whole catch-up screen down between
+    // the code deploying and the migration running.
+    const { data: resets } = await supabase
+      .from('nexus_class_absences')
+      .select('scheduled_class_id, test_reset_at')
+      .eq('student_id', studentId)
+      .in('scheduled_class_id', classIds);
+    const resetByClass = new Map<string, string | null>(
+      (resets || []).map((r: any) => [r.scheduled_class_id, r.test_reset_at ?? null]),
     );
+
     const { data: attempts, error } = await supabase
       .from('nexus_test_attempts')
-      .select('test_id, percentage')
+      .select('test_id, percentage, submitted_at')
       .eq('student_id', studentId)
       .eq('mode', 'official')
       .eq('status', 'submitted')
-      .in('test_id', [...barByTest.keys()]);
+      .in('test_id', [...classOfTest.keys()]);
 
     // Checked rather than ignored: an unread error here means "you have not
     // passed", which holds a student on a backlog they have already cleared and
     // says nothing about why.
     if (error) throw error;
 
-    const passedTests = new Set<string>();
+    const rowsByClass = new Map<string, CatchupTestAttemptRow[]>();
     for (const a of attempts || []) {
-      const pct = a.percentage == null ? null : Number(a.percentage);
-      if (pct == null) continue;
-      const bar = barByTest.get(a.test_id);
-      // A null bar means no pass mark was set, so sitting it is passing it. Same
-      // rule as resolvePassingPct, deliberately.
-      if (bar == null || pct >= bar) passedTests.add(a.test_id);
+      const classId = classOfTest.get(a.test_id);
+      if (!classId) continue;
+      const list = rowsByClass.get(classId) || [];
+      list.push({ percentage: a.percentage == null ? null : Number(a.percentage), submitted_at: a.submitted_at ?? null });
+      rowsByClass.set(classId, list);
     }
-    for (const t of classTests) t.passed = passedTests.has(t.test_id);
+
+    for (const [classId, t] of testByClass) {
+      const state = resolveCatchupTestState(
+        rowsByClass.get(classId) || [],
+        t.passing_pct,
+        resetByClass.get(classId) ?? null,
+      );
+      t.passed = state.passed;
+      t.attemptCount = state.attemptCount;
+      t.lastAttempt = state.lastAttempt;
+      t.bestPercentage = state.bestPercentage;
+    }
   }
 
   const recapIds = [...recapByClass.values()].map((r) => r.id);
@@ -945,6 +988,29 @@ export function isWatched(item: any, facts: ClassFacts): boolean {
   return !!item.recording_watched_at;
 }
 
+/**
+ * Can the student sit this class's test right now?
+ *
+ * Derived, never stored, which is the whole of the NXS-0141 fix. Finishing the
+ * recap's checkpoints is the gate, and a failed attempt does not close it again:
+ * a student who has watched the class and got it wrong needs another go, not a
+ * padlock and no explanation. `test_unlocked_at` survives only as a fallback for
+ * a stamp made before this was derived, notably a teacher's reset on a class
+ * whose recap was later unpublished.
+ *
+ * A class test is always available: it was set for the whole class rather than
+ * for the backlog, so there is no recording to finish first and reporting it as
+ * locked would render a step nobody can clear.
+ */
+export function isCatchupTestAvailable(item: any, facts: ClassFacts): boolean {
+  const test = facts.testByClass.get(item.scheduled_class_id);
+  if (!test) return false;
+  if (test.source === 'class_test') return true;
+  const recap = facts.recapByClass.get(item.scheduled_class_id);
+  if (recap && facts.completedRecaps.has(recap.id)) return true;
+  return !!item.test_unlocked_at;
+}
+
 /** Turn one item row plus the batched class facts into the pure rules' input. */
 export function toFacts(item: any, facts: ClassFacts) {
   const verdict = classifyCatchupCandidate(
@@ -979,11 +1045,12 @@ export function toFacts(item: any, facts: ClassFacts) {
     watched: isWatched(item, facts),
     assignmentsOutstanding: work.filter((a) => !facts.submitted.has(a.id)).length,
     hasTest: !!test,
-    // Two different sources of truth, chosen by which paper this is. The
-    // catch-up paper stamps test_passed_at on the absence row when it is graded;
-    // a class test is graded by the ordinary engine, which knows nothing about
-    // backlogs, so its pass is derived from the attempts in loadClassFacts.
-    testPassed: test?.source === 'class_test' ? test.passed : !!item.test_passed_at,
+    // ONE source of truth now, for both kinds of paper: the attempts, resolved
+    // in loadClassFacts. `test_passed_at` survives only as a fallback, for a
+    // pass stamped before this changed whose attempt row cannot be read. It is
+    // no longer load-bearing, so a lost write can no longer strand anybody, and
+    // a teacher reset clears it alongside stamping test_reset_at.
+    testPassed: (test ? test.passed : false) || !!item.test_passed_at,
     testRequired: test ? test.required : true,
   };
 }
@@ -1165,10 +1232,25 @@ export async function recomputeCatchupItemCompletion(
 /**
  * The side-effect of grading a class test, dispatched from gradeTestOneShot.
  *
- * Runs on a FAIL as well as a pass, which is the part worth being careful about:
- * clearing test_unlocked_at is the entire "you must rewatch before you retry"
- * rule. Doing it here rather than in the route means it holds no matter which
- * caller grades the attempt.
+ * It used to punish a fail: null `test_unlocked_at` ("you must rewatch before
+ * you retry") and rewind the recording to the start. Both are gone, for two
+ * separate reasons.
+ *
+ * The rule never worked. Nulling the unlock put the row into exactly the state
+ * the read-time self-heal treated as damage, so the next page load handed the
+ * unlock straight back, measured in production at twenty six seconds. In two
+ * years of rows, `rewatch_count` is still 0: the wall it built was never once
+ * climbed, because it was never once standing.
+ *
+ * And it should not be rebuilt. A student who watched the whole class, passed
+ * every checkpoint and then missed the bar on a paper drawn from the same
+ * material needs another attempt, not their place in the video thrown away. The
+ * score and the bar are now shown instead, which is what the student who
+ * reported this was actually missing.
+ *
+ * What remains is the pass mirror. `test_passed_at` is no longer read for the
+ * student's own gate (the attempts are), but teacher and parent surfaces still
+ * read it, so it keeps being written.
  */
 export async function recordCatchupTestAttempt(
   input: { studentId: string; scheduledClassId: string; passed: boolean; percentage: number },
@@ -1186,47 +1268,17 @@ export async function recordCatchupTestAttempt(
   // class. Grading still stands, there is just nothing to unlock.
   if (!item) return;
 
-  if (input.passed) {
-    if (!item.test_passed_at) {
-      await supabase
-        .from(ITEMS)
-        .update({ test_passed_at: new Date().toISOString() })
-        .eq('id', item.id);
-    }
-    await recomputeCatchupItemCompletion(input.studentId, input.scheduledClassId, supabase);
-    return;
-  }
-
-  // Failed. Re-lock. The only way back in is through the recording.
-  await supabase.from(ITEMS).update({ test_unlocked_at: null }).eq('id', item.id);
-
-  // Send them back to the start of the recording too.
-  //
-  // Clearing the unlock on its own is not enough. rearmCatchupTest decides
-  // "have they rewatched" from nexus_class_recap_progress, and a failed attempt
-  // leaves that row exactly as the FIRST watch left it: status 'completed' and
-  // the position at the end. So without this the student can fail, POST /rearm,
-  // and be handed the paper again having rewatched nothing. The rule would then
-  // live only in the UI, which offers no such button, rather than on the server.
-  //
-  // Only the position is reset. status stays 'completed' on purpose: the
-  // checkpoint quizzes are already passed and making someone re-answer them is
-  // a different punishment from the one the rule describes. The player
-  // heartbeats the position back up as they watch, so reaching
-  // REWATCH_COMPLETION_RATIO again is what re-opens the test.
-  const { data: recap } = await supabase
-    .from('nexus_class_recaps')
-    .select('id')
-    .eq('scheduled_class_id', input.scheduledClassId)
-    .eq('status', 'published')
-    .maybeSingle();
-  if (recap?.id) {
+  if (input.passed && !item.test_passed_at) {
     await supabase
-      .from('nexus_class_recap_progress')
-      .update({ last_video_position_seconds: 0 })
-      .eq('student_id', input.studentId)
-      .eq('recap_id', recap.id);
+      .from(ITEMS)
+      .update({ test_passed_at: new Date().toISOString() })
+      .eq('id', item.id);
   }
+
+  // Recomputed on a fail as well as a pass. A fail cannot complete an item, but
+  // it can UN-complete one: a student who passed, was reset by a teacher and
+  // then failed the retake should stop reading as caught up.
+  await recomputeCatchupItemCompletion(input.studentId, input.scheduledClassId, supabase);
 }
 
 /**

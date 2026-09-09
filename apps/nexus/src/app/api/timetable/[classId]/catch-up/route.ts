@@ -18,8 +18,8 @@ import {
   catchupDueOn,
   catchupDaysLeft,
   catchupWindowDays,
-  shouldUnlockCatchupTest,
-  unlockCatchupTestForRecap,
+  isCatchupTestAvailable,
+  getClassTestForClass,
   type CatchupKind,
 } from '@neram/database';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
@@ -69,7 +69,11 @@ interface Ctx {
  * nobody wrote a sentence for, which is a bug in this function, not a state a
  * student can get into.
  */
-function whyNotComplete(f: ReturnType<typeof toFacts>, recap: unknown): string | null {
+function whyNotComplete(
+  f: ReturnType<typeof toFacts>,
+  recap: unknown,
+  test?: { passing_pct: number | null; lastAttempt: { percentage: number; submitted_at: string | null } | null } | null,
+): string | null {
   if (isCatchupItemComplete(f)) return null;
   if (f.excluded) {
     return 'There is no recording of this class, so there is nothing here to finish. Ask your teacher to add one or to excuse you from it.';
@@ -79,9 +83,32 @@ function whyNotComplete(f: ReturnType<typeof toFacts>, recap: unknown): string |
   }
   if (f.assignmentsOutstanding > 0) return 'Finish the assignment from this class first.';
   if (f.hasTest && f.testRequired !== false && !f.testPassed) {
+    // Name the score when there is one. The reported bug was not that this
+    // sentence was wrong, it was that a student who had already sat the test
+    // read the identical sentence they saw before sitting it, and reasonably
+    // concluded the app had lost their attempt.
+    const last = test?.lastAttempt;
+    if (last) {
+      return `You scored ${formatPct(last.percentage)} on ${formatAttemptDate(last.submitted_at)}. You need ${formatPct(test?.passing_pct ?? 85)} to clear this class, so have another go.`;
+    }
     return 'Pass the class test to clear this class.';
   }
   return 'This class cannot be completed yet.';
+}
+
+/** A percentage a student would write down: 67%, not 66.67%. */
+function formatPct(pct: number): string {
+  return `${Math.round(pct)}%`;
+}
+
+/** The day an attempt was sat, in IST, because classes are Indian evenings. */
+function formatAttemptDate(iso: string | null): string {
+  if (!iso) return 'your last attempt';
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(iso));
 }
 
 async function resolveStudent(supabase: any, msOid: string, classId: string) {
@@ -158,34 +185,28 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       item = await ensureCatchupItemForClass(access.userId, params.classId, supabase);
     }
 
-    const { facts, recap, work, test, itemFacts } = await readItemState(
+    const { facts, recap, work, test, itemFacts, shaped } = await readItemState(
       supabase,
       access.userId,
       access.cls,
       item,
     );
 
-    // Self-heal, same reason as the item creation above. The catch-up test's
-    // unlock is normally a one-shot write fired from inside the last
-    // checkpoint quiz's POST handler; if this item did not exist yet at that
-    // moment, or that write failed, nothing else will ever set
-    // test_unlocked_at. Checking on every read and repairing it here means a
-    // student is never stuck looking at a finished recap and a test that will
-    // never unlock itself.
-    if (
-      item &&
-      recap &&
-      test?.source === 'catchup' &&
-      shouldUnlockCatchupTest({
-        hasRecap: true,
-        recapCheckpointsComplete: facts.completedRecaps.has(recap.id),
-        testUnlockedAt: item.test_unlocked_at,
-        testPassedAt: item.test_passed_at,
-      })
-    ) {
-      const unlockedNow = await unlockCatchupTestForRecap(access.userId, recap.id, supabase);
-      if (unlockedNow) item.test_unlocked_at = new Date().toISOString();
-    }
+    // The second `test_unlocked_at` self-heal used to sit here, and removing it
+    // is the fix for NXS-0141. It repaired a lost unlock by stamping the column
+    // whenever the recap's checkpoints were complete and nothing was unlocked or
+    // passed, which is precisely the state a FAILED attempt left behind. So it
+    // undid the fail penalty on the next read, and the student saw the screen
+    // they had before they sat the test: no score, no reason, no change.
+    //
+    // Nothing replaces it. Availability is derived by isCatchupTestAvailable and
+    // the pass by the attempts, so there is no stored answer left to repair.
+
+    // How long the paper actually is, which the checklist now states up front.
+    // Only for the auto-generated paper: a teacher-set class test is sat through
+    // the ordinary take engine, which shows its own count.
+    const paper =
+      test?.source === 'catchup' ? await getClassTestForClass(access.cls.id, supabase) : null;
 
     const journey = item?.journey_id
       ? await getCatchupJourney(access.userId, access.cls.classroom_id, supabase)
@@ -248,11 +269,23 @@ export async function GET(request: NextRequest, { params }: Ctx) {
             placement_id: test.id,
             test_id: test.test_id,
             passing_pct: test.passing_pct ?? 85,
-            // A teacher-set class test has no unlock and no rewatch rule: it was
-            // set for the whole class, so an absent student sits exactly the
-            // paper their classmates sat, through the ordinary take engine.
-            unlocked: test.source === 'class_test' ? true : !!item?.test_unlocked_at,
+            // Derived from the recap's checkpoints, never read from a stored
+            // unlock. See isCatchupTestAvailable.
+            unlocked: isCatchupTestAvailable(shaped, facts),
             passed: itemFacts.testPassed,
+            // What the student actually did, which the screen had no way to show
+            // before. `attempts` of 0 with `passed` false means never sat;
+            // anything else means sat and missed the bar.
+            attempts: test.attemptCount,
+            last_score_pct: test.lastAttempt ? Math.round(test.lastAttempt.percentage) : null,
+            last_attempt_at: test.lastAttempt?.submitted_at ?? null,
+            best_score_pct: test.bestPercentage == null ? null : Math.round(test.bestPercentage),
+            // What one sitting asks, and how many of those must be right. Both
+            // describe the sitting, not the bank behind it.
+            question_count: paper?.question_count ?? null,
+            must_get_right: paper
+              ? Math.ceil(((test.passing_pct ?? 85) / 100) * paper.question_count)
+              : null,
             source: test.source,
             required: test.required,
             // Where to send them. The catch-up paper has its own gated player;
@@ -283,7 +316,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
        */
       canComplete: isCatchupItemComplete(itemFacts),
       /** What to say under the button while it is disabled. Null when it is not. */
-      blockedReason: whyNotComplete(itemFacts, recap),
+      blockedReason: whyNotComplete(itemFacts, recap, test),
       step: catchupItemStep(itemFacts),
       due_on: dueOn,
       overdue: isOverdue(dueOn, today),
@@ -397,7 +430,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       );
     }
 
-    const { recap, itemFacts } = await readItemState(supabase, access.userId, access.cls, item);
+    const { recap, test, itemFacts } = await readItemState(supabase, access.userId, access.cls, item);
     const patch: Record<string, unknown> = {};
 
     switch (body.action) {
@@ -508,7 +541,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         // button is a suggestion, not a rule. The refusal is worded once, in
         // whyNotComplete, which is also what disabled the button, so the two can
         // no longer disagree about whether this class is finishable.
-        const why = whyNotComplete(itemFacts, recap);
+        const why = whyNotComplete(itemFacts, recap, test);
         if (why) return NextResponse.json({ error: why }, { status: 400 });
         patch.caught_up_at = new Date().toISOString();
         // Finishing frees the clock so the next class can take it. Banked, not

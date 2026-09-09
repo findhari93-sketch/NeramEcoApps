@@ -122,10 +122,38 @@ describe('ImageToggleTabs', () => {
   });
 });
 
+// Fractions of the drawing, not percentages of the stage. See
+// lib/annotation-geometry.ts for why that distinction is the whole point.
 const REGIONS = [
-  { id: 'r1', x: 10, y: 10, width: 20, height: 20, comment: 'Proportion' },
-  { id: 'r2', x: 40, y: 40, width: 15, height: 15, comment: 'Shading' },
+  { id: 'r1', x: 0.1, y: 0.1, width: 0.2, height: 0.2, comment: 'Proportion' },
+  { id: 'r2', x: 0.4, y: 0.4, width: 0.15, height: 0.15, comment: 'Shading' },
 ];
+
+/**
+ * jsdom reports every element as 0x0, so the component decides it cannot place
+ * an annotation yet. Give the stage and the image real sizes for the tests
+ * that care where a rectangle lands.
+ *
+ * 400 wide by 200 tall inside a 400x400 stage: 100px of letterbox top and
+ * bottom, which is exactly the offset the old percentage maths ignored.
+ */
+function stubLayout({ imgW = 400, imgH = 200, stageW = 400, stageH = 400 } = {}) {
+  const proto = window.HTMLElement.prototype;
+  const defs: Array<[string, number]> = [
+    ['offsetWidth', imgW], ['offsetHeight', imgH],
+    ['clientWidth', stageW], ['clientHeight', stageH],
+  ];
+  const originals = defs.map(([prop]) => [prop, Object.getOwnPropertyDescriptor(proto, prop)] as const);
+  for (const [prop, value] of defs) {
+    Object.defineProperty(proto, prop, { configurable: true, get: () => value });
+  }
+  return () => {
+    for (const [prop, desc] of originals) {
+      if (desc) Object.defineProperty(proto, prop, desc);
+      else delete (proto as any)[prop];
+    }
+  };
+}
 
 const rotateBtn = () => screen.getByRole('button', { name: /rotate image 90 degrees/i });
 
@@ -277,5 +305,71 @@ describe('ImageToggleTabs rotation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Reference/i }));
     expect(screen.queryByRole('button', { name: /save rotation/i })).toBeNull();
+  });
+});
+
+describe('ImageToggleTabs annotation placement', () => {
+  it('positions a region against the drawing, letterbox included', () => {
+    const restore = stubLayout();
+    try {
+      const { container } = render(
+        <ImageToggleTabs originalImageUrl={ORIGINAL_URL} isEditMode regionAnnotations={REGIONS} />
+      );
+
+      const boxes = Array.from(container.querySelectorAll('div')).filter((el) =>
+        (el as HTMLElement).style.left.endsWith('px') && (el as HTMLElement).style.width.endsWith('px'),
+      ) as HTMLElement[];
+
+      const first = boxes[0];
+      expect(first).toBeDefined();
+      // x 0.1 of a 400px drawing that starts at stage x 0, and y 0.1 of a
+      // 200px drawing that starts 100px down. The 100px is the letterbox the
+      // old percentage maths silently folded into the coordinate.
+      expect(first.style.left).toBe('40px');
+      expect(first.style.top).toBe('120px');
+      expect(first.style.width).toBe('80px');
+      expect(first.style.height).toBe('40px');
+    } finally {
+      restore();
+    }
+  });
+
+  it('puts the same region on the same part of the drawing at a different stage size', () => {
+    function leftFractionAt(stageW: number, stageH: number, imgW: number, imgH: number) {
+      const restore = stubLayout({ imgW, imgH, stageW, stageH });
+      try {
+        const { container, unmount } = render(
+          <ImageToggleTabs originalImageUrl={ORIGINAL_URL} isEditMode regionAnnotations={REGIONS} />
+        );
+        const box = (Array.from(container.querySelectorAll('div')) as HTMLElement[]).find(
+          (el) => el.style.left.endsWith('px') && el.style.width.endsWith('px'),
+        )!;
+        const left = parseFloat(box.style.left);
+        const imageLeft = (stageW - imgW) / 2;
+        unmount();
+        return (left - imageLeft) / imgW;
+      } finally {
+        restore();
+      }
+    }
+
+    // A narrow phone stage and a wide desktop stage showing the same drawing.
+    const mobile = leftFractionAt(360, 400, 360, 252);
+    const desktop = leftFractionAt(900, 600, 857, 600);
+
+    expect(mobile).toBeCloseTo(0.1, 6);
+    expect(desktop).toBeCloseTo(0.1, 6);
+  });
+
+  it('draws nothing until the stage has been measured', () => {
+    // Without a measurement there is no honest place to put a rectangle, so
+    // the layer waits rather than guessing at the stage box.
+    const { container } = render(
+      <ImageToggleTabs originalImageUrl={ORIGINAL_URL} isEditMode regionAnnotations={REGIONS} />
+    );
+    const positioned = (Array.from(container.querySelectorAll('div')) as HTMLElement[]).filter(
+      (el) => el.style.left.endsWith('px') && el.style.width.endsWith('px'),
+    );
+    expect(positioned).toHaveLength(0);
   });
 });

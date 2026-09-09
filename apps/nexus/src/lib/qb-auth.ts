@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { verifyMsToken } from './ms-verify';
+import { getRequestUser } from './study-materials';
 import {
   getSupabaseAdminClient,
   getUserRoleInClassroom,
@@ -49,22 +49,19 @@ async function resolveQBCaller(authHeader: string | null): Promise<ResolvedCalle
     return { ok: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  let msUser;
+  // getRequestUser is verifyMsToken plus this exact users lookup, with the resolved row
+  // held for 30 seconds. Doing it by hand here meant every Question Bank request paid the
+  // lookup again, and a QB screen fires several endpoints at once. The two failures stay
+  // distinguishable: a bad token is still 401, an unknown caller still 404. Parent tokens
+  // are still refused, by getRequestUser rather than by verifyMsToken's default.
+  let caller;
   try {
-    msUser = await verifyMsToken(authHeader);
-  } catch {
-    return { ok: false, response: NextResponse.json({ error: 'Invalid token' }, { status: 401 }) };
-  }
-
-  const supabase = getSupabaseAdminClient();
-  const { data: caller } = await supabase
-    .from('users')
-    .select('id, user_type, staff_role, can_teach')
-    .eq('ms_oid', msUser.oid)
-    .single();
-
-  if (!caller) {
-    return { ok: false, response: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
+    caller = await getRequestUser(authHeader);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '';
+    return message === 'User not found'
+      ? { ok: false, response: NextResponse.json({ error: 'User not found' }, { status: 404 }) }
+      : { ok: false, response: NextResponse.json({ error: 'Invalid token' }, { status: 401 }) };
   }
 
   return {
@@ -189,7 +186,17 @@ export async function verifyQBAccess(
     };
   }
 
-  const role = await getUserRoleInClassroom(caller.id, classroomId).catch(() => null);
+  // "Are you in this classroom" and "is the bank open for it" are independent
+  // questions, and were asked one after the other on every request. Every QB
+  // screen fires several endpoints at once, so that second serial hop was being
+  // paid several times over per page. The order of the checks below is
+  // unchanged: enrolment still answers before the feature gate, so a student in
+  // no classroom keeps getting 'not enrolled' rather than 'not open yet'.
+  const [role, qbEnabled] = await Promise.all([
+    getUserRoleInClassroom(caller.id, classroomId).catch(() => null),
+    isQBEnabledForClassroom(classroomId).catch(() => false),
+  ]);
+
   if (!role) {
     return {
       ok: false,
@@ -200,7 +207,6 @@ export async function verifyQBAccess(
     };
   }
 
-  const qbEnabled = await isQBEnabledForClassroom(classroomId).catch(() => false);
   if (!qbEnabled) {
     return {
       ok: false,

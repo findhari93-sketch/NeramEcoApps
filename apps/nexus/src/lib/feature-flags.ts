@@ -232,6 +232,18 @@ export const FEATURES: FeatureDef[] = [
    */
   { id: 'staff.admin-ai-usage', label: 'AI usage', surface: 'staff', group: 'Admin', paths: ['/teacher/admin/ai-usage'], defaultEnabled: true, core: true },
 
+  /**
+   * The AI drawing evaluation surface: the anchor manager, and the button that
+   * asks for a draft evaluation on a review screen.
+   *
+   * Defaults OFF, which is unusual for a staff flag. This one gates a metered
+   * feature, so the flag and the AI feature's own mode are two switches on the
+   * same thing: this hides the controls, `nexus.drawing-eval` decides whether a
+   * press may spend. Both ship dark, and the API re-checks server side, because
+   * a hidden button is a UI courtesy and never the boundary.
+   */
+  { id: 'staff.drawing-eval', label: 'AI drawing evaluation', surface: 'staff', group: 'Teaching', paths: ['/teacher/admin/drawing-anchors'], defaultEnabled: false },
+
   // ── Parent ────────────────────────────────────────────────────────────────
   // Not a page: `paths: []` can never match in featureForPath, so this is a pure
   // on/off switch with no route-gating side effect.

@@ -131,19 +131,28 @@ export async function loadClassFactsForStudents(
       passing_pct: p.passing_pct,
       source: isClassTest ? 'class_test' : 'catchup',
       required: isClassTest ? gating.required !== false : true,
-      // Per student, so it is filled in per student below.
+      // All per student, so they are filled in per student below.
       passed: false,
+      attemptCount: 0,
+      lastAttempt: null,
+      bestPercentage: null,
     });
   }
 
-  // Whether a CLASS test is passed lives in the attempts rather than on the
-  // absence row, and unlike everything else in wave 1 it differs per student. One
-  // query for the whole cohort; the grouping happens in memory.
-  const classTests = [...testByClass.values()].filter((t) => t.source === 'class_test');
+  // Whether a test is passed lives in the attempts rather than on the absence
+  // row, for BOTH kinds of paper, and unlike everything else in wave 1 it differs
+  // per student. One query for the whole cohort; the grouping happens in memory.
+  //
+  // This covered only class tests until NXS-0141, leaving the catch-up paper to
+  // be read off test_passed_at downstream. That mirror is still written, so the
+  // teacher view was right in the ordinary case, but it disagreed with the
+  // student's own screen exactly when the mirror write had gone missing, which
+  // is the failure this whole change is about.
+  const gradedTests = [...testByClass.values()];
   const passedByStudent = new Map<string, Set<string>>();
-  if (classTests.length > 0) {
+  if (gradedTests.length > 0) {
     const barByTest = new Map<string, number | null>(
-      classTests.map((t) => [t.test_id, t.passing_pct]),
+      gradedTests.map((t) => [t.test_id, t.passing_pct]),
     );
     const attempts = await selectIn(
       supabase,
@@ -201,17 +210,18 @@ export async function loadClassFactsForStudents(
   }
 
   for (const studentId of studentIds) {
-    // Shared by reference while every paper is a catch-up one, which is the case
-    // for every classroom that has not used class tests: callers only read these
-    // maps and they hold the same answer for everyone. A class test breaks that,
-    // because `passed` is this student's fact, so the map is copied only then.
+    // Always copied now, never shared by reference. `passed` used to be this
+    // student's fact only for a class test, so the map could be shared whenever a
+    // classroom had none. Since the catch-up paper is read from the attempts too,
+    // every entry carries a per student answer and sharing one map would hand the
+    // whole cohort the first student's score.
     let testsForStudent = testByClass;
-    if (classTests.length > 0) {
+    if (testByClass.size > 0) {
       const passed = passedByStudent.get(studentId) || new Set<string>();
       testsForStudent = new Map(
         [...testByClass.entries()].map(([classId, t]) => [
           classId,
-          t.source === 'class_test' ? { ...t, passed: passed.has(t.test_id) } : t,
+          { ...t, passed: passed.has(t.test_id) },
         ]),
       );
     }

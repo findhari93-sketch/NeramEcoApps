@@ -6964,12 +6964,40 @@ export interface NexusQBPaperTest {
   best_pct: number | null;
 }
 
+/**
+ * One section run of a paper, with how far this student has got through it.
+ *
+ * Extends the run rather than replacing it so the student breakdown and the
+ * staff summary strip describe a paper with the same vocabulary. `attempted`
+ * counts questions in this run the student has answered at least once, which is
+ * the same definition attempted_count uses for the paper as a whole.
+ */
+export interface NexusQBPaperSectionProgress extends NexusQBPaperSectionRun {
+  attempted: number;
+}
+
+/** One recent answer on this paper, newest first, for the activity strip. */
+export interface NexusQBPaperRecentAttempt {
+  question_id: string;
+  question_number: number | null;
+  is_correct: boolean | null;
+  created_at: string;
+}
+
 export interface NexusQBPaperDetail extends NexusQBPaperCard {
   duration_minutes: number | null;
   total_marks: number | null;
   /** NULL when no PDF is linked; the Read card is hidden rather than disabled. */
   study_file: NexusStudyFileDTO | null;
   test: NexusQBPaperTest | null;
+  /**
+   * Section runs in paper order with per-run progress. Empty when nobody has
+   * classified the paper's questions yet, which the screen reads as "no
+   * breakdown to show" rather than "no progress".
+   */
+  sections: NexusQBPaperSectionProgress[];
+  /** Up to five most recent answers on this paper. */
+  recent_attempts: NexusQBPaperRecentAttempt[];
 }
 
 /** Papers grouped the way the grid draws them: exam tab, then year heading. */
@@ -7473,6 +7501,12 @@ export interface QBFilterState {
   source_year?: number;
   source_session?: string;
   source_shift?: QBShift;
+  /**
+   * Which part of a paper a question sits in. Added for the paper detail
+   * breakdown, whose rows link into this list scoped to one section, so a
+   * student can go straight from "Aptitude 1/30" to those thirty questions.
+   */
+  section?: QBQuestionSection[];
   // Solution filter
   solution_filter?: 'has_video' | 'has_image' | 'has_explanation' | 'no_solution';
   // Recalled paper filters
@@ -9074,7 +9108,143 @@ export * from './expenses';
 export type DrawingCategory = '2d_composition' | '3d_composition' | 'kit_sculpture';
 export type DrawingDifficulty = 'easy' | 'medium' | 'hard';
 export type DrawingSubmissionStatus = 'submitted' | 'under_review' | 'redo' | 'completed' | 'reviewed';
-export type DrawingSubmissionSource = 'question_bank' | 'homework' | 'free_practice' | 'assignment';
+/**
+ * 'exam' has been a valid source_type since the exam drawings migration widened
+ * the CHECK constraint, and getDrawingReviewQueue documents it, but it was
+ * missing here. The gap was invisible because queries/nexus/drawings.ts opens
+ * with @ts-nocheck.
+ */
+export type DrawingSubmissionSource =
+  | 'question_bank'
+  | 'homework'
+  | 'free_practice'
+  | 'assignment'
+  | 'exam';
+
+// ============================================================
+// AI DRAWING EVALUATION
+// ============================================================
+
+/**
+ * A recurring kind of drawing task, keyed on the (category, sub_type) pair that
+ * drawing_questions already carries.
+ *
+ * Anchoring is per brief type rather than per question because the graded
+ * history averages two or three sheets per question, and an anchor set needs
+ * five. is_active stays false until every criterion has band wording written.
+ */
+export interface DrawingBriefType {
+  id: string;
+  key: string;
+  category: string;
+  sub_type: string;
+  title: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Band number on the same 1 to 5 scale as tutor_rating. */
+export type DrawingBand = 1 | 2 | 3 | 4 | 5;
+
+export interface DrawingCriterion {
+  id: string;
+  brief_type_id: string;
+  key: string;
+  title: string;
+  /** Concrete, checkable statements the model is told to cite. */
+  observable_checks: string[];
+  /** Band number to the teacher's own wording. Empty until written by hand. */
+  band_descriptions: Record<string, string>;
+  weight: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * One teacher-graded reference sheet.
+ *
+ * image_url is denormalised from the submission on purpose, so an anchor keeps
+ * showing the sheet that was actually graded even if the submission is later
+ * rotated, replaced or deleted.
+ */
+export interface DrawingAnchorSheet {
+  id: string;
+  brief_type_id: string;
+  band: DrawingBand;
+  submission_id: string | null;
+  image_url: string;
+  annotations: DrawingAnnotationGeometry[];
+  comment: string | null;
+  created_by: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export type DrawingEvaluationStatus = 'draft' | 'needs_manual' | 'reviewed' | 'released';
+
+export interface DrawingEvaluation {
+  id: string;
+  submission_id: string;
+  brief_type_id: string | null;
+  status: DrawingEvaluationStatus;
+  provider: string;
+  model_id: string | null;
+  prompt_version: string;
+  raw_response: unknown | null;
+  error: string | null;
+  ai_total: number | null;
+  final_total: number | null;
+  overall_comment: string | null;
+  created_by: string | null;
+  created_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+}
+
+export interface DrawingEvaluationCriterion {
+  id: string;
+  evaluation_id: string;
+  criterion_key: string;
+  ai_band: DrawingBand | null;
+  final_band: DrawingBand | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+  closest_anchor_band: DrawingBand | null;
+  reasoning: string | null;
+  /** The headline training signal: which bands the teacher overrode. */
+  was_corrected: boolean;
+}
+
+export type DrawingAnnotationSource = 'ai' | 'human';
+export type DrawingAnnotationAction = 'created' | 'moved' | 'deleted' | 'kept';
+export type DrawingAnnotationKind = 'region' | 'point' | 'line' | 'stroke';
+export type DrawingAnnotationMarker = 'problem' | 'good' | 'guide' | 'note';
+
+/**
+ * ALWAYS image-relative and normalised 0 to 1, origin top-left.
+ *
+ * region is [x, y, w, h], point is [x, y], line and stroke are [[x, y], ...].
+ * Providers differ in convention, so normalisation happens in the adapter
+ * (apps/nexus/src/lib/drawing-eval/schema.ts) and nowhere else. Provider-raw
+ * coordinates reaching storage would make the correction history
+ * provider-locked and worthless on a model switch.
+ */
+export type DrawingAnnotationGeometry = number[] | number[][];
+
+export interface DrawingEvaluationAnnotation {
+  id: string;
+  evaluation_id: string;
+  criterion_key: string | null;
+  source: DrawingAnnotationSource;
+  action: DrawingAnnotationAction;
+  kind: DrawingAnnotationKind;
+  geometry: DrawingAnnotationGeometry;
+  marker: DrawingAnnotationMarker;
+  comment: string | null;
+  created_at: string;
+}
 
 export interface DrawingTag {
   id: string;

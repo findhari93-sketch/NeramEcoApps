@@ -1,0 +1,81 @@
+{
+  "criteria": [
+    {
+      "criterionKey": "composition",
+      "band": 4,
+      "reasoning": "The three vessels overlap and sit on a drawn table edge, so the group reads as one arrangement rather than three separate objects, though the jug crowds the right margin.",
+      "closestAnchorBand": 4,
+      "confidence": "high",
+      "annotations": [
+        {
+          "geometry": [0.62, 0.18, 0.33, 0.55],
+          "marker": "problem",
+          "comment": "The jug is tight against the right edge, leaving no breathing room on that side."
+        },
+        {
+          "geometry": [0.08, 0.61, 0.72, 0.12],
+          "marker": "good",
+          "comment": "The table line grounds the group instead of letting it float."
+        }
+      ]
+    },
+    {
+      "criterionKey": "proportion",
+      "band": 3,
+      "reasoning": "The bowl and the jug are believable relative to each other, but the bowl's rim ellipse is too narrow for its height on the sheet.",
+      "closestAnchorBand": 3,
+      "confidence": "medium",
+      "annotations": [
+        {
+          "geometry": [0.14, 0.32, 0.26, 0.09],
+          "marker": "problem",
+          "comment": "Rim ellipse is flatter than the viewing angle allows."
+        }
+      ]
+    },
+    {
+      "criterionKey": "depth_perspective",
+      "band": 3,
+      "reasoning": "Overlap and scale place the jug behind the bowl, but the table edge runs almost horizontal while the objects are drawn from slightly above.",
+      "closestAnchorBand": 3,
+      "confidence": "medium",
+      "annotations": [
+        {
+          "geometry": [0.05, 0.6, 0.9, 0.06],
+          "marker": "guide",
+          "comment": "Tilt this edge down to the right to match the eye level the objects imply."
+        }
+      ]
+    },
+    {
+      "criterionKey": "tonal_quality",
+      "band": 4,
+      "reasoning": "There is a real range from the dark inside the jug to clean paper on the lit side, and the gradient across the bowl is smooth rather than patchy.",
+      "closestAnchorBand": 4,
+      "confidence": "high",
+      "annotations": [
+        {
+          "geometry": [0.4, 0.24, 0.18, 0.3],
+          "marker": "good",
+          "comment": "Smooth pressure control through this gradient."
+        }
+      ]
+    },
+    {
+      "criterionKey": "line_quality",
+      "band": 3,
+      "reasoning": "Outlines are mostly single confident strokes, but construction lines are still visible through the base of the bowl.",
+      "closestAnchorBand": 3,
+      "confidence": "high",
+      "annotations": [
+        {
+          "geometry": [0.12, 0.5, 0.3, 0.11],
+          "marker": "problem",
+          "comment": "Construction lines left under the base."
+        }
+      ]
+    }
+  ],
+  "overallComment": "A solid arrangement with genuine tonal range, held back by an ellipse that does not match the eye level and by leftover construction lines. Redraw the bowl rim with the table edge tilted and this moves up a band.",
+  "flags": []
+}

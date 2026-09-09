@@ -28,7 +28,22 @@ export async function GET(request: NextRequest) {
     const caller = access.caller;
 
     const page = params.get('page') ? parseInt(params.get('page')!, 10) : 1;
-    const pageSize = params.get('page_size') ? parseInt(params.get('page_size')!, 10) : 20;
+
+    // page_size was uncapped, and the Select-All path asked for 1000 rows to read
+    // nothing but the ids off them: roughly 6.5MB of JSON over a phone connection
+    // to build a list of UUIDs. Callers that want every matching id ask for
+    // fields=id instead, which is answered from the same query without the bodies.
+    const idsOnly = params.get('fields') === 'id';
+    const MAX_PAGE_SIZE = 100;
+    const MAX_ID_PAGE_SIZE = 5000;
+    const requestedPageSize = params.get('page_size')
+      ? parseInt(params.get('page_size')!, 10)
+      : 20;
+    const ceiling = idsOnly ? MAX_ID_PAGE_SIZE : MAX_PAGE_SIZE;
+    const pageSize = Math.min(
+      Math.max(Number.isFinite(requestedPageSize) ? requestedPageSize : 20, 1),
+      ceiling,
+    );
 
     const solutionFilter = params.get('solution_filter') || undefined;
 
@@ -64,6 +79,13 @@ export async function GET(request: NextRequest) {
       exam_type: (params.get('exam_type') as any) || undefined,
       source_year: params.get('year') ? parseInt(params.get('year')!, 10) : undefined,
       source_session: params.get('session') || undefined,
+      // The paper detail screen has always put shift in the practice link and
+      // nothing has ever read it, so a forenoon/afternoon paper practised both
+      // sittings at once. resolvePaperSourceIds has handled source_shift the
+      // whole time; it was simply never given one.
+      source_shift: (params.get('shift') as any) || undefined,
+      // Set by the paper detail breakdown, so "Aptitude 1/30" opens those thirty.
+      section: params.get('section') ? (params.get('section')!.split(',') as any) : undefined,
       // Solution filter
       solution_filter: solutionFilter as any,
       // Recalled paper filters
@@ -91,6 +113,20 @@ export async function GET(request: NextRequest) {
       );
     } else {
       data = await getQBQuestions(filters, page, pageSize, caller.id);
+    }
+
+    // Select-All only ever reads q.id off this response. Shedding the bodies
+    // here keeps the same filter semantics without shipping the questions.
+    if (idsOnly) {
+      return NextResponse.json(
+        {
+          data: {
+            question_ids: (data.questions || []).map((q: { id: string }) => q.id),
+            total: data.total,
+          },
+        },
+        { status: 200 },
+      );
     }
 
     return NextResponse.json({ data }, { status: 200 });

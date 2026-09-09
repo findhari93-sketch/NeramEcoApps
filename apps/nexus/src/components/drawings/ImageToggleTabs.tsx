@@ -20,6 +20,7 @@ import GestureIcon from '@mui/icons-material/Gesture';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import RegionAnnotationLayer from './RegionAnnotationLayer';
+import { centeredBox, isReady, toStyle } from '@/lib/annotation-geometry';
 import { nextRotation, rotationTransform, type Rotation } from '@/lib/image-rotation';
 import {
   type DrawingMedium, type SkillLevel, type RegionAnnotation, type SubmissionPromptType,
@@ -232,8 +233,9 @@ export default function ImageToggleTabs({
   }, [activeTab]);
 
   const canRotate = !!onRotate && !imgError;
-  // Region percentages are measured against the viewer box, so a quarter turn
-  // invalidates them. Only the original tab carries them.
+  // Regions are fractions of the image, so a quarter turn transposes their
+  // axes and no longer describes the same part of the drawing. Only the
+  // original tab carries them.
   const annotationsAtRisk =
     activeTab === 'original' && rotation % 180 !== 0 ? regionAnnotations.length : 0;
 
@@ -262,6 +264,18 @@ export default function ImageToggleTabs({
   };
 
   const imageTransform = rotationTransform(fitBox.rw, fitBox.rh, fitBox.cw, fitBox.ch, rotation);
+
+  /**
+   * Where the drawing actually sits inside the stage.
+   *
+   * Reuses the measurement the rotation fit already takes: rw and rh are the
+   * image element's layout size, which with maxWidth/maxHeight is the rendered
+   * size of the drawing itself, and the flex stage centres it. Annotations are
+   * positioned against this rather than against the stage, so a rectangle
+   * stays on the same part of the drawing at every viewport width.
+   */
+  const annotationBox = centeredBox(fitBox.rw, fitBox.rh, fitBox.cw, fitBox.ch);
+  const canPlaceAnnotations = isReady(annotationBox);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height, width: '100%' }}>
@@ -362,25 +376,22 @@ export default function ImageToggleTabs({
         )}
 
         {/* Region annotation layer (only on original tab in edit+annotate mode) */}
-        {showAnnotateOnOriginal && onRegionAnnotationsChange && (
+        {showAnnotateOnOriginal && onRegionAnnotationsChange && canPlaceAnnotations && (
           <RegionAnnotationLayer
             annotations={regionAnnotations}
             onChange={onRegionAnnotationsChange}
+            box={annotationBox}
           />
         )}
 
         {/* Show region annotations as read-only (no edit popover) when not in annotate mode but annotations exist */}
-        {activeTab === 'original' && !annotateMode && rotation === 0 && regionAnnotations.length > 0 && (
+        {activeTab === 'original' && !annotateMode && rotation === 0 && canPlaceAnnotations && regionAnnotations.length > 0 && (
           <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}>
             {regionAnnotations.map((ann) => (
               <Box
                 key={ann.id}
+                style={{ position: 'absolute', ...toStyle(ann, annotationBox) }}
                 sx={{
-                  position: 'absolute',
-                  left: `${ann.x}%`,
-                  top: `${ann.y}%`,
-                  width: `${ann.width}%`,
-                  height: `${ann.height}%`,
                   border: '2px dashed rgba(220, 40, 40, 0.6)',
                   bgcolor: 'rgba(220, 40, 40, 0.06)',
                   borderRadius: '4px',

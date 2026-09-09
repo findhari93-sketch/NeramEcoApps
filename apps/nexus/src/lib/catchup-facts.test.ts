@@ -129,7 +129,13 @@ describe('loadClassFactsForStudents', () => {
       // rather than here.
       source: 'catchup',
       required: true,
+      // Since NXS-0141 the pass is derived from the attempts for a catch-up
+      // paper too, not just a class test, so every entry carries this student's
+      // own attempt facts. Nobody here has sat it.
       passed: false,
+      attemptCount: 0,
+      lastAttempt: null,
+      bestPercentage: null,
     });
   });
 
@@ -141,7 +147,7 @@ describe('loadClassFactsForStudents', () => {
     expect(facts.get('s1')!.recapByClass.has(CLASSES.b)).toBe(false);
   });
 
-  it('costs the same six queries for forty students as it does for one', async () => {
+  it('costs the same seven queries for forty students as it does for one', async () => {
     const oneStudent = fakeSupabase(baseRows);
     await loadClassFactsForStudents(oneStudent, new Map([['s1', [CLASSES.a, CLASSES.b]]]));
 
@@ -151,8 +157,11 @@ describe('loadClassFactsForStudents', () => {
       new Map(Array.from({ length: 40 }, (_, i) => [`s${i}`, [CLASSES.a, CLASSES.b]])),
     );
 
-    expect(oneStudent.queries).toBe(6);
-    expect(manyStudents.queries).toBe(6);
+    // Seven, not the original six: the attempts query became unconditional once
+    // the catch-up paper started deriving its pass from them too. The number is
+    // not the point, its independence from the cohort size is.
+    expect(oneStudent.queries).toBe(7);
+    expect(manyStudents.queries).toBe(7);
   });
 
   it('returns an entry for every student asked about, so callers need no null check', async () => {
@@ -270,13 +279,40 @@ describe('loadClassFactsForStudents: teacher-set class tests', () => {
     expect(facts.get('s2')!.testByClass.get(CLASSES.a)!.passed).toBe(false);
   });
 
-  it('costs nothing extra for a classroom that uses no class tests', async () => {
+  it('costs no extra query for a classroom that adds a class test', async () => {
     const without = fakeSupabase(baseRows);
     await loadClassFactsForStudents(without, new Map([['s1', [CLASSES.a]]]));
     const withOne = fakeSupabase(withClassTest);
     await loadClassFactsForStudents(withOne, new Map([['s1', [CLASSES.a]]]));
 
-    // Exactly one more query, and only when there is something to ask about.
-    expect(withOne.queries).toBe(without.queries + 1);
+    // This used to assert exactly one MORE query, because the attempts were read
+    // only when a class test existed. They are now read for the catch-up paper
+    // as well, so the query is already being made and a second kind of paper
+    // rides along in it. Cheaper than before, not dearer.
+    expect(withOne.queries).toBe(without.queries);
+  });
+
+  it('derives a catch-up paper pass from the attempts, per student', async () => {
+    // The NXS-0141 regression, at the cohort grain. s1 cleared the 60% bar on the
+    // auto-generated paper and s2 did not, and neither of them has a
+    // test_passed_at anywhere: this loader never reads one.
+    const db = fakeSupabase({
+      ...baseRows,
+      nexus_test_attempts: [
+        { test_id: 'test-1', student_id: 's1', mode: 'official', status: 'submitted', percentage: 73 },
+        { test_id: 'test-1', student_id: 's2', mode: 'official', status: 'submitted', percentage: 40 },
+      ],
+    } as Partial<Rows>);
+
+    const facts = await loadClassFactsForStudents(
+      db,
+      new Map([
+        ['s1', [CLASSES.a]],
+        ['s2', [CLASSES.a]],
+      ]),
+    );
+
+    expect(facts.get('s1')!.testByClass.get(CLASSES.a)!.passed).toBe(true);
+    expect(facts.get('s2')!.testByClass.get(CLASSES.a)!.passed).toBe(false);
   });
 });

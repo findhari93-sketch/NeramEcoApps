@@ -35,6 +35,14 @@ describe('feature-flags registry', () => {
     // it on is a decision somebody makes once the OAuth grant is verified, not
     // something a deploy does on their behalf.
     'staff.youtube-auto-backup',
+    // Same reasoning, different meter. Gates AI drawing evaluation, which
+    // spends against the shared Gemini budget. Two switches guard it and they
+    // answer different questions: this one hides the surface, and the
+    // nexus.drawing-eval mode in the AI registry decides whether a press may
+    // spend. Both fail closed, because the feature also cannot produce a
+    // defensible score until somebody has written the band descriptions and
+    // chosen five anchor sheets by hand.
+    'staff.drawing-eval',
   ]);
 
   /**

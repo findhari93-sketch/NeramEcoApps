@@ -353,6 +353,40 @@ export const AI_FEATURES = [
     allowFreeKey: false,
     dailyCallCap: 200,
   },
+
+  // ── Nexus: drawing evaluation ────────────────────────────────────────────
+  /**
+   * Drafts a per-criterion evaluation of a student's drawing by comparing it
+   * against five teacher-graded anchor sheets for the same brief type.
+   *
+   * Ships 'off', which is this feature's kill switch. The brief that specifies
+   * it (apps/nexus/Docs/AI_DRAWING_EVALUATION_BRIEF.md) requires an explicit
+   * human decision before the first live call, and a mode in this registry is
+   * a better switch than the env var it asked for: it flips from the admin
+   * panel with no deploy, and it is visible next to the spend it causes.
+   *
+   * 'best' tier because locating a problem on a sheet is the entire job, and a
+   * cheap model that returns plausible coordinates for the wrong part of the
+   * drawing is worse than no annotation at all. At ~5 anchor images per call
+   * this is roughly $0.02 a sheet, about $5/month at the expected 200 to 250
+   * evaluations, which the $25 monthly cap absorbs comfortably.
+   *
+   * supportsManual matters more here than elsewhere: the manual prompt is the
+   * copy-paste workflow teachers use today, so a blocked call degrades to the
+   * status quo rather than to a dead end.
+   */
+  {
+    id: 'nexus.drawing-eval',
+    label: 'Drawing evaluation draft',
+    app: 'nexus',
+    group: 'Drawing',
+    trigger: 'staff',
+    tier: 'best',
+    defaultMode: 'off',
+    supportsManual: true,
+    allowFreeKey: false,
+    dailyCallCap: 40,
+  },
 ] as const satisfies readonly AiFeatureDef[];
 
 /**

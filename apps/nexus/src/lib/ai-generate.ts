@@ -71,6 +71,8 @@ export interface GenerateOptions {
   actorId?: string | null;
 }
 
+import { dropTranscriptTrivia } from './recap-question-quality';
+
 const DEFAULTS = {
   /**
    * Fifteen minutes. A one hour class becomes four checkpoints, which is what
@@ -118,7 +120,9 @@ Rules:
 4. Vary which letter is correct. Do not make most answers the same letter.
 5. Every question gets a one-sentence explanation of why the answer is right.
 6. Questions must be distinct from one another. No rephrasings of the same fact.
-7. The title is 3 to 8 words naming what this stretch of the class covered. The description is one or two sentences. Both describe the segment you were given; do not comment on the split itself.`;
+7. The title is 3 to 8 words naming what this stretch of the class covered. The description is one or two sentences. Both describe the segment you were given; do not comment on the split itself.
+8. Write UP TO the number of questions asked for, never more, and fewer whenever the segment does not carry that much teaching. If a segment is greetings, waiting for students, an audio check, timetable admin or small talk with nothing taught in it, return an EMPTY questions array and say so in the description. Do not pad.
+9. Never ask about the mechanics of the recording. No questions about who was greeted, what was said first or last, how many times a phrase occurred, what time of day it was, or what words the tutor used. Every question must be about the subject being taught.`;
 
 /** Transcript lines inside one segment's window, for the questions pass. */
 function sliceTranscript(entries: TranscriptEntry[], start: number, end: number): string {
@@ -273,7 +277,7 @@ async function draftSegments(
 ): Promise<Record<number, SegmentDraft>> {
   const prompt = `Class: "${itemTitle}"
 
-For EACH segment below, write a title, a description, and exactly ${poolPerSegment} questions, using only that segment's transcript.
+For EACH segment below, write a title, a description, and up to ${poolPerSegment} questions, using only that segment's transcript. A segment with no teaching in it gets an empty questions array, which is the right answer and not a failure.
 
 ${batch
   .map(
@@ -306,9 +310,14 @@ Return JSON:
     const idx = Number(seg?.index);
     if (!Number.isFinite(idx)) continue;
 
-    const questions = ((seg.questions || []) as unknown[])
-      .map(sanitiseQuestion)
-      .filter(Boolean) as GeneratedQuestion[];
+    // dropTranscriptTrivia runs BEFORE dedupe, so a segment padded with
+    // questions about the recording itself ("what was the first word spoken")
+    // comes back empty rather than coming back full of noise. Rule 8 of the
+    // prompt asks the model not to write them; this is what happens when it
+    // does anyway.
+    const questions = dropTranscriptTrivia(
+      ((seg.questions || []) as unknown[]).map(sanitiseQuestion).filter(Boolean) as GeneratedQuestion[],
+    );
 
     out[idx] = {
       title: typeof seg.title === 'string' ? seg.title.trim() : '',
@@ -370,6 +379,18 @@ export async function generateSectionsAndQuestions(
   let callsUsed = 0;
 
   /**
+   * Segments the model answered for and left empty on purpose, plus any the
+   * trivia filter emptied.
+   *
+   * The retry pass below re-asks every segment holding no questions, which was
+   * right while an empty segment could only mean a truncated response. Since the
+   * prompt started allowing "this stretch is greetings, there is nothing to ask"
+   * an empty segment is often the correct answer, and re-asking it spends a call
+   * on the one shared Gemini key to be told the same thing again.
+   */
+  const settledEmpty = new Set<number>();
+
+  /**
    * One call for one batch, writing whatever came back onto `sections`.
    *
    * Returns false when nothing usable arrived, which is what the retry pass
@@ -392,7 +413,18 @@ export async function generateSectionsAndQuestions(
       let got = false;
       for (const b of batch) {
         const draft = byIndex[b.index];
-        if (!draft || draft.questions.length === 0) continue;
+        if (!draft) continue;
+        if (draft.questions.length === 0) {
+          // It answered for this segment and had nothing to ask. Keep the title
+          // and description, which say why, and take it off the retry list.
+          // isUsableSection drops it before anything is persisted: a checkpoint
+          // with no questions can never be passed, and assertUnlocked would
+          // then hold every later checkpoint behind it forever.
+          if (draft.title) sections[b.index].title = draft.title;
+          if (draft.description) sections[b.index].description = draft.description;
+          settledEmpty.add(b.index);
+          continue;
+        }
         if (draft.title) sections[b.index].title = draft.title;
         if (draft.description) sections[b.index].description = draft.description;
         sections[b.index].questions = draft.questions;
@@ -435,6 +467,7 @@ export async function generateSectionsAndQuestions(
   for (let i = 0; i < sections.length; i++) {
     if (callsUsed >= MAX_CALLS_PER_RECAP) break;
     if (sections[i].questions.length > 0) continue;
+    if (settledEmpty.has(i)) continue;
     await runBatch([
       { index: i, start: planned[i].start, end: planned[i].end },
     ]);

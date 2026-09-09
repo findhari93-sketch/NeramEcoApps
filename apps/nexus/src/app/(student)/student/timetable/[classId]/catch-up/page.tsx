@@ -11,9 +11,16 @@
  *   teacher cannot find out any other way.
  *
  *   Joined after the class was taught: there is no why, so that step is not
- *   shown. Instead there is a class test at the end, because for a newcomer
+ *   shown. Instead there is a final check at the end, because for a newcomer
  *   the point is not attendance, it is whether they actually know the material
  *   the rest of the class already covered.
+ *
+ * That final check is NOT a numbered step. It used to be, and a student put it
+ * plainly: every question in it comes from the recording, so a paper standing
+ * beside the recording is a second chore rather than the end of the class. It is
+ * rendered inside the Class Recap step, under the player. A teacher-set class
+ * test keeps its own step, because that one really is separate: the whole class
+ * sat it.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -46,6 +53,7 @@ import ClassCoverThumb from '@/components/timetable/ClassCoverThumb';
 import ClassResourcesSection from '@/components/timetable/ClassResourcesSection';
 import RecordingPlayerDialog from '@/components/timetable/RecordingPlayerDialog';
 import RecapWatch from '@/components/class-recap/RecapWatch';
+import FinalCheckPanel from '@/components/class-recap/FinalCheckPanel';
 import { SECTION_LABEL_SX } from '@/components/timetable/timetable-theme';
 import type { ClassImageRef } from '@/lib/class-cover';
 import type { ClassResource } from '@/lib/class-resources';
@@ -81,6 +89,18 @@ interface CatchUpData {
     required?: boolean;
     /** Where to open it. The two kinds have different players. */
     href?: string;
+    /**
+     * What the student has already done, all derived from the attempts. Before
+     * these existed the screen could only say "not passed", so someone who had
+     * sat the paper and missed the bar saw the exact screen they saw before
+     * sitting it and concluded the app had lost their attempt.
+     */
+    attempts?: number;
+    last_score_pct?: number | null;
+    last_attempt_at?: string | null;
+    best_score_pct?: number | null;
+    question_count?: number | null;
+    must_get_right?: number | null;
   } | null;
   steps: {
     reasonGiven: boolean;
@@ -252,13 +272,19 @@ export default function CatchUpPage() {
 
   // Numbered in the order they are actually shown, so a newcomer never reads
   // "2. Watch the recording" as their first instruction.
+  // A teacher-set class test is still its own numbered step: it is a paper the
+  // whole class sat, genuinely separate from this student's catch-up. The
+  // auto-generated final check is NOT, because every one of its questions comes
+  // from the recording, so it belongs to the recap and is rendered inside it.
+  const separateTestStep = !!test && test.source === 'class_test';
+
   const stepNo = (() => {
     let n = 0;
     return {
       reason: data.reasonRequired ? ++n : 0,
       watch: ++n,
       work: ++n,
-      test: test ? ++n : 0,
+      test: separateTestStep ? ++n : 0,
     };
   })();
 
@@ -539,7 +565,7 @@ export default function CatchUpPage() {
                   recapId={recap.id}
                   onProgress={(p) => {
                     // Finishing the recap clears the watch gate and opens the
-                    // class test, both decided server-side, so the page has to
+                    // final check, both decided server-side, so the page has to
                     // refetch rather than infer it here.
                     if (p.completed) void load();
                   }}
@@ -553,6 +579,27 @@ export default function CatchUpPage() {
                 >
                   {steps.watched ? 'Watch again' : 'Start the class recap'}
                 </Button>
+              )}
+
+              {/* The end of the class, not a separate errand. Every question in
+                  it comes from this recording, so it belongs under the player
+                  rather than as its own numbered step further down the page. */}
+              {test && test.source !== 'class_test' && (
+                <FinalCheckPanel
+                  test={{
+                    passing_pct: test.passing_pct,
+                    unlocked: test.unlocked,
+                    passed: test.passed,
+                    attempts: test.attempts ?? 0,
+                    last_score_pct: test.last_score_pct ?? null,
+                    last_attempt_at: test.last_attempt_at ?? null,
+                    best_score_pct: test.best_score_pct ?? null,
+                    question_count: test.question_count ?? null,
+                    must_get_right: test.must_get_right ?? null,
+                  }}
+                  onStart={() => router.push(test.href || `/student/catch-up/${cls.id}/test`)}
+                  onRewatch={() => setWatching(true)}
+                />
               )}
             </Box>
           ) : (
@@ -658,18 +705,15 @@ export default function CatchUpPage() {
 
         {/* The class test. Two different papers can stand here.
 
-            The auto-generated catch-up paper is for a newcomer: the question is
-            not "were you here", it is whether they know what everyone else
-            already covered. It stays locked until the guided recap is finished,
-            and a score under the pass mark locks it again, so a retry always
-            means going back through the material rather than guessing twice.
+            ONLY a teacher-set class test reaches here now. That paper was set
+            for the whole class, so an absent student sits exactly what their
+            classmates sat, through the ordinary take engine, with no unlock and
+            no rewatch rule, and it earns its own numbered step. When the teacher
+            marked it Optional it is offered here and blocks nothing.
 
-            A teacher-set class test replaces it. That paper was set for the
-            whole class, so an absent student sits exactly what their classmates
-            sat, through the ordinary take engine, with no unlock and no rewatch
-            rule. And when the teacher marked it Optional it is offered here and
-            blocks nothing. */}
-        {test && stepBox(
+            The auto-generated final check is rendered inside the Class Recap
+            step instead. See FinalCheckPanel. */}
+        {separateTestStep && test && stepBox(
           stepNo.test,
           test.passed,
           test.required === false

@@ -325,32 +325,78 @@ export function isCatchupItemComplete(f: CatchupItemFacts): boolean {
   return true;
 }
 
-export interface CatchupTestUnlockFacts {
-  hasRecap: boolean;
-  recapCheckpointsComplete: boolean;
-  testUnlockedAt: string | null;
-  testPassedAt: string | null;
+/** One graded, submitted attempt at a class test. */
+export interface CatchupTestAttemptRow {
+  percentage: number | null;
+  submitted_at: string | null;
+}
+
+export interface CatchupTestState {
+  /** Has the bar been cleared, ever, since the last teacher reset? */
+  passed: boolean;
+  /** How many counted attempts, for "you have tried this twice" copy. */
+  attemptCount: number;
+  /** The most recent counted attempt, which is the one worth showing. */
+  lastAttempt: { percentage: number; submitted_at: string | null } | null;
+  /** The high score, which is what `passed` is decided on. */
+  bestPercentage: number | null;
 }
 
 /**
- * Should the catch-up test's `test_unlocked_at` be (re)written right now?
+ * What a student's attempts say about one class test.
  *
- * The unlock is normally a one-shot write fired from inside the last
- * checkpoint quiz's POST handler, the instant it is answered. If the
- * backlog item did not exist yet at that moment, or that call failed, there
- * is no other code path that will ever set it, and a student can be left
- * with a green "Class Recap" step and a permanently locked test. This is the
- * gate a caller checks before self-healing that column at read time.
+ * This replaces `shouldUnlockCatchupTest` and the `test_unlocked_at` /
+ * `test_passed_at` read path it existed to repair. That design kept the answer
+ * in one-shot columns written by side effects, and needed a self-heal on read to
+ * cover the writes that never landed. The self-heal's condition ("a recap
+ * exists, its checkpoints are complete, and nothing is unlocked or passed") is
+ * character for character the state a FAILED attempt leaves behind, so it undid
+ * the fail penalty on the very next page load, twenty six seconds later in the
+ * case that was reported. Two reconciliation passes disagreeing is what happens
+ * when derived state is stored.
  *
- * Keyed on `recapCheckpointsComplete` (every checkpoint quiz passed), not the
- * broader "watched" flag: a legacy `recording_watched_at` self-declaration
- * made before a recap existed also counts as watched, but must not unlock a
- * test built from checkpoint questions the student never answered.
+ * The attempts are already an immutable ledger and a class test is already read
+ * this way, so reading both kinds from it means there is no write to lose, no
+ * order of operations to get right, and reading the state cannot change it.
+ *
+ * `passed` is decided on the BEST attempt, not the latest: passing and then
+ * failing a resit must not take a finished class away again.
  */
-export function shouldUnlockCatchupTest(f: CatchupTestUnlockFacts): boolean {
-  if (!f.hasRecap) return false;
-  if (f.testUnlockedAt || f.testPassedAt) return false;
-  return f.recapCheckpointsComplete;
+export function resolveCatchupTestState(
+  attempts: CatchupTestAttemptRow[],
+  passingPct: number | null,
+  resetAt: string | null,
+): CatchupTestState {
+  const counted = attempts.filter((a) => {
+    if (a.percentage == null) return false;
+    // A reset is a line in the sand rather than a delete, so the ledger stays
+    // intact and a teacher can still see what the student actually did.
+    // A row with no submitted_at is kept: grading always writes one, so a
+    // missing timestamp is a data oddity and not a reason to tell someone who
+    // passed that they did not.
+    if (resetAt && a.submitted_at && a.submitted_at <= resetAt) return false;
+    return true;
+  });
+
+  if (counted.length === 0) {
+    return { passed: false, attemptCount: 0, lastAttempt: null, bestPercentage: null };
+  }
+
+  const pcts = counted.map((a) => Number(a.percentage));
+  const bestPercentage = Math.max(...pcts);
+
+  const latest = counted.reduce((best, a) =>
+    (a.submitted_at ?? '') >= (best.submitted_at ?? '') ? a : best,
+  );
+
+  return {
+    // A null bar means no pass mark was set, so sitting it is passing it. Same
+    // rule as resolvePassingPct, deliberately.
+    passed: passingPct == null || bestPercentage >= passingPct,
+    attemptCount: counted.length,
+    lastAttempt: { percentage: Number(latest.percentage), submitted_at: latest.submitted_at },
+    bestPercentage,
+  };
 }
 
 /**

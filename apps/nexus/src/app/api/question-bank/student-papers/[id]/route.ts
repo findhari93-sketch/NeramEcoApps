@@ -20,21 +20,26 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const authHeader = request.headers.get('Authorization');
     const classroomId = request.nextUrl.searchParams.get('classroom_id');
-    const access = await verifyQBAccess(authHeader, classroomId);
+    // Neither of these needs the other's answer, and they used to be awaited in
+    // turn. The full header, not the token, goes to getRequestUser: it resolves
+    // impersonation and parent-portal sessions from it, and a student being
+    // viewed-as must see their own papers rather than the teacher's.
+    const [access, user] = await Promise.all([
+      verifyQBAccess(authHeader, classroomId),
+      getRequestUser(authHeader),
+    ]);
     if (!access.ok) return access.response;
 
-    // The full header, not the token: getRequestUser resolves impersonation and
-    // parent-portal sessions from it, and a student being viewed-as must see
-    // their own papers rather than the teacher's.
-    const user = await getRequestUser(authHeader);
     const staff = isStaff(user);
+
+    // Staff previewing the student view are not filtered by exam audience;
+    // an empty set means "no restriction" to isFolderVisibleToStudent.
+    const studentExams = staff ? [] : await getStudentExamSet(user.id);
 
     const detail = await getPaperDetailForStudent({
       paperId: params.id,
       studentId: access.caller.id,
-      // Staff previewing the student view are not filtered by exam audience;
-      // an empty set means "no restriction" to isFolderVisibleToStudent.
-      studentExams: staff ? [] : await getStudentExamSet(user.id),
+      studentExams,
       studentProgram: user.student_program,
     });
 

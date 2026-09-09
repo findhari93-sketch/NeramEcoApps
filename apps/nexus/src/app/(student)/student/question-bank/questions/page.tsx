@@ -22,6 +22,7 @@ import {
   Alert,
   useMediaQuery,
   useTheme,
+  EmptyState,
 } from '@neram/ui';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import AddIcon from '@mui/icons-material/Add';
@@ -29,12 +30,15 @@ import CloseIcon from '@mui/icons-material/Close';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import TopFilterBar from '@/components/question-bank/TopFilterBar';
 import QBSearchStatus, { type QBMatchKind } from '@/components/question-bank/QBSearchStatus';
 import InlineQuestionCard from '@/components/question-bank/InlineQuestionCard';
 import FilterDrawer from '@/components/question-bank/FilterDrawer';
 import { countActiveFilters } from '@/components/question-bank/FilterChips';
 import SwipeableQuestionCard from '@/components/question-bank/SwipeableQuestionCard';
+import QuestionDetail from '@/components/question-bank/QuestionDetail';
+import { SHELL_CHROME } from '@/lib/shell-chrome';
 import { expandCategories, categoryLabelMap } from '@/lib/qb-category-tree';
 import type {
   QBExamTree,
@@ -47,6 +51,12 @@ import type {
   QBQuestionFormat,
 } from '@neram/database';
 import { MAX_STUDENT_TEST_QUESTIONS } from '@/lib/test-limits';
+
+/** Stable identity, so a render with no counts does not re-trigger consumers. */
+const EMPTY_COUNTS: Record<string, number> = {};
+
+/** Where the detail pane pins, clearing the sticky filter bar beside it. */
+const DETAIL_PANE_TOP = 8;
 
 const PAGE_SIZE = 20;
 
@@ -83,11 +93,20 @@ export default function QuestionListPage() {
   const searchParams = useSearchParams();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const { activeClassroom, getToken } = useNexusAuthContext();
+  /**
+   * Two panes, or one.
+   *
+   * At `md` and up a single column of 90px cards was being stretched across
+   * 1116px, so the stem clamped to two lines with most of the row empty. Above
+   * that width the list becomes a column and the question opens beside it. Below
+   * it nothing changes: one column, swipe actions, expansion in place. That is
+   * the majority of these students and the layout already suits them.
+   */
+  const isTwoPane = useMediaQuery(theme.breakpoints.up('md'));
+
+  const { activeClassroom, getToken, loading: authLoading } = useNexusAuthContext();
 
   // Exam context from URL params
-  const [examTree, setExamTree] = useState<QBExamTree | null>(null);
-  const [examTreeLoading, setExamTreeLoading] = useState(true);
   const [selectedExam, setSelectedExam] = useState<string | null>(
     searchParams.get('exam') || null,
   );
@@ -97,6 +116,57 @@ export default function QuestionListPage() {
   const [selectedSession, setSelectedSession] = useState<string | null>(
     searchParams.get('session') || null,
   );
+  /**
+   * The paper detail screen has always written these two into the practice link.
+   * shift was read by nobody, so a paper split into a forenoon and an afternoon
+   * sitting practised both at once; section is what the new paper breakdown uses
+   * to open one part of a paper.
+   */
+  const [selectedShift] = useState<string | null>(searchParams.get('shift') || null);
+  const [selectedSection] = useState<string | null>(searchParams.get('section') || null);
+
+  /**
+   * The three catalogue reads, on the shared SWR cache.
+   *
+   * These were hand-rolled fetch-in-useEffect, each awaiting its own token
+   * first, so nothing they loaded was deduped or cached and coming back to this
+   * page always refetched all of it from cold. The exam tree is the expensive
+   * one: it reads the whole sources table and the whole active-question id list.
+   * A null key holds the request until the classroom resolves, which is the
+   * pattern documented on the QB landing page.
+   */
+  const scoped = (path: string, extra?: Record<string, string>) => {
+    if (!activeClassroom) return null;
+    const qs = new URLSearchParams({ classroom_id: activeClassroom.id, ...(extra || {}) });
+    return `${path}?${qs.toString()}`;
+  };
+
+  const { data: examTreeRes, isLoading: examTreeLoading } =
+    useAuthSWR<{ data: QBExamTree }>(scoped('/api/question-bank/exam-tree'));
+  const examTree = examTreeRes?.data ?? null;
+
+  const { data: topicsRes } = useAuthSWR<{
+    data: NexusQBTopic[];
+    counts?: Record<string, number>;
+  }>(scoped('/api/question-bank/topics'));
+  const topics = useMemo(() => topicsRes?.data ?? [], [topicsRes]);
+  const topicCounts = useMemo(
+    () => new Map(Object.entries(topicsRes?.counts ?? {})),
+    [topicsRes],
+  );
+
+  const { data: catCountsRes } = useAuthSWR<{
+    data: Record<string, number>;
+    tree?: NexusQBTagNode[];
+  }>(
+    scoped('/api/question-bank/category-counts', {
+      ...(selectedExam ? { exam_type: selectedExam } : {}),
+      ...(selectedYear ? { year: String(selectedYear) } : {}),
+      ...(selectedSession ? { session: selectedSession } : {}),
+    }),
+  );
+  const categoryCounts = catCountsRes?.data ?? EMPTY_COUNTS;
+  const categoryTree = useMemo(() => catCountsRes?.tree ?? [], [catCountsRes]);
 
   // Filters (categories, difficulty, format, status, search, topics)
   const [filters, setFilters] = useState<QBFilterState>(() =>
@@ -136,11 +206,8 @@ export default function QuestionListPage() {
   }, [filters.search_text]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [topics, setTopics] = useState<NexusQBTopic[]>([]);
-  const [topicCounts, setTopicCounts] = useState<Map<string, number>>(new Map());
-  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
-  const [categoryTree, setCategoryTree] = useState<NexusQBTagNode[]>([]);
 
   // Inline expansion state
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
@@ -193,19 +260,6 @@ export default function QuestionListPage() {
 
   // ─── Effects ──────────────────────────────────────────────────────────────
 
-  // Fetch exam tree and topics on mount
-  useEffect(() => {
-    if (!activeClassroom) return;
-    fetchExamTree();
-    fetchTopics();
-  }, [activeClassroom]);
-
-  // Fetch category counts when exam context changes
-  useEffect(() => {
-    if (!activeClassroom) return;
-    fetchCategoryCounts();
-  }, [activeClassroom, selectedExam, selectedYear, selectedSession]);
-
   // Load preset if specified
   useEffect(() => {
     const presetId = searchParams.get('preset');
@@ -216,9 +270,16 @@ export default function QuestionListPage() {
 
   // Fetch questions when filters or exam context change
   useEffect(() => {
-    if (!activeClassroom) return;
+    if (!activeClassroom) {
+      // Every fetch effect on this page returns early without a classroom, and
+      // `loading` starts true, so a student who has none sat on skeletons for
+      // ever. Once auth has settled and there is still no classroom, that is an
+      // answer, not a wait.
+      if (!authLoading) setLoading(false);
+      return;
+    }
     fetchQuestions(1);
-  }, [activeClassroom, filters, selectedExam, selectedYear, selectedSession]);
+  }, [activeClassroom, authLoading, filters, selectedExam, selectedYear, selectedSession]);
 
   // Sync filters + exam context to URL
   useEffect(() => {
@@ -258,66 +319,8 @@ export default function QuestionListPage() {
 
   // ─── Fetch functions ──────────────────────────────────────────────────────
 
-  async function fetchExamTree() {
-    setExamTreeLoading(true);
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/exam-tree?classroom_id=${activeClassroom!.id}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setExamTree(json.data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch exam tree:', err);
-    } finally {
-      setExamTreeLoading(false);
-    }
-  }
 
-  async function fetchTopics() {
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/topics?classroom_id=${activeClassroom!.id}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setTopics(json.data || json || []);
-        if (json.counts) {
-          setTopicCounts(new Map(Object.entries(json.counts)));
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch topics:', err);
-    }
-  }
 
-  async function fetchCategoryCounts() {
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const params = new URLSearchParams();
-      params.set('classroom_id', activeClassroom!.id);
-      if (selectedExam) params.set('exam_type', selectedExam);
-      if (selectedYear) params.set('year', String(selectedYear));
-      if (selectedSession) params.set('session', selectedSession);
-      const res = await fetch(
-        `/api/question-bank/category-counts?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setCategoryCounts(json.data || {});
-        setCategoryTree(json.tree || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch category counts:', err);
-    }
-  }
 
   async function loadPreset(presetId: string) {
     try {
@@ -430,7 +433,12 @@ export default function QuestionListPage() {
 
   async function fetchQuestions(pageNum: number) {
     setLoading(true);
-    setQuestions([]);
+    // The list used to be emptied here, before the request went out. That is why
+    // the bar above it read "Showing 0 of 0 questions" over a skeleton on every
+    // load and every filter tweak: it was reporting the list it had just been
+    // handed, and the list had just been thrown away. Keep the previous page
+    // until the next one lands; the skeleton already says work is happening.
+    setFetchError(null);
 
     try {
       const token = await getToken();
@@ -444,6 +452,8 @@ export default function QuestionListPage() {
       if (selectedExam) params.set('exam_type', selectedExam);
       if (selectedYear) params.set('year', String(selectedYear));
       if (selectedSession) params.set('session', selectedSession);
+      if (selectedShift) params.set('shift', selectedShift);
+      if (selectedSection) params.set('section', selectedSection);
 
       // Filter drawer filters
       applyFilterParams(params);
@@ -453,6 +463,7 @@ export default function QuestionListPage() {
       });
 
       if (!res.ok) throw new Error('Failed to fetch questions');
+
 
       const json = await res.json();
       const payload = json.data || json;
@@ -466,7 +477,11 @@ export default function QuestionListPage() {
       setMatchedTerms(payload?.search?.matched_terms ?? []);
       setPage(pageNum);
     } catch (err) {
+      // A failed list request used to be a console line and nothing else, so the
+      // screen sat on an empty list that looked like a legitimate no-results.
       console.error('Failed to fetch questions:', err);
+      setQuestions([]);
+      setFetchError('Could not load questions. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -513,6 +528,24 @@ export default function QuestionListPage() {
     } finally {
       setDetailLoading(false);
     }
+  }
+
+  /** Where the open question sits in the list, or -1. */
+  const detailIndex = expandedQuestionId
+    ? questions.findIndex((q) => q.id === expandedQuestionId)
+    : -1;
+
+  /**
+   * Move the detail pane one question along the list.
+   *
+   * Deliberately does not page: the arrows walk what is on screen, and running
+   * off the end of a page is a pagination decision the student should make
+   * themselves rather than have the arrows make silently.
+   */
+  function stepQuestion(delta: number) {
+    if (detailIndex < 0) return;
+    const next = questions[detailIndex + delta];
+    if (next) void handleExpandQuestion(next.id);
   }
 
   async function handleInlineSubmit(answer: string) {
@@ -675,10 +708,16 @@ export default function QuestionListPage() {
       const params = new URLSearchParams();
       params.set('classroom_id', activeClassroom!.id);
       params.set('page', '1');
-      params.set('page_size', '1000'); // fetch all matching IDs
+      // This asked for a thousand whole questions and then read nothing but the
+      // id off each one: roughly 6.5MB of JSON over a phone connection to build
+      // a list of UUIDs. fields=id runs the same filters and returns the ids.
+      params.set('page_size', '1000');
+      params.set('fields', 'id');
       if (selectedExam) params.set('exam_type', selectedExam);
       if (selectedYear) params.set('year', String(selectedYear));
       if (selectedSession) params.set('session', selectedSession);
+      if (selectedShift) params.set('shift', selectedShift);
+      if (selectedSection) params.set('section', selectedSection);
       applyFilterParams(params);
 
       const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
@@ -687,17 +726,17 @@ export default function QuestionListPage() {
       if (res.ok) {
         const json = await res.json();
         const payload = json.data || json;
-        const items: NexusQBQuestionListItem[] = payload?.questions || (Array.isArray(payload) ? payload : []);
+        const ids: string[] = payload?.question_ids ?? [];
         // Capped, and said out loud. Selecting every one of 544 matches and then
         // being refused at Create is worse than being told here how many were
         // taken. The server enforces the same ceiling either way.
-        const capped = items.slice(0, MAX_STUDENT_TEST_QUESTIONS);
+        const capped = ids.slice(0, MAX_STUDENT_TEST_QUESTIONS);
         setSelectedViaSelectAll(true);
-        setSelectedQuestionIds(new Set(capped.map((q) => q.id)));
-        if (items.length > capped.length) {
+        setSelectedQuestionIds(new Set(capped));
+        if (ids.length > capped.length) {
           setSnackbar({
             open: true,
-            message: `Selected the first ${capped.length} of ${items.length} matches. A practice test tops out at ${MAX_STUDENT_TEST_QUESTIONS}.`,
+            message: `Selected the first ${capped.length} of ${ids.length} matches. A practice test tops out at ${MAX_STUDENT_TEST_QUESTIONS}.`,
             severity: 'info',
           });
         }
@@ -786,10 +825,33 @@ export default function QuestionListPage() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
+  /**
+   * One left edge for the whole page.
+   *
+   * The back button, the search field and the list each had their own padding
+   * (0.5/2, a flat 2, and 0.5/2), so the three rows started at three different
+   * x positions on a laptop. One value, used by all of them.
+   */
+  const GUTTER = { xs: 1, md: 2 };
+
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        // height:'100%' used to resolve against an auto-height Container, so
+        // flex:1 on the list never got a bounded height and its overflowY never
+        // became a real scroll box. Rather than replace one guess with another,
+        // the page now just flows: the list is as long as it is, and the detail
+        // pane sticks (see DETAIL_PANE_TOP below). Pinning the whole page to the
+        // viewport would need the shell's padding as well as its chrome, and
+        // SHELL_CHROME is documented as the full-bleed number, which this route
+        // is not.
+        minHeight: 0,
+      }}
+    >
       {/* Back button */}
-      <Box sx={{ px: { xs: 0.5, md: 2 }, pt: 0.5 }}>
+      <Box sx={{ px: GUTTER, pt: 0.5 }}>
         <Button
           size="small"
           startIcon={<ArrowBackIcon />}
@@ -807,7 +869,7 @@ export default function QuestionListPage() {
 
       {/* Search: always visible. It used to be hidden inside the filter drawer,
           so most students never found it. */}
-      <Box sx={{ px: 2, pb: 1 }}>
+      <Box sx={{ px: GUTTER, pb: 1 }}>
         <TextField
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
@@ -843,7 +905,7 @@ export default function QuestionListPage() {
         />
       </Box>
 
-      <Box sx={{ px: 2 }}>
+      <Box sx={{ px: GUTTER }}>
         <QBSearchStatus
           query={filters.search_text ?? ''}
           matchKind={matchKind}
@@ -858,6 +920,7 @@ export default function QuestionListPage() {
       {/* Top Filter Bar (sticky) */}
       <TopFilterBar
         filters={filters}
+        loading={loading}
         onFilterChange={(newFilters) => setFilters(newFilters)}
         onOpenDrawer={() => setFilterOpen(true)}
         activeFilterCount={activeFilterCount}
@@ -881,32 +944,54 @@ export default function QuestionListPage() {
         categoryLabels={categoryLabels}
       />
 
-      {/* Question list (scrollable) */}
-      <Box sx={{ flex: 1, overflowY: 'auto', px: { xs: 0.5, md: 2 }, pb: 2 }}>
+      {/*
+        The list, and beside it the question being read.
+
+        On one column this is what it always was. On two, the list scrolls in its
+        own pane and the detail scrolls in another, so paging through questions
+        never loses your place in the list.
+      */}
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: isTwoPane ? 'grid' : 'block',
+          gridTemplateColumns: isTwoPane ? 'minmax(340px, 400px) 1fr' : undefined,
+          gap: isTwoPane ? 2 : 0,
+          alignItems: 'start',
+          px: GUTTER,
+          pb: 2,
+        }}
+      >
+      <Box sx={{ minWidth: 0 }}>
+        {fetchError && !loading && (
+          <Alert severity="warning" sx={{ mt: 1, borderRadius: 2 }}>
+            {fetchError}
+          </Alert>
+        )}
         {loading ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, pt: 1 }}>
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} variant="rounded" height={120} sx={{ borderRadius: 2 }} />
             ))}
           </Box>
+        ) : !activeClassroom ? (
+          <EmptyState
+            icon={<QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary' }} />}
+            title="No classroom yet"
+            description="The Question Bank opens once you are enrolled in a classroom."
+          />
         ) : questions.length === 0 ? (
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 4,
-              mt: 2,
-              textAlign: 'center',
-              borderRadius: 2,
-            }}
-          >
-            <QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-              No questions match your filters
-            </Typography>
-            <Button variant="outlined" onClick={handleClearFilters}>
-              Reset Filters
-            </Button>
-          </Paper>
+          <EmptyState
+            icon={<QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary' }} />}
+            title="No questions match your filters"
+            description="Try removing a filter or clearing the search."
+            action={
+              <Button variant="outlined" onClick={handleClearFilters} sx={{ minHeight: 44 }}>
+                Reset Filters
+              </Button>
+            }
+          />
         ) : (
           <Box
             sx={{
@@ -948,9 +1033,14 @@ export default function QuestionListPage() {
                     <InlineQuestionCard
                       highlight={matchedTerms}
                       question={q}
-                      questionDetail={expandedQuestionId === q.id ? expandedDetail : null}
-                      expanded={expandedQuestionId === q.id}
-                      loading={expandedQuestionId === q.id && detailLoading}
+                      questionDetail={
+                        !isTwoPane && expandedQuestionId === q.id ? expandedDetail : null
+                      }
+                      // With a detail pane beside the list the row stays a row:
+                      // expanding in place as well would render the question twice.
+                      expanded={!isTwoPane && expandedQuestionId === q.id}
+                      selected={isTwoPane && expandedQuestionId === q.id}
+                      loading={!isTwoPane && expandedQuestionId === q.id && detailLoading}
                       questionIndex={idx}
                       lang={lang}
                       onToggleExpand={() => handleExpandQuestion(q.id)}
@@ -1023,6 +1113,58 @@ export default function QuestionListPage() {
             )}
           </Box>
         )}
+      </Box>
+
+      {/* The detail pane. Only ever mounted on two columns. */}
+      {isTwoPane && (
+        <Box
+          sx={{
+            // Sticky rather than a second scroll pane: the question stays in
+            // view while the list scrolls behind it, and nothing has to know the
+            // exact height of the chrome above to get there. The offset clears
+            // the sticky filter bar this sits beside.
+            position: 'sticky',
+            top: DETAIL_PANE_TOP,
+            alignSelf: 'start',
+            maxHeight: `calc(100vh - ${DETAIL_PANE_TOP + SHELL_CHROME.md}px)`,
+            overflowY: 'auto',
+            borderLeft: '1px solid',
+            borderColor: 'divider',
+            pl: 2,
+          }}
+        >
+          {detailLoading ? (
+            <Box sx={{ pt: 1 }}>
+              <Skeleton variant="text" width="40%" height={28} />
+              <Skeleton variant="text" width="90%" />
+              <Skeleton variant="rounded" height={180} sx={{ my: 2, borderRadius: 2 }} />
+              <Skeleton variant="rounded" height={48} sx={{ borderRadius: 2 }} />
+            </Box>
+          ) : expandedDetail ? (
+            <QuestionDetail
+              question={expandedDetail}
+              onSubmit={handleInlineSubmit}
+              onStudyToggle={handleStudyToggle}
+              onReport={(reportType, description) =>
+                handleReport(expandedDetail.id, reportType, description)
+              }
+              onNext={() => stepQuestion(1)}
+              onPrev={() => stepQuestion(-1)}
+              hasNext={detailIndex >= 0 && detailIndex < questions.length - 1}
+              hasPrev={detailIndex > 0}
+              currentIndex={detailIndex}
+              totalCount={questions.length}
+              initialLang={lang}
+            />
+          ) : (
+            <EmptyState
+              icon={<QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary' }} />}
+              title="Pick a question"
+              description="Choose one from the list to read it, answer it and see the solution here."
+            />
+          )}
+        </Box>
+      )}
       </Box>
 
       {/* Selection bottom bar (fixed) */}

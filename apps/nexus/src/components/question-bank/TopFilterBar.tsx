@@ -9,6 +9,7 @@ import {
   Typography,
   ToggleButton,
   ToggleButtonGroup,
+  useTheme,
 } from '@neram/ui';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
@@ -55,6 +56,8 @@ export interface TopFilterBarProps {
    * members of QBCategory, so QB_CATEGORY_LABELS cannot resolve them.
    */
   categoryLabels?: Record<string, string>;
+  /** A request is in flight, so the result count is not worth reporting yet. */
+  loading?: boolean;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -118,10 +121,12 @@ function isQuickChipActive(filters: QBFilterState, chip: QuickChip): boolean {
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-const PURPLE_ACCENT = '#7c4dff';
-const ORANGE_BG = '#fff3e0';
-const ORANGE_BORDER = '#ffe0b2';
-const ORANGE_TEXT = '#e65100';
+/*
+  These were four hardcoded hex values sitting beside a themed app: #7c4dff is
+  not the Nexus purple (#7C3AED), and the orange trio had no relationship to the
+  warning palette at all, so this bar drifted in dark mode and ignored any theme
+  change. They now come from the theme, resolved inside the component.
+*/
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -142,7 +147,14 @@ export default function TopFilterBar({
   lang,
   onLangChange,
   categoryLabels,
+  loading = false,
 }: TopFilterBarProps) {
+  const theme = useTheme();
+  const PURPLE_ACCENT = theme.palette.primary.main;
+  const ORANGE_BG = theme.palette.warning.light;
+  const ORANGE_BORDER = theme.palette.warning.main;
+  const ORANGE_TEXT = theme.palette.warning.dark;
+
   const activeChips: ActiveChip[] = getFilterChips(filters, categoryLabels);
 
   function handleDismissChip(key: keyof QBFilterState, value?: string | number) {
@@ -208,7 +220,7 @@ export default function TopFilterBar({
                 onClick={onOpenDrawer}
                 sx={{
                   flexShrink: 0,
-                  height: { xs: 26, sm: 30 },
+                  height: { xs: 26, sm: 30, md: 32 },
                   fontSize: { xs: '0.675rem', sm: '0.75rem' },
                   fontWeight: 500,
                   borderRadius: '13px',
@@ -246,7 +258,7 @@ export default function TopFilterBar({
             variant="outlined"
             onClick={onOpenDrawer}
             sx={{
-              height: { xs: 26, sm: 30 },
+              height: { xs: 26, sm: 30, md: 32 },
               fontSize: { xs: '0.675rem', sm: '0.75rem' },
               fontWeight: 600,
               borderRadius: '13px',
@@ -276,7 +288,7 @@ export default function TopFilterBar({
             '& .MuiToggleButton-root': {
               px: 1,
               py: 0,
-              fontSize: '0.7rem',
+              fontSize: { xs: '0.7rem', md: '0.8125rem' },
               fontWeight: 600,
               textTransform: 'none',
               borderColor: 'grey.300',
@@ -313,7 +325,7 @@ export default function TopFilterBar({
               onDelete={() => handleDismissChip(chip.key, chip.value)}
               sx={{
                 height: 24,
-                fontSize: '0.7rem',
+                fontSize: { xs: '0.7rem', md: '0.8125rem' },
                 fontWeight: 500,
                 borderRadius: '12px',
                 bgcolor: ORANGE_BG,
@@ -334,7 +346,7 @@ export default function TopFilterBar({
               onClick={handleClearAll}
               sx={{
                 height: 24,
-                fontSize: '0.7rem',
+                fontSize: { xs: '0.7rem', md: '0.8125rem' },
                 fontWeight: 500,
                 borderRadius: '12px',
                 bgcolor: 'transparent',
@@ -360,16 +372,29 @@ export default function TopFilterBar({
         }}
       >
         {/* Result count */}
+        {/*
+          "Showing 0 of 0 questions" was what this said during every load, which
+          was true and useless: the list had just been emptied before the fetch.
+          The list is no longer blanked, and while a request is in flight this
+          says so rather than reporting a count nobody asked about.
+        */}
         <Typography
           variant="body2"
           color="text.secondary"
-          sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+          aria-live="polite"
+          sx={{ fontSize: { xs: '0.75rem', md: '0.8125rem' }, whiteSpace: 'nowrap' }}
         >
-          Showing{' '}
-          <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
-            {filteredCount}
-          </Box>{' '}
-          of {totalCount} questions
+          {loading ? (
+            'Loading questions…'
+          ) : (
+            <>
+              Showing{' '}
+              <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                {filteredCount}
+              </Box>{' '}
+              of {totalCount} questions
+            </>
+          )}
         </Typography>
 
         {/* Selection controls */}
@@ -381,7 +406,7 @@ export default function TopFilterBar({
                 onClick={onToggleSelectionMode}
                 sx={{
                   width: 28,
-                  height: 28,
+                  height: { xs: 28, md: 36 },
                   border: '1px solid',
                   borderColor: 'grey.300',
                   color: 'text.secondary',
@@ -397,8 +422,8 @@ export default function TopFilterBar({
                 startIcon={<CheckBoxOutlineBlankIcon sx={{ fontSize: 16 }} />}
                 onClick={onToggleSelectionMode}
                 sx={{
-                  height: 28,
-                  fontSize: '0.7rem',
+                  height: { xs: 28, md: 36 },
+                  fontSize: { xs: '0.7rem', md: '0.8125rem' },
                   fontWeight: 500,
                   textTransform: 'none',
                   borderRadius: '14px',
@@ -416,8 +441,8 @@ export default function TopFilterBar({
                 startIcon={<AddIcon sx={{ fontSize: 14, display: { xs: 'none', sm: 'inline-flex' } }} />}
                 onClick={onCreateTest}
                 sx={{
-                  height: 28,
-                  fontSize: '0.7rem',
+                  height: { xs: 28, md: 36 },
+                  fontSize: { xs: '0.7rem', md: '0.8125rem' },
                   fontWeight: 600,
                   textTransform: 'none',
                   borderRadius: '14px',
@@ -450,8 +475,8 @@ export default function TopFilterBar({
                 startIcon={<SelectAllIcon sx={{ fontSize: 16 }} />}
                 onClick={onSelectAll}
                 sx={{
-                  height: 28,
-                  fontSize: '0.7rem',
+                  height: { xs: 28, md: 36 },
+                  fontSize: { xs: '0.7rem', md: '0.8125rem' },
                   fontWeight: 500,
                   textTransform: 'none',
                   borderRadius: '14px',
@@ -467,7 +492,7 @@ export default function TopFilterBar({
                 onClick={onToggleSelectionMode}
                 sx={{
                   width: 28,
-                  height: 28,
+                  height: { xs: 28, md: 36 },
                   color: 'text.secondary',
                   '&:hover': { color: 'error.main' },
                 }}
@@ -481,8 +506,8 @@ export default function TopFilterBar({
                 disabled={selectedCount === 0}
                 onClick={onCreateTest}
                 sx={{
-                  height: 28,
-                  fontSize: '0.7rem',
+                  height: { xs: 28, md: 36 },
+                  fontSize: { xs: '0.7rem', md: '0.8125rem' },
                   fontWeight: 600,
                   textTransform: 'none',
                   borderRadius: '14px',

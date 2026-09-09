@@ -14,12 +14,24 @@ export type DrawingMedium = 'graphite_pencil' | 'charcoal_pencil' | 'color_penci
 
 export type SkillLevel = 'beginner' | 'medium' | 'expert';
 
+/**
+ * A rectangle a teacher drew over a student's drawing.
+ *
+ * All four values are fractions of the IMAGE, 0 to 1, origin top-left. Not of
+ * the box the image is displayed in: the review stage centres the drawing with
+ * objectFit contain, so measuring against the stage puts the letterbox bands
+ * inside the range and the same rectangle then lands on a different part of
+ * the drawing at different viewport sizes.
+ *
+ * The conversion between a pointer position and these numbers lives in
+ * lib/annotation-geometry.ts, and it is the only place that should do it.
+ */
 export interface RegionAnnotation {
   id: string;
-  x: number;      // percentage 0-100 from left
-  y: number;      // percentage 0-100 from top
-  width: number;  // percentage 0-100
-  height: number; // percentage 0-100
+  x: number;      // fraction 0-1 from the left edge of the image
+  y: number;      // fraction 0-1 from the top edge of the image
+  width: number;  // fraction 0-1 of the image width
+  height: number; // fraction 0-1 of the image height
   comment: string;
 }
 
@@ -97,7 +109,10 @@ function buildContext(
   if (regionAnnotations.length > 0) {
     lines.push('\nTEACHER OBSERVATIONS (areas the teacher highlighted):');
     regionAnnotations.forEach((ann, i) => {
-      const region = `Region ${i + 1} at (${Math.round(ann.x)}%, ${Math.round(ann.y)}%) to (${Math.round(ann.x + ann.width)}%, ${Math.round(ann.y + ann.height)}%)`;
+      // Stored as fractions, written out as percentages: a chat model reads
+      // "from (12%, 30%) to (30%, 52%)" far more reliably than four decimals.
+      const pct = (n: number) => Math.round(n * 100);
+      const region = `Region ${i + 1} at (${pct(ann.x)}%, ${pct(ann.y)}%) to (${pct(ann.x + ann.width)}%, ${pct(ann.y + ann.height)}%)`;
       lines.push(`  ${region}: ${ann.comment || '(no comment)'}`);
     });
     lines.push('Address each teacher observation in your response, plus identify additional issues.');

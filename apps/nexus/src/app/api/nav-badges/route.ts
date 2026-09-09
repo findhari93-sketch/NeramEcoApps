@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { getRequestUser } from '@/lib/study-materials';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /** How recently a reason has to have arrived to still count as news. */
@@ -13,18 +13,25 @@ const CATCHUP_BADGE_WINDOW_MS = 48 * 60 * 60 * 1000;
  */
 export async function GET(request: NextRequest) {
   try {
-    const msUser = await verifyMsToken(request.headers.get('Authorization'));
-    const supabase = getSupabaseAdminClient();
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    // getRequestUser rather than verifyMsToken + a hand-rolled users select, because it
+    // holds the resolved row for 30 seconds. This route is polled every 60 seconds by
+    // every signed-in user for as long as Nexus is open, so the lookup it skips is a cost
+    // paid forever rather than once. It refuses parent tokens exactly as verifyMsToken's
+    // default did here.
+    let user: Awaited<ReturnType<typeof getRequestUser>>;
+    try {
+      user = await getRequestUser(request.headers.get('Authorization'));
+    } catch (err) {
+      // It throws where this route answered with a status. Keep both apart: a caller with
+      // no users row is a 404, a bad token is a 401, and the poller tells them apart.
+      const message = err instanceof Error ? err.message : 'Unauthorized';
+      return NextResponse.json(
+        { error: message },
+        { status: message === 'User not found' ? 404 : 401 },
+      );
     }
+
+    const supabase = getSupabaseAdminClient();
 
     const badges: Record<string, number> = {};
 

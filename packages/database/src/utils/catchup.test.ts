@@ -3,7 +3,6 @@ import {
   classifyCatchupCandidate,
   catchupItemStep,
   isCatchupItemComplete,
-  shouldUnlockCatchupTest,
   resolveCatchupBacklog,
   summariseCatchupBacklog,
   summariseMissedClasses,
@@ -21,7 +20,6 @@ import {
   planCatchupActivation,
   DEFAULT_CATCHUP_WINDOWS,
   type CatchupItemFacts,
-  type CatchupTestUnlockFacts,
   type ResolveCatchupContext,
 } from './catchup';
 
@@ -148,40 +146,10 @@ describe('catchupItemStep', () => {
   });
 });
 
-describe('shouldUnlockCatchupTest', () => {
-  const unlockable = (over: Partial<CatchupTestUnlockFacts> = {}): CatchupTestUnlockFacts => ({
-    hasRecap: true,
-    recapCheckpointsComplete: true,
-    testUnlockedAt: null,
-    testPassedAt: null,
-    ...over,
-  });
-
-  it('unlocks once every checkpoint quiz is passed and nothing is set yet', () => {
-    expect(shouldUnlockCatchupTest(unlockable())).toBe(true);
-  });
-
-  it('does not unlock a class with no recap at all', () => {
-    expect(shouldUnlockCatchupTest(unlockable({ hasRecap: false }))).toBe(false);
-  });
-
-  it('leaves it locked while checkpoints are still outstanding', () => {
-    // The reported bug: `watched` can be true via the legacy self-declared
-    // recording_watched_at fallback without the guided checkpoints ever
-    // being answered. Unlocking a test built from those questions would be
-    // wrong, so this stays keyed on the checkpoint signal, not `watched`.
-    expect(shouldUnlockCatchupTest(unlockable({ recapCheckpointsComplete: false }))).toBe(false);
-  });
-
-  it('is a no-op once already unlocked or already passed', () => {
-    expect(shouldUnlockCatchupTest(unlockable({ testUnlockedAt: '2026-08-11T10:00:00Z' }))).toBe(
-      false,
-    );
-    expect(shouldUnlockCatchupTest(unlockable({ testPassedAt: '2026-08-11T10:00:00Z' }))).toBe(
-      false,
-    );
-  });
-});
+// `shouldUnlockCatchupTest` and its suite are gone. The unlock is no longer a
+// stored column that a read has to repair: availability is derived from the
+// recap's checkpoints and the pass from the attempts. See
+// catchup-test-state.test.ts for what replaced it, and why.
 
 describe('resolveCatchupBacklog', () => {
   it('leaves every unfinished item startable, and locks nothing', () => {

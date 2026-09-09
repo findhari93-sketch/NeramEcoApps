@@ -1,0 +1,59 @@
+{
+  "_note": "Recorded from a run where the model ignored the fraction instruction and answered in percent. Kept because this is the single most likely coordinate failure, and silently storing these would put every box in the top-left 1% of the sheet.",
+  "criteria": [
+    {
+      "criterionKey": "composition",
+      "band": 3,
+      "reasoning": "The shapes cluster centrally with even margins on all four sides.",
+      "closestAnchorBand": 3,
+      "confidence": "medium",
+      "annotations": [
+        {
+          "geometry": [25, 30, 40, 35],
+          "marker": "note",
+          "comment": "Central cluster."
+        }
+      ]
+    },
+    {
+      "criterionKey": "proportion",
+      "band": 3,
+      "reasoning": "The four parallelograms are consistent in size with each other.",
+      "closestAnchorBand": 3,
+      "confidence": "high",
+      "annotations": []
+    },
+    {
+      "criterionKey": "design_principle",
+      "band": 2,
+      "reasoning": "The layout is symmetrical about the centre point with no emphasis anywhere.",
+      "closestAnchorBand": 2,
+      "confidence": "high",
+      "annotations": [
+        {
+          "geometry": [10, 10, 80, 80],
+          "marker": "problem",
+          "comment": "Nothing draws the eye to a focal point."
+        }
+      ]
+    },
+    {
+      "criterionKey": "tonal_quality",
+      "band": 4,
+      "reasoning": "Colour application is even across the purple and red sections.",
+      "closestAnchorBand": 4,
+      "confidence": "medium",
+      "annotations": []
+    },
+    {
+      "criterionKey": "line_quality",
+      "band": 4,
+      "reasoning": "Edges are crisp and the shapes meet cleanly at the central point.",
+      "closestAnchorBand": 4,
+      "confidence": "high",
+      "annotations": []
+    }
+  ],
+  "overallComment": "Technically disciplined and cleanly rendered, but symmetrical to the point of being static. Shift the cluster off centre and give one shape emphasis.",
+  "flags": []
+}

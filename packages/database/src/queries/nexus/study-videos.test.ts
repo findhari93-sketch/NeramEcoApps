@@ -280,7 +280,9 @@ describe('getStudyVideoSummaryMap: what a chapter card can say', () => {
         nexus_class_recap_sections: [{ recap_id: 'track-ta' }],
       }),
     );
-    expect(map.get(FILE)!.languages).toEqual([{ code: 'ta', label: 'தமிழ்', gates: true }]);
+    expect(map.get(FILE)!.languages).toEqual([
+      { track_id: 'track-ta', code: 'ta', label: 'தமிழ்', gates: true },
+    ]);
     expect(map.get(FILE)!.requires_video).toBe(true);
   });
 

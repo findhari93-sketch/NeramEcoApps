@@ -46,6 +46,9 @@ import type {
   NexusQBPaperMatrix,
   NexusQBPaperMatrixCell,
   NexusQBPaperMatrixRow,
+  NexusQBPaperRecentAttempt,
+  NexusQBPaperSectionProgress,
+  NexusQBPaperSectionRow,
   NexusQBPaperTest,
   NexusStudyFileDTO,
   QBExamType,
@@ -53,17 +56,18 @@ import type {
   QBPaperFaceStates,
   QBShift,
 } from '../../types';
-import { QB_EXAM_TYPE_LABELS } from '../../types';
+import { QB_EXAM_TYPE_LABELS, qbPaperSectionRuns } from '../../types';
 import { buildPaperBlueprint, marksForQuestions } from './paper-marking';
 // Pure module, only depends on ../../types, so no cycle back into this one.
 import { effectiveAttemptScore } from './exam-score';
-import { getPaperSectionBreakdown } from './question-bank';
+import { getPaperSectionBreakdown, getPaperSections } from './question-bank';
 import {
   composeTest,
   createPlacement,
   getComposedTestQuestions,
   getPlacementsByContext,
   getTestMeta,
+  getTestQuestionTotals,
 } from './test-repository';
 import {
   deriveFileStatus,
@@ -91,6 +95,8 @@ const ENROLLMENTS = 'nexus_enrollments';
 const IN_CHUNK = 400;
 /** PostgREST's default page. Anything unbounded has to walk. */
 const PAGE = 1000;
+/** How many recent answers the paper detail activity strip shows. */
+const RECENT_ATTEMPT_LIMIT = 5;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -255,14 +261,15 @@ export async function getPlacedPaperTest(
   const meta = await getTestMeta(placement.test_id, supabase);
   if (!meta || !meta.is_active) return null;
 
-  const questions = await getComposedTestQuestions(placement.test_id, false, supabase);
-  const totalMarks = questions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
+  // Only the count and the marks total are needed here. This used to compose the
+  // whole paper (text, options, answers, explanations) to read .length.
+  const { count, totalMarks } = await getTestQuestionTotals(placement.test_id, supabase);
 
   return {
     test_id: placement.test_id,
     placement_id: placement.id,
     title: meta.title || 'Full paper',
-    question_count: questions.length,
+    question_count: count,
     duration_minutes: meta.duration_minutes ?? null,
     passing_pct:
       placement.passing_pct != null
@@ -974,6 +981,90 @@ function groupCards(cards: NexusQBPaperCard[]): NexusQBPaperGroup[] {
 // ============================================================================
 
 /**
+ * Section runs of a paper with this student's progress through each.
+ *
+ * Runs are contiguous by construction in qbPaperSectionRuns, so walking the
+ * rows in the same order and advancing a run pointer assigns every question to
+ * exactly one run without re-deriving the grouping. Reusing that function keeps
+ * a paper described the same way here, in the staff summary strip and in the
+ * exam scheduler, rather than growing a third opinion about what a section is.
+ */
+export function sectionProgress(
+  rows: NexusQBPaperSectionRow[],
+  attempted: Set<string>,
+): NexusQBPaperSectionProgress[] {
+  const runs = qbPaperSectionRuns(rows);
+  const out: NexusQBPaperSectionProgress[] = runs.map((r) => ({ ...r, attempted: 0 }));
+
+  let runIndex = 0;
+  let seenInRun = 0;
+  for (const row of rows) {
+    // Runs carry their own count, so the pointer advances on count alone and
+    // never needs to re-compare section labels.
+    while (runIndex < out.length && seenInRun >= out[runIndex].count) {
+      runIndex += 1;
+      seenInRun = 0;
+    }
+    if (runIndex >= out.length) break;
+    if (attempted.has(row.id)) out[runIndex].attempted += 1;
+    seenInRun += 1;
+  }
+  return out;
+}
+
+/**
+ * This student's most recent answers on one paper, newest first.
+ *
+ * Scoped to the paper's own question ids rather than the student's whole
+ * history, so it stays a bounded read however long they have been practising.
+ */
+async function loadRecentPaperAttempts(
+  studentId: string,
+  questionIds: string[],
+  sectionRows: NexusQBPaperSectionRow[],
+  client?: TypedSupabaseClient,
+): Promise<NexusQBPaperRecentAttempt[]> {
+  if (questionIds.length === 0) return [];
+  const supabase = client || getSupabaseAdminClient();
+
+  const numberById = new Map(sectionRows.map((r) => [r.id, r.question_number]));
+
+  const rows: NexusQBPaperRecentAttempt[] = [];
+  for (const part of chunk(questionIds, IN_CHUNK)) {
+    const { data, error } = await supabase
+      .from(QB_ATTEMPTS as any)
+      .select('question_id, is_correct, created_at')
+      .eq('student_id', studentId)
+      .in('question_id', part)
+      .order('created_at', { ascending: false })
+      .limit(RECENT_ATTEMPT_LIMIT);
+    if (error) throw error;
+    for (const row of (data || []) as unknown as { question_id: string; is_correct: boolean | null; created_at: string }[]) {
+      rows.push({
+        question_id: row.question_id,
+        question_number: numberById.get(row.question_id) ?? null,
+        is_correct: row.is_correct,
+        created_at: row.created_at,
+      });
+    }
+  }
+
+  // Each chunk is ordered on its own, so the merge has to re-sort before the cut.
+  rows.sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  // One row per question: the strip is "what you did last", not every retry.
+  const seen = new Set<string>();
+  const latest: NexusQBPaperRecentAttempt[] = [];
+  for (const row of rows) {
+    if (seen.has(row.question_id)) continue;
+    seen.add(row.question_id);
+    latest.push(row);
+    if (latest.length >= RECENT_ATTEMPT_LIMIT) break;
+  }
+  return latest;
+}
+
+/**
  * A paper with everything its detail screen needs, in one call.
  *
  * Returns null when the paper is unpublished or gone, so the route can answer
@@ -995,8 +1086,20 @@ export async function getPaperDetailForStudent(
   const paper = await getPaperById(input.paperId, supabase);
   if (!paper || !paper.is_student_visible) return null;
 
-  const questionIdsByPaper = await loadPaperQuestionIds([paper], supabase);
-  const placed = await getPlacedPaperTest(paper.id, supabase);
+  // These four are independent of each other and used to be awaited one at a
+  // time, which is most of why this screen was slow: the endpoint ran roughly
+  // sixteen strictly sequential Supabase round trips, and only the innermost
+  // three overlapped. Only loadStudentProgress genuinely depends on the results
+  // (it needs the study file id and the test id), so it stays behind them.
+  const [questionIdsByPaper, placed, studyFile, sectionRows] = await Promise.all([
+    loadPaperQuestionIds([paper], supabase),
+    getPlacedPaperTest(paper.id, supabase),
+    loadPaperStudyFile(
+      { paper, studentId: input.studentId, studentExams: input.studentExams, studentProgram: input.studentProgram },
+      supabase,
+    ),
+    getPaperSections(paper.id, supabase),
+  ]);
 
   const placementByPaper = new Map<string, { id: string; test_id: string; passing_pct: number | null }>();
   if (placed) {
@@ -1007,11 +1110,6 @@ export async function getPaperDetailForStudent(
     });
   }
 
-  const studyFile = await loadPaperStudyFile(
-    { paper, studentId: input.studentId, studentExams: input.studentExams, studentProgram: input.studentProgram },
-    supabase,
-  );
-
   const progress = await loadStudentProgress(
     input.studentId,
     studyFile ? [studyFile.id] : [],
@@ -1021,6 +1119,13 @@ export async function getPaperDetailForStudent(
 
   const card = toCard(paper, questionIdsByPaper, placementByPaper, progress);
   if (!card) return null;
+
+  const recentAttempts = await loadRecentPaperAttempts(
+    input.studentId,
+    sectionRows.map((r) => r.id),
+    sectionRows,
+    supabase,
+  );
 
   // The link may point at a folder this student cannot see. The card said
   // has_pdf from the column; the screen must say it from what they may open.
@@ -1045,6 +1150,8 @@ export async function getPaperDetailForStudent(
     total_marks: paper.total_marks,
     study_file: studyFile,
     test,
+    sections: sectionProgress(sectionRows, progress.attemptedQuestions),
+    recent_attempts: recentAttempts,
   };
 }
 

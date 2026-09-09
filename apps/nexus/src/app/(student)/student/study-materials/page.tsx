@@ -43,6 +43,7 @@ import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
 import { FileThumb, FileIcon } from '@/components/study-materials/FileThumb';
 import type { NexusStudyBrowseResult, NexusStudyFileDTO, NexusStudySearchResult } from '@neram/database/types';
@@ -55,17 +56,19 @@ function StudyMaterialsBrowser() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const folderId = searchParams.get('folder');
-  const { getToken, user, loading: authLoading } = useNexusAuthContext();
+  const { getToken, user, tokenReady } = useNexusAuthContext();
 
   // Identity stamped over PDFs/images to deter redistribution (name + phone/email).
   const watermark = user
     ? [user.name, user.phone || user.email].filter(Boolean).join('   ·   ')
     : undefined;
 
+  /**
+   * Only for the URLs that cannot carry a header: the PDF/image content stream and the
+   * thumbnails, which are an <img> and pdf.js. Everything else goes through useAuthSWR,
+   * which resolves the token inside its own fetcher.
+   */
   const [token, setToken] = useState<string | null>(null);
-  const [data, setData] = useState<NexusStudyBrowseResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [viewerFile, setViewerFile] = useState<NexusStudyFileDTO | null>(null);
 
@@ -75,32 +78,33 @@ function StudyMaterialsBrowser() {
 
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const t = await getToken();
-      if (!t) return;
-      setToken(t);
-      const res = await fetch(
-        `/api/study-materials/folders${folderId ? `?parent=${folderId}` : ''}`,
-        { headers: { Authorization: `Bearer ${t}` } },
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || 'Could not load this folder');
-      }
-      setData(await res.json());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
-  }, [folderId, getToken]);
+  /**
+   * Wait for MSAL, NOT for /api/auth/me.
+   *
+   * This used to be gated on the auth context's `loading`, which also covers the
+   * /api/auth/me round trip. Nothing here needs that profile, so on a cold device it
+   * put a 1.6s request in front of this one, in series, for no reason. `tokenReady` is
+   * the half that actually matters: can getToken() answer yet.
+   *
+   * A null key is SWR's documented way to skip, so nothing fires until it can.
+   */
+  const folderKey = tokenReady
+    ? `/api/study-materials/folders${folderId ? `?parent=${folderId}` : ''}`
+    : null;
 
+  const { data, error, isLoading, mutate } = useAuthSWR<NexusStudyBrowseResult>(folderKey);
+
+  // The token for the header-less URLs. Deliberately not gated on the profile either.
   useEffect(() => {
-    if (!authLoading) load();
-  }, [authLoading, load]);
+    if (!tokenReady) return;
+    let active = true;
+    getToken().then((t) => {
+      if (active && t) setToken(t);
+    });
+    return () => {
+      active = false;
+    };
+  }, [tokenReady, getToken]);
 
   // Debounced search across all materials.
   useEffect(() => {
@@ -163,8 +167,13 @@ function StudyMaterialsBrowser() {
 
   // Record a file as read (once per open) and clear its unread dot optimistically.
   const markRead = useCallback((fileId: string) => {
-    setData((prev) =>
-      prev ? { ...prev, files: prev.files.map((f) => (f.id === fileId ? { ...f, is_unread: false } : f)) } : prev,
+    // revalidate: false, because the server is being told what we just drew, not asked.
+    mutate(
+      (prev) =>
+        prev
+          ? { ...prev, files: prev.files.map((f) => (f.id === fileId ? { ...f, is_unread: false } : f)) }
+          : prev,
+      { revalidate: false },
     );
     getToken().then((t) =>
       fetch(`/api/study-materials/files/${fileId}/read`, {
@@ -172,7 +181,7 @@ function StudyMaterialsBrowser() {
         headers: { Authorization: `Bearer ${t}` },
       }).catch(() => {}),
     );
-  }, [getToken]);
+  }, [getToken, mutate]);
 
   const openFile = (file: NexusStudyFileDTO) => {
     if (file.kind === 'pdf' || file.kind === 'image') {
@@ -206,9 +215,19 @@ function StudyMaterialsBrowser() {
   const toggleFavorite = async (file: NexusStudyFileDTO, e: React.MouseEvent) => {
     e.stopPropagation();
     const next = !file.is_favorite;
-    setData((prev) =>
-      prev ? { ...prev, files: prev.files.map((f) => (f.id === file.id ? { ...f, is_favorite: next } : f)) } : prev,
-    );
+    const setFavorite = (value: boolean | undefined) =>
+      mutate(
+        (prev) =>
+          prev
+            ? {
+                ...prev,
+                files: prev.files.map((f) => (f.id === file.id ? { ...f, is_favorite: value } : f)),
+              }
+            : prev,
+        { revalidate: false },
+      );
+
+    setFavorite(next);
     try {
       const t = token || (await getToken());
       const res = await fetch(`/api/study-materials/files/${file.id}/favorite`, {
@@ -217,15 +236,11 @@ function StudyMaterialsBrowser() {
       });
       if (res.ok) {
         const d = await res.json();
-        setData((prev) =>
-          prev ? { ...prev, files: prev.files.map((f) => (f.id === file.id ? { ...f, is_favorite: d.favorite } : f)) } : prev,
-        );
+        setFavorite(d.favorite);
       }
     } catch {
       // revert on failure
-      setData((prev) =>
-        prev ? { ...prev, files: prev.files.map((f) => (f.id === file.id ? { ...f, is_favorite: file.is_favorite } : f)) } : prev,
-      );
+      setFavorite(file.is_favorite);
     }
   };
 
@@ -433,7 +448,12 @@ function StudyMaterialsBrowser() {
   );
 
   // ── Loading skeleton ──
-  if (loading) {
+  // Two conditions, both needed. `isLoading` covers the request being in flight, and
+  // `!tokenReady` covers the moment before it: SWR reports isLoading false while the key
+  // is still null, so without it the page would flash "no materials yet" at a student
+  // who simply has not finished signing in. `&& !data` keeps a background revalidation
+  // from replacing the folder they are already reading with a grid of skeletons.
+  if ((isLoading || !tokenReady) && !data) {
     return (
       <Box>
         {header}
@@ -452,15 +472,28 @@ function StudyMaterialsBrowser() {
     );
   }
 
-  if (error) {
+  // Only when there is no usable data. A failed background revalidation should leave the
+  // folder on screen rather than swapping it for an error.
+  if (error && !data) {
+    const denied = error.status === 403;
     return (
       <Box>
         {header}
         <EmptyState
-          title="Could not open this folder"
-          description={error}
+          title={denied ? 'Not available' : 'Could not open this folder'}
+          description={
+            denied
+              ? 'This folder is not part of your course.'
+              : error.message || 'Something went wrong'
+          }
           icon={<FolderOutlinedIcon />}
-          action={<Button variant="outlined" onClick={load}>Try again</Button>}
+          action={
+            denied ? undefined : (
+              <Button variant="outlined" onClick={() => mutate()}>
+                Try again
+              </Button>
+            )
+          }
         />
       </Box>
     );

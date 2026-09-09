@@ -195,6 +195,179 @@ test.describe('Nexus — Catch-up journey', () => {
     expect([403, 404]).toContain(res.status());
   });
 
+  /**
+   * NXS-0141. A student sat the class test, scored 66.67% against an 85% bar and
+   * failed. The fail nulled test_unlocked_at, and a read-time self-heal put it
+   * straight back twenty six seconds later, because "checkpoints complete and
+   * nothing unlocked or passed" is exactly what a fail leaves behind. He came
+   * back to a screen identical to the one before he sat it and reported the
+   * class as completed but still showing incomplete.
+   *
+   * Two contracts came out of that and both are asserted here: the response has
+   * to carry what the student actually did, and reading the state must never
+   * change it.
+   */
+  test('the checklist reports the attempts, not just a pass or fail flag', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'student');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const headers = { Authorization: `Bearer ${auth.testToken}` };
+
+    const sched = await request.get(`${NEXUS}/api/timetable/my-schedule`, { headers });
+    if (sched.status() !== 200) {
+      test.skip(true, 'Timetable unavailable for this account in this environment');
+      return;
+    }
+    const classes = (await sched.json()).classes || [];
+    if (classes.length === 0) {
+      test.skip(true, 'No classes seeded for this student');
+      return;
+    }
+
+    const res = await request.get(`${NEXUS}/api/timetable/${classes[0].id}/catch-up`, { headers });
+    if (res.status() !== 200) {
+      test.skip(true, 'No catch-up item for this class');
+      return;
+    }
+    const body = await res.json();
+    if (!body.test) {
+      test.skip(true, 'No class test built for this class');
+      return;
+    }
+
+    // The fields that let the screen say "you scored 67% on 23 Aug" instead of
+    // rendering the same untouched button it showed before the attempt.
+    expect(body.test).toHaveProperty('attempts');
+    expect(body.test).toHaveProperty('last_score_pct');
+    expect(body.test).toHaveProperty('last_attempt_at');
+    expect(typeof body.test.attempts).toBe('number');
+
+    // An unsat paper reports zero rather than null, so the screen never has to
+    // guess whether "no score" means "never tried" or "we lost it".
+    if (!body.test.passed && body.test.attempts === 0) {
+      expect(body.test.last_score_pct).toBeNull();
+    }
+  });
+
+  test('reading the catch-up state twice does not change it', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'student');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const headers = { Authorization: `Bearer ${auth.testToken}` };
+
+    const sched = await request.get(`${NEXUS}/api/timetable/my-schedule`, { headers });
+    if (sched.status() !== 200) {
+      test.skip(true, 'Timetable unavailable for this account in this environment');
+      return;
+    }
+    const classes = (await sched.json()).classes || [];
+    if (classes.length === 0) {
+      test.skip(true, 'No classes seeded for this student');
+      return;
+    }
+
+    const url = `${NEXUS}/api/timetable/${classes[0].id}/catch-up`;
+    const first = await request.get(url, { headers });
+    if (first.status() !== 200) {
+      test.skip(true, 'No catch-up item for this class');
+      return;
+    }
+    const second = await request.get(url, { headers });
+    expect(second.status()).toBe(200);
+
+    const a = await first.json();
+    const b = await second.json();
+
+    // The whole bug was a GET with a side effect. These four are what the
+    // self-heal used to move between one read and the next.
+    expect(b.test?.unlocked ?? null).toEqual(a.test?.unlocked ?? null);
+    expect(b.test?.passed ?? null).toEqual(a.test?.passed ?? null);
+    expect(b.canComplete).toBe(a.canComplete);
+    expect(b.blockedReason).toBe(a.blockedReason);
+  });
+
+  test('the final check is a short paper, and says so before it is opened', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'student');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const headers = { Authorization: `Bearer ${auth.testToken}` };
+
+    const sched = await request.get(`${NEXUS}/api/timetable/my-schedule`, { headers });
+    if (sched.status() !== 200) {
+      test.skip(true, 'Timetable unavailable for this account in this environment');
+      return;
+    }
+    const classes = (await sched.json()).classes || [];
+    if (classes.length === 0) {
+      test.skip(true, 'No classes seeded for this student');
+      return;
+    }
+
+    const res = await request.get(`${NEXUS}/api/timetable/${classes[0].id}/catch-up`, { headers });
+    if (res.status() !== 200) {
+      test.skip(true, 'No catch-up item for this class');
+      return;
+    }
+    const body = await res.json();
+    if (!body.test || body.test.source === 'class_test' || body.test.question_count == null) {
+      test.skip(true, 'No auto-generated final check on this class');
+      return;
+    }
+
+    // 15 is FINAL_CHECK_QUESTIONS. Production shipped papers of 105 questions
+    // needing 90 right, built by taking the union of every checkpoint's bank
+    // with no ceiling anywhere.
+    expect(body.test.question_count).toBeGreaterThan(0);
+    expect(body.test.question_count).toBeLessThanOrEqual(15);
+    expect(body.test.must_get_right).toBe(
+      Math.ceil((body.test.passing_pct / 100) * body.test.question_count),
+    );
+  });
+
+  test('GET and POST agree about whether the paper is open', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'student');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const headers = { Authorization: `Bearer ${auth.testToken}` };
+
+    const sched = await request.get(`${NEXUS}/api/timetable/my-schedule`, { headers });
+    if (sched.status() !== 200) {
+      test.skip(true, 'Timetable unavailable for this account in this environment');
+      return;
+    }
+    const classes = (await sched.json()).classes || [];
+    if (classes.length === 0) {
+      test.skip(true, 'No classes seeded for this student');
+      return;
+    }
+
+    const url = `${NEXUS}/api/student/catchup-journey/${classes[0].id}/test`;
+    const get = await request.get(url, { headers });
+    const post = await request.post(url, {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: { answers: {} },
+    });
+
+    // These used to disagree: GET handed a passed student the paper and POST
+    // then refused to grade it, so the only way to discover that was to answer
+    // everything first. Both verbs now ask the same question of the same data.
+    const getLocked = get.status() === 403;
+    const postLocked = post.status() === 403;
+    if (get.status() === 404 || post.status() === 404) {
+      test.skip(true, 'No backlog item or no test built for this class');
+      return;
+    }
+    expect(postLocked).toBe(getLocked);
+  });
+
   test('the student backlog endpoint is auth-gated and never 500s when empty', async ({
     request,
   }) => {
