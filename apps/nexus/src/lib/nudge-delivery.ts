@@ -7,13 +7,29 @@
  * one route HTTP-calling another).
  *
  * Delivery per recipient:
+ *   0. A real Teams 1:1 chat message, ONLY when the caller passes `chat` with a
+ *      teacher's delegated token. Opt-in because it is only right for a message
+ *      a person wrote to students they picked; a templated sweep posting into a
+ *      genuine conversation is the clutter tier 1 exists to avoid.
  *   1. A Microsoft Teams Activity-feed ping ("Neram Assistant") when
  *      TEAMS_APP_CATALOG_ID is configured and the student has a Microsoft
  *      identity. This lands in the Teams Activity feed (the bell), NOT in a 1:1
  *      chat, so templated reminders never clutter a real conversation.
  *   2. Always an in-app notification (the persistent record + the Nexus bell).
- *   3. An email backstop, ONLY when the Teams ping did not land, so
- *      Teams-reachable students are never double-messaged.
+ *      Written LAST and unconditionally: a Graph failure must never cost a
+ *      student the durable record.
+ *   3. An email backstop, ONLY when NEITHER Teams tier landed, so a
+ *      Teams-reachable student is never double-messaged.
+ *
+ * And once per batch, not per recipient:
+ *   4. One combined post to the classroom's Teams channel and group chat, when
+ *      the caller passes `group`. The class hears it once, naming the people it
+ *      is about, rather than the teacher repeating themselves.
+ *
+ * THE STANDING CONVENTION: a student-facing message goes to Teams (chat and/or
+ * activity feed), the Nexus bell, and where it concerns a group, one combined
+ * group post. Every one of those goes through THIS function. A feature that
+ * reaches students another way is a bug, not a shortcut.
  *
  * Never throws. A recipient we could not reach comes back with ok: false and
  * channel 'failed', because a partial send must still report honestly rather
@@ -24,15 +40,23 @@
  * catch-up nudges, study-material nudges), and several of those callers pass
  * client-supplied or escalation-derived id lists rather than a roster query. So
  * filtering dormant students at each roster query would leak; filtering here
- * cannot. See filterTrackedStudentIds.
+ * cannot. See filterTrackedStudentIds. A caller who hand-picked the recipients
+ * (a teacher selecting five students on a screen) passes respectDormancy: false,
+ * because "do not chase somebody who paused" is not the same rule as "a teacher
+ * may not write to them". That override is surfaced in the UI, never silent.
  */
 
 import { getSupabaseAdminClient, sendEmail, filterTrackedStudentIds } from '@neram/database';
 import { sendTeamsActivityNotification } from '@neram/auth';
+import { sendTeamsChatMessage } from './teams-messaging';
+import { postGroupMessage, type GroupPostResult } from './teams-group-post';
+import type { TeamsMention } from './teams-class-announcements';
 
 export interface NudgeResult {
   studentId: string;
   name: string | null;
+  /** A real 1:1 Teams chat message. Only attempted when the caller asked for one. */
+  chat: boolean;
   teams: boolean;
   inapp: boolean;
   email: boolean;
@@ -43,10 +67,13 @@ export interface NudgeResult {
 
 export interface NudgeCounts {
   total: number;
+  chat: number;
   teams: number;
   inapp: number;
   email: number;
   failed: number;
+  /** Present only when a group post was asked for. One per batch, not per student. */
+  group?: GroupPostResult;
 }
 
 export interface SendNudgeInput {
@@ -63,6 +90,51 @@ export interface SendNudgeInput {
   eventType: string;
   /** Extra JSONB stored on the notification row, e.g. { source: 'watchlist' }. */
   metadata?: Record<string, unknown>;
+
+  /**
+   * Send a real Teams 1:1 chat message as well, from the signed-in teacher.
+   *
+   * Opt-in, and it needs THEIR delegated bearer: app-only credentials cannot
+   * post a chatMessage at all. Right for a message a person composed to students
+   * they picked, wrong for anything a cron sends. See teams-messaging.ts.
+   */
+  chat?: { delegatedToken: string; html: string };
+
+  /**
+   * One combined post to the classroom's Teams channel and group chat, naming
+   * the recipients. Fired once for the batch, after everyone has been messaged.
+   */
+  group?: { delegatedToken: string; classroomId: string; html: string; peopleLabel?: string };
+
+  /**
+   * Per-recipient placeholder values, keyed by student id, e.g.
+   * `{ 'uuid': { name: 'Asha', score: '42%' } }`. Substituted into the subject,
+   * the body, the html and the chat message as {name} and {score}.
+   */
+  personalise?: Record<string, Record<string, string>>;
+
+  /**
+   * Whether to drop dormant students. Defaults to true, which preserves every
+   * caller that existed before this flag. Pass false only when a person picked
+   * the recipients by hand and can see who they picked.
+   */
+  respectDormancy?: boolean;
+}
+
+/**
+ * Substitute {name}-style placeholders in a message.
+ *
+ * Per-recipient values only. Anything constant across the batch (the test's
+ * name, the pass mark, the due date) is cheaper for the caller to substitute
+ * once before calling. A placeholder with no value is left exactly as written
+ * rather than blanked, so a typo reaches the screen as a visible {nmae} instead
+ * of a hole in a sentence that nobody notices.
+ */
+export function applyTokens(text: string, tokens?: Record<string, string>): string {
+  if (!tokens || !text) return text;
+  return text.replace(/\{(\w+)\}/g, (whole, key: string) =>
+    Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : whole,
+  );
 }
 
 export function escapeHtml(s: string): string {
@@ -124,7 +196,10 @@ export async function sendNudge(
   // incidental: api/timetable/prework-escalations sends PARENT ids through this
   // function and says so in a comment. An inner-join style filter here would
   // silently kill every parent escalation.
-  const { kept: studentIds, dropped } = await filterTrackedStudentIds(requestedIds);
+  const respectDormancy = input.respectDormancy !== false;
+  const { kept: studentIds, dropped } = respectDormancy
+    ? await filterTrackedStudentIds(requestedIds)
+    : { kept: requestedIds, dropped: [] as string[] };
 
   if (dropped.length) {
     console.info(
@@ -137,7 +212,14 @@ export async function sendNudge(
     // because everybody is dormant does not look like a silent success.
     return {
       results: dormantResults(dropped),
-      counts: { total: dropped.length, teams: 0, inapp: 0, email: 0, failed: dropped.length },
+      counts: {
+        total: dropped.length,
+        chat: 0,
+        teams: 0,
+        inapp: 0,
+        email: 0,
+        failed: dropped.length,
+      },
     };
   }
 
@@ -161,6 +243,7 @@ export async function sendNudge(
         return {
           studentId: sid,
           name: null,
+          chat: false,
           teams: false,
           inapp: false,
           email: false,
@@ -169,14 +252,38 @@ export async function sendNudge(
         };
       }
 
+      // Everything this recipient is told, with their own values filled in.
+      // Resolved once, so the chat message, the ping, the bell row and the email
+      // cannot end up saying four slightly different things.
+      const tokens = input.personalise?.[sid];
+      const subjectFor = applyTokens(subject, tokens);
+      const plainFor = applyTokens(plain, tokens);
+      const htmlFor = applyTokens(html, tokens);
+      const teamsTextFor = applyTokens(teamsText, tokens);
+
+      // 0) The real 1:1 chat, when a person asked for one. Addressed by UPN,
+      //    which is what the Graph chat member bind wants: ms_teams_email is the
+      //    UPN we store, and the account email is the usual fallback.
+      let chat = false;
+      if (input.chat) {
+        const upn = teamsBy.get(sid) || u.email || null;
+        if (upn) {
+          chat = await sendTeamsChatMessage(
+            input.chat.delegatedToken,
+            upn,
+            applyTokens(input.chat.html, tokens),
+          );
+        }
+      }
+
       // 1) Teams Activity-feed ping. ms_oid is preferred; the UPN
       //    (ms_teams_email) is a fallback identifier when the oid is missing.
       let teams = false;
       const teamsUserId = u.ms_oid || teamsBy.get(sid) || null;
       if (catalogAppId && teamsUserId) {
         const r = await sendTeamsActivityNotification(teamsUserId, {
-          text: teamsText,
-          preview: plain,
+          text: teamsTextFor,
+          preview: plainFor,
           catalogAppId,
         });
         teams = r.ok;
@@ -191,8 +298,8 @@ export async function sendNudge(
         const { error } = await supabase.from('user_notifications').insert({
           user_id: sid,
           event_type: eventType,
-          title: subject,
-          message: plain,
+          title: subjectFor,
+          message: plainFor,
           metadata,
           is_read: false,
         });
@@ -202,19 +309,27 @@ export async function sendNudge(
         console.error(`${eventType} notification insert threw:`, e);
       }
 
-      // 3) Email backstop, only when the Teams ping did not land.
+      // 3) Email backstop, only when NEITHER Teams tier landed. A student who
+      //    got the chat message and the email would read the same words twice
+      //    from the same teacher, which reads as a mistake rather than as care.
       let email = false;
-      if (!teams && u.email) {
-        const r = await sendEmail({ to: u.email, subject, html }).catch(() => ({ success: false }));
+      if (!teams && !chat && u.email) {
+        const r = await sendEmail({ to: u.email, subject: subjectFor, html: htmlFor }).catch(() => ({
+          success: false,
+        }));
         email = !!r.success;
       }
 
-      const parts = [teams ? 'teams' : '', inapp ? 'inapp' : '', email ? 'email' : ''].filter(
-        Boolean,
-      );
+      const parts = [
+        chat ? 'chat' : '',
+        teams ? 'teams' : '',
+        inapp ? 'inapp' : '',
+        email ? 'email' : '',
+      ].filter(Boolean);
       return {
         studentId: sid,
         name: u.name,
+        chat,
         teams,
         inapp,
         email,
@@ -229,14 +344,39 @@ export async function sendNudge(
   // apart from "we deliberately did not try".
   const allResults = [...results, ...dormantResults(dropped)];
 
+  // 4) The group post, once, after everybody has been reached individually.
+  //    Built from the people actually messaged rather than from the list the
+  //    caller passed in, so the names read out in the class channel cannot claim
+  //    somebody was told who was skipped as dormant or has no account.
+  let group: GroupPostResult | undefined;
+  if (input.group) {
+    const people: TeamsMention[] = studentIds
+      .map((sid) => usersBy.get(sid))
+      .filter((u): u is NonNullable<typeof u> => Boolean(u))
+      .map((u) => ({ oid: u.ms_oid || '', displayName: u.name || 'Student' }));
+    group = await postGroupMessage({
+      token: input.group.delegatedToken,
+      supabase,
+      classroomId: input.group.classroomId,
+      html: input.group.html,
+      people,
+      peopleLabel: input.group.peopleLabel,
+    });
+    if (group.errors.length) {
+      console.error(eventType + ' group post problems: ' + group.errors.join('; '));
+    }
+  }
+
   return {
     results: allResults,
     counts: {
       total: allResults.length,
+      chat: allResults.filter((r) => r.chat).length,
       teams: allResults.filter((r) => r.teams).length,
       inapp: allResults.filter((r) => r.inapp).length,
       email: allResults.filter((r) => r.email).length,
       failed: allResults.filter((r) => !r.ok).length,
+      ...(group ? { group } : {}),
     },
   };
 }
@@ -246,6 +386,7 @@ function dormantResults(studentIds: string[]): NudgeResult[] {
   return studentIds.map((studentId) => ({
     studentId,
     name: null,
+    chat: false,
     teams: false,
     inapp: false,
     email: false,

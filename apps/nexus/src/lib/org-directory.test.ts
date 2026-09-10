@@ -5,7 +5,11 @@ import {
   buildEnrollmentBlocklist,
   isBlockedFromStudentEnrollment,
   selectAddableStudents,
+  foldPastStudents,
+  splitAddableStudents,
   type EntraDirectoryUser,
+  type PastStudentRecord,
+  type StudentEnrollmentRow,
 } from './org-directory';
 
 /**
@@ -245,5 +249,95 @@ describe('selectAddableStudents', () => {
 
   it('returns an empty list rather than throwing on empty input', () => {
     expect(selectAddableStudents([], new Set(), blocklist)).toEqual([]);
+  });
+});
+
+/**
+ * 2026-09-10: 25 students removed as course_completed were never graduated, so
+ * is_alumni stayed false and their enabled Microsoft accounts filled "Not yet in
+ * class" ahead of the genuinely new ones.
+ */
+describe('foldPastStudents', () => {
+  const row = (over: Partial<StudentEnrollmentRow> = {}): StudentEnrollmentRow => ({
+    user_id: 'u1',
+    is_active: false,
+    removed_at: '2026-04-10T00:00:00Z',
+    removal_reason_category: 'course_completed',
+    classroom: { name: 'NATA 2026' },
+    user: {
+      id: 'u1',
+      name: 'Old Student',
+      ms_oid: 'oid-old',
+      email: 'old.student@neram.co.in',
+      personal_email: null,
+      linked_classroom_email: null,
+      academic_year: '2024-25',
+    },
+    ...over,
+  });
+
+  it('keeps someone whose every student enrollment is inactive, with the latest removal', () => {
+    const past = foldPastStudents([
+      row(),
+      row({ classroom: { name: 'JEE B.Arch Session 1' }, removed_at: '2026-06-01T00:00:00Z' }),
+    ]);
+    expect(past).toHaveLength(1);
+    expect(past[0]).toMatchObject({
+      user_id: 'u1',
+      ms_oid: 'oid-old',
+      academic_year: '2024-25',
+      last_classroom: 'JEE B.Arch Session 1',
+      removal_reason: 'course_completed',
+    });
+  });
+
+  it('drops anyone still active in any classroom, in either order', () => {
+    expect(foldPastStudents([row(), row({ is_active: true, removed_at: null })])).toEqual([]);
+    expect(foldPastStudents([row({ is_active: true, removed_at: null }), row()])).toEqual([]);
+  });
+});
+
+describe('splitAddableStudents', () => {
+  const pastRecord: PastStudentRecord = {
+    user_id: 'u1',
+    name: 'Old Student',
+    ms_oid: 'oid-old',
+    email: 'Old_Student@neramclasses.com',
+    personal_email: null,
+    linked_classroom_email: null,
+    academic_year: '2024-25',
+    last_classroom: 'NATA 2026',
+    removal_reason: 'course_completed',
+    removed_at: '2026-04-10T00:00:00Z',
+  };
+
+  it('moves a past student out of the new accounts, matched by oid', () => {
+    const split = splitAddableStudents(
+      [dir({ id: 'oid-old', userPrincipalName: 'x@neramclasses.com', mail: null }), dir({ id: 'oid-new' })],
+      [pastRecord],
+    );
+    expect(split.fresh.map((u) => u.id)).toEqual(['oid-new']);
+    expect(split.past.map((p) => p.user.id)).toEqual(['oid-old']);
+  });
+
+  it('matches by address when the stored oid is missing', () => {
+    const split = splitAddableStudents(
+      [dir({ id: 'oid-other', userPrincipalName: 'old_student@NERAMCLASSES.com', mail: null })],
+      [{ ...pastRecord, ms_oid: null }],
+    );
+    expect(split.past).toHaveLength(1);
+    expect(split.fresh).toEqual([]);
+  });
+
+  it('lists new accounts newest first, undated last', () => {
+    const split = splitAddableStudents(
+      [
+        dir({ id: 'a', displayName: 'Older', createdDateTime: '2026-08-01T10:00:00Z' }),
+        dir({ id: 'b', displayName: 'Newest', createdDateTime: '2026-09-08T10:00:00Z' }),
+        dir({ id: 'c', displayName: 'No date', createdDateTime: null }),
+      ],
+      [],
+    );
+    expect(split.fresh.map((u) => u.displayName)).toEqual(['Newest', 'Older', 'No date']);
   });
 });

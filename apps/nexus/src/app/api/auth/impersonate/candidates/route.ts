@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, getCurrentBatch } from '@neram/database';
+import { escapeIlike, rankPeople } from '@/lib/people-search';
 
 /**
  * GET /api/auth/impersonate/candidates?q={search}
@@ -16,6 +17,11 @@ import { getSupabaseAdminClient, getCurrentBatch } from '@neram/database';
  * Returns: { students: Array<{ id, name, email, avatar_url, ms_oid, classroomName? }> }
  */
 const MAX_RESULTS = 50;
+// A search fetches a wider pool than it shows, because the DB orders by name
+// and the relevance ranking runs after. Ranking only the first 50 rows would
+// let a prefix match be truncated away before it could be promoted. 300 covers
+// the whole impersonatable roster several times over (86 in production today).
+const SEARCH_POOL = 300;
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,13 +37,9 @@ export async function GET(request: NextRequest) {
     }
 
     const rawQuery = request.nextUrl.searchParams.get('q')?.trim() || '';
-    // Escape ILIKE wildcards (_ and %) and backslashes; drop commas so the
-    // PostgREST .or() separator is not broken by a comma in the search term.
-    const safe = rawQuery
-      .replace(/\\/g, '\\\\')
-      .replace(/[%_]/g, '\\$&')
-      .replace(/,/g, ' ');
+    const safe = escapeIlike(rawQuery);
     const orFilter = safe ? `name.ilike.%${safe}%,email.ilike.%${safe}%` : null;
+    const fetchLimit = orFilter ? SEARCH_POOL : MAX_RESULTS;
 
     // Optional exam-year cohort scope (users.academic_year). 'current' resolves to
     // the registry current batch; 'none' = untagged. NOT nexus_enrollments.batch_id.
@@ -51,6 +53,12 @@ export async function GET(request: NextRequest) {
       if (examBatchCode) return q.eq('academic_year', examBatchCode);
       return q;
     };
+
+    // Shape the rows, rank them against the search, then trim to the page size.
+    // Ranking before the slice is the point: an ilike matches "ya" anywhere, so
+    // without this the one student whose name starts with it renders last.
+    const finish = (rows: any[] | null, classroomByStudent?: Map<string, string>) =>
+      rankPeople(mapStudents(rows, classroomByStudent), rawQuery).slice(0, MAX_RESULTS);
 
     const supabase = getSupabaseAdminClient();
 
@@ -96,14 +104,16 @@ export async function GET(request: NextRequest) {
         // Hide synthetic E2E test accounts (e2e-<purpose>@…). Anchored on the dash
         // so the canonical e2etesting* account stays selectable for impersonation.
         .or('email.is.null,email.not.ilike.e2e-*')
+        // The DB order only decides which rows make the pool; relevance decides
+        // what the picker shows. See finish().
         .order('name', { ascending: true })
-        .limit(MAX_RESULTS);
+        .limit(fetchLimit);
 
       query = applyExamBatch(query);
       if (orFilter) query = query.or(orFilter);
 
       const { data: students } = await query;
-      return NextResponse.json({ students: mapStudents(students) });
+      return NextResponse.json({ students: finish(students) });
     }
 
     // ---- Teacher: students in classrooms they teach ----
@@ -161,13 +171,13 @@ export async function GET(request: NextRequest) {
       // so the canonical e2etesting* account stays selectable for impersonation.
       .or('email.is.null,email.not.ilike.e2e-*')
       .order('name', { ascending: true })
-      .limit(MAX_RESULTS);
+      .limit(fetchLimit);
 
     query = applyExamBatch(query);
     if (orFilter) query = query.or(orFilter);
 
     const { data: students } = await query;
-    return NextResponse.json({ students: mapStudents(students, classroomByStudent) });
+    return NextResponse.json({ students: finish(students, classroomByStudent) });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load students';
     console.error('Impersonate candidates error:', message);

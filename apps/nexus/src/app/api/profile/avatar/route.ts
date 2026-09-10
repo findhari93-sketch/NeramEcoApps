@@ -1,22 +1,28 @@
 export const dynamic = 'force-dynamic';
+/** Room for the face check, which an upload waits on for up to FACE_CHECK_WAIT_MS. */
+export const maxDuration = 30;
 
 /**
  * Profile Avatar API for Nexus (Microsoft Auth)
  *
- * POST - Upload avatar to Supabase + sync to Microsoft Teams via Graph API
+ * POST - Upload avatar to Supabase, then run the automatic face check
  * DELETE - Remove current avatar
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { createUserAvatar, getSupabaseAdminClient } from '@neram/database';
+import { runFaceCheckWithin } from '@/lib/photo-face-check';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
+/** How long an upload waits for the face check before answering anyway. */
+const FACE_CHECK_WAIT_MS = 8_000;
+
 /**
  * POST /api/profile/avatar
- * Upload avatar to Supabase storage + push to Microsoft Graph
+ * Upload avatar to Supabase storage, then ask the face check about it
  */
 export async function POST(req: NextRequest) {
   try {
@@ -119,9 +125,25 @@ export async function POST(req: NextRequest) {
         photo_reviewed_by: null,
         photo_reviewed_at: null,
         photo_rejection_reason: null,
+        photo_review_method: null,
+        photo_ai_check: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id);
+
+    // Ask the face check straight away, so a clear photo is approved before the
+    // student has closed the dialog, and their profile says so on the refresh
+    // that follows. Bounded, and unable to fail the upload: a slow or failed
+    // check leaves the photo pending, where the teacher's review page picks it
+    // up (api/photo-review/auto-check).
+    //
+    // Awaited rather than fired and forgotten because Next 14.2 has no after(),
+    // and work left running once the response is sent is not guaranteed to
+    // finish on Vercel. Every write the check makes is guarded, so one that
+    // lands after the ceiling is still correct.
+    const faceCheck = await runFaceCheckWithin(user.id, FACE_CHECK_WAIT_MS, {
+      actorId: user.id,
+    });
 
     // NOTE: the photo is deliberately NOT pushed to Microsoft here.
     //
@@ -133,10 +155,12 @@ export async function POST(req: NextRequest) {
     // tenant-wide identity before any teacher had looked at it.
     //
     // The push now happens app-only when a teacher approves the photo, in
-    // lib/photo-ms-sync.ts.
+    // lib/photo-ms-sync.ts. An automatic approval does not push either: that
+    // waits for a teacher to confirm it.
     return NextResponse.json({
       success: true,
       avatar: { id: avatar.id, url: publicUrl },
+      photoStatus: faceCheck.status === 'approved' ? 'approved' : 'pending',
     });
   } catch (error: any) {
     console.error('Avatar upload error:', error);
@@ -178,6 +202,8 @@ export async function DELETE(req: NextRequest) {
         photo_reviewed_by: null,
         photo_reviewed_at: null,
         photo_rejection_reason: null,
+        photo_review_method: null,
+        photo_ai_check: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id);

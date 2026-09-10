@@ -34,6 +34,8 @@ export interface EntraDirectoryUser {
   accountEnabled?: boolean | null;
   /** 'Member' or 'Guest'. B2B invitees are Guests and are never students. */
   userType?: string | null;
+  /** When the account was created. Lets the newest joiners be listed first. */
+  createdDateTime?: string | null;
 }
 
 /** The `users` columns that decide whether someone may be enrolled as a student. */
@@ -172,4 +174,110 @@ export function selectAddableStudents(
       !enrolledOids.has(user.id) &&
       !isBlockedFromStudentEnrollment(user, blocklist)
   );
+}
+
+/** One nexus_enrollments student row with its user and classroom, as the route selects it. */
+export interface StudentEnrollmentRow {
+  user_id: string;
+  is_active: boolean | null;
+  removed_at?: string | null;
+  removal_reason_category?: string | null;
+  classroom?: { name?: string | null } | null;
+  user?: (EnrollmentBlockRow & { id?: string; name?: string | null; academic_year?: string | null }) | null;
+}
+
+/** Someone who was a student in some classroom and is active in none. */
+export interface PastStudentRecord extends EnrollmentBlockRow {
+  user_id: string;
+  name: string | null;
+  academic_year: string | null;
+  last_classroom: string | null;
+  removal_reason: string | null;
+  removed_at: string | null;
+}
+
+/**
+ * Fold every student enrollment into the people who are active nowhere.
+ *
+ * These left a class (usually "course completed") without going through
+ * Graduate, so is_alumni is still false and the blocklist cannot see them.
+ */
+export function foldPastStudents(rows: StudentEnrollmentRow[]): PastStudentRecord[] {
+  const byUser = new Map<string, { active: boolean; latest: StudentEnrollmentRow }>();
+
+  for (const row of rows || []) {
+    if (!row?.user_id) continue;
+    const seen = byUser.get(row.user_id);
+    if (!seen) {
+      byUser.set(row.user_id, { active: !!row.is_active, latest: row });
+      continue;
+    }
+    seen.active = seen.active || !!row.is_active;
+    if ((row.removed_at || '') > (seen.latest.removed_at || '')) seen.latest = row;
+  }
+
+  const past: PastStudentRecord[] = [];
+  for (const [userId, { active, latest }] of byUser) {
+    if (active) continue;
+    const user = latest.user ?? null;
+    past.push({
+      user_id: userId,
+      name: user?.name ?? null,
+      ms_oid: user?.ms_oid ?? null,
+      email: user?.email ?? null,
+      personal_email: user?.personal_email ?? null,
+      linked_classroom_email: user?.linked_classroom_email ?? null,
+      academic_year: user?.academic_year ?? null,
+      last_classroom: latest.classroom?.name ?? null,
+      removal_reason: latest.removal_reason_category ?? null,
+      removed_at: latest.removed_at ?? null,
+    });
+  }
+  return past;
+}
+
+export interface AddableSplit {
+  fresh: EntraDirectoryUser[];
+  past: Array<{ user: EntraDirectoryUser; record: PastStudentRecord }>;
+}
+
+/**
+ * Separate addable directory accounts into genuinely new ones (newest first)
+ * and past students, matched on ms_oid and on every address we hold, the same
+ * way the blocklist matches, so a null or stale oid still lands correctly.
+ */
+export function splitAddableStudents(
+  addable: EntraDirectoryUser[],
+  pastRecords: PastStudentRecord[]
+): AddableSplit {
+  const byOid = new Map<string, PastStudentRecord>();
+  const byEmail = new Map<string, PastStudentRecord>();
+  for (const record of pastRecords || []) {
+    if (record.ms_oid) byOid.set(record.ms_oid, record);
+    for (const address of [record.email, record.personal_email, record.linked_classroom_email]) {
+      if (address) byEmail.set(String(address).trim().toLowerCase(), record);
+    }
+  }
+
+  const fresh: EntraDirectoryUser[] = [];
+  const past: AddableSplit['past'] = [];
+  for (const user of addable || []) {
+    const upn = String(user.userPrincipalName || '').trim().toLowerCase();
+    const mail = String(user.mail || '').trim().toLowerCase();
+    let record = byOid.get(user.id);
+    if (!record && upn) record = byEmail.get(upn);
+    if (!record && mail) record = byEmail.get(mail);
+    if (record) past.push({ user, record });
+    else fresh.push(user);
+  }
+
+  fresh.sort((a, b) => {
+    const aCreated = a.createdDateTime || '';
+    const bCreated = b.createdDateTime || '';
+    if (aCreated !== bCreated) return bCreated.localeCompare(aCreated);
+    return (a.displayName || '').localeCompare(b.displayName || '');
+  });
+  past.sort((a, b) => (a.user.displayName || '').localeCompare(b.user.displayName || ''));
+
+  return { fresh, past };
 }

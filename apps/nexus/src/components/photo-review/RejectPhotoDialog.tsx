@@ -96,7 +96,7 @@ export default function RejectPhotoDialog({
               value={r}
               control={<Radio size="small" />}
               label={<Typography variant="body2">{r}</Typography>}
-              sx={{ minHeight: 40, ml: 0 }}
+              sx={{ minHeight: 48, ml: 0 }}
             />
           ))}
         </RadioGroup>
@@ -119,7 +119,7 @@ export default function RejectPhotoDialog({
         </Alert>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} disabled={saving} sx={{ minHeight: 44, textTransform: 'none' }}>
+        <Button onClick={onClose} disabled={saving} sx={{ minHeight: 48, textTransform: 'none' }}>
           Cancel
         </Button>
         <Button
@@ -127,7 +127,7 @@ export default function RejectPhotoDialog({
           color="warning"
           onClick={handleConfirm}
           disabled={!canSubmit}
-          sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
+          sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}
         >
           {saving ? 'Sending...' : 'Ask for a new photo'}
         </Button>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { verifyQBAccess } from '@/lib/qb-auth';
+import { verifyQBAccess, verifyQBStaff } from '@/lib/qb-auth';
 import {
   getSupabaseAdminClient,
   getQBQuestionDetail,
@@ -71,23 +71,15 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const msUser = await verifyMsToken(authHeader);
+    // verifyQBStaff, not a hand-rolled ['teacher','admin'] check on user_type.
+    // A manager row is user_type='student' carrying staff_role='manager', so the
+    // old check refused every manager, which is exactly the bug qb-auth.ts was
+    // written to end. It matters more now that the test results screen opens
+    // this editor one tap from the question analysis that flagged the question.
+    const auth = await verifyQBStaff(request.headers.get('Authorization'));
+    if (!auth.ok) return auth.response;
+    const caller = auth.caller;
     const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-
-    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
     const { id } = await params;
     const body = await request.json();

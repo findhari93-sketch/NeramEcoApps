@@ -3,6 +3,7 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, recordUserHistory } from '@neram/database';
 import { getNexusMemberUserIds } from '@/lib/nexus-members';
 import { canUser, STAFF_ROLES, type StaffRole } from '@/lib/staff-capabilities';
+import { escapeIlike, rankPeople } from '@/lib/people-search';
 
 /**
  * GET /api/admin/users?q={query}&role={role}&page={page}&limit={limit}
@@ -11,6 +12,10 @@ import { canUser, STAFF_ROLES, type StaffRole } from '@/lib/staff-capabilities';
  * search and role filter. Admin-only. Scoped via getNexusMemberUserIds so leads
  * and Tools-app signups from the shared users table never appear here.
  */
+// A search ranks the whole match set in memory, so it fetches the members in one
+// go rather than a page at a time. Bounded by getNexusMemberUserIds either way.
+const SEARCH_POOL = 500;
+
 export async function GET(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
@@ -51,8 +56,28 @@ export async function GET(request: NextRequest) {
       query = query.eq('user_type', role);
     }
 
+    // Searching and browsing page differently on purpose. Browsing keeps the
+    // newest-first window the DB already produces. Searching has to rank the whole
+    // match set before paging, because ranking one page at a time would order page
+    // 2 independently of page 1, and an ilike that matches the term anywhere would
+    // otherwise bury the person whose name actually starts with it.
     if (q && q.length >= 2) {
-      query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%`);
+      const safe = escapeIlike(q);
+      const { data: matches, error: searchError } = await query
+        .or(`name.ilike.%${safe}%,email.ilike.%${safe}%`)
+        .order('created_at', { ascending: false })
+        .limit(SEARCH_POOL);
+
+      if (searchError) throw searchError;
+
+      const ranked = rankPeople(matches || [], q);
+      return NextResponse.json({
+        users: ranked.slice(offset, offset + limit),
+        total: ranked.length,
+        page,
+        limit,
+        totalPages: Math.ceil(ranked.length / limit),
+      });
     }
 
     const { data: users, error, count } = await query

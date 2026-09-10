@@ -54,6 +54,7 @@ import {
 } from '@/lib/student-stage';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { usePresence } from '@/hooks/usePresence';
+import { rankPeople, suggestPeople } from '@/lib/people-search';
 
 const SEGMENTS: StudentSegment[] = [
   'exam_this_year',
@@ -301,30 +302,30 @@ export default function TeacherStudents() {
     if (fallback && fallback !== segment) handleSegmentChange(fallback);
   }, [loading, counts.total, segmentTotals, segment, handleSegmentChange, mismatchOnly]);
 
-  // Segment first, then the free-text search, so the count on the active pill
-  // and the length of the list agree except when the user is searching.
+  const trimmedQuery = searchQuery.trim();
+
+  // A typed name searches the WHOLE roster, ranked by closeness. Finding one
+  // person must not depend on which category pill is active, and a respelling
+  // ("disha" for "Dhisha") must still land. The mismatch review keeps narrowing
+  // first: a contradictory pair can occur at any stage, and it is a review mode
+  // the teacher entered on purpose.
   const visibleStudents = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return students.filter((s) => {
-      // The mismatch review deliberately overrides the segment: a contradictory
-      // pair can occur at any stage, so narrowing within a segment would show only
-      // some of them and quietly imply the rest were fine.
-      if (mismatchOnly) {
-        if (s.pair_status !== 'mismatch') return false;
-      } else {
-        const inSegment = matchesSegment(
-          { stage: stageKeyOf(s.study_stage), dormant: s.participation_status === 'dormant' },
-          segment,
-        );
-        if (!inSegment) return false;
-      }
-      if (!query) return true;
-      return (
-        s.name.toLowerCase().includes(query) ||
-        (!!s.email && s.email.toLowerCase().includes(query))
+    if (trimmedQuery && !mismatchOnly) return rankPeople(students, trimmedQuery);
+    const base = students.filter((s) => {
+      if (mismatchOnly) return s.pair_status === 'mismatch';
+      return matchesSegment(
+        { stage: stageKeyOf(s.study_stage), dormant: s.participation_status === 'dormant' },
+        segment,
       );
     });
-  }, [students, segment, searchQuery, mismatchOnly]);
+    return trimmedQuery ? rankPeople(base, trimmedQuery) : base;
+  }, [students, segment, trimmedQuery, mismatchOnly]);
+
+  // Offered only when the search found nobody, so a near miss is one tap away.
+  const searchSuggestions = useMemo(
+    () => (trimmedQuery && visibleStudents.length === 0 ? suggestPeople(students, trimmedQuery) : []),
+    [students, trimmedQuery, visibleStudents.length],
+  );
 
   const awaitingCount = visibleStudents.filter((s) => s.awaiting_microsoft).length;
 
@@ -675,6 +676,11 @@ export default function TeacherStudents() {
           sx={{ mb: 1.5, '& .MuiOutlinedInput-root': { borderRadius: 2.5, bgcolor: 'background.paper' } }}
           inputProps={{ style: { minHeight: 24 } }}
         />
+        {trimmedQuery && !mismatchOnly && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: -1, mb: 1 }}>
+            Searching every student in this classroom, in all categories.
+          </Typography>
+        )}
 
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Exam-year cohort filter (users.academic_year) */}
@@ -818,21 +824,44 @@ export default function TeacherStudents() {
         <Paper variant="outlined" sx={{ p: 5, textAlign: 'center', borderRadius: 2, borderStyle: 'dashed' }}>
           <PeopleOutlinedIcon sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
           <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            {searchQuery
-              ? 'No students match your search'
+            {trimmedQuery
+              ? `No student matches "${trimmedQuery}"`
               : segment === 'dormant'
                 ? 'Nobody is marked dormant'
                 : segment === 'unset'
                   ? 'Every student has a study stage'
                   : `No students in ${SEGMENT_LABEL[segment]}`}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {searchQuery
-              ? 'Try a different name or email.'
-              : segment === 'exam_this_year'
-                ? 'Break Year and Class 12 students appear here once their stage is set.'
-                : 'Try another category, or All active to see everyone.'}
-          </Typography>
+          {trimmedQuery && searchSuggestions.length > 0 ? (
+            <Box
+              sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'center', alignItems: 'center' }}
+            >
+              <Typography variant="body2" color="text.secondary">
+                Did you mean
+              </Typography>
+              {searchSuggestions.map((suggestion) => (
+                <Chip
+                  key={suggestion.id}
+                  label={suggestion.name}
+                  onClick={() => setSearchQuery(suggestion.name)}
+                  sx={{ height: 'auto', minHeight: 48, px: 1, fontWeight: 600, borderRadius: 6 }}
+                />
+              ))}
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {trimmedQuery
+                ? 'Try part of the first name, or the email.'
+                : segment === 'exam_this_year'
+                  ? 'Break Year and Class 12 students appear here once their stage is set.'
+                  : 'Try another category, or All active to see everyone.'}
+            </Typography>
+          )}
+          {trimmedQuery && examBatchFilter !== 'all' && (
+            <Button onClick={() => setExamBatchFilter('all')} sx={{ mt: 1.5, minHeight: 48, fontWeight: 700 }}>
+              Search every exam year
+            </Button>
+          )}
         </Paper>
       ) : (
         <Box

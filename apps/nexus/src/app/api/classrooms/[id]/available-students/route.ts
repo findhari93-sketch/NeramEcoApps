@@ -4,7 +4,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getAppOnlyToken } from '@neram/auth';
-import { buildEnrollmentBlocklist, selectAddableStudents } from '@/lib/org-directory';
+import {
+  buildEnrollmentBlocklist,
+  foldPastStudents,
+  selectAddableStudents,
+  splitAddableStudents,
+  type EntraDirectoryUser,
+} from '@/lib/org-directory';
 
 /**
  * GET /api/classrooms/[id]/available-students
@@ -21,7 +27,8 @@ import { buildEnrollmentBlocklist, selectAddableStudents } from '@/lib/org-direc
  * route used to do, and it hid real students whose names happened to contain a
  * staff member's name. See lib/org-directory.ts for the full history.
  *
- * Teacher/admin only. Returns { students: [{ ms_oid, name, email, inDatabase }] }.
+ * Teacher/admin only. Returns { students, past, total, pastTotal }: new accounts
+ * newest first, and past students (active in no classroom) kept apart.
  * If app-only Graph credentials are unavailable, returns 502 so the UI can fall
  * back to the manual "Add Student" search dialog.
  */
@@ -59,9 +66,10 @@ export async function GET(
 
     // 1. Page all Entra users. userType is load-bearing: B2B guests carry a UPN on
     // our own tenant domain, so without it they read as insiders. See org-directory.
+    // createdDateTime orders the new accounts so the newest joiners read first.
     let allAdUsers: any[] = [];
     let nextLink: string | null =
-      'https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,accountEnabled,userType&$top=100';
+      'https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,accountEnabled,userType,createdDateTime&$top=100';
 
     while (nextLink) {
       const controller = new AbortController();
@@ -107,7 +115,20 @@ export async function GET(
     const blocklist = buildEnrollmentBlocklist(blockedUsers || []);
     const addable = selectAddableStudents(allAdUsers, enrolledOids as Set<string>, blocklist);
 
-    // 4. Flag which of them already have a local users row (informational only).
+    // 4. Past students: people who were students in some classroom and are active
+    // in none. They left without being graduated, so the alumni block above misses
+    // them, and their still-enabled accounts used to crowd out the new ones.
+    const { data: studentEnrollmentRows, error: pastError } = await supabase
+      .from('nexus_enrollments')
+      .select(
+        'user_id, is_active, removed_at, removal_reason_category, classroom:nexus_classrooms(name), user:users!nexus_enrollments_user_id_fkey!inner(id, name, ms_oid, email, personal_email, linked_classroom_email, academic_year)'
+      )
+      .eq('role', 'student');
+    if (pastError) throw pastError;
+
+    const { fresh, past } = splitAddableStudents(addable, foldPastStudents(studentEnrollmentRows || []));
+
+    // 5. Flag which of them already have a local users row (informational only).
     const addableOids = addable.map((u) => u.id);
     const { data: existingUsers } = await supabase
       .from('users')
@@ -115,16 +136,29 @@ export async function GET(
       .in('ms_oid', addableOids.length > 0 ? addableOids : ['__none__']);
     const existingOids = new Set((existingUsers || []).map((u: any) => u.ms_oid));
 
-    const students = addable
-      .map((u) => ({
-        ms_oid: u.id,
-        name: u.displayName || u.userPrincipalName?.split('@')[0] || 'Unknown',
-        email: u.mail || u.userPrincipalName || '',
-        inDatabase: existingOids.has(u.id),
-      }))
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const toDto = (u: EntraDirectoryUser) => ({
+      ms_oid: u.id,
+      name: u.displayName || u.userPrincipalName?.split('@')[0] || 'Unknown',
+      email: u.mail || u.userPrincipalName || '',
+      inDatabase: existingOids.has(u.id),
+      createdAt: u.createdDateTime ?? null,
+    });
 
-    return NextResponse.json({ students, total: students.length });
+    const students = fresh.map(toDto);
+    const pastStudents = past.map(({ user, record }) => ({
+      ...toDto(user),
+      academicYear: record.academic_year,
+      lastClassroom: record.last_classroom,
+      removalReason: record.removal_reason,
+      removedAt: record.removed_at,
+    }));
+
+    return NextResponse.json({
+      students,
+      past: pastStudents,
+      total: students.length,
+      pastTotal: pastStudents.length,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load available students';
     // verifyMsToken throws on a missing/invalid token — surface that as 401.

@@ -95,6 +95,10 @@ export async function POST(request: NextRequest) {
         photo_reviewed_by: staff.id,
         photo_rejection_reason: null,
         photo_avatar_id: avatar.id,
+        // A teacher chose this photo, so it belongs on Approved, never on the
+        // Auto-approved tab, and it has nothing for the face check to do.
+        photo_review_method: 'teacher',
+        photo_ai_check: null,
         updated_at: now,
       })
       .eq('id', studentId);

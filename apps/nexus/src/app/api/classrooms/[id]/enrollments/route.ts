@@ -4,6 +4,8 @@ import { getSupabaseAdminClient, createUserNotification, removeEnrollments } fro
 import { canUser } from '@/lib/staff-capabilities';
 import { addMemberToTeam } from '@/lib/teams-sync';
 import type { RemovalReasonCategory } from '@neram/database';
+import { resolveDirectoryUser } from '@/lib/directory-enrollment';
+import { createSupabaseDirectoryEnrollStore } from '@/lib/directory-enrollment-store';
 
 /**
  * GET /api/classrooms/[id]/enrollments?batch={batchId}&role={teacher|student}
@@ -116,35 +118,31 @@ export async function POST(
       // Existing user flow
       resolvedUserId = body.user_id;
     } else if (body.ms_oid && body.name && body.email) {
-      // Directory user flow — find or create
-      const { data: existing } = await supabase
-        .from('users')
-        .select('id')
-        .eq('ms_oid', body.ms_oid)
-        .single();
+      // A directory account. Never insert a second row for someone already
+      // enrolled without a Microsoft account: link, reconcile, or stop and ask.
+      // See lib/directory-enrollment.ts.
+      const resolved = await resolveDirectoryUser(createSupabaseDirectoryEnrollStore(supabase), {
+        classroomId: id,
+        msOid: body.ms_oid,
+        upn: body.email,
+        name: body.name,
+        role,
+        userType: body.user_type || 'student',
+        linkUserId: typeof body.link_user_id === 'string' ? body.link_user_id : null,
+        confirmNew: body.confirm_new === true,
+        actorId: caller.id,
+      });
 
-      if (existing) {
-        resolvedUserId = existing.id;
-      } else {
-        // Auto-create user from directory info
-        const { data: newUser, error: createError } = await supabase
-          .from('users')
-          .insert({
-            name: body.name,
-            email: body.email,
-            ms_oid: body.ms_oid,
-            user_type: body.user_type || 'student',
-            status: 'active',
-            email_verified: true,
-            phone_verified: false,
-            preferred_language: 'en',
-          })
-          .select('id')
-          .single();
-
-        if (createError) throw createError;
-        resolvedUserId = newUser.id;
+      if (resolved.kind === 'possible_duplicate') {
+        return NextResponse.json(
+          { error: 'possible_duplicate', candidates: resolved.candidates },
+          { status: 409 },
+        );
       }
+      if (resolved.kind === 'conflict') {
+        return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+      }
+      resolvedUserId = resolved.userId;
     } else {
       return NextResponse.json(
         { error: 'Either user_id or (ms_oid + name + email) is required' },

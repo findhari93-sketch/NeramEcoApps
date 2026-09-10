@@ -51,16 +51,30 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
       const token = await getToken();
       if (!token) return;
 
+      // cache: 'no-store' as defence in depth. The route already answers
+      // no-store, and it is the only consumer, but this fetch is what the bug
+      // actually went through: refreshBadges() is called the instant a teacher
+      // approves a photo, and with no cache option the browser happily replayed
+      // a body it had held for under 30 seconds and re-set the stale number.
+      // Belt and braces against a future intermediary putting the trap back.
       const res = await fetch('/api/nav-badges', {
+        cache: 'no-store',
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.ok) {
         const data = await res.json();
         setCounts(data.badges || {});
+        return;
       }
-    } catch {
-      // Silently fail — badges are non-critical
+      // Not fatal, the next poll retries. But log it: a non-OK response leaves
+      // the previous counts on screen looking authoritative, and a badge that
+      // is quietly frozen is exactly the failure this provider already had.
+      console.warn('nav-badges: refusing to update counts, server said', res.status);
+    } catch (err) {
+      // Badges are non-critical, so this must not throw. It must not be silent
+      // either: the counts on screen are now of unknown age.
+      console.warn('nav-badges: could not refresh counts', err);
     }
   }, [getToken]);
 

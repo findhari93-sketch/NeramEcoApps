@@ -178,6 +178,12 @@ export default function TestDetailPage() {
   );
   /** Which run the Results tab opens on, set by "See results" in the runs list. */
   const [resultsRunId, setResultsRunId] = useState(searchParams?.get('placement_id') || '');
+  /**
+   * Which group of students the Results tab opens on, e.g. `&filter=below_pass`.
+   * Read once for the same reason as the two above: the panel owns it after
+   * first render and writes its own changes back to the URL.
+   */
+  const [resultsFilter] = useState(searchParams?.get('filter') || '');
   const [duplicating, setDuplicating] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [examOpen, setExamOpen] = useState(false);
@@ -596,6 +602,8 @@ export default function TestDetailPage() {
           authFetch={authFetch}
           getToken={getToken}
           initialRunId={resultsRunId}
+          initialFilter={resultsFilter}
+          testTitle={test.title}
         />
       )}
 

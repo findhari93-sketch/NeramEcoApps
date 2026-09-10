@@ -50,7 +50,15 @@ export function decideClassTestReminders(input: {
   closesAt: string | null;
   /** Already chased with this template inside the cooldown. */
   recentlyRemindedByTemplate: Record<string, Set<string>>;
-  /** Reminders each student has had about this run, all time. */
+  /**
+   * Reminders each student has had about this run, all time.
+   *
+   * MUST be counted for this sweep's own templates only, via
+   * countClassTestRemindersByTemplate. The results screen writes
+   * 'results_message' rows into the same table, and counting those here would
+   * let one hand-written message from a teacher exhaust the automated cap and
+   * silently switch the sweep off for that student.
+   */
   sentCounts: Map<string, number>;
   now: number;
 }): SweepDecision[] {

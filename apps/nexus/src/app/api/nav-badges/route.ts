@@ -54,15 +54,24 @@ export async function GET(request: NextRequest) {
           .select('id', { count: 'exact', head: true })
           .eq('status', 'submitted'),
 
-        // Profile photos waiting for a human decision.
+        // Profile photos waiting for a human decision, in the classrooms THIS
+        // person can open.
         //
-        // This MUST match the population /teacher/photo-review shows, which is a
-        // classroom roster. Counting users.photo_status alone sweeps in ~1,350
-        // marketing leads whose avatar came from Google sign-in and who never open
-        // Nexus, which is how the badge came to read "99+" over an empty queue.
-        // The RPC does the enrollment join once, server side, counting distinct
-        // students so a two-classroom student is one piece of work.
-        supabase.rpc('count_pending_photo_reviews'),
+        // The viewer argument is the whole point. The queue at
+        // /teacher/photo-review loads one classroom, picked from a dropdown that
+        // only offers the signed-in person's own classrooms (/api/auth/me ->
+        // classrooms). A tenant-wide count over that is a badge the person
+        // looking at it cannot clear: on staging it read 1 for a teacher whose
+        // own roster was empty, because the pending student sat in a classroom
+        // he is not enrolled in. The RPC now takes p_user_id and restricts to
+        // the same set auth/me hands the dropdown, so the number is always one
+        // this person can drive to zero.
+        //
+        // Counting distinct students, so a two-classroom student is one piece
+        // of work. Under impersonation verifyMsToken resolves `oid` to the
+        // target, so an admin viewing as a teacher gets that teacher's badge,
+        // matching the queue in front of them.
+        supabase.rpc('count_pending_photo_reviews', { p_user_id: user.id }),
 
         // Catch-up: freshly explained absences, plus anything still open from a
         // class that has already been taught again.
@@ -119,13 +128,18 @@ export async function GET(request: NextRequest) {
       badges.catchup = catchup.count ?? 0;
     }
 
-    // Badge counts are a nudge, not a ledger, so a slightly old number is fine and a
-    // repeated request within the polling interval is not. `private` because this is
-    // one person's counts and must never be held by a shared proxy.
-    return NextResponse.json(
-      { badges },
-      { headers: { 'Cache-Control': 'private, max-age=30' } },
-    );
+    // no-store, and deliberately so after this header caused a bug.
+    //
+    // It used to be `private, max-age=30`, which never saved a single poll:
+    // NavBadgeProvider polls every 60 seconds and 60 > 30, so every scheduled
+    // request revalidated anyway. The only requests it did eliminate were the
+    // two that must never be eliminated, the explicit refreshBadges() fired the
+    // instant a teacher approves a photo, and the catch-up fetch when a hidden
+    // tab comes back inside 30 seconds. So it bought nothing and paid for it
+    // with a badge that re-set itself to the stale number the moment it was
+    // cleared. `private` was never strong enough either: what served the stale
+    // body was the browser's own cache, which honours private perfectly well.
+    return NextResponse.json({ badges }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load badges';
     return NextResponse.json({ error: message }, { status: 401 });

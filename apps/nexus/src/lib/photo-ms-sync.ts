@@ -360,6 +360,11 @@ export async function pullMicrosoftPhoto(userId: string): Promise<MsPullResult> 
         photo_reviewed_by: null,
         photo_reviewed_at: null,
         photo_rejection_reason: null,
+        // Hygiene only. The face check keys its verdict on the photo URL, so
+        // a new photo reads as unchecked either way; the review page's
+        // auto-check picks it up.
+        photo_review_method: null,
+        photo_ai_check: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId);

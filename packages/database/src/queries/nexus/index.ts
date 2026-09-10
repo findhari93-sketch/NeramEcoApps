@@ -32,6 +32,8 @@ export * from './exam-drawings';
 export * from './test-folders';
 export * from './test-analytics';
 export * from './test-access';
+export * from './test-regrade';
+export * from './qb-question-edits';
 export * from './classroom-access';
 export * from './settings';
 export * from './modules';

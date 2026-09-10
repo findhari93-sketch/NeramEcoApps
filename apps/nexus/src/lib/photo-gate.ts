@@ -1,9 +1,11 @@
 /**
  * Mandatory face-visible profile photo: the gate decision, in one pure function.
  *
- * Every Nexus student must have a clear photo of their own face, approved by a
- * teacher. There is no AI check anywhere in this flow, a human looks at every
- * photo. A student without one gets a full-screen blocker whose only content is
+ * Every Nexus student must have a clear photo of their own face, approved. A
+ * clear photo of one face is approved automatically by the face check
+ * (lib/photo-face-check.ts), and a teacher decides everything else; only a
+ * teacher ever rejects. This gate treats both kinds of approval the same.
+ * A student without one gets a full-screen blocker whose only content is
  * the camera/upload widget and Sign Out, so they can clear it themselves in
  * under a minute.
  *

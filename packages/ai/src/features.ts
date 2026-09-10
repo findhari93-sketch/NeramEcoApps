@@ -354,6 +354,33 @@ export const AI_FEATURES = [
     dailyCallCap: 200,
   },
 
+  // ── Nexus: student profile photos ────────────────────────────────────────
+  /**
+   * Looks at a new profile photo and reports whether it shows one person's
+   * face, clearly. A clear yes approves the photo without a teacher; anything
+   * else leaves it in the teacher's Needs review queue. It never rejects.
+   *
+   * 'document' tier because the input is an image, which is what that cascade
+   * exists for. One small photo per call, so well under a cent each.
+   *
+   * No manual mode: the manual path is the review queue teachers already use,
+   * and switching this Off simply sends every photo back to it.
+   *
+   * Student faces, so never the free key.
+   */
+  {
+    id: 'nexus.photo-face-check',
+    label: 'Profile photo face check',
+    app: 'nexus',
+    group: 'Student photos',
+    trigger: 'student',
+    tier: 'document',
+    defaultMode: 'auto',
+    supportsManual: false,
+    allowFreeKey: false,
+    dailyCallCap: 150,
+  },
+
   // ── Nexus: drawing evaluation ────────────────────────────────────────────
   /**
    * Drafts a per-criterion evaluation of a student's drawing by comparing it

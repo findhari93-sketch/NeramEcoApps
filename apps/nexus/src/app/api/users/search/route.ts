@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { escapeIlike, rankPeople } from '@/lib/people-search';
 
 /**
  * GET /api/users/search?q={query}&exclude_classroom={classroomId}&include_directory=true
@@ -9,6 +10,9 @@ import { getSupabaseAdminClient } from '@neram/database';
  * When include_directory=true, also searches the Microsoft Entra ID organization directory.
  * Optionally exclude users already enrolled in a classroom.
  */
+const MAX_RESULTS = 20;
+const SEARCH_POOL = 200;
+
 export async function GET(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
@@ -33,15 +37,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ users: [] });
     }
 
-    // Search local users — only org users (those with ms_oid)
+    // Search local users — only org users (those with ms_oid).
+    // The pool is deliberately wider than MAX_RESULTS: the ilike matches the term
+    // anywhere, and relevance is applied at the end, so ranking only the first 20
+    // name-ordered rows could truncate a prefix match before promoting it.
+    const safe = escapeIlike(q);
     const { data: localUsers, error } = await supabase
       .from('users')
       .select('id, name, email, avatar_url, ms_oid, user_type')
       .eq('status', 'active')
       .not('ms_oid', 'is', null)
-      .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
+      .or(`name.ilike.%${safe}%,email.ilike.%${safe}%`)
       .order('name')
-      .limit(20);
+      .limit(SEARCH_POOL);
 
     if (error) throw error;
 
@@ -106,7 +114,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ users: results });
+    // Rank last, so local and directory rows interleave by how well they match
+    // rather than always local-then-directory. A local row still wins a tie,
+    // since it carries an avatar, a user_type and a real users row.
+    const ranked = rankPeople(results, q, (a, b) =>
+      (a.source === 'local' ? 0 : 1) - (b.source === 'local' ? 0 : 1)
+    ).slice(0, MAX_RESULTS);
+
+    return NextResponse.json({ users: ranked });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Search failed';
     console.error('User search error:', message);

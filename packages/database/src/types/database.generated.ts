@@ -16276,7 +16276,7 @@ export type Database = {
         Args: { source_year: number; target_year: number }
         Returns: number
       }
-      count_pending_photo_reviews: { Args: Record<string, never>; Returns: number }
+      count_pending_photo_reviews: { Args: { p_user_id: string }; Returns: number }
       create_lead_profile: { Args: { payload: Json }; Returns: Json }
       ensure_qb_stats: { Args: { p_user_id: string }; Returns: undefined }
       get_allotment_college_stats: {

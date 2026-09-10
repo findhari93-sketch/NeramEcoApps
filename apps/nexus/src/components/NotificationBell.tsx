@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -18,6 +18,7 @@ import {
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useUserNotifications } from '@neram/ui';
+import { pickSeenNotifications, SEEN_DWELL_MS } from '@/lib/notification-seen';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
@@ -43,6 +44,11 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   study_material_nudge: '#0ea5e9',
   catchup_digest: '#7c3aed',
   catchup_behind_pace: '#ed6c02',
+  test_result_message: '#0ea5e9',
+  test_reopened: '#2E7D32',
+  // Amber, deliberately louder than the other two: a score that moved is the
+  // one notification a student must not scroll past.
+  test_regraded: '#ed6c02',
 };
 
 function getNavigationUrl(
@@ -79,6 +85,25 @@ function getNavigationUrl(
       return assignmentId
         ? `/${nexusRole || 'student'}/assignments/${assignmentId}`
         : `/${nexusRole || 'student'}/assignments`;
+    }
+    // The three raised by the test results screen. All land on the test itself:
+    // a message about a paper, a reopened window and a corrected score are only
+    // actionable next to the paper they are about. Without these cases the row
+    // renders and then does nothing when tapped, which is how class_test_due sat
+    // inert for a whole release.
+    case 'test_result_message':
+    case 'test_reopened':
+    case 'test_regraded': {
+      const testId = notification.metadata?.test_id as string | undefined;
+      const placementId = notification.metadata?.placement_id as string | undefined;
+      if (!testId) return `/${nexusRole || 'student'}/tests`;
+      const run = placementId ? `&placement_id=${encodeURIComponent(placementId)}` : '';
+      // A teacher lands on the results they were working from; a student lands
+      // in the paper itself, because being told to redo a test and then having
+      // to find it is how a reopened window goes unused.
+      return nexusRole === 'teacher'
+        ? `/teacher/tests/${testId}?tab=results${run}`
+        : `/student/tests/take?test_id=${testId}${run}`;
     }
     // Study-material reminder → open the study materials space.
     case 'study_material_nudge':
@@ -182,6 +207,37 @@ export default function NotificationBell() {
   };
 
   const open = Boolean(anchorEl);
+
+  // Mark what the panel actually showed as read.
+  //
+  // handleOpen only fetched. Rows were marked read by tapping one, or by "Mark
+  // all as read", so a purely informational row ("Issue Confirmed Resolved") had
+  // no reason to ever be tapped and sat unread forever. The bell then advertised
+  // news the user had plainly already read, and no amount of looking cleared it.
+  //
+  // Read from a ref and keyed on open/loading rather than on `notifications`:
+  // markAsRead flips is_read in that array, which would otherwise restart this
+  // timer on its own result.
+  const notificationsRef = useRef(notifications);
+  notificationsRef.current = notifications;
+  const markedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!open || loading) return;
+    const timer = setTimeout(() => {
+      const seen = pickSeenNotifications(notificationsRef.current, markedRef.current);
+      if (seen.length === 0) return;
+      seen.forEach((id) => markedRef.current.add(id));
+      // One POST per row on purpose. /api/notifications/mark-read takes a single
+      // id, and all four apps share this hook: a `notificationIds` array would
+      // be an unrecognised body in the other three and they would read it as
+      // "mark ALL as read". Bounded by the page size, and markAsRead is what
+      // decrements the shared count across every mounted bell. If a write fails,
+      // the poller re-emits the true server count and the badge honestly returns.
+      void Promise.all(seen.map((id) => markAsRead(id)));
+    }, SEEN_DWELL_MS);
+    return () => clearTimeout(timer);
+  }, [open, loading, markAsRead]);
 
   return (
     <>

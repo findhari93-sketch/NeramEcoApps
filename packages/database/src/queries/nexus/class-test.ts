@@ -638,6 +638,34 @@ export async function loadRecentClassTestReminders(
 }
 
 /** How many reminders each student has had about this placement, all time. */
+/**
+ * The same count, narrowed to named templates.
+ *
+ * The automated sweep caps how many times it may chase one student about one
+ * run. Since the results screen started writing its own rows into this table
+ * (template 'results_message'), an all-template count would let a teacher's
+ * hand-written message burn the sweep's budget: write to five students twice
+ * and the sweep silently stops reminding them at all. A cap must only ever
+ * count the thing it caps.
+ */
+export async function countClassTestRemindersByTemplate(
+  placementId: string,
+  templates: string[],
+  client?: TypedSupabaseClient,
+): Promise<Map<string, number>> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const { data } = await supabase
+    .from(REMINDERS)
+    .select('student_id')
+    .eq('placement_id', placementId)
+    .in('template', templates);
+  const out = new Map<string, number>();
+  for (const r of (data || []) as any[]) {
+    out.set(r.student_id, (out.get(r.student_id) || 0) + 1);
+  }
+  return out;
+}
+
 export async function countClassTestReminders(
   placementId: string,
   client?: TypedSupabaseClient,

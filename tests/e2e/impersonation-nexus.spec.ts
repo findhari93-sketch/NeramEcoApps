@@ -101,6 +101,30 @@ test.describe('Nexus — View as Student (impersonation)', () => {
     }
   });
 
+  test('candidates endpoint ranks a prefix match first', async ({ request }) => {
+    // Self-seeding, so it holds on any dataset: take a real student, search for
+    // the first two letters of their name, and require the top row to start with
+    // them. Before ranking, an ilike matched those letters anywhere in any name
+    // or email and alphabetical order buried the actual prefix match.
+    const all = await request.get('/api/auth/impersonate/candidates', {
+      headers: authHeader(teacherToken),
+    });
+    expect(all.status()).toBe(200);
+    const roster: Array<{ name: string }> = (await all.json()).students || [];
+    const seed = roster.find((s) => (s.name || '').trim().length >= 2);
+    test.skip(!seed, 'No impersonatable students in this environment to search for');
+
+    const prefix = seed!.name.trim().slice(0, 2);
+    const res = await request.get(
+      `/api/auth/impersonate/candidates?q=${encodeURIComponent(prefix)}`,
+      { headers: authHeader(teacherToken) }
+    );
+    expect(res.status()).toBe(200);
+    const hits: Array<{ name: string }> = (await res.json()).students || [];
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].name.toLowerCase().startsWith(prefix.toLowerCase())).toBe(true);
+  });
+
   // ── Happy path: full UI flow (guarded) ──
 
   test('teacher enters student view, sees banner, and exits', async ({ page, request }) => {
