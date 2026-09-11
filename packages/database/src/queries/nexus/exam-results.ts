@@ -9,7 +9,12 @@
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { effectiveAttemptScore, sectionBreakdown, type ExamSectionScore } from './exam-score';
-import { getComposedTestQuestions } from './test-repository';
+import {
+  answersAsOriginal,
+  attemptDrawKey,
+  getComposedTestQuestions,
+  loadAttemptDraws,
+} from './test-repository';
 import { gradeQBAnswerStrict } from './question-bank';
 import { getExam } from './exams';
 
@@ -122,7 +127,7 @@ export async function getExamResults(
   const { data: attempts, error } = await supabase
     .from('nexus_test_attempts' as any)
     .select(
-      'id, student_id, status, score, total_marks, percentage, final_score, final_total_marks, final_percentage, finalised_at, time_spent_seconds, answers',
+      'id, student_id, status, attempt_number, score, total_marks, percentage, final_score, final_total_marks, final_percentage, finalised_at, time_spent_seconds, answers',
     )
     .eq('test_id', exam.test_id)
     .eq('mode', 'official')
@@ -139,7 +144,14 @@ export async function getExamResults(
     }
   }
 
-  const questions = await getComposedTestQuestions(exam.test_id, true, supabase);
+  const [questions, draws] = await Promise.all([
+    getComposedTestQuestions(exam.test_id, true, supabase),
+    // The section breakdown re-marks stored answers, and a shuffled exam stores
+    // the letter the student CLICKED. Without the draw every shuffled option is
+    // marked against the wrong letter and the section averages are noise, while
+    // the total (read from the attempt row) still looks right beside them.
+    loadAttemptDraws({ testIds: [exam.test_id] }, supabase),
+  ]);
   const closed = new Date(exam.closes_at) <= new Date();
 
   const candidates: ExamCandidate[] = roster.map((student) => {
@@ -163,7 +175,8 @@ export async function getExamResults(
     }
 
     const eff = effectiveAttemptScore(attempt);
-    const review = buildReviewFromAnswers(questions, attempt.answers || {});
+    const draw = draws.get(attemptDrawKey(exam.test_id, student.id, attempt.attempt_number));
+    const review = buildReviewFromAnswers(questions, answersAsOriginal(attempt.answers, draw));
 
     return {
       student_id: student.id,

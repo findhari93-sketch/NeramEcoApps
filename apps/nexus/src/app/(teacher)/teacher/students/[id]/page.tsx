@@ -36,6 +36,9 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ParentAccessCard from '@/components/parent/ParentAccessCard';
 import ClassifyDrawer, { type ClassifyMode } from '@/components/students/ClassifyDrawer';
+import AddStudentSheet from '@/components/students/AddStudentSheet';
+import CreateAccountForm from '@/components/students/CreateAccountForm';
+import ResetPasswordSheet from '@/components/students/ResetPasswordSheet';
 import ClassStandingCard from '@/components/standing/ClassStandingCard';
 import ProfileHeaderCard from '@/components/students/profile/ProfileHeaderCard';
 import ProfileSkeleton from '@/components/students/profile/ProfileSkeleton';
@@ -86,6 +89,11 @@ export default function StudentProfilePage() {
   const canSetStage = can('coord.student.stage');
   const canSetDormancy = can('coord.student.dormancy');
   const canSeeFinance = can('coord.student.finance');
+  const canManageAccount = can('structure.student.account');
+
+  const [accountSheet, setAccountSheet] = useState<'create' | 'reset' | null>(null);
+  /** A new password is on screen that nobody has copied yet, so closing the sheet asks first. */
+  const [passwordPending, setPasswordPending] = useState(false);
 
   // ── Core bundle. The only blocking fetch. ─────────────────────────────────
   useEffect(() => {
@@ -299,6 +307,9 @@ export default function StudentProfilePage() {
       onToggleDormancy={() =>
         setDrawer(core.enrollment.participation_status === 'dormant' ? 'reactivate' : 'dormant')
       }
+      canManageAccount={canManageAccount}
+      onCreateAccount={() => setAccountSheet('create')}
+      onResetPassword={() => setAccountSheet('reset')}
     />
   );
 
@@ -417,6 +428,54 @@ export default function StudentProfilePage() {
         onClose={() => setDrawer(null)}
         onApply={applyClassification}
       />
+
+      {activeClassroom && canManageAccount && (
+        <AddStudentSheet
+          open={accountSheet === 'create'}
+          onClose={() => {
+            setAccountSheet(null);
+            setPasswordPending(false);
+          }}
+          classroomId={activeClassroom.id}
+          getToken={getToken}
+          onEnrolled={() => undefined}
+          createOnly
+          title="Create Microsoft account"
+          guardClose={passwordPending}
+          createAccount={
+            <CreateAccountForm
+              classroomId={activeClassroom.id}
+              getToken={getToken}
+              examYears={examYears}
+              currentBatch={core.currentBatch}
+              batches={[]}
+              prefill={{
+                attachToUserId: core.student.id,
+                name: core.student.name || 'this student',
+                firstName: core.student.first_name || (core.student.name || '').split(' ')[0] || '',
+                lastName: core.student.last_name || (core.student.name || '').split(' ').slice(1).join(' '),
+              }}
+              // Reloading the profile swaps the page for its skeleton, which would
+              // take the password off screen. Reload once staff are done instead.
+              onCreated={() => undefined}
+              onDone={() => {
+                setAccountSheet(null);
+                setPasswordPending(false);
+                setReloadKey((k) => k + 1);
+              }}
+              onPendingPasswordChange={setPasswordPending}
+            />
+          }
+        />
+      )}
+
+      {canManageAccount && (
+        <ResetPasswordSheet
+          target={accountSheet === 'reset' ? { id: core.student.id, name: core.student.name || 'this student' } : null}
+          getToken={getToken}
+          onClose={() => setAccountSheet(null)}
+        />
+      )}
 
       <Snackbar
         open={!!snackbar}

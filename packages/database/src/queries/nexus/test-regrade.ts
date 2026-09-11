@@ -27,13 +27,13 @@
 import { getSupabaseAdminClient } from '../../client';
 import type { TypedSupabaseClient } from '../../client';
 import {
+  attemptDrawKey,
   getComposedTestQuestions,
   gradeAgainstDraw,
-  type NexusTestDraw,
+  loadAttemptDraws,
 } from './test-repository';
 
 const ATTEMPTS = 'nexus_test_attempts';
-const DRAWS = 'nexus_test_draws';
 const PLACEMENTS = 'nexus_test_placements';
 const REGRADES = 'nexus_test_regrades';
 
@@ -97,36 +97,6 @@ function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * Every draw for one test, keyed by student and attempt number.
- *
- * Loaded in one query rather than through getTestDraw per attempt. A run with
- * forty sitters would otherwise open forty round trips inside a serverless
- * request that also has to write.
- */
-async function loadDraws(
-  testId: string,
-  supabase: TypedSupabaseClient,
-): Promise<Map<string, NexusTestDraw>> {
-  const map = new Map<string, NexusTestDraw>();
-  const { data, error } = await (supabase as any)
-    .from(DRAWS)
-    .select('student_id, attempt_number, question_ids, option_maps')
-    .eq('test_id', testId);
-  // A paper that is not a pool has no draws at all, and a failure to read them
-  // must not be mistaken for that. Throwing is right: grading a drawn paper as
-  // undrawn is the exact silent misgrade this module exists to prevent.
-  if (error) throw error;
-  for (const d of (data || []) as any[]) {
-    map.set(`${d.student_id}:${Number(d.attempt_number) || 1}`, {
-      attempt_number: Number(d.attempt_number) || 1,
-      question_ids: (d.question_ids as string[]) || [],
-      option_maps: (d.option_maps as Record<string, string[]>) || {},
-    });
-  }
-  return map;
-}
-
 /** Pass mark per run, so an attempt is judged by the door it came through. */
 async function loadPassingByPlacement(
   testId: string,
@@ -184,7 +154,7 @@ export async function regradeTestAttempts(
   if (error) throw error;
 
   const [draws, passingBy] = await Promise.all([
-    loadDraws(testId, supabase),
+    loadAttemptDraws({ testIds: [testId] }, supabase),
     loadPassingByPlacement(testId, supabase),
   ]);
 
@@ -192,7 +162,7 @@ export async function regradeTestAttempts(
 
   for (const a of (attempts || []) as any[]) {
     const attemptNumber = Number(a.attempt_number) || 1;
-    const draw = draws.get(`${a.student_id}:${attemptNumber}`) || null;
+    const draw = draws.get(attemptDrawKey(testId, a.student_id, attemptNumber)) || null;
     const passingPct = a.placement_id ? (passingBy.get(a.placement_id) ?? null) : null;
 
     const graded = gradeAgainstDraw(

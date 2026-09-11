@@ -4,8 +4,13 @@
  * Every people search in Nexus used to be a substring `ilike` ordered by name,
  * so typing "ya" put YahulKishore last behind Ananya, Ilakiya and Ooveya. The
  * fix is one testable ordering shared by every picker: a typed prefix wins, then
- * a word start, then a bare substring, and only then a match that lives in the
- * email alone.
+ * a word start, then every typed word starting a word of its own, then a bare
+ * substring, and only then a match that lives in the email alone.
+ *
+ * Inside one of those tiers an earlier hit wins, the way LinkedIn and Google
+ * order people: for "ba", "Afrin banu" (a word starting at 6) comes before
+ * "Aarthi Senthil Babu" (15), and "Zubair" before "Kaveya Rameshbabu". The
+ * alphabet only decides between hits that start in the same place.
  *
  * Below all of those sits a spelling-tolerant tier. The same name reaches the
  * roster spelled several ways ("Dhisha" and "Disha"), and a substring search can
@@ -26,11 +31,13 @@ export interface RankablePerson {
 export const MatchTier = {
   NAME_PREFIX: 0,
   NAME_WORD: 1,
-  EMAIL_WORD: 2,
-  NAME_CONTAINS: 3,
-  EMAIL_CONTAINS: 4,
+  /** Every typed word starts its own word of the name, in any order: "bav sen". */
+  NAME_ALL_WORDS: 2,
+  EMAIL_WORD: 3,
+  NAME_CONTAINS: 4,
+  EMAIL_CONTAINS: 5,
   /** A respelling or a one-letter typo. Always ranks below every literal hit. */
-  FUZZY: 5,
+  FUZZY: 6,
 } as const;
 
 /**
@@ -139,10 +146,36 @@ function wordStarts(text: string): number[] {
   return starts;
 }
 
-/** True when any word in `text` starts with `query` (query already lowercased). */
-function hasWordStartingWith(text: string, query: string): boolean {
+/** Index of the first word in `text` that starts with `query` (already lowercased), or -1. */
+function firstWordStartingWith(text: string, query: string): number {
   const lower = text.toLowerCase();
-  return wordStarts(text).some((i) => lower.startsWith(query, i));
+  return wordStarts(text).find((i) => lower.startsWith(query, i)) ?? -1;
+}
+
+/**
+ * Where each word of a multi-word query starts a word of the name, one name word
+ * per typed word, or null when any typed word has no word left to start.
+ *
+ * Longer typed words claim a word first. Two typed words can only compete for
+ * the same name word when one is a prefix of the other, and the longer one fits
+ * fewer words, so serving it first never strands the shorter one: "a ab" still
+ * finds "Ab Ax".
+ */
+function allWordsRanges(name: string, normalizedQuery: string): Array<[number, number]> | null {
+  const typed = normalizedQuery.split(' ').filter(Boolean);
+  if (typed.length < 2) return null;
+
+  const lower = name.toLowerCase();
+  const starts = wordStarts(name);
+  const taken = new Set<number>();
+  const ranges: Array<[number, number]> = [];
+  for (const word of [...typed].sort((a, b) => b.length - a.length)) {
+    const start = starts.find((i) => !taken.has(i) && lower.startsWith(word, i));
+    if (start === undefined) return null;
+    taken.add(start);
+    ranges.push([start, start + word.length]);
+  }
+  return ranges.sort((a, b) => a[0] - b[0]);
 }
 
 /** The words of a name or an address local part, split on separators and camel humps. */
@@ -193,44 +226,92 @@ function fuzzyMatches(person: RankablePerson, normalizedQuery: string): boolean 
   return queryKeys.every((queryKey) => storedKeys.some((storedKey) => wordsResemble(queryKey, storedKey)));
 }
 
+interface MatchScore {
+  tier: number;
+  /** Where the hit starts, so an earlier hit wins inside a tier. */
+  position: number;
+  /** The spans of the name the query literally matched, for highlighting. */
+  nameRanges: Array<[number, number]>;
+}
+
 /**
- * How well a person matches the query, or `null` when they don't match at all.
- * Returns the strongest (lowest) tier that applies.
+ * The strongest hit of a normalised query on a person, or null for no match.
+ * Every tier check runs in strength order and the first one that applies wins.
  */
-export function matchTier(person: RankablePerson, query: string): number | null {
-  const q = normalizeQuery(query);
+function scoreMatch(person: RankablePerson, q: string): MatchScore | null {
   if (!q) return null;
 
   const name = person.name || '';
   const email = person.email || '';
   const lowerName = name.toLowerCase();
-  const lowerEmail = email.toLowerCase();
 
-  if (lowerName.startsWith(q)) return MatchTier.NAME_PREFIX;
-  if (hasWordStartingWith(name, q)) return MatchTier.NAME_WORD;
+  if (lowerName.startsWith(q)) {
+    return { tier: MatchTier.NAME_PREFIX, position: 0, nameRanges: [[0, q.length]] };
+  }
+
+  const wordAt = firstWordStartingWith(name, q);
+  if (wordAt >= 0) {
+    return { tier: MatchTier.NAME_WORD, position: wordAt, nameRanges: [[wordAt, wordAt + q.length]] };
+  }
+
+  const words = allWordsRanges(name, q);
+  if (words) {
+    return { tier: MatchTier.NAME_ALL_WORDS, position: words[0][0], nameRanges: words };
+  }
 
   // Only the local part: every org address ends in the same domain, so matching
   // word starts after the "@" would tier the whole roster equally on "n".
   const localPart = email.split('@')[0] || '';
-  if (hasWordStartingWith(localPart, q)) return MatchTier.EMAIL_WORD;
+  const localWordAt = firstWordStartingWith(localPart, q);
+  if (localWordAt >= 0) return { tier: MatchTier.EMAIL_WORD, position: localWordAt, nameRanges: [] };
 
-  if (lowerName.includes(q)) return MatchTier.NAME_CONTAINS;
-  if (lowerEmail.includes(q)) return MatchTier.EMAIL_CONTAINS;
+  const containsAt = lowerName.indexOf(q);
+  if (containsAt >= 0) {
+    return {
+      tier: MatchTier.NAME_CONTAINS,
+      position: containsAt,
+      nameRanges: [[containsAt, containsAt + q.length]],
+    };
+  }
+
+  const emailAt = email.toLowerCase().indexOf(q);
+  if (emailAt >= 0) return { tier: MatchTier.EMAIL_CONTAINS, position: emailAt, nameRanges: [] };
 
   // Three characters minimum: below that every name starting with the same
   // sound would match, which is noise rather than help.
-  if (q.length >= 3 && fuzzyMatches(person, q)) return MatchTier.FUZZY;
+  if (q.length >= 3 && fuzzyMatches(person, q)) {
+    return { tier: MatchTier.FUZZY, position: 0, nameRanges: [] };
+  }
 
   return null;
 }
 
 /**
- * Filter to the people who match, ordered by relevance then (by default) name.
+ * How well a person matches the query, or `null` when they don't match at all.
+ * Returns the strongest (lowest) tier that applies.
+ */
+export function matchTier(person: RankablePerson, query: string): number | null {
+  return scoreMatch(person, normalizeQuery(query))?.tier ?? null;
+}
+
+/**
+ * The spans of `name` a query literally matched, as [start, end) pairs in
+ * order, for highlighting a result. Empty when nothing in the name matched
+ * letter for letter, as with a respelling, since there is nothing to point at.
+ */
+export function nameMatchRanges(name: string | null | undefined, query: string): Array<[number, number]> {
+  return scoreMatch({ name, email: null }, normalizeQuery(query))?.nameRanges ?? [];
+}
+
+/**
+ * Filter to the people who match, ordered by relevance: tier, then where the
+ * hit starts, then `tieBreak`, then name.
  *
  * An empty query returns the input untouched, so an unsearched list keeps
  * whatever order its caller already chose.
  *
- * `tieBreak` orders rows that share a tier; it runs before the name fallback.
+ * `tieBreak` orders rows whose hits are equally strong and start in the same
+ * place; it runs before the name fallback.
  */
 export function rankPeople<T extends RankablePerson>(
   people: T[],
@@ -240,14 +321,15 @@ export function rankPeople<T extends RankablePerson>(
   const q = normalizeQuery(query);
   if (!q) return people;
 
-  const scored: Array<{ person: T; tier: number }> = [];
+  const scored: Array<{ person: T; tier: number; position: number }> = [];
   for (const person of people) {
-    const tier = matchTier(person, q);
-    if (tier !== null) scored.push({ person, tier });
+    const score = scoreMatch(person, q);
+    if (score) scored.push({ person, tier: score.tier, position: score.position });
   }
 
   scored.sort((a, b) => {
     if (a.tier !== b.tier) return a.tier - b.tier;
+    if (a.position !== b.position) return a.position - b.position;
     if (tieBreak) {
       const broken = tieBreak(a.person, b.person);
       if (broken !== 0) return broken;

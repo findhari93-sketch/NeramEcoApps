@@ -55,6 +55,22 @@ describe('parseRecordingFileName', () => {
       .toEqual({ subject: 'Meeting in  General', startedAt: '2026-07-03T18:30:00' });
   });
 
+  it('reads a recording whose time Teams wrote in UTC, and gives the IST start', () => {
+    // Real shape from this tenant. 13:28:38 UTC on 28 July is 18:58:38 IST.
+    expect(parseRecordingFileName('Class-20260728_132838UTC-Meeting Recording.mp4')).toEqual({
+      subject: 'Class',
+      startedAt: '2026-07-28T18:58:38',
+    });
+  });
+
+  it('moves a late UTC start onto the next IST day', () => {
+    // 19:00 UTC on 20 July is 00:30 IST on 21 July.
+    expect(parseRecordingFileName('Class-20260720_190000UTC-Meeting Recording.mp4')).toEqual({
+      subject: 'Class',
+      startedAt: '2026-07-21T00:30:00',
+    });
+  });
+
   it('returns null for anything that is not a timestamped recording', () => {
     expect(parseRecordingFileName('random notes.mp4')).toBeNull();
     expect(parseRecordingFileName('Class-20261320_190000-Meeting Recording.mp4')).toBeNull();

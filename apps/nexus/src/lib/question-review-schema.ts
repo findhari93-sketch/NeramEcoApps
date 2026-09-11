@@ -487,3 +487,78 @@ export function diffReviewRow(
 
   return changes;
 }
+
+// ---------------------------------------------------------------------------
+// Recording a check
+// ---------------------------------------------------------------------------
+
+/** One verdict as the dialog sends it back, before any trust is extended. */
+export interface ReviewVerdictInput {
+  question_id: string;
+  verdict: string;
+  note?: string | null;
+}
+
+export interface ReviewRowInput {
+  reviews: ReviewVerdictInput[];
+  /** The questions the test is actually composed of. Anything else is dropped. */
+  onThisTest: Set<string>;
+  /** What was written per question, and the audit row it went through. */
+  applied: Map<string, { fields: string[]; editId: string | null }>;
+  /** The correct rate before any fix moved it. */
+  snapshot: Map<string, { correct_pct: number | null; answered: number }>;
+  testId: string;
+  placementId: string | null;
+  reviewedBy: string | null;
+}
+
+/** Shaped for recordQuestionReviews in @neram/database. */
+export interface ReviewRecord {
+  questionId: string;
+  testId: string;
+  placementId: string | null;
+  verdict: ReviewVerdict;
+  note: string | null;
+  appliedFields: string[];
+  editId: string | null;
+  correctPctAtCheck: number | null;
+  answeredAtCheck: number | null;
+  reviewedBy: string | null;
+}
+
+/**
+ * One history row per question the AI judged, fixed or not. PURE.
+ *
+ * "Checked, nothing wrong" is recorded on purpose: it is the fact that stops the
+ * same question being sent to an AI a second time. A verdict outside the four
+ * is dropped rather than guessed, a question off this test is dropped, and a
+ * reply naming a question twice counts once, the first time.
+ */
+export function buildReviewRows(input: ReviewRowInput): ReviewRecord[] {
+  const seen = new Set<string>();
+  const out: ReviewRecord[] = [];
+  for (const r of input.reviews || []) {
+    const id = typeof r?.question_id === 'string' ? r.question_id : '';
+    if (!id || seen.has(id) || !input.onThisTest.has(id)) continue;
+    if (!VERDICTS.includes(r.verdict as ReviewVerdict)) continue;
+    seen.add(id);
+
+    const applied = input.applied.get(id);
+    const snap = input.snapshot.get(id);
+    const note = typeof r.note === 'string' ? r.note.trim().slice(0, MAX_NOTE_CHARS) : '';
+
+    out.push({
+      questionId: id,
+      testId: input.testId,
+      placementId: input.placementId,
+      verdict: r.verdict as ReviewVerdict,
+      note: note || null,
+      appliedFields: applied?.fields ?? [],
+      editId: applied?.editId ?? null,
+      correctPctAtCheck: snap?.correct_pct ?? null,
+      answeredAtCheck: snap ? snap.answered : null,
+      reviewedBy: input.reviewedBy,
+    });
+  }
+  return out;
+}

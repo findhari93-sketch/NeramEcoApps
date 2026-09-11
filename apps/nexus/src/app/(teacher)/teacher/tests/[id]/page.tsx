@@ -1,6 +1,24 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+/**
+ * One test, laid out like a form: Questions, Students, Settings.
+ *
+ * It used to be Overview (the 150 questions, the runs, the paper's origin and
+ * six buttons) and Results, which held two more tabs, one of which listed the
+ * same 150 questions again under four stat cards. A teacher had to go three
+ * levels in and scroll past a screen of cards to reach a question. The founder
+ * asked for it to work like a Microsoft Form or a Google Form, so it does:
+ *
+ *   Questions  every question, with how students did on it, and the filters
+ *              and AI checks that act on them
+ *   Students   who sat it, filtered by the numbers at the top
+ *   Settings   where it is used, where it came from, and the rarely-used rest
+ *
+ * The header is one line of facts and two controls (Assign, and a menu for the
+ * rest), so the tab content starts near the top of the screen.
+ */
+
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import {
   Box,
@@ -9,46 +27,43 @@ import {
   IconButton,
   TextField,
   Chip,
-  Paper,
   Stack,
   Skeleton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Alert,
   Snackbar,
   CircularProgress,
   Divider,
   Tabs,
   Tab,
+  Menu,
   MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from '@neram/ui';
 import { NEXUS_TEACHER_TEST_KINDS, type NexusTestKind } from '@neram/database';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
-import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
-import TestResultsPanel from '@/components/tests/TestResultsPanel';
-import TestHealthPanel from '@/components/tests/TestHealthPanel';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
-import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
-import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import TestResultsPanel from '@/components/tests/TestResultsPanel';
+import TestHealthPanel from '@/components/tests/TestHealthPanel';
+import TestSettingsView from '@/components/tests/TestSettingsView';
 import ExamScheduleDialog from '@/components/scheduled-exams/ExamScheduleDialog';
-import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import MathText from '@/components/common/MathText';
-import QuestionPreviewText from '@/components/question-bank/QuestionPreviewText';
 import TestQuestionEditorDialog from '@/components/tests/TestQuestionEditorDialog';
-import { describeTestOrigin, type TestOriginFacts } from '@/lib/test-origin';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import type { TestOriginFacts } from '@/lib/test-origin';
+import { pickDefaultRunId, resolveTestPageTab, type TestPageTab } from '@/lib/test-page-tabs';
+import type { PoolQuestion } from '@/components/tests/TestQuestionsView';
 
 interface DetailTest {
   id: string;
@@ -67,18 +82,6 @@ interface DetailTest {
   questions_to_serve?: number | null;
 }
 
-interface DetailQuestion {
-  test_question_id: string;
-  question_id: string;
-  question_text: string | null;
-  question_image_url: string | null;
-  question_format: string;
-  options: Array<{ id?: string; label?: string; text?: string; image_url?: string }> | null;
-  marks: number;
-  sort_order: number;
-  correct_answer?: string | null;
-}
-
 interface DetailPlacement {
   id: string;
   context_type: string;
@@ -89,56 +92,12 @@ interface DetailPlacement {
   available_until: string | null;
 }
 
-/**
- * What each run of this paper is called.
- *
- * A "run" is one scheduled use: who it is for, when it closes, and how they
- * did. The class-linked contexts were missing here entirely, so a class test
- * rendered as the raw string `class_test` on the very screen a teacher goes to
- * to find out where a paper is being used.
- */
-const CONTEXT_LABELS: Record<string, string> = {
-  classroom_assignment: 'Class test (whole class, no class linked)',
-  class_test: 'Class test',
-  exam: 'Exam',
-  class_prep_test: 'Before class',
-  catchup_class: 'Catch-up',
-  student_practice: 'Practice (always open)',
-  study_file: 'Study chapter',
-  foundation_section: 'Foundation section',
-  module_item: 'Module section',
-  class_recap_section: 'Recap checkpoint',
-};
-
 const MIRRORED_FROM = ['foundation_migration', 'module_migration', 'recap_migration', 'study_migration'];
 
 function timerLabel(t: DetailTest): string {
   if (t.test_type === 'timed' && t.duration_minutes) return `${t.duration_minutes} min`;
-  if (t.test_type === 'per_question_timer' && t.per_question_seconds) return `${t.per_question_seconds}s / question`;
+  if (t.test_type === 'per_question_timer' && t.per_question_seconds) return `${t.per_question_seconds}s per question`;
   return 'Untimed';
-}
-
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-  } catch {
-    return iso;
-  }
-}
-
-/** An option row is correct when correct_answer matches its id, its letter label, or its text. */
-function isCorrectOption(
-  opt: { id?: string; label?: string; text?: string },
-  index: number,
-  correct: string | null | undefined,
-): boolean {
-  if (!correct) return false;
-  const c = String(correct).trim().toLowerCase();
-  if (opt.id && String(opt.id).trim().toLowerCase() === c) return true;
-  if (opt.label && String(opt.label).trim().toLowerCase() === c) return true;
-  const letter = String.fromCharCode(97 + index);
-  return c === letter;
 }
 
 export default function TestDetailPage() {
@@ -152,7 +111,7 @@ export default function TestDetailPage() {
   /** The archived import row, or null for a test built before it existed. */
   const [origin, setOrigin] = useState<TestOriginFacts | null>(null);
   const [kindDraft, setKindDraft] = useState<NexusTestKind>('classroom_assigned');
-  const [questions, setQuestions] = useState<DetailQuestion[]>([]);
+  const [questions, setQuestions] = useState<PoolQuestion[]>([]);
   const [placements, setPlacements] = useState<DetailPlacement[]>([]);
   const [attemptsCount, setAttemptsCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -164,24 +123,21 @@ export default function TestDetailPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [menuEl, setMenuEl] = useState<HTMLElement | null>(null);
+
   /**
-   * Both seeded from the URL so `?tab=results&placement_id=` actually lands
-   * where it says. The Conducted tab and the runs list below both link that
-   * way, and until this read existed every one of those links quietly dropped
-   * the teacher on Overview with no run selected.
-   *
-   * Read once, at first render. Reading it on every render would fight setTab
-   * and pin the page to whichever tab the URL named.
+   * Seeded from the URL, read once at first render, so `?tab=results&placement_id=`
+   * (what the Conducted tab and teacher notifications link to) lands on Students
+   * for that run. Reading it on every render would fight setTab.
    */
-  const [tab, setTab] = useState<'overview' | 'results'>(
-    searchParams?.get('tab') === 'results' ? 'results' : 'overview',
-  );
-  /** Which run the Results tab opens on, set by "See results" in the runs list. */
-  const [resultsRunId, setResultsRunId] = useState(searchParams?.get('placement_id') || '');
+  const [tab, setTab] = useState<TestPageTab>(() => resolveTestPageTab(searchParams?.get('tab')));
+  /** The run both Questions and Students report on. */
+  const [runId, setRunId] = useState(searchParams?.get('placement_id') || '');
+  /** Whether a run has been chosen yet, by the URL or by the default. */
+  const runChosen = useRef(Boolean(searchParams?.get('placement_id')));
   /**
-   * Which group of students the Results tab opens on, e.g. `&filter=below_pass`.
-   * Read once for the same reason as the two above: the panel owns it after
-   * first render and writes its own changes back to the URL.
+   * Which group of students the Students tab opens on, e.g. `&filter=below_pass`.
+   * The panel owns it after first render and writes its own changes back.
    */
   const [resultsFilter] = useState(searchParams?.get('filter') || '');
   const [duplicating, setDuplicating] = useState(false);
@@ -213,17 +169,27 @@ export default function TestDetailPage() {
     [getToken],
   );
 
+  const applyTestPayload = useCallback((data: any) => {
+    setTest(data.test);
+    setKindDraft(data.test?.test_kind || 'classroom_assigned');
+    setQuestions(data.questions || []);
+    setPlacements(data.placements || []);
+    setAttemptsCount(data.attempts_count || 0);
+    // The run the numbers are about, when the URL did not name one: the most
+    // recent run with a roster, so the page opens on "how did my class do".
+    if (!runChosen.current) {
+      runChosen.current = true;
+      setRunId(pickDefaultRunId(data.placements || []));
+    }
+  }, []);
+
   const load = useCallback(async () => {
     if (!testId) return;
     setLoading(true);
     setError(null);
     try {
       const json = await authFetch(`/api/question-bank/tests/${testId}`);
-      setTest(json.data.test);
-      setKindDraft(json.data.test?.test_kind || 'classroom_assigned');
-      setQuestions(json.data.questions || []);
-      setPlacements(json.data.placements || []);
-      setAttemptsCount(json.data.attempts_count || 0);
+      applyTestPayload(json.data);
 
       // Provenance, without the document. Never allowed to fail the page: a
       // test whose origin was never archived is an ordinary state, and every
@@ -239,11 +205,40 @@ export default function TestDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [testId, authFetch]);
+  }, [testId, authFetch, applyTestPayload]);
+
+  /**
+   * Re-read the paper without the page skeleton.
+   *
+   * After a question is fixed or a run is added, the full load() would swap the
+   * whole page for a skeleton and unmount the results panel mid-task, taking
+   * the teacher's filters and selection with it.
+   */
+  const refresh = useCallback(async () => {
+    if (!testId) return;
+    try {
+      const json = await authFetch(`/api/question-bank/tests/${testId}`);
+      applyTestPayload(json.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not refresh the test');
+    }
+  }, [testId, authFetch, applyTestPayload]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Keep the tab and the run in the URL, so a reload or a shared link lands
+  // where the teacher was. Questions is the default and stays out of the URL.
+  useEffect(() => {
+    if (typeof window === 'undefined' || loading) return;
+    const url = new URL(window.location.href);
+    if (tab === 'questions') url.searchParams.delete('tab');
+    else url.searchParams.set('tab', tab);
+    if (runId) url.searchParams.set('placement_id', runId);
+    else url.searchParams.delete('placement_id');
+    window.history.replaceState(window.history.state, '', url.toString());
+  }, [tab, runId, loading]);
 
   /** Relabel the test. Saved immediately so the choice survives closing the dialog. */
   async function saveKind(kind: NexusTestKind) {
@@ -344,7 +339,7 @@ export default function TestDetailPage() {
       });
       setAssignOpen(false);
       setToast(contextType === 'classroom_assignment' ? 'Assigned to the class' : 'Added to the practice pool');
-      load();
+      refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to place test');
     } finally {
@@ -358,7 +353,8 @@ export default function TestDetailPage() {
     try {
       await authFetch(`/api/question-bank/tests/${test.id}/placements/${placementId}`, { method: 'DELETE' });
       setPlacements((prev) => prev.filter((p) => p.id !== placementId));
-      setToast('Placement removed');
+      if (runId === placementId) setRunId('');
+      setToast('Run removed');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove placement');
     } finally {
@@ -378,9 +374,10 @@ export default function TestDetailPage() {
     return (
       <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 900, mx: 'auto' }}>
         <Skeleton variant="text" width={240} height={40} />
-        <Skeleton variant="rectangular" height={90} sx={{ borderRadius: 2, mb: 2, mt: 1 }} />
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} variant="rectangular" height={56} sx={{ borderRadius: 1.5, mb: 1 }} />
+        <Skeleton variant="text" width={320} height={24} />
+        <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1, mb: 2, mt: 1 }} />
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} variant="rectangular" height={64} sx={{ borderRadius: 1.5, mb: 1 }} />
         ))}
       </Box>
     );
@@ -400,424 +397,190 @@ export default function TestDetailPage() {
   }
 
   const isMirrored = !!test.created_from && MIRRORED_FROM.includes(test.created_from);
+  const pooled = test.questions_to_serve != null && test.questions_to_serve < questions.length;
+  const facts = [
+    timerLabel(test),
+    pooled ? `Pool of ${questions.length}, ${test.questions_to_serve} per sitting` : `${questions.length} questions`,
+    test.total_marks != null ? `${test.total_marks} marks` : null,
+    `${attemptsCount} ${attemptsCount === 1 ? 'attempt' : 'attempts'}`,
+  ].filter(Boolean);
+
+  const menuAction = (fn: () => void) => () => {
+    setMenuEl(null);
+    fn();
+  };
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 900, mx: 'auto' }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, mb: 1 }}>
-        <IconButton onClick={() => router.push('/teacher/tests')} aria-label="Back to tests" sx={{ mt: 0.25 }}>
-          <ArrowBackOutlinedIcon />
-        </IconButton>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography variant="h5" component="h1" sx={{ fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>
-              {test.title}
-            </Typography>
-            <IconButton
-              size="small"
-              aria-label="Rename test"
-              onClick={() => {
-                setRenameValue(test.title);
-                setRenameOpen(true);
-              }}
-            >
-              <EditOutlinedIcon sx={{ fontSize: 18 }} />
-            </IconButton>
+      {/* Header: one line of facts, Assign, and a menu for the rest. */}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', columnGap: 1, rowGap: 0.5, mb: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, flex: '1 1 280px', minWidth: 0 }}>
+          <IconButton onClick={() => router.push('/teacher/tests')} aria-label="Back to tests" sx={{ width: 44, height: 44 }}>
+            <ArrowBackOutlinedIcon />
+          </IconButton>
+          <Box sx={{ flex: 1, minWidth: 0, pt: 0.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography variant="h5" component="h1" sx={{ fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>
+                {test.title}
+              </Typography>
+              <IconButton
+                size="small"
+                aria-label="Rename test"
+                onClick={() => {
+                  setRenameValue(test.title);
+                  setRenameOpen(true);
+                }}
+                sx={{ width: 36, height: 36 }}
+              >
+                <EditOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
+            {test.description && (
+              <Typography variant="body2" color="text.secondary">
+                {test.description}
+              </Typography>
+            )}
+            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
+              <Chip
+                size="small"
+                label={test.is_published ? 'Published' : 'Hidden'}
+                color={test.is_published ? 'success' : 'default'}
+                variant={test.is_published ? 'filled' : 'outlined'}
+                sx={{ height: 22 }}
+              />
+              <Typography variant="body2" color="text.secondary">
+                {facts.join(' · ')}
+              </Typography>
+            </Box>
           </Box>
-          {test.description && (
-            <Typography variant="body2" color="text.secondary">
-              {test.description}
-            </Typography>
-          )}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
-            <Chip
-              size="small"
-              label={test.is_published ? 'Published' : 'Hidden'}
-              color={test.is_published ? 'success' : 'default'}
-              variant={test.is_published ? 'filled' : 'outlined'}
-            />
-            <Chip size="small" variant="outlined" label={timerLabel(test)} />
-            <Chip size="small" variant="outlined" label={`${questions.length} Q`} />
-            {test.total_marks != null && <Chip size="small" variant="outlined" label={`${test.total_marks} marks`} />}
-            {test.passing_marks != null && <Chip size="small" variant="outlined" label={`Pass: ${test.passing_marks}`} />}
-            <Chip size="small" variant="outlined" label={`${attemptsCount} ${attemptsCount === 1 ? 'attempt' : 'attempts'}`} />
-          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto', pt: 0.25 }}>
+          <Button
+            variant="contained"
+            startIcon={<SendOutlinedIcon />}
+            onClick={() => setAssignOpen(true)}
+            disabled={busy || !activeClassroom}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Assign
+          </Button>
+          <IconButton
+            aria-label="More actions for this test"
+            aria-haspopup="menu"
+            onClick={(e) => setMenuEl(e.currentTarget)}
+            sx={{ width: 44, height: 44 }}
+          >
+            <MoreVertIcon />
+          </IconButton>
+          <Menu
+            anchorEl={menuEl}
+            open={Boolean(menuEl)}
+            onClose={() => setMenuEl(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            {/* Any paper in the library can be sat as an exam, not only one built
+                from a question paper. One of the three doors into ExamScheduleDialog. */}
+            <MenuItem onClick={menuAction(() => setExamOpen(true))} disabled={busy} sx={{ minHeight: 48 }}>
+              <ListItemIcon>
+                <EventAvailableOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Schedule as exam</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={menuAction(() => setEditorOpen(true))} disabled={busy} sx={{ minHeight: 48 }}>
+              <ListItemIcon>
+                <EditNoteOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Edit questions</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={menuAction(togglePublish)} disabled={busy} sx={{ minHeight: 48 }}>
+              <ListItemIcon>
+                {test.is_published ? <VisibilityOffOutlinedIcon fontSize="small" /> : <VisibilityOutlinedIcon fontSize="small" />}
+              </ListItemIcon>
+              <ListItemText>{test.is_published ? 'Unpublish' : 'Publish'}</ListItemText>
+            </MenuItem>
+            {attemptsCount > 0 && (
+              <MenuItem onClick={menuAction(duplicateForEdit)} disabled={busy || duplicating} sx={{ minHeight: 48 }}>
+                <ListItemIcon>
+                  {duplicating ? <CircularProgress size={16} /> : <ContentCopyOutlinedIcon fontSize="small" />}
+                </ListItemIcon>
+                <ListItemText>Duplicate to edit</ListItemText>
+              </MenuItem>
+            )}
+            <Divider />
+            <MenuItem onClick={menuAction(() => setDeleteOpen(true))} disabled={busy} sx={{ minHeight: 48, color: 'error.main' }}>
+              <ListItemIcon>
+                <DeleteOutlineOutlinedIcon fontSize="small" color="error" />
+              </ListItemIcon>
+              <ListItemText>Delete</ListItemText>
+            </MenuItem>
+          </Menu>
         </Box>
       </Box>
 
-      {isMirrored && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          This quiz is mirrored from a legacy section. Publishing or deleting here does not change what students see
-          inside Foundation, Modules or Class Recaps.
-        </Alert>
-      )}
-
-      {/*
-        Where this test came from.
-
-        Every fact below has been archived since nexus_test_imports shipped and
-        none of it has ever been on a screen, so a teacher who uploaded 150
-        questions could not answer "which file was that" or "did any rows get
-        dropped". `origin` is null for tests built before the archive existed,
-        and the describer says that rather than guessing.
-      */}
-      {(() => {
-        const o = describeTestOrigin(origin);
-        return (
-          <Box
-            sx={{
-              mb: 2,
-              p: 1.5,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: o.hasLoss ? 'warning.main' : 'divider',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-              {/* The icon carries the warning as well as the border, so dropped
-                  rows are not signalled by colour alone. */}
-              <HistoryOutlinedIcon
-                sx={{
-                  fontSize: 18,
-                  mt: '2px',
-                  color: o.hasLoss ? 'warning.main' : 'text.secondary',
-                  flexShrink: 0,
-                }}
-              />
-              <Box sx={{ minWidth: 0, flex: 1 }}>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                  {o.headline}
-                </Typography>
-                {o.details.length > 0 && (
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                    {o.details.join(' ')}
-                  </Typography>
-                )}
-                {/* The questions went into the shared bank, which is the thing
-                    most often assumed and never stated. */}
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                  Its questions live in the question bank and can be reused by any other test.
-                </Typography>
-              </Box>
-            </Box>
-          </Box>
-        );
-      })()}
-
-      {/* Actions */}
-      <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={test.is_published ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />}
-          onClick={togglePublish}
-          disabled={busy}
-          sx={{ textTransform: 'none', minHeight: 44 }}
-        >
-          {test.is_published ? 'Unpublish' : 'Publish'}
-        </Button>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<SendOutlinedIcon />}
-          onClick={() => setAssignOpen(true)}
-          disabled={busy || !activeClassroom}
-          sx={{ textTransform: 'none', minHeight: 44 }}
-        >
-          Assign
-        </Button>
-        {/* Any paper in the library can be sat as an exam, not only one built
-            from a question paper. This is the second of the three doors into
-            ExamScheduleDialog, beside the paper workspace and the timetable. */}
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<EventAvailableOutlinedIcon />}
-          onClick={() => setExamOpen(true)}
-          disabled={busy}
-          sx={{ textTransform: 'none', minHeight: 44 }}
-        >
-          Schedule as exam
-        </Button>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<EditNoteOutlinedIcon />}
-          onClick={() => setEditorOpen(true)}
-          disabled={busy}
-          sx={{ textTransform: 'none', minHeight: 44 }}
-        >
-          Edit questions
-        </Button>
-        {attemptsCount > 0 && (
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={duplicating ? <CircularProgress size={14} /> : <ContentCopyOutlinedIcon />}
-            onClick={duplicateForEdit}
-            disabled={busy || duplicating}
-            sx={{ textTransform: 'none', minHeight: 44 }}
-          >
-            Duplicate to edit
-          </Button>
-        )}
-        <Box sx={{ flex: 1 }} />
-        <Button
-          variant="text"
-          color="error"
-          size="small"
-          startIcon={<DeleteOutlineOutlinedIcon />}
-          onClick={() => setDeleteOpen(true)}
-          disabled={busy}
-          sx={{ textTransform: 'none', minHeight: 44 }}
-        >
-          Delete
-        </Button>
-      </Stack>
-
-      {/* Once anyone has sat the paper, changing its questions silently changes
-          what past scores mean. Say so, and offer the safe move instead. */}
-      {attemptsCount > 0 && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {attemptsCount} attempt{attemptsCount !== 1 ? 's' : ''} recorded. Changing the questions now would
-          change what those scores mean, so edit a duplicate instead and swap it in when you are ready.
-        </Alert>
-      )}
+      {/* Above the tabs on purpose. If this paper is broken, that is the first
+          thing a teacher needs to know. Renders nothing when nothing is wrong. */}
+      <TestHealthPanel testId={test.id} getToken={getToken} />
 
       <Tabs
         value={tab}
-        onChange={(_, v) => setTab(v as 'overview' | 'results')}
-        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { textTransform: 'none', minHeight: 48 } }}
+        onChange={(_, v) => setTab(v as TestPageTab)}
+        variant="fullWidth"
+        sx={{
+          mb: 2,
+          borderBottom: 1,
+          borderColor: 'divider',
+          '& .MuiTabs-flexContainer': { maxWidth: { sm: 520 } },
+          '& .MuiTab-root': { textTransform: 'none', minHeight: 48, fontWeight: 600 },
+        }}
       >
-        <Tab value="overview" label="Overview" />
-        <Tab value="results" label={attemptsCount > 0 ? `Results (${attemptsCount})` : 'Results'} />
+        <Tab value="questions" label={`Questions (${questions.length})`} />
+        <Tab value="students" label="Students" />
+        <Tab value="settings" label="Settings" />
       </Tabs>
 
-      {tab === 'results' && (
-        // Keyed on the run so picking a different one from the runs list
-        // remounts the panel rather than leaving it on the previous selection.
+      {/* Mounted once for both tabs, so moving between Questions and Students
+          costs no second fetch and keeps the filters where the teacher left them. */}
+      <Box sx={{ display: tab === 'settings' ? 'none' : 'block' }}>
         <TestResultsPanel
-          key={resultsRunId || 'all'}
           testId={test.id}
           authFetch={authFetch}
           getToken={getToken}
-          initialRunId={resultsRunId}
+          view={tab === 'students' ? 'students' : 'questions'}
+          runId={runId}
+          onRunIdChange={setRunId}
           initialFilter={resultsFilter}
           testTitle={test.title}
+          pool={questions}
+          onQuestionsChanged={refresh}
+        />
+      </Box>
+
+      {tab === 'settings' && (
+        <TestSettingsView
+          isPublished={test.is_published}
+          timerText={timerLabel(test)}
+          questionsCount={questions.length}
+          questionsToServe={test.questions_to_serve}
+          totalMarks={test.total_marks}
+          passingMarks={test.passing_marks}
+          attemptsCount={attemptsCount}
+          origin={origin}
+          placements={placements}
+          busy={busy}
+          duplicating={duplicating}
+          isMirrored={isMirrored}
+          canAssign={Boolean(activeClassroom)}
+          onAssign={() => setAssignOpen(true)}
+          onSeeResults={(placementId) => {
+            setRunId(placementId);
+            setTab('students');
+          }}
+          onRemovePlacement={removePlacement}
+          onDuplicate={duplicateForEdit}
+          onDelete={() => setDeleteOpen(true)}
         />
       )}
-
-      <Box sx={{ display: tab === 'overview' ? 'block' : 'none' }}>
-
-      {/* Above everything else on purpose. If this paper is broken, that is the
-          first thing a teacher needs to know, before where it is placed or what
-          is in it. Renders nothing when nothing is wrong. */}
-      <TestHealthPanel testId={test.id} getToken={getToken} />
-
-      {/* Runs */}
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.25 }}>
-        Runs of this paper
-      </Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-        A run is one scheduled use of this paper: who it is for, when it closes, and how they did. The same
-        paper can have many runs.
-      </Typography>
-      {placements.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 3 }}>
-          <Typography variant="body2" color="text.secondary">
-            No runs yet. Use Assign to set it for your class or add it to the practice pool.
-          </Typography>
-        </Paper>
-      ) : (
-        <Stack spacing={1} sx={{ mb: 3 }}>
-          {placements.map((p) => (
-            <Paper
-              key={p.id}
-              variant="outlined"
-              sx={{ p: 1.25, borderRadius: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}
-            >
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {CONTEXT_LABELS[p.context_type] || p.context_type}
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
-                  {p.available_from && (
-                    <Chip size="small" variant="outlined" label={`Opens ${fmtDateTime(p.available_from)}`} sx={{ height: 20, fontSize: '0.7rem' }} />
-                  )}
-                  {p.available_until && (
-                    <Chip size="small" variant="outlined" label={`Due ${fmtDateTime(p.available_until)}`} sx={{ height: 20, fontSize: '0.7rem' }} />
-                  )}
-                  {p.passing_pct != null && (
-                    <Chip size="small" variant="outlined" label={`Pass ${p.passing_pct}%`} sx={{ height: 20, fontSize: '0.7rem' }} />
-                  )}
-                  {!p.is_visible && <Chip size="small" label="Hidden" sx={{ height: 20, fontSize: '0.7rem' }} />}
-                </Box>
-              </Box>
-              {/* The link the library never had. Results used to mean every
-                  sitting of the paper through every door at once, so a teacher
-                  asking "how did my class do" was shown every stranger who had
-                  ever practised it. */}
-              <Button
-                size="small"
-                onClick={() => {
-                  setResultsRunId(p.id);
-                  setTab('results');
-                }}
-                sx={{ textTransform: 'none', minHeight: 44, flexShrink: 0 }}
-              >
-                See results
-              </Button>
-              {(p.context_type === 'classroom_assignment' || p.context_type === 'student_practice') && (
-                <IconButton
-                  aria-label="Remove placement"
-                  onClick={() => removePlacement(p.id)}
-                  disabled={busy}
-                  sx={{ minWidth: 44, minHeight: 44 }}
-                >
-                  <CloseOutlinedIcon sx={{ fontSize: 18 }} />
-                </IconButton>
-              )}
-            </Paper>
-          ))}
-        </Stack>
-      )}
-
-      {/* Questions */}
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-          Questions
-        </Typography>
-        {/* A pool holds more than it asks, so the count above the list would
-            otherwise contradict the count a student sees on the paper. */}
-        {test.questions_to_serve != null && test.questions_to_serve < questions.length && (
-          <Chip
-            size="small"
-            color="primary"
-            variant="outlined"
-            label={`Pool of ${questions.length}, ${test.questions_to_serve} asked each attempt`}
-            sx={{ height: 22 }}
-          />
-        )}
-      </Box>
-      {questions.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          No questions found for this test.
-        </Typography>
-      ) : (
-        <Box sx={{ mb: 4 }}>
-          {questions.map((q, idx) => (
-            <Accordion key={q.test_question_id} disableGutters variant="outlined" sx={{ borderRadius: 1.5, mb: 0.75, '&:before': { display: 'none' } }}>
-              <AccordionSummary
-                expandIcon={<ExpandMoreOutlinedIcon />}
-                // MUI's summary content is a flex child with no min-width, so a
-                // long stem grew the row past the viewport and took the page's
-                // horizontal scroll with it on a phone.
-                sx={{ minHeight: 48, '& .MuiAccordionSummary-content': { minWidth: 0, overflow: 'hidden' } }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, pr: 1, flex: 1 }}>
-                  <Chip size="small" label={idx + 1} sx={{ height: 22, fontWeight: 700, flexShrink: 0 }} />
-                  {q.question_image_url && (
-                    <Box
-                      component="img"
-                      src={q.question_image_url}
-                      alt=""
-                      loading="lazy"
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        flexShrink: 0,
-                        objectFit: 'contain',
-                        borderRadius: 0.5,
-                        bgcolor: 'common.white',
-                      }}
-                    />
-                  )}
-                  <QuestionPreviewText text={q.question_text} sx={{ flex: 1 }} />
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails sx={{ pt: 0 }}>
-                {q.question_text && (
-                  <Typography variant="body2" component="div" sx={{ mb: 1 }}>
-                    <MathText text={q.question_text} />
-                  </Typography>
-                )}
-                {q.question_image_url && (
-                  <Box
-                    component="img"
-                    src={q.question_image_url}
-                    alt="Question"
-                    sx={{ maxWidth: '100%', borderRadius: 1, mb: 1 }}
-                  />
-                )}
-                {Array.isArray(q.options) && q.options.length > 0 ? (
-                  <Stack spacing={0.5}>
-                    {q.options.map((opt, oi) => {
-                      const correct = isCorrectOption(opt, oi, q.correct_answer);
-                      return (
-                        <Box
-                          key={opt.id || opt.label || oi}
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: 1,
-                            p: 0.75,
-                            borderRadius: 1,
-                            bgcolor: correct ? 'success.light' : 'transparent',
-                            border: '1px solid',
-                            borderColor: correct ? 'success.main' : 'divider',
-                          }}
-                        >
-                          {correct ? (
-                            <CheckCircleOutlinedIcon color="success" sx={{ fontSize: 18, mt: 0.25 }} />
-                          ) : (
-                            <Box sx={{ width: 18, flexShrink: 0 }} />
-                          )}
-                          <Box sx={{ minWidth: 0, flex: 1 }}>
-                            <MathText text={opt.text || opt.label || ''} variant="body2" />
-                            {/* An image-only paper is unreviewable without this:
-                                every option reads "Option figure (1)" and a
-                                teacher cannot tell which one they are marking
-                                correct. */}
-                            {opt.image_url && (
-                              <Box
-                                component="img"
-                                src={opt.image_url}
-                                alt={`Option ${opt.label || oi + 1}`}
-                                loading="lazy"
-                                sx={{
-                                  display: 'block',
-                                  mt: 0.5,
-                                  maxWidth: '100%',
-                                  maxHeight: 140,
-                                  objectFit: 'contain',
-                                  objectPosition: 'left',
-                                  borderRadius: 1,
-                                  bgcolor: 'common.white',
-                                }}
-                              />
-                            )}
-                          </Box>
-                        </Box>
-                      );
-                    })}
-                  </Stack>
-                ) : (
-                  q.correct_answer != null && (
-                    <Typography variant="body2">
-                      Answer: <b>{q.correct_answer}</b>
-                    </Typography>
-                  )
-                )}
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                  {q.marks} {q.marks === 1 ? 'mark' : 'marks'}
-                </Typography>
-              </AccordionDetails>
-            </Accordion>
-          ))}
-        </Box>
-      )}
-
-      </Box>
 
       {/* Rename dialog */}
       <Dialog open={renameOpen} onClose={() => !busy && setRenameOpen(false)} fullWidth maxWidth="xs">
@@ -875,7 +638,7 @@ export default function TestDetailPage() {
         testId={testId}
         testTitle={test?.title ?? null}
         classroomId={activeClassroom?.id ?? null}
-        onScheduled={() => load()}
+        onScheduled={() => refresh()}
       />
 
       {/* Assign dialog */}
@@ -893,9 +656,6 @@ export default function TestDetailPage() {
             onChange={(e) => saveKind(e.target.value as NexusTestKind)}
             disabled={busy}
             sx={{ mt: 0.5, mb: 2 }}
-            // "Test type" read as though it decided how students got the paper,
-            // which is what the buttons below actually do. This field only says
-            // what the paper covers.
             helperText="What the paper covers. Students see this on the test card."
           >
             {NEXUS_TEACHER_TEST_KINDS.map((k) => (
@@ -976,7 +736,7 @@ export default function TestDetailPage() {
         testTitle={test.title}
         authFetch={authFetch}
         onClose={() => setEditorOpen(false)}
-        onSaved={load}
+        onSaved={refresh}
       />
 
       <Snackbar

@@ -104,6 +104,14 @@ const nextConfig = {
         destination: '/student/catch-up',
         permanent: true,
       },
+      {
+        // The checkpoint editor moved under the recording it belongs to, so its
+        // Back returns to that recording's tab instead of the Study Materials
+        // root. Not permanent, so no browser caches it past a future change.
+        source: '/teacher/study-materials/checkpoints/:fileId/:trackId',
+        destination: '/teacher/study-materials/:fileId/recordings/:trackId/checkpoints',
+        permanent: false,
+      },
     ];
   },
   images: {

@@ -1,289 +1,196 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { APP_URLS, injectAuthForPage, getTestAuthToken } from '../utils/credentials';
 import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../utils/mobile-helpers';
 
 /**
- * Putting a video on a chapter, at 375px.
+ * A chapter's Class recordings page, at 375px.
  *
- * A chapter used to offer two video features. "Class recordings" were gated,
- * per language, and could not be published without a .vtt transcript. "Quick
- * video link" was an ungated URL that was stored, chipped on the teacher's grid,
- * and rendered on no student screen anywhere, so a teacher who used it reached
- * nobody. Between them, a teacher holding a SharePoint recording and no
- * transcript had no route to a student at all.
+ * It replaces a dialog that had no address: its "Edit" opened a checkpoint editor
+ * whose Back dropped the teacher at the Study Materials root, it named a Tamil
+ * video "DispForm.aspx", and its Change and Move buttons said nothing about what
+ * they did. What these lock down is the journey:
+ *   - Setup opens the page and Back returns to Setup; the library menu opens it
+ *     and Back returns to the library;
+ *   - each language is a tab, and the tab is in the URL, so a refresh keeps it;
+ *   - a language with no video says videos come from SharePoint, with both ways in;
+ *   - a OneDrive link is refused with its reason before anything is saved;
+ *   - none of the new routes answer a student.
  *
- * What these lock down: one video feature, every offered language listed whether
- * or not it has a recording, and no dead control carrying its own instruction as
- * its label. The last one is why "why don't I see the English tag" was asked:
- * a language with a recording lost its chip, and the card that held it named its
- * language only in a header that scrolled away.
- *
- * AND THE STEP THAT WAS MISSING ENTIRELY. Attaching a recording meant pasting a
- * URL into a box that only appeared after pressing Add, so the teacher had to go
- * to SharePoint in another tab and copy a link before this dialog could do
- * anything. Once attached the video disappeared: no name, no link, no way to
- * change it. "Where do I actually search and add the recording" was the question
- * that produced, and the last group of tests here is the answer to it.
- *
- * Read-only against real data. Nothing here presses a button that writes, and no
- * assertion names a specific chapter: which chapters exist and what is attached
- * to them differs per environment.
+ * Most checks use a chapter id no environment has. The tracks API lists every
+ * offered language for any chapter, so the tabs, the empty state and the back
+ * links can be checked without depending on what data an environment holds.
+ * Nothing here saves anything.
  */
 
 const NEXUS = APP_URLS.nexus;
 const PHONE = { width: 375, height: 812 };
 const COLD_COMPILE_BUDGET = 120_000;
+const NO_SUCH_CHAPTER = '00000000-0000-4000-8000-000000000000';
+const NO_SUCH_TRACK = '00000000-0000-4000-8000-000000000001';
 
-/** Open the first previewable chapter and return its dialog, or null. */
-async function openFirstChapter(page: any) {
+/** The real Tamil recording's list form link on prod, which lives in a personal OneDrive. */
+const ONEDRIVE_LINK =
+  'https://nerasmclasses-my.sharepoint.com/personal/haribabu_neramclasses_com/Documents/Forms/DispForm.aspx?ID=10171';
+
+async function openRecordingsPage(page: Page, query = '') {
+  await page.goto(`${NEXUS}/teacher/study-materials/${NO_SUCH_CHAPTER}/recordings${query}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await expect(page.getByRole('heading', { name: 'Class recordings' })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole('tab').first()).toBeVisible({ timeout: 60_000 });
+}
+
+/** Open a real chapter from the library, following folders a few levels down. */
+async function firstChapterId(page: Page): Promise<string | null> {
   await page.goto(`${NEXUS}/teacher/study-materials`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(5000);
-
-  const cards = page.locator('.MuiCardActionArea-root');
-  if ((await cards.count()) === 0) return null;
-
-  const total = Math.min(await cards.count(), 6);
-  for (let i = 0; i < total; i += 1) {
-    await cards.nth(i).click();
-    const dialog = page.getByRole('dialog');
-    if (await dialog.isVisible().catch(() => false)) return dialog;
-    await page.waitForTimeout(1200);
-    if (await dialog.isVisible().catch(() => false)) return dialog;
-    if (!page.url().includes('/teacher/study-materials')) return null;
+  for (let depth = 0; depth < 4; depth += 1) {
+    await page.waitForTimeout(4000);
+    const cards = page.locator('.MuiCardActionArea-root');
+    if ((await cards.count()) === 0) return null;
+    await cards.first().click();
+    await page.waitForTimeout(2500);
+    const match = page.url().match(/\/teacher\/study-materials\/([0-9a-f-]{36})(?:[/?#]|$)/i);
+    if (match) return match[1];
   }
   return null;
 }
 
-/** Open the Class recordings dialog from inside an opened chapter. */
-async function openRecordings(page: any) {
-  const dialog = await openFirstChapter(page);
-  if (!dialog) return null;
-
-  // The workspace rail: Setup carries the Recordings line.
-  const setup = page.getByRole('button', { name: /setup/i }).first();
-  if (await setup.isVisible().catch(() => false)) await setup.click();
-  await page.waitForTimeout(2500);
-
-  const recordings = page.getByRole('button', { name: /^recordings$/i }).first();
-  if (!(await recordings.isVisible().catch(() => false))) return null;
-  await recordings.click();
-  await page.waitForTimeout(3000);
-  return page.getByRole('dialog').filter({ hasText: /class recordings/i }).first();
-}
-
-test.describe('Chapter recordings (mobile)', () => {
+test.describe('Class recordings page (mobile)', () => {
   test.setTimeout(COLD_COMPILE_BUDGET);
 
-  test('every offered language is listed, with or without a recording', async ({ browser }) => {
+  test('each language is a tab that says where it stands, and the tab lives in the URL', async ({ browser }) => {
     const context = await browser.newContext({ viewport: PHONE });
     const page = await context.newPage();
+    test.skip(!(await injectAuthForPage(page, 'teacher')), 'Nexus test-login unavailable');
 
-    const injected = await injectAuthForPage(page, 'teacher');
-    test.skip(!injected, 'Nexus test-login unavailable');
+    await openRecordingsPage(page);
+    const tabs = page.getByRole('tab');
+    expect(await tabs.count()).toBeGreaterThanOrEqual(2);
+    await expect(page.getByRole('tab', { name: /English/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /தமிழ்/ })).toBeVisible();
+    // The state in words on every tab, never colour alone.
+    await expect(page.getByRole('tab', { name: /Not added/ }).first()).toBeVisible();
 
-    const dialog = await openRecordings(page);
-    test.skip(!dialog, 'No chapter reachable in this environment');
+    await page.getByRole('tab', { name: /தமிழ்/ }).click();
+    await expect(page).toHaveURL(/[?&]lang=ta\b/);
 
-    const body = await dialog!.innerText();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('tab', { name: /தமிழ்/ })).toHaveAttribute('aria-selected', 'true', { timeout: 60_000 });
 
-    // Both default languages are always on screen. The bug this replaces was
-    // that a language WITH a recording had no row of its own to find.
-    expect(body).toMatch(/English/);
-    expect(body).toMatch(/தமிழ்/);
+    await assertNoHorizontalOverflow(page);
+    await assertTouchTargetSize(page, '[role="tab"]', 44);
+    await context.close();
+  });
 
-    // And each of them commits to a state rather than leaving a blank row.
-    expect(body).toMatch(/Not added|Draft|Live|On hold/);
+  test('a language with no video says where videos come from, and offers both ways in', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: PHONE });
+    const page = await context.newPage();
+    test.skip(!(await injectAuthForPage(page, 'teacher')), 'Nexus test-login unavailable');
+
+    await openRecordingsPage(page);
+    await expect(page.getByText(/Videos are not uploaded to Nexus/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Find video in SharePoint' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Paste a SharePoint link' })).toBeEnabled();
 
     await assertNoHorizontalOverflow(page);
     await context.close();
   });
 
-  test('a recording without a transcript offers a way out, not a dead button', async ({ browser }) => {
+  test('finding a video opens the library picker as a bottom sheet, with a way out', async ({ browser }) => {
     const context = await browser.newContext({ viewport: PHONE });
     const page = await context.newPage();
+    test.skip(!(await injectAuthForPage(page, 'teacher')), 'Nexus test-login unavailable');
 
-    const injected = await injectAuthForPage(page, 'teacher');
-    test.skip(!injected, 'Nexus test-login unavailable');
+    await openRecordingsPage(page);
+    await page.getByRole('button', { name: 'Find video in SharePoint' }).click();
 
-    const dialog = await openRecordings(page);
-    test.skip(!dialog, 'No chapter reachable in this environment');
-
-    const body = await dialog!.innerText();
-    const hasDraftWithoutCheckpoints = /Draft, no checkpoints/.test(body);
-    test.skip(!hasDraftWithoutCheckpoints, 'No un-transcribed recording on this chapter');
-
-    // Publishing it open is a real, pressable action. It used to be a greyed
-    // Publish button with the reason in a caption above it, which is the state
-    // that left the recording reaching nobody.
-    const open = dialog!.getByRole('button', { name: /publish as open/i }).first();
-    await expect(open).toBeVisible();
-    await expect(open).toBeEnabled();
-
-    // The sentence names its own language, so a row read halfway down a
-    // scrolled dialog still says which recording it is about.
-    expect(body).toMatch(/Upload the .+ recording's transcript/);
+    const sheet = page.locator('.MuiDrawer-root').last();
+    await expect(sheet.getByText(/Choose the .+ class recording/)).toBeVisible({ timeout: 30_000 });
+    await expect(sheet.getByText('Not listed here?')).toBeVisible({ timeout: 30_000 });
+    await expect(sheet.getByRole('button', { name: 'Paste a SharePoint link' })).toBeVisible();
 
     await assertNoHorizontalOverflow(page);
     await context.close();
   });
 
-  test('the retired quick video link is gone from the chapter menu', async ({ browser }) => {
+  test('a OneDrive link is refused with its reason, and nothing is saved', async ({ browser }) => {
     const context = await browser.newContext({ viewport: PHONE });
     const page = await context.newPage();
+    test.skip(!(await injectAuthForPage(page, 'teacher')), 'Nexus test-login unavailable');
 
-    const injected = await injectAuthForPage(page, 'teacher');
-    test.skip(!injected, 'Nexus test-login unavailable');
+    await openRecordingsPage(page);
+    await page.getByRole('button', { name: 'Paste a SharePoint link' }).click();
+    await page.getByLabel('SharePoint link').fill(ONEDRIVE_LINK);
+    await page.getByRole('button', { name: 'Check link' }).click();
 
-    await page.goto(`${NEXUS}/teacher/study-materials`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(5000);
+    // OneDrive while the file stays there; "could not be found" once it has been
+    // moved into the library, which is the fix this message asks for.
+    await expect(page.getByText(/personal OneDrive|could not be found|did not answer/)).toBeVisible({ timeout: 60_000 });
+    // Still asking: no "Use this video?" was offered for a refused file.
+    await expect(page.getByText(/Use this video for/)).toHaveCount(0);
 
-    const menus = page.getByRole('button', { name: /more|options|actions/i });
-    test.skip((await menus.count()) === 0, 'No chapter menu in this environment');
-    await menus.first().click();
-    await page.waitForTimeout(1200);
+    await context.close();
+  });
 
-    const menu = page.getByRole('menu').first();
-    if (await menu.isVisible().catch(() => false)) {
-      const text = await menu.innerText();
-      expect(text).not.toMatch(/quick video link/i);
-      // The one that replaced it is still there.
-      expect(text).toMatch(/class recordings/i);
-    }
+  test('Back returns to the chapter Setup tab by default, and to the library when opened from it', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: PHONE });
+    const page = await context.newPage();
+    test.skip(!(await injectAuthForPage(page, 'teacher')), 'Nexus test-login unavailable');
+
+    await openRecordingsPage(page);
+    const back = page.getByRole('link', { name: /^Back to/ }).first();
+    await expect(back).toHaveAttribute('href', `/teacher/study-materials/${NO_SUCH_CHAPTER}?tab=setup`);
+
+    await openRecordingsPage(page, '?from=library');
+    const libraryBack = page.getByRole('link', { name: /^Back to/ }).first();
+    await expect(libraryBack).toHaveAttribute('href', /^\/teacher\/study-materials(\?folder=.+)?$/);
+
+    // Done goes the same way.
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(page).toHaveURL(/\/teacher\/study-materials(\?folder=[^&]+)?$/, { timeout: 60_000 });
+
+    await context.close();
+  });
+
+  test('a real chapter: Setup opens the page and Back returns to Setup', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: PHONE });
+    const page = await context.newPage();
+    test.skip(!(await injectAuthForPage(page, 'teacher')), 'Nexus test-login unavailable');
+
+    const id = await firstChapterId(page);
+    test.skip(!id, 'No chapter in this environment');
+
+    await page.goto(`${NEXUS}/teacher/study-materials/${id}?tab=setup`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Manage' }).first().click({ timeout: 60_000 });
+    await expect(page).toHaveURL(new RegExp(`/teacher/study-materials/${id}/recordings`), { timeout: 60_000 });
+    await expect(page.getByRole('heading', { name: 'Class recordings' })).toBeVisible();
+
+    // The file name is never a SharePoint page name.
+    await expect(page.getByText('DispForm.aspx')).toHaveCount(0);
+
+    await page.getByRole('link', { name: /^Back to/ }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/teacher/study-materials/${id}\\?tab=setup`), { timeout: 60_000 });
 
     await assertNoHorizontalOverflow(page);
     await context.close();
   });
 
-  test('a student card never promises a recording that is not published', async ({ browser }) => {
-    const context = await browser.newContext({ viewport: PHONE });
-    const page = await context.newPage();
-
-    const injected = await injectAuthForPage(page, 'student');
-    test.skip(!injected, 'Nexus test-login unavailable');
-
-    await page.goto(`${NEXUS}/student/study-materials`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(6000);
-
-    // Nothing here asserts that a chip IS present: whether any chapter has a
-    // published recording is environment data. What must hold is that the grid
-    // renders and does not overflow with the new chips on it.
-    //
-    // Filtered to the VISIBLE match. The unfiltered locator resolved to the
-    // navigation's own "Study Materials" entry, which sits in the closed mobile
-    // drawer at this width, so the assertion failed on a hidden element while
-    // the page title it meant to check was on screen the whole time.
-    await expect(
-      page.getByText(/study materials/i).filter({ visible: true }).first(),
-    ).toBeVisible();
-    await assertNoHorizontalOverflow(page);
-    await context.close();
-  });
-
-  /* ── Finding and attaching the video ─────────────────────────────────── */
-
-  test('every language shows the three steps, in order, video first', async ({ browser }) => {
-    const context = await browser.newContext({ viewport: PHONE });
-    const page = await context.newPage();
-
-    const injected = await injectAuthForPage(page, 'teacher');
-    test.skip(!injected, 'Nexus test-login unavailable');
-
-    const dialog = await openRecordings(page);
-    test.skip(!dialog, 'No chapter reachable in this environment');
-
-    const body = await dialog!.innerText();
-
-    // The sequence the five-button row never admitted to having.
-    expect(body).toMatch(/Video/);
-    expect(body).toMatch(/Transcript/);
-    expect(body).toMatch(/Publish/);
-
-    // Said once at the top, so the row headings do not have to repeat it.
-    expect(body).toMatch(/three steps/i);
-
-    await assertNoHorizontalOverflow(page);
-    await context.close();
-  });
-
-  test('a language with no recording offers the search, not just a paste box', async ({ browser }) => {
-    const context = await browser.newContext({ viewport: PHONE });
-    const page = await context.newPage();
-
-    const injected = await injectAuthForPage(page, 'teacher');
-    test.skip(!injected, 'Nexus test-login unavailable');
-
-    const dialog = await openRecordings(page);
-    test.skip(!dialog, 'No chapter reachable in this environment');
-
-    const body = await dialog!.innerText();
-    test.skip(!/Not added/.test(body), 'Every language on this chapter already has a recording');
-
-    // The control whose absence is the entire reason for this work.
-    const search = dialog!.getByRole('button', { name: /search sharepoint or onedrive/i }).first();
-    await expect(search).toBeVisible();
-    await expect(search).toBeEnabled();
-
-    // Pasting survives as the fallback for a drive neither search can reach.
-    await expect(dialog!.getByRole('button', { name: /paste a link/i }).first()).toBeVisible();
-
-    // A language with no video cannot start the later steps, and says so rather
-    // than hiding them: a step a teacher cannot see is one they cannot plan for.
-    expect(body).toMatch(/add the video first/i);
-
-    await assertNoHorizontalOverflow(page);
-    await context.close();
-  });
-
-  test('the search opens a picker that reads both drives', async ({ browser }) => {
-    const context = await browser.newContext({ viewport: PHONE });
-    const page = await context.newPage();
-
-    const injected = await injectAuthForPage(page, 'teacher');
-    test.skip(!injected, 'Nexus test-login unavailable');
-
-    const dialog = await openRecordings(page);
-    test.skip(!dialog, 'No chapter reachable in this environment');
-
-    const search = dialog!.getByRole('button', { name: /search sharepoint or onedrive/i }).first();
-    test.skip(!(await search.isVisible().catch(() => false)), 'No language awaiting a recording');
-
-    await search.click();
-    await page.waitForTimeout(2000);
-
-    // The picker is a bottom drawer at this width, not the desktop dialog.
-    const box = page.getByLabel(/search sharepoint and onedrive for a recording/i).first();
-    await expect(box).toBeVisible();
-
-    // It says which drives it covers, because a teacher who cannot find their
-    // file needs to know where it looked before they conclude it is broken.
-    await expect(page.getByText(/your own OneDrive/i).first()).toBeVisible();
-
-    // Typing must not fire a request per keystroke, but it must reach the API.
-    await box.fill('recording');
-    await page.waitForTimeout(2500);
-
-    // No assertion on RESULTS: which files exist is environment data. What must
-    // hold is that the picker stays usable and does not overflow the phone.
-    await assertNoHorizontalOverflow(page);
-    await assertTouchTargetSize(page, '[role="dialog"] button, .MuiDrawer-root button', 44);
-
-    await context.close();
-  });
-
-  test('a student cannot enumerate either drive through the recording search', async ({ request }) => {
-    // The site half of this route runs app-only, reading the library with the
-    // application's permissions rather than the caller's, so the staff gate is
-    // the only thing standing between a student and a document library they
-    // have no account on. The new params must not have opened a way around it.
+  test('none of the recordings routes answer a student', async ({ request }) => {
     const auth = await getTestAuthToken(request, 'student');
     test.skip(!auth?.testToken, 'Nexus test-login unavailable');
+    const headers = { Authorization: `Bearer ${auth!.testToken}`, 'Content-Type': 'application/json' };
+    const base = `${NEXUS}/api/study-materials/files/${NO_SUCH_CHAPTER}/video-tracks`;
 
-    const res = await request.get(
-      `${NEXUS}/api/sharepoint/search?q=recording&kind=video&scope=both`,
-      { headers: { Authorization: `Bearer ${auth!.testToken}` } },
-    );
-
-    expect(res.status()).toBe(403);
-    expect((await res.text()).toLowerCase()).toContain('staff');
+    const calls = [
+      request.get(`${base}?resolve=1`, { headers }),
+      request.post(`${base}/resolve-link`, { headers, data: { url: ONEDRIVE_LINK } }),
+      request.get(`${base}/${NO_SUCH_TRACK}/preview`, { headers }),
+      request.get(`${base}/${NO_SUCH_TRACK}/thumbnail`, { headers }),
+      request.post(`${base}/${NO_SUCH_TRACK}/prepare`, { headers, data: {} }),
+      request.get(`${NEXUS}/api/sharepoint/thumbnail?drive=b!x&item=y`, { headers }),
+    ];
+    for (const res of await Promise.all(calls)) {
+      expect(res.status(), res.url()).toBe(403);
+    }
   });
 });

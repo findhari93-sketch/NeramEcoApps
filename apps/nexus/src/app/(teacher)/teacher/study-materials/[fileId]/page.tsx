@@ -9,6 +9,10 @@
  * it feel heavy. A page has a URL (`?tab=` is shareable and survives a
  * refresh), a working back button, and no second layer of chrome around
  * whatever dialog Setup opens next.
+ *
+ * Recordings are their own page now (/recordings), for the same reason: the
+ * dialog they used to live in lost its place whenever the checkpoint editor
+ * opened. Its Back returns here, to the Setup tab.
  */
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
@@ -32,8 +36,8 @@ import ChapterCompletionPanel from '@/components/study-materials/ChapterCompleti
 import DownloadGrantDialog, { type GrantTarget } from '@/components/study-materials/DownloadGrantDialog';
 import StudyTestAuthorDialog from '@/components/study-materials/StudyTestAuthorDialog';
 import GenerateChapterTestSheet from '@/components/study-materials/GenerateChapterTestSheet';
-import StudyVideoTracksDialog from '@/components/study-materials/StudyVideoTracksDialog';
-import type { NexusStudyFileDTO, NexusStudyFileRecording } from '@neram/database/types';
+import { recordingsHref } from '@/lib/recordings-nav';
+import type { NexusStudyFileDTO } from '@neram/database/types';
 
 type FileDTO = NexusStudyFileDTO & {
   allow_download?: boolean | null;
@@ -92,14 +96,11 @@ function ChapterWorkspace() {
     if (!authLoading) load();
   }, [authLoading, load]);
 
-  // Dialogs this page owns: the same four the Setup checklist's buttons reach
-  // for, so opening the workspace never loses the way in to any of them.
+  // Dialogs this page owns: the test sheets and the download grant. Recordings
+  // are a page of their own, reached with a link.
   const [grantTarget, setGrantTarget] = useState<GrantTarget | null>(null);
   const [testFile, setTestFile] = useState<{ id: string; title: string; qb_paper?: FileDTO['qb_paper'] } | null>(null);
   const [generateFile, setGenerateFile] = useState<{ id: string; title: string } | null>(null);
-  const [tracksFile, setTracksFile] = useState<
-    { id: string; title: string; recording?: NexusStudyFileRecording | null } | null
-  >(null);
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -142,8 +143,7 @@ function ChapterWorkspace() {
       }
     },
     onOpenTest: (testId: string) => router.push(`/teacher/tests/${testId}`),
-    onRecordings: () =>
-      file && setTracksFile({ id: file.id, title: file.title, recording: file.recording ?? null }),
+    onRecordings: () => router.push(recordingsHref({ fileId, from: 'chapter' })),
     onDownloadAccess: () =>
       file && setGrantTarget({ kind: 'file', id: file.id, name: file.title, folderId: file.folder_id }),
   };
@@ -290,15 +290,6 @@ function ChapterWorkspace() {
           load();
         }}
         onGenerated={(s) => setSnack({ msg: `${s.title} is live, ${s.serve} questions per attempt`, sev: 'success' })}
-      />
-
-      {/* Every video on this chapter, one dialog. */}
-      <StudyVideoTracksDialog
-        open={!!tracksFile}
-        file={tracksFile}
-        getToken={getToken}
-        onClose={() => setTracksFile(null)}
-        onChanged={load}
       />
 
       {/* Time-limited download grants. */}

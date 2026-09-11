@@ -308,20 +308,25 @@ async function listVideoFiles(
 export function parseRecordingFileName(
   name: string,
 ): { subject: string; startedAt: string } | null {
-  const m = name.match(/^(.+?)-(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:-.*)?\.(?:mp4|mkv)$/i);
+  const m = name.match(/^(.+?)-(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(UTC)?(?:-.*)?\.(?:mp4|mkv)$/i);
   if (!m) return null;
 
-  const [, rawSubject, y, mo, d, hh, mm, ss] = m;
-  const subject = rawSubject.replace(/_/g, ' ').trim();
+  const [, rawSubject, y, mo, d, hh, mm, ss, utc] = m;
+  const subject = rawSubject.replace(/_/g, ' ').trim() || 'Class';
   const month = Number(mo);
   const day = Number(d);
   const hour = Number(hh);
   if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23) return null;
 
-  return {
-    subject: subject || 'Class',
-    startedAt: `${y}-${mo}-${d}T${hh}:${mm}:${ss}`,
-  };
+  if (!utc) return { subject, startedAt: `${y}-${mo}-${d}T${hh}:${mm}:${ss}` };
+
+  // Newer Teams recordings stamp the time in UTC and say so, as in
+  // "Class-20260728_132838UTC-Meeting Recording.mp4". The regex used to require
+  // a dash straight after the seconds, so every one of them read as "not a
+  // recording". Shifted to IST here so every caller keeps comparing one zone.
+  const ms = Date.UTC(Number(y), month - 1, day, hour, Number(mm), Number(ss));
+  if (Number.isNaN(ms)) return null;
+  return { subject, startedAt: new Date(ms + 5.5 * 60 * 60 * 1000).toISOString().substring(0, 19) };
 }
 
 /**

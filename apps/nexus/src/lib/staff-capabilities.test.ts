@@ -110,6 +110,7 @@ describe('teacher tier (external, restricted)', () => {
     'structure.batch.manage',
     'structure.enrollment.add',
     'structure.enrollment.remove',
+    'structure.student.account',
     'structure.plan.delete',
     'teach.timetable.schedule',
     'coord.student.dormancy',
@@ -117,6 +118,15 @@ describe('teacher tier (external, restricted)', () => {
     'coord.photo_ms_push',
     'impersonate.any',
   ];
+
+  it('cannot create a student Microsoft account or reset its password', () => {
+    // A new account consumes a paid license and hands someone a working login,
+    // and a reset locks a student out until the new password reaches them. Both
+    // stay with the internal team, like adding and removing students.
+    expect(can('teacher', 'structure.student.account')).toBe(false);
+    expect(can('manager', 'structure.student.account')).toBe(true);
+    expect(can('admin', 'structure.student.account')).toBe(true);
+  });
 
   it('loses the structural powers it used to have', () => {
     // These are the audit's highest-risk findings: before the split, any teacher

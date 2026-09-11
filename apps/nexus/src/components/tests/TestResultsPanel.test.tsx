@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import TestResultsPanel from './TestResultsPanel';
 
 /**
- * The results tab, as a teacher reads it.
+ * The results, as a teacher reads them.
  *
  * Written from a founder's report on the live page: a student row showed a bare
  * "100%" and a "7 attempts" count. Neither said how many questions that was,
@@ -47,6 +47,24 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+const notStarted = (over: Record<string, unknown> = {}) =>
+  row({
+    student_id: 'stu-2',
+    student_name: 'Meera S',
+    attempts: 0,
+    first_percentage: null,
+    first_score: null,
+    first_total_marks: null,
+    best_percentage: null,
+    best_score: null,
+    best_total_marks: null,
+    last_submitted_at: null,
+    passed: null,
+    status: 'not_started',
+    bucket: 'mandatory_caught_up',
+    ...over,
+  });
+
 const RUN_STATS = {
   students: 1,
   attempts: 7,
@@ -66,13 +84,7 @@ const RUN_STATS = {
 
 function mountWith(payload: Record<string, unknown>) {
   const authFetch = vi.fn(async () => ({ data: payload }));
-  render(
-    <TestResultsPanel
-      testId="test-1"
-      authFetch={authFetch as never}
-      getToken={async () => 'tok'}
-    />,
-  );
+  render(<TestResultsPanel testId="test-1" authFetch={authFetch as never} getToken={async () => 'tok'} />);
   return authFetch;
 }
 
@@ -85,9 +97,7 @@ describe('TestResultsPanel', () => {
     // Both the score chip and the summary line carry marks.
     expect(screen.getAllByText(/100% \(45\/45\)/).length).toBeGreaterThan(0);
 
-    // Nothing in the student list is a bare percentage. The stat tiles are
-    // excluded deliberately: a tile's value is explained by the hint directly
-    // under it, which is asserted separately below.
+    // Nothing in the student list is a bare percentage.
     const list = screen.getByText('Inaya Nizamudeen').closest('.MuiPaper-root')!;
     const bare = Array.from(list.querySelectorAll('*')).filter(
       (el) => el.children.length === 0 && /^\d+%$/.test((el.textContent || '').trim()),
@@ -98,8 +108,9 @@ describe('TestResultsPanel', () => {
   it('explains the cohort average with the marks behind it', async () => {
     mountWith({ rows: [row()], stats: RUN_STATS, questions: [], runs: [], run: null });
 
-    await waitFor(() => expect(screen.getByText('AVERAGE')).not.toBeNull());
-    expect(screen.getByText('best each, 45 of 45 marks')).not.toBeNull();
+    await waitFor(() =>
+      expect(screen.getByText('Average 100% (45 of 45 marks), best attempt each · pass mark 60%')).not.toBeNull(),
+    );
   });
 
   it('shows the first sitting beside the best one, both with raw marks', async () => {
@@ -116,30 +127,7 @@ describe('TestResultsPanel', () => {
    * finished class from a class that ignored the paper.
    */
   it('lists the students who never sat it, under a heading saying why they were expected to', async () => {
-    mountWith({
-      rows: [
-        row(),
-        row({
-          student_id: 'stu-2',
-          student_name: 'Meera S',
-          attempts: 0,
-          first_percentage: null,
-          first_score: null,
-          first_total_marks: null,
-          best_percentage: null,
-          best_score: null,
-          best_total_marks: null,
-          last_submitted_at: null,
-          passed: null,
-          status: 'not_started',
-          bucket: 'mandatory_caught_up',
-        }),
-      ],
-      stats: RUN_STATS,
-      questions: [],
-      runs: [],
-      run: null,
-    });
+    mountWith({ rows: [row(), notStarted()], stats: RUN_STATS, questions: [], runs: [], run: null });
 
     await waitFor(() => expect(screen.getByText('Meera S')).not.toBeNull());
     expect(screen.getAllByText(/Not started/).length).toBeGreaterThan(0);
@@ -147,13 +135,15 @@ describe('TestResultsPanel', () => {
     expect(screen.getByText(/CAUGHT UP LATER/)).not.toBeNull();
   });
 
-  it('counts who is done against who it was set for, not against who turned up', async () => {
-    mountWith({ rows: [row()], stats: RUN_STATS, questions: [], runs: [], run: null });
+  it('counts who is done against everybody the run was set for', async () => {
+    mountWith({ rows: [row(), notStarted()], stats: RUN_STATS, questions: [], runs: [], run: null });
 
-    await waitFor(() => expect(screen.getByText('DONE')).not.toBeNull());
-    expect(screen.getByText('1 of 2')).not.toBeNull();
-    expect(screen.getByText('of the students this is set for')).not.toBeNull();
-    expect(screen.getByText('NOT DONE')).not.toBeNull();
+    await waitFor(() => expect(screen.getByTestId('stat-tile-did')).not.toBeNull());
+    const done = screen.getByTestId('stat-tile-did');
+    expect(within(done).getByText('Done')).not.toBeNull();
+    expect(within(done).getByText('1')).not.toBeNull();
+    expect(within(done).getByText('of 2')).not.toBeNull();
+    expect(within(screen.getByTestId('stat-tile-not_done')).getByText('1 not started, 0 missed')).not.toBeNull();
   });
 
   /**
@@ -185,8 +175,8 @@ describe('TestResultsPanel', () => {
     await waitFor(() => expect(screen.getByText(/Nobody has sat this test yet/)).not.toBeNull());
   });
 
-  /** The paper wide view must read exactly as it always has. */
-  it('keeps the original four tiles when no run is selected', async () => {
+  /** The paper-wide view has no roster, so no "done" or "not done" to show. */
+  it('keeps to the groups that mean something when no run is selected', async () => {
     mountWith({
       rows: [row()],
       stats: {
@@ -210,10 +200,11 @@ describe('TestResultsPanel', () => {
       run: null,
     });
 
-    await waitFor(() => expect(screen.getByText('STUDENTS')).not.toBeNull());
-    expect(screen.getByText('ATTEMPTS')).not.toBeNull();
-    expect(screen.getByText('retakes included')).not.toBeNull();
-    expect(screen.queryByText('DONE')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('stat-tile-all')).not.toBeNull());
+    expect(within(screen.getByTestId('stat-tile-all')).getByText('31 attempts, retakes included')).not.toBeNull();
+    expect(screen.getByTestId('stat-tile-passed')).not.toBeNull();
+    expect(screen.queryByTestId('stat-tile-did')).toBeNull();
+    expect(screen.queryByTestId('stat-tile-not_done')).toBeNull();
   });
 
   it('offers the runs of this paper so a class test can be read apart from practice', async () => {
@@ -256,6 +247,55 @@ describe('TestResultsPanel', () => {
     // ask without scrolling, and the row itself so they know whose it is.
     expect(screen.getByText(/asked to reopen this test/)).not.toBeNull();
     expect(screen.getByText(/· asked to reopen$/)).not.toBeNull();
+  });
+
+  /** Mounted on its own, as the paper workspace does, it brings its own switch. */
+  it('offers its own Students and Questions switch when no page controls it', async () => {
+    mountWith({
+      rows: [row()],
+      stats: RUN_STATS,
+      questions: [
+        {
+          question_id: 'q1',
+          question_text: 'Which dynasty built the Lingaraja temple?',
+          sort_order: 0,
+          answered: 4,
+          correct: 3,
+          correct_pct: 75,
+          top_wrong_option: null,
+          option_counts: null,
+          needs_review: false,
+          ai: null,
+        },
+      ],
+      runs: [],
+      run: null,
+    });
+
+    await waitFor(() => expect(screen.getByText('Inaya Nizamudeen')).not.toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Questions' }));
+    await waitFor(() => expect(screen.getByTestId('question-row-1')).not.toBeNull());
+    expect(screen.queryByText('Inaya Nizamudeen')).toBeNull();
+  });
+
+  it('shows no switch of its own when the page chooses the tab', async () => {
+    const authFetch = vi.fn(async () => ({
+      data: { rows: [row()], stats: RUN_STATS, questions: [], runs: [], run: null },
+    }));
+    render(
+      <TestResultsPanel
+        testId="test-1"
+        authFetch={authFetch as never}
+        getToken={async () => 'tok'}
+        view="students"
+        runId=""
+        onRunIdChange={() => {}}
+        pool={[]}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Inaya Nizamudeen')).not.toBeNull());
+    expect(screen.queryByRole('button', { name: 'Questions' })).toBeNull();
   });
 });
 

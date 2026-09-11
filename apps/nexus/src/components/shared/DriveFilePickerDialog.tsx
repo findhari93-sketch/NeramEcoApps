@@ -75,6 +75,13 @@ export interface DriveItem {
   source?: 'site' | 'mine';
   /** The folder this item sits in, e.g. "Neram library / 2019 JEE Papers". */
   folderPath?: string | null;
+  /**
+   * The drive the item lives on. With `id` it lets a pick be looked up by its
+   * ids, because the webUrl SharePoint search returns is often a list form page
+   * ("Forms/DispForm.aspx?ID=86") rather than the file.
+   */
+  driveId?: string | null;
+  driveType?: string | null;
 }
 
 interface DriveFilePickerDialogProps {
@@ -86,6 +93,18 @@ interface DriveFilePickerDialogProps {
   onAdded?: (resource: ClassResource) => void;
   /** Hand-back mode. When given, nothing is posted anywhere. */
   onPick?: (item: DriveItem) => void;
+  /**
+   * A second way in, offered under the list as "Paste a SharePoint link". The
+   * picker closes and the caller opens its own box.
+   */
+  onPasteLink?: () => void;
+  /**
+   * Where a file has to be put before it can be picked, e.g. the library's Class
+   * videos folder. Opens in a new tab, so the teacher can upload there and come
+   * back to Refresh.
+   */
+  openFolderUrl?: string | null;
+  openFolderLabel?: string;
   /**
    * Multi-select hand-back mode: rows toggle a checkbox instead of picking
    * immediately, and an "Add N files" action in the footer hands back
@@ -163,6 +182,9 @@ export default function DriveFilePickerDialog({
   title,
   subtitle,
   onNotify,
+  onPasteLink,
+  openFolderUrl,
+  openFolderLabel = 'Open the folder in SharePoint',
 }: DriveFilePickerDialogProps) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
@@ -587,6 +609,55 @@ export default function DriveFilePickerDialog({
           <Typography variant="caption" color="text.secondary">
             {emptyMessage}
           </Typography>
+        </Box>
+      )}
+
+      {/* The way out when the file is not in the list: paste its link instead,
+          or open the folder it belongs in, put it there, and refresh. */}
+      {(onPasteLink || openFolderUrl) && (
+        <Box
+          sx={{
+            mt: 2,
+            pt: 1.5,
+            borderTop: `1px solid ${theme.palette.divider}`,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+          <Typography variant="caption" color="text.secondary" sx={{ width: '100%' }}>
+            Not listed here?
+          </Typography>
+          {onPasteLink && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                onClose();
+                onPasteLink();
+              }}
+              sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
+            >
+              Paste a SharePoint link
+            </Button>
+          )}
+          {openFolderUrl && (
+            <Button
+              size="small"
+              href={openFolderUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ textTransform: 'none', minHeight: 44 }}
+            >
+              {openFolderLabel}
+            </Button>
+          )}
+          {openFolderUrl && (
+            <Button size="small" onClick={load} sx={{ textTransform: 'none', minHeight: 44 }}>
+              Refresh
+            </Button>
+          )}
         </Box>
       )}
 

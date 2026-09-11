@@ -86,7 +86,8 @@ function ReadinessRow({ line, onAction }: { line: ReadinessLine; onAction: () =>
     line.key === 'test'
       ? 'Test'
       : line.key === 'recordings'
-        ? 'Recordings'
+        ? // The line is already titled Recordings; the button says what it opens.
+          'Manage'
         : line.key === 'quick_link'
           ? // The only thing left to do with an old link is move it, so the
             // button says that rather than offering to edit it.

@@ -165,10 +165,12 @@ export default function RecapCheckpointsEditor({ sections, onChange, disabled, e
                 size="small"
                 type="number"
                 label="Min correct to pass"
-                placeholder="all"
+                placeholder="default"
                 value={s.min_questions_to_pass ?? ''}
                 disabled={disabled}
-                helperText="Blank = all"
+                // Blank is filled in by the server from the pass percentage, the
+                // same rule the student quiz grades against. It never meant "all".
+                helperText="Blank = default pass mark"
                 onChange={(e) =>
                   patchSection(si, {
                     min_questions_to_pass: e.target.value === '' ? null : Number(e.target.value),

@@ -33,20 +33,32 @@ export interface RecordQuestionEditInput {
   after: Record<string, unknown>;
 }
 
+/**
+ * Returns the new row's id, so an AI check can point at the edit it produced,
+ * or null when the audit insert failed (logged, never thrown).
+ */
 export async function recordQuestionEdit(
   input: RecordQuestionEditInput,
   client?: TypedSupabaseClient,
-): Promise<void> {
+): Promise<string | null> {
   const supabase = client || getSupabaseAdminClient();
-  const { error } = await (supabase as any).from(EDITS).insert({
-    question_id: input.questionId,
-    test_id: input.testId ?? null,
-    edited_by: input.editedBy ?? null,
-    source: input.source,
-    before: input.before || {},
-    after: input.after || {},
-  });
-  if (error) console.error('Question edit audit insert failed:', error.message);
+  const { data, error } = await (supabase as any)
+    .from(EDITS)
+    .insert({
+      question_id: input.questionId,
+      test_id: input.testId ?? null,
+      edited_by: input.editedBy ?? null,
+      source: input.source,
+      before: input.before || {},
+      after: input.after || {},
+    })
+    .select('id')
+    .single();
+  if (error) {
+    console.error('Question edit audit insert failed:', error.message);
+    return null;
+  }
+  return (data as { id?: string } | null)?.id ?? null;
 }
 
 export interface NexusQuestionEdit {

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getRecapById, saveRecapSections } from '@neram/database';
-import { resolveSectionGate } from '@/lib/recap-gate';
 import { readRecapDefaults } from '@/lib/recap-defaults';
+import { findUnpassableCheckpoint } from '@/lib/checkpoint-validation';
+import { stampTrackGate } from '@/lib/track-recording';
+import { describeRecordingUrl } from '@/lib/chapter-recordings';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import type { GeneratedRecapSection } from '@neram/database';
 
@@ -16,58 +18,24 @@ import type { GeneratedRecapSection } from '@neram/database';
  * nexus_class_recap_attempts.section_id is ON DELETE CASCADE, so a blanket
  * replace on a published track would destroy every student's passed checkpoints
  * and silently re-lock them mid-chapter.
- */
-
-/**
- * Fill in how many questions each checkpoint serves and how many must be right.
  *
- * Stamped server-side, never taken from the client, and using the same resolver
- * the student quiz route reads, so what is written and what is graded cannot
- * drift. Leaving either column blank is not neutral: a NULL there once meant
- * "serve the whole bank of fifteen and get every one right", which made those
- * checkpoints quietly unpassable.
+ * On a draft nobody has attempted, a save deletes and re-inserts, so every
+ * checkpoint comes back with a NEW id. The response carries the saved track with
+ * its sections, and the editor must adopt those ids before the next save.
  */
-async function withGate(
-  trackId: string,
-  sections: GeneratedRecapSection[],
-): Promise<GeneratedRecapSection[]> {
-  const supabase = getSupabaseAdminClient() as any;
-  const defaults = await readRecapDefaults(supabase);
-
-  const { data: track } = await supabase
-    .from('nexus_class_recaps')
-    .select('question_pool_per_segment, questions_per_segment, pass_percentage')
-    .eq('id', trackId)
-    .maybeSingle();
-
-  const wanted = Math.min(
-    track?.question_pool_per_segment ?? defaults.question_pool_per_segment,
-    track?.questions_per_segment ?? defaults.questions_per_segment,
-  );
-  const passPercentage = track?.pass_percentage ?? defaults.pass_percentage;
-
-  return sections.map((s) => {
-    const { serve, minToPass } = resolveSectionGate(s, (s.questions || []).length, {
-      questionsPerSegment: wanted,
-      passPercentage,
-    });
-    return { ...s, questions_to_serve: serve, min_questions_to_pass: minToPass };
-  });
-}
 
 /**
  * GET the checkpoints so a teacher can actually read them.
- *
- * The editor used to save whatever the generator produced and then tell the
- * teacher to "review them, then publish", with no screen anywhere that could
- * open them. The two-step this whole feature rests on, generate then review,
- * only existed in the comments.
  *
  * Returns each section's ID. That is not incidental: updateRecapSections
  * decides update-in-place versus re-create on the presence of that id, and
  * re-creating archives the live sections, which strands every student's passed
  * checkpoint on an invisible row and silently re-locks them mid-chapter. An
  * editor that loads without ids destroys work on its first save.
+ *
+ * Also returns the gate the server will stamp (how many questions a checkpoint
+ * serves and the pass percentage), so the editor can say "7 of 10 to pass"
+ * instead of the "Blank = all" it used to claim, which was never true.
  */
 export async function GET(
   request: NextRequest,
@@ -79,8 +47,16 @@ export async function GET(
 
     const track = await getRecapById(params.trackId);
     if (!track || track.study_file_id !== params.id) {
-      return NextResponse.json({ error: 'Track not found' }, { status: 404 });
+      return NextResponse.json({ error: 'This recording could not be found. It may have been removed, or the link is out of date.' }, { status: 404 });
     }
+
+    const defaults = await readRecapDefaults(getSupabaseAdminClient() as any);
+    const questionsPerSegment = Math.min(
+      track.question_pool_per_segment ?? defaults.question_pool_per_segment,
+      track.questions_per_segment ?? defaults.questions_per_segment,
+    );
+    // Not on the NexusClassRecap type, which predates the column; the row has it.
+    const recordingFileName = (track as { recording_file_name?: string | null }).recording_file_name ?? null;
 
     return NextResponse.json({
       track: {
@@ -91,8 +67,15 @@ export async function GET(
         status: track.status,
         readiness: track.readiness,
         recording_url: track.recording_url,
+        recording_name: track.recording_url
+          ? describeRecordingUrl(track.recording_url, recordingFileName)
+          : null,
         video_source: track.video_source,
         video_duration_seconds: track.video_duration_seconds,
+        gate: {
+          questions_per_segment: questionsPerSegment,
+          pass_percentage: track.pass_percentage ?? defaults.pass_percentage,
+        },
       },
       sections: (track.sections || []).map((s: any) => ({
         id: s.id,
@@ -129,7 +112,7 @@ export async function PUT(
 
     const track = await getRecapById(params.trackId);
     if (!track || track.study_file_id !== params.id) {
-      return NextResponse.json({ error: 'Track not found' }, { status: 404 });
+      return NextResponse.json({ error: 'This recording could not be found. It may have been removed, or the link is out of date.' }, { status: 404 });
     }
 
     const body = await request.json().catch(() => ({}));
@@ -151,10 +134,38 @@ export async function PUT(
       }
     }
 
-    await saveRecapSections(params.trackId, await withGate(params.trackId, sections));
+    /**
+     * Whitespace-only questions are dropped here, where it is deliberate, rather
+     * than saved as a blank question a student would be shown. The query layer
+     * only drops a question whose text is exactly empty.
+     */
+    const cleaned = sections.map((s) => ({
+      ...s,
+      questions: (s.questions || []).filter(
+        (q) => q && typeof q.question_text === 'string' && q.question_text.trim(),
+      ),
+    }));
+
+    /**
+     * A checkpoint with no questions saves fine and can never be passed, which
+     * locks every checkpoint after it for every student. Refused, and named.
+     */
+    const unpassable = findUnpassableCheckpoint(cleaned);
+    if (unpassable !== -1) {
+      return NextResponse.json(
+        {
+          error: `Checkpoint ${unpassable + 1} has no questions, so no student could pass it. Add a question or delete the checkpoint.`,
+          code: 'CHECKPOINT_NO_QUESTIONS',
+          index: unpassable,
+        },
+        { status: 400 },
+      );
+    }
+
+    const supabase = getSupabaseAdminClient() as any;
+    await saveRecapSections(params.trackId, await stampTrackGate(supabase, params.trackId, cleaned));
 
     // Generated and saved, so it is no longer waiting on a human.
-    const supabase = getSupabaseAdminClient() as any;
     await supabase
       .from('nexus_class_recaps')
       .update({ readiness: 'ready', generated_at: new Date().toISOString() })

@@ -14,6 +14,8 @@ import {
 } from '@neram/ui';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import LockResetOutlinedIcon from '@mui/icons-material/LockResetOutlined';
+import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import ExamYearChip from '@/components/students/ExamYearChip';
 import { DormantChip, StudentStageChip } from '@/components/students/StudentStageChip';
@@ -28,11 +30,11 @@ import type {
 } from '@/lib/student-profile-types';
 
 /**
- * Who this student is, at a glance, plus the three actions a teacher takes.
+ * Who this student is, at a glance, plus the actions a teacher takes.
  *
- * On mobile the actions collapse into a kebab menu. Three stacked 48px buttons
- * would push the first section below the fold on a 375x812 screen, so the page
- * would open on nothing but chrome.
+ * On mobile the actions collapse into a kebab menu. Stacked 48px buttons would
+ * push the first section below the fold on a 375x812 screen, so the page would
+ * open on nothing but chrome.
  *
  * On desktop this is the sticky left rail, so it stays on screen while the
  * section stack scrolls beside it.
@@ -47,6 +49,9 @@ export default function ProfileHeaderCard({
   canSetDormancy,
   onEditStage,
   onToggleDormancy,
+  canManageAccount = false,
+  onCreateAccount,
+  onResetPassword,
 }: {
   student: ProfileStudent;
   enrollment: ProfileEnrollment;
@@ -57,6 +62,10 @@ export default function ProfileHeaderCard({
   canSetDormancy: boolean;
   onEditStage: () => void;
   onToggleDormancy: () => void;
+  /** Holds structure.student.account: may create the Microsoft account or reset its password. */
+  canManageAccount?: boolean;
+  onCreateAccount?: () => void;
+  onResetPassword?: () => void;
 }) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
@@ -64,6 +73,18 @@ export default function ProfileHeaderCard({
 
   const stage = stageKeyOf(enrollment.study_stage);
   const dormant = enrollment.participation_status === 'dormant';
+
+  // One account action, whichever this student needs: a login they do not have
+  // yet, or a new password for the one they do.
+  const accountAction = !canManageAccount
+    ? null
+    : student.ms_oid
+      ? onResetPassword
+        ? { label: 'Reset password', icon: <LockResetOutlinedIcon />, run: onResetPassword }
+        : null
+      : onCreateAccount
+        ? { label: 'Create Microsoft account', icon: <ManageAccountsOutlinedIcon />, run: onCreateAccount }
+        : null;
 
   const chips = (
     <Box
@@ -160,6 +181,16 @@ export default function ProfileHeaderCard({
               {dormant ? 'Bring back' : 'Mark dormant'}
             </Button>
           )}
+          {accountAction && (
+            <Button
+              variant="outlined"
+              startIcon={accountAction.icon}
+              onClick={accountAction.run}
+              sx={{ minHeight: 48, fontWeight: 700 }}
+            >
+              {accountAction.label}
+            </Button>
+          )}
         </Box>
       </Paper>
     );
@@ -239,6 +270,17 @@ export default function ProfileHeaderCard({
             }}
           >
             {dormant ? 'Bring back' : 'Mark dormant'}
+          </MenuItem>
+        )}
+        {accountAction && (
+          <MenuItem
+            sx={{ minHeight: 48 }}
+            onClick={() => {
+              setMenuEl(null);
+              accountAction.run();
+            }}
+          >
+            {accountAction.label}
           </MenuItem>
         )}
       </Menu>

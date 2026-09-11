@@ -1,25 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBStaff } from '@/lib/qb-auth';
 import { errorResponse } from '@/lib/api-errors';
+import { buildReviewRows, type ReviewVerdictInput } from '@/lib/question-review-schema';
 import {
   countScoredAttempts,
+  getQuestionAnalysis,
   getSupabaseAdminClient,
   recordQuestionEdit,
+  recordQuestionReviews,
   updateQBQuestion,
 } from '@neram/database';
 
 /**
  * POST /api/question-bank/tests/[id]/question-fixes            (staff)
  *
- * Apply teacher-approved corrections to questions on ONE test, from the
- * question analysis tab. The body carries only the fields the teacher actually
- * ticked in the review step, so a reply that suggested four changes to a
- * question can land as one.
+ * Two things arrive from the question analysis tab, in one body:
+ *
+ *   reviews  every verdict an AI returned for the questions a teacher sent it,
+ *            whether or not anything was changed. "Checked, nothing wrong" is
+ *            the fact that stops the same question being sent to an AI again,
+ *            so it is recorded rather than thrown away.
+ *   fixes    only the fields the teacher actually ticked, so a reply that
+ *            suggested four changes to a question can land as one.
+ *
+ * Either may be empty, not both.
  *
  * Three guards, each earning its place:
  *
  *  1. verifyQBStaff, NOT the hand-rolled `['teacher','admin'].includes(...)`
- *     that questions/[id] PATCH still uses. That check refuses a manager (a
+ *     that questions/[id] PATCH used to have. That check refused a manager (a
  *     manager row is user_type='student' with staff_role='manager'), which is
  *     the exact bug qb-auth.ts was written to end.
  *
@@ -31,6 +40,10 @@ import {
  *     has no whitelist of its own, so a spread here would let a caller set
  *     status, is_active or origin from a dialog that has no business naming
  *     them.
+ *
+ * The correct rate each reviewed question had is read BEFORE anything is
+ * written. A corrected key moves that number, and "was 0%, now 44%" is only
+ * possible if the 0% was kept.
  *
  * The response reports how many scored attempts sit on the questions whose
  * answer key moved. That number is what turns "saved" into "saved, and sixteen
@@ -81,7 +94,10 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
     const body = await request.json().catch(() => ({}) as any);
     const fixes: FixInput[] = Array.isArray(body?.fixes) ? body.fixes : [];
-    if (fixes.length === 0) {
+    const reviews: ReviewVerdictInput[] = Array.isArray(body?.reviews) ? body.reviews : [];
+    const placementId =
+      typeof body?.placement_id === 'string' && body.placement_id ? body.placement_id : null;
+    if (fixes.length === 0 && reviews.length === 0) {
       return NextResponse.json({ error: 'Nothing to apply.' }, { status: 400 });
     }
 
@@ -97,22 +113,41 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       ((links || []) as any[]).map((l) => l.qb_question_id).filter(Boolean) as string[],
     );
 
-    const wanted = fixes.map((f) => f.question_id).filter((id) => onThisTest.has(id));
-    if (wanted.length === 0) {
+    const fixIds = fixes.map((f) => f.question_id).filter((id) => onThisTest.has(id));
+    const reviewIds = reviews.map((r) => r?.question_id).filter((id) => onThisTest.has(id));
+    if (fixIds.length === 0 && reviewIds.length === 0) {
       return NextResponse.json(
         { error: 'None of those questions are on this test.' },
         { status: 400 },
       );
     }
 
-    const { data: current, error: curErr } = await supabase
-      .from('nexus_qb_questions')
-      .select('id, question_text, options, correct_answer, explanation_brief')
-      .in('id', wanted);
-    if (curErr) throw curErr;
-    const currentBy = new Map<string, any>(((current || []) as any[]).map((q) => [q.id, q]));
+    // Before any write, so a corrected key cannot move the number it records.
+    const snapshot = new Map<string, { correct_pct: number | null; answered: number }>();
+    if (reviewIds.length > 0) {
+      try {
+        const analysis = await getQuestionAnalysis(params.id, { placementId }, supabase);
+        for (const row of analysis) {
+          snapshot.set(row.question_id, { correct_pct: row.correct_pct, answered: row.answered });
+        }
+      } catch (err) {
+        // Context for the history, not a reason to refuse the teacher's fixes.
+        console.warn('[question-fixes] correct rate snapshot skipped:', (err as Error)?.message);
+      }
+    }
+
+    const currentBy = new Map<string, any>();
+    if (fixIds.length > 0) {
+      const { data: current, error: curErr } = await supabase
+        .from('nexus_qb_questions')
+        .select('id, question_text, options, correct_answer, explanation_brief')
+        .in('id', fixIds);
+      if (curErr) throw curErr;
+      for (const q of (current || []) as any[]) currentBy.set(q.id, q);
+    }
 
     const applied: Array<{ question_id: string; fields: string[] }> = [];
+    const appliedBy = new Map<string, { fields: string[]; editId: string | null }>();
     const skipped: Array<{ question_id: string; reason: string }> = [];
     const keyChanged: string[] = [];
 
@@ -170,7 +205,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       if (fields.length === 0) continue;
 
       await updateQBQuestion(fix.question_id, patch as any, supabase);
-      await recordQuestionEdit(
+      const editId = await recordQuestionEdit(
         {
           questionId: fix.question_id,
           testId: params.id,
@@ -183,8 +218,20 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       );
 
       applied.push({ question_id: fix.question_id, fields });
+      appliedBy.set(fix.question_id, { fields, editId });
       if (fields.includes('correct_answer')) keyChanged.push(fix.question_id);
     }
+
+    const reviewRows = buildReviewRows({
+      reviews,
+      onThisTest,
+      applied: appliedBy,
+      snapshot,
+      testId: params.id,
+      placementId,
+      reviewedBy: auth.caller.id,
+    });
+    await recordQuestionReviews(reviewRows, supabase);
 
     // Only asked for when a key actually moved. A wording fix changes nothing
     // about a recorded score, and offering a re-grade after one would train the
@@ -196,6 +243,8 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       data: {
         applied,
         skipped,
+        checked: reviewRows.length,
+        fixed_question_ids: applied.map((a) => a.question_id),
         answer_key_changed: keyChanged,
         stale_attempts: staleAttempts,
       },

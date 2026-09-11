@@ -19,6 +19,18 @@ export interface EnrolledStudent {
   ms_oid: string | null;
   awaiting_microsoft: boolean; // enrolled, but no Entra account yet: cannot sign in
 
+  /** nexus_enrollments.id, which removing a student from the class needs. */
+  enrollment_id?: string;
+  enrolled_at?: string | null;
+  /**
+   * users.nexus_first_login_at / nexus_last_login_at. Written only when the
+   * student actually opens Nexus, unlike users.last_login_at.
+   */
+  first_signed_in_at?: string | null;
+  last_seen_at?: string | null;
+  /** Another row on this roster that may be the same person. See lib/roster-duplicates. */
+  possible_duplicate_of?: { id: string; name: string } | null;
+
   batch: StudentBatch | null; // classroom section (nexus_batches)
   exam_batch: string | null; // exam-year cohort (users.academic_year)
   academic_year?: string | null; // same value, named after the column
@@ -50,10 +62,15 @@ export interface StudentRowProps {
   doneColor: string;
   presenceStatus?: string | null;
   isMobile: boolean;
+  /** One clock for every row, so "Seen 2h ago" agrees down the list. */
+  now: number;
+  /** The search text, so the letters it matched in the name can be marked. */
+  query?: string;
   /** Select mode turns row taps into selection toggles instead of navigation. */
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
   onOpen: () => void;
-  onCopy: (e: React.MouseEvent, email: string) => void;
+  /** The row's actions menu. Hidden in select mode, where a tap means "select". */
+  actions?: React.ReactNode;
 }

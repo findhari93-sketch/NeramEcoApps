@@ -15,7 +15,14 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { effectiveAttemptScore } from './exam-score';
 import { gradeQBAnswerStrict } from './question-bank';
-import { composeTest, getComposedTestQuestions, gradeAgainstDraw } from './test-repository';
+import {
+  answersAsOriginal,
+  attemptDrawKey,
+  composeTest,
+  getComposedTestQuestions,
+  gradeAgainstDraw,
+  loadAttemptDraws,
+} from './test-repository';
 
 const ATTEMPTS = 'nexus_test_attempts';
 const TESTS = 'nexus_tests';
@@ -185,7 +192,7 @@ async function collectAnsweredQuestions(
 ): Promise<Map<string, AnsweredQuestion>> {
   const { data: attempts, error } = await supabase
     .from(ATTEMPTS)
-    .select('answers, submitted_at')
+    .select('test_id, attempt_number, answers, submitted_at')
     .eq('student_id', studentId)
     .eq('status', 'submitted')
     // Deliberately NOT filtered to official. This feeds "fix my mistakes", and a
@@ -196,11 +203,20 @@ async function collectAnsweredQuestions(
     .limit(Math.min(Math.max(opts.limit ?? 100, 1), 500));
   if (error) throw error;
 
+  // A drawn paper stores the letter the student CLICKED. Read raw, a correct
+  // answer on a shuffled question grades as wrong, and "fix my mistakes" then
+  // serves the student questions they actually got right.
+  const draws = await loadAttemptDraws(
+    { testIds: (attempts || []).map((a: any) => a.test_id), studentId },
+    supabase,
+  );
+
   // Oldest first, so a later attempt on the same question simply overwrites the
   // earlier verdict and "wrong but since corrected" resolves itself.
   const latest = new Map<string, { selected: string | null; answered_at: string | null }>();
   for (const a of attempts || []) {
-    const answers = (a.answers || {}) as Record<string, string>;
+    const draw = a.test_id ? draws.get(attemptDrawKey(a.test_id, studentId, a.attempt_number)) : null;
+    const answers = answersAsOriginal(a.answers, draw);
     for (const [questionId, selected] of Object.entries(answers)) {
       latest.set(questionId, { selected: selected ?? null, answered_at: a.submitted_at });
     }
@@ -981,12 +997,30 @@ export interface NexusQuestionAnalysisRow {
   correct_pct: number | null;
   /** The wrong option most people picked, which is where the misconception is. */
   top_wrong_option: { key: string; text: string | null; count: number } | null;
+  /**
+   * How many picked each option, keyed by the option's own id, after undoing
+   * any shuffle. Null for a question with no options (numerical, drawing).
+   * Feeds the per-option bars on the questions list.
+   */
+  option_counts: Record<string, number> | null;
   /** Under this, the question is more likely broken than hard. */
   needs_review: boolean;
 }
 
 /** How low a correct rate has to be before the question itself is the suspect. */
 export const QUESTION_REVIEW_THRESHOLD_PCT = 20;
+
+/**
+ * The option id an answer names, matched case-insensitively, or the answer
+ * itself when no option matches (a numerical value, or a stale id).
+ */
+function optionKeyFor(options: Array<{ id?: string }> | null, selected: string): string {
+  const raw = String(selected).trim();
+  if (!options) return raw;
+  const wanted = raw.toLowerCase();
+  const hit = options.find((o) => typeof o?.id === 'string' && o.id.trim().toLowerCase() === wanted);
+  return hit?.id ?? raw;
+}
 
 /**
  * Per question: how many got it right, and which wrong option pulled the most
@@ -1004,7 +1038,7 @@ export async function getQuestionAnalysis(
   // same reason as the cohort stats above.
   let attemptQuery = supabase
     .from(ATTEMPTS)
-    .select('answers')
+    .select('student_id, attempt_number, answers')
     .eq('test_id', testId)
     .eq('status', 'submitted')
     .eq('mode', 'official');
@@ -1013,34 +1047,46 @@ export async function getQuestionAnalysis(
   // a different fact from one that a hundred practising strangers found hard.
   if (opts?.placementId) attemptQuery = attemptQuery.eq('placement_id', opts.placementId);
 
-  const [questions, { data: attempts, error }] = await Promise.all([
+  const [questions, { data: attempts, error }, draws] = await Promise.all([
     getComposedTestQuestions(testId, true, supabase),
     attemptQuery,
+    loadAttemptDraws({ testIds: [testId] }, supabase),
   ]);
   if (error) throw error;
   if (questions.length === 0) return [];
+
+  // Every sheet in the bank's own lettering, translated once rather than once
+  // per question. Reading them raw is the bug that reported 25% right on a run
+  // that had scored 87%, and "0 of 9, most picked Copper Age" on a question all
+  // nine had answered Bronze Age: a drawn paper stores the letter they CLICKED.
+  const sheets = ((attempts || []) as any[]).map((a) =>
+    answersAsOriginal(a.answers, draws.get(attemptDrawKey(testId, a.student_id, a.attempt_number))),
+  );
 
   return questions.map((q) => {
     let answered = 0;
     let correct = 0;
     const wrongCounts = new Map<string, number>();
+    const options = Array.isArray(q.options) ? (q.options as Array<{ id?: string; text?: string }>) : null;
+    const optionCounts: Record<string, number> | null = options && options.length > 0 ? {} : null;
 
-    for (const a of attempts || []) {
-      const selected = ((a.answers || {}) as Record<string, string>)[q.question_id];
+    for (const sheet of sheets) {
+      const selected = sheet[q.question_id];
       if (selected == null || selected === '') continue;
       const verdict = gradeQBAnswerStrict(q.question_format, selected, q.correct_answer, (q as any).answer_tolerance);
       if (verdict === null) continue;
       answered += 1;
+      // Keyed by the option's own id, so a stored 'B' and 'b' land on one bar.
+      const key = optionKeyFor(options, selected);
+      if (optionCounts) optionCounts[key] = (optionCounts[key] || 0) + 1;
       if (verdict) correct += 1;
-      else wrongCounts.set(selected, (wrongCounts.get(selected) || 0) + 1);
+      else wrongCounts.set(key, (wrongCounts.get(key) || 0) + 1);
     }
 
     let topWrong: NexusQuestionAnalysisRow['top_wrong_option'] = null;
     for (const [key, count] of wrongCounts.entries()) {
       if (!topWrong || count > topWrong.count) {
-        const option = Array.isArray(q.options)
-          ? (q.options as Array<{ id?: string; text?: string }>).find((o) => o?.id === key)
-          : null;
+        const option = options ? options.find((o) => o?.id === key) : null;
         topWrong = { key, text: option?.text ?? null, count };
       }
     }
@@ -1054,6 +1100,7 @@ export async function getQuestionAnalysis(
       correct,
       correct_pct: correctPct,
       top_wrong_option: topWrong,
+      option_counts: optionCounts,
       // Needs a real sample before accusing a question of being broken.
       needs_review: answered >= 5 && correctPct != null && correctPct < QUESTION_REVIEW_THRESHOLD_PCT,
     };

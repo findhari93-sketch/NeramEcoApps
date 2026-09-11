@@ -80,6 +80,24 @@ describe('describeRecordingUrl', () => {
     );
   });
 
+  it('never names a video after a SharePoint page, which is what a list form link ends in', () => {
+    // The exact link the prod Tamil recording was stored with.
+    expect(
+      describeRecordingUrl(
+        'https://nerasmclasses-my.sharepoint.com/personal/haribabu_neramclasses_com/Documents/Forms/DispForm.aspx?ID=10171',
+      ),
+    ).toBe('Video file in SharePoint');
+  });
+
+  it('still prefers the stored file name to anything read from the link', () => {
+    expect(
+      describeRecordingUrl(
+        'https://nerasmclasses.sharepoint.com/sites/NeramStorage/Shared%20Documents/Forms/DispForm.aspx?ID=86',
+        '1.History of Architecture.mp4',
+      ),
+    ).toBe('1.History of Architecture.mp4');
+  });
+
   it('says so plainly when there is no video', () => {
     expect(describeRecordingUrl(null)).toBe('No video attached');
     expect(describeRecordingUrl('')).toBe('No video attached');

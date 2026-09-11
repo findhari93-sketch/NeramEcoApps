@@ -16,7 +16,9 @@
  *
  * Nothing is written that the teacher did not tick. The AI proposes; the review
  * step is where a person decides, field by field, with the old value struck
- * through above the new one.
+ * through above the new one. Every verdict is saved either way, including "no
+ * change needed", because that is what stops the same question being sent to
+ * an AI again next week.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -34,7 +36,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   FormControlLabel,
   IconButton,
   Paper,
@@ -51,6 +52,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import FieldDiff from '@/components/tests/FieldDiff';
 import {
   buildQuestionReviewPrompt,
   diffReviewRow,
@@ -69,19 +71,32 @@ export interface DoctorStatRow {
   correct: number;
   correct_pct: number | null;
   top_wrong_option: { key: string; text: string | null; count: number } | null;
+  /** What an AI already said about the question, from any paper. */
+  ai?: { checks: number } | null;
+}
+
+export interface DoctorApplyResult {
+  applied: number;
+  /** Verdicts saved, fixed or not. */
+  checked: number;
+  fixedIds: string[];
+  answerKeyChanged: number;
+  staleAttempts: number;
 }
 
 interface Props {
   open: boolean;
   onClose: () => void;
   testId: string;
+  /** The run the teacher is looking at, so the saved check keeps its correct rate. */
+  placementId?: string | null;
   /** The questions the teacher selected, by qb question id. */
   questionIds: string[];
   /** Performance for those questions, straight off the analysis rows. */
   stats: DoctorStatRow[];
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
   /** Fired after a successful apply, so the panel can reload and offer a re-grade. */
-  onApplied: (result: { applied: number; answerKeyChanged: number; staleAttempts: number }) => void;
+  onApplied: (result: DoctorApplyResult) => void;
 }
 
 const VERDICT_META: Record<
@@ -143,6 +158,7 @@ export default function QuestionDoctorDialog({
   open,
   onClose,
   testId,
+  placementId = null,
   questionIds,
   stats,
   authFetch,
@@ -173,6 +189,12 @@ export default function QuestionDoctorDialog({
     }
     return m;
   }, [stats]);
+
+  /** How many of the chosen questions an AI has looked at before. */
+  const alreadyChecked = useMemo(() => {
+    const wanted = new Set(questionIds);
+    return stats.filter((s) => wanted.has(s.question_id) && (s.ai?.checks ?? 0) > 0).length;
+  }, [stats, questionIds]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -290,14 +312,23 @@ export default function QuestionDoctorDialog({
         })
         .filter((f) => Object.keys(f.fields).length > 0);
 
+      // Every verdict, fixed or not.
+      const reviews = reviewed.map((item) => ({
+        question_id: item.row.question_id,
+        verdict: item.row.verdict,
+        note: item.row.note || null,
+      }));
+
       const json = await authFetch(`/api/question-bank/tests/${testId}/question-fixes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fixes }),
+        body: JSON.stringify({ placement_id: placementId, reviews, fixes }),
       });
 
       onApplied({
         applied: (json.data?.applied || []).length,
+        checked: json.data?.checked ?? reviews.length,
+        fixedIds: json.data?.fixed_question_ids || [],
         answerKeyChanged: (json.data?.answer_key_changed || []).length,
         staleAttempts: json.data?.stale_attempts || 0,
       });
@@ -308,6 +339,12 @@ export default function QuestionDoctorDialog({
       setSaving(false);
     }
   }
+
+  const applyLabel = saving
+    ? 'Saving'
+    : tickedCount > 0
+      ? `Apply ${tickedCount} change${tickedCount === 1 ? '' : 's'}`
+      : `Save ${reviewed.length} check${reviewed.length === 1 ? '' : 's'}`;
 
   return (
     <Dialog
@@ -349,6 +386,12 @@ export default function QuestionDoctorDialog({
           </Box>
         ) : step === 0 ? (
           <Box>
+            {alreadyChecked > 0 && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                {alreadyChecked} of these {alreadyChecked === 1 ? 'was' : 'were'} already checked by AI. Checking again
+                is fine, and every check is kept.
+              </Alert>
+            )}
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Copy the prompt below and paste it into ChatGPT, Gemini or Claude. It carries the
               question, its options, the stored answer and how your class actually answered, which is
@@ -464,86 +507,77 @@ export default function QuestionDoctorDialog({
                 Nothing came back to review.
               </Typography>
             ) : (
-              reviewed.map((item) => {
-                const meta = VERDICT_META[item.row.verdict];
-                const set = ticked[item.row.question_id];
-                return (
-                  <Accordion
-                    key={item.row.question_id}
-                    defaultExpanded={item.changes.length > 0 && item.row.verdict !== 'fine'}
-                    disableGutters
-                    sx={{ mb: 1, borderRadius: 2, '&:before': { display: 'none' } }}
-                    variant="outlined"
-                  >
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 56 }}>
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', pr: 1 }}>
-                        <Chip size="small" label={meta.label} color={meta.color} sx={{ fontWeight: 700 }} />
-                        <Typography variant="body2" sx={{ flex: 1, minWidth: 120 }}>
-                          {(item.current.question_text || 'Question').slice(0, 90)}
-                        </Typography>
-                        {item.changes.length > 0 && (
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            label={`${set?.size || 0} of ${item.changes.length} ticked`}
-                          />
-                        )}
-                      </Box>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      {item.row.note && (
-                        <Typography variant="body2" sx={{ mb: 1.5, fontStyle: 'italic' }}>
-                          {item.row.note}
-                        </Typography>
-                      )}
-
-                      {item.changes.length === 0 ? (
-                        <Typography variant="caption" color="text.secondary">
-                          No change suggested.
-                        </Typography>
-                      ) : (
-                        item.changes.map((change) => (
-                          <Box key={change.field} sx={{ mb: 1.5 }}>
-                            <FormControlLabel
-                              control={
-                                <Checkbox
-                                  checked={Boolean(set?.has(change.field))}
-                                  onChange={() => toggleField(item.row.question_id, change.field)}
-                                  sx={{ p: 1 }}
-                                />
-                              }
-                              label={
-                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                  {FIELD_LABELS[change.field]}
-                                </Typography>
-                              }
-                              sx={{ minHeight: 44, ml: 0 }}
+              <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  Tick what you agree with. Every verdict is saved on its question either way, so these do not
+                  need checking again.
+                </Typography>
+                {reviewed.map((item) => {
+                  const meta = VERDICT_META[item.row.verdict];
+                  const set = ticked[item.row.question_id];
+                  return (
+                    <Accordion
+                      key={item.row.question_id}
+                      defaultExpanded={item.changes.length > 0 && item.row.verdict !== 'fine'}
+                      disableGutters
+                      sx={{ mb: 1, borderRadius: 2, '&:before': { display: 'none' } }}
+                      variant="outlined"
+                    >
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 56 }}>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', pr: 1 }}>
+                          <Chip size="small" label={meta.label} color={meta.color} sx={{ fontWeight: 700 }} />
+                          <Typography variant="body2" sx={{ flex: 1, minWidth: 120 }}>
+                            {(item.current.question_text || 'Question').slice(0, 90)}
+                          </Typography>
+                          {item.changes.length > 0 && (
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label={`${set?.size || 0} of ${item.changes.length} ticked`}
                             />
-                            <Box sx={{ pl: 5 }}>
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  textDecoration: 'line-through',
-                                  color: 'text.disabled',
-                                  wordBreak: 'break-word',
-                                }}
-                              >
-                                {change.before || '(empty)'}
-                              </Typography>
-                              <Typography
-                                variant="body2"
-                                sx={{ color: 'success.dark', fontWeight: 600, wordBreak: 'break-word' }}
-                              >
-                                {change.after || '(empty)'}
-                              </Typography>
+                          )}
+                        </Box>
+                      </AccordionSummary>
+                      <AccordionDetails>
+                        {item.row.note && (
+                          <Typography variant="body2" sx={{ mb: 1.5, fontStyle: 'italic' }}>
+                            {item.row.note}
+                          </Typography>
+                        )}
+
+                        {item.changes.length === 0 ? (
+                          <Typography variant="caption" color="text.secondary">
+                            No change suggested.
+                          </Typography>
+                        ) : (
+                          item.changes.map((change) => (
+                            <Box key={change.field} sx={{ mb: 1 }}>
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    checked={Boolean(set?.has(change.field))}
+                                    onChange={() => toggleField(item.row.question_id, change.field)}
+                                    sx={{ p: 1 }}
+                                  />
+                                }
+                                label={
+                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                    {FIELD_LABELS[change.field]}
+                                  </Typography>
+                                }
+                                sx={{ minHeight: 44, ml: 0 }}
+                              />
+                              <Box sx={{ pl: 5 }}>
+                                <FieldDiff before={change.before} after={change.after} />
+                              </Box>
                             </Box>
-                          </Box>
-                        ))
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
-                );
-              })
+                          ))
+                        )}
+                      </AccordionDetails>
+                    </Accordion>
+                  );
+                })}
+              </>
             )}
           </Box>
         )}
@@ -569,11 +603,11 @@ export default function QuestionDoctorDialog({
           <Button
             variant="contained"
             onClick={apply}
-            disabled={saving || tickedCount === 0}
+            disabled={saving || reviewed.length === 0}
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <CheckIcon />}
             sx={{ minHeight: 48, textTransform: 'none' }}
           >
-            {saving ? 'Applying' : `Apply ${tickedCount} change${tickedCount === 1 ? '' : 's'}`}
+            {applyLabel}
           </Button>
         )}
       </DialogActions>

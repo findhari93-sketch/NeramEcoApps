@@ -146,6 +146,11 @@ export function describeRecordingUrl(
   // honest answer than a random string presented as if it were a file.
   if (!name.includes('.')) return parsed.hostname;
 
+  // A list form link ends in "DispForm.aspx" and a bare player link in
+  // "stream.aspx": the name of a SharePoint page, never of the video. That is
+  // exactly what the Tamil recording on prod was labelled with.
+  if (/\.aspx$/i.test(name)) return 'Video file in SharePoint';
+
   return name;
 }
 

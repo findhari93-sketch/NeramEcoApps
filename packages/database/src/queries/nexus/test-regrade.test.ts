@@ -307,6 +307,7 @@ describe('regradeTestAttempts: the draw', () => {
     ];
     const draws = [
       {
+        test_id: 't1',
         student_id: 'u1',
         attempt_number: 1,
         question_ids: ['q1'],
@@ -355,6 +356,7 @@ describe('regradeTestAttempts: the draw', () => {
           // would regrade the wrong paper.
           draws: [
             {
+              test_id: 't1',
               student_id: 'u1',
               attempt_number: 1,
               question_ids: ['q1'],

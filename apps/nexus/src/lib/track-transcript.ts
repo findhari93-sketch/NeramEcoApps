@@ -2,6 +2,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import type { TranscriptEntry } from '@neram/database';
 import { fetchTranscriptFromSharePoint } from '@/lib/sharepoint-transcript';
 import { parseVTT } from '@/lib/vtt-parser';
+import { classStartMs, parseRecordingFileName } from '@/lib/channel-recordings';
 
 /**
  * Where a Foundation chapter track's transcript comes from.
@@ -26,7 +27,8 @@ import { parseVTT } from '@/lib/vtt-parser';
 
 const TRANSCRIPTS = 'nexus_class_recap_transcripts';
 
-export type TrackTranscriptSource = 'upload' | 'stored' | 'sharepoint' | 'none';
+/** 'class' is the stored transcript of the Teams class the recording came from. */
+export type TrackTranscriptSource = 'upload' | 'stored' | 'class' | 'sharepoint' | 'none';
 
 /** No transcript, and why. Each maps to a different sentence for the teacher. */
 export type TrackTranscriptError =
@@ -108,9 +110,102 @@ async function recordFailure(trackId: string, detail: string): Promise<void> {
     .then(undefined, () => undefined);
 }
 
+/**
+ * Forget the stored transcript of one recording. Called whenever its video changes.
+ *
+ * resolveTrackTranscript serves the stored copy before trying anything else, so a
+ * transcript left behind after a video is replaced would be cut into checkpoints
+ * for the NEW recording: the old video's words, at the old video's timings.
+ * Clearing the checkpoints alone, which is all a video change used to do, left
+ * exactly that trap.
+ *
+ * Throws rather than warns. A stale transcript produces wrong quizzes silently,
+ * which is worse than a video change that visibly fails and can be retried.
+ */
+export async function forgetTrackTranscript(trackId: string): Promise<void> {
+  const supabase = getSupabaseAdminClient() as any;
+  const { error } = await supabase.from(TRANSCRIPTS).delete().eq('recap_id', trackId);
+  // A PostgrestError is a plain object, not an Error, so it is wrapped rather
+  // than thrown as it is.
+  if (error) {
+    throw new Error(
+      `Could not clear the stored transcript: ${error.message || error.code || 'unknown error'}`,
+    );
+  }
+}
+
+/**
+ * How far apart a Teams recording and its class can start. The recording begins
+ * when someone presses record, which can be well into the class, and the same
+ * window matchRecordingToClass settles on.
+ */
+export const CLASS_TRANSCRIPT_MATCH_WINDOW_MS = 90 * 60 * 1000;
+
+/**
+ * The transcript of the Teams class a recording came from, if one is stored.
+ *
+ * A class recorded in Teams already has its WEBVTT in nexus_class_transcripts,
+ * put there by the nightly sync against the CLASS. A chapter recording made from
+ * that class is the same video, so asking a teacher to download the transcript
+ * from Stream and upload it by hand was asking for a copy Nexus already holds.
+ *
+ * Two ways to find the class, in order: a class whose recording_url is this
+ * exact file, then the start time Teams writes into the file name, matched to a
+ * class on the same IST day within the window. No Graph call either way.
+ */
+export async function findClassTranscriptVtt(
+  supabase: any,
+  input: { recordingUrl: string | null; recordingFileName: string | null },
+): Promise<{ classId: string; vtt: string } | null> {
+  const candidates: string[] = [];
+
+  if (input.recordingUrl) {
+    const { data } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('id')
+      .eq('recording_url', input.recordingUrl)
+      .limit(3);
+    for (const row of (data || []) as { id: string }[]) {
+      if (row?.id) candidates.push(String(row.id));
+    }
+  }
+
+  const parsed = input.recordingFileName ? parseRecordingFileName(input.recordingFileName) : null;
+  if (parsed) {
+    const date = parsed.startedAt.substring(0, 10);
+    const startedMs = Date.parse(`${parsed.startedAt}+05:30`);
+    const { data } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('id, scheduled_date, start_time')
+      .eq('scheduled_date', date);
+    const near = ((data || []) as { id: string; scheduled_date: string; start_time: string | null }[])
+      .map((row) => ({
+        id: String(row.id),
+        delta: Math.abs(classStartMs(row.scheduled_date, String(row.start_time || '')) - startedMs),
+      }))
+      .filter((c) => Number.isFinite(c.delta) && c.delta <= CLASS_TRANSCRIPT_MATCH_WINDOW_MS)
+      .sort((a, b) => a.delta - b.delta);
+    for (const c of near) if (!candidates.includes(c.id)) candidates.push(c.id);
+  }
+
+  for (const classId of candidates) {
+    const { data } = await supabase
+      .from('nexus_class_transcripts')
+      .select('vtt, status')
+      .eq('class_id', classId)
+      .maybeSingle();
+    if (data?.status === 'ok' && typeof data.vtt === 'string' && data.vtt.trim()) {
+      return { classId, vtt: data.vtt };
+    }
+  }
+  return null;
+}
+
 export async function resolveTrackTranscript(input: {
   trackId: string;
   recordingUrl: string | null;
+  /** The video's file name. A Teams recording's name carries its class start time. */
+  recordingFileName?: string | null;
   /** A .vtt the teacher pasted or uploaded in this request. */
   vttContent?: string | null;
   /** The teacher's Microsoft token. Without it, rung 3 is skipped. */
@@ -136,7 +231,23 @@ export async function resolveTrackTranscript(input: {
   const stored = await readStored(input.trackId);
   if (stored) return { entries: stored, source: 'stored' };
 
-  // 3. Graph, via the recording's sharing link. Only meaningful for a file that
+  // 3. The Teams class this recording came from, when the nightly sync already
+  //    stored that class's transcript. No Graph call and no token needed.
+  if (input.videoSource !== 'youtube') {
+    const fromClass = await findClassTranscriptVtt(getSupabaseAdminClient(), {
+      recordingUrl: input.recordingUrl,
+      recordingFileName: input.recordingFileName ?? null,
+    }).catch(() => null);
+    if (fromClass) {
+      const entries = parseVTT(fromClass.vtt);
+      if (entries.length) {
+        await store(input.trackId, fromClass.vtt, entries, 'class');
+        return { entries, source: 'class' };
+      }
+    }
+  }
+
+  // 4. Graph, via the recording's sharing link. Only meaningful for a file that
   //    actually lives in SharePoint.
   if (input.videoSource === 'youtube') {
     return { entries: [], source: 'none', sharepointError: 'YOUTUBE_NO_FETCH' };

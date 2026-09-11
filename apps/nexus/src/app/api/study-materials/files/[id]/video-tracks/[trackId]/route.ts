@@ -1,45 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getRecapById, saveRecapSections } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
-import { extractYouTubeId } from '@/lib/youtube';
 import { normalizeRecordingUrl } from '@/lib/sharepoint-transcript';
-import { resolveRecordingSource } from '@/lib/recording-source';
 import { readTrackLanguages, labelForCode } from '@/lib/track-languages';
+import { forgetTrackTranscript } from '@/lib/track-transcript';
+import { evictMedia } from '@/lib/recording-source-cache';
+import { describeTrackRecording, videoRefFromBody } from '@/lib/track-recording';
+import {
+  classifyRecordingLink,
+  forgetVideoItem,
+  recordingPolicyProblem,
+  resolveVideoItem,
+  resolveVideoItemCached,
+  sameRecording,
+  videoItemMessage,
+  VideoItemError,
+  type RecordingFingerprint,
+  type ResolvedVideoItem,
+  type SameRecordingVerdict,
+} from '@/lib/sharepoint-video';
 
 /**
  * One language track.
  *
- *   PATCH  -> edit it: title, recording link, label, language, publish/unpublish,
- *             and the generation knobs (segment length, questions served, pass
- *             mark).
+ *   PATCH  -> edit it: replace its video, re-file it under another language,
+ *             publish or unpublish it, and the generation knobs.
  *   DELETE -> archive it. Never a hard delete: nexus_class_recap_attempts
  *             cascades from the sections, so removing the row would destroy
  *             every student's passed checkpoints along with it.
  *
- * SWAPPING THE VIDEO IS NOT A FIELD EDIT. recording_url has always been in
- * EDITABLE, so a new link could be written straight over the old one while its
- * checkpoints stayed exactly where they were. Those timings were cut from the
- * OLD recording's transcript, and the two recordings of a chapter are different
- * lengths and pause in different places, so keeping them drops a quiz into the
- * middle of a sentence in the new video. Changing the video therefore clears the
- * checkpoints and returns the track to draft, which is the same conclusion
- * reviveStudyVideoTrack reached for the same reason. Nothing did this before
- * because nothing offered a way to change the video.
+ * REPLACING THE VIDEO. Checkpoints are timed to one recording, so a different
+ * video clears them, and the stored transcript with them. But a teacher moving
+ * the SAME recording into the library is not a different video, and clearing
+ * its checkpoints would throw away work that is still right. So the new file is
+ * compared with the old one (lib/sharepoint-video.ts sameRecording):
+ *   same      same file, or same size and name: checkpoints kept, no question
+ *   likely    only the length matches: kept only when the teacher confirmed,
+ *             `keep_checkpoints: true`, because a trimmed copy would shift them
+ *   different cleared, transcript forgotten, back to draft
  *
- * CHANGING THE LANGUAGE IS NOT THE SAME OPERATION, and the difference is the
- * whole reason it exists. A recording filed under the wrong language is a
- * mis-labelled row, not a different video: the audio, the transcript it was cut
- * from and every checkpoint timing are all still correct. So this one KEEPS the
- * checkpoints, keeps the publish state and keeps every student's progress, and
- * the rule two paragraphs up deliberately does not carry over to it. Without
- * this the only exits were Remove, which archives the row and makes the
- * transcript and the checkpoints have to be built a second time, or Change the
- * video, which clears them on purpose. Both threw away work that was right.
+ * CHANGING THE LANGUAGE is not the same operation. A recording filed under the
+ * wrong language is a mis-labelled row, not a different video, so it KEEPS the
+ * checkpoints, the publish state and every student's progress.
  */
 
 const EDITABLE = new Set([
   'title',
-  'recording_url',
   'language_label',
   'target_segment_seconds',
   'question_pool_per_segment',
@@ -54,6 +60,11 @@ async function loadTrack(trackId: string, fileId: string) {
   // edit any chapter.
   if (!track || track.study_file_id !== fileId) return null;
   return track;
+}
+
+/** Not on the NexusClassRecap type, which predates the column; the row has it. */
+function fileNameOf(track: unknown): string | null {
+  return (track as { recording_file_name?: string | null }).recording_file_name ?? null;
 }
 
 export async function PATCH(
@@ -73,68 +84,93 @@ export async function PATCH(
       if (EDITABLE.has(key)) patch[key] = value;
     }
 
-    /**
-     * A new video, which is a bigger change than the field it arrives in.
-     * See the header: the old checkpoints cannot survive it.
-     */
+    /* ── A new video ─────────────────────────────────────────────────────── */
     let clearedCheckpoints = false;
-    if (typeof body.recording_url === 'string' && body.recording_url.trim()) {
-      // Same unwrap-and-classify the POST path does, so a Teams recap link
-      // pasted here behaves identically to one pasted when first attaching.
-      const nextUrl = normalizeRecordingUrl(body.recording_url.trim());
-      const videoSource = extractYouTubeId(nextUrl) ? 'youtube' : 'sharepoint';
+    let sameAs: SameRecordingVerdict | null = null;
+    const ref = videoRefFromBody(body);
 
-      // What the picker saw first, then what Graph reports. The picker's name is
-      // the only one available on a forced attach, where nothing is resolved.
-      let fileName: string | null = body.recording_file_name
-        ? String(body.recording_file_name).slice(0, 300)
-        : null;
-
-      if (videoSource === 'sharepoint' && body.force !== true) {
-        try {
-          const source = await resolveRecordingSource(nextUrl);
-          fileName = fileName || source.name;
-        } catch (err) {
-          const detail = err instanceof Error ? err.message : '';
+    if (ref) {
+      let item: ResolvedVideoItem | null = null;
+      try {
+        item = await resolveVideoItem(ref);
+      } catch (err) {
+        if (!(err instanceof VideoItemError)) throw err;
+        // Same rule as attaching: only a SharePoint outage can be passed, and
+        // only for a pasted link that is not a OneDrive one.
+        const canForce =
+          err.code === 'GRAPH_UNAVAILABLE' &&
+          body.force === true &&
+          typeof ref === 'string' &&
+          !classifyRecordingLink(ref).oneDrive;
+        if (!canForce) {
           return NextResponse.json(
             {
-              error: detail.includes('RECORDING_SIZE_UNKNOWN')
-                ? 'Nexus found that link but cannot read the file itself, so students would get a broken player. This usually means the file sits in a personal OneDrive that Nexus has no access to. Move it into the Neram library and try again.'
-                : 'Nexus could not open that link. Check it points at the video file itself, then try again.',
-              code: 'RECORDING_UNREACHABLE',
+              error: videoItemMessage(err.code),
+              code: err.code === 'GRAPH_UNAVAILABLE' ? 'RECORDING_UNREACHABLE' : err.code,
             },
             { status: 422 },
           );
         }
       }
 
-      patch.recording_url = nextUrl;
-      // Written even when null, because the old name described the old file and
-      // a stale name is worse than one derived from the URL.
-      patch.recording_file_name = fileName;
-      patch.video_source = videoSource;
+      if (item) {
+        const problem = recordingPolicyProblem(item);
+        if (problem) {
+          return NextResponse.json({ error: videoItemMessage(problem, item), code: problem }, { status: 422 });
+        }
+      }
 
-      if ((track.recording_url || '') !== nextUrl) {
+      const nextUrl = item?.webUrl || normalizeRecordingUrl(typeof ref === 'string' ? ref : '');
+      patch.recording_url = nextUrl;
+      // Written even when null: the old name described the old file.
+      patch.recording_file_name = item?.name ?? null;
+      patch.video_source = 'sharepoint';
+      if (item?.durationSeconds) patch.video_duration_seconds = item.durationSeconds;
+
+      // What we know about the recording already attached. The old file may be
+      // gone after a move, in which case the row's own name and length stand in.
+      const previous: RecordingFingerprint = {
+        name: fileNameOf(track),
+        durationSeconds: track.video_duration_seconds,
+      };
+      if (track.recording_url) {
+        try {
+          const old = await resolveVideoItemCached(track.recording_url);
+          previous.driveId = old.driveId;
+          previous.itemId = old.itemId;
+          previous.name = old.name;
+          previous.sizeBytes = old.sizeBytes;
+          previous.durationSeconds = old.durationSeconds ?? previous.durationSeconds;
+        } catch {
+          /* see above */
+        }
+      }
+
+      sameAs = item
+        ? sameRecording(previous, item)
+        : (track.recording_url || '') === nextUrl
+          ? 'same'
+          : 'different';
+      const keep = sameAs === 'same' || (sameAs === 'likely' && body.keep_checkpoints === true);
+
+      if (!keep) {
         // Safe on both paths: with no attempts this deletes, with attempts it
         // archives, so nobody's passed checkpoints are destroyed either way.
         await saveRecapSections(params.trackId, []);
+        // And the transcript goes with them. It was the old video's, and the
+        // next "create checkpoints" would otherwise cut the new video with it.
+        await forgetTrackTranscript(params.trackId);
         patch.status = 'draft';
         patch.readiness = 'pending';
         patch.published_at = null;
         patch.generated_at = null;
         clearedCheckpoints = true;
       }
+
+      if (track.recording_url) forgetVideoItem(track.recording_url);
     }
 
-    /**
-     * Re-file the recording under a different language.
-     *
-     * Handled here rather than by adding 'language' to EDITABLE, because EDITABLE
-     * validates nothing and this needs three checks: the code has to be one an
-     * admin actually offers, the slot has to be free, and the label has to move
-     * with it. A bare passthrough would let a typo reach the CHECK constraint and
-     * come back as a 500.
-     */
+    /* ── Re-file under another language ──────────────────────────────────── */
     let movedLanguage: string | null = null;
     if (typeof body.language === 'string' && body.language.trim()) {
       const language = body.language.trim().toLowerCase();
@@ -150,13 +186,8 @@ export async function PATCH(
         }
 
         /**
-         * The slot has to be empty, and "empty" includes archived.
-         *
-         * uq_class_recaps_study_file_language does not exclude archived rows, so
-         * a language whose recording was removed still holds its slot, which is
-         * the same fact createStudyVideoTrack has to revive around. Checked here
-         * so the teacher gets a sentence naming the recording in the way rather
-         * than a 23505 surfacing as a 500.
+         * The slot has to be empty, and "empty" includes archived:
+         * uq_class_recaps_study_file_language does not exclude archived rows.
          */
         const { data: occupant } = await supabase
           .from('nexus_class_recaps')
@@ -170,7 +201,7 @@ export async function PATCH(
           return occupant.status === 'archived'
             ? NextResponse.json(
                 {
-                  error: `${targetLabel} already holds a recording that was removed earlier. Restore it by attaching a video to the ${targetLabel} row, or change that video, then move this one.`,
+                  error: `${targetLabel} already holds a recording that was removed earlier. Add a video to ${targetLabel} to bring it back, or replace that video, then move this one.`,
                   code: 'LANGUAGE_ARCHIVED',
                 },
                 { status: 409 },
@@ -185,22 +216,10 @@ export async function PATCH(
         }
 
         patch.language = language;
-        // The label is stored on the row on purpose (see track-languages.ts), so
-        // it has to travel with the code or the row keeps saying "English".
         patch.language_label = body.language_label ? String(body.language_label) : targetLabel;
 
-        /**
-         * The title too, but only when it still ends in the old language.
-         *
-         * POST writes `${file.title} (${label})`, so the generated shape would
-         * otherwise read "Ch:1 History Of Architecture (English)" on a Tamil
-         * recording. A title a teacher typed by hand is left exactly as it is.
-         *
-         * BOTH the label and the bare code are matched, because the tracks that
-         * most need moving are the oldest ones. Stamping the label at creation
-         * arrived after the first tracks did, so those read "(en)" rather than
-         * "(English)" and a label-only check would silently skip exactly them.
-         */
+        // The title too, but only when it still ends in the old language, in
+        // either the label or the bare code form older tracks were made with.
         const suffixes = [
           track.language_label ? ` (${track.language_label})` : '',
           ` (${track.language})`,
@@ -215,21 +234,8 @@ export async function PATCH(
       }
     }
 
+    /* ── Publish or unpublish ────────────────────────────────────────────── */
     if (body.status === 'published' || body.status === 'draft') {
-      /**
-       * Publishing without checkpoints is a decision, not an accident.
-       *
-       * It used to be refused outright, and for a real reason: the chapter test
-       * was gated on any published recording, and markStudyVideoCompleted only
-       * fires when a checkpoint quiz passes, so a checkpoint-less recording was
-       * a gate with no key. The gate now counts only recordings a student can
-       * actually finish (trackGatesChapter), which makes an OPEN recording safe:
-       * watchable, ungated, and it does not complete the chapter.
-       *
-       * The refusal stays as the default anyway. A teacher who meant to publish
-       * a checkpointed recording and forgot the transcript should still be
-       * stopped, so the open path needs `allow_open` said out loud.
-       */
       if (body.status === 'published') {
         const supabase = getSupabaseAdminClient() as any;
         const { count } = await supabase
@@ -237,16 +243,45 @@ export async function PATCH(
           .select('id', { count: 'exact', head: true })
           .eq('recap_id', params.trackId)
           .is('archived_at', null);
+        /**
+         * Publishing without checkpoints is a decision, not an accident, so the
+         * open path needs `allow_open` said out loud.
+         */
         if (!count && body.allow_open !== true) {
           return NextResponse.json(
             {
               error:
-                'This recording has no checkpoints. Upload its transcript, or publish it as an open recording that does not unlock the test.',
+                'This recording has no checkpoints. Add its transcript, or publish it without checkpoints so it does not unlock the test.',
               code: 'NO_SECTIONS',
             },
             { status: 400 },
           );
         }
+
+        /**
+         * The video has to be one students will be served. A file still in a
+         * personal OneDrive, or one that has gone, is refused here as well as on
+         * the page, so no route can publish around the library rule. A moment
+         * where SharePoint did not answer is never a reason to refuse.
+         */
+        const url = (patch.recording_url as string | undefined) ?? track.recording_url;
+        const source = (patch.video_source as string | undefined) ?? track.video_source;
+        if (url && source !== 'youtube') {
+          const { recording } = await describeTrackRecording({
+            video_source: 'sharepoint',
+            recording_url: url,
+            recording_file_name: (patch.recording_file_name as string | null | undefined) ?? fileNameOf(track),
+            video_duration_seconds: track.video_duration_seconds,
+          });
+          const problem = recording?.problem;
+          if (problem && problem !== 'UNRESOLVED') {
+            return NextResponse.json(
+              { error: videoItemMessage(problem, { name: recording?.name }), code: problem },
+              { status: 422 },
+            );
+          }
+        }
+
         patch.readiness = 'ready';
         patch.published_at = new Date().toISOString();
       }
@@ -264,12 +299,9 @@ export async function PATCH(
     let { data, error } = await save();
 
     /**
-     * The schema is a release behind the code.
-     *
-     * Migrations here are applied by GitHub Actions during deploy and have
-     * silently no-opped before, so recording_file_name can be absent while this
-     * code is live. Dropping it and retrying costs a display name that already
-     * has a fallback; not retrying would make every video change 500.
+     * The schema is a release behind the code: migrations here have silently
+     * no-opped before, so recording_file_name can be absent while this code is
+     * live. Dropping it costs a display name that has a fallback.
      */
     if (
       (error as { code?: string })?.code === 'PGRST204' &&
@@ -281,19 +313,19 @@ export async function PATCH(
     }
     if (error) throw error;
 
-    return NextResponse.json({ track: data, clearedCheckpoints, movedLanguage });
+    // The byte proxy caches a resolved file for ten minutes. Without this a
+    // preview, or a student, could keep receiving the OLD video after a replace.
+    // Only this instance's cache is reachable from here; another server's copy
+    // expires on its own TTL.
+    if (typeof patch.recording_url === 'string') evictMedia('recap', params.trackId);
+
+    return NextResponse.json({ track: data, clearedCheckpoints, movedLanguage, sameRecording: sameAs });
   } catch (err) {
-    /**
-     * The language slot was taken between the check above and the update.
-     *
-     * Only reachable as a race, since the ordinary case is answered with a 409
-     * that names the occupant. Caught anyway so two teachers pressing Move at
-     * the same instant get a conflict rather than a 500.
-     */
+    /** The language slot was taken between the check above and the update. */
     if ((err as { code?: string })?.code === '23505') {
       return NextResponse.json(
         {
-          error: 'That language was given a recording a moment ago. Reopen this dialog to see it.',
+          error: 'That language was given a recording a moment ago. Reload the page to see it.',
           code: 'LANGUAGE_TAKEN',
         },
         { status: 409 },

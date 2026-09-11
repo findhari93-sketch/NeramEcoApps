@@ -140,6 +140,36 @@ test.describe('Nexus test results: fix, re-grade, reopen, message', () => {
     expect(row.correct).toBe(0);
     // The misconception the teacher acts on: everybody picked the same wrong one.
     expect(row.top_wrong_option?.key).toBe(flippedAnswer);
+    // The per-option bars on the Questions tab read this.
+    expect(row.option_counts?.[flippedAnswer!]).toBe(1);
+    // Nobody has checked it with an AI yet.
+    expect(row.ai ?? null).toBeNull();
+  });
+
+  test('an AI check that changes nothing is still remembered on the question', async ({ request }) => {
+    // "Checked, nothing wrong" is what stops a question being sent to an AI
+    // again next week, so it must land without a single field changing.
+    const res = await request.post(`/api/question-bank/tests/${testId}/question-fixes`, {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+      data: {
+        placement_id: placementId,
+        reviews: [{ question_id: attemptQuestionId, verdict: 'hard_but_fair', note: 'Sound question.' }],
+        fixes: [],
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data.checked).toBe(1);
+    expect(body.data.applied).toHaveLength(0);
+
+    const results = await request.get(
+      `/api/question-bank/tests/${testId}/results?placement_id=${placementId}`,
+      { headers: { Authorization: `Bearer ${teacherToken}` } },
+    );
+    const row = (await results.json()).data.questions.find((q: any) => q.question_id === attemptQuestionId);
+    expect(row.ai?.checks).toBeGreaterThanOrEqual(1);
+    expect(row.ai?.last_verdict).toBe('hard_but_fair');
+    expect(row.ai?.fixed ?? null).toBeNull();
   });
 
   test('a non-staff caller cannot fix a question', async ({ request }) => {
@@ -166,6 +196,8 @@ test.describe('Nexus test results: fix, re-grade, reopen, message', () => {
     const res = await request.post(`/api/question-bank/tests/${testId}/question-fixes`, {
       headers: { Authorization: `Bearer ${teacherToken}` },
       data: {
+        placement_id: placementId,
+        reviews: [{ question_id: attemptQuestionId, verdict: 'wrong_key', note: 'The key names the wrong option.' }],
         fixes: [
           {
             question_id: attemptQuestionId,
@@ -181,9 +213,20 @@ test.describe('Nexus test results: fix, re-grade, reopen, message', () => {
     expect(body.data.applied).toHaveLength(1);
     expect(body.data.applied[0].fields).toContain('correct_answer');
     expect(body.data.answer_key_changed).toContain(attemptQuestionId);
+    expect(body.data.fixed_question_ids).toContain(attemptQuestionId);
     // The number that turns "saved" into "saved, and somebody was graded on the
     // old key". Without it the re-grade is never offered.
     expect(body.data.stale_attempts).toBeGreaterThan(0);
+
+    // The question now says what the AI fixed, and what the rate was before.
+    const results = await request.get(
+      `/api/question-bank/tests/${testId}/results?placement_id=${placementId}`,
+      { headers: { Authorization: `Bearer ${teacherToken}` } },
+    );
+    const row = (await results.json()).data.questions.find((q: any) => q.question_id === attemptQuestionId);
+    expect(row.ai?.checks).toBeGreaterThanOrEqual(2);
+    expect(row.ai?.fixed?.fields).toContain('correct_answer');
+    expect(row.ai?.fixed?.pct_before).toBe(0);
   });
 
   test('a dry-run re-grade reports the move and writes nothing', async ({ request }) => {

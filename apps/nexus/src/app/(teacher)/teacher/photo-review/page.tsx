@@ -57,7 +57,6 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import UndoIcon from '@mui/icons-material/Undo';
-import SearchIcon from '@mui/icons-material/Search';
 import CloudSyncOutlinedIcon from '@mui/icons-material/CloudSyncOutlined';
 import BrokenImageOutlinedIcon from '@mui/icons-material/BrokenImageOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -70,6 +69,16 @@ import type { PhotoStatus } from '@/lib/photo-gate';
 import type { ReviewTab } from '@/lib/photo-auto-review';
 import { photoOriginLabel, type PhotoOrigin } from '@/lib/photo-origin';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import PeopleSearchField from '@/components/PeopleSearchField';
+import MatchHighlight from '@/components/MatchHighlight';
+import { nameMatchRanges, rankPeople, suggestPeople } from '@/lib/people-search';
+import {
+  matchCountsByTab,
+  otherTabsWithMatches,
+  searchableName,
+  toSearchable,
+  type PhotoSearchEntry,
+} from '@/lib/photo-review-search';
 
 interface ReviewRow {
   student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
@@ -92,6 +101,8 @@ interface ReviewData {
   counts: Counts;
   rows: ReviewRow[];
   status: ReviewTab;
+  /** Every student on the roster and their tab, so a search can count the other tabs. */
+  search_index?: PhotoSearchEntry[];
 }
 
 /** Auto-approved sits next to Needs review: it is the other place a teacher might look. */
@@ -102,6 +113,12 @@ const TABS: { value: ReviewTab; label: string }[] = [
   { value: 'rejected', label: 'Rejected' },
   { value: 'approved', label: 'Approved' },
 ];
+
+const TAB_ORDER: readonly ReviewTab[] = TABS.map((t) => t.value);
+const TAB_LABEL = Object.fromEntries(TABS.map((t) => [t.value, t.label])) as Record<
+  ReviewTab,
+  string
+>;
 
 const EMPTY_COUNTS: Counts = {
   pending: 0,
@@ -153,6 +170,9 @@ export default function PhotoReviewPage() {
   const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS);
   const [countsReady, setCountsReady] = useState(false);
   const [search, setSearch] = useState('');
+  // Beside `counts` rather than inside `data`, for the same reason: load()
+  // clears `data`, and the match counts on the chips must not blink per load.
+  const [searchIndex, setSearchIndex] = useState<PhotoSearchEntry[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -181,8 +201,18 @@ export default function PhotoReviewPage() {
     if (activeClassroom?.id && !classroomId) setClassroomId(activeClassroom.id);
   }, [activeClassroom, classroomId]);
 
+  /**
+   * Bumped by every load. A teacher can switch tabs while the previous tab is
+   * still loading, and the two answers can arrive in either order: when the
+   * older one landed last it painted its students under the newer tab's name
+   * ("Nobody in No photo matches" beside a No photo chip counting 29). Only the
+   * latest load may paint.
+   */
+  const loadSeqRef = useRef(0);
+
   const load = useCallback(async () => {
     if (!classroomId) return;
+    const seq = ++loadSeqRef.current;
     setData(null);
     setSelected(new Set());
     setBroken(new Set());
@@ -191,10 +221,13 @@ export default function PhotoReviewPage() {
       const res = (await authFetch(
         `/api/photo-review?classroom=${classroomId}&status=${tab}`,
       )) as ReviewData;
+      if (seq !== loadSeqRef.current) return;
       setData(res);
       setCounts({ ...EMPTY_COUNTS, ...(res.counts || {}) });
+      setSearchIndex(res.search_index || []);
       setCountsReady(true);
     } catch (e) {
+      if (seq !== loadSeqRef.current) return;
       setLoadError(e instanceof Error ? e.message : 'Could not load the review queue.');
       setData({ counts: EMPTY_COUNTS, rows: [], status: tab });
     }
@@ -265,14 +298,31 @@ export default function PhotoReviewPage() {
     void runAutoCheck(counts.unchecked);
   }, [classroomId, countsReady, counts.unchecked, runAutoCheck]);
 
+  const query = search.trim();
+
+  /**
+   * The open tab's rows, ranked the way people search is ranked everywhere
+   * else: a name that starts with the letters, then a later word that starts
+   * with them, then a name that only contains them, earlier hits first. This
+   * used to be a plain "contains" filter left in alphabetical order, so "ba"
+   * listed Afrin banu above Bavishiya. Only the name on the card is searched.
+   */
   const visibleRows = useMemo(() => {
     const rows = data?.rows || [];
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) =>
-      (r.student.name || r.student.email || '').toLowerCase().includes(q),
-    );
-  }, [data, search]);
+    if (!query) return rows;
+    return rankPeople(toSearchable(rows), query).map((s) => s.row);
+  }, [data, query]);
+
+  /** Matches on every tab while a search is live, for the chips and the empty state. */
+  const matchCounts = useMemo(() => matchCountsByTab(searchIndex, query), [searchIndex, query]);
+  const otherTabMatches = otherTabsWithMatches(matchCounts, tab, TAB_ORDER);
+  const suggestions = useMemo(
+    () =>
+      matchCounts && TAB_ORDER.every((t) => matchCounts[t] === 0)
+        ? suggestPeople(searchIndex, query)
+        : [],
+    [matchCounts, searchIndex, query],
+  );
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -293,12 +343,15 @@ export default function PhotoReviewPage() {
       return next;
     });
 
-  /** Switching bucket clears the query. A term typed on "Needs review" used to
-   *  carry over and silently filter "Approved", which made a full tab look
-   *  empty and the count beside it look wrong. */
+  /**
+   * Switching tabs keeps the search, the way GitHub keeps it between Open and
+   * Closed. It used to clear it, because a term carried from "Needs review"
+   * silently filtered "Approved" and made its count look wrong. It is no longer
+   * silent: while a search is live every chip counts matches, not students,
+   * and the box keeps its X.
+   */
   const changeTab = (next: ReviewTab) => {
     setTab(next);
-    setSearch('');
   };
 
   const decide = useCallback(
@@ -617,11 +670,17 @@ export default function PhotoReviewPage() {
           }}
         >
           {TABS.map((t) => (
-            <ToggleButton key={t.value} value={t.value}>
+            <ToggleButton
+              key={t.value}
+              value={t.value}
+              // While a search is live each chip counts that tab's matches, so a
+              // teacher can see where a student is before switching.
+              aria-label={matchCounts ? `${t.label}, ${matchCounts[t.value]} matching` : undefined}
+            >
               {t.label}
               {countsReady ? (
                 <Chip
-                  label={counts[t.value]}
+                  label={matchCounts ? matchCounts[t.value] : counts[t.value]}
                   size="small"
                   sx={{
                     ml: 0.75,
@@ -669,21 +728,13 @@ export default function PhotoReviewPage() {
             </Typography>
           </Stack>
         )}
-        <TextField
-          size="small"
-          placeholder="Search students"
+        <PeopleSearchField
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          inputProps={{ 'aria-label': 'Search students by name' }}
-          InputProps={{
-            startAdornment: <SearchIcon sx={{ fontSize: 20, mr: 0.75, color: 'text.disabled' }} />,
-          }}
-          sx={{
-            flex: 1,
-            maxWidth: { sm: 360 },
-            ml: { sm: 'auto !important' },
-            '& .MuiInputBase-root': { minHeight: TAP, bgcolor: 'background.paper' },
-          }}
+          onChange={setSearch}
+          label="Search students by name"
+          placeholder="Search by name"
+          resultCount={data === null ? undefined : visibleRows.length}
+          sx={{ flex: 1, minWidth: 0, maxWidth: { sm: 360 }, ml: { sm: 'auto !important' } }}
         />
       </Stack>
 
@@ -761,20 +812,67 @@ export default function PhotoReviewPage() {
           }}
         >
           <Typography variant="body2" color="text.secondary">
-            {search.trim()
-              ? `Nobody here matches "${search.trim()}".`
+            {query
+              ? `Nobody in ${TAB_LABEL[tab]} matches "${query}".`
               : tab === 'pending'
                 ? 'Nothing waiting for you. Well done.'
                 : tab === 'auto'
                   ? 'No automatic approvals to look at.'
                   : 'No students here.'}
           </Typography>
-          {search.trim() && (
+          {/* A search that finds nobody on this tab is rarely a dead end. The
+              student is usually on another tab, or spelled a little
+              differently, so offer the way there before offering to give up. */}
+          {query && (otherTabMatches.length > 0 || suggestions.length > 0) && (
+            <Box
+              sx={{
+                mt: 1.5,
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 1,
+              }}
+            >
+              {otherTabMatches.length > 0 ? (
+                otherTabMatches.map(({ tab: other, count }) => (
+                  <Button
+                    key={other}
+                    variant="outlined"
+                    onClick={() => changeTab(other)}
+                    sx={{ minHeight: TAP, textTransform: 'none', fontWeight: 700 }}
+                  >
+                    Show {count} in {TAB_LABEL[other]}
+                  </Button>
+                ))
+              ) : (
+                <>
+                  <Typography variant="body2" color="text.secondary">
+                    Did you mean
+                  </Typography>
+                  {suggestions.map((s) => (
+                    <Button
+                      key={s.id}
+                      variant="outlined"
+                      onClick={() => {
+                        setSearch(s.name);
+                        changeTab(s.tab);
+                      }}
+                      sx={{ minHeight: TAP, textTransform: 'none', fontWeight: 700 }}
+                    >
+                      {s.name}
+                    </Button>
+                  ))}
+                </>
+              )}
+            </Box>
+          )}
+          {query && (
             <Button
               onClick={() => setSearch('')}
               sx={{ mt: 1, minHeight: TAP, textTransform: 'none' }}
             >
-              Clear the search
+              Clear search
             </Button>
           )}
         </Box>
@@ -903,7 +1001,10 @@ export default function PhotoReviewPage() {
 
                 <Box sx={{ p: 1.25 }}>
                   <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 14 }} noWrap>
-                    {r.student.name || r.student.email}
+                    <MatchHighlight
+                      text={searchableName(r.student)}
+                      ranges={query ? nameMatchRanges(searchableName(r.student), query) : []}
+                    />
                   </Typography>
                   {originLabel && (
                     <Chip

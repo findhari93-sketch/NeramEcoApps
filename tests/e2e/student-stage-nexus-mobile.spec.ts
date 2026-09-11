@@ -151,32 +151,38 @@ test.describe('Students screen on a phone', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('the issues banner stacks its rows without pushing the page sideways', async ({ page }) => {
-    // Wait for the roster to land FIRST. The banner only renders once counts have
+  test('the attention card stacks its rows without pushing the page sideways', async ({ page }) => {
+    // Wait for the roster to land FIRST. The card only renders once counts have
     // arrived, and `count()` does not auto-wait, so checking it straight after
     // navigation reads 0 while the fetch is still in flight and skips a test that
     // should have run.
     await expect(studentRows(page).first()).toBeVisible({ timeout: 15000 });
 
     // Each row is message-above-button at 375px. Side by side would either clip
-    // the button or force the document to scroll.
-    const banner = page.getByRole('alert').filter({ hasText: /no class set|disagree|no exam year/i });
-    if ((await banner.count()) === 0) {
-      test.skip(true, 'This classroom has no classification problems to report');
+    // the button or force the document to scroll. The card is a labelled region,
+    // not an alert: it is there on most visits and must not be announced each time.
+    const card = page.getByRole('region', { name: 'Needs attention' });
+    if ((await card.count()) === 0) {
+      test.skip(true, 'This classroom has nothing that needs attention');
     }
 
-    await expect(banner.first()).toBeVisible();
+    await expect(card).toBeVisible();
+
+    // Folded by default on a phone; open it so the rows themselves are measured.
+    const toggle = card.getByRole('button', { name: /^Needs attention \(/ });
+    if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     expect(overflow).toBe(false);
 
-    // Every action in the banner stays a real touch target.
-    const actions = banner.first().getByRole('button');
+    // Every action in the card stays a real touch target.
+    const actions = card.getByRole('button');
     for (let i = 0; i < (await actions.count()); i++) {
       const box = await actions.nth(i).boundingBox();
-      expect(box, `banner action ${i} has no box`).toBeTruthy();
+      expect(box, `card action ${i} has no box`).toBeTruthy();
       expect(box!.height).toBeGreaterThanOrEqual(44);
     }
   });

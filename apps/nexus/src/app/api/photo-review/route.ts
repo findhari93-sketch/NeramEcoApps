@@ -6,6 +6,7 @@ import { sendNudge } from '@/lib/nudge-delivery';
 import { toPhotoStatus, type PhotoStatus } from '@/lib/photo-gate';
 import { resolvePhotoOrigin } from '@/lib/photo-origin';
 import { loadPhotoRoster } from '@/lib/photo-review-roster';
+import { searchableName, type PhotoSearchEntry } from '@/lib/photo-review-search';
 import {
   aiHintFor,
   needsFaceCheck,
@@ -42,8 +43,10 @@ const MAX_DECISIONS = 200;
 /**
  * GET /api/photo-review?classroom=<id>&status=pending|auto|missing|rejected|approved
  * Returns the per-tab counts (always all five, for the tab badges, plus how many
- * pending photos the face check has not looked at yet) and the rows of the
- * requested tab.
+ * pending photos the face check has not looked at yet), the rows of the
+ * requested tab, and `search_index`: every student's id, the name their card
+ * shows and their tab. The page loads one tab at a time, and the index is what
+ * lets a search say "Show 2 in Approved" instead of "nobody here".
  */
 export async function GET(request: NextRequest) {
   try {
@@ -68,9 +71,12 @@ export async function GET(request: NextRequest) {
       approved: 0,
       unchecked: 0,
     };
+    const searchIndex: PhotoSearchEntry[] = [];
     for (const u of roster) {
-      counts[reviewTabFor(u)] += 1;
+      const bucket = reviewTabFor(u);
+      counts[bucket] += 1;
       if (needsFaceCheck(u, now)) counts.unchecked += 1;
+      searchIndex.push({ id: u.id, name: searchableName(u), tab: bucket });
     }
 
     const shown = roster
@@ -115,7 +121,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ counts, rows, status: tab });
+    return NextResponse.json({ counts, rows, status: tab, search_index: searchIndex });
   } catch (err) {
     return errorResponse(err, 'Failed to load photo review queue');
   }

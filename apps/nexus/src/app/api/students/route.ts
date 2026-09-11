@@ -4,6 +4,8 @@ import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient, getCurrentBatch, isTracked, pairStatus } from '@neram/database';
 import { pickClassroomEmail } from '@/lib/classroom-email';
 import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
+import { findRosterDuplicates } from '@/lib/roster-duplicates';
+import { activityOf } from '@/lib/student-roster-view';
 import {
   matchesSegment,
   segmentCounts,
@@ -92,13 +94,17 @@ export async function GET(request: NextRequest) {
     // are counted separately, so they never inflate "N active". See
     // lib/microsoft-account.ts.
     //
+    // nexus_first_login_at / nexus_last_login_at are the sign-in signal the roster
+    // shows. Only a real Nexus session writes them (api/auth/me), unlike
+    // users.last_login_at, which the Tools app and signup also stamp.
+    //
     // The `user:users!nexus_enrollments_user_id_fkey` hint is mandatory, not
     // stylistic: nexus_enrollments references users FOUR times (user_id,
     // removed_by, dormant_by, current_standard_set_by), so a bare embed is
     // ambiguous and PostgREST rejects it.
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('id, user_id, enrolled_at, batch_id, is_active, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, is_alumni), batch:nexus_batches(id, name)')
+      .select('id, user_id, enrolled_at, batch_id, is_active, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, is_alumni, nexus_first_login_at, nexus_last_login_at), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
       .eq('role', 'student')
       .eq('is_active', true)
@@ -176,6 +182,8 @@ export async function GET(request: NextRequest) {
           segments: segmentCounts([]),
           mismatch: 0,
           noYear: 0,
+          neverSignedIn: 0,
+          notSeen14d: 0,
         },
         batches: [],
         currentBatch: currentCode,
@@ -272,6 +280,8 @@ export async function GET(request: NextRequest) {
         ms_oid: string | null;
         nexus_access_enabled: boolean | null;
         academic_year: string | null;
+        nexus_first_login_at: string | null;
+        nexus_last_login_at: string | null;
       };
       const attendance = attendanceByStudent[userId] || { attended: 0, total: 0 };
 
@@ -294,6 +304,12 @@ export async function GET(request: NextRequest) {
         avatar_url: user.avatar_url,
         ms_oid: user.ms_oid,
         awaiting_microsoft: isAwaitingMicrosoft(user.ms_oid),
+        // The enrollment row itself, which removing a student from the class needs.
+        enrollment_id: enrollment.id,
+        first_signed_in_at: user.nexus_first_login_at ?? null,
+        last_seen_at: user.nexus_last_login_at ?? null,
+        // Filled below, once the whole roster is known.
+        possible_duplicate_of: null as { id: string; name: string } | null,
         nexus_access_enabled: user.nexus_access_enabled ?? false,
         // Same value under two names for one release. `exam_batch` is the older
         // name and still has consumers; `academic_year` matches the column and the
@@ -326,6 +342,14 @@ export async function GET(request: NextRequest) {
         },
       };
     });
+
+    // A record with no Microsoft account beside one with it, under the same first
+    // name, is the shape a paid Gmail signup plus a hand-made org account takes.
+    // Flag only: merging stays a human decision in Admin.
+    const duplicates = findRosterDuplicates(
+      students.map((s: any) => ({ id: s.id, name: s.name, ms_oid: s.ms_oid })),
+    );
+    for (const s of students) s.possible_duplicate_of = duplicates.get(s.id) ?? null;
 
     // Fetch batches for this classroom
     const { data: batches } = await supabase
@@ -363,6 +387,12 @@ export async function GET(request: NextRequest) {
       (s: any) => s.pair_status === 'no_year' || s.pair_status === 'unknown',
     ).length;
 
+    // Sign-in activity, over targetable students only: a dormant student is
+    // expected not to sign in, and nagging about them is noise.
+    const nowMs = Date.now();
+    const neverSignedIn = targetable.filter((s: any) => activityOf(s, nowMs) === 'never_signed_in').length;
+    const notSeen14d = targetable.filter((s: any) => activityOf(s, nowMs) === 'inactive').length;
+
     const counts = {
       total: students.length,
       active: students.length - awaitingMicrosoft,
@@ -373,6 +403,8 @@ export async function GET(request: NextRequest) {
       segments: segmentCounts(facts),
       mismatch,
       noYear,
+      neverSignedIn,
+      notSeen14d,
     };
 
     // Server-side segment narrowing is applied LAST, after the counts, and only

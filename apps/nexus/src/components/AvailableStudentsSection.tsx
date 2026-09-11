@@ -43,6 +43,11 @@ interface Props {
   getToken: () => Promise<string | null>;
   /** Called after one or more students are enrolled, so the parent refreshes its roster. */
   onEnrolled: () => void;
+  /**
+   * Inside the Add student sheet: always open, no collapsible header and no
+   * border, because the sheet already is the container.
+   */
+  embedded?: boolean;
 }
 
 const REMOVAL_LABEL: Record<string, string> = {
@@ -73,8 +78,8 @@ function pastMeta(student: PastStudent): string {
  * Every add goes through useDirectoryEnroll, which asks before linking or
  * creating when the account may belong to a student already enrolled.
  */
-export default function AvailableStudentsSection({ classroomId, getToken, onEnrolled }: Props) {
-  const [expanded, setExpanded] = useState(false);
+export default function AvailableStudentsSection({ classroomId, getToken, onEnrolled, embedded = false }: Props) {
+  const [expanded, setExpanded] = useState(embedded);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [students, setStudents] = useState<DirectoryStudent[]>([]);
@@ -211,6 +216,152 @@ export default function AvailableStudentsSection({ classroomId, getToken, onEnro
     </Box>
   );
 
+  const body = (
+    <Box sx={{ px: embedded ? 0 : 1.5, pb: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', flex: 1 }}>
+          New Microsoft accounts that are not in this classroom yet, newest first. Add them to grant Nexus access.
+        </Typography>
+        {embedded && (
+          <IconButton
+            onClick={() => fetchAvailable()}
+            disabled={loading}
+            aria-label="Refresh directory"
+            sx={{ width: 48, height: 48, flexShrink: 0 }}
+          >
+            <RefreshIcon fontSize="small" />
+          </IconButton>
+        )}
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {unavailable ? (
+        <Alert severity="info" sx={{ mb: 1 }}>
+          {embedded
+            ? 'The organisation directory is temporarily unavailable. Try Refresh in a minute.'
+            : 'The organisation directory is temporarily unavailable. Use the "Add Student" button to search and add a student by name or email.'}
+        </Alert>
+      ) : loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+          <CircularProgress size={24} />
+        </Box>
+      ) : (
+        <>
+          {(students.length > 0 || past.length > 0) && (
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Filter by name or email..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              sx={{ mb: 1.5 }}
+              inputProps={{ style: { minHeight: 24 } }}
+            />
+          )}
+
+          {selected.size > 0 && (
+            <Button
+              fullWidth
+              variant="contained"
+              size="small"
+              startIcon={adding ? <CircularProgress size={16} color="inherit" /> : <PersonAddAltOutlinedIcon />}
+              disabled={adding}
+              onClick={() => enroll([...students, ...past].filter((s) => selected.has(s.ms_oid)))}
+              sx={{ mb: 1.5, minHeight: 48 }}
+            >
+              Add {selected.size} to class
+            </Button>
+          )}
+
+          {students.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+              {past.length > 0
+                ? 'No new accounts. Past students are listed below.'
+                : 'Everyone in the directory is already in this class.'}
+            </Typography>
+          ) : (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.5,
+                // The sheet scrolls as a whole; a second scroll box inside it traps the thumb.
+                ...(embedded ? {} : { maxHeight: 360, overflow: 'auto' }),
+              }}
+            >
+              {filtered.map((s) =>
+                renderRow(s, s.createdAt ? `Account created ${timeAgo(s.createdAt)}` : '', 'Add')
+              )}
+              {filtered.length === 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                  No matches for &quot;{query}&quot;.
+                </Typography>
+              )}
+            </Box>
+          )}
+
+          {past.length > 0 && (
+            <Box sx={{ mt: 1.5, pt: 1, borderTop: 1, borderColor: 'divider' }}>
+              <Button
+                fullWidth
+                onClick={() => setShowPast((v) => !v)}
+                aria-expanded={showPast}
+                endIcon={showPast ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                sx={{
+                  justifyContent: 'space-between',
+                  minHeight: 48,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  color: 'text.secondary',
+                }}
+              >
+                Past students ({past.length})
+              </Button>
+              {showPast && (
+                <>
+                  <Alert severity="info" sx={{ my: 1 }}>
+                    These students left a class earlier but were never graduated, so their Microsoft
+                    accounts are still active. Graduate them in the Admin app to free their licenses.
+                    Add someone back only if they have rejoined.
+                  </Alert>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 0.5,
+                      ...(embedded ? {} : { maxHeight: 360, overflow: 'auto' }),
+                    }}
+                  >
+                    {filteredPast.map((s) => renderRow(s, pastMeta(s), 'Add back'))}
+                    {filteredPast.length === 0 && (
+                      <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                        No past students match &quot;{query}&quot;.
+                      </Typography>
+                    )}
+                  </Box>
+                </>
+              )}
+            </Box>
+          )}
+        </>
+      )}
+    </Box>
+  );
+
+  if (embedded) {
+    return (
+      <Box>
+        {body}
+        {dialog}
+      </Box>
+    );
+  }
+
   return (
     <Paper variant="outlined" sx={{ mb: 2, borderRadius: 2, overflow: 'hidden' }}>
       {/* Header. A real button, so the section opens from a keyboard, with the
@@ -254,114 +405,7 @@ export default function AvailableStudentsSection({ classroomId, getToken, onEnro
         )}
       </Box>
 
-      {expanded && (
-        <Box sx={{ px: 1.5, pb: 1.5 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-            New Microsoft accounts that are not in this classroom yet, newest first. Add them to grant Nexus access.
-          </Typography>
-
-          {error && (
-            <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setError(null)}>
-              {error}
-            </Alert>
-          )}
-
-          {unavailable ? (
-            <Alert severity="info" sx={{ mb: 1 }}>
-              The organisation directory is temporarily unavailable. Use the &quot;Add Student&quot;
-              button to search and add a student by name or email.
-            </Alert>
-          ) : loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-              <CircularProgress size={24} />
-            </Box>
-          ) : (
-            <>
-              {(students.length > 0 || past.length > 0) && (
-                <TextField
-                  fullWidth
-                  size="small"
-                  placeholder="Filter by name or email..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  sx={{ mb: 1.5 }}
-                  inputProps={{ style: { minHeight: 24 } }}
-                />
-              )}
-
-              {selected.size > 0 && (
-                <Button
-                  fullWidth
-                  variant="contained"
-                  size="small"
-                  startIcon={adding ? <CircularProgress size={16} color="inherit" /> : <PersonAddAltOutlinedIcon />}
-                  disabled={adding}
-                  onClick={() => enroll([...students, ...past].filter((s) => selected.has(s.ms_oid)))}
-                  sx={{ mb: 1.5, minHeight: 48 }}
-                >
-                  Add {selected.size} to class
-                </Button>
-              )}
-
-              {students.length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                  {past.length > 0
-                    ? 'No new accounts. Past students are listed below.'
-                    : 'Everyone in the directory is already in this class.'}
-                </Typography>
-              ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 360, overflow: 'auto' }}>
-                  {filtered.map((s) =>
-                    renderRow(s, s.createdAt ? `Account created ${timeAgo(s.createdAt)}` : '', 'Add')
-                  )}
-                  {filtered.length === 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                      No matches for &quot;{query}&quot;.
-                    </Typography>
-                  )}
-                </Box>
-              )}
-
-              {past.length > 0 && (
-                <Box sx={{ mt: 1.5, pt: 1, borderTop: 1, borderColor: 'divider' }}>
-                  <Button
-                    fullWidth
-                    onClick={() => setShowPast((v) => !v)}
-                    aria-expanded={showPast}
-                    endIcon={showPast ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                    sx={{
-                      justifyContent: 'space-between',
-                      minHeight: 48,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      color: 'text.secondary',
-                    }}
-                  >
-                    Past students ({past.length})
-                  </Button>
-                  {showPast && (
-                    <>
-                      <Alert severity="info" sx={{ my: 1 }}>
-                        These students left a class earlier but were never graduated, so their Microsoft
-                        accounts are still active. Graduate them in the Admin app to free their licenses.
-                        Add someone back only if they have rejoined.
-                      </Alert>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 360, overflow: 'auto' }}>
-                        {filteredPast.map((s) => renderRow(s, pastMeta(s), 'Add back'))}
-                        {filteredPast.length === 0 && (
-                          <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                            No past students match &quot;{query}&quot;.
-                          </Typography>
-                        )}
-                      </Box>
-                    </>
-                  )}
-                </Box>
-              )}
-            </>
-          )}
-        </Box>
-      )}
+      {expanded && body}
 
       {dialog}
     </Paper>

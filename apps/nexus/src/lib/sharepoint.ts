@@ -305,7 +305,7 @@ function folderPathOf(item: any): string | null {
   }
 }
 
-export function toDriveItem(item: any): SiteDriveItem {
+export function toDriveItem(item: any): SiteDriveItem & { driveId: string | null; driveType: string | null } {
   return {
     id: item.id,
     name: item.name || 'Untitled',
@@ -315,6 +315,11 @@ export function toDriveItem(item: any): SiteDriveItem {
     lastModified: item.lastModifiedDateTime || null,
     isFolder: !!item.folder,
     folderPath: folderPathOf(item),
+    // The drive the file lives on. With `id` it lets a pick be looked up by its
+    // ids, because the webUrl search returns is often a list form page
+    // ("Forms/DispForm.aspx?ID=86"), not the file.
+    driveId: item.parentReference?.driveId ?? null,
+    driveType: item.parentReference?.driveType ?? null,
   };
 }
 
@@ -489,7 +494,7 @@ interface SharePointUploadResult {
 /**
  * Get the SharePoint site ID from environment or by discovery.
  */
-async function getSiteId(token: string): Promise<string> {
+export async function getSiteId(token: string): Promise<string> {
   const siteId = process.env.SHAREPOINT_SITE_ID;
   if (siteId) return siteId;
 

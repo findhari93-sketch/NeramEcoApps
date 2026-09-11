@@ -14,7 +14,8 @@ export default function StudentListSkeleton({ viewMode }: { viewMode: ViewMode }
       </Box>
     );
   }
-  const h = viewMode === 'compact' ? 56 : 92;
+  // Compact rows now carry a status line under the email, so they stand taller.
+  const h = viewMode === 'compact' ? 72 : 92;
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: viewMode === 'compact' ? 1 : 1.5 }}>
       {[1, 2, 3, 4, 5].map((i) => (

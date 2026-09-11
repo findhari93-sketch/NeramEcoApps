@@ -1,22 +1,30 @@
 'use client';
 
 import { Box, Typography } from '@neram/ui';
-import ViewAsStudentButton from '@/components/ViewAsStudentButton';
-import CopyEmailButton from './CopyEmailButton';
+import MatchHighlight from '@/components/MatchHighlight';
 import StudentRowShell from './StudentRowShell';
 import StudentRowChips from './StudentRowChips';
 import StudentStageAvatar from './StudentStageAvatar';
-import { Meter, StatPill } from './StudentStatMeters';
+import StudentStatusLine from './StudentStatusLine';
+import { Meter } from './StudentStatMeters';
+import { nameMatchRanges } from '@/lib/people-search';
 import { stageKeyOf } from '@/lib/student-stage';
 import type { StudentRowProps } from './studentRow.types';
 
 /**
  * The three row densities.
  *
- * They share StudentRowShell (container, tap behaviour, select checkbox) and
- * StudentRowChips (the badge row), so the classification renders identically in
- * all three. Only the layout differs, which is the only thing that ever should
- * have differed between them.
+ * They share StudentRowShell (container, tap behaviour, select checkbox),
+ * StudentRowChips (the badge row) and StudentStatusLine (joined and sign-in), so a
+ * student reads the same in all three. Only the layout differs.
+ *
+ * Progress meters appear only when there is something to measure. A classroom with
+ * no completed classes used to give every student two empty 0% bars, which read as
+ * "everyone is failing" rather than "nothing has happened yet".
+ *
+ * The chips no longer carry "No Microsoft account": the status line says it once.
+ * Copy email and View as student moved into the row's actions menu, which leaves
+ * one 48px control on the row instead of two cramped ones.
  */
 
 function stageOf(student: StudentRowProps['student']) {
@@ -26,19 +34,25 @@ function stageOf(student: StudentRowProps['student']) {
   };
 }
 
-/** Compact: single-line scan row. Small avatar, name, muted email, tiny stat pills. */
+/** The name with the searched letters marked, so it is clear why each row is listed. */
+function RowName({ name, query }: { name: string; query?: string }) {
+  return <MatchHighlight text={name || ''} ranges={query ? nameMatchRanges(name, query) : []} />;
+}
+
+/** Compact: the default. Name and chips, email, then the status line. */
 export function CompactRow(props: StudentRowProps) {
-  const { student, checklistPct, attColor, doneColor, presenceStatus, onCopy } = props;
+  const { student, presenceStatus, now, actions, selectMode, query } = props;
   const { stage, dormant } = stageOf(student);
+  const attendance = student.attendance.total > 0 ? student.attendance.percentage : null;
 
   return (
     <StudentRowShell
-      selectMode={props.selectMode}
+      selectMode={selectMode}
       selected={props.selected}
       onToggleSelect={props.onToggleSelect}
       onOpen={props.onOpen}
       dormant={dormant}
-      sx={{ px: 1.5, py: 1, minHeight: 56, display: 'flex', alignItems: 'center', gap: 1.25 }}
+      sx={{ pl: 1.5, pr: 0.5, py: 1, minHeight: 64, display: 'flex', alignItems: 'center', gap: 1.25 }}
     >
       <StudentStageAvatar
         stage={stage}
@@ -52,8 +66,8 @@ export function CompactRow(props: StudentRowProps) {
       />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flexWrap: 'wrap' }}>
-          <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.9rem', maxWidth: '100%' }}>
-            {student.name}
+          <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.95rem', maxWidth: '100%' }}>
+            <RowName name={student.name} query={query} />
           </Typography>
           <StudentRowChips
             studyStage={student.study_stage}
@@ -64,42 +78,42 @@ export function CompactRow(props: StudentRowProps) {
             pairStatus={student.pair_status}
             currentBatch={props.currentBatch}
             emailStatus={student.email_status}
-            awaitingMicrosoft={student.awaiting_microsoft}
             density="compact"
             showSection={false}
           />
         </Box>
         {student.email && (
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.72rem', lineHeight: 1.3 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            noWrap
+            sx={{ display: 'block', fontSize: '0.75rem', lineHeight: 1.35 }}
+          >
             {student.email}
           </Typography>
         )}
+        <StudentStatusLine student={student} now={now} attendance={attendance} />
       </Box>
-      <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 0.75, flexShrink: 0 }}>
-        <StatPill label="Att" value={student.attendance.percentage} color={attColor} />
-        <StatPill label="List" value={checklistPct} color={doneColor} />
-      </Box>
-      {student.email && <CopyEmailButton email={student.email} title="Copy email" onCopy={onCopy} />}
-      <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0 }}>
-        <ViewAsStudentButton studentId={student.id} reason={`Student list: ${student.name}`} iconOnly />
-      </Box>
+      {!selectMode && actions}
     </StudentRowShell>
   );
 }
 
-/** Cards: avatar tile with chips + both progress meters, laid out in a grid. */
+/** Cards: avatar tile with chips and status, meters only when there is data. */
 export function StudentCard(props: StudentRowProps) {
-  const { student, checklistPct, attColor, doneColor, presenceStatus, onCopy } = props;
+  const { student, checklistPct, attColor, doneColor, presenceStatus, now, actions, selectMode, query } = props;
   const { stage, dormant } = stageOf(student);
+  const showAttendance = student.attendance.total > 0;
+  const showChecklist = student.checklist.total > 0;
 
   return (
     <StudentRowShell
-      selectMode={props.selectMode}
+      selectMode={selectMode}
       selected={props.selected}
       onToggleSelect={props.onToggleSelect}
       onOpen={props.onOpen}
       dormant={dormant}
-      sx={{ p: 2, borderRadius: 2.5, height: '100%', display: 'flex', flexDirection: 'column', gap: 1.25 }}
+      sx={{ p: 2, pr: 1, borderRadius: 2.5, height: '100%', display: 'flex', flexDirection: 'column', gap: 1.25 }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
         <StudentStageAvatar
@@ -114,7 +128,7 @@ export function StudentCard(props: StudentRowProps) {
         />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
-            {student.name}
+            <RowName name={student.name} query={query} />
           </Typography>
           {student.email && (
             <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
@@ -128,41 +142,43 @@ export function StudentCard(props: StudentRowProps) {
               dormantSince={student.dormant_since}
               dormantReason={student.dormant_reason}
               examBatch={student.exam_batch}
-            pairStatus={student.pair_status}
-            currentBatch={props.currentBatch}
+              pairStatus={student.pair_status}
+              currentBatch={props.currentBatch}
               batchName={student.batch?.name}
               emailStatus={student.email_status}
-              awaitingMicrosoft={student.awaiting_microsoft}
               density="card"
             />
           </Box>
+          <StudentStatusLine student={student} now={now} />
         </Box>
+        {!selectMode && actions}
       </Box>
-      <Box sx={{ display: 'flex', gap: 2, mt: 'auto', pt: 0.5 }}>
-        <Meter label="Attendance" value={student.attendance.percentage} color={attColor} />
-        <Meter label="Checklist" value={checklistPct} color={doneColor} />
-      </Box>
-      <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end', alignItems: 'center' }}>
-        {student.email && <CopyEmailButton email={student.email} title="Copy email" onCopy={onCopy} />}
-        <ViewAsStudentButton studentId={student.id} reason={`Student list: ${student.name}`} iconOnly />
-      </Box>
+      {(showAttendance || showChecklist) && (
+        <Box sx={{ display: 'flex', gap: 2, mt: 'auto', pt: 0.5, pr: 1 }}>
+          {showAttendance && <Meter label="Attendance" value={student.attendance.percentage} color={attColor} />}
+          {showChecklist && <Meter label="Checklist" value={checklistPct} color={doneColor} />}
+        </Box>
+      )}
     </StudentRowShell>
   );
 }
 
-/** Detailed: the roomy two-row layout (avatar + chips on top, full meters below). */
+/** Detailed: roomy rows with full meters, again only when there is data. */
 export function DetailedRow(props: StudentRowProps) {
-  const { student, checklistPct, attColor, doneColor, presenceStatus, isMobile, onCopy } = props;
+  const { student, checklistPct, attColor, doneColor, presenceStatus, isMobile, now, actions, selectMode, query } =
+    props;
   const { stage, dormant } = stageOf(student);
+  const showAttendance = student.attendance.total > 0;
+  const showChecklist = student.checklist.total > 0;
 
   return (
     <StudentRowShell
-      selectMode={props.selectMode}
+      selectMode={selectMode}
       selected={props.selected}
       onToggleSelect={props.onToggleSelect}
       onOpen={props.onOpen}
       dormant={dormant}
-      sx={{ p: 2, minHeight: 48, display: 'block' }}
+      sx={{ p: 2, pr: 1, minHeight: 48, display: 'block' }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <StudentStageAvatar
@@ -177,8 +193,8 @@ export function DetailedRow(props: StudentRowProps) {
         />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-            <Typography variant="body1" sx={{ fontWeight: 700, fontSize: { xs: '0.92rem', sm: '1rem' } }} noWrap>
-              {student.name}
+            <Typography variant="body1" sx={{ fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1rem' } }} noWrap>
+              <RowName name={student.name} query={query} />
             </Typography>
             <StudentRowChips
               studyStage={student.study_stage}
@@ -186,36 +202,28 @@ export function DetailedRow(props: StudentRowProps) {
               dormantSince={student.dormant_since}
               dormantReason={student.dormant_reason}
               examBatch={student.exam_batch}
-            pairStatus={student.pair_status}
-            currentBatch={props.currentBatch}
+              pairStatus={student.pair_status}
+              currentBatch={props.currentBatch}
               batchName={student.batch?.name}
               emailStatus={student.email_status}
-              awaitingMicrosoft={student.awaiting_microsoft}
               density="detailed"
             />
           </Box>
-          {student.email && !isMobile && (
+          {student.email && (
             <Typography variant="body2" color="text.secondary" noWrap>
               {student.email}
             </Typography>
           )}
+          <StudentStatusLine student={student} now={now} />
         </Box>
-        {student.email && (
-          <CopyEmailButton email={student.email} title={isMobile ? student.email : 'Copy email'} onCopy={onCopy} />
-        )}
-        <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0 }}>
-          <ViewAsStudentButton studentId={student.id} reason={`Student list: ${student.name}`} iconOnly />
+        {!selectMode && actions}
+      </Box>
+      {(showAttendance || showChecklist) && (
+        <Box sx={{ display: 'flex', gap: 2, mt: 1.25, ml: { xs: 0, sm: 7.5 }, pr: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+          {showAttendance && <Meter label="Attendance" value={student.attendance.percentage} color={attColor} />}
+          {showChecklist && <Meter label="Checklist" value={checklistPct} color={doneColor} />}
         </Box>
-      </Box>
-      <Box sx={{ display: 'flex', gap: 2, mt: 1.25, ml: { xs: 0, sm: 7.5 }, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Meter label="Attendance" value={student.attendance.percentage} color={attColor} />
-        <Meter label="Checklist" value={checklistPct} color={doneColor} />
-        {student.email && isMobile && (
-          <Typography variant="caption" color="text.disabled" noWrap sx={{ ml: 'auto', maxWidth: 130, fontSize: '0.65rem' }}>
-            {student.email}
-          </Typography>
-        )}
-      </Box>
+      )}
     </StudentRowShell>
   );
 }

@@ -1,33 +1,30 @@
 'use client';
 
 /**
- * Who sat this test, which questions are not doing their job, and what to do
- * about either.
+ * The data, the run scope and the dialogs behind the Questions and Students
+ * tabs of a test.
  *
- * Two halves answering two different questions. The student list answers "who
- * needs help". The question list answers "is this paper any good", which is the
- * loop that keeps a growing bank trustworthy: a question almost nobody gets
- * right is usually ambiguous rather than hard, and without surfacing it nobody
- * ever finds it again.
+ * On the test page the page owns the tab and the run, and this stays mounted
+ * while a teacher moves between tabs, so switching never costs a second fetch
+ * and the run they picked is the run both tabs are about. Mounted on its own
+ * (the paper workspace does this) it keeps its own run picker and its own
+ * Students/Questions switch, and behaves the same.
  *
- * Both halves used to stop at surfacing. This file is now the orchestrator that
- * closes them: it owns the data, the run scope and the dialogs, while the two
- * lists (TestResultsStudents, TestResultsQuestions) own their own presentation
- * and selection. The chain it wires up is the point:
+ * The chain it wires up is the point:
  *
- *   spot a bad question -> fix it (by hand or with an AI) -> re-grade the
- *   attempts that were marked on the old answer -> tell the students whose
- *   score moved.
+ *   spot a bad question -> check it with an AI -> fix it -> re-grade the
+ *   attempts marked on the old answer -> tell the students whose score moved.
  *
- * Each of those steps hands the next one its recipients, so the teacher is never
- * asked to reconstruct a list the app already knows.
+ * Each step hands the next one its recipients, so the teacher is never asked
+ * to reconstruct a list the app already knows.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
   Button,
+  IconButton,
   Paper,
   Skeleton,
   TextField,
@@ -35,19 +32,30 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@neram/ui';
-import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import CloseIcon from '@mui/icons-material/Close';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import GradingOutlinedIcon from '@mui/icons-material/GradingOutlined';
 import StudentAttemptSheet from '@/components/tests/StudentAttemptSheet';
-import TestResultsStudents, { type StudentResultRow } from '@/components/tests/TestResultsStudents';
-import TestResultsQuestions, {
+import TestResultsStudents, {
+  type StudentResultRow,
+  type StudentResultStats,
+} from '@/components/tests/TestResultsStudents';
+import TestQuestionsView, {
+  type PoolQuestion,
   type QuestionAnalysisRow,
-} from '@/components/tests/TestResultsQuestions';
+} from '@/components/tests/TestQuestionsView';
 import QuestionDoctorDialog from '@/components/tests/QuestionDoctorDialog';
 import QuestionEditDialog from '@/components/tests/QuestionEditDialog';
 import RegradePreviewDialog from '@/components/tests/RegradePreviewDialog';
 import TestMessageDialog, { type MessageRecipient } from '@/components/tests/TestMessageDialog';
 import { isResultFilter, type ResultFilter } from '@/lib/test-result-filters';
+import {
+  DEFAULT_QUESTION_FILTERS,
+  QUESTION_FILTER_PARAMS,
+  questionFiltersFromParams,
+  questionFiltersToParams,
+  type QuestionFilters,
+} from '@/lib/question-filters';
 import type { TestMessageTemplate } from '@/lib/test-message-templates';
 
 interface RunSummary {
@@ -59,23 +67,6 @@ interface RunSummary {
   closes_at: string | null;
   attempts: number;
   is_active: boolean;
-}
-
-interface Stats {
-  students: number;
-  attempts: number;
-  average: number | null;
-  passed: number;
-  roster_total: number | null;
-  mandatory: number | null;
-  submitted: number | null;
-  not_started: number | null;
-  missed: number | null;
-  excused: number | null;
-  average_first: number | null;
-  average_first_marks: { score: number; total: number } | null;
-  average_best_marks: { score: number; total: number } | null;
-  pass_mark_pct: number | null;
 }
 
 const BUCKET_LABELS: Record<string, string> = {
@@ -95,23 +86,7 @@ const STATUS_TEXT: Record<string, string> = {
   excused: 'Not required',
 };
 
-function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, flex: 1, minWidth: 120 }}>
-      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-        {label}
-      </Typography>
-      <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
-        {value}
-      </Typography>
-      {hint && (
-        <Typography variant="caption" color="text.secondary">
-          {hint}
-        </Typography>
-      )}
-    </Paper>
-  );
-}
+const NO_POOL: PoolQuestion[] = [];
 
 /** What the re-grade banner needs to say, once a fix has landed. */
 interface StaleNotice {
@@ -119,21 +94,43 @@ interface StaleNotice {
   staleAttempts: number;
 }
 
+interface Notice {
+  text: string;
+  /** Offer to show the questions an AI just fixed. */
+  showFixed?: boolean;
+}
+
+function freshQuestionFilters(): QuestionFilters {
+  if (typeof window === 'undefined') return { ...DEFAULT_QUESTION_FILTERS, pct: [0, 100] };
+  const params = new URL(window.location.href).searchParams;
+  return questionFiltersFromParams((k) => params.get(k));
+}
+
 export default function TestResultsPanel({
   testId,
   authFetch,
   getToken,
+  view: controlledView,
+  runId: controlledRunId,
+  onRunIdChange,
   initialRunId = '',
   initialFilter,
   testTitle,
+  pool = NO_POOL,
+  onQuestionsChanged,
 }: {
   testId: string;
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
   /** For the response sheet drawer, which fetches directly rather than via authFetch. */
   getToken: () => Promise<string | null>;
-  /** Open straight onto one run, for "See results" links from the runs list. */
+  /** Which tab the page is on. Omitted, the panel shows its own switch. */
+  view?: 'questions' | 'students';
+  /** The run both tabs report on, when the page owns it. Empty means all time. */
+  runId?: string;
+  onRunIdChange?: (runId: string) => void;
+  /** The run to start on when the panel owns the run itself. */
   initialRunId?: string;
-  /** Open straight onto one group, from a shared or bookmarked link. */
+  /** Open straight onto one group of students, from a shared or bookmarked link. */
   initialFilter?: string;
   /**
    * The paper's own name, for anything a student reads.
@@ -143,19 +140,34 @@ export default function TestResultsPanel({
    * Valley, 18 Aug" names a scheduling row at them; the paper is what they sat.
    */
   testTitle?: string;
+  /**
+   * The paper's questions as the test holds them, text and answers included.
+   * Omitted, the questions list is built from the analysis rows alone.
+   */
+  pool?: PoolQuestion[];
+  /** A question was edited here, so the page's copy of the paper is stale. */
+  onQuestionsChanged?: () => void;
 }) {
-  const [view, setView] = useState<'students' | 'questions'>('students');
+  const [ownView, setOwnView] = useState<'questions' | 'students'>('students');
+  const [ownRunId, setOwnRunId] = useState(initialRunId);
+  const view = controlledView ?? ownView;
+  const runId = controlledRunId ?? ownRunId;
+
+  const changeRun = (next: string) => {
+    if (controlledRunId === undefined) setOwnRunId(next);
+    onRunIdChange?.(next);
+  };
+
   const [rows, setRows] = useState<StudentResultRow[] | null>(null);
   const [questions, setQuestions] = useState<QuestionAnalysisRow[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<StudentResultStats | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
-  const [runId, setRunId] = useState<string>(initialRunId);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [scoreShown, setScoreShown] = useState<'first' | 'best'>('best');
-  const [filter, setFilter] = useState<ResultFilter>(
-    isResultFilter(initialFilter) ? initialFilter : 'all',
-  );
+  const [filter, setFilter] = useState<ResultFilter>(isResultFilter(initialFilter) ? initialFilter : 'all');
+  const [qFilters, setQFilters] = useState<QuestionFilters>(freshQuestionFilters);
 
   const [sheet, setSheet] = useState<{ list: StudentResultRow[]; index: number } | null>(null);
   const [acting, setActing] = useState<string | null>(null);
@@ -170,7 +182,10 @@ export default function TestResultsPanel({
     template: TestMessageTemplate;
   } | null>(null);
 
+  const scoredRun = useRef<string | null>(null);
+
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const qs = runId ? `?placement_id=${encodeURIComponent(runId)}` : '';
       const json = await authFetch(`/api/question-bank/tests/${testId}/results${qs}`);
@@ -178,13 +193,20 @@ export default function TestResultsPanel({
       setQuestions(json.data?.questions || []);
       setStats(json.data?.stats || null);
       setRuns(json.data?.runs || []);
+      setError(null);
       // A dated run is about what the class knew on the day, so it leads with
-      // the first sitting. An always-open practice pool has no such day.
-      const door = json.data?.run?.door;
-      setScoreShown(door === 'class' || door === 'exam' ? 'first' : 'best');
+      // the first sitting. An always-open practice pool has no such day. Set
+      // once per run, so a reload after a reopen keeps the teacher's choice.
+      if (scoredRun.current !== runId) {
+        scoredRun.current = runId;
+        const door = json.data?.run?.door;
+        setScoreShown(door === 'class' || door === 'exam' ? 'first' : 'best');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load results');
-      setRows([]);
+      setRows((prev) => prev ?? []);
+    } finally {
+      setLoading(false);
     }
   }, [authFetch, testId, runId]);
 
@@ -193,25 +215,29 @@ export default function TestResultsPanel({
   }, [load]);
 
   /**
-   * Keep the active group in the URL.
+   * Keep the student group and the question filters in the URL.
    *
-   * So "the five who did not pass" is a link a teacher can send themselves, and
-   * so a back press out of the response drawer returns to the group they were
-   * working through rather than to everyone.
+   * So "the five who did not pass" and "0% questions nobody has checked" are
+   * links a teacher can send themselves, and a back press out of a drawer
+   * returns to the view they were working through. history.state is carried
+   * over because the router keeps its own entry there.
    */
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const url = new URL(window.location.href);
     if (filter === 'all') url.searchParams.delete('filter');
     else url.searchParams.set('filter', filter);
-    window.history.replaceState({}, '', url.toString());
-  }, [filter]);
+    const params = questionFiltersToParams(qFilters);
+    for (const key of QUESTION_FILTER_PARAMS) {
+      const value = params[key];
+      if (value == null) url.searchParams.delete(key);
+      else url.searchParams.set(key, value);
+    }
+    window.history.replaceState(window.history.state, '', url.toString());
+  }, [filter, qFilters]);
 
   const isRunScoped = Boolean(stats?.roster_total);
-  const currentRun = useMemo(
-    () => runs.find((r) => r.placement_id === runId) || null,
-    [runs, runId],
-  );
+  const currentRun = useMemo(() => runs.find((r) => r.placement_id === runId) || null, [runs, runId]);
 
   async function setAccess(studentId: string, action: 'open' | 'close') {
     if (!runId) return;
@@ -266,11 +292,12 @@ export default function TestResultsPanel({
       // Reported honestly rather than as a blanket success: a partial grant is
       // the case a teacher most needs to know about, because the students it
       // missed will not tell them.
-      setNotice(
-        counts?.failed
+      const ok = counts?.ok ?? studentIds.length;
+      setNotice({
+        text: counts?.failed
           ? `Reopened for ${counts.ok} of ${counts.requested}. ${counts.failed} could not be opened.`
-          : `Reopened for ${counts?.ok ?? studentIds.length} student${(counts?.ok ?? studentIds.length) === 1 ? '' : 's'}.`,
-      );
+          : `Reopened for ${ok} student${ok === 1 ? '' : 's'}.`,
+      });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not reopen for those students');
@@ -328,28 +355,29 @@ export default function TestResultsPanel({
     URL.revokeObjectURL(url);
   }
 
+  function showFixed() {
+    setQFilters({ ...DEFAULT_QUESTION_FILTERS, pct: [0, 100], sort: qFilters.sort, ai: 'fixed' });
+    if (controlledView === undefined) setOwnView('questions');
+    setNotice(null);
+  }
+
+  const waiting = (rows || []).filter((r) => r.access_request_pending);
+  const sheetRow = sheet ? (sheet.list[sheet.index] ?? null) : null;
+
+  let studentsBody: React.ReactNode;
   if (rows === null) {
-    return (
+    studentsBody = (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Skeleton variant="rectangular" height={72} sx={{ borderRadius: 2 }} />
         {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} variant="rectangular" height={64} sx={{ borderRadius: 1.5 }} />
+          <Skeleton key={i} variant="rectangular" height={56} sx={{ borderRadius: 1.5 }} />
         ))}
       </Box>
     );
-  }
-
-  if (error) {
-    return (
-      <Alert severity="error" action={<Button onClick={load}>Retry</Button>}>
-        {error}
-      </Alert>
-    );
-  }
-
-  // A run with a roster is never empty, even before anyone sits it: the list of
-  // people who have not is exactly what the teacher came for.
-  if (stats && stats.attempts === 0 && !stats.roster_total) {
-    return (
+  } else if (stats && stats.attempts === 0 && !stats.roster_total) {
+    // A run with a roster is never empty, even before anyone sits it: the list
+    // of people who have not is exactly what the teacher came for.
+    studentsBody = (
       <Paper variant="outlined" sx={{ py: 6, px: 3, textAlign: 'center', borderRadius: 2 }}>
         <GroupsOutlinedIcon sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
         <Typography variant="body2" color="text.secondary">
@@ -357,178 +385,26 @@ export default function TestResultsPanel({
         </Typography>
       </Paper>
     );
-  }
-
-  const flagged = questions.filter((q) => q.needs_review);
-  const waiting = (rows || []).filter((r) => r.access_request_pending);
-  const notDone = (stats?.not_started ?? 0) + (stats?.missed ?? 0);
-  const sheetRow = sheet ? sheet.list[sheet.index] ?? null : null;
-
-  return (
-    <Box>
-      {runs.length > 0 && (
-        <TextField
-          select
-          size="small"
-          label="Showing"
-          value={runId}
-          onChange={(e) => setRunId(e.target.value)}
-          SelectProps={{ native: true }}
-          sx={{ mb: 2, minWidth: 240, width: { xs: '100%', sm: 'auto' } }}
-          helperText="A run is one scheduled use of this paper: who it is for, when it closes, and how they did."
-        >
-          <option value="">Everyone, all time</option>
-          {runs.map((r) => (
-            <option key={r.placement_id || 'unassigned'} value={r.placement_id || ''}>
-              {r.label} ({r.attempts})
-            </option>
-          ))}
-        </TextField>
-      )}
-
-      {stats && (
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-          {isRunScoped ? (
-            <>
-              <StatTile
-                label="DONE"
-                value={`${stats.submitted ?? 0} of ${stats.mandatory ?? stats.roster_total ?? 0}`}
-                hint="of the students this is set for"
-              />
-              <StatTile
-                label="NOT DONE"
-                value={String(notDone)}
-                hint={`${stats.not_started ?? 0} not started, ${stats.missed ?? 0} missed the date`}
-              />
-              <StatTile
-                label="AVERAGE"
-                value={
-                  scoreShown === 'first'
-                    ? stats.average_first == null
-                      ? '-'
-                      : `${stats.average_first}%`
-                    : stats.average == null
-                      ? '-'
-                      : `${stats.average}%`
-                }
-                hint={
-                  scoreShown === 'first'
-                    ? stats.average_first_marks
-                      ? `first attempt, ${stats.average_first_marks.score} of ${stats.average_first_marks.total} marks`
-                      : 'first attempt'
-                    : stats.average_best_marks
-                      ? `best each, ${stats.average_best_marks.score} of ${stats.average_best_marks.total} marks`
-                      : 'best score each'
-                }
-              />
-              <StatTile
-                label="PASSED"
-                value={String(stats.passed)}
-                hint={
-                  stats.pass_mark_pct == null
-                    ? undefined
-                    : `pass mark ${Math.round(stats.pass_mark_pct)}%`
-                }
-              />
-            </>
-          ) : (
-            <>
-              <StatTile label="STUDENTS" value={String(stats.students)} />
-              <StatTile label="ATTEMPTS" value={String(stats.attempts)} hint="retakes included" />
-              <StatTile
-                label="AVERAGE"
-                value={stats.average == null ? '-' : `${stats.average}%`}
-                hint="best score each"
-              />
-              <StatTile label="PASSED" value={String(stats.passed)} />
-            </>
-          )}
-        </Box>
-      )}
-
-      {notice && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setNotice(null)}>
-          {notice}
-        </Alert>
-      )}
-
-      {/* The bridge from "fixed the question" to "fix the scores it produced".
-          Without it the correction only ever helps future sitters, and the
-          people who were marked wrong by the old key stay marked wrong. */}
-      {stale && stale.staleAttempts > 0 && (
-        <Alert
-          severity="warning"
-          icon={<GradingOutlinedIcon />}
-          sx={{ mb: 2 }}
-          action={
-            <Button
-              size="small"
-              variant="contained"
-              onClick={() => setRegradeOpen(true)}
-              sx={{ textTransform: 'none', minHeight: 44 }}
-            >
-              Re-grade
-            </Button>
-          }
-        >
-          {stale.answerKeyChanged} question{stale.answerKeyChanged === 1 ? '' : 's'} changed answer.{' '}
-          {stale.staleAttempts} attempt{stale.staleAttempts === 1 ? ' was' : 's were'} marked on the
-          old one.
-        </Alert>
-      )}
-
-      {waiting.length > 0 && view === 'students' && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {waiting.length} student{waiting.length !== 1 ? 's' : ''} asked to reopen this test.
-          Approve or decline on their row below.
-        </Alert>
-      )}
-
-      {flagged.length > 0 && view === 'students' && (
-        <Alert
-          severity="warning"
-          icon={<WarningAmberOutlinedIcon />}
-          sx={{ mb: 2 }}
-          action={
-            <Button size="small" onClick={() => setView('questions')} sx={{ textTransform: 'none' }}>
-              Show me
-            </Button>
-          }
-        >
-          {flagged.length} question{flagged.length !== 1 ? 's' : ''} almost nobody got right. Worth a
-          read before you blame the class.
-        </Alert>
-      )}
-
-      <ToggleButtonGroup
-        size="small"
-        exclusive
-        value={view}
-        onChange={(_, v) => v && setView(v)}
-        sx={{ mb: 2, flexWrap: 'wrap' }}
-      >
-        <ToggleButton value="students" sx={{ textTransform: 'none', px: 2, minHeight: 40 }}>
-          Students
-        </ToggleButton>
-        <ToggleButton value="questions" sx={{ textTransform: 'none', px: 2, minHeight: 40 }}>
-          Question analysis
-        </ToggleButton>
-      </ToggleButtonGroup>
-
-      {view === 'students' ? (
+  } else {
+    studentsBody = (
+      <>
+        {waiting.length > 0 && (
+          <Alert severity="info" sx={{ mb: 1.5 }}>
+            {waiting.length} student{waiting.length !== 1 ? 's' : ''} asked to reopen this test. Approve or decline on
+            their row below.
+          </Alert>
+        )}
         <TestResultsStudents
           rows={rows}
+          stats={stats}
           isRunScoped={isRunScoped}
           runId={runId}
-          runLabel={currentRun?.label || 'Every attempt, all time'}
           scoreShown={scoreShown}
           onScoreShownChange={setScoreShown}
           filter={filter}
           onFilterChange={setFilter}
           acting={acting}
-          onOpenSheet={(row, ordered) =>
-            setSheet({ list: ordered, index: ordered.indexOf(row) })
-          }
+          onOpenSheet={(row, ordered) => setSheet({ list: ordered, index: ordered.indexOf(row) })}
           onSetAccess={setAccess}
           onDecide={decide}
           onBulkReopen={bulkReopen}
@@ -543,12 +419,117 @@ export default function TestResultsPanel({
           }
           onExportCsv={exportCsv}
         />
-      ) : (
-        <TestResultsQuestions
-          questions={questions}
+      </>
+    );
+  }
+
+  return (
+    <Box>
+      {runs.length > 0 && (
+        <TextField
+          select
+          size="small"
+          label="Results from"
+          value={runId}
+          onChange={(e) => changeRun(e.target.value)}
+          SelectProps={{ native: true }}
+          InputProps={{ sx: { minHeight: 44, fontSize: 16 } }}
+          sx={{ mb: 1.5, minWidth: 260, width: { xs: '100%', sm: 'auto' } }}
+        >
+          <option value="">Everyone, all time</option>
+          {runs.map((r) => (
+            <option key={r.placement_id || 'unassigned'} value={r.placement_id || ''}>
+              {r.label} ({r.attempts})
+            </option>
+          ))}
+        </TextField>
+      )}
+
+      {notice && (
+        <Alert
+          severity="success"
+          sx={{ mb: 1.5, alignItems: 'center' }}
+          action={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              {notice.showFixed && (
+                <Button
+                  color="inherit"
+                  onClick={showFixed}
+                  sx={{ textTransform: 'none', fontWeight: 700, minHeight: 40 }}
+                >
+                  Show fixed
+                </Button>
+              )}
+              <IconButton aria-label="Dismiss" color="inherit" onClick={() => setNotice(null)} sx={{ width: 40, height: 40 }}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          }
+        >
+          {notice.text}
+        </Alert>
+      )}
+
+      {/* The bridge from "fixed the question" to "fix the scores it produced".
+          Without it the correction only ever helps future sitters, and the
+          people who were marked wrong by the old key stay marked wrong. */}
+      {stale && stale.staleAttempts > 0 && (
+        <Alert
+          severity="warning"
+          icon={<GradingOutlinedIcon />}
+          sx={{ mb: 1.5 }}
+          action={
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => setRegradeOpen(true)}
+              sx={{ textTransform: 'none', minHeight: 44 }}
+            >
+              Re-grade
+            </Button>
+          }
+        >
+          {stale.answerKeyChanged} question{stale.answerKeyChanged === 1 ? '' : 's'} changed answer.{' '}
+          {stale.staleAttempts} attempt{stale.staleAttempts === 1 ? ' was' : 's were'} marked on the old one.
+        </Alert>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 1.5 }} action={<Button onClick={load}>Retry</Button>}>
+          {error}
+        </Alert>
+      )}
+
+      {controlledView === undefined && (
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={ownView}
+          onChange={(_, v) => v && setOwnView(v)}
+          aria-label="Show"
+          sx={{ mb: 1.5 }}
+        >
+          <ToggleButton value="students" sx={{ textTransform: 'none', px: 2, minHeight: 44 }}>
+            Students
+          </ToggleButton>
+          <ToggleButton value="questions" sx={{ textTransform: 'none', px: 2, minHeight: 44 }}>
+            Questions
+          </ToggleButton>
+        </ToggleButtonGroup>
+      )}
+
+      {view === 'questions' ? (
+        <TestQuestionsView
+          pool={pool}
+          analysis={questions}
+          statsLoading={loading}
+          filters={qFilters}
+          onFiltersChange={setQFilters}
           onReview={(ids) => setDoctorIds(ids)}
           onEdit={(id) => setEditId(id)}
         />
+      ) : (
+        studentsBody
       )}
 
       {/* The drill-down. "7 attempts" was a dead end until this existed. */}
@@ -563,20 +544,12 @@ export default function TestResultsPanel({
         }
         subtitle={currentRun?.label || 'Every attempt, all time'}
         student={
-          sheetRow
-            ? {
-                id: sheetRow.student_id,
-                name: sheetRow.student_name,
-                avatar_url: sheetRow.avatar_url,
-              }
-            : null
+          sheetRow ? { id: sheetRow.student_id, name: sheetRow.student_name, avatar_url: sheetRow.avatar_url } : null
         }
         getToken={getToken}
         onClose={() => setSheet(null)}
         onPrev={() => setSheet((s) => (s && s.index > 0 ? { ...s, index: s.index - 1 } : s))}
-        onNext={() =>
-          setSheet((s) => (s && s.index < s.list.length - 1 ? { ...s, index: s.index + 1 } : s))
-        }
+        onNext={() => setSheet((s) => (s && s.index < s.list.length - 1 ? { ...s, index: s.index + 1 } : s))}
         hasPrev={Boolean(sheet && sheet.index > 0)}
         hasNext={Boolean(sheet && sheet.index < sheet.list.length - 1)}
       />
@@ -585,19 +558,28 @@ export default function TestResultsPanel({
         open={doctorIds !== null}
         onClose={() => setDoctorIds(null)}
         testId={testId}
+        placementId={runId || null}
         questionIds={doctorIds || []}
         stats={questions}
         authFetch={authFetch}
         onApplied={(result) => {
-          setNotice(
-            `Applied ${result.applied} question fix${result.applied === 1 ? '' : 'es'}.`,
-          );
+          const checked = result.checked ?? 0;
+          setNotice({
+            text:
+              checked > 0
+                ? `Checked ${checked} with AI. ${
+                    result.applied > 0 ? `Fixed ${result.applied}.` : 'Nothing needed changing.'
+                  }`
+                : `Applied ${result.applied} question fix${result.applied === 1 ? '' : 'es'}.`,
+            showFixed: result.applied > 0,
+          });
           setStale(
             result.answerKeyChanged > 0
               ? { answerKeyChanged: result.answerKeyChanged, staleAttempts: result.staleAttempts }
               : null,
           );
           load();
+          onQuestionsChanged?.();
         }}
       />
 
@@ -608,8 +590,9 @@ export default function TestResultsPanel({
         authFetch={authFetch}
         getToken={getToken}
         onSaved={() => {
-          setNotice('Question saved.');
+          setNotice({ text: 'Question saved.' });
           load();
+          onQuestionsChanged?.();
         }}
       />
 
@@ -621,7 +604,7 @@ export default function TestResultsPanel({
         authFetch={authFetch}
         onApplied={(movedIds) => {
           setStale(null);
-          setNotice(`Re-graded ${movedIds.length} attempt${movedIds.length === 1 ? '' : 's'}.`);
+          setNotice({ text: `Re-graded ${movedIds.length} attempt${movedIds.length === 1 ? '' : 's'}.` });
           load();
           // Straight into the composer with exactly the people whose score
           // moved. A number that changes on a student's record without a word

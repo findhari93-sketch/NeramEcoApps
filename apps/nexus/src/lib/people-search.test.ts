@@ -7,6 +7,7 @@ import {
   phoneticKey,
   editDistance,
   suggestPeople,
+  nameMatchRanges,
 } from './people-search';
 
 /**
@@ -42,10 +43,14 @@ describe('rankPeople', () => {
     expect(ranked).toHaveLength(16);
   });
 
-  it('keeps the remaining substring matches alphabetical', () => {
-    const rest = names(rankPeople(ROSTER, 'ya')).slice(1);
-    expect(rest).toEqual([...rest].sort((a, b) => (a || '').localeCompare(b || '')));
-    expect(rest[0]).toBe('Ananya AnoopPuthan');
+  it('orders the remaining substring matches by where the hit starts, then by name', () => {
+    const rest = rankPeople(ROSTER, 'ya').slice(1);
+    const at = (name?: string | null) => (name || '').toLowerCase().indexOf('ya');
+    const expected = [...rest].sort(
+      (a, b) => at(a.name) - at(b.name) || (a.name || '').localeCompare(b.name || '')
+    );
+    expect(names(rest)).toEqual(names(expected));
+    expect(rest[0].name).toBe('Ayana khan');
   });
 
   it('ranks a word start above a substring', () => {
@@ -101,6 +106,69 @@ describe('rankPeople', () => {
   });
 });
 
+/**
+ * The Photo Review report, 2026-09-11: typing "ba" listed Afrin banu,
+ * Bavishiya Senthilkumar and Kaveya Rameshbabu alphabetically. People search
+ * on Google, LinkedIn or Facebook puts the name that starts with the letters
+ * first, a later word that starts with them next, and a name that only
+ * contains them last, with an earlier hit ahead of a later one.
+ */
+describe('the order people search is expected to follow', () => {
+  it('puts a name start, then a word start, then a hit inside a word', () => {
+    const roster = [
+      { name: 'Afrin banu', email: 'Afrin_banu@neramclasses.com' },
+      { name: 'Bavishiya Senthilkumar', email: 'nathibavi85@gmail.com' },
+      { name: 'Kaveya Rameshbabu', email: 'Kaveya@neram.co.in' },
+    ];
+    expect(names(rankPeople(roster, 'ba'))).toEqual([
+      'Bavishiya Senthilkumar',
+      'Afrin banu',
+      'Kaveya Rameshbabu',
+    ]);
+  });
+
+  it('ranks an earlier hit inside a word above a later one, whatever the alphabet says', () => {
+    const roster = [
+      { name: 'Kaveya Rameshbabu', email: null },
+      { name: 'Zubair Ahmed', email: null },
+    ];
+    expect(names(rankPeople(roster, 'ba'))).toEqual(['Zubair Ahmed', 'Kaveya Rameshbabu']);
+  });
+
+  it('ranks an earlier word start above a later one, whatever the alphabet says', () => {
+    const roster = [
+      { name: 'Aarthi Senthil Babu', email: null },
+      { name: 'Afrin banu', email: null },
+    ];
+    expect(names(rankPeople(roster, 'ba'))).toEqual(['Afrin banu', 'Aarthi Senthil Babu']);
+  });
+});
+
+describe('multi-word queries', () => {
+  it('finds a person when each typed word starts one of their words, in any order', () => {
+    const bavishiya = { name: 'Bavishiya Senthilkumar', email: null };
+    expect(matchTier(bavishiya, 'bav sen')).toBe(MatchTier.NAME_ALL_WORDS);
+    expect(matchTier(bavishiya, 'sen bav')).toBe(MatchTier.NAME_ALL_WORDS);
+  });
+
+  it('ranks that above a name that merely contains the typed text', () => {
+    const roster = [
+      { name: 'Abav Senan', email: null },
+      { name: 'Bavishiya Senthilkumar', email: null },
+    ];
+    expect(names(rankPeople(roster, 'bav sen'))).toEqual(['Bavishiya Senthilkumar', 'Abav Senan']);
+  });
+
+  it('needs a separate name word for each typed word', () => {
+    expect(matchTier({ name: 'Babu Kumar', email: null }, 'ba ba')).not.toBe(MatchTier.NAME_ALL_WORDS);
+    expect(matchTier({ name: 'Babu Banu', email: null }, 'ba ba')).toBe(MatchTier.NAME_ALL_WORDS);
+  });
+
+  it('lets a longer typed word claim its word first, so a shorter one is not stranded', () => {
+    expect(matchTier({ name: 'Ab Ax', email: null }, 'a ab')).toBe(MatchTier.NAME_ALL_WORDS);
+  });
+});
+
 describe('matchTier', () => {
   it('grades each kind of hit', () => {
     const ayana = { name: 'Ayana khan', email: 'Ayana_khan@neramclasses.com' };
@@ -130,6 +198,25 @@ describe('matchTier', () => {
 
   it('returns null for an empty query', () => {
     expect(matchTier({ name: 'Ayana khan', email: null }, '  ')).toBeNull();
+  });
+});
+
+describe('nameMatchRanges', () => {
+  it('points at the letters that matched, for each kind of name hit', () => {
+    expect(nameMatchRanges('Bavishiya Senthilkumar', 'ba')).toEqual([[0, 2]]);
+    expect(nameMatchRanges('Afrin banu', 'BA')).toEqual([[6, 8]]);
+    expect(nameMatchRanges('Kaveya Rameshbabu', 'ba')).toEqual([[13, 15]]);
+    expect(nameMatchRanges('Bavishiya Senthilkumar', 'sen bav')).toEqual([
+      [0, 3],
+      [10, 13],
+    ]);
+  });
+
+  it('points at nothing when no letters of the name matched as typed', () => {
+    expect(nameMatchRanges('Dhisha Haribabu', 'disha')).toEqual([]);
+    expect(nameMatchRanges('Ayana khan', 'zzz')).toEqual([]);
+    expect(nameMatchRanges('Ayana khan', '  ')).toEqual([]);
+    expect(nameMatchRanges(null, 'ay')).toEqual([]);
   });
 });
 

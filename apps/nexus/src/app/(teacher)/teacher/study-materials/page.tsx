@@ -61,11 +61,11 @@ import DownloadGrantDialog, { type GrantTarget } from '@/components/study-materi
 import StudyTestAuthorDialog from '@/components/study-materials/StudyTestAuthorDialog';
 import GenerateChapterTestSheet from '@/components/study-materials/GenerateChapterTestSheet';
 import GenerateFolderTestsDialog from '@/components/study-materials/GenerateFolderTestsDialog';
-import StudyVideoTracksDialog from '@/components/study-materials/StudyVideoTracksDialog';
+import { recordingsHref } from '@/lib/recordings-nav';
 import FolderMovePicker, { type MoveItem } from '@/components/study-materials/FolderMovePicker';
 import LinkQBPaperDialog from '@/components/study-materials/LinkQBPaperDialog';
 import { FileThumb, FileIcon } from '@/components/study-materials/FileThumb';
-import type { NexusStudyFileDTO, NexusStudyFolderDTO, NexusStudyFileRecording } from '@neram/database/types';
+import type { NexusStudyFileDTO, NexusStudyFolderDTO } from '@neram/database/types';
 
 const EXAM_OPTIONS = [
   { value: 'nata', label: 'NATA' },
@@ -124,13 +124,8 @@ function TeacherStudyMaterials() {
   // Generate a test straight from a chapter PDF, one file or the whole folder.
   const [generateFile, setGenerateFile] = useState<{ id: string; title: string } | null>(null);
   const [folderGenOpen, setFolderGenOpen] = useState(false);
-  // Every video on a chapter, one dialog. `recording` rides along so it can
-  // offer the chapter's old ungated link as the first recording's URL and then
-  // move it across, rather than making a teacher fetch the same SharePoint URL
-  // twice and leaving two copies of it behind.
-  const [tracksFile, setTracksFile] = useState<
-    { id: string; title: string; recording?: NexusStudyFileRecording | null } | null
-  >(null);
+  // Class recordings are a page of their own (/[fileId]/recordings); the file
+  // menu links there with from=library, so its Back returns to this folder.
   // Link this PDF to the Question Bank paper it is the source of.
   const [linkPaperFile, setLinkPaperFile] = useState<{ id: string; title: string } | null>(null);
 
@@ -1075,11 +1070,11 @@ function TeacherStudyMaterials() {
             iconed, and near-identically worded, which is why the gated flow went
             unused. They are now told apart three ways: order, icon, and a
             subtitle naming the one difference a teacher cares about. */}
-        <MenuItem onClick={() => { if (fileMenu) setTracksFile({ id: fileMenu.file.id, title: fileMenu.file.title, recording: fileMenu.file.recording ?? null }); setFileMenu(null); }}>
+        <MenuItem onClick={() => { if (fileMenu) router.push(recordingsHref({ fileId: fileMenu.file.id, from: 'library' })); setFileMenu(null); }}>
           <ListItemIcon><SmartDisplayOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
           <ListItemText
             primary="Class recordings"
-            secondary="Tamil and English, with checkpoints"
+            secondary="A video in each language, with checkpoints"
             primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
             secondaryTypographyProps={{ variant: 'caption' }}
           />
@@ -1208,25 +1203,6 @@ function TeacherStudyMaterials() {
           setSnack({ msg: `Linked to ${paper.short_title}`, sev: 'success' });
           load();
         }}
-      />
-
-      {/*
-        Every video on a chapter, one dialog.
-
-        "Quick video link" used to sit beside this one: an ungated URL with no
-        checkpoints, stored on the file itself. It was retired because no
-        student screen ever rendered it, so a teacher who used it reached
-        nobody, and because the reason to reach for it (a recording with no
-        transcript could not be published) no longer exists: such a recording is
-        now published open, from here. Chapters that still hold an old link are
-        flagged in the Setup checklist and move it across from this dialog.
-      */}
-      <StudyVideoTracksDialog
-        open={!!tracksFile}
-        file={tracksFile}
-        getToken={getToken}
-        onClose={() => setTracksFile(null)}
-        onChanged={load}
       />
 
       {/* Move to folder... picker (touch-friendly path; drag-and-drop does the same on desktop) */}

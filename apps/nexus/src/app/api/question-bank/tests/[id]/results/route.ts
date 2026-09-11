@@ -9,6 +9,7 @@ import {
   listRunCoveredClasses,
   loadAccessRequestsForRun,
   loadEligibilityFactsForPreview,
+  loadQuestionAiStatus,
   loadRunEligibilityOverrides,
   resolvePlacementLabels,
   type NexusTestResultsOptions,
@@ -80,12 +81,21 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const rows = results.rows.map((r: any) => ({ ...r, elsewhere: elsewhere[r.student_id] ?? null }));
 
+    // What an AI already said about each question, from any paper. Decoration:
+    // loadQuestionAiStatus never throws, so a missing table costs the markers
+    // and never the report.
+    const aiStatus = await loadQuestionAiStatus(
+      questions.map((q) => q.question_id),
+      supabase,
+    );
+    const questionsWithAi = questions.map((q) => ({ ...q, ai: aiStatus.get(q.question_id) ?? null }));
+
     return NextResponse.json(
       {
         data: {
           rows,
           stats: results.stats,
-          questions,
+          questions: questionsWithAi,
           runs,
           run: selected
             ? {

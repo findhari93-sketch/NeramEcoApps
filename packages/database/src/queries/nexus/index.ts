@@ -34,6 +34,7 @@ export * from './test-analytics';
 export * from './test-access';
 export * from './test-regrade';
 export * from './qb-question-edits';
+export * from './qb-question-reviews';
 export * from './classroom-access';
 export * from './settings';
 export * from './modules';

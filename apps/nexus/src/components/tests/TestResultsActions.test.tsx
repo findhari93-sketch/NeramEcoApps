@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import TestResultsPanel from './TestResultsPanel';
 
 /**
- * The results tab as a place to ACT, not only to read.
+ * The results as a place to ACT, not only to read.
  *
- * The complaint these came from: the screen could say "26 missed the date" and
+ * The complaints these came from: the screen could say "26 missed the date" and
  * "11 of 16 passed" and offered no way to select either group, reopen the test
- * for them, or tell them anything. And it could say a question was answered
- * correctly by nobody without offering any way to fix that question.
+ * for them, or tell them anything. It could say a question was answered
+ * correctly by nobody without offering any way to fix that question. And once
+ * it could, the stat cards did nothing when pressed and filled the screen.
  */
 
 vi.mock('@/components/students/StudentAvatar', () => ({
@@ -25,7 +26,7 @@ vi.mock('@/components/tests/QuestionDoctorDialog', () => ({
   }: {
     open: boolean;
     questionIds: string[];
-    onApplied: (r: { applied: number; answerKeyChanged: number; staleAttempts: number }) => void;
+    onApplied: (r: any) => void;
   }) =>
     open ? (
       <div data-testid="doctor">
@@ -33,15 +34,25 @@ vi.mock('@/components/tests/QuestionDoctorDialog', () => ({
         {/* Stands in for the teacher ticking a corrected answer and applying it. */}
         <button
           type="button"
-          onClick={() => onApplied({ applied: 1, answerKeyChanged: 1, staleAttempts: 16 })}
+          onClick={() =>
+            onApplied({ applied: 1, checked: 1, fixedIds: ['q-indus'], answerKeyChanged: 1, staleAttempts: 16 })
+          }
         >
           pretend-apply-key-fix
         </button>
         <button
           type="button"
-          onClick={() => onApplied({ applied: 1, answerKeyChanged: 0, staleAttempts: 0 })}
+          onClick={() =>
+            onApplied({ applied: 1, checked: 1, fixedIds: ['q-indus'], answerKeyChanged: 0, staleAttempts: 0 })
+          }
         >
           pretend-apply-wording-fix
+        </button>
+        <button
+          type="button"
+          onClick={() => onApplied({ applied: 0, checked: 2, fixedIds: [], answerKeyChanged: 0, staleAttempts: 0 })}
+        >
+          pretend-save-checks
         </button>
       </div>
     ) : null,
@@ -143,7 +154,9 @@ const indusQuestion = {
   correct: 0,
   correct_pct: 0,
   top_wrong_option: { key: 'a', text: 'Copper Age civilization', count: 9 },
+  option_counts: { a: 9 },
   needs_review: true,
+  ai: null,
 };
 
 const goodQuestion = {
@@ -154,10 +167,12 @@ const goodQuestion = {
   correct: 4,
   correct_pct: 80,
   top_wrong_option: null,
+  option_counts: { c: 4, a: 1 },
   needs_review: false,
+  ai: null,
 };
 
-function mount(payload: Record<string, unknown>, fetchImpl?: any) {
+function mount(payload: Record<string, unknown>, fetchImpl?: any, props: Record<string, unknown> = {}) {
   const authFetch = fetchImpl || vi.fn(async () => ({ data: payload }));
   render(
     <TestResultsPanel
@@ -165,6 +180,7 @@ function mount(payload: Record<string, unknown>, fetchImpl?: any) {
       authFetch={authFetch as never}
       getToken={async () => 'tok'}
       initialRunId="run-1"
+      {...props}
     />,
   );
   return authFetch;
@@ -179,27 +195,32 @@ const runPayload = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+const tile = (key: string) => screen.getByTestId(`stat-tile-${key}`);
+
 beforeEach(() => {
   window.history.replaceState({}, '', '/teacher/tests/test-1');
 });
 
-describe('Students tab: filtering to a group', () => {
-  it('offers a chip per group, each carrying its own count', async () => {
+describe('Students: the numbers are the filters', () => {
+  it('gives each group a tile with its own count', async () => {
     mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
-    expect(screen.getByText('Everyone 3')).not.toBeNull();
-    expect(screen.getByText('Did it 2')).not.toBeNull();
-    expect(screen.getByText('Not done 1')).not.toBeNull();
-    expect(screen.getByText('Below pass 1')).not.toBeNull();
-    expect(screen.getByText('Passed 1')).not.toBeNull();
+    expect(within(tile('all')).getByText('3')).not.toBeNull();
+    expect(within(tile('did')).getByText('2')).not.toBeNull();
+    expect(within(tile('not_done')).getByText('1')).not.toBeNull();
+    expect(within(tile('passed')).getByText('1')).not.toBeNull();
+    expect(within(tile('below_pass')).getByText('Not passed')).not.toBeNull();
+    expect(within(tile('below_pass')).getByText('sat it, under 80%')).not.toBeNull();
+    // First attempts average 65%, and Bala's first attempt was 40%.
+    expect(within(tile('below_avg')).getByText('1')).not.toBeNull();
   });
 
   it('narrows the list to the students who did not pass', async () => {
     mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
-    fireEvent.click(screen.getByText('Below pass 1'));
+    fireEvent.click(tile('below_pass'));
 
     expect(screen.getByText('Bala Raj')).not.toBeNull();
     expect(screen.queryByText('Asha Kumar')).toBeNull();
@@ -212,49 +233,67 @@ describe('Students tab: filtering to a group', () => {
     mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
-    fireEvent.click(screen.getByText('Not done 1'));
+    fireEvent.click(tile('not_done'));
 
     expect(screen.getByText('Chetana Rao')).not.toBeNull();
     expect(screen.queryByText('Bala Raj')).toBeNull();
+  });
+
+  it('narrows the list to the students below the class average', async () => {
+    mount(runPayload());
+    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
+
+    fireEvent.click(tile('below_avg'));
+
+    expect(screen.getByText('Bala Raj')).not.toBeNull();
+    expect(screen.queryByText('Asha Kumar')).toBeNull();
+    expect(screen.queryByText('Chetana Rao')).toBeNull();
+  });
+
+  it('goes back to everyone when the active tile is pressed again', async () => {
+    mount(runPayload());
+    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
+
+    fireEvent.click(tile('below_pass'));
+    expect(screen.queryByText('Asha Kumar')).toBeNull();
+    fireEvent.click(tile('below_pass'));
+    expect(screen.getByText('Asha Kumar')).not.toBeNull();
   });
 
   it('writes the active group into the URL, so the view is shareable', async () => {
     mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
-    fireEvent.click(screen.getByText('Below pass 1'));
+    fireEvent.click(tile('below_pass'));
     await waitFor(() => expect(window.location.search).toContain('filter=below_pass'));
 
-    fireEvent.click(screen.getByText('Everyone 3'));
+    fireEvent.click(tile('all'));
     await waitFor(() => expect(window.location.search).not.toContain('filter='));
   });
 
   it('opens straight onto a group named in the URL', async () => {
-    const authFetch = vi.fn(async () => ({ data: runPayload() }));
-    render(
-      <TestResultsPanel
-        testId="test-1"
-        authFetch={authFetch as never}
-        getToken={async () => 'tok'}
-        initialRunId="run-1"
-        initialFilter="not_done"
-      />,
-    );
+    mount(runPayload(), undefined, { initialFilter: 'not_done' });
     await waitFor(() => expect(screen.getByText('Chetana Rao')).not.toBeNull());
     expect(screen.queryByText('Asha Kumar')).toBeNull();
   });
 
-  it('says why a group is empty instead of showing a blank panel', async () => {
+  it('shows an empty group as a disabled tile, not a button onto nobody', async () => {
     mount(runPayload({ rows: [passed], stats: { ...RUN_STATS, missed: 0 } }));
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
-    // With nobody outstanding the chip is not offered at all, which is the
-    // stronger form of an empty state.
-    expect(screen.queryByText(/^Not done/)).toBeNull();
+    expect((tile('not_done') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('explains the average with the marks behind it and the pass mark', async () => {
+    mount(runPayload());
+    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
+    expect(
+      screen.getByText('Average 65% (32 of 50 marks), first attempt · pass mark 80%'),
+    ).not.toBeNull();
   });
 });
 
-describe('Students tab: acting on a group', () => {
-  it('offers no group actions until the teacher enters selection mode', async () => {
+describe('Students: acting on a group', () => {
+  it('offers no group actions until somebody is selected', async () => {
     mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
     expect(screen.queryByText(/^Reopen \(/)).toBeNull();
@@ -265,9 +304,8 @@ describe('Students tab: acting on a group', () => {
     mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
-    fireEvent.click(screen.getByText('Not done 1'));
-    fireEvent.click(screen.getByText('Select students'));
-    fireEvent.click(screen.getByText('Select all 1 shown'));
+    fireEvent.click(tile('not_done'));
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
 
     expect(screen.getByText('1 selected')).not.toBeNull();
     expect(screen.getByText('Reopen (1)')).not.toBeNull();
@@ -284,9 +322,8 @@ describe('Students tab: acting on a group', () => {
     mount(runPayload(), authFetch);
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
-    fireEvent.click(screen.getByText('Not done 1'));
-    fireEvent.click(screen.getByText('Select students'));
-    fireEvent.click(screen.getByText('Select all 1 shown'));
+    fireEvent.click(tile('not_done'));
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
     fireEvent.click(screen.getByText('Reopen (1)'));
 
     await waitFor(() => {
@@ -309,9 +346,8 @@ describe('Students tab: acting on a group', () => {
     mount(runPayload(), authFetch);
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
-    fireEvent.click(screen.getByText('Not done 1'));
-    fireEvent.click(screen.getByText('Select students'));
-    fireEvent.click(screen.getByText('Select all 1 shown'));
+    fireEvent.click(tile('not_done'));
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
     fireEvent.click(screen.getByText('Reopen (1)'));
 
     await waitFor(() => expect(screen.getByText(/could not be opened/)).not.toBeNull());
@@ -321,44 +357,63 @@ describe('Students tab: acting on a group', () => {
     mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
-    fireEvent.click(screen.getByText('Below pass 1'));
-    fireEvent.click(screen.getByText('Select students'));
-    fireEvent.click(screen.getByText('Select all 1 shown'));
+    fireEvent.click(tile('below_pass'));
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
     fireEvent.click(screen.getByText('Message (1)'));
 
     await waitFor(() => expect(screen.getByTestId('composer').textContent).toBe('Bala Raj'));
   });
-});
 
-describe('Question analysis: acting on a bad question', () => {
-  it('offers one press to select every question that needs a look', async () => {
+  it('keeps a selection across groups, so two groups can get one message', async () => {
     mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
-    fireEvent.click(screen.getByText('Question analysis'));
 
-    fireEvent.click(screen.getByText('Select the 1 that need a look'));
+    fireEvent.click(tile('not_done'));
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
+    fireEvent.click(tile('below_pass'));
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
+
+    expect(screen.getByText('2 selected')).not.toBeNull();
+  });
+});
+
+async function openQuestions() {
+  await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
+  fireEvent.click(screen.getByRole('button', { name: 'Questions' }));
+  await waitFor(() => expect(screen.getByTestId('question-row-1')).not.toBeNull());
+}
+
+describe('Questions: acting on a bad question', () => {
+  it('narrows to the 0% questions and selects them in two presses', async () => {
+    mount(runPayload());
+    await openQuestions();
+
+    fireEvent.click(screen.getByTestId('quick-zero'));
+    await waitFor(() => expect(screen.queryByTestId('question-row-2')).toBeNull());
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
+
     expect(screen.getByText('1 selected')).not.toBeNull();
-    // The question that is doing its job is not swept in.
     expect(screen.getByText('Check 1 with AI')).not.toBeNull();
   });
 
-  it('sends only the flagged question to the doctor', async () => {
+  it('sends only the filtered question to the doctor', async () => {
     mount(runPayload());
-    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
-    fireEvent.click(screen.getByText('Question analysis'));
+    await openQuestions();
 
-    fireEvent.click(screen.getByText('Select the 1 that need a look'));
+    fireEvent.click(screen.getByTestId('quick-zero'));
+    await waitFor(() => expect(screen.queryByTestId('question-row-2')).toBeNull());
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
     fireEvent.click(screen.getByText('Check 1 with AI'));
 
     await waitFor(() => expect(screen.getByTestId('doctor-ids').textContent).toBe('q-indus'));
   });
 
-  it('opens the doctor for a single question from its own menu', async () => {
+  it('opens the doctor for a single question from its own row', async () => {
     mount(runPayload());
-    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
-    fireEvent.click(screen.getByText('Question analysis'));
+    await openQuestions();
 
-    fireEvent.click(screen.getByLabelText('Actions for question 2'));
+    fireEvent.click(within(screen.getByTestId('question-row-2')).getByRole('button', { name: /^Question 2,/ }));
+    await waitFor(() => expect(screen.getByText('Check with AI')).not.toBeNull());
     fireEvent.click(screen.getByText('Check with AI'));
 
     await waitFor(() => expect(screen.getByTestId('doctor-ids').textContent).toBe('q-good'));
@@ -366,10 +421,10 @@ describe('Question analysis: acting on a bad question', () => {
 
   it('opens the plain editor for a single question', async () => {
     mount(runPayload());
-    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
-    fireEvent.click(screen.getByText('Question analysis'));
+    await openQuestions();
 
-    fireEvent.click(screen.getByLabelText('Actions for question 1'));
+    fireEvent.click(within(screen.getByTestId('question-row-1')).getByRole('button', { name: /^Question 1,/ }));
+    await waitFor(() => expect(screen.getByText('Edit question')).not.toBeNull());
     fireEvent.click(screen.getByText('Edit question'));
 
     await waitFor(() => expect(screen.getByTestId('editor').textContent).toBe('q-indus'));
@@ -377,32 +432,30 @@ describe('Question analysis: acting on a bad question', () => {
 
   it('still says which question is worth checking, and why', async () => {
     mount(runPayload());
-    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
-    fireEvent.click(screen.getByText('Question analysis'));
+    await openQuestions();
 
-    expect(screen.getByText(/0 of 9 got it right/)).not.toBeNull();
-    expect(screen.getByText(/most picked "Copper Age civilization" \(9\)/)).not.toBeNull();
-    expect(
-      screen.getByText('Check this question. At this rate it is more likely unclear than hard.'),
-    ).not.toBeNull();
+    const row = screen.getByTestId('question-row-1');
+    expect(within(row).getByText(/0 of 9 right/)).not.toBeNull();
+    expect(within(row).getByText(/most picked "Copper Age civilization" \(9\)/)).not.toBeNull();
+    expect(within(row).getByText('Needs a look')).not.toBeNull();
   });
 
-  it('does not offer a group action before anything is selected', async () => {
+  it('writes the question filters into the URL', async () => {
     mount(runPayload());
-    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
-    fireEvent.click(screen.getByText('Question analysis'));
+    await openQuestions();
 
-    fireEvent.click(screen.getByText('Select questions'));
-    expect(screen.queryByText(/^Check \d+ with AI/)).toBeNull();
+    fireEvent.click(screen.getByTestId('quick-zero'));
+    await waitFor(() => expect(window.location.search).toContain('qpct=0-0'));
   });
 });
 
-describe('The chain from a fixed question to a re-grade', () => {
-  async function fixAQuestion(label: string) {
+describe('The chain from a checked question to a re-grade', () => {
+  async function checkAQuestion(label: string) {
     mount(runPayload());
-    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
-    fireEvent.click(screen.getByText('Question analysis'));
-    fireEvent.click(screen.getByText('Select the 1 that need a look'));
+    await openQuestions();
+    fireEvent.click(screen.getByTestId('quick-zero'));
+    await waitFor(() => expect(screen.queryByTestId('question-row-2')).toBeNull());
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
     fireEvent.click(screen.getByText('Check 1 with AI'));
     await waitFor(() => expect(screen.getByTestId('doctor')).not.toBeNull());
     fireEvent.click(screen.getByText(label));
@@ -415,7 +468,7 @@ describe('The chain from a fixed question to a re-grade', () => {
   });
 
   it('offers the re-grade once a key has moved under recorded attempts', async () => {
-    await fixAQuestion('pretend-apply-key-fix');
+    await checkAQuestion('pretend-apply-key-fix');
 
     await waitFor(() =>
       expect(
@@ -429,15 +482,32 @@ describe('The chain from a fixed question to a re-grade', () => {
     // The trap this pins: offering a re-grade after every edit trains the
     // teacher to press through a dialog that usually does nothing, and then
     // they press through the one that does.
-    await fixAQuestion('pretend-apply-wording-fix');
+    await checkAQuestion('pretend-apply-wording-fix');
 
-    await waitFor(() => expect(screen.getByText(/Applied 1 question fix/)).not.toBeNull());
+    await waitFor(() => expect(screen.getByText('Checked 1 with AI. Fixed 1.')).not.toBeNull());
     expect(screen.queryByText(/marked on the old one/)).toBeNull();
     expect(screen.queryByText('Re-grade')).toBeNull();
   });
 
+  it('says so when the AI found nothing to change, and offers nothing to show', async () => {
+    await checkAQuestion('pretend-save-checks');
+
+    await waitFor(() => expect(screen.getByText('Checked 2 with AI. Nothing needed changing.')).not.toBeNull());
+    expect(screen.queryByText('Show fixed')).toBeNull();
+  });
+
+  it('shows what the AI fixed in one press after applying', async () => {
+    await checkAQuestion('pretend-apply-wording-fix');
+
+    await waitFor(() => expect(screen.getByText('Show fixed')).not.toBeNull());
+    fireEvent.click(screen.getByText('Show fixed'));
+    await waitFor(() => expect(window.location.search).toContain('qai=fixed'));
+    // The 0% range is cleared, because a fixed key moves the rate out of it.
+    expect(window.location.search).not.toContain('qpct=');
+  });
+
   it('opens the re-grade preview from the banner', async () => {
-    await fixAQuestion('pretend-apply-key-fix');
+    await checkAQuestion('pretend-apply-key-fix');
     await waitFor(() => expect(screen.getByText('Re-grade')).not.toBeNull());
 
     fireEvent.click(screen.getByText('Re-grade'));

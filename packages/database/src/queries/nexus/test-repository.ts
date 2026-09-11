@@ -1022,6 +1022,70 @@ export async function getTestDraw(
   };
 }
 
+/** How loadAttemptDraws keys a draw: one sitting of one test by one student. */
+export function attemptDrawKey(testId: string, studentId: string, attemptNumber: unknown): string {
+  return `${testId}:${studentId}:${Number(attemptNumber) || 1}`;
+}
+
+/**
+ * Every draw for a set of tests, keyed by attemptDrawKey.
+ *
+ * The reason this exists: an attempt's `answers` are stored in the lettering
+ * the student CLICKED, which on a drawn paper is permuted. Anything that reads
+ * those answers back and compares them with the bank's correct_answer has to
+ * undo the permutation first, and before this helper three readers did not.
+ * The question analysis on a 150-question pool reported 25% right (chance, for
+ * four options) on a run that had actually scored 87%, and told a teacher that
+ * nine of nine students had failed a question all nine had answered correctly.
+ *
+ * One query per hundred tests rather than one per attempt. Throws on a read
+ * error: a failure to load draws must never be mistaken for "this paper was
+ * not drawn", because grading a drawn paper as undrawn produces a wrong number
+ * that looks entirely ordinary.
+ */
+export async function loadAttemptDraws(
+  scope: { testIds: string[]; studentId?: string | null },
+  client?: TypedSupabaseClient,
+): Promise<Map<string, NexusTestDraw>> {
+  const map = new Map<string, NexusTestDraw>();
+  const testIds = [...new Set((scope.testIds || []).filter(Boolean))];
+  if (testIds.length === 0) return map;
+
+  const supabase = client || getSupabaseAdminClient();
+  for (let i = 0; i < testIds.length; i += 100) {
+    let query = supabase
+      .from(DRAWS)
+      .select('test_id, student_id, attempt_number, question_ids, option_maps')
+      .in('test_id', testIds.slice(i, i + 100));
+    if (scope.studentId) query = query.eq('student_id', scope.studentId);
+    const { data, error } = await query;
+    if (error) throw error;
+    for (const d of (data || []) as any[]) {
+      map.set(attemptDrawKey(d.test_id, d.student_id, d.attempt_number), {
+        attempt_number: Number(d.attempt_number) || 1,
+        question_ids: (d.question_ids as string[]) || [],
+        option_maps: (d.option_maps as Record<string, string[]>) || {},
+      });
+    }
+  }
+  return map;
+}
+
+/**
+ * An answer sheet in the question's own lettering, whatever the student was shown.
+ *
+ * With no draw the sheet is returned as it is. With one, answers are translated
+ * back through the option permutation, and answers to questions outside the
+ * draw are dropped (see translateDrawnAnswers).
+ */
+export function answersAsOriginal(
+  answers: unknown,
+  draw: NexusTestDraw | null | undefined,
+): Record<string, string> {
+  const sheet = ((answers as Record<string, string>) || {}) as Record<string, string>;
+  return draw ? translateDrawnAnswers(sheet, draw.question_ids, draw.option_maps) : sheet;
+}
+
 /**
  * The draw for one sitting, computed and stored the first time it is asked for.
  *

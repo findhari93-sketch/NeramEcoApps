@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { APP_URLS } from '../utils/credentials';
+import { APP_URLS, injectAuthForPage } from '../utils/credentials';
 
 /**
  * Teacher photo review queue E2E.
@@ -36,7 +36,6 @@ const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
  */
 async function openPhotoReview(
   page: import('@playwright/test').Page,
-  token: string,
   viewport: { width: number; height: number },
 ) {
   // The page runs the automatic face check when it opens. Answer for it, as if
@@ -57,8 +56,10 @@ async function openPhotoReview(
     }),
   );
   await page.setViewportSize(viewport);
-  await page.goto(`${NEXUS}/login`, { waitUntil: 'domcontentloaded' });
-  await page.evaluate((t) => localStorage.setItem('nexus_test_token', t), token);
+  // The whole cached session, not just the token. Test mode never calls
+  // /api/auth/me, so a page handed only nexus_test_token had no user and sent
+  // the browser to /login, where every heading wait below timed out.
+  expect(await injectAuthForPage(page, 'teacher')).toBe(true);
   await page.goto(`${NEXUS}/teacher/photo-review`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /^Photo Review$/i })).toBeVisible({
     timeout: 60_000,
@@ -71,6 +72,46 @@ const DESKTOP = { width: 1280, height: 900 };
 const PAGE_TEST_TIMEOUT = 120_000;
 
 const BUCKETS = ['pending', 'auto', 'missing', 'rejected', 'approved'] as const;
+
+/** The tab button label for each bucket. */
+const TAB_LABELS: Record<(typeof BUCKETS)[number], string> = {
+  pending: 'Needs review',
+  auto: 'Auto-approved',
+  missing: 'No photo',
+  rejected: 'Rejected',
+  approved: 'Approved',
+};
+
+/** The student checkboxes on the grid, leaving out "Select all N students". */
+const STUDENT_CHECKBOX = /^Select (?!all \d)/;
+
+/** Words of a name the way the ranking splits them: separators and camelCase humps. */
+function wordsOf(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function startsAWord(name: string, query: string): boolean {
+  return wordsOf(name).some((word) => word.startsWith(query));
+}
+
+/**
+ * A two-letter search this roster answers with both kinds of hit: a word that
+ * starts with it, and a name that only contains it. Null when there is none.
+ */
+function pickRankingQuery(names: string[]): string | null {
+  for (const name of names) {
+    for (const word of wordsOf(name)) {
+      const query = word.slice(0, 2);
+      if (!/^[a-z]{2}$/.test(query)) continue;
+      if (names.some((n) => n.toLowerCase().includes(query) && !startsAWord(n, query))) return query;
+    }
+  }
+  return null;
+}
 
 test.describe('Nexus, photo review queue', () => {
   test.describe.configure({ mode: 'serial' });
@@ -288,6 +329,30 @@ test.describe('Nexus, photo review queue', () => {
     }
   });
 
+  /**
+   * The page loads one tab at a time, so a search counts the other tabs from
+   * this index. It has to hold exactly the students the counts do, or a student
+   * could sit on a tab while its chip says nobody there matches.
+   */
+  test('the search index covers every student the counts do', async ({ request }) => {
+    test.skip(!ready);
+    const res = await request.get(
+      `${NEXUS}/api/photo-review?classroom=${classroomId}&status=pending`,
+      { headers: authHeader(teacherToken) },
+    );
+    expect(res.status()).toBe(200);
+    const { counts, search_index } = await res.json();
+
+    expect(Array.isArray(search_index)).toBe(true);
+    const total =
+      counts.pending + counts.auto + counts.missing + counts.rejected + counts.approved;
+    expect(search_index).toHaveLength(total);
+    for (const entry of search_index) {
+      expect(BUCKETS).toContain(entry.tab);
+      expect(typeof entry.name).toBe('string');
+    }
+  });
+
   test('a rejection without a reason is refused', async ({ request }) => {
     test.skip(!ready);
     const res = await request.post(`${NEXUS}/api/photo-review`, {
@@ -367,7 +432,7 @@ test.describe('Nexus, photo review queue', () => {
   test('mobile: the grid is two columns at 375px with no overflow', async ({ page }) => {
     test.skip(!ready);
     test.setTimeout(PAGE_TEST_TIMEOUT);
-    await openPhotoReview(page, teacherToken, MOBILE);
+    await openPhotoReview(page, MOBILE);
 
     const scrollW = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(scrollW).toBeLessThanOrEqual(376);
@@ -386,10 +451,10 @@ test.describe('Nexus, photo review queue', () => {
   test('mobile: the header is compact, so the grid starts near the top', async ({ page }) => {
     test.skip(!ready);
     test.setTimeout(PAGE_TEST_TIMEOUT);
-    await openPhotoReview(page, teacherToken, MOBILE);
+    await openPhotoReview(page, MOBILE);
 
     const heading = await page.getByRole('heading', { name: /^Photo Review$/i }).boundingBox();
-    const search = await page.getByRole('textbox', { name: /Search students/i }).boundingBox();
+    const search = await page.getByRole('searchbox', { name: /Search students/i }).boundingBox();
     expect(heading).not.toBeNull();
     expect(search).not.toBeNull();
     expect(search!.y + search!.height - heading!.y).toBeLessThanOrEqual(260);
@@ -399,7 +464,7 @@ test.describe('Nexus, photo review queue', () => {
   test('mobile: the explanation lives behind the info button', async ({ page }) => {
     test.skip(!ready);
     test.setTimeout(PAGE_TEST_TIMEOUT);
-    await openPhotoReview(page, teacherToken, MOBILE);
+    await openPhotoReview(page, MOBILE);
 
     await expect(page.getByText(/listed under Auto-approved/i)).toHaveCount(0);
     await page.getByRole('button', { name: /How photo review works/i }).click();
@@ -419,7 +484,7 @@ test.describe('Nexus, photo review queue', () => {
   test('mobile: the filter row scrolls in one row rather than wrapping', async ({ page }) => {
     test.skip(!ready);
     test.setTimeout(PAGE_TEST_TIMEOUT);
-    await openPhotoReview(page, teacherToken, MOBILE);
+    await openPhotoReview(page, MOBILE);
     await expect(page.getByRole('button', { name: /Needs review/i })).toBeVisible();
 
     // Every filter button shares one row: same top edge, no wrap.
@@ -444,7 +509,7 @@ test.describe('Nexus, photo review queue', () => {
   }) => {
     test.skip(!ready);
     test.setTimeout(PAGE_TEST_TIMEOUT);
-    await openPhotoReview(page, teacherToken, MOBILE);
+    await openPhotoReview(page, MOBILE);
 
     await page.getByRole('button', { name: /No photo/i }).click();
     await expect(page.getByText(/cannot open Nexus until they add one/i)).toBeVisible({
@@ -473,7 +538,7 @@ test.describe('Nexus, photo review queue', () => {
   test('mobile: the filter and action controls are at least 48px tall', async ({ page }) => {
     test.skip(!ready);
     test.setTimeout(PAGE_TEST_TIMEOUT);
-    await openPhotoReview(page, teacherToken, MOBILE);
+    await openPhotoReview(page, MOBILE);
 
     const heights = await page
       .getByRole('button', {
@@ -484,10 +549,183 @@ test.describe('Nexus, photo review queue', () => {
     for (const h of heights) expect(h).toBeGreaterThanOrEqual(48);
   });
 
+  /**
+   * The search had no way out but deleting it letter by letter. The X appears
+   * with text, is a real 48px target, clears in one tap and leaves the cursor in
+   * the box for the next name. Escape clears too.
+   */
+  test('mobile: the search clears in one tap, and on Escape', async ({ page }) => {
+    test.skip(!ready);
+    test.setTimeout(PAGE_TEST_TIMEOUT);
+    await openPhotoReview(page, MOBILE);
+
+    const box = page.getByRole('searchbox', { name: /Search students/i });
+    // Scoped to the search landmark: an empty result also offers "Clear search".
+    const clear = page.getByRole('search').getByRole('button', { name: 'Clear search' });
+    await expect(clear).toHaveCount(0);
+
+    await box.fill('a');
+    await expect(clear).toBeVisible();
+    const size = await clear.boundingBox();
+    expect(size!.width).toBeGreaterThanOrEqual(48);
+    expect(size!.height).toBeGreaterThanOrEqual(48);
+
+    await clear.click();
+    await expect(box).toHaveValue('');
+    await expect(box).toBeFocused();
+    await expect(clear).toHaveCount(0);
+
+    await box.fill('a');
+    await box.press('Escape');
+    await expect(box).toHaveValue('');
+  });
+
+  /**
+   * People search puts a name that starts with the letters first, a later word
+   * that starts with them next, and a name that only contains them last. The
+   * queue listed matches alphabetically, so "ba" showed Afrin banu above
+   * Bavishiya. The query is picked from the fullest tab, so this runs on
+   * whatever students the e2e classroom has (on staging, mostly No photo).
+   */
+  test('mobile: a name with a word starting with the search ranks above one that only contains it', async ({
+    page,
+    request,
+  }) => {
+    test.skip(!ready);
+    test.setTimeout(PAGE_TEST_TIMEOUT);
+
+    const counted = await request.get(
+      `${NEXUS}/api/photo-review?classroom=${classroomId}&status=pending`,
+      { headers: authHeader(teacherToken) },
+    );
+    expect(counted.status()).toBe(200);
+    const { counts } = await counted.json();
+    const fullest = BUCKETS.reduce((a, b) => (counts[b] > counts[a] ? b : a));
+
+    const res = await request.get(
+      `${NEXUS}/api/photo-review?classroom=${classroomId}&status=${fullest}`,
+      { headers: authHeader(teacherToken) },
+    );
+    expect(res.status()).toBe(200);
+    const names: string[] = (await res.json()).rows.map(
+      (r: any) => r.student.name || r.student.email || '',
+    );
+    const query = pickRankingQuery(names);
+    test.skip(!query, 'No two-letter search on this roster has both kinds of hit');
+
+    await openPhotoReview(page, MOBILE);
+    await page.getByRole('button', { name: new RegExp(`^${TAB_LABELS[fullest]}`) }).click();
+    await page.getByRole('searchbox', { name: /Search students/i }).fill(query!);
+
+    const cards = page.getByRole('checkbox', { name: STUDENT_CHECKBOX });
+    const expected = names.filter((n) => n.toLowerCase().includes(query!)).length;
+    await expect(cards).toHaveCount(expected, { timeout: 15000 });
+
+    const shown = (
+      await cards.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') || ''))
+    ).map((label) => label.replace(/^Select /, ''));
+    const lastWordStart = Math.max(...shown.map((n, i) => (startsAWord(n, query!) ? i : -1)));
+    const firstInsideOnly = shown.findIndex((n) => !startsAWord(n, query!));
+
+    expect(lastWordStart).toBeGreaterThanOrEqual(0);
+    expect(firstInsideOnly).toBeGreaterThan(lastWordStart);
+  });
+
+  /**
+   * While a search is live every chip counts matches, and switching tabs keeps
+   * the search. The carried term stays on screen, so it can no longer silently
+   * empty the next tab, which is why switching used to clear it.
+   */
+  test('mobile: the tab chips count matches and switching tabs keeps the search', async ({
+    page,
+  }) => {
+    test.skip(!ready);
+    test.setTimeout(PAGE_TEST_TIMEOUT);
+    await openPhotoReview(page, MOBILE);
+
+    const box = page.getByRole('searchbox', { name: /Search students/i });
+    await box.fill('a');
+
+    const openTab = page.getByRole('button', { name: /^Needs review, \d+ matching$/ });
+    await expect(openTab).toBeVisible();
+    const matching = Number((await openTab.getAttribute('aria-label'))!.match(/(\d+) matching/)![1]);
+    await expect(page.getByRole('checkbox', { name: STUDENT_CHECKBOX })).toHaveCount(matching, {
+      timeout: 15000,
+    });
+
+    await page.getByRole('button', { name: /^Approved/i }).click();
+    await expect(box).toHaveValue('a');
+    await expect(page.getByRole('button', { name: /^Approved, \d+ matching$/ })).toBeVisible();
+  });
+
+  /**
+   * REGRESSION, 2026-09-11. A tab switched while the first tab was still
+   * loading could show the first tab's students: both requests were in flight,
+   * the older one answered last, and it overwrote the newer one. With a search
+   * live that read as "Nobody in No photo matches" beside a No photo chip
+   * counting 29 matches. Holding the first answer back makes the race certain.
+   */
+  test('mobile: a tab switched mid-load shows its own students, not the tab that answered last', async ({
+    page,
+    request,
+  }) => {
+    test.skip(!ready);
+    test.setTimeout(PAGE_TEST_TIMEOUT);
+
+    const counted = await request.get(
+      `${NEXUS}/api/photo-review?classroom=${classroomId}&status=pending`,
+      { headers: authHeader(teacherToken) },
+    );
+    expect(counted.status()).toBe(200);
+    const { counts } = await counted.json();
+    const other = BUCKETS.filter((b) => b !== 'pending').reduce((a, b) =>
+      counts[b] > counts[a] ? b : a,
+    );
+    test.skip(
+      counts[other] === counts.pending,
+      'Needs review and the fullest other tab hold the same number of students',
+    );
+
+    // Needs review answers only once the other tab has answered, so it lands last.
+    let releaseFirst: () => void = () => {};
+    const firstHeld = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const isReview = (url: URL, status: string) =>
+      url.pathname === '/api/photo-review' && url.searchParams.get('status') === status;
+    await page.route(
+      (url) => isReview(url, 'pending'),
+      async (route) => {
+        await firstHeld;
+        await route.continue();
+      },
+    );
+    await page.route(
+      (url) => isReview(url, other),
+      async (route) => {
+        const response = await route.fetch();
+        await route.fulfill({ response });
+        releaseFirst();
+      },
+    );
+
+    await openPhotoReview(page, MOBILE);
+    const firstAnswered = page.waitForResponse((res) => isReview(new URL(res.url()), 'pending'));
+    await page.getByRole('button', { name: new RegExp(`^${TAB_LABELS[other]}`) }).click();
+    await firstAnswered;
+    // Give React the render the late answer would have caused.
+    await page.waitForTimeout(1000);
+
+    await expect(page.getByRole('checkbox', { name: STUDENT_CHECKBOX })).toHaveCount(
+      counts[other],
+      { timeout: 15000 },
+    );
+  });
+
   test('desktop: all five filters sit on one row', async ({ page }) => {
     test.skip(!ready);
     test.setTimeout(PAGE_TEST_TIMEOUT);
-    await openPhotoReview(page, teacherToken, DESKTOP);
+    await openPhotoReview(page, DESKTOP);
 
     const tops = await page
       .getByRole('button', { name: /Needs review|Auto-approved|No photo|Rejected|^Approved/i })
@@ -499,7 +737,7 @@ test.describe('Nexus, photo review queue', () => {
   test('mobile: the No photo tab warns what the gate will do', async ({ page }) => {
     test.skip(!ready);
     test.setTimeout(PAGE_TEST_TIMEOUT);
-    await openPhotoReview(page, teacherToken, MOBILE);
+    await openPhotoReview(page, MOBILE);
 
     await page.getByRole('button', { name: /No photo/i }).click();
     await expect(page.getByText(/cannot open Nexus until they add one/i)).toBeVisible({

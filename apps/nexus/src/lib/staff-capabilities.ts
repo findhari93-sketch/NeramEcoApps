@@ -78,6 +78,7 @@ export type Capability =
   | 'structure.batch.manage'
   | 'structure.enrollment.add'
   | 'structure.enrollment.remove'
+  | 'structure.student.account'
   | 'structure.plan.delete'
   // ── teaching ───────────────────────────────────────────────────────────────
   | 'teach.timetable.schedule'
@@ -175,6 +176,11 @@ const SHARED_STAFF: readonly Capability[] = [
  * It is enforced by ABSENCE, not by hiding. The routes that serve a teacher
  * never select the commercial columns, so the values are not in the payload to
  * be found in devtools. See student-finance.ts for the two column allowlists.
+ *
+ * `structure.student.account` creates a student's Microsoft account and resets
+ * its password. A new account consumes a paid license and hands someone a
+ * working login; a reset locks a student out until they get the new password.
+ * Both sit with adding and removing students, not with teaching.
  */
 const MANAGER_EXTRA: readonly Capability[] = [
   'structure.classroom.create',
@@ -182,6 +188,7 @@ const MANAGER_EXTRA: readonly Capability[] = [
   'structure.batch.manage',
   'structure.enrollment.add',
   'structure.enrollment.remove',
+  'structure.student.account',
   'structure.plan.delete',
   'teach.timetable.schedule',
   'coord.student.dormancy',
@@ -317,6 +324,7 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   'structure.batch.manage',
   'structure.enrollment.add',
   'structure.enrollment.remove',
+  'structure.student.account',
   'structure.plan.delete',
   'teach.timetable.schedule',
   'teach.tutor',
