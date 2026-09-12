@@ -113,6 +113,18 @@ type BucketId = (typeof BUCKETS)[number]['id'];
 const announcedIn = (d: PreviewData): boolean =>
   Boolean(d.teams_message_id ?? d.exam.teams_results_message_id);
 
+/**
+ * Is there a channel to post to at all?
+ *
+ * Straight from the GET payload, never inferred. A classroom with no Teams link
+ * can never become announced, so gating the channel half on `!announced` alone
+ * showed "What goes in the channel", the card preview and a Post to Teams
+ * checkbox on every publish and every republish, none of which could ever do
+ * anything. A control that cannot act is the dead end this sheet refuses to
+ * render, exactly like a disabled button.
+ */
+const channelLinked = (d: PreviewData): boolean => d.teams_linked === true;
+
 export default function ExamResultsSheet({
   open,
   onClose,
@@ -186,8 +198,9 @@ export default function ExamResultsSheet({
         // Keyed on whether the channel has actually heard about the exam, not
         // on whether a publish has happened. A publish whose Graph post failed
         // stamps last_published_at all the same, and keying on that left the
-        // class permanently unannounced with no way to retry.
-        setPostToTeams(!announcedIn(json.data));
+        // class permanently unannounced with no way to retry. And off entirely
+        // when there is no channel, so the request says what will happen.
+        setPostToTeams(channelLinked(json.data) && !announcedIn(json.data));
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Could not build the preview');
       } finally {
@@ -235,7 +248,10 @@ export default function ExamResultsSheet({
 
       setDone(
         `Published to ${published.data.students} students. ${notified.data?.notified ?? 0} told privately.` +
-          (published.data.teams_error ? ` Teams post failed: ${published.data.teams_error}` : ''),
+          (published.data.teams_error ? ` Teams post failed: ${published.data.teams_error}` : '') +
+          // The opposite advice to a failed post, so it is said separately. The
+          // card IS in the channel; pressing again would put a second one there.
+          (published.data.teams_record_error ? ` ${published.data.teams_record_error}` : ''),
       );
       onPublished?.();
     } catch (err) {
@@ -262,6 +278,7 @@ export default function ExamResultsSheet({
   const secondSitting = counts('second_sitting');
   const publishedBefore = Boolean(data?.last_published_at);
   const announced = data ? announcedIn(data) : false;
+  const channelHere = data ? channelLinked(data) : false;
   // Reused by both branches: nothing is ever announced about the second
   // sitting (the channel hears about an exam once), but its papers are still
   // written and privately notified, on a first publish exactly as on a
@@ -287,10 +304,17 @@ export default function ExamResultsSheet({
    * moment a post is recorded, so it can never produce a second announcement.
    */
   const canRetryTeams =
-    publishedBefore &&
-    !announced &&
-    data?.teams_linked === true &&
-    examDay + secondSitting > 0;
+    publishedBefore && !announced && channelHere && examDay + secondSitting > 0;
+
+  /**
+   * Will this press also put a card in the channel? The label has to say so.
+   *
+   * "Publish final results (12)" while the same press announces the exam to
+   * forty students and their parents understates it. Nothing was hidden, the
+   * preview and the checkbox are right above, but the button is what a teacher
+   * reads before pressing, and a channel post cannot be taken back.
+   */
+  const willPostToChannel = channelHere && !announced && postToTeams;
 
   const cta = !publishedBefore
     ? examDay > 0
@@ -301,7 +325,9 @@ export default function ExamResultsSheet({
     : secondSitting > 0
       ? secondSittingCta
       : canFinalise
-        ? `Publish final results (${examDay})`
+        ? willPostToChannel
+          ? `Publish final results (${examDay}) and post to the channel`
+          : `Publish final results (${examDay})`
         : canRetryTeams
           ? 'Post the results to the Teams channel'
           : null;
@@ -471,7 +497,7 @@ export default function ExamResultsSheet({
               )}
             </Box>
 
-            {!announced && (
+            {channelHere && !announced && (
               <>
                 <Divider />
 

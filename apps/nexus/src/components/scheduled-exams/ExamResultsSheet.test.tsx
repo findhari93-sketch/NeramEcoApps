@@ -27,6 +27,9 @@ const PAYLOAD = {
     warnings: ['19 students still have an open window. Publishing now announces exam day results only. They will be ranked in the second sitting.'],
     preview: { text: 'preview', html: '<p>preview</p>' },
     last_published_at: null,
+    // The common case: this classroom has a Teams channel, so the channel half
+    // of the sheet is real. Sent by the GET route on every payload.
+    teams_linked: true,
   },
 };
 
@@ -285,5 +288,69 @@ describe('ExamResultsSheet', () => {
     // And the preview and the toggle come back with it, so the teacher sees
     // exactly what is about to reach the channel.
     expect(screen.getByText(/Post this to the classroom/i)).toBeTruthy();
+  });
+
+  /**
+   * A classroom with no Teams link can never become announced, so gating the
+   * channel half on "not yet announced" alone showed it forever: the heading,
+   * the card preview and a Post to Teams checkbox, on every publish and every
+   * republish, none of which could ever do anything. Same rule as the disabled
+   * button: where there is nothing to act on, render nothing.
+   */
+  it('shows nothing about a channel when the classroom has no Teams link', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: { ...PAYLOAD.data, teams_linked: false } }),
+    })) as never;
+
+    const { container } = open();
+    await waitFor(() => expect(screen.getByText('Arun')).toBeTruthy());
+
+    expect(screen.queryByText(/What goes in the channel/i)).toBeNull();
+    expect(screen.queryByText(/Post this to the classroom/i)).toBeNull();
+    expect(screen.queryByText('preview')).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    // The results themselves still publish, and students are still told
+    // privately. Only the channel half is gone.
+    expect(screen.getByTestId('exam-publish-cta').textContent).toBe('Publish exam day results (1)');
+    expect(container.querySelectorAll('[disabled], [aria-disabled="true"]')).toHaveLength(0);
+  });
+
+  /**
+   * The press does two things, so the label names both. A channel card reaches
+   * every student and often a parent and cannot be taken back, and "Publish
+   * final results (1)" does not say that is about to happen.
+   */
+  it('says so when finalising also posts the card to the channel', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          ...PAYLOAD.data,
+          exam: { ...PAYLOAD.data.exam, results_state: 'provisional' },
+          results: {
+            ...PAYLOAD.data.results,
+            drawings_ungraded: 0,
+            rows: PAYLOAD.data.results.rows.filter((r) => r.bucket !== 'second_sitting'),
+          },
+          last_published_at: '2026-08-19T06:00:00.000Z',
+          teams_message_id: null,
+          teams_linked: true,
+          warnings: [],
+        },
+      }),
+    })) as never;
+
+    open();
+    await waitFor(() => expect(screen.getByTestId('exam-publish-cta')).toBeTruthy());
+    expect(screen.getByTestId('exam-publish-cta').textContent).toBe(
+      'Publish final results (1) and post to the channel',
+    );
+
+    // And it stops claiming that the moment the teacher turns the post off.
+    fireEvent.click(screen.getByRole('checkbox', { name: /Post this to the classroom/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId('exam-publish-cta').textContent).toBe('Publish final results (1)'),
+    );
   });
 });
