@@ -33,7 +33,7 @@ export default function SketchbookHomeCard() {
       </Typography>
       {!fresh && <RhythmDots days={r.week.days} size={14} />}
       <Button component={Link} href="/student/sketchbook" variant={fresh ? 'contained' : 'text'} sx={{ mt: 1, minHeight: 48 }}>
-        {fresh ? 'Open sketchbook' : 'Open sketchbook'}
+        Open sketchbook
       </Button>
     </Paper>
   );
