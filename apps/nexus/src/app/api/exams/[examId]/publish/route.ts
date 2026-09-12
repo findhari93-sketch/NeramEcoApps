@@ -304,13 +304,16 @@ async function awardExamGamification(input: {
     percentage: number;
     absent: boolean;
     attempt_id: string | null;
+    sitting: 'main' | 'second' | null;
+    bucket: 'exam_day' | 'second_sitting' | 'still_to_sit' | 'absent';
   }>;
   isFinal: boolean;
 }): Promise<{ points_awarded: number; badges_awarded: number }> {
   const supabase = getSupabaseAdminClient();
   const sourceId = `exam:${input.examId}`;
-  const sat = input.rows.filter((r) => !r.absent && r.attempt_id);
-  const candidates = sat.length;
+  const sat = input.rows.filter((r) => r.bucket === 'exam_day' || r.bucket === 'second_sitting');
+  // The main sitting's size, because that is the pool a placing is won in.
+  const candidates = input.rows.filter((r) => r.bucket === 'exam_day').length;
 
   // How many scheduled exams each of these students has now sat, and their best
   // previous percentage. One query each rather than per student.
@@ -370,6 +373,7 @@ async function awardExamGamification(input: {
       candidates,
       examsSat: Math.max(1, prior.count),
       previousBestPct: prior.best,
+      sitting: row.sitting ?? 'main',
     })) {
       try {
         // UNIQUE(student_id, badge_id) makes a repeat a no-op returning false.

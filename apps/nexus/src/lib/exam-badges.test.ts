@@ -12,7 +12,18 @@ const base = {
   candidates: 10,
   examsSat: 1,
   previousBestPct: null as number | null,
+  sitting: 'main' as const,
 };
+
+const input = (over: Partial<Parameters<typeof examBadgesFor>[0]> = {}) => ({
+  rank: 1,
+  percentage: 88,
+  candidates: 16,
+  examsSat: 1,
+  previousBestPct: null,
+  sitting: 'main' as const,
+  ...over,
+});
 
 describe('examBadgesFor', () => {
   it('awards the topper badge for first place', () => {
@@ -65,8 +76,37 @@ describe('examBadgesFor', () => {
     );
   });
 
-  it('awards an absent student nothing at all', () => {
-    expect(examBadgesFor({ ...base, rank: null, examsSat: 9 })).toEqual([]);
+  it('gives the exam day winner the topper and podium badges', () => {
+    expect(examBadgesFor(input())).toContain(EXAM_BADGE_IDS.topper);
+    expect(examBadgesFor(input())).toContain(EXAM_BADGE_IDS.podium);
+  });
+
+  // The scarce thing punctuality buys. A student who sat four weeks later had
+  // four more weeks to prepare, so they cannot take a placing from someone who
+  // met the deadline.
+  it('gives the second sitting winner neither topper nor podium', () => {
+    const out = examBadgesFor(input({ sitting: 'second' }));
+    expect(out).not.toContain(EXAM_BADGE_IDS.topper);
+    expect(out).not.toContain(EXAM_BADGE_IDS.podium);
+  });
+
+  // And it does not tell them their work was worth nothing.
+  it('still gives the second sitting regular and personal best', () => {
+    const out = examBadgesFor(
+      input({ sitting: 'second', examsSat: 3, percentage: 80, previousBestPct: 60 }),
+    );
+    expect(out).toContain(EXAM_BADGE_IDS.regular);
+    expect(out).toContain(EXAM_BADGE_IDS.personalBest);
+  });
+
+  it('gives an absent student nothing at all', () => {
+    expect(examBadgesFor(input({ rank: null }))).toEqual([]);
+  });
+
+  it('withholds the podium from a sitting too small for it to mean anything', () => {
+    expect(examBadgesFor(input({ candidates: EXAM_PODIUM_MIN_CANDIDATES - 1 }))).not.toContain(
+      EXAM_BADGE_IDS.topper,
+    );
   });
 });
 
