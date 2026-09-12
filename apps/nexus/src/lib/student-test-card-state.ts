@@ -152,6 +152,16 @@ function ms(iso: string | null | undefined): number | null {
 
 const pct = (n: number | null | undefined): string => (n == null ? '' : `${Math.round(n)}%`);
 
+/**
+ * The clause naming a finished result's sitting, appended to a "You sat this..."
+ * sentence. ONE function so the two `done` returns that report a completed
+ * sitting cannot drift apart, which is exactly the failure this task exists to
+ * prevent: a future wording change applied at one call site and missed at the
+ * other.
+ */
+const resultSittingNote = (t: StudentTestFacts): string =>
+  t.result_sitting === 'second' ? ' You were ranked in the second sitting.' : '';
+
 export function resolveStudentTestCard(t: StudentTestFacts, now: number): StudentTestCard {
   const attempts = t.attempts ?? 0;
   const limit = t.attempt_limit && t.attempt_limit > 0 ? t.attempt_limit : null;
@@ -200,9 +210,7 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
    *    student a human had just let in, which is this bug in reverse. */
   if (t.is_reopen && (closes == null || closes > now) && (opens == null || opens <= now)) {
     if (sat && attemptsLeft === 0) {
-      const sittingNote =
-        t.result_sitting === 'second' ? ' You were ranked in the second sitting.' : '';
-      return card('done', `You sat this on ${on(t.last_submitted_at)}.${sittingNote}`, { kind: 'review', label: 'See your answers' }, 'positive');
+      return card('done', `You sat this on ${on(t.last_submitted_at)}.${resultSittingNote(t)}`, { kind: 'review', label: 'See your answers' }, 'positive');
     }
     const sittingNote = t.ranks_in_second_sitting
       ? ' You will be ranked with the second sitting, because exam day has passed.'
@@ -277,9 +285,7 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
           'neutral',
         );
       }
-      const sittingNote =
-        t.result_sitting === 'second' ? ' You were ranked in the second sitting.' : '';
-      return card('done', `You sat this${when}.${sittingNote}`, { kind: 'review', label: 'See your answers' }, 'positive');
+      return card('done', `You sat this${when}.${resultSittingNote(t)}`, { kind: 'review', label: 'See your answers' }, 'positive');
     }
     // Not an exam, so it can be retaken if the door and the limit both allow.
     const shut = closes != null && closes < now;

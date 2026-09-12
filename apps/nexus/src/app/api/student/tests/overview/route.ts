@@ -15,6 +15,7 @@ import {
 import { buildExamEligibilityRoster, type EligibilityRosterRow } from '@/lib/exam-eligibility-roster';
 import { decideCatchupGate, type CatchupGateDecision } from '@/lib/catchup-test-gate';
 import { resolveStudentTestCard } from '@/lib/student-test-card-state';
+import { willRankInSecondSitting } from '@/lib/exam-second-sitting';
 
 /**
  * GET /api/student/tests/overview?classroom=<id>
@@ -448,12 +449,11 @@ export async function GET(request: NextRequest) {
         is_reopen: ev?.is_reopen ?? false,
         // Said BEFORE they sit, while the door is still shut. A personal window
         // that begins after exam day closed will rank them in the second sitting.
-        ranks_in_second_sitting: Boolean(
-          ev?.is_reopen &&
-            ev?.opens_at &&
-            ev?.exam_closes_at &&
-            Date.parse(ev.opens_at) > Date.parse(ev.exam_closes_at),
-        ),
+        ranks_in_second_sitting: willRankInSecondSitting({
+          is_reopen: ev?.is_reopen,
+          opens_at: ev?.opens_at,
+          exam_closes_at: ev?.exam_closes_at,
+        }),
         access_state: ev?.access_state ?? 'none',
         results_state: ev?.results_state ?? 'unpublished',
         exam_result: ev?.result ?? null,
