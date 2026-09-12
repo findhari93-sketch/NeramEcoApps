@@ -50,6 +50,7 @@ import GuardianSection from '@/components/students/profile/GuardianSection';
 import DocumentsSection from '@/components/students/profile/DocumentsSection';
 import AttendanceSection from '@/components/students/profile/AttendanceSection';
 import WorkSection from '@/components/students/profile/WorkSection';
+import SketchbookSection from '@/components/sketchbook/SketchbookSection';
 import FeeSection from '@/components/students/profile/FeeSection';
 import TimelineSection from '@/components/students/profile/TimelineSection';
 import { formatCurrencyINR } from '@/lib/student-profile-fields';
@@ -287,6 +288,7 @@ export default function StudentProfilePage() {
     { id: 'profile-classroom', label: 'Class and progress' },
     { id: 'profile-attendance', label: 'Attendance' },
     { id: 'profile-work', label: 'Assignments and tests' },
+    { id: 'profile-sketchbook', label: 'Sketchbook' },
     { id: 'profile-application', label: 'Application form' },
     ...(canSeeFinance ? [{ id: 'profile-fees', label: 'Fees and payments' }] : []),
     { id: 'profile-documents', label: 'Documents' },
@@ -356,6 +358,8 @@ export default function StudentProfilePage() {
         error={perfState.error}
         onFirstOpen={loadPerformance}
       />
+
+      <SketchbookSection studentId={core.student.id} />
 
       <ApplicationSection application={core.application} />
 

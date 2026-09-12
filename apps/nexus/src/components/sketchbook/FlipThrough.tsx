@@ -100,6 +100,7 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
 
       <Box sx={{ p: 1.5, pb: 'calc(12px + env(safe-area-inset-bottom))', position: 'sticky', bottom: 0, bgcolor: 'background.paper' }}>
         <TeacherSketchActions
+          key={current.id}
           compact
           sketchId={current.id}
           reaction={(state.reaction as never) ?? current.reaction}
