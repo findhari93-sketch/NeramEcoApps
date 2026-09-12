@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listUnflipped, loadClassroomRoster } from '@neram/database/queries/nexus';
+import { listUnflipped } from '@neram/database/queries/nexus';
 import { getRequestUser } from '@/lib/study-materials';
-import { ApiError, errorResponse } from '@/lib/api-errors';
-import { staffClassroomIds } from '@/lib/sketchbook-access';
+import { errorResponse } from '@/lib/api-errors';
+import { staffStudentIds } from '@/lib/sketchbook-access';
 
 const PAGE = 20;
 
@@ -17,13 +17,8 @@ const PAGE = 20;
 export async function GET(request: NextRequest) {
   try {
     const caller = await getRequestUser(request.headers.get('Authorization'));
-    const mine = await staffClassroomIds(caller);
     const asked = request.nextUrl.searchParams.get('classroom');
-    if (asked && !mine.includes(asked)) throw new ApiError('You do not teach this classroom.', 403);
-    const classroomIds = asked ? [asked] : mine;
-
-    const rosters = await Promise.all(classroomIds.map((id) => loadClassroomRoster(id, { includeDormant: true })));
-    const studentIds = [...new Set(rosters.flatMap((r) => r.members.map((m) => m.user_id)))];
+    const studentIds = await staffStudentIds(caller, asked);
 
     const { rows, remaining } = await listUnflipped(caller.id, studentIds, PAGE);
     return NextResponse.json({ sketches: rows, remaining }, { headers: { 'Cache-Control': 'no-store' } });
