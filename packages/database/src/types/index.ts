@@ -9119,7 +9119,9 @@ export type DrawingSubmissionSource =
   | 'homework'
   | 'free_practice'
   | 'assignment'
-  | 'exam';
+  | 'exam'
+  /** A personal sketchbook entry. Never reviewed, never graded; see the sketchbook spec. */
+  | 'sketchbook';
 
 // ============================================================
 // AI DRAWING EVALUATION
@@ -9332,6 +9334,8 @@ export interface DrawingSubmission {
   assignment_id: string | null;
   source_type: DrawingSubmissionSource;
   original_image_url: string;
+  /** 400px JPEG uploaded beside the original. Grids load this, never the original. */
+  thumbnail_url: string | null;
   reviewed_image_url: string | null;
   self_note: string | null;
   ai_feedback: {
@@ -9516,6 +9520,49 @@ export interface DrawingObject {
 
 // Gallery Reactions
 export type GalleryReactionType = 'heart' | 'clap' | 'fire' | 'star' | 'wow';
+
+/** The three reactions a teacher can give a sketch. A subset of GalleryReactionType. */
+export type SketchbookReaction = Extract<GalleryReactionType, 'heart' | 'fire' | 'wow'>;
+
+export interface NexusSketchbookPracticeDay {
+  student_id: string;
+  /** YYYY-MM-DD in Asia/Kolkata. */
+  practice_date: string;
+  sketch_count: number;
+  first_submission_id: string | null;
+}
+
+export interface NexusSketchbookFlip {
+  id: string;
+  teacher_id: string;
+  submission_id: string;
+  action: 'seen' | 'skipped';
+  created_at: string;
+}
+
+export interface NexusSketchbookFeature {
+  id: string;
+  submission_id: string;
+  classroom_id: string;
+  featured_by: string;
+  caption: string | null;
+  teams_channel_id: string | null;
+  teams_channel_message_id: string | null;
+  teams_group_chat_message_id: string | null;
+  card_hash: string | null;
+  featured_at: string;
+  unfeatured_at: string | null;
+}
+
+export interface NexusSketchbookGoalChange {
+  id: string;
+  classroom_id: string;
+  goal: number;
+  /** YYYY-MM-DD, always a Monday. */
+  effective_from: string;
+  set_by: string | null;
+  created_at: string;
+}
 
 export interface DrawingGalleryReaction {
   id: string;
