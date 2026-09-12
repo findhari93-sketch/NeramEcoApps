@@ -167,4 +167,133 @@ test.describe('Draw Corrections canvas', () => {
     await page.keyboard.press('Control+z');
     await expect(undo).toBeDisabled();
   });
+
+  /** Open the review screen and get into the Draw Corrections canvas. */
+  const openCanvas = async (page: import('@playwright/test').Page) => {
+    const ok = await injectAuthForPage(page, 'teacher');
+    test.skip(!ok, 'Teacher auth injection failed (credentials likely missing)');
+    await page.goto(`${APP_URLS.nexus}/teacher/drawing-reviews/${submissionId}`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await expect(page.getByText('Feedback', { exact: true }).first()).toBeVisible({ timeout: 90_000 });
+    const markup = page.getByRole('button', { name: /markup tools/i });
+    await expect(markup).toBeVisible({ timeout: 30_000 });
+    await markup.click();
+    await page.getByRole('menuitem', { name: /draw on image/i }).click();
+    await expect(page.getByText('Draw Corrections', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('canvas[aria-label="Drawing canvas"]')).toBeVisible({ timeout: 15_000 });
+  };
+
+  test('a pen stroke carrying pressure is drawn, not dropped', async ({ page }) => {
+    test.skip(!submissionId, 'No submission from setup');
+    await openCanvas(page);
+
+    const undo = page.getByRole('button', { name: 'Undo' });
+    await expect(undo).toBeDisabled();
+
+    // Playwright's mouse cannot carry pressure, so the stylus is simulated with
+    // real PointerEvents. pointerType 'pen' with a varying pressure is what
+    // makes the renderer taper rather than draw one flat width.
+    await page.evaluate(() => {
+      const canvas = document.querySelector('canvas[aria-label="Drawing canvas"]') as HTMLCanvasElement;
+      const r = canvas.getBoundingClientRect();
+      const fire = (type: string, fx: number, fy: number, pressure: number) => {
+        canvas.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            pointerId: 1,
+            pointerType: 'pen',
+            isPrimary: true,
+            pressure,
+            clientX: r.left + r.width * fx,
+            clientY: r.top + r.height * fy,
+          }),
+        );
+      };
+      fire('pointerdown', 0.2, 0.5, 0.15);
+      for (let i = 1; i <= 12; i++) fire('pointermove', 0.2 + i * 0.04, 0.5, 0.15 + i * 0.07);
+      fire('pointerup', 0.68, 0.5, 0.95);
+    });
+
+    await expect(undo).toBeEnabled();
+  });
+
+  test('the comment size is its own control, not the pen nib', async ({ page }) => {
+    test.skip(!submissionId, 'No submission from setup');
+    await openCanvas(page);
+
+    // The pen sizes a nib. Comment size is nowhere near it.
+    await expect(page.getByRole('group', { name: 'Nib size' })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Comment size' })).toHaveCount(0);
+
+    // The text tool sizes comments, and the nib control steps aside.
+    await page.getByRole('button', { name: 'Text', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Comment size' })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Nib size' })).toHaveCount(0);
+  });
+
+  test('changing the nib leaves the comment size alone', async ({ page }) => {
+    test.skip(!submissionId, 'No submission from setup');
+    await openCanvas(page);
+
+    const canvas = page.locator('canvas[aria-label="Drawing canvas"]');
+    const label = page.getByPlaceholder('Type label');
+
+    /** Place a label and report the size the editor is actually using. */
+    const fontSizeAfterPlacing = async (): Promise<number> => {
+      await page.getByRole('button', { name: 'Text', exact: true }).click();
+      const box = (await canvas.boundingBox())!;
+      await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.35);
+      await expect(label).toBeVisible();
+      const px = await label.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      // Enter on an empty label discards it. Escape bubbles to the dialog and
+      // would take the whole canvas down with it.
+      await page.keyboard.press('Enter');
+      await expect(label).toHaveCount(0);
+      return px;
+    };
+
+    /** Switching tools swaps the whole size control, so wait for the new one. */
+    const pickNib = async (name: 'Fine' | 'Marker') => {
+      await page.getByRole('button', { name: 'Pen', exact: true }).click();
+      await expect(page.getByRole('group', { name: 'Nib size' })).toBeVisible();
+      await page.getByRole('button', { name, exact: true }).click();
+    };
+
+    await pickNib('Fine');
+    const withFineNib = await fontSizeAfterPlacing();
+
+    await pickNib('Marker');
+    const withMarkerNib = await fontSizeAfterPlacing();
+
+    // The whole point: the pen got four and a half times thicker and the
+    // comment did not move. It used to be (18 + lineWidth * 3) / scale.
+    expect(withMarkerNib).toBe(withFineNib);
+  });
+
+  test('the comment size control does change the comment size', async ({ page }) => {
+    test.skip(!submissionId, 'No submission from setup');
+    await openCanvas(page);
+
+    const canvas = page.locator('canvas[aria-label="Drawing canvas"]');
+    const label = page.getByPlaceholder('Type label');
+    await page.getByRole('button', { name: 'Text', exact: true }).click();
+
+    const sizeWith = async (which: 'Comment size S' | 'Comment size L'): Promise<number> => {
+      await page.getByRole('button', { name: which, exact: true }).click();
+      const box = (await canvas.boundingBox())!;
+      await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.35);
+      await expect(label).toBeVisible();
+      const px = await label.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      // Enter on an empty label discards it. Escape bubbles to the dialog and
+      // would take the whole canvas down with it.
+      await page.keyboard.press('Enter');
+      await expect(label).toHaveCount(0);
+      return px;
+    };
+
+    expect(await sizeWith('Comment size L')).toBeGreaterThan(await sizeWith('Comment size S'));
+  });
 });

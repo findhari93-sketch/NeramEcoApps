@@ -21,7 +21,7 @@ import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import PauseRoundedIcon from '@mui/icons-material/PauseRounded';
 import GraphicEqRoundedIcon from '@mui/icons-material/GraphicEqRounded';
 import { formatClock, formatSpoken } from '@/components/video/format';
-import { applySmoothStroke, buildSmoothStroke } from '@/lib/sketch-geometry';
+import { buildStrokeOutline, smoothCentreline } from '@/lib/sketch-stroke';
 import { validateTimeline, visibleAt, type SketchTimeline } from '@/lib/sketch-timeline';
 
 const FONT_FAMILY = "'Segoe UI', system-ui, -apple-system, sans-serif";
@@ -123,23 +123,31 @@ export default function VoiceNotePlayer({
             : null;
           const source =
             whole && whole.k === 'stroke' ? whole.p.map(([, x, y]) => ({ x, y })) : item.points || [];
-          const points = source.map((p) => ({ x: p.x * width, y: p.y * height }));
+          // A whole stroke shown at once keeps its own pressures; a stroke being
+          // revealed point by point gets the ones visibleAt handed back.
+          const pressures =
+            whole && whole.k === 'stroke'
+              ? (whole.p.every((point) => point.length === 4)
+                  ? whole.p.map((point) => point[3] as number)
+                  : undefined)
+              : item.pressures;
+          const points = source.map((point) => ({ x: point.x * width, y: point.y * height }));
           if (!points.length) continue;
 
-          ctx.strokeStyle = item.color;
-          ctx.lineWidth = Math.max(1, (item.width || 0) * width);
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          if (points.length === 1) {
-            ctx.fillStyle = item.color;
-            ctx.beginPath();
-            ctx.arc(points[0].x, points[0].y, ctx.lineWidth / 2, 0, Math.PI * 2);
-            ctx.fill();
-            continue;
-          }
+          // Filled outline, the same renderer the teacher drew against, so a
+          // tapered stroke replays as the stroke they actually made. A timeline
+          // recorded before pressure existed has none, and comes back at a
+          // constant width exactly as it always did.
+          const lineWidth = Math.max(1, (item.width || 0) * width);
+          const smoothed = smoothCentreline(points, pressures);
+          const outline = buildStrokeOutline(smoothed.points, smoothed.pressures, lineWidth);
+          if (!outline.length) continue;
+          ctx.fillStyle = item.color;
           ctx.beginPath();
-          applySmoothStroke(ctx, buildSmoothStroke(points));
-          ctx.stroke();
+          ctx.moveTo(outline[0].x, outline[0].y);
+          for (let i = 1; i < outline.length; i++) ctx.lineTo(outline[i].x, outline[i].y);
+          ctx.closePath();
+          ctx.fill();
         } else {
           const fontPx = Math.max(10, (item.fontSize || 0) * height);
           const x = (item.x || 0) * width;

@@ -21,8 +21,18 @@ export const TIMELINE_VERSION = 1;
 /** A three-minute sketch runs well under this. Anything larger is not a sketch. */
 export const MAX_TIMELINE_BYTES = 512 * 1024;
 
-/** [msSinceStrokeStart, x, y], x and y as fractions of the image. */
-export type TimedPoint = [number, number, number];
+/**
+ * [msSinceStrokeStart, x, y] or [msSinceStrokeStart, x, y, pressure].
+ *
+ * x and y are fractions of the image. The fourth slot is a stylus's pressure,
+ * 0 to 1, and is simply absent for a stroke recorded before pressure existed or
+ * drawn with a device that reports none worth keeping. Both readers tolerate
+ * either shape, which is why TIMELINE_VERSION stays 1: bumping it would make
+ * validateTimeline reject every voice note already stored.
+ */
+export type TimedPoint =
+  | [number, number, number]
+  | [number, number, number, number];
 
 export interface StrokeOp {
   t: number;
@@ -74,6 +84,8 @@ export interface VisibleItem {
   color: string;
   width?: number;
   points?: NormPoint[];
+  /** One per visible point, 0 to 1. Absent when the stroke carried none. */
+  pressures?: number[];
   text?: string;
   fontSize?: number;
   x?: number;
@@ -153,10 +165,16 @@ export function visibleAt(timeline: SketchTimeline, ms: number): VisibleItem[] {
       out.push(entry.item);
       continue;
     }
-    const points = entry.op.p
-      .filter(([dt]) => entry.startedAt + dt <= ms)
-      .map(([, x, y]) => ({ x, y }));
-    if (points.length) out.push({ ...entry.item, points });
+    const shown = entry.op.p.filter(([dt]) => entry.startedAt + dt <= ms);
+    const points = shown.map(([, x, y]) => ({ x, y }));
+    if (!points.length) continue;
+    // All or nothing: a half-pressured stroke would render as a width that
+    // jumps, so unless every visible point carries one the player draws it at
+    // a constant width exactly as it did before pressure existed.
+    const pressures = shown.every((point) => point.length === 4)
+      ? shown.map((point) => point[3] as number)
+      : undefined;
+    out.push(pressures ? { ...entry.item, points, pressures } : { ...entry.item, points });
   }
   return out;
 }
@@ -192,8 +210,12 @@ export function validateTimeline(input: unknown): SketchTimeline | null {
     if (entry.k === 'stroke') {
       if (!Number.isFinite(entry.wd) || !Array.isArray(entry.p)) return null;
       for (const point of entry.p) {
-        if (!Array.isArray(point) || point.length !== 3) return null;
+        // 3 slots is the original shape, 4 adds pressure. Nothing else.
+        if (!Array.isArray(point) || (point.length !== 3 && point.length !== 4)) return null;
         if (!point.every((n) => Number.isFinite(n))) return null;
+        // Pressure multiplies a stroke width downstream, so it is bounded here
+        // rather than clamped at draw time in two different renderers.
+        if (point.length === 4 && (point[3] < 0 || point[3] > 1)) return null;
       }
       ops.push({
         t,

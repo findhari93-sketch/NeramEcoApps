@@ -17,6 +17,14 @@ export type CanvasItem =
       points: Point[];
       color: string;
       width: number;
+      /**
+       * One per point, 0 to 1, from a stylus or synthesised from speed.
+       * Absent for a stroke drawn before pressure existed, which renders at a
+       * constant width exactly as it always did.
+       */
+      pressures?: number[];
+      /** A highlighter lays down translucent ink under the student's lines. */
+      highlight?: boolean;
     }
   | {
       id: string;

@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import {
-  Box, Button, IconButton, Slider, ToggleButton, ToggleButtonGroup,
+  Box, Button, IconButton, ToggleButton, ToggleButtonGroup,
   Typography, Paper, Tooltip,
 } from '@neram/ui';
 import UndoOutlinedIcon from '@mui/icons-material/UndoOutlined';
@@ -11,16 +11,16 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import CreateOutlinedIcon from '@mui/icons-material/CreateOutlined';
+import BorderColorOutlinedIcon from '@mui/icons-material/BorderColorOutlined';
+import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
 import FitScreenOutlinedIcon from '@mui/icons-material/FitScreenOutlined';
 import ZoomInOutlinedIcon from '@mui/icons-material/ZoomInOutlined';
 import ZoomOutOutlinedIcon from '@mui/icons-material/ZoomOutOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import {
-  applySmoothStroke, buildSmoothStroke, arrowHead, hitTestItem, textBounds,
-  type CanvasItem, type Point,
-} from '../../lib/sketch-geometry';
+import { arrowHead, hitTestItem, textBounds, type CanvasItem, type Point } from '../../lib/sketch-geometry';
+import { buildStrokeOutline, smoothCentreline, splitStrokeAtHits } from '../../lib/sketch-stroke';
 import { normPoint, type SketchOp } from '../../lib/sketch-timeline';
 
 /**
@@ -48,32 +48,108 @@ interface SketchOverCanvasProps {
   onImageSize?: (size: { w: number; h: number }) => void;
 }
 
-type Tool = 'pen' | 'eraser' | 'text';
+type Tool = 'pen' | 'highlighter' | 'eraser' | 'text';
 type Item = CanvasItem;
 
-const COLORS = ['#FF0000', '#0066FF', '#00AA00', '#FF6600', '#9933FF', '#000000'];
+/**
+ * Three marks, not six colours.
+ *
+ * Each maps onto the marker vocabulary drawing_annotation already stores
+ * (problem / good / guide), so a saved stroke says what KIND of mark it is
+ * rather than only what colour it happened to be.
+ */
+const COLORS = [
+  { hex: '#DC2626', marker: 'problem', label: 'Correction' },
+  { hex: '#16A34A', marker: 'good', label: 'This works' },
+  { hex: '#2563EB', marker: 'guide', label: 'Guide line' },
+] as const;
+
+/** Nib widths in image pixels. Three sizes beat a 1 to 12 slider nobody reads. */
+const NIBS = [
+  { key: 'fine', label: 'Fine', width: 2 },
+  { key: 'medium', label: 'Medium', width: 4 },
+  { key: 'marker', label: 'Marker', width: 9 },
+] as const;
+type NibKey = (typeof NIBS)[number]['key'];
+
+/**
+ * Comment size as a fraction of the IMAGE height, never of the screen.
+ *
+ * It used to be `(18 + lineWidth * 3) / scale`, two faults in one expression:
+ * the pen slider drove it, and dividing by the zoom anchored it to the screen.
+ * A label was therefore a constant 27 CSS px whatever the sheet's resolution,
+ * which is why comments landed far too large with no way to control them. As a
+ * fraction of the drawing, Medium on a 1600px-tall sheet reads at about 12px at
+ * fit, and keeps reading at about 12px on a phone, a laptop and a pen display.
+ */
+const TEXT_FRACTIONS = { S: 0.014, M: 0.018, L: 0.024 } as const;
+type TextSize = keyof typeof TEXT_FRACTIONS;
+
+/** Alpha for the highlighter, which lays ink under the student's own lines. */
+const HIGHLIGHT_ALPHA = 0.32;
+
+/**
+ * Speed at which a synthesised stroke reaches its thinnest, in image px per ms.
+ *
+ * A mouse reports a flat 0.5 pressure and a finger reports 0 or 1, so neither
+ * can taper on its own. Deriving it from speed is what keeps a correction drawn
+ * with a mouse looking like the same hand as one drawn with the Wacom.
+ */
+const SYNTH_MAX_SPEED = 2.2;
+
 const FONT_FAMILY = "'Segoe UI', system-ui, -apple-system, sans-serif";
+
+/** Pressure for one sample, real where the device reports it and speed-derived where it does not. */
+function readPressure(
+  real: boolean,
+  raw: number,
+  prev: Point | undefined,
+  next: Point,
+  dtMs: number,
+): number {
+  if (real) return Math.max(0, Math.min(1, raw));
+  if (!prev || dtMs <= 0) return 0.8;
+  const speed = Math.hypot(next.x - prev.x, next.y - prev.y) / dtMs;
+  return Math.max(0, Math.min(1, 1 - speed / SYNTH_MAX_SPEED));
+}
 
 // --- Pure canvas drawing helpers (operate on any 2D context) ---
 
+/**
+ * A stroke as a filled outline rather than a stroked path.
+ *
+ * `ctx.stroke()` carries one lineWidth for the whole path, so it cannot taper:
+ * every correction landed at the same weight whatever the teacher did with the
+ * pen. The centreline is smoothed first, on the same quadratic-midpoint curve
+ * the old renderer used, then offset by half the width scaled by pressure, so
+ * one fill paints the mark with no seams where the width changes.
+ */
 function drawStrokeItem(
-  ctx: CanvasRenderingContext2D, points: Point[], color: string, width: number,
+  ctx: CanvasRenderingContext2D,
+  points: Point[],
+  color: string,
+  width: number,
+  pressures?: number[],
+  highlight?: boolean,
 ) {
   if (points.length === 0) return;
-  if (points.length === 1) {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(points[0].x, points[0].y, Math.max(width / 2, 0.5), 0, Math.PI * 2);
-    ctx.fill();
-    return;
+  const smoothed = smoothCentreline(points, pressures);
+  const outline = buildStrokeOutline(smoothed.points, smoothed.pressures, width);
+  if (outline.length === 0) return;
+
+  ctx.save();
+  if (highlight) {
+    // multiply keeps the student's pencil visible through the highlight.
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = HIGHLIGHT_ALPHA;
   }
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  applySmoothStroke(ctx, buildSmoothStroke(points));
-  ctx.stroke();
+  ctx.moveTo(outline[0].x, outline[0].y);
+  for (let i = 1; i < outline.length; i++) ctx.lineTo(outline[i].x, outline[i].y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawLeaderLine(
@@ -111,8 +187,11 @@ function drawTextItem(ctx: CanvasRenderingContext2D, item: Extract<Item, { type:
 }
 
 function drawItem(ctx: CanvasRenderingContext2D, item: Item) {
-  if (item.type === 'stroke') drawStrokeItem(ctx, item.points, item.color, item.width);
-  else drawTextItem(ctx, item);
+  if (item.type === 'stroke') {
+    drawStrokeItem(ctx, item.points, item.color, item.width, item.pressures, item.highlight);
+  } else {
+    drawTextItem(ctx, item);
+  }
 }
 
 export default function SketchOverCanvas({
@@ -130,12 +209,17 @@ export default function SketchOverCanvas({
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const [tool, setTool] = useState<Tool>('pen');
-  const [color, setColor] = useState('#FF0000');
-  const [lineWidth, setLineWidth] = useState(3);
+  const [color, setColor] = useState<string>(COLORS[0].hex);
+  const [nib, setNib] = useState<NibKey>('medium');
+  const [textSize, setTextSize] = useState<TextSize>('M');
+  // The highlighter is deliberately fat: it is for circling an area, not drawing.
+  const lineWidth = (NIBS.find((n) => n.key === nib)?.width ?? 4) * (tool === 'highlighter' ? 4 : 1);
   const [items, setItems] = useState<Item[]>([]);
   const [undoStack, setUndoStack] = useState<Item[][]>([]);
   const [redoStack, setRedoStack] = useState<Item[][]>([]);
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
+  const [bgError, setBgError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -160,7 +244,17 @@ export default function SketchOverCanvas({
   // Interaction refs (mutable, not rendered directly)
   // `times` is filled only while recording: one stamp per point, so the replay
   // draws at the speed the teacher drew rather than all at once.
-  const draftRef = useRef<{ points: Point[]; color: string; width: number; times: number[] } | null>(null);
+  const draftRef = useRef<{
+    points: Point[];
+    color: string;
+    width: number;
+    times: number[];
+    pressures: number[];
+    highlight: boolean;
+    /** A stylus reports real pressure; a mouse and a finger do not. */
+    realPressure: boolean;
+    lastAt: number;
+  } | null>(null);
   const arrowPreviewRef = useRef<{ from: Point; to: Point; color: string } | null>(null);
   const textGestureRef = useRef<{ start: Point; moved: boolean } | null>(null);
   const preEraseRef = useRef<Item[] | null>(null);
@@ -192,18 +286,26 @@ export default function SketchOverCanvas({
   }, []);
 
   // --- Load background image and fit to container ---
+  //
+  // crossOrigin is required so the finished markup can be read back out with
+  // toBlob(). It also means a host that sends no CORS headers fails the load
+  // outright, and the <canvas> below is gated on the size this sets. Before
+  // onerror existed, that pair left the teacher looking at a working toolbar
+  // over an empty dark box, with no message, for as long as they cared to wait.
   useEffect(() => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    setBgError(false);
     img.onload = () => {
       setBgImage(img);
       setCanvasRes({ width: img.width, height: img.height });
       fitToScreen(img);
       onImageSize?.({ w: img.width, h: img.height });
     };
+    img.onerror = () => setBgError(true);
     img.src = imageUrl;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageUrl]);
+  }, [imageUrl, loadAttempt]);
 
   const fitToScreen = useCallback((img?: HTMLImageElement) => {
     const image = img || bgImage;
@@ -238,7 +340,9 @@ export default function SketchOverCanvas({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(base, 0, 0);
     const draft = draftRef.current;
-    if (draft && draft.points.length) drawStrokeItem(ctx, draft.points, draft.color, draft.width);
+    if (draft && draft.points.length) {
+      drawStrokeItem(ctx, draft.points, draft.color, draft.width, draft.pressures, draft.highlight);
+    }
     const arrow = arrowPreviewRef.current;
     if (arrow) {
       drawLeaderLine(ctx, arrow.from, arrow.to, arrow.color, Math.max(lineWidthRef.current / scaleRef.current / 2, 2));
@@ -323,21 +427,52 @@ export default function SketchOverCanvas({
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo]);
 
-  // --- Eraser: remove whole items under the pointer ---
+  // --- Eraser: rub out the part of a mark it actually touched ---
+  //
+  // It used to delete whole items. Correcting over a student's lines means many
+  // long overlapping strokes, and losing a 300-point line because the eraser
+  // grazed its tail is the single most enraging thing this tool did. A stroke
+  // now comes back as the pieces that survived; a label still goes as a whole,
+  // because half a sentence is not a correction.
   const eraserRadius = () => Math.max(lineWidth * 2, 10) / scale;
 
   const eraseAt = (p: Point) => {
     const radius = eraserRadius();
     setItems((prev) => {
-      const next = prev.filter((it) => !hitTestItem(it, p, radius));
-      if (next.length !== prev.length) {
+      let changed = false;
+      const next: Item[] = [];
+      for (const it of prev) {
+        if (it.type !== 'stroke') {
+          if (hitTestItem(it, p, radius)) changed = true;
+          else next.push(it);
+          continue;
+        }
+        const spans = splitStrokeAtHits(it.points, it.pressures, p, radius);
+        const kept = spans.reduce((n, span) => n + span.points.length, 0);
+        if (kept === it.points.length) {
+          next.push(it);
+          continue;
+        }
+        changed = true;
+        // The first surviving piece keeps the original id so any `show` op
+        // already emitted for it still refers to something.
+        spans.forEach((span, i) => {
+          next.push({
+            ...it,
+            id: i === 0 ? it.id : genId(),
+            points: span.points,
+            pressures: span.pressures,
+          });
+        });
+      }
+      if (changed) {
         erasedAnythingRef.current = true;
         // Emitted here rather than on pointer-up so a quick erase-and-lift cannot
         // leave the rubbed-out item showing in the replay. Repeated identical
         // `show` ops are harmless: the recorder drops the duplicates.
         emitShow(next);
       }
-      return next.length === prev.length ? prev : next;
+      return changed ? next : prev;
     });
   };
 
@@ -350,7 +485,13 @@ export default function SketchOverCanvas({
       });
     } else {
       setEditing({
-        x: loc.x, y: loc.y, value: '', color, fontSize: (18 + lineWidth * 3) / scale, leader,
+        x: loc.x,
+        y: loc.y,
+        value: '',
+        color,
+        // A fraction of the drawing, not of the screen. See TEXT_FRACTIONS.
+        fontSize: TEXT_FRACTIONS[textSize] * (canvasRes.height || 1000),
+        leader,
       });
     }
   };
@@ -455,8 +596,20 @@ export default function SketchOverCanvas({
     if (editingRef.current) return; // a click-away commit is handled by the input's blur
 
     const point = getCanvasPoint(e.clientX, e.clientY);
-    if (tool === 'pen') {
-      draftRef.current = { points: [point], color, width: lineWidth / scale, times: [stamp()] };
+    if (tool === 'pen' || tool === 'highlighter') {
+      // Decided once per stroke: a device either reports usable pressure or it
+      // does not, and switching mid-stroke would make the line jump.
+      const realPressure = e.pointerType === 'pen' && e.pressure > 0 && e.pressure !== 0.5;
+      draftRef.current = {
+        points: [point],
+        color,
+        width: lineWidth / scale,
+        times: [stamp()],
+        pressures: [readPressure(realPressure, e.pressure, undefined, point, 0)],
+        highlight: tool === 'highlighter',
+        realPressure,
+        lastAt: performance.now(),
+      };
       scheduleComposite();
     } else if (tool === 'eraser') {
       preEraseRef.current = items;
@@ -474,13 +627,23 @@ export default function SketchOverCanvas({
 
     if (ap.size >= 2) { handlePinch(); return; }
 
-    if (tool === 'pen' && draftRef.current) {
+    if ((tool === 'pen' || tool === 'highlighter') && draftRef.current) {
       const ne = e.nativeEvent as PointerEvent;
+      // Each coalesced event carries its own pressure, which is the whole reason
+      // a 240Hz stylus can taper within a single animation frame.
       const coalesced = typeof ne.getCoalescedEvents === 'function' ? ne.getCoalescedEvents() : [];
       const events = coalesced.length ? coalesced : [ne];
+      const draft = draftRef.current;
       for (const ev of events) {
-        draftRef.current.points.push(getCanvasPoint(ev.clientX, ev.clientY));
-        draftRef.current.times.push(stamp());
+        const point = getCanvasPoint(ev.clientX, ev.clientY);
+        const now = performance.now();
+        const prev = draft.points[draft.points.length - 1];
+        draft.points.push(point);
+        draft.times.push(stamp());
+        draft.pressures.push(
+          readPressure(draft.realPressure, ev.pressure, prev, point, now - draft.lastAt),
+        );
+        draft.lastAt = now;
       }
       scheduleComposite();
     } else if (tool === 'eraser' && preEraseRef.current) {
@@ -505,12 +668,20 @@ export default function SketchOverCanvas({
 
     if (ap.size >= 1) { pinchRef.current.lastDist = 0; return; }
 
-    if (tool === 'pen' && draftRef.current) {
+    if ((tool === 'pen' || tool === 'highlighter') && draftRef.current) {
       const d = draftRef.current;
       draftRef.current = null;
       if (d.points.length > 0) {
         const id = genId();
-        commit([...items, { id, type: 'stroke', points: d.points, color: d.color, width: d.width }]);
+        commit([...items, {
+          id,
+          type: 'stroke',
+          points: d.points,
+          color: d.color,
+          width: d.width,
+          pressures: d.pressures,
+          highlight: d.highlight,
+        }]);
 
         const { width: iw, height: ih } = canvasResRef.current;
         if (recordingRef.current && iw > 0 && ih > 0) {
@@ -519,6 +690,10 @@ export default function SketchOverCanvas({
           // it has been laid out has a zoom of zero. That made this Infinity, and
           // an infinite number is not a width the replay could ever store.
           const penWidth = Number.isFinite(d.width) && d.width > 0 ? d.width : lineWidth;
+          const spread = d.pressures.length
+            ? Math.max(...d.pressures) - Math.min(...d.pressures)
+            : 0;
+          const varies = spread > 0.08;
           emit({
             t: startedAt,
             k: 'stroke',
@@ -527,9 +702,14 @@ export default function SketchOverCanvas({
             // Held as a fraction of the image width, so a line drawn on a laptop
             // keeps its weight when it replays on a phone.
             wd: Math.min(penWidth / iw, 0.2),
+            // Pressure rides in an optional fourth slot. A stroke whose weight
+            // never really varied sends three, so a steady mouse line does not
+            // pay for a number that says nothing. See sketch-timeline.ts.
             p: d.points.map((point, i) => {
               const at = normPoint(point, iw, ih);
-              return [Math.max(0, Math.round((d.times[i] ?? startedAt) - startedAt)), at.x, at.y];
+              const dt = Math.max(0, Math.round((d.times[i] ?? startedAt) - startedAt));
+              if (!varies) return [dt, at.x, at.y] as [number, number, number];
+              return [dt, at.x, at.y, Math.round((d.pressures[i] ?? 1) * 100) / 100] as [number, number, number, number];
             }),
           });
         }
@@ -696,6 +876,33 @@ export default function SketchOverCanvas({
         sx={{ flex: 1, overflow: 'hidden', position: 'relative', bgcolor: '#2a2a2a', cursor }}
         onWheel={handleWheel}
       >
+        {bgError && (
+          <Box
+            role="alert"
+            sx={{
+              position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: 1.5, px: 3, textAlign: 'center',
+            }}
+          >
+            <ImageNotSupportedOutlinedIcon sx={{ fontSize: 40, color: 'rgba(255,255,255,0.6)' }} />
+            <Typography sx={{ color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>
+              This drawing could not be loaded
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)', maxWidth: 360 }}>
+              Marking it up needs the image itself, not just a preview. Check the connection and try
+              again, or close and reopen the review.
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setLoadAttempt((n) => n + 1)}
+              sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.5)', minHeight: 44, textTransform: 'none' }}
+            >
+              Try again
+            </Button>
+          </Box>
+        )}
+
         {canvasRes.width > 0 && (
           <canvas
             ref={canvasRef}
@@ -785,12 +992,23 @@ export default function SketchOverCanvas({
         display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1,
         borderRadius: 0, flexWrap: 'wrap', flexShrink: 0,
       }}>
-        <ToggleButtonGroup value={tool} exclusive onChange={(_, v) => v && setTool(v)} size="small">
-          <ToggleButton value="pen" sx={{ px: 1.5, gap: 0.5, textTransform: 'none' }}>
+        {/* aria-label on each, so the name survives the label hiding on a phone. */}
+        <ToggleButtonGroup
+          value={tool}
+          exclusive
+          onChange={(_, v) => v && setTool(v)}
+          size="small"
+          sx={{ '& .MuiToggleButton-root': { minHeight: 44 } }}
+        >
+          <ToggleButton value="pen" aria-label="Pen" sx={{ px: 1.5, gap: 0.5, textTransform: 'none' }}>
             <CreateOutlinedIcon sx={{ fontSize: 18 }} />
             <Typography variant="caption" sx={{ display: { xs: 'none', sm: 'inline' } }}>Pen</Typography>
           </ToggleButton>
-          <ToggleButton value="eraser" sx={{ px: 1.5, gap: 0.5, textTransform: 'none' }}>
+          <ToggleButton value="highlighter" aria-label="Highlighter" sx={{ px: 1.5, gap: 0.5, textTransform: 'none' }}>
+            <BorderColorOutlinedIcon sx={{ fontSize: 18 }} />
+            <Typography variant="caption" sx={{ display: { xs: 'none', sm: 'inline' } }}>Highlight</Typography>
+          </ToggleButton>
+          <ToggleButton value="eraser" aria-label="Eraser" sx={{ px: 1.5, gap: 0.5, textTransform: 'none' }}>
             <Box sx={{
               width: 16, height: 16, borderRadius: '50%', border: '2px solid',
               borderColor: tool === 'eraser' ? 'primary.main' : 'text.secondary',
@@ -798,40 +1016,91 @@ export default function SketchOverCanvas({
             }} />
             <Typography variant="caption" sx={{ display: { xs: 'none', sm: 'inline' } }}>Eraser</Typography>
           </ToggleButton>
-          <ToggleButton value="text" sx={{ px: 1.5, gap: 0.5, textTransform: 'none' }}>
+          <ToggleButton value="text" aria-label="Text" sx={{ px: 1.5, gap: 0.5, textTransform: 'none' }}>
             <TextFieldsIcon sx={{ fontSize: 18 }} />
             <Typography variant="caption" sx={{ display: { xs: 'none', sm: 'inline' } }}>Text</Typography>
           </ToggleButton>
         </ToggleButtonGroup>
 
-        {/* Color picker */}
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          {COLORS.map((c) => (
-            <Box
-              key={c}
-              onClick={() => { setColor(c); if (tool === 'eraser') setTool('pen'); }}
-              sx={{
-                width: 28, height: 28, borderRadius: '50%', bgcolor: c, cursor: 'pointer',
-                border: color === c && tool !== 'eraser' ? '3px solid' : '2px solid',
-                borderColor: color === c && tool !== 'eraser' ? 'primary.main' : 'divider',
-                transition: 'transform 0.1s',
-                '&:hover': { transform: 'scale(1.15)' },
-              }}
-            />
-          ))}
+        {/* What kind of mark this is, which is also what colour it is. */}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {COLORS.map((c) => {
+            const active = color === c.hex && tool !== 'eraser';
+            const pick = () => { setColor(c.hex); if (tool === 'eraser') setTool('pen'); };
+            return (
+              <Tooltip key={c.hex} title={c.label}>
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  aria-label={c.label}
+                  aria-pressed={active}
+                  onClick={pick}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+                  }}
+                  sx={{
+                    width: 44, height: 44, borderRadius: '50%', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                    '&:hover > *': { transform: 'scale(1.12)' },
+                  }}
+                >
+                  <Box sx={{
+                    width: 26, height: 26, borderRadius: '50%', bgcolor: c.hex,
+                    border: active ? '3px solid' : '2px solid',
+                    borderColor: active ? 'primary.main' : 'divider',
+                    transition: 'transform 0.1s',
+                  }} />
+                </Box>
+              </Tooltip>
+            );
+          })}
         </Box>
 
-        {/* Size (pen thickness / text size) */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: 'text.secondary' }} />
-          <Slider
-            value={lineWidth}
-            onChange={(_, v) => setLineWidth(v as number)}
-            min={1} max={12} step={1} size="small"
-            sx={{ width: 80 }}
-            aria-label={tool === 'text' ? 'Text size' : 'Pen thickness'}
-          />
-          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: 'text.secondary' }} />
+        {/* The text tool sizes comments; everything else sizes the nib.
+            Fixed width on the slot: the two groups are not quite the same size,
+            and letting the toolbar reflow made every other control jump sideways
+            the moment you picked up the text tool. */}
+        <Box sx={{ display: 'flex', justifyContent: 'center', minWidth: 168 }}>
+        {tool === 'text' ? (
+          <ToggleButtonGroup
+            value={textSize}
+            exclusive
+            onChange={(_, v) => v && setTextSize(v as TextSize)}
+            size="small"
+            aria-label="Comment size"
+            sx={{ '& .MuiToggleButton-root': { minHeight: 44, px: 1.5 } }}
+          >
+            {(Object.keys(TEXT_FRACTIONS) as TextSize[]).map((key) => (
+              <ToggleButton key={key} value={key} aria-label={`Comment size ${key}`}>
+                <Typography sx={{
+                  fontSize: key === 'S' ? 11 : key === 'M' ? 13 : 16,
+                  fontWeight: 700, lineHeight: 1,
+                }}>
+                  Aa
+                </Typography>
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        ) : (
+          <ToggleButtonGroup
+            value={nib}
+            exclusive
+            onChange={(_, v) => v && setNib(v as NibKey)}
+            size="small"
+            aria-label="Nib size"
+            sx={{ '& .MuiToggleButton-root': { minHeight: 44, px: 1.5 } }}
+          >
+            {NIBS.map((n) => (
+              <ToggleButton key={n.key} value={n.key} aria-label={n.label}>
+                <Box sx={{
+                  width: 4 + n.width, height: 4 + n.width, borderRadius: '50%',
+                  bgcolor: nib === n.key ? 'primary.main' : 'text.secondary',
+                }} />
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        )}
         </Box>
       </Paper>
     </Box>
