@@ -17,7 +17,7 @@
  * checkpoints created on the server as soon as a video is attached.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Box, Button, Skeleton, Snackbar, Typography, useMediaQuery, useTheme } from '@neram/ui';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
@@ -38,8 +38,10 @@ import {
 } from '@/lib/recordings-nav';
 import { FALLBACK_TRACK_LANGUAGES } from '@/lib/track-languages';
 import { detectTranscriptScript, transcriptLanguageConflict } from '@/lib/transcript-language';
+import { copyFailureMessage, libraryDestinationPath } from '@/lib/library-copy';
 import AddVideoPanel from './AddVideoPanel';
 import ConfirmVideoSheet from './ConfirmVideoSheet';
+import CopyToLibrarySheet, { type CopyPhase, type CopyToLibraryFile } from './CopyToLibrarySheet';
 import LanguageTabs, { panelId, tabId, type LanguageTab } from './LanguageTabs';
 import PasteLinkSheet from './PasteLinkSheet';
 import RecordingSteps, { type RecordingBusy } from './RecordingSteps';
@@ -49,11 +51,15 @@ import StickyActionBar from './StickyActionBar';
 import TrackPreviewPlayer from './TrackPreviewPlayer';
 import {
   authedJson,
+  copyToLibraryUrl,
   RecordingsApiError,
   tracksUrl,
   trackUrl,
   type ChapterResponse,
+  type CopyProgressResponse,
+  type CopyToLibraryResponse,
   type PrepareResponse,
+  type ResolvedLinkItem,
   type ResolveLinkResponse,
   type TracksResponse,
 } from './recordings-api';
@@ -80,6 +86,39 @@ type Confirm =
   | { kind: 'reset_progress'; row: TrackRow; attempts: number; vtt: string | null; redo: boolean }
   | { kind: 'script'; row: TrackRow; text: string; message: string; moveTo: { code: string; label: string } | null }
   | null;
+
+/**
+ * Copying one language's OneDrive video into the Neram library. One copy at a
+ * time: a second is refused until the first is attached or given up.
+ */
+interface CopyJob {
+  code: string;
+  /** What to copy: the attached recording's address, or a pasted file's ids. */
+  ref: VideoRef;
+  file: CopyToLibraryFile;
+  status: CopyPhase;
+  /** The server's sealed handle on the running copy, once Graph has accepted it. */
+  operation: string | null;
+  startedAt: number | null;
+  /** Bumped on every progress check, so the next one is scheduled even when nothing changed. */
+  polls: number;
+  /** The sheet is showing. A running copy carries on while it is hidden. */
+  open: boolean;
+}
+
+/** A pasted OneDrive link, and what copying it would take. */
+interface PasteCopy {
+  code: string;
+  ref: VideoRef;
+  file: CopyToLibraryFile;
+  message: string;
+}
+
+/** An hour-long class copies in minutes. After this the page stops asking; the copy itself carries on. */
+const COPY_GIVE_UP_MS = 20 * 60 * 1000;
+
+/** Survives a reload, so a running copy is picked up again instead of forgotten. */
+const copyStorageKey = (fileId: string, code: string) => `nexus:library-copy:${fileId}:${code}`;
 
 interface Snack {
   message: string;
@@ -112,6 +151,8 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [legacyCleared, setLegacyCleared] = useState(false);
+  const [copyJob, setCopyJob] = useState<CopyJob | null>(null);
+  const [pasteCopy, setPasteCopy] = useState<PasteCopy | null>(null);
 
   const languages = recordings.data?.languages?.length ? recordings.data.languages : FALLBACK_TRACK_LANGUAGES;
   const tracks = useMemo(() => recordings.data?.tracks ?? [], [recordings.data]);
@@ -132,7 +173,11 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
   const selectedTrack = viewOf(selectedRow);
   const selectedLabel = selectedRow?.label ?? selectedCode;
   const plan = planRecording(selectedTrack, selectedLabel);
-  const selectedBusy = busy[selectedCode] ?? null;
+  // A copy holds its language from the moment it starts until the copy is
+  // attached, derived from the copy itself so no busy flag can be left behind.
+  const copyingCode =
+    copyJob && ['starting', 'copying', 'attaching'].includes(copyJob.status.phase) ? copyJob.code : null;
+  const selectedBusy: RecordingBusy = busy[selectedCode] ?? (copyingCode === selectedCode ? 'copying' : null);
 
   const thumbnail = useAuthSWR<{ url: string | null }>(
     tokenReady && selectedTrack && selectedTrack.video_source !== 'youtube'
@@ -294,6 +339,7 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
     const ref: VideoRef = { url };
     setPasteChecking(true);
     setPasteError(null);
+    setPasteCopy(null);
     try {
       const res = await resolveLink(code, ref);
       setPasteFor(null);
@@ -301,10 +347,19 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
       loadPendingThumb(res);
     } catch (err) {
       const e = err instanceof RecordingsApiError ? err : null;
+      const inOneDrive = e?.code === 'RECORDING_IN_ONEDRIVE' ? (e.body.item as ResolvedLinkItem | undefined) : undefined;
       if (e?.code === 'RECORDING_UNREACHABLE') {
         // SharePoint did not answer: the only case that can be attached anyway.
         setPasteFor(null);
         setPending({ code, ref, resolved: null, error: e.message, errorCode: e.code });
+      } else if (e && inOneDrive?.drive_id && inOneDrive.item_id) {
+        // The right video in the wrong place: offer the copy rather than a refusal.
+        setPasteCopy({
+          code,
+          ref: { drive_id: inOneDrive.drive_id, item_id: inOneDrive.item_id },
+          file: { name: inOneDrive.name, sizeBytes: inOneDrive.size_bytes, durationSeconds: inOneDrive.duration_seconds },
+          message: e.message,
+        });
       } else {
         setPasteError(errorText(err, 'Could not check that link.'));
       }
@@ -313,9 +368,15 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
     }
   };
 
-  const attachVideo = async (opts: { keepCheckpoints: boolean; force?: boolean }) => {
-    const choice = pending;
-    if (!choice) return;
+  /**
+   * Save a video onto a language. The choice is passed in rather than read from
+   * `pending`, so a finished copy can be attached the moment it lands, with no
+   * state update to wait for.
+   */
+  const attachVideo = async (
+    choice: PendingVideo,
+    opts: { keepCheckpoints: boolean; force?: boolean; copied?: boolean },
+  ) => {
     const row = rows.find((r) => r.code === choice.code);
     if (!row) return;
 
@@ -334,13 +395,21 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
             body: JSON.stringify({ language: row.code, ...refBody, ...(opts.force ? { force: true } : {}) }),
           });
 
-      setPending(null);
+      if (!opts.copied) setPending(null);
       setPlaying(null);
       const trackId = row.track?.id ?? res.track.id;
       const cleared = 'clearedCheckpoints' in res && res.clearedCheckpoints;
       const restoredWithCheckpoints = 'restored' in res && res.restored && !res.checkpointsCleared;
 
-      if (row.track) {
+      if (opts.copied) {
+        notify(
+          !row.track
+            ? `Copied the ${row.label} video into the Neram library and added it.`
+            : cleared
+              ? `Copied the ${row.label} video into the Neram library. The copy did not match, so its checkpoints were removed.`
+              : `Copied the ${row.label} video into the Neram library. Its checkpoints and student progress were kept.`,
+        );
+      } else if (row.track) {
         notify(
           cleared
             ? `Replaced the ${row.label} video. The checkpoints made for the old video were removed.`
@@ -359,12 +428,232 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
         void prepareTrack(row.code, row.label, trackId);
       }
     } catch (err) {
+      // The copy says what went wrong in its own sheet.
+      if (opts.copied) throw err;
       const e = err instanceof RecordingsApiError ? err : null;
       setPending({ ...choice, error: errorText(err, 'Could not save the video.'), errorCode: e?.code ?? null });
     } finally {
       setBusyFor(row.code, null);
     }
   };
+
+  /* ── Copying a OneDrive video into the library ────────────────────────── */
+
+  const rememberCopy = (job: CopyJob) => {
+    try {
+      sessionStorage.setItem(
+        copyStorageKey(fileId, job.code),
+        JSON.stringify({
+          ref: job.ref,
+          file: job.file,
+          operation: job.operation,
+          startedAt: job.startedAt,
+        }),
+      );
+    } catch {
+      // No storage (a private window): a reload loses the progress, and Copy again recovers the file.
+    }
+  };
+
+  const forgetCopy = (code: string) => {
+    try {
+      sessionStorage.removeItem(copyStorageKey(fileId, code));
+    } catch {
+      /* as above */
+    }
+  };
+
+  const failCopy = (operation: string | null, message: string) =>
+    setCopyJob((prev) =>
+      prev && prev.operation === operation ? { ...prev, open: true, status: { phase: 'failed', message } } : prev,
+    );
+
+  const openCopy = (job: Pick<CopyJob, 'code' | 'ref' | 'file'>) => {
+    if (copyingCode && copyJob?.code === job.code) {
+      setCopyJob({ ...copyJob, open: true });
+      return;
+    }
+    if (copyingCode) {
+      notify('Another video is being copied. Wait for it to finish, then copy this one.', 'info');
+      return;
+    }
+    setCopyJob({
+      ...job,
+      status: { phase: 'confirm' },
+      operation: null,
+      startedAt: null,
+      polls: 0,
+      open: true,
+    });
+  };
+
+  const openCopyForTrack = (row: TrackRow) => {
+    const track = viewOf(row);
+    if (!track?.recording_url) return;
+    openCopy({
+      code: row.code,
+      ref: { url: track.recording_url },
+      file: {
+        name: track.recording?.name || track.recording_file_name || 'This video',
+        sizeBytes: track.recording?.size_bytes ?? null,
+        durationSeconds: track.recording?.duration_seconds ?? track.video_duration_seconds ?? null,
+      },
+    });
+  };
+
+  /** The copy is in the library: attach it, keeping what was made from the original. */
+  const attachCopy = async (job: CopyJob, item: ResolvedLinkItem) => {
+    forgetCopy(job.code);
+    setCopyJob((prev) => (prev && prev.code === job.code ? { ...prev, status: { phase: 'attaching' } } : prev));
+    try {
+      await attachVideo(
+        { code: job.code, ref: { drive_id: item.drive_id, item_id: item.item_id }, resolved: null, error: null, errorCode: null },
+        { keepCheckpoints: true, copied: true },
+      );
+      setCopyJob(null);
+    } catch (err) {
+      setCopyJob((prev) =>
+        prev && prev.code === job.code
+          ? {
+              ...prev,
+              open: true,
+              status: {
+                phase: 'failed',
+                message: errorText(err, 'The copy finished, but it could not be attached. Press Try again.'),
+              },
+            }
+          : prev,
+      );
+    }
+  };
+
+  const startCopy = async () => {
+    if (!copyJob) return;
+    const starting: CopyJob = {
+      ...copyJob,
+      status: { phase: 'starting' },
+      operation: null,
+      startedAt: null,
+      polls: 0,
+      open: true,
+    };
+    setCopyJob(starting);
+    const refBody =
+      'url' in starting.ref ? { url: starting.ref.url } : { drive_id: starting.ref.drive_id, item_id: starting.ref.item_id };
+    try {
+      const res = await call<CopyToLibraryResponse>(copyToLibraryUrl(fileId), {
+        method: 'POST',
+        body: JSON.stringify(refBody),
+      });
+      if (res.status === 'done') {
+        await attachCopy(starting, res.item);
+        return;
+      }
+      const running: CopyJob = {
+        ...starting,
+        status: { phase: 'copying', percent: null },
+        operation: res.operation,
+        startedAt: Date.now(),
+      };
+      rememberCopy(running);
+      setCopyJob(running);
+    } catch (err) {
+      failCopy(null, errorText(err, copyFailureMessage(null)));
+    }
+  };
+
+  const closeCopy = () => {
+    if (!copyJob) return;
+    const { phase } = copyJob.status;
+    // A running copy is only hidden; the card shows it and reopens this.
+    if (phase === 'copying') setCopyJob({ ...copyJob, open: false });
+    else if (phase === 'confirm' || phase === 'failed') setCopyJob(null);
+  };
+
+  const copyOperation = copyJob?.operation ?? null;
+  const copyPolls = copyJob?.polls ?? 0;
+  const copyRunning = copyJob?.status.phase === 'copying';
+
+  /**
+   * Ask how the copy is getting on, sooner at first and less often as it runs,
+   * and only while one is running, so the page costs a few calls per copy.
+   */
+  useEffect(() => {
+    if (!copyJob || !copyRunning || !copyOperation) return;
+    const job = copyJob;
+    const elapsed = Date.now() - (job.startedAt ?? Date.now());
+    if (elapsed > COPY_GIVE_UP_MS) {
+      forgetCopy(job.code);
+      failCopy(job.operation, copyFailureMessage('COPY_TIMEOUT'));
+      return;
+    }
+
+    let cancelled = false;
+    const delay = elapsed < 30_000 ? 3_000 : elapsed < 120_000 ? 5_000 : 8_000;
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await call<CopyProgressResponse>(
+          `${copyToLibraryUrl(fileId)}?operation=${encodeURIComponent(job.operation!)}`,
+        );
+        if (cancelled) return;
+        if (res.status === 'done') {
+          await attachCopy(job, res.item);
+        } else if (res.status === 'failed') {
+          forgetCopy(job.code);
+          failCopy(job.operation, res.error);
+        } else {
+          setCopyJob((prev) =>
+            prev && prev.operation === job.operation
+              ? { ...prev, polls: prev.polls + 1, status: { phase: 'copying', percent: res.percent } }
+              : prev,
+          );
+        }
+      } catch (err) {
+        if (cancelled) return;
+        // Refused outright (not a copy's address, or signed out): asking again will not help.
+        if (err instanceof RecordingsApiError && err.status >= 400 && err.status < 500) {
+          forgetCopy(job.code);
+          failCopy(job.operation, err.message);
+          return;
+        }
+        // A check that did not get through is not a failed copy. Ask again.
+        setCopyJob((prev) => (prev && prev.operation === job.operation ? { ...prev, polls: prev.polls + 1 } : prev));
+      }
+    }, delay);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [copyOperation, copyPolls, copyRunning]);
+
+  // A copy started before a reload carries on in SharePoint: pick its progress up again.
+  useEffect(() => {
+    if (!recordings.data || copyJob) return;
+    for (const row of rows) {
+      let saved: Partial<Pick<CopyJob, 'ref' | 'file' | 'operation' | 'startedAt'>> | null = null;
+      try {
+        saved = JSON.parse(sessionStorage.getItem(copyStorageKey(fileId, row.code)) || 'null');
+      } catch {
+        saved = null;
+      }
+      if (saved?.operation && saved.ref && saved.file) {
+        setCopyJob({
+          code: row.code,
+          ref: saved.ref,
+          file: saved.file,
+          status: { phase: 'copying', percent: null },
+          operation: saved.operation,
+          startedAt: Number(saved.startedAt) || Date.now(),
+          polls: 0,
+          open: false,
+        });
+        return;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordings.data]);
 
   /* ── Publishing, moving, removing ─────────────────────────────────────── */
 
@@ -449,6 +738,9 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
       case 'find_video':
       case 'replace_video':
         setPickerFor(row.code);
+        return;
+      case 'copy_to_library':
+        openCopyForTrack(row);
         return;
       case 'paste_link':
         setPasteError(null);
@@ -622,6 +914,12 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
                     onMove={(code) => void moveLanguage(selectedRow, code)}
                     onRemove={() => setConfirm({ kind: 'remove', row: selectedRow })}
                     busy={!!selectedBusy}
+                    onCopyToLibrary={() => openCopyForTrack(selectedRow)}
+                    copying={
+                      copyJob?.code === selectedCode && copyJob.status.phase === 'copying'
+                        ? { percent: copyJob.status.percent }
+                        : null
+                    }
                   />
                   <RecordingSteps
                     label={selectedLabel}
@@ -641,10 +939,17 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
                     <Button
                       variant="contained"
                       onClick={() => plan.primary && handleAction(selectedRow, plan.primary.kind)}
-                      disabled={!!selectedBusy}
+                      // A running copy stays pressable here too, to show its progress again.
+                      disabled={!!selectedBusy && !(selectedBusy === 'copying' && copyRunning)}
                       sx={{ textTransform: 'none', fontWeight: 700 }}
                     >
-                      {selectedBusy === 'preparing' ? 'Creating checkpoints...' : plan.primary.label}
+                      {selectedBusy === 'preparing'
+                        ? 'Creating checkpoints...'
+                        : selectedBusy === 'copying'
+                          ? copyJob?.status.phase === 'copying' && copyJob.status.percent != null
+                            ? `Copying... ${copyJob.status.percent}%`
+                            : 'Copying...'
+                          : plan.primary.label}
                     </Button>
                   </StickyActionBar>
                 )}
@@ -690,8 +995,23 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
         label={pasteLabel}
         busy={pasteChecking}
         error={pasteError}
-        onClose={() => setPasteFor(null)}
+        onClose={() => {
+          setPasteFor(null);
+          setPasteCopy(null);
+        }}
         onSubmit={(url) => void onPaste(url)}
+        copyOffer={pasteCopy && pasteCopy.code === pasteFor ? { message: pasteCopy.message } : null}
+        onCopy={() => {
+          if (!pasteCopy) return;
+          const offer = pasteCopy;
+          setPasteFor(null);
+          setPasteCopy(null);
+          openCopy({ code: offer.code, ref: offer.ref, file: offer.file });
+        }}
+        onEdit={() => {
+          setPasteCopy(null);
+          setPasteError(null);
+        }}
       />
 
       <ConfirmVideoSheet
@@ -709,11 +1029,39 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
           setPending(null);
           if (code) setPickerFor(code);
         }}
-        onConfirm={(opts) => void attachVideo(opts)}
+        onConfirm={(opts) => {
+          if (pending) void attachVideo(pending, opts);
+        }}
         onForce={
-          pending && 'url' in pending.ref ? () => void attachVideo({ keepCheckpoints: false, force: true }) : undefined
+          pending && 'url' in pending.ref
+            ? () => void attachVideo(pending, { keepCheckpoints: false, force: true })
+            : undefined
         }
       />
+
+      {/* ── Copying a OneDrive video into the library ──────────────────── */}
+      {copyJob && (
+        <CopyToLibrarySheet
+          open={copyJob.open}
+          label={rows.find((r) => r.code === copyJob.code)?.label ?? copyJob.code}
+          file={copyJob.file}
+          destination={libraryDestinationPath({
+            folderUrl,
+            rootPath: recordings.data?.library?.folder_path,
+            chapterTitle,
+          })}
+          keepsCheckpoints={(rows.find((r) => r.code === copyJob.code)?.track?.section_count ?? 0) > 0}
+          status={copyJob.status}
+          onClose={closeCopy}
+          onCopy={() => void startCopy()}
+          onChooseAnother={() => {
+            const code = copyJob.code;
+            forgetCopy(code);
+            setCopyJob(null);
+            setPickerFor(code);
+          }}
+        />
+      )}
 
       {/* ── Questions ───────────────────────────────────────────────────── */}
       <ResponsiveSheet

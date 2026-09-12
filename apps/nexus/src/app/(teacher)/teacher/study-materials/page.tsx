@@ -55,7 +55,9 @@ import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
+import SlideshowOutlinedIcon from '@mui/icons-material/SlideshowOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { slidesNeedFix } from '@/lib/slides-messages';
 import StudyUploadDialog from '@/components/study-materials/StudyUploadDialog';
 import DownloadGrantDialog, { type GrantTarget } from '@/components/study-materials/DownloadGrantDialog';
 import StudyTestAuthorDialog from '@/components/study-materials/StudyTestAuthorDialog';
@@ -647,6 +649,36 @@ function TeacherStudyMaterials() {
           }}
         />
       ))}
+      {/* The class PowerPoint. Amber only for a problem a teacher can fix:
+          SharePoint being busy clears on its own and students keep the last
+          good slides meanwhile (slidesNeedFix). */}
+      {slidesNeedFix(file.slides_problem) ? (
+        <Chip
+          size="small"
+          icon={<ErrorOutlineIcon />}
+          label="Slides need a fix"
+          sx={{
+            height: 20,
+            fontSize: '0.6rem',
+            '& .MuiChip-icon': { fontSize: '0.78rem' },
+            bgcolor: alpha(theme.palette.warning.main, 0.18),
+            color: 'warning.dark',
+          }}
+        />
+      ) : file.has_slides ? (
+        <Chip
+          size="small"
+          icon={<SlideshowOutlinedIcon />}
+          label="Slides"
+          sx={{
+            height: 20,
+            fontSize: '0.6rem',
+            '& .MuiChip-icon': { fontSize: '0.78rem' },
+            bgcolor: alpha(theme.palette.primary.main, 0.1),
+            color: 'primary.main',
+          }}
+        />
+      ) : null}
       {file.recording && (
         <Chip
           size="small"
@@ -1079,6 +1111,19 @@ function TeacherStudyMaterials() {
             secondaryTypographyProps={{ variant: 'caption' }}
           />
         </MenuItem>
+        {/* The deck the class is taught from, read by students beside this PDF.
+            It opens the chapter page's Slides tab, whose Back returns to this folder. */}
+        {fileMenu?.file.kind === 'pdf' && (
+          <MenuItem onClick={() => { if (fileMenu) router.push(`/teacher/study-materials/${fileMenu.file.id}?tab=slides`); setFileMenu(null); }}>
+            <ListItemIcon><SlideshowOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText
+              primary="Slides (PowerPoint)"
+              secondary="Show the class deck beside this PDF"
+              primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+          </MenuItem>
+        )}
         <MenuItem onClick={() => { if (fileMenu) router.push(`/teacher/study-materials/${fileMenu.file.id}?tab=students`); setFileMenu(null); }}>
           <ListItemIcon><GroupsOutlinedIcon fontSize="small" /></ListItemIcon>
           <ListItemText>View completion</ListItemText>

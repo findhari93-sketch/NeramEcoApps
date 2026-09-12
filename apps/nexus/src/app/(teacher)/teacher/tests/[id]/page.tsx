@@ -105,7 +105,7 @@ export default function TestDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const testId = params?.id;
-  const { getToken, isTeacher, activeClassroom } = useNexusAuthContext();
+  const { getToken, getTeacherToken, isTeacher, activeClassroom } = useNexusAuthContext();
 
   const [test, setTest] = useState<DetailTest | null>(null);
   /** The archived import row, or null for a test built before it existed. */
@@ -546,6 +546,7 @@ export default function TestDetailPage() {
           testId={test.id}
           authFetch={authFetch}
           getToken={getToken}
+          getTeacherToken={getTeacherToken}
           view={tab === 'students' ? 'students' : 'questions'}
           runId={runId}
           onRunIdChange={setRunId}

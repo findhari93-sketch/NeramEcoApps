@@ -6,6 +6,7 @@ import {
   recordingPolicyProblem,
   resolveVideoItemCached,
   sameRecording,
+  videoItemDto,
   videoItemMessage,
   VideoItemError,
   type RecordingFingerprint,
@@ -29,18 +30,8 @@ import {
  *                                      NO_ACCESS | LINK_NOT_RECOGNISED | RECORDING_UNREACHABLE
  */
 
-function itemDto(item: ResolvedVideoItem) {
-  return {
-    drive_id: item.driveId,
-    item_id: item.itemId,
-    name: item.name,
-    size_bytes: item.sizeBytes,
-    duration_seconds: item.durationSeconds,
-    web_url: item.webUrl,
-    folder_path: item.folderPath,
-    drive_type: item.driveType,
-  };
-}
+// Shared with the copy-to-library route, so both hand the page the same shape.
+const itemDto = videoItemDto;
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {

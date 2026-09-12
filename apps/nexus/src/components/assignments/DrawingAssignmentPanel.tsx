@@ -4,7 +4,8 @@
  * Student view of a DRAWING-type assignment. Submitting routes through the
  * existing Drawing Review channel (DrawingSubmissionSheet -> /api/drawing/*),
  * and once the teacher has evaluated it this shows their overlay, corrected
- * reference, region notes, rating and feedback, with a redo when requested.
+ * reference, region notes, voice note, rating and feedback, with a redo when
+ * requested.
  */
 import { useMemo, useState } from 'react';
 import {
@@ -13,7 +14,10 @@ import {
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import type { GalleryReactionType } from '@neram/database/types';
 import DrawingSubmissionSheet from '@/components/drawings/DrawingSubmissionSheet';
+import VoiceNotePlayer from '@/components/drawings/voice/VoiceNotePlayer';
+import { useVoiceListenReporter } from '@/components/drawings/voice/useVoiceListenReporter';
 import type { SubmitMode } from '@/lib/assignment-submit-window';
+import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 import GradeDisplay from './GradeDisplay';
 import ReactionAppreciation from './ReactionAppreciation';
 
@@ -27,7 +31,11 @@ export interface DrawingSubmissionView {
   reaction: GalleryReactionType | null;
   tutor_feedback: string | null;
   status: string; // submitted | under_review | redo | completed | reviewed
-  ai_overlay_annotations: Array<{ area?: string; label?: string; severity?: string }> | null;
+  /**
+   * Teacher region notes. Current rows carry `comment`; rows written before the
+   * region editor carry `label` or `area`, so all three are read.
+   */
+  ai_overlay_annotations: Array<{ area?: string; label?: string; severity?: string; comment?: string }> | null;
   submitted_at: string;
 }
 
@@ -42,6 +50,7 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
 export default function DrawingAssignmentPanel({
   assignmentId,
   submission,
+  voice = null,
   evaluationType = 'stars',
   maxMarks = 5,
   submitMode = 'first',
@@ -51,6 +60,8 @@ export default function DrawingAssignmentPanel({
 }: {
   assignmentId: string;
   submission: DrawingSubmissionView | null;
+  /** The voice note the teacher sent on this attempt, if any. */
+  voice?: VoiceFeedbackView | null;
   evaluationType?: 'marks' | 'stars';
   maxMarks?: number;
   /** Resolved server-side, the same window the document path uses. */
@@ -61,6 +72,7 @@ export default function DrawingAssignmentPanel({
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'mine' | 'overlay' | 'reference'>('mine');
+  const reportListen = useVoiceListenReporter(getToken, voice?.id);
 
   const isReplace = submitMode === 'replace';
   const canRedo = submitMode !== 'locked';
@@ -76,7 +88,10 @@ export default function DrawingAssignmentPanel({
 
   const hasOverlay = !!submission?.reviewed_image_url;
   const hasReference = !!submission?.corrected_image_url;
-  const annotations = (submission?.ai_overlay_annotations || []).filter((a) => a && (a.label || a.area));
+  const annotations = (submission?.ai_overlay_annotations || [])
+    .map((a) => (a ? a.comment || a.label || a.area || '' : ''))
+    .map((text) => text.trim())
+    .filter(Boolean);
 
   return (
     <Box>
@@ -129,6 +144,18 @@ export default function DrawingAssignmentPanel({
             />
           )}
 
+          {voice && (
+            <VoiceNotePlayer
+              url={voice.url}
+              mime={voice.audio_mime}
+              durationMs={voice.duration_ms}
+              title="Voice feedback from your teacher"
+              sketch={voice.sketch}
+              imageUrl={voice.base_image_url}
+              onProgress={reportListen}
+            />
+          )}
+
           {isReviewed && (evaluationType === 'marks' ? submission.tutor_marks != null : submission.tutor_rating != null) && (
             <Stack direction="row" alignItems="center" spacing={1}>
               <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -152,9 +179,9 @@ export default function DrawingAssignmentPanel({
                 What to fix
               </Typography>
               <Stack component="ul" sx={{ pl: 2.2, m: 0, mt: 0.5 }} spacing={0.25}>
-                {annotations.map((a, i) => (
+                {annotations.map((text, i) => (
                   <Typography key={i} component="li" variant="body2">
-                    {a.label || a.area}
+                    {text}
                   </Typography>
                 ))}
               </Stack>
@@ -220,6 +247,8 @@ export default function DrawingAssignmentPanel({
         sourceType="assignment"
         redoFeedback={submission?.status === 'redo' ? submission.tutor_feedback : null}
         referenceImageUrl={submission?.status === 'redo' ? submission.corrected_image_url : null}
+        redoVoice={submission?.status === 'redo' ? voice : null}
+        onRedoVoiceProgress={reportListen}
         getToken={getToken}
         onSubmitted={onChanged}
       />

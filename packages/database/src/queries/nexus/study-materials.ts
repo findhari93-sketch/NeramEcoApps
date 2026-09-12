@@ -2,6 +2,7 @@
 // regenerate with pnpm supabase:gen:types after the migration is applied.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { hasPlacedTestForFiles } from './study-tests';
+import { getSlidesSummaryMap } from './study-slides';
 import type {
   NexusStudyFolder,
   NexusStudyFile,
@@ -854,6 +855,7 @@ export async function listFavorites(
   const favFileIds = favRows.map((f) => f.file_id);
   const progress = await getFileProgressMap(userId, favFileIds, supabase);
   const testSet = await hasPlacedTestForFiles(favFileIds, supabase);
+  const slidesMap = await getSlidesSummaryMap(favFileIds, supabase);
   const now = Date.now();
   const out: (NexusStudyFileDTO & { breadcrumb: { id: string; name: string }[] })[] = [];
   // Preserve favorite order (favRows is newest-first).
@@ -883,6 +885,7 @@ export async function listFavorites(
       active_seconds: p?.active_seconds ?? 0,
       best_score_pct: p?.best_score_pct ?? null,
       has_test: testSet.has(file.id),
+      has_slides: slidesMap.get(file.id)?.servable ?? false,
       recording: fileRecording(file),
       breadcrumb: buildBreadcrumb(folder.id, folderMap),
     });

@@ -17,6 +17,10 @@
  *
  * Each step hands the next one its recipients, so the teacher is never asked
  * to reconstruct a list the app already knows.
+ *
+ * It also owns the student selection, so a finished reopen or message clears it.
+ * On 11 Sept all 26 students stayed selected after a reopen that had already
+ * happened, which reads as "it did not work".
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -48,6 +52,7 @@ import QuestionDoctorDialog from '@/components/tests/QuestionDoctorDialog';
 import QuestionEditDialog from '@/components/tests/QuestionEditDialog';
 import RegradePreviewDialog from '@/components/tests/RegradePreviewDialog';
 import TestMessageDialog, { type MessageRecipient } from '@/components/tests/TestMessageDialog';
+import CountAttemptSheet from '@/components/tests/CountAttemptSheet';
 import { isResultFilter, type ResultFilter } from '@/lib/test-result-filters';
 import {
   DEFAULT_QUESTION_FILTERS,
@@ -56,6 +61,7 @@ import {
   questionFiltersToParams,
   type QuestionFilters,
 } from '@/lib/question-filters';
+import { formatReopenUntil } from '@/lib/reopen-deadline';
 import type { TestMessageTemplate } from '@/lib/test-message-templates';
 
 interface RunSummary {
@@ -110,6 +116,7 @@ export default function TestResultsPanel({
   testId,
   authFetch,
   getToken,
+  getTeacherToken,
   view: controlledView,
   runId: controlledRunId,
   onRunIdChange,
@@ -123,6 +130,13 @@ export default function TestResultsPanel({
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
   /** For the response sheet drawer, which fetches directly rather than via authFetch. */
   getToken: () => Promise<string | null>;
+  /**
+   * The teacher's Graph token, whose scopes carry the Teams chat permissions.
+   * Messages go out with it; getToken's base scopes cannot open a 1:1 chat, which
+   * is why a class send on 11 Sept reached no student's Teams chat. Omitted (the
+   * paper workspace), the base token is used and the receipt says what failed.
+   */
+  getTeacherToken?: () => Promise<string | null>;
   /** Which tab the page is on. Omitted, the panel shows its own switch. */
   view?: 'questions' | 'students';
   /** The run both tabs report on, when the page owns it. Empty means all time. */
@@ -168,6 +182,7 @@ export default function TestResultsPanel({
   const [scoreShown, setScoreShown] = useState<'first' | 'best'>('best');
   const [filter, setFilter] = useState<ResultFilter>(isResultFilter(initialFilter) ? initialFilter : 'all');
   const [qFilters, setQFilters] = useState<QuestionFilters>(freshQuestionFilters);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const [sheet, setSheet] = useState<{ list: StudentResultRow[]; index: number } | null>(null);
   const [acting, setActing] = useState<string | null>(null);
@@ -180,9 +195,34 @@ export default function TestResultsPanel({
   const [message, setMessage] = useState<{
     recipients: MessageRecipient[];
     template: TestMessageTemplate;
+    mode: 'reopen' | 'message';
   } | null>(null);
+  const [countFor, setCountFor] = useState<StudentResultRow | null>(null);
 
   const scoredRun = useRef<string | null>(null);
+
+  /** authFetch, but carrying the token that can post to Teams as the teacher. */
+  const teacherFetch = useCallback(
+    async (url: string, init?: RequestInit) => {
+      if (!getTeacherToken) return authFetch(url, init);
+      const token = await getTeacherToken();
+      if (!token) throw new Error('Not signed in');
+      const res = await fetch(url, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(init?.headers || {}),
+        },
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || 'Request failed');
+      }
+      return res.json();
+    },
+    [authFetch, getTeacherToken],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -213,6 +253,12 @@ export default function TestResultsPanel({
   useEffect(() => {
     load();
   }, [load]);
+
+  // A selection belongs to one run. Carrying it to another would reopen or
+  // message people the teacher picked on a different screen.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [runId]);
 
   /**
    * Keep the student group and the question filters in the URL.
@@ -279,28 +325,44 @@ export default function TestResultsPanel({
     }
   }
 
-  async function bulkReopen(studentIds: string[]) {
+  async function undoCount(row: StudentResultRow) {
     if (!runId) return;
-    setActing('bulk');
+    setActing(row.student_id);
     try {
-      const json = await authFetch(`/api/tests/runs/${runId}/access/bulk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_ids: studentIds, action: 'open' }),
+      await authFetch(`/api/tests/runs/${runId}/credits?student_id=${encodeURIComponent(row.student_id)}`, {
+        method: 'DELETE',
       });
-      const counts = json.data?.counts;
-      // Reported honestly rather than as a blanket success: a partial grant is
-      // the case a teacher most needs to know about, because the students it
-      // missed will not tell them.
-      const ok = counts?.ok ?? studentIds.length;
-      setNotice({
-        text: counts?.failed
-          ? `Reopened for ${counts.ok} of ${counts.requested}. ${counts.failed} could not be opened.`
-          : `Reopened for ${ok} student${ok === 1 ? '' : 's'}.`,
-      });
+      setNotice({ text: `No longer counting ${row.student_name || 'their'} own attempt.` });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reopen for those students');
+      setError(err instanceof Error ? err.message : 'Could not undo that count');
+    } finally {
+      setActing(null);
+    }
+  }
+
+  /**
+   * Students a teacher reopened who turn out to have sat it inside the window.
+   *
+   * On 11 Sept Samruddhi and Inaya were reopened while the exam already had
+   * their sitting through Study Materials. Their window is not closed silently:
+   * the teacher opened it, so the teacher is shown it and closes it.
+   */
+  const reopenedButSat = (rows || []).filter((r) => r.window_open_until && r.sat_via === 'window');
+
+  async function closeReopens(target: StudentResultRow[]) {
+    if (!runId || target.length === 0) return;
+    setActing('bulk');
+    try {
+      await authFetch(`/api/tests/runs/${runId}/access/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_ids: target.map((r) => r.student_id), action: 'close' }),
+      });
+      setNotice({ text: `Closed the reopen for ${target.length} student${target.length === 1 ? '' : 's'}.` });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not close those reopens');
     } finally {
       setActing(null);
     }
@@ -361,6 +423,9 @@ export default function TestResultsPanel({
     setNotice(null);
   }
 
+  const toRecipients = (list: StudentResultRow[]): MessageRecipient[] =>
+    list.map((r) => ({ id: r.student_id, name: r.student_name }));
+
   const waiting = (rows || []).filter((r) => r.access_request_pending);
   const sheetRow = sheet ? (sheet.list[sheet.index] ?? null) : null;
 
@@ -394,6 +459,26 @@ export default function TestResultsPanel({
             their row below.
           </Alert>
         )}
+        {reopenedButSat.length > 0 && (
+          <Alert
+            severity="info"
+            sx={{ mb: 1.5, alignItems: 'center' }}
+            action={
+              <Button
+                color="inherit"
+                disabled={acting === 'bulk'}
+                onClick={() => closeReopens(reopenedButSat)}
+                sx={{ textTransform: 'none', fontWeight: 700, minHeight: 44 }}
+              >
+                Close their reopen
+              </Button>
+            }
+          >
+            {reopenedButSat.length === 1
+              ? `${reopenedButSat[0].student_name || '1 student'} is reopened but already sat this inside the window.`
+              : `${reopenedButSat.length} students you reopened already sat this inside the window.`}
+          </Alert>
+        )}
         <TestResultsStudents
           rows={rows}
           stats={stats}
@@ -404,19 +489,31 @@ export default function TestResultsPanel({
           filter={filter}
           onFilterChange={setFilter}
           acting={acting}
+          selected={selected}
+          onSelectedChange={setSelected}
           onOpenSheet={(row, ordered) => setSheet({ list: ordered, index: ordered.indexOf(row) })}
           onSetAccess={setAccess}
           onDecide={decide}
-          onBulkReopen={bulkReopen}
-          onMessage={(selectedRows) =>
+          onReopen={(list) =>
             setMessage({
-              recipients: selectedRows.map((r) => ({ id: r.student_id, name: r.student_name })),
+              recipients: toRecipients(list),
               // The group the teacher filtered to is the strongest hint at what
-              // they mean to say, so the composer opens on that template rather
-              // than making them pick it again.
-              template: filter === 'not_done' ? 'missed' : 'redo',
+              // they mean to say, so the sheet opens on that template rather than
+              // making them pick it again.
+              template:
+                filter === 'not_done' || list.every((r) => r.attempts === 0) ? 'missed' : 'redo',
+              mode: 'reopen',
             })
           }
+          onMessage={(list) =>
+            setMessage({
+              recipients: toRecipients(list),
+              template: filter === 'not_done' ? 'missed' : 'redo',
+              mode: 'message',
+            })
+          }
+          onCountAttempt={(row) => setCountFor(row)}
+          onUndoCount={undoCount}
           onExportCsv={exportCsv}
         />
       </>
@@ -455,12 +552,12 @@ export default function TestResultsPanel({
                 <Button
                   color="inherit"
                   onClick={showFixed}
-                  sx={{ textTransform: 'none', fontWeight: 700, minHeight: 40 }}
+                  sx={{ textTransform: 'none', fontWeight: 700, minHeight: 44 }}
                 >
                   Show fixed
                 </Button>
               )}
-              <IconButton aria-label="Dismiss" color="inherit" onClick={() => setNotice(null)} sx={{ width: 40, height: 40 }}>
+              <IconButton aria-label="Dismiss" color="inherit" onClick={() => setNotice(null)} sx={{ width: 44, height: 44 }}>
                 <CloseIcon fontSize="small" />
               </IconButton>
             </Box>
@@ -611,26 +708,58 @@ export default function TestResultsPanel({
           // from their teacher is how trust in the marking goes.
           if (movedIds.length > 0 && runId) {
             const moved = (rows || []).filter((r) => movedIds.includes(r.student_id));
-            setMessage({
-              recipients: moved.map((r) => ({ id: r.student_id, name: r.student_name })),
-              template: 'regraded',
-            });
+            setMessage({ recipients: toRecipients(moved), template: 'regraded', mode: 'message' });
           }
         }}
       />
+
+      {runId && (
+        <CountAttemptSheet
+          open={countFor !== null}
+          onClose={() => setCountFor(null)}
+          placementId={runId}
+          student={countFor ? { id: countFor.student_id, name: countFor.student_name } : null}
+          authFetch={authFetch}
+          onCounted={(counted) => {
+            const row = countFor;
+            setCountFor(null);
+            const pct = counted.percentage == null ? 'their attempt' : `${Math.round(counted.percentage)}%`;
+            setNotice({
+              text: `Counted ${pct} for ${row?.student_name || 'them'}.${counted.closedReopen ? ' Their reopen is closed.' : ''}`,
+            });
+            load();
+            // Tell them straight away, the same hand-off as a re-grade: they are
+            // the ones writing in to say they already did it.
+            if (row) {
+              setMessage({ recipients: toRecipients([row]), template: 'counted', mode: 'message' });
+            }
+          }}
+        />
+      )}
 
       {message && runId && (
         <TestMessageDialog
           open
           onClose={() => setMessage(null)}
+          mode={message.mode}
           placementId={runId}
           recipients={message.recipients}
           testTitle={testTitle || currentRun?.label || 'this test'}
           passMark={stats?.pass_mark_pct ?? null}
           dueLabel={currentRun?.closes_at ? formatDay(currentRun.closes_at) : null}
           initialTemplate={message.template}
-          authFetch={authFetch}
-          onSent={() => load()}
+          authFetch={teacherFetch}
+          onSent={(summary) => {
+            // Done means done: the selection that produced this send is spent.
+            setSelected(new Set());
+            setNotice({
+              text:
+                summary.reopened > 0 && summary.closesAt
+                  ? `Reopened for ${summary.reopened} until ${formatReopenUntil(summary.closesAt)}. Reached ${summary.reached}.`
+                  : `Message sent. Reached ${summary.reached}.`,
+            });
+            load();
+          }}
         />
       )}
     </Box>

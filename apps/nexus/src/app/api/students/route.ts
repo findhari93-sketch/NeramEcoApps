@@ -6,6 +6,7 @@ import { pickClassroomEmail } from '@/lib/classroom-email';
 import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
 import { findRosterDuplicates } from '@/lib/roster-duplicates';
 import { activityOf } from '@/lib/student-roster-view';
+import { isApplicationForm } from '@/lib/application-form';
 import {
   matchesSegment,
   segmentCounts,
@@ -184,6 +185,7 @@ export async function GET(request: NextRequest) {
           noYear: 0,
           neverSignedIn: 0,
           notSeen14d: 0,
+          noForm: 0,
         },
         batches: [],
         currentBatch: currentCode,
@@ -193,48 +195,64 @@ export async function GET(request: NextRequest) {
     const studentIds = enrollments.map((e: any) => e.user_id);
 
     // Fetch stats in parallel
-    const [attendanceResult, totalClassesResult, checklistTotalResult, checklistProgressResult, profileEmailResult] =
-      await Promise.all([
-        // Attendance records for all students in this classroom's classes
-        supabase
-          .from('nexus_attendance')
-          .select('student_id, attended')
-          .in('student_id', studentIds),
+    const [
+      attendanceResult,
+      totalClassesResult,
+      checklistTotalResult,
+      checklistProgressResult,
+      profileEmailResult,
+      formResult,
+    ] = await Promise.all([
+      // Attendance records for all students in this classroom's classes
+      supabase
+        .from('nexus_attendance')
+        .select('student_id, attended')
+        .in('student_id', studentIds),
 
-        // Total completed classes in classroom
-        supabase
-          .from('nexus_scheduled_classes')
-          .select('id', { count: 'exact', head: true })
-          .eq('classroom_id', classroomId)
-          .eq('status', 'completed'),
+      // Total completed classes in classroom
+      supabase
+        .from('nexus_scheduled_classes')
+        .select('id', { count: 'exact', head: true })
+        .eq('classroom_id', classroomId)
+        .eq('status', 'completed'),
 
-        // Total active checklist items
-        supabase
-          .from('nexus_checklist_items')
-          .select('id', { count: 'exact', head: true })
-          .eq('classroom_id', classroomId)
-          .eq('is_active', true),
+      // Total active checklist items
+      supabase
+        .from('nexus_checklist_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('classroom_id', classroomId)
+        .eq('is_active', true),
 
-        // Checklist progress for all students
-        supabase
-          .from('nexus_student_checklist_progress')
-          .select('student_id, checklist_item:nexus_checklist_items!inner(classroom_id)')
-          .in('student_id', studentIds)
-          .eq('is_completed', true)
-          .eq('nexus_checklist_items.classroom_id', classroomId),
+      // Checklist progress for all students
+      supabase
+        .from('nexus_student_checklist_progress')
+        .select('student_id, checklist_item:nexus_checklist_items!inner(classroom_id)')
+        .in('student_id', studentIds)
+        .eq('is_completed', true)
+        .eq('nexus_checklist_items.classroom_id', classroomId),
 
-        // Classroom (Teams) email per student, used to prefer the @neramclasses.com
-        // identity over the personal Gmail stored in users.email.
-        supabase
-          .from('student_profiles')
-          .select('user_id, ms_teams_email')
-          .in('user_id', studentIds),
-      ]);
+      // Classroom (Teams) email per student, used to prefer the @neramclasses.com
+      // identity over the personal Gmail stored in users.email.
+      supabase
+        .from('student_profiles')
+        .select('user_id, ms_teams_email')
+        .in('user_id', studentIds),
+
+      // Application forms on each student's OWN record. A student without one
+      // usually has theirs on a second record that was never linked, which is why
+      // their class and exam year are empty. See /api/students/application-forms.
+      supabase
+        .from('lead_profiles')
+        .select('user_id, application_number, academic_data, applicant_category, father_name, created_at')
+        .in('user_id', studentIds)
+        .is('deleted_at', null),
+    ]);
 
     if (attendanceResult.error) throw attendanceResult.error;
     if (totalClassesResult.error) throw totalClassesResult.error;
     if (checklistTotalResult.error) throw checklistTotalResult.error;
     if (checklistProgressResult.error) throw checklistProgressResult.error;
+    if (formResult.error) throw formResult.error;
 
     // Map user_id -> ms_teams_email (classroom address).
     const msTeamsByUser = (profileEmailResult.data || []).reduce(
@@ -243,6 +261,10 @@ export async function GET(request: NextRequest) {
         return acc;
       },
       {} as Record<string, string | null>,
+    );
+
+    const usersWithForm = new Set<string>(
+      (formResult.data || []).filter((row: any) => isApplicationForm(row)).map((row: any) => row.user_id),
     );
 
     const totalClasses = totalClassesResult.count || 0;
@@ -310,6 +332,7 @@ export async function GET(request: NextRequest) {
         last_seen_at: user.nexus_last_login_at ?? null,
         // Filled below, once the whole roster is known.
         possible_duplicate_of: null as { id: string; name: string } | null,
+        has_application_form: usersWithForm.has(userId),
         nexus_access_enabled: user.nexus_access_enabled ?? false,
         // Same value under two names for one release. `exam_batch` is the older
         // name and still has consumers; `academic_year` matches the column and the
@@ -393,6 +416,9 @@ export async function GET(request: NextRequest) {
     const neverSignedIn = targetable.filter((s: any) => activityOf(s, nowMs) === 'never_signed_in').length;
     const notSeen14d = targetable.filter((s: any) => activityOf(s, nowMs) === 'inactive').length;
 
+    // The same targetable population as the application-forms review lists.
+    const noForm = targetable.filter((s: any) => !s.has_application_form).length;
+
     const counts = {
       total: students.length,
       active: students.length - awaitingMicrosoft,
@@ -405,6 +431,7 @@ export async function GET(request: NextRequest) {
       noYear,
       neverSignedIn,
       notSeen14d,
+      noForm,
     };
 
     // Server-side segment narrowing is applied LAST, after the counts, and only

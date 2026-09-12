@@ -72,7 +72,22 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const [results, questions, runs, elsewhere] = await Promise.all([
       getTestResults(params.id, opts, supabase),
-      getQuestionAnalysis(params.id, { placementId }, supabase),
+      getQuestionAnalysis(
+        params.id,
+        {
+          placementId,
+          run: selected
+            ? {
+                id: (selected as any).id,
+                test_id: params.id,
+                available_from: (selected as any).available_from ?? null,
+                available_until: (selected as any).available_until ?? null,
+              }
+            : null,
+          studentIds: opts?.roster?.length ? opts.roster.map((r) => r.student_id) : null,
+        },
+        supabase,
+      ),
       buildRuns(params.id, placements, supabase),
       selected
         ? loadElsewhereAttempts(params.id, (selected as any).id, supabase)
@@ -133,6 +148,9 @@ async function buildRunOptions(
     placementId: placement.id,
     passingPct: placement.passing_pct ?? null,
     closesAt: placement.available_until ?? null,
+    // Rule 2 of run-sittings.ts: another door of this paper, used inside this
+    // window, counts as sitting the run.
+    runWindow: { opensAt: placement.available_from ?? null, closesAt: placement.available_until ?? null },
   };
 
   if (!canBuildRoster(contextType)) return base;

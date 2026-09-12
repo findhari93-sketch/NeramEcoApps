@@ -56,6 +56,8 @@ import ClassPickerField, {
   type ClassOption,
 } from '@/components/assignments/ClassPickerField';
 import { remindedAgo } from '@/lib/relative-time';
+import HeadphonesOutlinedIcon from '@mui/icons-material/HeadphonesOutlined';
+import { heardLabel, heardState } from '@/lib/voice-recording';
 
 interface AttachmentRow {
   id: string;
@@ -101,6 +103,14 @@ interface DrawingRosterRow {
     is_resubmission?: boolean;
   } | null;
   bucket: 'submitted' | 'reviewed' | 'missing';
+  /** The voice note sent on the latest attempt, and whether the student heard it. */
+  voice?: {
+    sent_at: string | null;
+    first_played_at: string | null;
+    heard_fully_at: string | null;
+    max_position_ms: number;
+    duration_ms: number;
+  } | null;
 }
 type DBucket = 'submitted' | 'reviewed' | 'missing';
 const D_BUCKET_LABEL: Record<DBucket, string> = { submitted: 'To review', reviewed: 'Reviewed', missing: 'Not submitted' };
@@ -708,6 +718,17 @@ export default function AssignmentReviewPage() {
                                 ? ` · attempt ${row.drawing.attempt_count ?? row.drawing.attempt_number}`
                                 : ''}
                             </Typography>
+                          )}
+                          {row.voice?.sent_at && (
+                            <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 0.25 }}>
+                              <HeadphonesOutlinedIcon
+                                aria-hidden
+                                sx={{ fontSize: 14, color: row.voice.heard_fully_at ? 'success.main' : 'warning.main' }}
+                              />
+                              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                Voice note: {heardLabel(heardState(row.voice)).toLowerCase()}
+                              </Typography>
+                            </Stack>
                           )}
                           {row.bucket === 'missing' && reminders[row.student.id] && (
                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>

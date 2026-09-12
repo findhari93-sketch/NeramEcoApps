@@ -91,6 +91,35 @@ describe('RecordingVideoCard', () => {
     expect(props.onReplace).toHaveBeenCalled();
   });
 
+  it('offers to copy a OneDrive video into the library, beside the reason, and keeps Replace', () => {
+    const onCopyToLibrary = vi.fn();
+    renderCard(track({ recording: { ...recording, drive_type: 'business', problem: 'RECORDING_IN_ONEDRIVE' } }), {
+      onCopyToLibrary,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Copy to Neram library' }));
+    expect(onCopyToLibrary).toHaveBeenCalled();
+    expect(screen.getAllByRole('button', { name: 'Replace video' }).length).toBeGreaterThan(0);
+  });
+
+  it('does not offer a copy for a video that has gone, which copying cannot fix', () => {
+    renderCard(track({ recording: { ...recording, problem: 'NOT_FOUND' } }), { onCopyToLibrary: vi.fn() });
+    expect(screen.queryByRole('button', { name: 'Copy to Neram library' })).toBeNull();
+  });
+
+  it('shows how far a copy has got, and pressing it opens the progress again', () => {
+    const onCopyToLibrary = vi.fn();
+    renderCard(track({ recording: { ...recording, drive_type: 'business', problem: 'RECORDING_IN_ONEDRIVE' } }), {
+      onCopyToLibrary,
+      copying: { percent: 42 },
+      busy: true,
+    });
+    const button = screen.getByRole('button', { name: /Copying/ });
+    expect(button.textContent).toContain('42%');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(button);
+    expect(onCopyToLibrary).toHaveBeenCalledTimes(1);
+  });
+
   it('plays the video in place when the picture is pressed', () => {
     const props = renderCard();
     fireEvent.click(screen.getByRole('button', { name: 'Play the தமிழ் recording' }));

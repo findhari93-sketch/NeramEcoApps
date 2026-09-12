@@ -22,6 +22,7 @@ import {
   getCommentCounts,
   getStudyVideoSummaryMap,
   getLinkedPapersForFiles,
+  getSlidesSummaryMap,
   type FileProgress,
   type LinkedQBPaper,
   type NexusStudyFile,
@@ -149,6 +150,9 @@ export async function GET(request: NextRequest) {
             staff
               ? getLinkedPapersForFiles(fileIds)
               : Promise.resolve(new Map<string, LinkedQBPaper>()),
+            // Which chapters have PowerPoint slides beside the PDF. Fails open to
+            // none, so a missing table costs a chip rather than the folder.
+            getSlidesSummaryMap(fileIds),
           ] as const)
         : Promise.resolve(null),
     ]);
@@ -173,7 +177,7 @@ export async function GET(request: NextRequest) {
 
     let files: any[] = [];
     if (wantsFiles && fileExtras) {
-      const [progress, favSet, commentCounts, grants, testSet, videoLanguages, linkedPapers] =
+      const [progress, favSet, commentCounts, grants, testSet, videoLanguages, linkedPapers, slidesMap] =
         fileExtras;
       const now = Date.now();
       files = rawFiles.map((file) => {
@@ -196,6 +200,7 @@ export async function GET(request: NextRequest) {
           // published, which is what lets a card stay silent rather than
           // promising a video that is still a draft.
           video_languages: videoLanguages.get(file.id)?.languages ?? [],
+          has_slides: slidesMap.get(file.id)?.servable ?? false,
           sort_order: file.sort_order,
           created_at: file.created_at,
           is_new: isNewFile(file.created_at, now),
@@ -210,7 +215,11 @@ export async function GET(request: NextRequest) {
                 best_score_pct: p?.best_score_pct ?? null,
               }),
           ...(staff
-            ? { allow_download: file.allow_download, qb_paper: linkedPapers.get(file.id) ?? null }
+            ? {
+                allow_download: file.allow_download,
+                qb_paper: linkedPapers.get(file.id) ?? null,
+                slides_problem: slidesMap.get(file.id)?.problem ?? null,
+              }
             : {}),
         };
       });

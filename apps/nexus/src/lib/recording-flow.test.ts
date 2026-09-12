@@ -53,16 +53,32 @@ describe('planRecording', () => {
     });
   });
 
-  it('sends a OneDrive video back to be replaced before anything else, checkpoints or not', () => {
+  it('offers to copy a OneDrive video into the library before anything else, and keeps Replace to hand', () => {
     const plan = planRecording(
       track({ section_count: 4, recording: { ...resolved, problem: 'RECORDING_IN_ONEDRIVE' } }),
       'தமிழ்',
     );
     expect(plan.stage).toBe('video_problem');
     expect(plan.tabStatus).toBe('Needs a fix');
-    expect(plan.primary?.kind).toBe('replace_video');
+    expect(plan.primary).toMatchObject({ kind: 'copy_to_library', label: 'Copy to Neram library' });
+    expect(plan.secondary.map((a) => a.kind)).toEqual(['replace_video']);
     expect(plan.steps.video).toBe('problem');
     expect(plan.steps.publish).toBe('blocked');
+  });
+
+  it('keeps Unpublish to hand on a live recording whose video is still in OneDrive', () => {
+    const plan = planRecording(
+      track({ status: 'published', readiness: 'ready', recording: { ...resolved, problem: 'RECORDING_IN_ONEDRIVE' } }),
+      'English',
+    );
+    expect(plan.primary?.kind).toBe('copy_to_library');
+    expect(plan.secondary.map((a) => a.kind)).toEqual(['replace_video', 'unpublish']);
+  });
+
+  it('never offers a copy for a video that has gone, which copying cannot fix', () => {
+    const plan = planRecording(track({ recording: { ...resolved, problem: 'NOT_FOUND' } }), 'தமிழ்');
+    expect(plan.primary?.kind).toBe('replace_video');
+    expect([plan.primary, ...plan.secondary].some((a) => a?.kind === 'copy_to_library')).toBe(false);
   });
 
   it('flags a live recording whose video students cannot play', () => {

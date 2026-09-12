@@ -16,6 +16,10 @@
  * Opening the dialog first is deliberate: it is non-destructive, so a teacher
  * mid-grading can compare rounds without navigating away and losing their draft.
  * `currentKey` marks the round already on screen so nobody navigates in a circle.
+ *
+ * A round's voice note plays in the dialog, never on the card: the card is
+ * itself a role="button", and a real control nested inside it has its click
+ * swallowed. The card only says a note exists.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -39,9 +43,13 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import GraphicEqRoundedIcon from '@mui/icons-material/GraphicEqRounded';
 import GradeDisplay from './GradeDisplay';
 import SubmissionFiles from './SubmissionFiles';
+import VoiceNotePlayer from '@/components/drawings/voice/VoiceNotePlayer';
+import { useVoiceListenReporter } from '@/components/drawings/voice/useVoiceListenReporter';
 import { reactionEmoji } from '@/lib/assignment-reactions';
+import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 import {
   type AttemptView,
   attemptGradeValue,
@@ -49,6 +57,8 @@ import {
 } from '@/lib/submission-history';
 
 const REDO_AMBER = '#B54700';
+
+const NO_TOKEN = async () => null;
 
 function statusColor(status: string): string {
   if (status === 'completed' || status === 'reviewed') return 'success.main';
@@ -120,6 +130,13 @@ interface SubmissionHistoryTimelineProps {
    * graded. Omit on student screens to keep the timeline read-only.
    */
   onOpenAttempt?: (attempt: AttemptView) => void;
+  /** Voice notes by AttemptView.key (the submission id), played in the attempt dialog. */
+  voiceByKey?: Record<string, VoiceFeedbackView>;
+  /**
+   * Student screens pass this so listening in the dialog counts toward "Heard".
+   * Teacher screens leave it out: a teacher replaying their own note is not a listen.
+   */
+  getToken?: () => Promise<string | null>;
 }
 
 export default function SubmissionHistoryTimeline({
@@ -127,6 +144,8 @@ export default function SubmissionHistoryTimeline({
   title = 'Submission history',
   currentKey,
   onOpenAttempt,
+  voiceByKey,
+  getToken,
 }: SubmissionHistoryTimelineProps) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
@@ -166,6 +185,7 @@ export default function SubmissionHistoryTimeline({
           const emoji = reactionEmoji(a.reaction);
           const isCurrent = !!currentKey && a.key === currentKey;
           const canReview = !!onOpenAttempt && !isCurrent;
+          const hasVoice = !!voiceByKey?.[a.key];
           return (
             <Box key={a.key} sx={{ position: 'relative', pl: 5, pb: 2 }}>
               {/* Timeline dot */}
@@ -272,6 +292,15 @@ export default function SubmissionHistoryTimeline({
                       </Typography>
                     )}
 
+                    {hasVoice && (
+                      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 0.25 }}>
+                        <GraphicEqRoundedIcon sx={{ fontSize: 14, color: 'primary.main' }} aria-hidden />
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                          Voice note
+                        </Typography>
+                      </Stack>
+                    )}
+
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
                       {formatWhen(a.submitted_at)}
                     </Typography>
@@ -300,6 +329,8 @@ export default function SubmissionHistoryTimeline({
         attempt={open}
         onClose={() => setOpen(null)}
         fullScreen={fullScreen}
+        voice={open ? voiceByKey?.[open.key] ?? null : null}
+        getToken={getToken}
         onOpenAttempt={
           onOpenAttempt && open && open.key !== currentKey ? onOpenAttempt : undefined
         }
@@ -316,11 +347,15 @@ function AttemptDetailDialog({
   attempt,
   onClose,
   fullScreen,
+  voice,
+  getToken,
   onOpenAttempt,
 }: {
   attempt: AttemptView | null;
   onClose: () => void;
   fullScreen: boolean;
+  voice: VoiceFeedbackView | null;
+  getToken?: () => Promise<string | null>;
   /** Present only when the viewer can grade this round (teacher screens). */
   onOpenAttempt?: (attempt: AttemptView) => void;
 }) {
@@ -328,6 +363,7 @@ function AttemptDetailDialog({
   useEffect(() => {
     setView('original');
   }, [attempt?.key]);
+  const reportListen = useVoiceListenReporter(getToken ?? NO_TOKEN, getToken ? voice?.id : null);
 
   const gradeValue = attempt ? attemptGradeValue(attempt) : null;
   const emoji = reactionEmoji(attempt?.reaction);
@@ -405,6 +441,20 @@ function AttemptDetailDialog({
         ) : (
           <Box sx={{ mb: 1.5 }}>
             <SubmissionFiles files={(attempt.files as any) || []} />
+          </Box>
+        )}
+
+        {voice && (
+          <Box sx={{ mb: 1.5 }}>
+            <VoiceNotePlayer
+              url={voice.url}
+              mime={voice.audio_mime}
+              durationMs={voice.duration_ms}
+              title="Voice feedback"
+              sketch={voice.sketch}
+              imageUrl={voice.base_image_url}
+              onProgress={getToken ? reportListen : undefined}
+            />
           </Box>
         )}
 

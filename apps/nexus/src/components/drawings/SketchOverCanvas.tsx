@@ -21,11 +21,31 @@ import {
   applySmoothStroke, buildSmoothStroke, arrowHead, hitTestItem, textBounds,
   type CanvasItem, type Point,
 } from '../../lib/sketch-geometry';
+import { normPoint, type SketchOp } from '../../lib/sketch-timeline';
+
+/**
+ * Set while a voice walkthrough is being recorded: every change to the canvas is
+ * stamped against the recording's clock so the student can watch it happen in
+ * time with the teacher's voice. Absent, this canvas behaves exactly as before.
+ */
+export interface SketchRecording {
+  /** performance.now() at the moment recording started. */
+  startedAt: number;
+  onOp: (op: SketchOp) => void;
+}
 
 interface SketchOverCanvasProps {
   imageUrl: string;
   onSave: (blob: Blob) => Promise<void> | void;
   onClose: () => void;
+  recording?: SketchRecording | null;
+  /** Recording controls, shown in the top toolbar beside Undo and Save. */
+  headerExtra?: React.ReactNode;
+  /** Save is held while a walkthrough is still recording. */
+  saveDisabled?: boolean;
+  saveLabel?: string;
+  /** The drawing's own pixel size once it loads. Recorded points are fractions of it. */
+  onImageSize?: (size: { w: number; h: number }) => void;
 }
 
 type Tool = 'pen' | 'eraser' | 'text';
@@ -95,7 +115,16 @@ function drawItem(ctx: CanvasRenderingContext2D, item: Item) {
   else drawTextItem(ctx, item);
 }
 
-export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOverCanvasProps) {
+export default function SketchOverCanvas({
+  imageUrl,
+  onSave,
+  onClose,
+  recording = null,
+  headerExtra,
+  saveDisabled = false,
+  saveLabel = 'Save',
+  onImageSize,
+}: SketchOverCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -129,7 +158,9 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
   const textInputRef = useRef<HTMLInputElement>(null);
 
   // Interaction refs (mutable, not rendered directly)
-  const draftRef = useRef<{ points: Point[]; color: string; width: number } | null>(null);
+  // `times` is filled only while recording: one stamp per point, so the replay
+  // draws at the speed the teacher drew rather than all at once.
+  const draftRef = useRef<{ points: Point[]; color: string; width: number; times: number[] } | null>(null);
   const arrowPreviewRef = useRef<{ from: Point; to: Point; color: string } | null>(null);
   const textGestureRef = useRef<{ start: Point; moved: boolean } | null>(null);
   const preEraseRef = useRef<Item[] | null>(null);
@@ -140,6 +171,26 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
   const idRef = useRef(0);
   const genId = () => `i${idRef.current++}`;
 
+  // Recording lives in refs so the pointer handlers never need rebinding, and a
+  // canvas nobody is recording pays nothing for any of it.
+  const recordingRef = useRef(recording);
+  recordingRef.current = recording;
+  const canvasResRef = useRef(canvasRes);
+  canvasResRef.current = canvasRes;
+
+  /** Milliseconds since the voice recording started. */
+  const stamp = () => (recordingRef.current ? performance.now() - recordingRef.current.startedAt : 0);
+
+  const emit = useCallback((op: SketchOp) => {
+    recordingRef.current?.onOp(op);
+  }, []);
+
+  /** Undo, redo, the eraser and Clear all reduce to "these are the items now". */
+  const emitShow = useCallback((next: Item[]) => {
+    if (!recordingRef.current) return;
+    recordingRef.current.onOp({ t: stamp(), k: 'show', ids: next.map((i) => i.id) });
+  }, []);
+
   // --- Load background image and fit to container ---
   useEffect(() => {
     const img = new Image();
@@ -148,6 +199,7 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
       setBgImage(img);
       setCanvasRes({ width: img.width, height: img.height });
       fitToScreen(img);
+      onImageSize?.({ w: img.width, h: img.height });
     };
     img.src = imageUrl;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -237,16 +289,18 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
     const snapshot = undoStack[undoStack.length - 1];
     setRedoStack((r) => [...r, items]);
     setItems(snapshot);
+    emitShow(snapshot);
     setUndoStack((s) => s.slice(0, -1));
-  }, [undoStack, items]);
+  }, [undoStack, items, emitShow]);
 
   const redo = useCallback(() => {
     if (redoStack.length === 0) return;
     const snapshot = redoStack[redoStack.length - 1];
     setUndoStack((s) => [...s, items]);
     setItems(snapshot);
+    emitShow(snapshot);
     setRedoStack((r) => r.slice(0, -1));
-  }, [redoStack, items]);
+  }, [redoStack, items, emitShow]);
 
   // Keyboard: Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl+Y = redo.
   useEffect(() => {
@@ -276,7 +330,13 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
     const radius = eraserRadius();
     setItems((prev) => {
       const next = prev.filter((it) => !hitTestItem(it, p, radius));
-      if (next.length !== prev.length) erasedAnythingRef.current = true;
+      if (next.length !== prev.length) {
+        erasedAnythingRef.current = true;
+        // Emitted here rather than on pointer-up so a quick erase-and-lift cannot
+        // leave the rubbed-out item showing in the replay. Repeated identical
+        // `show` ops are harmless: the recorder drops the duplicates.
+        emitShow(next);
+      }
       return next.length === prev.length ? prev : next;
     });
   };
@@ -302,7 +362,11 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
     const value = e.value.trim();
     if (!value) {
       // Empty text: remove the item if editing an existing one, else discard.
-      if (e.id) commit(items.filter((it) => it.id !== e.id));
+      if (e.id) {
+        const next = items.filter((it) => it.id !== e.id);
+        commit(next);
+        emitShow(next);
+      }
       return;
     }
     const textItem: Item = {
@@ -311,6 +375,25 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
     };
     if (e.id) commit(items.map((it) => (it.id === e.id ? textItem : it)));
     else commit([...items, textItem]);
+
+    // Re-emitting an edited label under its own id replaces it in the replay.
+    const { width: iw, height: ih } = canvasResRef.current;
+    if (recordingRef.current && iw > 0 && ih > 0) {
+      const at = normPoint({ x: textItem.x, y: textItem.y }, iw, ih);
+      const leader = textItem.leader ? normPoint(textItem.leader, iw, ih) : null;
+      emit({
+        t: stamp(),
+        k: 'text',
+        id: textItem.id,
+        c: textItem.color,
+        // A fraction of the image height, so the label keeps its size on a phone.
+        fs: textItem.fontSize / ih,
+        x: at.x,
+        y: at.y,
+        s: textItem.text,
+        ...(leader ? { lx: leader.x, ly: leader.y } : {}),
+      });
+    }
   };
 
   // --- Pointer interaction ---
@@ -373,7 +456,7 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
 
     const point = getCanvasPoint(e.clientX, e.clientY);
     if (tool === 'pen') {
-      draftRef.current = { points: [point], color, width: lineWidth / scale };
+      draftRef.current = { points: [point], color, width: lineWidth / scale, times: [stamp()] };
       scheduleComposite();
     } else if (tool === 'eraser') {
       preEraseRef.current = items;
@@ -395,7 +478,10 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
       const ne = e.nativeEvent as PointerEvent;
       const coalesced = typeof ne.getCoalescedEvents === 'function' ? ne.getCoalescedEvents() : [];
       const events = coalesced.length ? coalesced : [ne];
-      for (const ev of events) draftRef.current.points.push(getCanvasPoint(ev.clientX, ev.clientY));
+      for (const ev of events) {
+        draftRef.current.points.push(getCanvasPoint(ev.clientX, ev.clientY));
+        draftRef.current.times.push(stamp());
+      }
       scheduleComposite();
     } else if (tool === 'eraser' && preEraseRef.current) {
       eraseAt(getCanvasPoint(e.clientX, e.clientY));
@@ -423,7 +509,30 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
       const d = draftRef.current;
       draftRef.current = null;
       if (d.points.length > 0) {
-        commit([...items, { id: genId(), type: 'stroke', points: d.points, color: d.color, width: d.width }]);
+        const id = genId();
+        commit([...items, { id, type: 'stroke', points: d.points, color: d.color, width: d.width }]);
+
+        const { width: iw, height: ih } = canvasResRef.current;
+        if (recordingRef.current && iw > 0 && ih > 0) {
+          const startedAt = d.times[0] ?? stamp();
+          // The pen's width is divided by the zoom, and a canvas measured before
+          // it has been laid out has a zoom of zero. That made this Infinity, and
+          // an infinite number is not a width the replay could ever store.
+          const penWidth = Number.isFinite(d.width) && d.width > 0 ? d.width : lineWidth;
+          emit({
+            t: startedAt,
+            k: 'stroke',
+            id,
+            c: d.color,
+            // Held as a fraction of the image width, so a line drawn on a laptop
+            // keeps its weight when it replays on a phone.
+            wd: Math.min(penWidth / iw, 0.2),
+            p: d.points.map((point, i) => {
+              const at = normPoint(point, iw, ih);
+              return [Math.max(0, Math.round((d.times[i] ?? startedAt) - startedAt)), at.x, at.y];
+            }),
+          });
+        }
       } else {
         composite();
       }
@@ -480,7 +589,11 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
     setScale(newScale);
   };
 
-  const handleClear = () => { if (items.length) commit([]); };
+  const handleClear = () => {
+    if (!items.length) return;
+    commit([]);
+    emitShow([]);
+  };
 
   const handleSave = async () => {
     const canvas = canvasRef.current;
@@ -520,10 +633,20 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
       {/* Top toolbar */}
       <Paper elevation={2} sx={{
         display: 'flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.5,
-        borderRadius: 0, bgcolor: '#fff', zIndex: 1, flexShrink: 0,
+        borderRadius: 0, bgcolor: '#fff', zIndex: 1, flexShrink: 0, flexWrap: 'wrap',
       }}>
         <IconButton onClick={onClose} size="small" aria-label="Close"><CloseIcon /></IconButton>
-        <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+        <Typography
+          variant="body2"
+          fontWeight={600}
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            // Recording controls need the room on a phone, and the title is the
+            // one thing in this bar that is not a control.
+            display: headerExtra ? { xs: 'none', sm: 'block' } : 'block',
+          }}
+        >
           Draw Corrections
         </Typography>
         <Tooltip title="Undo (Ctrl+Z)">
@@ -543,6 +666,7 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
         <IconButton onClick={handleClear} disabled={items.length === 0} size="small" aria-label="Clear all">
           <DeleteOutlineIcon />
         </IconButton>
+        {headerExtra}
         {saveStatus === 'success' ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'success.main', ml: 0.5 }}>
             <CheckCircleIcon fontSize="small" />
@@ -558,10 +682,10 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
         ) : (
           <Button
             variant="contained" size="small" startIcon={<SaveOutlinedIcon />}
-            onClick={handleSave} disabled={saving}
+            onClick={handleSave} disabled={saving || saveDisabled}
             sx={{ textTransform: 'none', minHeight: 36, ml: 0.5 }}
           >
-            {saving ? 'Uploading...' : 'Save'}
+            {saving ? 'Uploading...' : saveLabel}
           </Button>
         )}
       </Paper>
@@ -575,6 +699,7 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
         {canvasRes.width > 0 && (
           <canvas
             ref={canvasRef}
+            aria-label="Drawing canvas"
             width={canvasRes.width}
             height={canvasRes.height}
             style={{

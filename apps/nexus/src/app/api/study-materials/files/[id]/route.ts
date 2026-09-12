@@ -14,6 +14,7 @@ import {
   getCommentCounts,
   getStudyVideoSummaryMap,
   getLinkedPapersForFiles,
+  getSlidesSummaryMap,
 } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { extractYouTubeId } from '@/lib/youtube';
@@ -36,11 +37,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const folder = await getFolderById(file.folder_id);
     if (!folder) return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
 
-    const [testSet, commentCounts, videoLanguages, linkedPapers] = await Promise.all([
+    const [testSet, commentCounts, videoLanguages, linkedPapers, slidesMap] = await Promise.all([
       hasPlacedTestForFiles([file.id]),
       getCommentCounts([file.id]),
       getStudyVideoSummaryMap([file.id]),
       getLinkedPapersForFiles([file.id]),
+      getSlidesSummaryMap([file.id]),
     ]);
 
     return NextResponse.json({
@@ -63,6 +65,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         comment_count: commentCounts[file.id] || 0,
         allow_download: file.allow_download,
         qb_paper: linkedPapers.get(file.id) ?? null,
+        has_slides: slidesMap.get(file.id)?.servable ?? false,
+        slides_problem: slidesMap.get(file.id)?.problem ?? null,
       },
     });
   } catch (err) {

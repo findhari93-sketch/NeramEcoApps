@@ -27,6 +27,11 @@
  * tell that anything was wrong. `path` is now NULL until the teacher navigates,
  * and null means "start where this kind belongs".
  *
+ * PRESENTATIONS ARE SEARCH ONLY. A chapter's PowerPoint lives in its Teams
+ * class's own SharePoint site, not in one library folder, so `kind="presentation"`
+ * never browses: it waits for a name, which saves a request that could only
+ * list folders holding none of the decks.
+ *
  * A file on a drive belonging to none of these is still reachable by pasting its
  * share link into the box behind this dialog.
  *
@@ -124,8 +129,8 @@ interface DriveFilePickerDialogProps {
    * drives instead and says so.
    */
   getSearchToken?: () => Promise<string | null>;
-  /** Which files are offered. Defaults to documents. */
-  kind?: 'document' | 'video';
+  /** Which files are offered. Defaults to documents. `presentation` is PowerPoint only, and search only. */
+  kind?: 'document' | 'video' | 'presentation';
   /** Which drives are read. Defaults to the shared library alone. */
   scope?: 'site' | 'mine' | 'both';
   title?: string;
@@ -215,6 +220,7 @@ export default function DriveFilePickerDialog({
   const [selected, setSelected] = useState<Map<string, DriveItem>>(new Map());
 
   const isVideo = kind === 'video';
+  const isDeck = kind === 'presentation';
   /**
    * `both` is a search-only scope on the server, because a folder path names a
    * folder in ONE drive. Browsing falls back to the library, which is the drive a
@@ -227,6 +233,16 @@ export default function DriveFilePickerDialog({
     const seq = ++requestSeq.current;
     /** This response is still the newest one asked for. */
     const current = () => requestSeq.current === seq;
+
+    // A deck is found by name, never by browsing (see the file comment). The
+    // sequence bump above still retires any search still in flight.
+    if (kind === 'presentation' && !query.trim()) {
+      setItems([]);
+      setError(null);
+      setPartial(null);
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -367,12 +383,14 @@ export default function DriveFilePickerDialog({
   };
 
   const heading =
-    title || (isVideo ? 'Find the recording' : 'Choose from SharePoint');
+    title || (isVideo ? 'Find the recording' : isDeck ? 'Find the class slides' : 'Choose from SharePoint');
   const blurb =
     subtitle ||
     (isVideo
       ? 'Search the Neram library and your own OneDrive for the video file, then pick it.'
-      : 'Attach a presentation or document. Students read it inside the app and cannot edit or download it.');
+      : isDeck
+        ? 'Type part of the PowerPoint name, then pick the deck. Students read it as pages beside the PDF and never get the .pptx.'
+        : 'Attach a presentation or document. Students read it inside the app and cannot edit or download it.');
 
   const emptyMessage = query
     ? scope === 'site'
@@ -380,7 +398,13 @@ export default function DriveFilePickerDialog({
       : `Nothing matches that. Try part of the file name, or paste the file's share link instead.`
     : isVideo
       ? 'No video files in this folder. Go up a level, or search by name.'
-      : 'This folder has nothing you can attach.';
+      : isDeck
+        ? 'Type the name of the PowerPoint to find it.'
+        : 'This folder has nothing you can attach.';
+
+  /** Where a row lives. A deck in a Teams class site is SharePoint, not the Neram library. */
+  const placeLabel = (item: DriveItem) =>
+    item.source === 'mine' ? 'My OneDrive' : isDeck ? 'SharePoint' : 'Neram library';
 
   const body = (
     <Box sx={{ p: 2.5, maxHeight: { xs: '85vh', sm: 600 }, overflow: 'auto' }}>
@@ -394,13 +418,20 @@ export default function DriveFilePickerDialog({
         size="small"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        autoFocus={isDeck}
         placeholder={
-          scope === 'site' ? 'Search the Neram library' : 'Search the Neram library and your OneDrive'
+          isDeck
+            ? 'Search for the PowerPoint by name'
+            : scope === 'site'
+              ? 'Search the Neram library'
+              : 'Search the Neram library and your OneDrive'
         }
         inputProps={{
           'aria-label': isVideo
             ? 'Search SharePoint and OneDrive for a recording'
-            : 'Search SharePoint for a file',
+            : isDeck
+              ? 'Search SharePoint for a PowerPoint'
+              : 'Search SharePoint for a file',
         }}
         InputProps={{
           startAdornment: (
@@ -568,7 +599,7 @@ export default function DriveFilePickerDialog({
                       noWrap
                       sx={{ display: 'block', opacity: 0.85 }}
                     >
-                      {(item.source === 'mine' ? 'My OneDrive' : 'Neram library') + ' / ' + item.folderPath}
+                      {placeLabel(item) + ' / ' + item.folderPath}
                     </Typography>
                   )}
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
@@ -576,7 +607,7 @@ export default function DriveFilePickerDialog({
                       <Chip
                         size="small"
                         variant="outlined"
-                        label={item.source === 'mine' ? 'My OneDrive' : 'Neram library'}
+                        label={placeLabel(item)}
                         sx={{ height: 20, fontSize: '0.6875rem', flexShrink: 0 }}
                       />
                     )}

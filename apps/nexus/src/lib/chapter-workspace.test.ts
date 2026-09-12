@@ -219,13 +219,54 @@ describe('chapterReadiness', () => {
     expect(chapterReadiness(file(), []).map((l) => l.key)).toEqual([
       'test',
       'recordings',
+      'slides',
       'download',
     ]);
     expect(
       chapterReadiness(file({ recording: { source: 'link', url: 'https://x' } }), []).map(
         (l) => l.key,
       ),
-    ).toEqual(['test', 'recordings', 'quick_link', 'download']);
+    ).toEqual(['test', 'recordings', 'slides', 'quick_link', 'download']);
+  });
+
+  describe('slides', () => {
+    it('says a chapter without slides is read from its PDF, as information rather than a gap', () => {
+      const line = byKey(chapterReadiness(file(), []), 'slides');
+      expect(line.state).toBe('info');
+      expect(line.optional).toBe(true);
+      expect(line.detail).toMatch(/PDF only/);
+    });
+
+    it('marks attached slides ready', () => {
+      expect(byKey(chapterReadiness(file({ has_slides: true }), []), 'slides').state).toBe('ready');
+    });
+
+    it('asks for a fix on a real problem, and says students keep the last version', () => {
+      const line = byKey(
+        chapterReadiness(file({ has_slides: true, slides_problem: 'SOURCE_MISSING' }), []),
+        'slides',
+      );
+      expect(line.state).toBe('attention');
+      expect(line.detail).toMatch(/last version/i);
+    });
+
+    it('does not turn amber while SharePoint is only busy', () => {
+      // It clears on its own and there is nothing for a teacher to do about it.
+      const line = byKey(
+        chapterReadiness(file({ has_slides: true, slides_problem: 'GRAPH_UNAVAILABLE' }), []),
+        'slides',
+      );
+      expect(line.state).toBe('ready');
+    });
+
+    it('never offers slides on an image chapter', () => {
+      expect(chapterReadiness(file({ kind: 'image' }), []).some((l) => l.key === 'slides')).toBe(false);
+    });
+
+    it('never makes slides a blocker', () => {
+      const lines = chapterReadiness(file({ has_slides: false, slides_problem: 'NO_ACCESS' }), []);
+      expect(chapterBlockers(lines)).toEqual([]);
+    });
   });
 });
 

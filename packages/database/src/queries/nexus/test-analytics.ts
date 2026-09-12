@@ -16,6 +16,12 @@ import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { effectiveAttemptScore } from './exam-score';
 import { gradeQBAnswerStrict } from './question-bank';
 import {
+  compareSittingAttempts,
+  loadRunSittings,
+  type RunForSittings,
+  type RunSittingSource,
+} from './run-sittings';
+import {
   answersAsOriginal,
   attemptDrawKey,
   composeTest,
@@ -26,6 +32,10 @@ import {
 
 const ATTEMPTS = 'nexus_test_attempts';
 const TESTS = 'nexus_tests';
+
+/** What a results row is built from, on the paper wide view and on a run. */
+const RESULT_ATTEMPT_COLUMNS =
+  'id, student_id, score, total_marks, percentage, submitted_at, attempt_number, status, final_score, final_total_marks, final_percentage, finalised_at';
 const TEST_QUESTIONS = 'nexus_test_questions';
 const QUESTIONS = 'nexus_qb_questions';
 const PLACEMENTS = 'nexus_test_placements';
@@ -465,6 +475,14 @@ export interface NexusTestResultRow {
   /** A window of this student's own, beyond the run's shared close time. */
   window_open_until: string | null;
   access_request_pending: boolean;
+  /**
+   * How this student's sitting on the run was decided (run-sittings.ts): their
+   * own door, another door inside the window, or a teacher's count. Null on the
+   * paper wide view and for anyone with no sitting.
+   */
+  sat_via: RunSittingSource | null;
+  /** When the counted sitting was submitted, for "counted from Study Materials, 28 Aug". */
+  sat_via_at: string | null;
 }
 
 export type NexusTestResultStatus =
@@ -517,6 +535,12 @@ export interface NexusTestResultsOptions {
   passingPct?: number | null;
   /** When the run shut. Drives "missed" for anyone who never sat it. */
   closesAt?: string | null;
+  /**
+   * The run's own window, for rule 2 of run-sittings.ts: an attempt through
+   * another door of the paper, started and submitted inside it, counts as
+   * sitting the run. Omit and only the run's own door and teacher counts apply.
+   */
+  runWindow?: { opensAt: string | null; closesAt: string | null } | null;
   /** student_id -> their own window's end, from an approved reopen or catch up. */
   windowsByStudent?: Record<string, string | null>;
   /** Students who have asked to be let back in and are still waiting. */
@@ -598,6 +622,8 @@ function emptyRow(studentId: string): NexusTestResultRow {
     provisional: false,
     window_open_until: null,
     access_request_pending: false,
+    sat_via: null,
+    sat_via_at: null,
   };
 }
 
@@ -650,30 +676,60 @@ export async function getTestResults(
   const supabase = client || getSupabaseAdminClient();
   const now = Date.now();
 
-  let attemptQuery = supabase
-    .from(ATTEMPTS)
-    .select(
-      'id, student_id, score, total_marks, percentage, submitted_at, attempt_number, status, final_score, final_total_marks, final_percentage, finalised_at',
-    )
-    .eq('test_id', testId)
-    // In progress sittings are read for status only and never touch a score
-    // aggregate, so a student mid paper shows as working rather than as absent.
-    .in('status', ['submitted', 'in_progress'])
-    // Cohort stats. A student practising after completion must not move the
-    // class average or the pass rate.
-    .eq('mode', 'official')
-    .order('submitted_at', { ascending: true })
-    // There is no unique constraint on (test_id, student_id, attempt_number),
-    // and an in-progress row has no submitted_at at all, so ties need a second
-    // key or "first" is whichever row the planner happened to return first.
-    .order('attempt_number', { ascending: true });
-  if (opts?.placementId) attemptQuery = attemptQuery.eq('placement_id', opts.placementId);
+  const runId = opts?.placementId || null;
+  const satVia = new Map<string, { source: RunSittingSource; at: string | null }>();
 
-  const [{ data: attempts, error }, { data: test }] = await Promise.all([
-    attemptQuery,
+  const loadAttempts = async (): Promise<any[]> => {
+    if (!runId) {
+      const { data, error } = await supabase
+        .from(ATTEMPTS)
+        .select(RESULT_ATTEMPT_COLUMNS)
+        .eq('test_id', testId)
+        // In progress sittings are read for status only and never touch a score
+        // aggregate, so a student mid paper shows as working rather than as absent.
+        .in('status', ['submitted', 'in_progress'])
+        // Cohort stats. A student practising after completion must not move the
+        // class average or the pass rate.
+        .eq('mode', 'official')
+        .order('submitted_at', { ascending: true })
+        // There is no unique constraint on (test_id, student_id, attempt_number),
+        // and an in-progress row has no submitted_at at all, so ties need a second
+        // key or "first" is whichever row the planner happened to return first.
+        .order('attempt_number', { ascending: true });
+      if (error) throw error;
+      return (data || []) as any[];
+    }
+
+    // Scoped to a run, who sat it is decided by run-sittings.ts rather than by
+    // the placement column alone, so an attempt through another door inside the
+    // run's window, or a teacher's count, lands here exactly as it does on the
+    // exam results and on the student's own card.
+    const run: RunForSittings = {
+      id: runId,
+      test_id: testId,
+      available_from: opts?.runWindow?.opensAt ?? null,
+      available_until: opts?.runWindow?.closesAt ?? null,
+    };
+    const rosterIds = opts?.roster?.length ? opts.roster.map((m) => m.student_id) : null;
+    const byRun = await loadRunSittings<any>(
+      [run],
+      { studentIds: rosterIds, columns: RESULT_ATTEMPT_COLUMNS },
+      supabase,
+    );
+    const out: any[] = [];
+    for (const sitting of (byRun.get(runId) || new Map()).values()) {
+      satVia.set(sitting.student_id, { source: sitting.source, at: sitting.first?.submitted_at ?? null });
+      for (const a of sitting.attempts) {
+        if (a.status === 'submitted' || a.status === 'in_progress') out.push(a);
+      }
+    }
+    return out.sort(compareSittingAttempts);
+  };
+
+  const [attempts, { data: test }] = await Promise.all([
+    loadAttempts(),
     supabase.from(TESTS).select('passing_marks, total_marks').eq('id', testId).maybeSingle(),
   ]);
-  if (error) throw error;
 
   const bar =
     opts?.passingPct != null
@@ -742,6 +798,9 @@ export async function getTestResults(
   for (const r of rows) {
     r.window_open_until = opts?.windowsByStudent?.[r.student_id] ?? null;
     r.access_request_pending = pending.has(r.student_id);
+    const via = satVia.get(r.student_id);
+    r.sat_via = via?.source ?? null;
+    r.sat_via_at = via?.at ?? null;
     r.provisional = unmarked.has(bestAttemptId.get(r.student_id) || '');
     r.status = resolveResultStatus({
       hasSubmitted: r.attempts > 0,
@@ -1029,7 +1088,16 @@ function optionKeyFor(options: Array<{ id?: string }> | null, selected: string):
  */
 export async function getQuestionAnalysis(
   testId: string,
-  opts?: { placementId?: string | null },
+  opts?: {
+    placementId?: string | null;
+    /**
+     * The run itself, so students who sat it through another door inside its
+     * window (or whom a teacher counted) contribute their sitting too. Pass the
+     * roster as studentIds whenever it is known, to bound the read.
+     */
+    run?: RunForSittings | null;
+    studentIds?: string[] | null;
+  },
   client?: TypedSupabaseClient,
 ): Promise<NexusQuestionAnalysisRow[]> {
   const supabase = client || getSupabaseAdminClient();
@@ -1047,10 +1115,25 @@ export async function getQuestionAnalysis(
   // a different fact from one that a hundred practising strangers found hard.
   if (opts?.placementId) attemptQuery = attemptQuery.eq('placement_id', opts.placementId);
 
-  const [questions, { data: attempts, error }, draws] = await Promise.all([
+  // A run also counts the one sitting of each student who sat it through another
+  // door inside its window, or whom a teacher counted, so the question signal
+  // covers the same people the Students tab calls done. Their first attempt
+  // only: that is the sitting, and the tries around it were practice.
+  const run = opts?.run ?? null;
+  const counted: Promise<any[]> = run
+    ? loadRunSittings<any>([run], { studentIds: opts?.studentIds ?? null, columns: 'answers' }, supabase).then(
+        (byRun) =>
+          [...(byRun.get(run.id) || new Map()).values()]
+            .filter((s) => s.source !== 'run' && s.first)
+            .map((s) => s.first),
+      )
+    : Promise.resolve([]);
+
+  const [questions, { data: attempts, error }, draws, extra] = await Promise.all([
     getComposedTestQuestions(testId, true, supabase),
     attemptQuery,
     loadAttemptDraws({ testIds: [testId] }, supabase),
+    counted,
   ]);
   if (error) throw error;
   if (questions.length === 0) return [];
@@ -1059,7 +1142,7 @@ export async function getQuestionAnalysis(
   // per question. Reading them raw is the bug that reported 25% right on a run
   // that had scored 87%, and "0 of 9, most picked Copper Age" on a question all
   // nine had answered Bronze Age: a drawn paper stores the letter they CLICKED.
-  const sheets = ((attempts || []) as any[]).map((a) =>
+  const sheets = [...((attempts || []) as any[]), ...extra].map((a) =>
     answersAsOriginal(a.answers, draws.get(attemptDrawKey(testId, a.student_id, a.attempt_number))),
   );
 

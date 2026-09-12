@@ -39,6 +39,7 @@ import SubmissionHistoryTimeline from '@/components/assignments/SubmissionHistor
 import { documentSubmissionToViews, drawingAttemptsToViews } from '@/lib/submission-history';
 import { captureScreenshot } from '@/lib/capture-screenshot';
 import type { SubmitMode } from '@/lib/assignment-submit-window';
+import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
 import type { DrawingSubmission, GalleryReactionType, NexusAssignmentSubmissionHistoryEntry } from '@neram/database/types';
 
@@ -109,6 +110,8 @@ export default function StudentAssignmentDetailPage() {
   const [answersBusy, setAnswersBusy] = useState(false);
   const [drawingSubmission, setDrawingSubmission] = useState<DrawingSubmissionView | null>(null);
   const [drawingAttempts, setDrawingAttempts] = useState<DrawingSubmission[]>([]);
+  // The teacher's voice notes, keyed by the attempt (submission id) each belongs to.
+  const [voiceBySubmission, setVoiceBySubmission] = useState<Record<string, VoiceFeedbackView>>({});
   const [enrolledAt, setEnrolledAt] = useState<string | null>(null);
   const [recording, setRecording] = useState<{
     url: string | null;
@@ -129,6 +132,7 @@ export default function StudentAssignmentDetailPage() {
       setSubmission((res.submission as MySubmission) ?? null);
       setDrawingSubmission((res.drawing_submission as DrawingSubmissionView) ?? null);
       setDrawingAttempts((res.drawing_attempts as DrawingSubmission[]) ?? []);
+      setVoiceBySubmission((res.voice_by_submission as Record<string, VoiceFeedbackView>) ?? {});
       setEnrolledAt(res.enrolled_at ?? null);
       setRecording(res.recording ?? { url: null, source: null });
       setSubmitMode((res.submit_mode as SubmitMode) ?? 'first');
@@ -473,6 +477,7 @@ export default function StudentAssignmentDetailPage() {
               <DrawingAssignmentPanel
                 assignmentId={detail.id}
                 submission={drawingSubmission}
+                voice={drawingSubmission ? voiceBySubmission[drawingSubmission.id] ?? null : null}
                 evaluationType={detail.evaluation_type}
                 maxMarks={detail.max_marks}
                 submitMode={submitMode}
@@ -589,7 +594,12 @@ export default function StudentAssignmentDetailPage() {
             {priorAttemptViews.length > 0 && (
               <Box>
                 <Divider sx={{ mb: 2 }} />
-                <SubmissionHistoryTimeline attempts={priorAttemptViews} title="Your previous attempts" />
+                <SubmissionHistoryTimeline
+                  attempts={priorAttemptViews}
+                  title="Your previous attempts"
+                  voiceByKey={voiceBySubmission}
+                  getToken={getToken}
+                />
               </Box>
             )}
           </Stack>

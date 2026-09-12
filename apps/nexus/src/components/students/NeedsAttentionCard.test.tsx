@@ -6,6 +6,7 @@ const none = {
   duplicateCount: 0,
   mismatchCount: 0,
   neverSignedInCount: 0,
+  noFormCount: 0,
   noStageCount: 0,
   noYearCount: 0,
   suggestionCount: 0,
@@ -46,5 +47,13 @@ describe('NeedsAttentionCard', () => {
     expect(screen.queryByRole('button', { name: 'Set exam year' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Show them' })).toBeTruthy();
     expect(screen.getByText(/Ask a manager/)).toBeTruthy();
+  });
+
+  it('lets anyone look for missing application forms', () => {
+    const onAction = vi.fn();
+    render(<NeedsAttentionCard {...none} noFormCount={3} canEdit={false} onAction={onAction} />);
+    expect(screen.getByText(/3 students have no application form linked/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Find their forms' }));
+    expect(onAction).toHaveBeenCalledWith('review_forms');
   });
 });

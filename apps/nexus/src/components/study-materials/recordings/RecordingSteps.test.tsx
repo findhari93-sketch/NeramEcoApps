@@ -127,6 +127,24 @@ describe('RecordingSteps', () => {
     expect(buttons.every((b) => b.disabled)).toBe(true);
   });
 
+  it('offers to copy a OneDrive video into the library on the video step, with Replace beside it', () => {
+    const props = renderSteps(track({ section_count: 4, recording: { ...resolved, problem: 'RECORDING_IN_ONEDRIVE' } }));
+    expect(document.body.textContent).toContain('Copy this video into the Neram library');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy to Neram library' }));
+    expect(props.onAction).toHaveBeenCalledWith('copy_to_library');
+    fireEvent.click(screen.getByRole('button', { name: 'Replace video' }));
+    expect(props.onAction).toHaveBeenCalledWith('replace_video');
+  });
+
+  it('says a copy is running, and holds every step until it is attached', () => {
+    renderSteps(track({ section_count: 4, recording: { ...resolved, problem: 'RECORDING_IN_ONEDRIVE' } }), {
+      busy: 'copying',
+    });
+    expect(document.body.textContent).toContain('Copying this video into the Neram library');
+    const buttons = screen.queryAllByRole('button') as HTMLButtonElement[];
+    expect(buttons.every((b) => b.disabled)).toBe(true);
+  });
+
   it('offers nothing to publish while the video needs a fix', () => {
     renderSteps(track({ section_count: 4, recording: { ...resolved, problem: 'RECORDING_IN_ONEDRIVE' } }));
     expect(screen.queryByRole('button', { name: /publish/i })).toBeNull();

@@ -42,6 +42,7 @@ import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
+import SlideshowOutlinedIcon from '@mui/icons-material/SlideshowOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
@@ -377,6 +378,23 @@ function StudyMaterialsBrowser() {
           }}
         />
       ))}
+      {/* A label, like the language chips above: the Slides switch is inside
+          the chapter, so the card only has to say the deck is there. */}
+      {file.has_slides && (
+        <Chip
+          size="small"
+          icon={<SlideshowOutlinedIcon />}
+          label="Slides"
+          sx={{
+            height: 20,
+            fontSize: '0.6rem',
+            fontWeight: 600,
+            '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' },
+            bgcolor: alpha(theme.palette.primary.main, 0.12),
+            color: 'primary.main',
+          }}
+        />
+      )}
       {!!file.comment_count && (
         <Chip
           size="small"

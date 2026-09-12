@@ -33,9 +33,11 @@ import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
 import LockResetOutlinedIcon from '@mui/icons-material/LockResetOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
+import AssignmentLateOutlinedIcon from '@mui/icons-material/AssignmentLateOutlined';
 import PeopleSearchField from '@/components/PeopleSearchField';
 import RemoveStudentDialog from '@/components/RemoveStudentDialog';
 import AddStudentSheet from '@/components/students/AddStudentSheet';
+import ApplicationFormSheet from '@/components/students/ApplicationFormSheet';
 import CreateAccountForm, { type AccountPrefill } from '@/components/students/CreateAccountForm';
 import ResetPasswordSheet, { type ResetPasswordTarget } from '@/components/students/ResetPasswordSheet';
 import BulkSelectBar from '@/components/students/BulkSelectBar';
@@ -111,6 +113,8 @@ interface StudentCounts {
   neverSignedIn: number;
   /** Last opened Nexus 14 or more days ago. Excludes dormant students. */
   notSeen14d: number;
+  /** No application form on their own record. Excludes dormant students. */
+  noForm: number;
 }
 
 /** Snackbar verb for a class and/or exam year edit, naming what actually changed. */
@@ -137,6 +141,7 @@ const EMPTY_COUNTS: StudentCounts = {
   noYear: 0,
   neverSignedIn: 0,
   notSeen14d: 0,
+  noForm: 0,
 };
 
 export default function TeacherStudents() {
@@ -219,6 +224,11 @@ export default function TeacherStudents() {
   }>({ open: false, loading: false, suggestions: [] });
   /** Count only, so the attention card can hide the prefill button when there is nothing. */
   const [suggestionCount, setSuggestionCount] = useState(0);
+  /** The application-form review: everyone without a form, or one student from their row. */
+  const [formSheet, setFormSheet] = useState<{ open: boolean; studentId: string | null }>({
+    open: false,
+    studentId: null,
+  });
 
   // Preferences are read AFTER mount, not during render: reading localStorage
   // while rendering a client page produces a hydration mismatch.
@@ -716,16 +726,19 @@ export default function TeacherStudents() {
         case 'prefill':
           loadSuggestions(true);
           break;
+        case 'review_forms':
+          setFormSheet({ open: true, studentId: null });
+          break;
         case 'show_never_signed_in':
           setMismatchOnly(false);
           handleSegmentChange('all_active');
-          handleFiltersChange({ signIn: 'never', account: 'any' });
+          handleFiltersChange({ signIn: 'never', account: 'any', form: 'any' });
           break;
         case 'review_duplicates':
           setMismatchOnly(false);
           setExamBatchFilter('all');
           handleSegmentChange('all_active');
-          handleFiltersChange({ signIn: 'any', account: 'possible_duplicate' });
+          handleFiltersChange({ signIn: 'any', account: 'possible_duplicate', form: 'any' });
           break;
       }
     },
@@ -820,6 +833,17 @@ export default function TeacherStudents() {
                 dividerBefore: !canSetStage && !canSetDormancy,
               },
         );
+      }
+      // Their form sits on another record, or they never filled one in. Anyone can
+      // look; the sheet offers linking only to someone allowed to do it.
+      if (student.has_application_form === false) {
+        items.push({
+          key: 'application-form',
+          label: 'Find application form',
+          icon: <AssignmentLateOutlinedIcon fontSize="small" />,
+          onClick: () => setFormSheet({ open: true, studentId: student.id }),
+          dividerBefore: true,
+        });
       }
       if (canRemoveStudents && student.enrollment_id) {
         items.push({
@@ -1032,6 +1056,7 @@ export default function TeacherStudents() {
             duplicateCount={filters.account === 'possible_duplicate' ? 0 : duplicateCount}
             mismatchCount={counts.mismatch}
             neverSignedInCount={filters.signIn === 'never' ? 0 : counts.neverSignedIn}
+            noFormCount={filters.form === 'missing' ? 0 : counts.noForm}
             noStageCount={segment === 'unset' ? 0 : unsetTotal}
             noYearCount={counts.noYear}
             suggestionCount={suggestionCount}
@@ -1183,6 +1208,20 @@ export default function TeacherStudents() {
         onClose={() => setPrefill({ open: false, loading: false, suggestions: [] })}
         onApply={(assignments) => applyClassification({}, undefined, false, assignments)}
       />
+
+      {activeClassroom && (
+        <ApplicationFormSheet
+          open={formSheet.open}
+          classroomId={activeClassroom.id}
+          studentId={formSheet.studentId}
+          getToken={getToken}
+          onClose={() => setFormSheet({ open: false, studentId: null })}
+          onChanged={() => {
+            fetchStudents();
+            if (canSetStage) loadSuggestions(false);
+          }}
+        />
+      )}
 
       {activeClassroom && removeTarget && removeTarget.enrollment_id && (
         <RemoveStudentDialog

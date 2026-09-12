@@ -4689,6 +4689,51 @@ export interface NexusStudyFileDTO {
    * of forking a second, untagged set from the raw PDF.
    */
   qb_paper?: { id: string; title: string; short_title: string } | null;
+  /**
+   * The chapter has a PowerPoint deck a student can read as pages, beside the
+   * PDF. True only when a converted PDF exists to serve.
+   */
+  has_slides?: boolean;
+  /** Staff-only: why the deck could not be refreshed from SharePoint, when it could not. */
+  slides_problem?: NexusStudySlidesProblem | null;
+}
+
+/**
+ * Why a chapter's slides could not be refreshed from SharePoint. The last good
+ * PDF keeps being served whatever the problem is.
+ */
+export type NexusStudySlidesProblem =
+  | 'SOURCE_MISSING'
+  | 'NO_ACCESS'
+  | 'RENDITION_UNAVAILABLE'
+  | 'TOO_LARGE'
+  | 'GRAPH_UNAVAILABLE';
+
+/**
+ * A chapter's PowerPoint deck (nexus_study_file_slides), at most one per
+ * chapter. The deck stays in the Neram SharePoint library; students read the
+ * PDF Nexus converts from it, kept in the private study-slides bucket.
+ */
+export interface NexusStudyFileSlides {
+  id: string;
+  file_id: string;
+  drive_id: string;
+  item_id: string;
+  source_name: string;
+  source_web_url: string | null;
+  /** SharePoint content tag of the version pdf_path was converted from. */
+  source_ctag: string | null;
+  source_modified_at: string | null;
+  /** Object path in the study-slides bucket. Null until a conversion succeeds. */
+  pdf_path: string | null;
+  pdf_size_bytes: number | null;
+  converted_at: string | null;
+  /** Last time SharePoint was asked whether the deck changed. */
+  checked_at: string | null;
+  problem: NexusStudySlidesProblem | null;
+  attached_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Per-student progress status for a study-material file. */
@@ -5401,8 +5446,11 @@ export type NexusStudyStage = '10th' | '11th' | '12th' | 'gap_year';
  */
 export type NexusParticipationStatus = 'active' | 'dormant';
 
-/** How a study stage got its value. See migration 20260802090000. */
-export type NexusStudyStageSource = 'staff' | 'onboarding_backfill';
+/**
+ * How a study stage got its value. See migrations 20260802090000 and
+ * 20260911120000 ('application' is copied off the student's application form).
+ */
+export type NexusStudyStageSource = 'staff' | 'onboarding_backfill' | 'application';
 
 export interface NexusEnrollment {
   id: string;

@@ -139,6 +139,43 @@ describe('renderGroupPostHtml', () => {
   });
 });
 
+describe('the reopen deadline', () => {
+  const until = 'Mon 14 Sept, 11:59 PM';
+
+  it('tells the student when the reopened test closes', () => {
+    const body = renderTestMessage('missed', { ...ctx, until }).body;
+    expect(body).toContain('It is open until {until}');
+    expect(fillConstants(body, { ...ctx, until })).toContain('open until Mon 14 Sept, 11:59 PM');
+  });
+
+  it('puts the date in the class post and escapes a title a teacher typed', () => {
+    const html = renderGroupPostHtml({
+      testTitle: 'Indus <Valley>',
+      count: 26,
+      reopening: true,
+      until,
+      bodyHtml: 'x',
+    });
+    expect(html).toContain('has been reopened for 26 students, open until Mon 14 Sept, 11:59 PM.');
+    expect(html).toContain('Indus &lt;Valley&gt;');
+    expect(html).not.toContain('<Valley>');
+  });
+});
+
+describe('the counted template', () => {
+  it('says they need not sit it again, with their own score and the day they did it', () => {
+    const { subject, body } = renderTestMessage('counted', ctx);
+    expect(subject).toContain(ctx.testTitle);
+    expect(body).toContain('{score}');
+    expect(body).toContain('{date}');
+    expect(body).not.toMatch(/reopen/i);
+  });
+
+  it('leaves {date} for sendNudge, because every student counted a different day', () => {
+    expect(fillConstants('from {date}', ctx)).toBe('from {date}');
+  });
+});
+
 describe('isTestMessageTemplate', () => {
   it('accepts the five real templates', () => {
     for (const t of TEST_MESSAGE_TEMPLATES) expect(isTestMessageTemplate(t)).toBe(true);

@@ -61,8 +61,27 @@ export const trackUrl = (fileId: string, trackId: string) =>
 export interface TracksResponse {
   tracks: RecordingTrackView[];
   languages: TrackLanguageOption[];
-  library?: { folder_url: string | null };
+  /** folder_path is the class videos folder inside the library, e.g. "nexus/class-videos". */
+  library?: { folder_url: string | null; folder_path?: string | null };
 }
+
+export const copyToLibraryUrl = (fileId: string) => `${tracksUrl(fileId)}/copy-to-library`;
+
+export type CopyToLibraryResponse =
+  | { status: 'done'; item: ResolvedLinkItem }
+  | {
+      status: 'copying';
+      /** Sealed by the server: Graph's progress address carries a token and never reaches the page. */
+      operation: string;
+      name: string;
+      size_bytes: number | null;
+      folder_path: string;
+    };
+
+export type CopyProgressResponse =
+  | { status: 'copying'; percent: number | null }
+  | { status: 'done'; item: ResolvedLinkItem }
+  | { status: 'failed'; code: string; error: string };
 
 export interface ChapterResponse {
   file: {

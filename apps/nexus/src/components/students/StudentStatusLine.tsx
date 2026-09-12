@@ -6,6 +6,7 @@ import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
 import NoAccountsOutlinedIcon from '@mui/icons-material/NoAccountsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
+import AssignmentLateOutlinedIcon from '@mui/icons-material/AssignmentLateOutlined';
 import { statusLineOf, type RosterStudent, type StudentActivity } from '@/lib/student-roster-view';
 
 const ICON: Record<StudentActivity, React.ElementType> = {
@@ -24,8 +25,9 @@ const TONE_COLOR = {
 const TEXT = { fontSize: '0.75rem', lineHeight: 1.4 } as const;
 
 /**
- * One line under a student's name: when they joined and whether they actually use
- * Nexus. Text plus an icon, never colour alone.
+ * One line under a student's name: when they joined, whether they actually use
+ * Nexus, and anything missing from their record. Text plus an icon, never colour
+ * alone.
  *
  * Deliberately not an avatar ring. The ring already carries the study stage
  * (solid), "not set" (dotted) and dormant (dashed); a fourth meaning would make
@@ -75,6 +77,16 @@ export default function StudentStatusLine({
           <PeopleAltOutlinedIcon aria-hidden sx={{ fontSize: '0.95rem' }} />
           <Typography component="span" sx={{ ...TEXT, color: 'inherit', fontWeight: 700 }}>
             May have two records
+          </Typography>
+        </Box>
+      )}
+      {/* Strictly false: an older payload without the check says nothing, rather
+          than calling every student formless. */}
+      {student.has_application_form === false && (
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, color: 'text.secondary' }}>
+          <AssignmentLateOutlinedIcon aria-hidden sx={{ fontSize: '0.95rem' }} />
+          <Typography component="span" sx={{ ...TEXT, color: 'inherit', fontWeight: 600 }}>
+            No application form
           </Typography>
         </Box>
       )}

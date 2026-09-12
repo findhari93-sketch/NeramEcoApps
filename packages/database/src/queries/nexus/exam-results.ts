@@ -17,6 +17,7 @@ import {
 } from './test-repository';
 import { gradeQBAnswerStrict } from './question-bank';
 import { getExam } from './exams';
+import { loadRunSittings } from './run-sittings';
 
 export interface ExamCandidate {
   student_id: string;
@@ -123,26 +124,7 @@ export async function getExamResults(
   if (!exam) throw new Error('EXAM_NOT_FOUND');
 
   const studentIds = roster.map((r) => r.id);
-
-  const { data: attempts, error } = await supabase
-    .from('nexus_test_attempts' as any)
-    .select(
-      'id, student_id, status, attempt_number, score, total_marks, percentage, final_score, final_total_marks, final_percentage, finalised_at, time_spent_seconds, answers',
-    )
-    .eq('test_id', exam.test_id)
-    .eq('mode', 'official')
-    .in('student_id', studentIds.length > 0 ? studentIds : ['00000000-0000-0000-0000-000000000000']);
-  if (error) throw error;
-
-  // One attempt per student: the exam allows exactly one, but an abandoned
-  // first try can leave a second row, so keep the submitted one.
-  const bestByStudent = new Map<string, any>();
-  for (const a of (attempts || []) as any[]) {
-    const prior = bestByStudent.get(a.student_id);
-    if (!prior || (prior.status !== 'submitted' && a.status === 'submitted')) {
-      bestByStudent.set(a.student_id, a);
-    }
-  }
+  const bestByStudent = await loadExamSittings(exam, studentIds, supabase);
 
   const [questions, draws] = await Promise.all([
     getComposedTestQuestions(exam.test_id, true, supabase),
@@ -242,6 +224,69 @@ export async function getExamResults(
       0,
     ),
   };
+}
+
+const EXAM_ATTEMPT_COLUMNS =
+  'id, student_id, status, attempt_number, score, total_marks, percentage, final_score, final_total_marks, final_percentage, finalised_at, time_spent_seconds, answers';
+
+/**
+ * The one attempt that is each student's exam.
+ *
+ * Decided by run-sittings.ts, the rule the Students tab and the student's own
+ * card share: the exam door first, then a sitting through another door made
+ * inside the exam window, then a teacher's count. This used to take any
+ * submitted attempt on the paper, from any door, at any time, so a chapter
+ * practised a week early could rank as the exam.
+ *
+ * The first submitted attempt is the exam score. An exam door still open with
+ * nothing submitted keeps its open row, which reads as not sat.
+ */
+async function loadExamSittings(
+  exam: { test_id: string; scheduled_class_id?: string | null },
+  studentIds: string[],
+  supabase: TypedSupabaseClient,
+): Promise<Map<string, any>> {
+  const out = new Map<string, any>();
+  if (studentIds.length === 0) return out;
+
+  const { data: placement } = await (supabase as any)
+    .from('nexus_test_placements')
+    .select('id, test_id, available_from, available_until')
+    .eq('context_type', 'exam')
+    .eq('context_id', exam.scheduled_class_id ?? null)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (placement) {
+    const byRun = await loadRunSittings<any>(
+      [placement],
+      { studentIds, columns: EXAM_ATTEMPT_COLUMNS },
+      supabase,
+    );
+    byRun.get(placement.id)?.forEach((sitting, studentId) => {
+      out.set(studentId, sitting.first ?? sitting.attempts[0] ?? null);
+    });
+    return out;
+  }
+
+  // No placement to anchor a window to. The paper wide reading, unchanged.
+  const { data: attempts, error } = await supabase
+    .from('nexus_test_attempts' as any)
+    .select(EXAM_ATTEMPT_COLUMNS)
+    .eq('test_id', exam.test_id)
+    .eq('mode', 'official')
+    .in('student_id', studentIds);
+  if (error) throw error;
+
+  // One attempt per student: the exam allows exactly one, but an abandoned
+  // first try can leave a second row, so keep the submitted one.
+  for (const a of (attempts || []) as any[]) {
+    const prior = out.get(a.student_id);
+    if (!prior || (prior.status !== 'submitted' && a.status === 'submitted')) {
+      out.set(a.student_id, a);
+    }
+  }
+  return out;
 }
 
 /**

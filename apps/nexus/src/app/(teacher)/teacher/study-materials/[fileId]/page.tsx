@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * The chapter workspace: Document, Setup, Students, Comments, all as full-width
- * tabs on one real page.
+ * The chapter workspace: Document, Slides, Setup, Students, Comments, all as
+ * full-width tabs on one real page.
  *
  * This replaces a Dialog that opened on top of the folder grid and stacked a
  * further dialog on top of itself for every Setup action, which is what made
@@ -13,6 +13,11 @@
  * Recordings are their own page now (/recordings), for the same reason: the
  * dialog they used to live in lost its place whenever the checkpoint editor
  * opened. Its Back returns here, to the Setup tab.
+ *
+ * Slides are a tab here rather than a page of their own: one deck, found and
+ * previewed in one place, so there is nothing deeper to navigate into. The
+ * library menu's "Slides (PowerPoint)" lands on `?tab=slides`, and Back still
+ * returns to the folder.
  */
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
@@ -25,6 +30,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import SlideshowOutlinedIcon from '@mui/icons-material/SlideshowOutlined';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutlined';
@@ -33,6 +39,7 @@ import PDFReader from '@/components/reader/PDFReader';
 import ProtectedContent from '@/components/ProtectedContent';
 import ChapterWorkspaceRail, { type ChapterManageActions } from '@/components/study-materials/ChapterWorkspaceRail';
 import ChapterCompletionPanel from '@/components/study-materials/ChapterCompletionPanel';
+import ChapterSlidesPanel from '@/components/study-materials/ChapterSlidesPanel';
 import DownloadGrantDialog, { type GrantTarget } from '@/components/study-materials/DownloadGrantDialog';
 import StudyTestAuthorDialog from '@/components/study-materials/StudyTestAuthorDialog';
 import GenerateChapterTestSheet from '@/components/study-materials/GenerateChapterTestSheet';
@@ -43,7 +50,7 @@ type FileDTO = NexusStudyFileDTO & {
   allow_download?: boolean | null;
   qb_paper?: { id: string; title: string; short_title: string } | null;
 };
-type Tab = 'doc' | 'setup' | 'students' | 'comments';
+type Tab = 'doc' | 'slides' | 'setup' | 'students' | 'comments';
 
 function ChapterWorkspace() {
   const theme = useTheme();
@@ -144,6 +151,7 @@ function ChapterWorkspace() {
     },
     onOpenTest: (testId: string) => router.push(`/teacher/tests/${testId}`),
     onRecordings: () => router.push(recordingsHref({ fileId, from: 'chapter' })),
+    onSlides: () => changeTab('slides'),
     onDownloadAccess: () =>
       file && setGrantTarget({ kind: 'file', id: file.id, name: file.title, folderId: file.folder_id }),
   };
@@ -152,6 +160,9 @@ function ChapterWorkspace() {
     file
       ? `/api/study-materials/files/${file.id}/content?token=${encodeURIComponent(token || '')}${download ? '&download=1' : ''}`
       : '';
+
+  // A deck sits beside a book, so an image chapter has no Slides tab.
+  const offersSlides = file?.kind !== 'image';
 
   if (!authLoading && !isTeacher) {
     return (
@@ -207,6 +218,11 @@ function ChapterWorkspace() {
           {file?.kind === 'image' ? <ImageOutlinedIcon fontSize="small" /> : <PictureAsPdfOutlinedIcon fontSize="small" />}
           Document
         </ToggleButton>
+        {offersSlides && (
+          <ToggleButton value="slides">
+            <SlideshowOutlinedIcon fontSize="small" /> Slides
+          </ToggleButton>
+        )}
         <ToggleButton value="setup">
           <TuneRoundedIcon fontSize="small" /> Setup
         </ToggleButton>
@@ -253,6 +269,10 @@ function ChapterWorkspace() {
               )}
             </ProtectedContent>
           </Box>
+        ) : tab === 'slides' && offersSlides ? (
+          // `load` re-reads the chapter after a change, so the Setup line and the
+          // library chip agree with what was just attached or removed.
+          <ChapterSlidesPanel fileId={fileId} getToken={getToken} onChanged={load} />
         ) : tab === 'students' ? (
           <ChapterCompletionPanel fileId={fileId} classroomId={activeClassroom?.id ?? null} getToken={getToken} />
         ) : (tab === 'setup' || tab === 'comments') ? (

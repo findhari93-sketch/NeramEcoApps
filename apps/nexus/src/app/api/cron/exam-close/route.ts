@@ -42,10 +42,28 @@ export async function GET(request: NextRequest) {
     const touched: string[] = [];
 
     for (const exam of exams) {
+      // Only the exam's own door. This read used to be by paper, so closing the
+      // 18 Aug exam also force-submitted two Study Materials practice attempts
+      // that happened to be open on the same paper, at 0% and 6%.
+      const { data: placement, error: placementError } = await supabase
+        .from('nexus_test_placements' as any)
+        .select('id')
+        .eq('context_type', 'exam')
+        .eq('context_id', exam.scheduled_class_id)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (placementError) {
+        console.error(`[exam-close] could not read the placement for ${exam.id}:`, placementError);
+        continue;
+      }
+      const placementId = (placement as { id?: string } | null)?.id;
+      if (!placementId) continue;
+
       const { data: open, error } = await supabase
         .from('nexus_test_attempts' as any)
         .select('id, student_id')
         .eq('test_id', exam.test_id)
+        .eq('placement_id', placementId)
         .eq('status', 'in_progress');
       if (error) {
         console.error(`[exam-close] could not read attempts for ${exam.id}:`, error);

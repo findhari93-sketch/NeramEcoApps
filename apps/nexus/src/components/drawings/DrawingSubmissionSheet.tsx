@@ -11,9 +11,11 @@ import PhotoLibraryOutlinedIcon from '@mui/icons-material/PhotoLibraryOutlined';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import ClipboardPasteZone from './ClipboardPasteZone';
+import VoiceNotePlayer, { type VoiceProgressReport } from './voice/VoiceNotePlayer';
 import { compressImage } from '@/utils/imageCompression';
 import { nextRotation, prevRotation, rotationTransform, type Rotation } from '@/lib/image-rotation';
 import { useCanCapturePhoto } from '@/hooks/useCanCapturePhoto';
+import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 
 interface DrawingSubmissionSheetProps {
   open: boolean;
@@ -26,6 +28,10 @@ interface DrawingSubmissionSheetProps {
   redoFeedback?: string | null;
   /** Teacher's corrected reference from the last review, shown as a reminder. */
   referenceImageUrl?: string | null;
+  /** The teacher's voice note about the redo, so the student can replay it while redrawing. */
+  redoVoice?: VoiceFeedbackView | null;
+  /** Receipt callback for that note, so listening here counts toward "Heard". */
+  onRedoVoiceProgress?: (report: VoiceProgressReport) => void;
   getToken: () => Promise<string | null>;
   onSubmitted: () => void;
   /**
@@ -42,7 +48,8 @@ interface DrawingSubmissionSheetProps {
 }
 
 export default function DrawingSubmissionSheet({
-  open, onClose, questionId, assignmentId, sourceType, redoFeedback, referenceImageUrl, getToken, onSubmitted,
+  open, onClose, questionId, assignmentId, sourceType, redoFeedback, referenceImageUrl,
+  redoVoice, onRedoVoiceProgress, getToken, onSubmitted,
   submitUrl, submitBody,
 }: DrawingSubmissionSheetProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -213,7 +220,7 @@ export default function DrawingSubmissionSheet({
           <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
         </Box>
 
-        {redoFeedback && (
+        {(redoFeedback || redoVoice) && (
           <Box
             sx={{
               p: 1.5,
@@ -226,9 +233,24 @@ export default function DrawingSubmissionSheet({
             <Typography variant="caption" sx={{ fontWeight: 700, color: '#B54700' }}>
               Your teacher asked for a redo
             </Typography>
-            <Typography variant="body2" sx={{ mt: 0.25, whiteSpace: 'pre-wrap' }}>
-              {redoFeedback}
-            </Typography>
+            {redoVoice && (
+              <Box sx={{ mt: 1, mb: redoFeedback ? 1 : 0 }}>
+                <VoiceNotePlayer
+                  url={redoVoice.url}
+                  mime={redoVoice.audio_mime}
+                  durationMs={redoVoice.duration_ms}
+                  title="Listen before you redraw"
+                  sketch={redoVoice.sketch}
+                  imageUrl={redoVoice.base_image_url}
+                  onProgress={onRedoVoiceProgress}
+                />
+              </Box>
+            )}
+            {redoFeedback && (
+              <Typography variant="body2" sx={{ mt: 0.25, whiteSpace: 'pre-wrap' }}>
+                {redoFeedback}
+              </Typography>
+            )}
             {referenceImageUrl && (
               <Box sx={{ mt: 1 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>

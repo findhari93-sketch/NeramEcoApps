@@ -8,6 +8,7 @@ import {
   loadExamEligibilityFacts,
   getTestMeta,
   resolveExamTimer,
+  loadRunSittings,
 } from '@neram/database';
 import { requireExamStaff, loadExamRoster } from '@/lib/exam-access';
 import {
@@ -52,15 +53,8 @@ export async function GET(
     );
 
     const studentIds = students.map((s) => s.id);
-    const [{ data: attempts }, attemptOverrides, violationCounts] = await Promise.all([
-      supabase
-        .from('nexus_test_attempts' as any)
-        .select(
-          'student_id, status, started_at, submitted_at, score, percentage, final_percentage, finalised_at',
-        )
-        .eq('test_id', exam.test_id)
-        .eq('mode', 'official')
-        .in('student_id', studentIds.length > 0 ? studentIds : ['00000000-0000-0000-0000-000000000000']),
+    const [attempts, attemptOverrides, violationCounts] = await Promise.all([
+      loadRosterAttempts(exam, placement as any, studentIds, supabase),
       getExamAttemptOverrides(params.examId),
       getViolationCountsForTest(exam.test_id, studentIds),
     ]);
@@ -113,4 +107,56 @@ export async function GET(
     console.error('[Exam Roster API] Error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+const ROSTER_ATTEMPT_COLUMNS =
+  'student_id, status, started_at, submitted_at, score, percentage, final_percentage, finalised_at';
+
+/**
+ * The attempts that are each student's exam, by the rule every other screen
+ * uses (run-sittings.ts in @neram/database).
+ *
+ * Any attempt on the paper used to count here, so a student practising the
+ * chapter in Study Materials during the exam showed as sitting it, and one who
+ * practised last week showed as done. A sitting through another door, or a
+ * teacher's count, is ONE attempt: the exam is sat once, and passing every
+ * practice try through would mark the row as out of attempts.
+ */
+async function loadRosterAttempts(
+  exam: { test_id: string },
+  placement: { id: string; available_from?: string | null; available_until?: string | null } | null,
+  studentIds: string[],
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+): Promise<any[]> {
+  if (studentIds.length === 0) return [];
+
+  if (placement?.id) {
+    const byRun = await loadRunSittings<any>(
+      [
+        {
+          id: placement.id,
+          test_id: exam.test_id,
+          available_from: placement.available_from ?? null,
+          available_until: placement.available_until ?? null,
+        },
+      ],
+      { studentIds, columns: ROSTER_ATTEMPT_COLUMNS },
+      supabase,
+    );
+    const out: any[] = [];
+    byRun.get(placement.id)?.forEach((sitting) => {
+      if (sitting.source === 'run') out.push(...sitting.attempts);
+      else if (sitting.first) out.push(sitting.first);
+    });
+    return out;
+  }
+
+  // No placement to anchor a window to. The paper wide reading, unchanged.
+  const { data } = await supabase
+    .from('nexus_test_attempts' as any)
+    .select(ROSTER_ATTEMPT_COLUMNS)
+    .eq('test_id', exam.test_id)
+    .eq('mode', 'official')
+    .in('student_id', studentIds);
+  return (data || []) as any[];
 }

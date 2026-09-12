@@ -23,7 +23,7 @@ export function videoItemMessage(code: RecordingMessageCode, item?: { name?: str
   const named = item?.name ? `"${item.name}"` : 'This video';
   switch (code) {
     case 'RECORDING_IN_ONEDRIVE':
-      return `${named} is in a personal OneDrive. Class recordings have to live in the Neram SharePoint library, so they stay available whoever recorded them. Move it into the library, then pick it here.`;
+      return `${named} is in a personal OneDrive. Class recordings have to live in the Neram SharePoint library, so they stay available whoever recorded them. Nexus can copy it there for you.`;
     case 'NOT_A_VIDEO':
       return `${named} is not a video file. Pick the recording itself.`;
     case 'NOT_FOUND':

@@ -1841,6 +1841,29 @@ export interface StartAttemptResult {
   draw: NexusTestDraw | null;
 }
 
+/** The doors that keep a record of who sat them, so never share an open attempt. */
+const RECORD_DOORS = new Set(['exam', 'class_test']);
+
+/**
+ * Whether an open attempt may be resumed through the door being opened.
+ *
+ * Same placement, yes. Otherwise no when either side is a record door. Two
+ * practice doors (a study chapter and a practice pool) keep sharing, which is
+ * what they did before this existed.
+ */
+async function isSameDoor(
+  openPlacementId: string | null,
+  target: NexusTestPlacement | null,
+  supabase: TypedSupabaseClient,
+): Promise<boolean> {
+  const targetId = target?.id ?? null;
+  if (openPlacementId === targetId) return true;
+  if (target && RECORD_DOORS.has(String(target.context_type))) return false;
+  if (!openPlacementId) return true;
+  const openDoor = await getPlacementById(openPlacementId, supabase);
+  return !(openDoor && RECORD_DOORS.has(String(openDoor.context_type)));
+}
+
 /**
  * Start a new attempt, or resume the one already open.
  *
@@ -1912,10 +1935,23 @@ export async function startOrResumeAttempt(
     null,
   );
 
+  // The limit belongs to the door being opened, never to the paper.
+  //
+  // One paper is routinely a practice pool AND a one-shot exam at once
+  // (acf8084d carries a study_file and an exam placement). Counting every door
+  // against the exam's attempt_limit locked out exactly the students who had
+  // practised: on 18 Aug the three who had submitted the chapter test were
+  // refused at the exam door, and all sixteen who got in had never practised.
+  // A paper opened without a placement has no door of its own and keeps
+  // counting everything, as before.
+  const usedHere = placement
+    ? submitted.filter((r) => r.placement_id === placement.id).length
+    : submitted.length;
+
   const baseLimit = Number((placement?.gating as any)?.attempt_limit);
   const limit =
     Number.isFinite(baseLimit) && baseLimit > 0 ? baseLimit + (input.extraAttempts || 0) : baseLimit;
-  if (Number.isFinite(limit) && limit > 0 && submitted.length >= limit) {
+  if (Number.isFinite(limit) && limit > 0 && usedHere >= limit) {
     throw new Error('ATTEMPT_LIMIT_REACHED');
   }
 
@@ -1952,7 +1988,13 @@ export async function startOrResumeAttempt(
     // attempt who starts a revision would resume the official one, and passing
     // it would overwrite their real best score with a practice result.
     const sameMode = (open.mode ?? 'official') === mode;
-    if (sameMode && !attemptIsStale(open, timerMeta, servedCount)) {
+    // Nor may a sitting open on ANOTHER door be resumed, when either door keeps
+    // a record. The same index is per paper, so a student who left a Study
+    // Materials attempt open and then opened the exam was handed that practice
+    // attempt, and the exam they sat was filed as practice. Two practice doors
+    // still share an open attempt, exactly as before.
+    const sameDoor = await isSameDoor(open.placement_id ?? null, placement, supabase);
+    if (sameMode && sameDoor && !attemptIsStale(open, timerMeta, servedCount)) {
       return {
         attempt: open,
         resumed: true,
@@ -1961,12 +2003,25 @@ export async function startOrResumeAttempt(
         draw: await drawFor(Number(open.attempt_number) || 1),
       };
     }
-    // The clock ran out while they were away. Retire it so a fresh attempt can
-    // start; before the CHECK was widened this write failed and the dead attempt
-    // blocked every retry.
+    // The clock ran out while they were away, or the open sitting belongs to
+    // another door. Retire it so a fresh attempt can start; before the CHECK was
+    // widened this write failed and the dead attempt blocked every retry.
+    const retiredAt = new Date().toISOString();
     await supabase
       .from(ATTEMPTS)
-      .update({ status: 'abandoned', submitted_at: new Date().toISOString() })
+      .update(
+        sameDoor
+          ? { status: 'abandoned', submitted_at: retiredAt }
+          : {
+              status: 'abandoned',
+              submitted_at: retiredAt,
+              // Stated, so the student is never asked why they gave up on a
+              // paper they did not give up on.
+              abandon_reason_code: 'other',
+              abandon_reason_note: 'Closed when this paper was opened through another door.',
+              abandon_reason_at: retiredAt,
+            },
+      )
       .eq('id', open.id);
   }
 

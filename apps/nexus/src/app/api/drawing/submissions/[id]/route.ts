@@ -1,32 +1,84 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getDrawingSubmissionById, getAssignmentDrawingHistory } from '@neram/database/queries/nexus';
+import {
+  getDrawingSubmissionById,
+  getAssignmentDrawingHistory,
+  getSubmissionTags,
+} from '@neram/database/queries/nexus';
 import { getSupabaseAdminClient } from '@neram/database';
+import {
+  getVoiceFeedbackForSubmissions,
+  removeVoiceFilesForSubmission,
+  signVoiceFeedback,
+} from '@/lib/drawing-voice-feedback';
+
+/** The public drawing buckets a submission's images can live in. */
+const DRAWING_IMAGE_BUCKETS = new Set(['drawing-uploads', 'drawing-reviewed', 'drawing-references']);
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await verifyMsToken(request.headers.get('Authorization'));
+    const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const { id } = await params;
+    const supabase = getSupabaseAdminClient() as any;
 
-    const submission = await getDrawingSubmissionById(id);
+    const [{ data: viewer }, submission] = await Promise.all([
+      supabase.from('users').select('id, user_type').eq('ms_oid', msUser.oid).maybeSingle(),
+      getDrawingSubmissionById(id),
+    ]);
     if (!submission) {
+      return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+    }
+
+    // Staff, or the student whose drawing this is. Anyone else signed in used to
+    // be able to read any submission by id. A 404 rather than a 403, so a guessed
+    // id cannot confirm that another student's work exists.
+    const studentId = (submission as any).student_id as string | null;
+    const isStaffViewer = !!viewer && ['teacher', 'admin'].includes(viewer.user_type ?? '');
+    const isOwner = !!viewer && !!studentId && viewer.id === studentId;
+    if (!isStaffViewer && !isOwner) {
       return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
     }
 
     // For an assignment drawing, also return every prior attempt so the review
     // screen can show the redo history (image + feedback per round). Practice
     // drawings (no assignment_id) have no assignment-scoped history.
-    let attempts: unknown[] = [];
+    let attempts: any[] = [];
     const assignmentId = (submission as any).assignment_id;
-    const studentId = (submission as any).student_id;
     if (assignmentId && studentId) {
       attempts = await getAssignmentDrawingHistory(assignmentId, studentId);
     }
 
-    return NextResponse.json({ submission, attempts });
+    const submissionIds = Array.from(new Set([id, ...attempts.map((a) => a.id)]));
+    const [tags, voiceRows, profile] = await Promise.all([
+      // The review screen fills its tag editor from these. Without them it opened
+      // empty and every save sent an empty list, which deleted the tags.
+      getSubmissionTags(id).catch(() => []),
+      // A student only ever hears a note that was sent; a draft is the teacher's.
+      getVoiceFeedbackForSubmissions(submissionIds, { sentOnly: !isStaffViewer }).catch((e) => {
+        console.error('Voice feedback load failed:', e?.message || e);
+        return [];
+      }),
+      isStaffViewer && studentId
+        ? supabase.from('student_profiles').select('ms_teams_email').eq('user_id', studentId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const voices = await signVoiceFeedback(voiceRows);
+    const voiceBySubmission = Object.fromEntries(voices.map((v) => [v.submission_id, v]));
+
+    return NextResponse.json({
+      submission: { ...submission, tags },
+      attempts,
+      voice_feedback: voiceBySubmission[id] ?? null,
+      voice_by_submission: voiceBySubmission,
+      // Staff only: lets the review screen open the Teams chat with this student.
+      student_teams_email: isStaffViewer
+        ? (profile as any)?.data?.ms_teams_email || (submission as any).student?.email || null
+        : null,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load submission';
     console.error('Submission GET error:', message);
@@ -65,7 +117,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
     }
 
-    // Delete the row (cascades to comments, notifications)
+    // The voice note row goes with the submission by cascade; its audio file
+    // would not, so remove it while the row still says where it is.
+    await removeVoiceFilesForSubmission(id);
+
+    // Delete the row (cascades to comments, notifications, voice feedback)
     const { error: deleteError } = await supabase
       .from('drawing_submissions')
       .delete()
@@ -73,7 +129,9 @@ export async function DELETE(
 
     if (deleteError) throw deleteError;
 
-    // Best-effort: delete associated storage files
+    // Best-effort: delete associated storage files. The bucket is read from the
+    // URL itself. It used to be guessed, and the guess named a bucket that does
+    // not exist, so every original image was left behind.
     const urlsToDelete = [
       submission.original_image_url,
       submission.reviewed_image_url,
@@ -82,9 +140,9 @@ export async function DELETE(
 
     for (const url of urlsToDelete) {
       try {
-        const bucket = url.includes('drawing-reviewed') ? 'drawing-reviewed' : 'drawing-submissions';
-        const path = url.split(`/${bucket}/`)[1];
-        if (path) await supabase.storage.from(bucket).remove([path]);
+        const match = url.match(/\/object\/public\/([^/]+)\/(.+)$/);
+        if (!match || !DRAWING_IMAGE_BUCKETS.has(match[1])) continue;
+        await supabase.storage.from(match[1]).remove([decodeURIComponent(match[2])]);
       } catch { /* non-critical */ }
     }
 

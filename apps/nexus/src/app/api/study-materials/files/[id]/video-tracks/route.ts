@@ -11,6 +11,7 @@ import { normalizeRecordingUrl } from '@/lib/sharepoint-transcript';
 import { readTrackLanguages, trackLanguageOrder, labelForCode } from '@/lib/track-languages';
 import { forgetTrackTranscript } from '@/lib/track-transcript';
 import { countQuestionsByTrack, describeTrackRecording, videoRefFromBody } from '@/lib/track-recording';
+import { libraryVideoRootSegments } from '@/lib/library-copy';
 import {
   classifyRecordingLink,
   getLibraryVideoFolderUrl,
@@ -113,7 +114,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         };
       }),
       languages,
-      library: { folder_url: libraryFolderUrl },
+      // folder_path lets the page name the folder a OneDrive video is copied into.
+      library: { folder_url: libraryFolderUrl, folder_path: libraryVideoRootSegments(process.env.SHAREPOINT_VIDEO_ROOT).join('/') },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load tracks';

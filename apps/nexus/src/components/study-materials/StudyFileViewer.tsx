@@ -1,10 +1,20 @@
 'use client';
 
 /**
- * StudyFileViewer — the view-only file viewer with a Google Classroom style comments panel.
+ * StudyFileViewer: the view-only chapter viewer with a Google Classroom style comments panel.
  * PDFs render in the in-app PDFReader (download/print toolbar hidden); images render as a contained
- * <img>. Desktop shows document + comments side by side; mobile uses a Document / Comments toggle.
+ * <img>. Desktop shows document + comments side by side; mobile uses one row of tabs.
  * Shared by the Study Materials browser and the Starred view.
+ *
+ * SLIDES. A chapter can carry its class PowerPoint, read as pages in the same
+ * secure reader (SlidesReader, lib/study-slides.ts). The student picks PDF or
+ * Slides: a segmented control in the header on desktop, two tabs in the one row
+ * on a phone. The choice is remembered on the device for the next chapter.
+ * Readers stay mounted once opened and are only hidden, so switching back lands
+ * on the page the student left and costs no second request. Notes belong to the
+ * book: jumping to one switches to the PDF, and the slides reader has no pen.
+ * Comments, the test footer and reading time belong to the chapter, whichever
+ * view is on screen, so Slides time counts toward progress with no extra work.
  *
  * The chapter test does NOT open here. It used to: a Dialog holding every
  * question in one scroll, opened on top of this Dialog, with no timer, no
@@ -29,6 +39,7 @@ import {
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
+import SlideshowOutlinedIcon from '@mui/icons-material/SlideshowOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
@@ -38,9 +49,17 @@ import ProtectedContent from '@/components/ProtectedContent';
 import StudyCommentPanel from '@/components/study-materials/StudyCommentPanel';
 import PDFAnnotationsPanel from '@/components/study-materials/PDFAnnotationsPanel';
 import ChapterVideoPanel from '@/components/study-materials/ChapterVideoPanel';
+import ReaderTabs, { type ReaderTabValue } from '@/components/study-materials/ReaderTabs';
+import SlidesReader from '@/components/study-materials/SlidesReader';
 import { useStudyTimeTracker } from '@/hooks/useStudyTimeTracker';
 import { useFileAnnotations } from '@/hooks/useFileAnnotations';
 import { takeTestHref } from '@/lib/test-return';
+import {
+  initialReaderView,
+  readReaderMode,
+  writeReaderMode,
+  type StudyReaderView,
+} from '@/lib/study-reader-mode';
 import type { NexusStudyFileDTO } from '@neram/database/types';
 
 type ViewerTab = 'doc' | 'notes' | 'comments';
@@ -57,6 +76,19 @@ interface StudyFileViewerProps {
   watermark?: string;
   /** Silently record the student's reading time on this file while the viewer is open. */
   track?: boolean;
+}
+
+/** PDF or Slides for one chapter, and which readers have been opened. */
+interface ReaderState {
+  fileId: string | null;
+  view: StudyReaderView;
+  opened: Record<StudyReaderView, boolean>;
+}
+
+/** How a chapter opens: on the view the student last chose, when it has slides. */
+function openingReader(file: NexusStudyFileDTO | null): ReaderState {
+  const view = file ? initialReaderView(!!file.has_slides, readReaderMode()) : 'pdf';
+  return { fileId: file?.id ?? null, view, opened: { pdf: view === 'pdf', slides: view === 'slides' } };
 }
 
 /** A tiled, low-opacity diagonal watermark background (for images; PDFs bake it onto the canvas). */
@@ -86,11 +118,47 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
   const [startingTest, setStartingTest] = useState(false);
   const [testError, setTestError] = useState('');
   const [jumpToPage, setJumpToPage] = useState<number | undefined>(undefined);
+  const [reader, setReader] = useState<ReaderState>(() => openingReader(null));
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
 
   // Reset to the document tab whenever a new file opens. A teacher opening a
   // chapter is still reading it first; Setup is one tap away, not in the way.
   // A stale jump target must not survive into the next file's page count.
-  useEffect(() => { if (file) { setTab('doc'); setTestError(''); setJumpToPage(undefined); } }, [file]);
+  useEffect(() => {
+    if (file) {
+      setTab('doc');
+      setTestError('');
+      setJumpToPage(undefined);
+      setDownloadError('');
+    }
+  }, [file]);
+
+  /**
+   * PDF or Slides, for the chapter on screen.
+   *
+   * Derived during render rather than reset in an effect: a chapter that has
+   * just opened reads its starting view in the same render, so the wrong reader
+   * is never mounted for a frame (and never starts a request) before an effect
+   * corrects it. State is written only when the student switches.
+   */
+  const hasSlides = !!file?.has_slides;
+  const current = file && reader.fileId === file.id ? reader : openingReader(file);
+  const view: StudyReaderView = hasSlides ? current.view : 'pdf';
+  const pdfOpened = current.opened.pdf || view === 'pdf';
+  const slidesOpened = hasSlides && (current.opened.slides || view === 'slides');
+
+  /** `remember` is false when the switch is not the student's choice of how to read. */
+  const showView = (next: StudyReaderView, remember = true) => {
+    if (!file) return;
+    setReader({
+      fileId: file.id,
+      view: next,
+      opened: { pdf: pdfOpened || next === 'pdf', slides: slidesOpened || next === 'slides' },
+    });
+    setDownloadError('');
+    if (remember && hasSlides) writeReaderMode(next);
+  };
 
   /**
    * Which panel the side rail shows.
@@ -100,6 +168,17 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
    * means the document fills the screen.
    */
   const railTab: ViewerTab = tab === 'doc' ? 'comments' : tab;
+
+  /** The phone row folds PDF and Slides into the same tabs as Notes and Comments. */
+  const mobileTab: ReaderTabValue = tab === 'doc' ? view : tab;
+  const onMobileTab = (v: ReaderTabValue) => {
+    if (v === 'pdf' || v === 'slides') {
+      showView(v);
+      setTab('doc');
+    } else {
+      setTab(v);
+    }
+  };
 
   // Personal ink annotations (Pen/Highlighter/Note).
   const annotationsHook = useFileAnnotations({
@@ -172,6 +251,38 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
       ? `/api/study-materials/files/${file.id}/content?token=${encodeURIComponent(token || '')}${download ? '&download=1' : ''}`
       : '';
 
+  /**
+   * The slides as a PDF copy. Never the .pptx: the server signs a download of
+   * the converted PDF, and only when the chapter may be downloaded.
+   */
+  const downloadSlides = async () => {
+    if (!file || downloading) return;
+    setDownloading(true);
+    setDownloadError('');
+    try {
+      const t = await getToken();
+      const res = await fetch(`/api/study-materials/files/${file.id}/slides?download=1`, {
+        headers: { Authorization: `Bearer ${t}` },
+        cache: 'no-store',
+      });
+      const body = await res.json().catch(() => null);
+      const url = body?.slides?.status === 'ready' && typeof body.slides.url === 'string' ? body.slides.url : null;
+      if (!res.ok || !url) throw new Error(body?.error || 'The slides could not be downloaded right now.');
+      // Same tab on purpose. The link answers as an attachment, so the page
+      // stays put, and a new tab opened after an await is blocked as a popup on phones.
+      const link = document.createElement('a');
+      link.href = url;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (e: any) {
+      setDownloadError(e?.message || 'The slides could not be downloaded right now.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <Dialog
       open={!!file}
@@ -185,10 +296,48 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           {/* Header */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
-            <Glyph kind={file.kind} />
+            {view === 'slides' ? (
+              <SlideshowOutlinedIcon sx={{ fontSize: 22, color: 'primary.main' }} />
+            ) : (
+              <Glyph kind={file.kind} />
+            )}
             <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1, minWidth: 0 }} noWrap>{file.title}</Typography>
+            {!isMobile && hasSlides && (
+              <ToggleButtonGroup
+                value={view}
+                exclusive
+                size="small"
+                aria-label="Read this chapter as"
+                onChange={(_, v: StudyReaderView | null) => {
+                  if (v) showView(v);
+                }}
+                sx={{
+                  flexShrink: 0,
+                  '& .MuiToggleButton-root': { minHeight: 44, px: 1.5, textTransform: 'none', gap: 0.75, fontSize: 13 },
+                }}
+              >
+                <ToggleButton value="pdf">
+                  {file.kind === 'pdf' ? <PictureAsPdfOutlinedIcon fontSize="small" /> : <ImageOutlinedIcon fontSize="small" />}
+                  {file.kind === 'pdf' ? 'PDF' : 'Document'}
+                </ToggleButton>
+                <ToggleButton value="slides">
+                  <SlideshowOutlinedIcon fontSize="small" />
+                  Slides
+                </ToggleButton>
+              </ToggleButtonGroup>
+            )}
             {file.downloadable && (
-              <Button size="small" startIcon={<DownloadOutlinedIcon />} onClick={() => window.open(contentUrl(true), '_blank')}>
+              <Button
+                size="small"
+                startIcon={<DownloadOutlinedIcon />}
+                disabled={view === 'slides' && downloading}
+                aria-label={view === 'slides' ? 'Download the slides as a PDF' : undefined}
+                onClick={() => {
+                  if (view === 'slides') downloadSlides();
+                  else window.open(contentUrl(true), '_blank');
+                }}
+                sx={{ minHeight: 40 }}
+              >
                 Download
               </Button>
             )}
@@ -197,99 +346,105 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
             </IconButton>
           </Box>
 
-          {/* Mobile tabs. */}
-          {isMobile && (
-            <ToggleButtonGroup
-              value={tab}
-              exclusive
-              onChange={(_, v) => v && setTab(v)}
-              fullWidth
-              size="small"
-              sx={{
-                p: 1,
-                flexShrink: 0,
-                '& .MuiToggleButton-root': { minHeight: 48, textTransform: 'none', gap: 0.5 },
-              }}
-            >
-              <ToggleButton value="doc">
-                {file.kind === 'pdf' ? <PictureAsPdfOutlinedIcon fontSize="small" /> : <ImageOutlinedIcon fontSize="small" />}
-                Document
-              </ToggleButton>
-              <ToggleButton value="notes">
-                <StickyNote2OutlinedIcon fontSize="small" /> Notes
-              </ToggleButton>
-              <ToggleButton value="comments">
-                <ChatBubbleOutlineIcon fontSize="small" /> Comments
-              </ToggleButton>
-            </ToggleButtonGroup>
+          {downloadError && (
+            <Alert severity="warning" onClose={() => setDownloadError('')} sx={{ borderRadius: 0, flexShrink: 0 }}>
+              {downloadError}
+            </Alert>
           )}
+
+          {/* Mobile tabs. */}
+          {isMobile && <ReaderTabs value={mobileTab} onChange={onMobileTab} hasSlides={hasSlides} kind={file.kind} />}
 
           {/* Body */}
           <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
-            {(!isMobile || tab === 'doc') && (
-              <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', bgcolor: alpha(theme.palette.text.primary, 0.03) }}>
-                {/* ProtectedContent blocks right-click, text selection, Ctrl+S/P and printing while viewing. */}
-                <ProtectedContent disableScreenshot sx={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', width: '100%' }}>
-                  {file.kind === 'pdf' ? (
-                    <PDFReader
-                      pdfUrl={contentUrl()}
-                      watermark={watermark}
-                      initialPage={jumpToPage}
-                      annotations={{
-                        items: annotationsHook.annotations,
-                        onCreateStroke: (page, kind, points, color) =>
-                          annotationsHook
-                            .createAnnotation({ page_number: page, kind, color, points })
-                            .then((a) => a?.id ?? null),
-                        onCreateNote: (page, anchor, text, color) =>
-                          annotationsHook
-                            .createAnnotation({
-                              page_number: page,
-                              kind: 'note',
-                              color,
-                              anchor_x: anchor.x,
-                              anchor_y: anchor.y,
-                              note_text: text,
-                            })
-                            .then((a) => a?.id ?? null),
-                        onUpdateNote: (id, text) => {
-                          annotationsHook.updateAnnotationNote(id, { note_text: text });
-                        },
-                        onDelete: (id) => {
-                          annotationsHook.deleteAnnotation(id);
-                        },
-                      }}
-                    />
-                  ) : (
-                    <Box
-                      onContextMenu={(e) => e.preventDefault()}
-                      sx={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={contentUrl()}
-                        alt={file.title}
-                        draggable={false}
-                        onContextMenu={(e) => e.preventDefault()}
-                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', userSelect: 'none', pointerEvents: 'none' }}
+            {/* Hidden rather than removed while a phone shows Notes or Comments,
+                so coming back neither reloads the chapter nor loses the page. */}
+            <Box
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+                display: !isMobile || tab === 'doc' ? 'flex' : 'none',
+                bgcolor: alpha(theme.palette.text.primary, 0.03),
+              }}
+            >
+              {/* ProtectedContent blocks right-click, text selection, Ctrl+S/P and printing while viewing. */}
+              <ProtectedContent disableScreenshot sx={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', width: '100%' }}>
+                {pdfOpened && (
+                  <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: view === 'pdf' ? 'flex' : 'none' }}>
+                    {file.kind === 'pdf' ? (
+                      <PDFReader
+                        pdfUrl={contentUrl()}
+                        watermark={watermark}
+                        initialPage={jumpToPage}
+                        annotations={{
+                          items: annotationsHook.annotations,
+                          onCreateStroke: (page, kind, points, color) =>
+                            annotationsHook
+                              .createAnnotation({ page_number: page, kind, color, points })
+                              .then((a) => a?.id ?? null),
+                          onCreateNote: (page, anchor, text, color) =>
+                            annotationsHook
+                              .createAnnotation({
+                                page_number: page,
+                                kind: 'note',
+                                color,
+                                anchor_x: anchor.x,
+                                anchor_y: anchor.y,
+                                note_text: text,
+                              })
+                              .then((a) => a?.id ?? null),
+                          onUpdateNote: (id, text) => {
+                            annotationsHook.updateAnnotationNote(id, { note_text: text });
+                          },
+                          onDelete: (id) => {
+                            annotationsHook.deleteAnnotation(id);
+                          },
+                        }}
                       />
-                      {watermark && (
-                        <Box
-                          aria-hidden
-                          sx={{
-                            position: 'absolute',
-                            inset: 0,
-                            pointerEvents: 'none',
-                            backgroundImage: watermarkBackground(watermark),
-                            backgroundRepeat: 'repeat',
-                          }}
+                    ) : (
+                      <Box
+                        onContextMenu={(e) => e.preventDefault()}
+                        sx={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={contentUrl()}
+                          alt={file.title}
+                          draggable={false}
+                          onContextMenu={(e) => e.preventDefault()}
+                          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', userSelect: 'none', pointerEvents: 'none' }}
                         />
-                      )}
-                    </Box>
-                  )}
-                </ProtectedContent>
-              </Box>
-            )}
+                        {watermark && (
+                          <Box
+                            aria-hidden
+                            sx={{
+                              position: 'absolute',
+                              inset: 0,
+                              pointerEvents: 'none',
+                              backgroundImage: watermarkBackground(watermark),
+                              backgroundRepeat: 'repeat',
+                            }}
+                          />
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                )}
+                {slidesOpened && (
+                  <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: view === 'slides' ? 'flex' : 'none' }}>
+                    {/* Going back to the PDF because the slides failed is not a
+                        change of how the student likes to read, so it is not remembered. */}
+                    <SlidesReader
+                      fileId={file.id}
+                      getToken={getToken}
+                      watermark={watermark}
+                      onReadPdf={() => showView('pdf', false)}
+                    />
+                  </Box>
+                )}
+              </ProtectedContent>
+            </Box>
 
             {(!isMobile || tab !== 'doc') && (
               <Box
@@ -327,7 +482,9 @@ export default function StudyFileViewer({ file, token, getToken, onClose, waterm
                     annotations={annotationsHook.annotations}
                     loading={annotationsHook.loading}
                     onJumpToPage={(page) => {
+                      // Notes are on the book's pages, never the slides'.
                       setJumpToPage(page);
+                      showView('pdf', false);
                       if (isMobile) setTab('doc');
                     }}
                     onDelete={(id) => annotationsHook.deleteAnnotation(id)}

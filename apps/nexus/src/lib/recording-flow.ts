@@ -68,6 +68,7 @@ export type FlowActionKind =
   | 'find_video'
   | 'paste_link'
   | 'replace_video'
+  | 'copy_to_library'
   | 'upload_transcript'
   | 'create_checkpoints'
   | 'publish'
@@ -114,6 +115,7 @@ const action = (kind: FlowActionKind, label: string): FlowAction => ({ kind, lab
 const FIND_VIDEO = action('find_video', 'Find video in SharePoint');
 const PASTE_LINK = action('paste_link', 'Paste a SharePoint link');
 const REPLACE_VIDEO = action('replace_video', 'Replace video');
+const COPY_TO_LIBRARY = action('copy_to_library', 'Copy to Neram library');
 const UPLOAD_TRANSCRIPT = action('upload_transcript', 'Upload transcript (.vtt)');
 const CREATE_CHECKPOINTS = action('create_checkpoints', 'Create checkpoints');
 const PUBLISH_OPEN = action('publish_open', 'Publish without checkpoints');
@@ -158,11 +160,15 @@ export function planRecording(track: RecordingTrackView | null, label: string): 
   // The video comes first even on a live recording: nothing else on the page
   // matters while the file itself is the problem.
   if (problem) {
+    // A video in a personal OneDrive is the right video in the wrong place, so
+    // copying it keeps everything cut from it. Any other problem (gone, not a
+    // video, no access) cannot be copied away and needs another file.
+    const inOneDrive = problem === 'RECORDING_IN_ONEDRIVE';
     return {
       stage: 'video_problem',
       tabStatus: 'Needs a fix',
-      primary: REPLACE_VIDEO,
-      secondary: published ? [UNPUBLISH] : [],
+      primary: inOneDrive ? COPY_TO_LIBRARY : REPLACE_VIDEO,
+      secondary: [...(inOneDrive ? [REPLACE_VIDEO] : []), ...(published ? [UNPUBLISH] : [])],
       steps,
     };
   }

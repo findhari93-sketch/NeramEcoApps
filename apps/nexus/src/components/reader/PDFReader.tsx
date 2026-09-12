@@ -7,6 +7,7 @@ import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PDFAnnotationLayer, { type AnnotationTool } from './PDFAnnotationLayer';
 import PDFAnnotationToolbar, { ANNOTATION_COLORS } from './PDFAnnotationToolbar';
+import { currentPageFromTops, needsRerenderForWidth, pageAspectRatio } from './pdf-layout';
 import type { NexusStudyAnnotationDTO, NexusStudyAnnotationPoint } from '@neram/database/types';
 
 /** Personal ink annotations for this file. Omit entirely for a plain, non-annotatable reader. */
@@ -40,13 +41,32 @@ interface PDFReaderProps {
    */
   watermark?: string;
   annotations?: PDFReaderAnnotations;
+  /** Names the document in the toolbar, for example "Slides". */
+  label?: string;
 }
+
+/** Read by screen readers, not drawn. */
+const visuallyHidden = {
+  position: 'absolute',
+  width: '1px',
+  height: '1px',
+  p: 0,
+  m: '-1px',
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+} as const;
 
 /**
  * Secure PDF viewer. Renders the document with pdf.js into <canvas> pages (NOT the browser's
  * native <iframe> PDF viewer), so there is no built-in toolbar, no "Save as", no Print, and
  * right-click is genuinely blocked. Pages render lazily as they scroll into view. An optional
  * watermark is drawn directly onto each canvas.
+ *
+ * Page placeholders take the document's own page shape, so a deck of 16:9 slides does not sit
+ * in 400px white gaps on a phone. When the reader's width changes enough (a phone turned on its
+ * side), the pages on screen are drawn again at the new size so they stay sharp.
  *
  * Note: no browser-rendered document can be 100% leak-proof (screenshots, devtools). This removes
  * every casual download path and ties any screenshot to the viewer via the watermark.
@@ -58,11 +78,15 @@ export default function PDFReader({
   onRetry,
   watermark,
   annotations,
+  label = 'PDF Viewer',
 }: PDFReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [numPages, setNumPages] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  /** Page 1's width over height, used for every placeholder until its page is drawn. */
+  const [pageAspect, setPageAspect] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Also kept as state (not just a ref) so it can be passed as the Drawer's portal
@@ -77,6 +101,10 @@ export default function PDFReader({
   const pdfRef = useRef<any>(null);
   const renderedRef = useRef<Set<number>>(new Set());
   const pageElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
+  /** Pages near the viewport, so a width change redraws only what can be seen. */
+  const visibleRef = useRef<Set<number>>(new Set());
+  /** The width pages were last drawn at. */
+  const renderedWidthRef = useRef<number | null>(null);
 
   // --- Annotate mode (Pen / Highlighter / Note / Eraser) --------------------
   const canAnnotate = !!annotations;
@@ -130,8 +158,12 @@ export default function PDFReader({
     setLoading(true);
     setError(false);
     setNumPages(0);
+    setPageAspect(null);
+    setCurrentPage(1);
     renderedRef.current = new Set();
     pageElsRef.current = new Map();
+    visibleRef.current = new Set();
+    renderedWidthRef.current = null;
 
     (async () => {
       try {
@@ -146,11 +178,23 @@ export default function PDFReader({
           cMapPacked: true,
           standardFontDataUrl: `${cdn}/standard_fonts/`,
         }).promise;
+
+        // The first page's shape sizes every placeholder, so pages do not jump as they draw.
+        let aspect: number | null = null;
+        try {
+          const first = await doc.getPage(1);
+          const vp = first.getViewport({ scale: 1 });
+          aspect = pageAspectRatio(vp.width, vp.height);
+        } catch {
+          // Placeholders fall back to a fixed height.
+        }
+
         if (cancelled) {
           doc.destroy();
           return;
         }
         pdfRef.current = doc;
+        setPageAspect(aspect);
         setNumPages(doc.numPages);
         setLoading(false);
       } catch {
@@ -212,6 +256,7 @@ export default function PDFReader({
       try {
         const page = await doc.getPage(pageNum);
         const containerWidth = host.clientWidth || 800;
+        if (host.clientWidth) renderedWidthRef.current = host.clientWidth;
         const baseViewport = page.getViewport({ scale: 1 });
         const scale = containerWidth / baseViewport.width;
         const outputScale = Math.min(window.devicePixelRatio || 1, 2);
@@ -234,6 +279,7 @@ export default function PDFReader({
 
         if (watermark) drawWatermark(canvas, watermark);
 
+        // Emptied and filled in one task, so the placeholder shape never shows in between.
         host.innerHTML = '';
         host.appendChild(canvas);
       } catch {
@@ -251,8 +297,11 @@ export default function PDFReader({
         for (const entry of entries) {
           const pageNum = Number((entry.target as HTMLElement).dataset.page);
           if (entry.isIntersecting) {
+            visibleRef.current.add(pageNum);
             renderPage(pageNum);
             if (entry.intersectionRatio > 0.5) onPageChange?.(pageNum);
+          } else {
+            visibleRef.current.delete(pageNum);
           }
         }
       },
@@ -261,6 +310,60 @@ export default function PDFReader({
     pageElsRef.current.forEach((el) => io.observe(el));
     return () => io.disconnect();
   }, [numPages, renderPage, onPageChange]);
+
+  // --- Draw again at the new size when the width changes enough -------------
+  // Canvases scale with CSS at once, so nothing jumps; this only makes them sharp.
+  // Pages off screen are drawn afresh when they next scroll into view.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!numPages || !el || typeof ResizeObserver === 'undefined') return;
+    let timer: number | undefined;
+    const ro = new ResizeObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const width = pageElsRef.current.get(1)?.clientWidth ?? 0;
+        if (!needsRerenderForWidth(renderedWidthRef.current, width)) return;
+        renderedRef.current = new Set();
+        visibleRef.current.forEach((p) => {
+          renderPage(p);
+        });
+      }, 200);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [numPages, renderPage]);
+
+  // --- Track the page on screen for the "3 / 12" indicator -------------------
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!numPages || !el) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      // A hidden reader measures nothing and would report the last page.
+      if (!el.clientHeight) return;
+      const top = el.getBoundingClientRect().top;
+      const tops: number[] = [];
+      for (let p = 1; p <= numPages; p++) {
+        const host = pageElsRef.current.get(p);
+        tops.push(host ? host.getBoundingClientRect().top - top : Number.POSITIVE_INFINITY);
+      }
+      const page = currentPageFromTops(tops, el.clientHeight);
+      if (page) setCurrentPage(page);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    update();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [numPages]);
 
   // --- Jump to the initial page once pages exist ---------------------------
   useEffect(() => {
@@ -293,13 +396,14 @@ export default function PDFReader({
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
+          width: '100%',
           gap: 2,
           p: 3,
           textAlign: 'center',
         }}
       >
         <Typography variant="body2" color="text.secondary">
-          Could not load the PDF
+          {label === 'Slides' ? 'Could not load the slides' : 'Could not load the PDF'}
         </Typography>
         {onRetry && (
           <Button
@@ -310,6 +414,7 @@ export default function PDFReader({
               setLoading(true);
               onRetry();
             }}
+            sx={{ minHeight: 44 }}
           >
             Retry
           </Button>
@@ -354,8 +459,22 @@ export default function PDFReader({
           variant="caption"
           sx={{ flex: 1, fontWeight: 600, color: 'text.secondary', fontSize: '0.75rem' }}
         >
-          PDF Viewer
+          {label}
         </Typography>
+        {numPages > 0 && (
+          <Typography
+            variant="caption"
+            aria-live="polite"
+            sx={{ color: 'text.secondary', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', px: 0.5 }}
+          >
+            <span aria-hidden="true">
+              {currentPage} / {numPages}
+            </span>
+            <Box component="span" sx={visuallyHidden}>
+              Page {currentPage} of {numPages}
+            </Box>
+          </Typography>
+        )}
         {canAnnotate && (
           <Tooltip title={annotateMode ? 'Stop marking up' : 'Highlight, underline or add a note'}>
             <IconButton
@@ -374,6 +493,7 @@ export default function PDFReader({
             size="small"
             onClick={handleFullscreen}
             aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            sx={{ width: 40, height: 40 }}
           >
             {isFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
           </IconButton>
@@ -433,7 +553,6 @@ export default function PDFReader({
               sx={{
                 position: 'relative',
                 width: '100%',
-                minHeight: 400,
                 bgcolor: 'background.paper',
                 borderRadius: 1,
                 boxShadow: 2,
@@ -452,14 +571,19 @@ export default function PDFReader({
               >
                 <CircularProgress size={22} sx={{ opacity: 0.5 }} />
               </Box>
-              {/* Canvas mount: React keeps this empty; pdf.js appends the <canvas> imperatively. */}
+              {/* Canvas mount: React keeps this empty; pdf.js appends the <canvas> imperatively.
+                  While empty it holds the page's shape; once the canvas is in, the canvas sets the height. */}
               <Box
                 data-page={pageNum}
                 ref={(el: HTMLDivElement | null) => {
                   if (el) pageElsRef.current.set(pageNum, el);
                   else pageElsRef.current.delete(pageNum);
                 }}
-                sx={{ position: 'relative', width: '100%' }}
+                sx={{
+                  position: 'relative',
+                  width: '100%',
+                  '&:empty': pageAspect ? { aspectRatio: `${pageAspect}` } : { minHeight: 400 },
+                }}
               />
               {annotations && (
                 <PDFAnnotationLayer

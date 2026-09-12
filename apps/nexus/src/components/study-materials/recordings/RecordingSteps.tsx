@@ -25,6 +25,7 @@ import PublishRoundedIcon from '@mui/icons-material/PublishRounded';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
+import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
 import type {
   FlowAction,
   FlowActionKind,
@@ -33,7 +34,8 @@ import type {
   StepState,
 } from '@/lib/recording-flow';
 
-export type RecordingBusy = 'preparing' | 'publishing' | 'saving' | null;
+/** 'copying': the video is being copied into the Neram library, which holds every step. */
+export type RecordingBusy = 'preparing' | 'publishing' | 'saving' | 'copying' | null;
 
 export interface RecordingStepsProps {
   label: string;
@@ -142,10 +144,21 @@ function Step({
   );
 }
 
+/**
+ * Text for a screen reader only. Sizes are strings on purpose: in MUI's `sx` a
+ * number up to 1 is a fraction, so `width: 1` meant 100%, and an absolutely
+ * placed span a whole screen wide started halfway across the steps. It pushed
+ * the recordings page 71px past a 375px phone and 919px past a laptop, and
+ * because MUI pads the page for a scrollbar when a sheet opens, every sheet then
+ * crushed the page behind it into a one-letter column.
+ */
 const visuallyHidden = {
   position: 'absolute',
-  width: 1,
-  height: 1,
+  width: '1px',
+  height: '1px',
+  margin: '-1px',
+  padding: 0,
+  border: 0,
   overflow: 'hidden',
   clip: 'rect(0 0 0 0)',
   whiteSpace: 'nowrap',
@@ -212,10 +225,19 @@ export default function RecordingSteps({
   const checkpoints = track.section_count || 0;
   const questions = track.question_count || 0;
   const preparingHere = busy === 'preparing';
+  const copyingHere = busy === 'copying';
 
   const progress = (
     <Box sx={{ mt: 1.25 }} role="status" aria-live="polite">
-      <LinearProgress sx={{ borderRadius: 1, mb: 1 }} />
+      <LinearProgress
+        sx={{
+          borderRadius: 1,
+          mb: 1,
+          '@media (prefers-reduced-motion: reduce)': {
+            '& .MuiLinearProgress-bar': { animation: 'none', transition: 'none' },
+          },
+        }}
+      />
       <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.55 }}>
         Creating checkpoints. Nexus is finding the transcript and writing the questions, which can take a minute. You
         can leave this page; it carries on.
@@ -234,9 +256,23 @@ export default function RecordingSteps({
         <Step index={1} title="Video" state={plan.steps.video}>
           {problem ? (
             <>
-              <Detail>Replace this video before anything else. The reason is shown with the video.</Detail>
-              {offers('replace_video') && (
-                <Actions>{actionButton('replace_video', 'Replace video', <SwapHorizRoundedIcon />)}</Actions>
+              <Detail>
+                {copyingHere
+                  ? 'Copying this video into the Neram library. The other steps wait until the copy is attached.'
+                  : offers('copy_to_library')
+                    ? 'Copy this video into the Neram library before anything else. Nothing made from it is lost.'
+                    : 'Replace this video before anything else. The reason is shown with the video.'}
+              </Detail>
+              {/*
+                No buttons here while the copy runs. Disabled, the blue one still
+                looked pressable; the card and the sticky bar show the progress.
+              */}
+              {!copyingHere && (offers('copy_to_library') || offers('replace_video')) && (
+                <Actions>
+                  {offers('copy_to_library') &&
+                    actionButton('copy_to_library', 'Copy to Neram library', <DriveFileMoveOutlinedIcon />)}
+                  {offers('replace_video') && actionButton('replace_video', 'Replace video', <SwapHorizRoundedIcon />)}
+                </Actions>
               )}
             </>
           ) : (

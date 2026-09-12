@@ -6,6 +6,7 @@ import { addMemberToTeam } from '@/lib/teams-sync';
 import type { RemovalReasonCategory } from '@neram/database';
 import { resolveDirectoryUser } from '@/lib/directory-enrollment';
 import { createSupabaseDirectoryEnrollStore } from '@/lib/directory-enrollment-store';
+import { fillFromApplicationForms } from '@/lib/application-fill-store';
 
 /**
  * GET /api/classrooms/[id]/enrollments?batch={batchId}&role={teacher|student}
@@ -160,6 +161,22 @@ export async function POST(
       .single();
 
     if (error) throw error;
+
+    // A student who applied has already told us their class and exam year. Copy
+    // what is missing now rather than leaving it for the daily pass. Best effort:
+    // the enrolment has happened either way.
+    if (role === 'student') {
+      try {
+        await fillFromApplicationForms(supabase, {
+          userIds: [resolvedUserId],
+          classroomId: id,
+          actorId: caller.id,
+          reason: 'Filled from the application form when the student was added',
+        });
+      } catch (fillErr) {
+        console.warn('[enrollments] application-form fill failed:', fillErr);
+      }
+    }
 
     // Non-blocking: auto-add to the classroom's own Teams team if sync is enabled.
     // Under one-classroom-per-year each yearly classroom has its own Team, so there

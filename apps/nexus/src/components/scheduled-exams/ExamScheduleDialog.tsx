@@ -25,6 +25,7 @@ import {
 } from '@neram/ui';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { istDatePlusDays } from '@/lib/reopen-deadline';
 import EligibilityRosterPanel from './EligibilityRosterPanel';
 
 /**
@@ -114,18 +115,6 @@ function toIso(date: string, time: string): string {
   // offset is stated rather than inferred from the teacher's laptop: a teacher
   // scheduling from a different timezone must not shift the whole class's exam.
   return new Date(`${date}T${time}:00+05:30`).toISOString();
-}
-
-/** Today or tomorrow, as an IST calendar date -- the quick-pick's two chips. */
-function istDatePlusDays(offset: number): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(Date.now() + offset * 86_400_000));
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
-  return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
 export default function ExamScheduleDialog({

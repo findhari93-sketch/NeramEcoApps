@@ -17,6 +17,8 @@
  * page and any future caller share it.
  */
 
+import { slidesNeedFix } from './slides-messages';
+
 /** A language track, as /api/study-materials/files/[id]/video-tracks returns it. */
 export interface WorkspaceTrack {
   language: string;
@@ -38,9 +40,14 @@ export interface WorkspaceReportRow {
 
 /** Enough of the file DTO to describe the chapter. */
 export interface WorkspaceFile {
+  kind?: string;
   has_test?: boolean;
   downloadable?: boolean;
   recording?: { source?: string; url?: string | null; youtube_id?: string | null } | null;
+  /** A converted PowerPoint deck students can read beside the PDF. */
+  has_slides?: boolean;
+  /** Why the deck could not be refreshed from SharePoint, when it could not. */
+  slides_problem?: string | null;
 }
 
 /** The chapter's placed test, as getPlacedChapterTest returns it. */
@@ -138,7 +145,7 @@ export function summariseWatchLanguages(
 export type ReadinessState = 'ready' | 'attention' | 'missing' | 'info';
 
 export interface ReadinessLine {
-  key: 'test' | 'recordings' | 'quick_link' | 'download';
+  key: 'test' | 'recordings' | 'slides' | 'quick_link' | 'download';
   title: string;
   /** One sentence, stating the fact rather than the instruction. */
   detail: string;
@@ -150,9 +157,10 @@ export interface ReadinessLine {
 /**
  * The chapter, line by line, in the order a teacher would fix it.
  *
- * Test, recordings and download are always present, so the checklist keeps its
- * shape between chapters and a teacher can scan a folder of them. The old video
- * link appears only on the chapters that still have one to move.
+ * Test, recordings and download are always present, and slides on every chapter
+ * that is not an image, so the checklist keeps its shape between chapters and a
+ * teacher can scan a folder of them. The old video link appears only on the
+ * chapters that still have one to move.
  */
 export function chapterReadiness(
   file: WorkspaceFile,
@@ -258,6 +266,48 @@ export function chapterReadiness(
   }
 
   /**
+   * The class PowerPoint, read beside the PDF.
+   *
+   * Optional in every state: a chapter without slides is read from its PDF,
+   * which is how every chapter worked before decks existed, so "none" is
+   * information and never a gap. An image chapter gets no line, because a deck
+   * sits beside a book.
+   *
+   * Only a problem a teacher can fix turns it amber. SharePoint being busy clears
+   * on its own, and students keep the last good slides meanwhile.
+   */
+  let slides: ReadinessLine | null = null;
+  if (file.kind !== 'image') {
+    if (slidesNeedFix(file.slides_problem)) {
+      slides = {
+        key: 'slides',
+        title: 'Slides',
+        detail: file.has_slides
+          ? 'Need a fix. Students still see the last version that worked.'
+          : 'Added, but students cannot see them yet.',
+        state: 'attention',
+        optional: true,
+      };
+    } else if (file.has_slides) {
+      slides = {
+        key: 'slides',
+        title: 'Slides',
+        detail: 'Students can read the class PowerPoint beside the PDF.',
+        state: 'ready',
+        optional: true,
+      };
+    } else {
+      slides = {
+        key: 'slides',
+        title: 'Slides',
+        detail: 'None. Students read the PDF only.',
+        state: 'info',
+        optional: true,
+      };
+    }
+  }
+
+  /**
    * The old ungated link, and the one line in this checklist that is a cleanup
    * rather than a state.
    *
@@ -265,8 +315,8 @@ export function chapterReadiness(
    * teacher who used one reached nobody, and the reason to reach for it (an
    * un-transcribed recording could not be published) is gone. A chapter that
    * still holds one gets an amber line until it is moved. A chapter that never
-   * had one gets no line at all, which is why this list no longer always
-   * returns four keys.
+   * had one gets no line at all, which is why this list does not always
+   * return the same keys.
    */
   const quickLink: ReadinessLine | null = file.recording
     ? {
@@ -289,9 +339,9 @@ export function chapterReadiness(
   };
 
   // quickLink is dropped when there is nothing to clean up, so the usual
-  // chapter reads test, recordings, download and nothing about a feature that
-  // no longer exists.
-  return [test, recordings, ...(quickLink ? [quickLink] : []), download];
+  // chapter reads test, recordings, slides, download and nothing about a feature
+  // that no longer exists.
+  return [test, recordings, ...(slides ? [slides] : []), ...(quickLink ? [quickLink] : []), download];
 }
 
 /** The lines that actually stop a student finishing. Usually none, or the test. */

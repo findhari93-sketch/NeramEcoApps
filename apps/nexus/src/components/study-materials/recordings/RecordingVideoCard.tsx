@@ -39,6 +39,7 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import MovieOutlinedIcon from '@mui/icons-material/MovieOutlined';
+import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
 import { formatTimecode } from '@/lib/timecode';
 import { videoItemMessage } from '@/lib/recording-messages';
 import { describeRecordingUrl } from '@/lib/chapter-recordings';
@@ -64,6 +65,13 @@ export interface RecordingVideoCardProps {
   onMove: (code: string) => void;
   onRemove: () => void;
   busy?: boolean;
+  /**
+   * Copy a video kept in a personal OneDrive into the Neram library. Offered
+   * only for that problem: a video that has gone cannot be copied.
+   */
+  onCopyToLibrary?: () => void;
+  /** A copy of this video is running. Pressing the button shows its progress again. */
+  copying?: { percent: number | null } | null;
 }
 
 export default function RecordingVideoCard({
@@ -77,6 +85,8 @@ export default function RecordingVideoCard({
   onMove,
   onRemove,
   busy = false,
+  onCopyToLibrary,
+  copying = null,
 }: RecordingVideoCardProps) {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
 
@@ -190,18 +200,32 @@ export default function RecordingVideoCard({
         </Typography>
       )}
 
-      {/* Whether it may be used, with the fix beside the reason. */}
+      {/*
+        Whether it may be used, with the fix under the reason. Under, not beside:
+        as an Alert action the button sat in a narrow column and wrapped to one
+        word per line, squeezing the reason too, on a phone and a laptop alike.
+      */}
       {problem ? (
-        <Alert
-          severity="warning"
-          sx={{ mt: 1.5 }}
-          action={
-            <Button color="inherit" onClick={onReplace} disabled={busy} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}>
-              Replace video
-            </Button>
-          }
-        >
+        <Alert severity="warning" sx={{ mt: 1.5 }}>
           {videoItemMessage(problem, { name })}
+          <Box sx={{ mt: 1, ml: -1 }}>
+            {problem === 'RECORDING_IN_ONEDRIVE' && onCopyToLibrary ? (
+              <Button
+                color="inherit"
+                onClick={onCopyToLibrary}
+                // Stays pressable while its own copy runs, to show the progress again.
+                disabled={busy && !copying}
+                startIcon={copying ? undefined : <DriveFileMoveOutlinedIcon />}
+                sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
+              >
+                {copying ? `Copying...${copying.percent != null ? ` ${copying.percent}%` : ''}` : 'Copy to Neram library'}
+              </Button>
+            ) : (
+              <Button color="inherit" onClick={onReplace} disabled={busy} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}>
+                Replace video
+              </Button>
+            )}
+          </Box>
         </Alert>
       ) : unchecked ? (
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, mt: 1, color: 'text.secondary' }}>

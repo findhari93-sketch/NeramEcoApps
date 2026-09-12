@@ -48,6 +48,8 @@ export interface ChapterManageActions {
   onOpenTest: (testId: string) => void;
   /** Every video on this chapter, per language. Also where an old link is moved. */
   onRecordings: () => void;
+  /** The class PowerPoint: the Slides tab on the same page. */
+  onSlides: () => void;
   /** Time-limited download grants. */
   onDownloadAccess: () => void;
 }
@@ -80,19 +82,27 @@ function stateColour(state: ReadinessState, optional: boolean): string {
   return 'text.secondary';
 }
 
+/** The button says what it opens, since each line is already titled. */
+function actionLabel(line: ReadinessLine): string {
+  switch (line.key) {
+    case 'test':
+      return 'Test';
+    case 'recordings':
+      return 'Manage';
+    case 'slides':
+      // Nothing attached reads as information, and the honest button is Add.
+      return line.state === 'info' ? 'Add' : 'Manage';
+    case 'quick_link':
+      // The only thing left to do with an old link is move it, so the button
+      // says that rather than offering to edit it.
+      return 'Move it';
+    default:
+      return 'Access';
+  }
+}
+
 function ReadinessRow({ line, onAction }: { line: ReadinessLine; onAction: () => void }) {
   const Icon = STATE_ICON[line.state];
-  const label =
-    line.key === 'test'
-      ? 'Test'
-      : line.key === 'recordings'
-        ? // The line is already titled Recordings; the button says what it opens.
-          'Manage'
-        : line.key === 'quick_link'
-          ? // The only thing left to do with an old link is move it, so the
-            // button says that rather than offering to edit it.
-            'Move it'
-          : 'Access';
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, py: 1 }}>
       <Icon sx={{ fontSize: 20, mt: '2px', color: stateColour(line.state, line.optional), flexShrink: 0 }} />
@@ -110,7 +120,7 @@ function ReadinessRow({ line, onAction }: { line: ReadinessLine; onAction: () =>
         onClick={onAction}
         sx={{ textTransform: 'none', flexShrink: 0, minHeight: 40, alignSelf: 'center' }}
       >
-        {label}
+        {actionLabel(line)}
       </Button>
     </Box>
   );
@@ -187,7 +197,7 @@ export default function ChapterWorkspaceRail({
   if (tracks === null) {
     return (
       <Box sx={{ p: 2 }}>
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2, 3, 4].map((i) => (
           <Skeleton key={i} variant="rounded" height={56} sx={{ mb: 1 }} />
         ))}
       </Box>
@@ -201,6 +211,7 @@ export default function ChapterWorkspaceRail({
     // authoring surface from the chapter is how there came to be four.
     test: placedTest ? () => actions.onOpenTest(placedTest.test_id) : actions.onTest,
     recordings: actions.onRecordings,
+    slides: actions.onSlides,
     // The old ungated link is cleared by moving it into a recording, so its
     // line leads to the same dialog rather than to an editor for a feature
     // that no longer exists.

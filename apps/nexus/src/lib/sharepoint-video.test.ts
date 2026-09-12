@@ -330,6 +330,8 @@ describe('videoItemMessage', () => {
     const text = videoItemMessage('RECORDING_IN_ONEDRIVE', { name: '1.History of Architecture.mp4' });
     expect(text).toContain('1.History of Architecture.mp4');
     expect(text).toMatch(/Neram SharePoint library/);
+    // And that Nexus can do the move, since the button beside it does.
+    expect(text).toContain('Nexus can copy it there for you');
   });
 
   it('never uses a dash as punctuation', () => {

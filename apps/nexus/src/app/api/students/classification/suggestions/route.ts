@@ -11,6 +11,7 @@ import {
 } from '@neram/database';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
+import { pickApplicationForm } from '@/lib/application-form';
 
 /**
  * GET /api/students/classification/suggestions?classroom=<id>
@@ -30,6 +31,11 @@ import { errorResponse } from '@/lib/api-errors';
  * survived intact, whereas the form's exam-year answer was destroyed on the way in
  * (Number('2026-27') is NaN, so lead_profiles.target_exam_year landed NULL). Where
  * an integer exam year IS present it was written by admin and is trustworthy.
+ *
+ * A PAST exam year is never suggested. The PATCH refuses a year before the current
+ * batch, and one such row used to fail the whole review for every student in it.
+ * The daily application-form pass (api/cron/application-fill) copies whatever is
+ * unambiguous without anyone opening this; what reaches this sheet is the rest.
  */
 
 const CLASS_LABEL: Record<string, string> = {
@@ -71,6 +77,7 @@ export async function GET(request: NextRequest) {
       getCurrentBatch(),
     ]);
     const currentCode = currentBatch?.code ?? null;
+    const currentStart = startYearOf(currentCode);
 
     if (!roster.members.length) {
       return NextResponse.json({ suggestions: [], currentBatch: currentCode });
@@ -79,23 +86,29 @@ export async function GET(request: NextRequest) {
     const userIds = roster.members.map((m) => m.user_id);
     const supabase = getSupabaseAdminClient() as any;
 
-    // One query for the whole classroom, not one per student. Ordered oldest
-    // first so the newest row for each user overwrites the earlier ones as we
-    // walk it, which leaves the latest application in the map.
+    // One query for the whole classroom, not one per student. A student can hold
+    // several rows (a draft, a direct-link form, a blank row made later), so the
+    // newest one that is a real form wins, never simply the newest row.
     const [{ data: leads, error: leadError }, { data: users, error: userError }] = await Promise.all([
       supabase
         .from('lead_profiles')
-        .select('user_id, academic_data, target_exam_year, applicant_category, created_at')
+        .select(
+          'user_id, application_number, academic_data, target_exam_year, applicant_category, father_name, created_at',
+        )
         .in('user_id', userIds)
-        .order('created_at', { ascending: true }),
+        .is('deleted_at', null),
       supabase.from('users').select('id, academic_year').in('id', userIds),
     ]);
 
     if (leadError) throw leadError;
     if (userError) throw userError;
 
-    const leadByUser = new Map<string, any>();
-    for (const lead of (leads || []) as any[]) leadByUser.set(lead.user_id, lead);
+    const leadsByUser = new Map<string, any[]>();
+    for (const lead of (leads || []) as any[]) {
+      const list = leadsByUser.get(lead.user_id) ?? [];
+      list.push(lead);
+      leadsByUser.set(lead.user_id, list);
+    }
 
     const yearByUser = new Map<string, string | null>();
     for (const user of (users || []) as any[]) yearByUser.set(user.id, user.academic_year ?? null);
@@ -109,7 +122,7 @@ export async function GET(request: NextRequest) {
       const hasYear = startYearOf(currentYear) !== null;
       if (hasStage && hasYear) continue; // nothing missing
 
-      const lead = leadByUser.get(member.user_id);
+      const lead = pickApplicationForm(leadsByUser.get(member.user_id));
       const evidence: string[] = [];
 
       // ── Stage ────────────────────────────────────────────────────────────
@@ -143,14 +156,22 @@ export async function GET(request: NextRequest) {
             ? lead.target_exam_year
             : Number(lead?.target_exam_year),
         );
-        if (fromForm) {
+        const formYearIsPast =
+          fromForm !== null && currentStart !== null && (startYearOf(fromForm) ?? 0) < currentStart;
+
+        if (fromForm && !formYearIsPast) {
           suggestedYear = fromForm;
           evidence.push(`Application form: writing the exam in ${examYearOf(fromForm)}`);
-        } else if (currentCode) {
-          const stageForYear = currentStage ?? suggestedStage;
-          suggestedYear = expectedYearForStage(stageForYear, currentCode);
-          if (suggestedYear && stageForYear) {
-            evidence.push(`${STAGE_LABEL[stageForYear]} writes in ${examYearOf(suggestedYear)}`);
+        } else {
+          if (fromForm) {
+            evidence.push(`Application form says the ${examYearOf(fromForm)} exam, which is already over`);
+          }
+          if (currentCode) {
+            const stageForYear = currentStage ?? suggestedStage;
+            suggestedYear = expectedYearForStage(stageForYear, currentCode);
+            if (suggestedYear && stageForYear) {
+              evidence.push(`${STAGE_LABEL[stageForYear]} writes in ${examYearOf(suggestedYear)}`);
+            }
           }
         }
       }

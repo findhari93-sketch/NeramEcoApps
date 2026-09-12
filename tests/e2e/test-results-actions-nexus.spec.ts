@@ -373,6 +373,87 @@ test.describe('Nexus test results: fix, re-grade, reopen, message', () => {
     expect([401, 403]).toContain(res.status());
   });
 
+  /**
+   * A reopen now carries the day the teacher picked. On 11 Sept a separate
+   * Reopen button used three days nobody chose, and the message never said when
+   * the test closed.
+   */
+  test('a reopen with a message stores the deadline the teacher picked', async ({ request }) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date(Date.now() + 3 * 86_400_000));
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+    const closesAt = new Date(`${get('year')}-${get('month')}-${get('day')}T23:59:59+05:30`).toISOString();
+
+    const res = await request.post(`/api/tests/runs/${placementId}/message`, {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+      data: {
+        student_ids: [studentId],
+        template: 'missed',
+        channels: { chat: false, activity: false, group: false },
+        also_reopen: true,
+        closes_at: closesAt,
+        include_dormant: true,
+      },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.data.reopened).toBe(1);
+    expect(body.data.closes_at).toBe(closesAt);
+    // A skip is its own count, never folded into "reached nobody".
+    expect(body.data.counts.skipped).toBe(0);
+
+    const results = await request.get(
+      `/api/question-bank/tests/${testId}/results?placement_id=${placementId}`,
+      { headers: { Authorization: `Bearer ${teacherToken}` } },
+    );
+    const row = (await results.json()).data.rows.find((r: any) => r.student_id === studentId);
+    expect(Date.parse(row.window_open_until)).toBe(Date.parse(closesAt));
+  });
+
+  test('a reopen without a deadline, or with one that has passed, is refused', async ({ request }) => {
+    for (const closes_at of [undefined, new Date(Date.now() - 86_400_000).toISOString()]) {
+      const res = await request.post(`/api/tests/runs/${placementId}/message`, {
+        headers: { Authorization: `Bearer ${teacherToken}` },
+        data: {
+          student_ids: [studentId],
+          template: 'missed',
+          channels: { chat: false, activity: false, group: false },
+          also_reopen: true,
+          ...(closes_at ? { closes_at } : {}),
+        },
+      });
+      expect(res.status()).toBe(400);
+    }
+  });
+
+  test('an attempt that is not through another door of this paper cannot be counted', async ({ request }) => {
+    // The student sat this run through its own door, so there is nothing
+    // elsewhere to count.
+    const list = await request.get(`/api/tests/runs/${placementId}/credits?student_id=${studentId}`, {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+    });
+    expect(list.status()).toBe(200);
+    expect((await list.json()).data.attempts).toHaveLength(0);
+
+    const res = await request.post(`/api/tests/runs/${placementId}/credits`, {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+      data: { student_id: studentId, attempt_id: '00000000-0000-0000-0000-000000000000' },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  test('a student cannot count attempts', async ({ request }) => {
+    const res = await request.post(`/api/tests/runs/${placementId}/credits`, {
+      headers: { Authorization: `Bearer ${studentToken}` },
+      data: { student_id: studentId, attempt_id: '00000000-0000-0000-0000-000000000000' },
+    });
+    expect([401, 403]).toContain(res.status());
+  });
+
   test('cleanup: remove the paper this spec created', async ({ request }) => {
     const res = await request.delete(`/api/question-bank/tests/${testId}`, {
       headers: { Authorization: `Bearer ${teacherToken}` },

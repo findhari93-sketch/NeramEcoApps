@@ -16,6 +16,7 @@ import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
+import SlideshowOutlinedIcon from '@mui/icons-material/SlideshowOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
@@ -194,6 +195,14 @@ export default function StarredPage() {
                         icon={<AutoStoriesOutlinedIcon />}
                         label="In progress"
                         sx={{ height: 20, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' }, bgcolor: alpha(theme.palette.warning.main, 0.16), color: 'warning.dark' }}
+                      />
+                    )}
+                    {file.has_slides && (
+                      <Chip
+                        size="small"
+                        icon={<SlideshowOutlinedIcon />}
+                        label="Slides"
+                        sx={{ height: 20, fontSize: '0.6rem', fontWeight: 600, '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' }, bgcolor: alpha(theme.palette.primary.main, 0.12), color: 'primary.main' }}
                       />
                     )}
                   </Box>

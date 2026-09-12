@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  getFileById,
-  getFolderById,
-  isFolderVisibleToStudent,
-  effectiveDownloadable,
-  hasActiveDownloadGrant,
-} from '@neram/database';
-import {
   getSharePointDownloadUrl,
   getSharePointStreamUrl,
   getSharePointPdfRendition,
 } from '@/lib/sharepoint';
 import { needsPdfRendition } from '@/lib/office-rendition';
-import { getRequestUser, isStaff, getStudentExamSet } from '@/lib/study-materials';
+import { authorizeStudyFileRequest } from '@/lib/study-materials';
+import { ApiError } from '@/lib/api-errors';
 
 /**
  * GET /api/study-materials/files/[id]/content?token=...&download=0|1
@@ -30,31 +24,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const queryToken = request.nextUrl.searchParams.get('token');
     const tokenString = authHeader || (queryToken ? `Bearer ${queryToken}` : null);
 
-    const user = await getRequestUser(tokenString);
+    // Audience and download permission, the same rule the slides route applies.
+    const { staff, file, downloadable } = await authorizeStudyFileRequest(tokenString, params.id);
 
-    const file = await getFileById(params.id);
     // A file is streamable if it has uploaded bytes (sharepoint_item_id) OR is an
     // external link (link_url, e.g. a pasted OneDrive/SharePoint document).
-    if (!file || (!file.sharepoint_item_id && !file.link_url)) {
+    if (!file.sharepoint_item_id && !file.link_url) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 });
     }
-    const folder = await getFolderById(file.folder_id);
-    if (!folder) {
-      return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
-    }
 
-    const staff = isStaff(user);
-    if (!staff) {
-      const studentExams = await getStudentExamSet(user.id);
-      if (!isFolderVisibleToStudent(folder, studentExams, user.student_program)) {
-        return NextResponse.json({ error: 'Not available' }, { status: 403 });
-      }
-    }
-
-    // Staff always; else the file/folder's own setting, else an active time-limited grant for
-    // this student (a teacher-issued printout window).
-    const granted = !staff && (await hasActiveDownloadGrant(user.id, file));
-    const downloadable = staff || effectiveDownloadable(file, folder) || granted;
     const wantDownload = request.nextUrl.searchParams.get('download') === '1' && downloadable;
 
     // A PowerPoint or Word file cannot be shown by the reader, and handing the
@@ -62,10 +40,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // and the download block. Graph renders it as PDF instead, and everything
     // downstream carries on unchanged.
     //
-    // Only for VIEWING. A permitted download gets the real file, because a
-    // teacher who is allowed to save the deck wants the deck, not a flattened
-    // copy of it.
-    const convert = !wantDownload && needsPdfRendition(file.file_type, file.file_name);
+    // A student's download is converted too: students are never handed the deck
+    // itself, only a PDF of it. Staff who download get the real file, because a
+    // teacher saving the deck wants the deck, not a flattened copy of it.
+    const office = needsPdfRendition(file.file_type, file.file_name);
+    const convert = office && (!wantDownload || !staff);
 
     let servedType = file.file_type || 'application/octet-stream';
     let downloadUrl: string | null = null;
@@ -107,7 +86,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // invocation: a 20 MB chapter cost 20 MB of provisioned memory for every
     // student who opened it. Passing the body through keeps memory flat
     // regardless of file size. Same approach as api/media/recording.
-    const safeName = (file.file_name || 'file').replace(/["\\]/g, '');
+    const originalName = (file.file_name || 'file').replace(/["\\]/g, '');
+    const safeName = convert ? `${originalName.replace(/\.[^.]+$/, '') || 'file'}.pdf` : originalName;
     const upstreamLength = upstream.headers.get('content-length');
     return new NextResponse(upstream.body, {
       status: 200,
@@ -122,6 +102,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       },
     });
   } catch (err) {
+    // A missing file or a student outside the audience is a plain answer.
+    if (err instanceof ApiError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     // Log the real error server-side for debugging, but never leak internal
     // resolver messages to the student — this URL opens directly in a new tab.
     console.error('[study-materials/content] failed to stream file:', err);

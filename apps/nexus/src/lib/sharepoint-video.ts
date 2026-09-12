@@ -243,6 +243,20 @@ export function recordingPolicyProblem(item: ResolvedVideoItem): RecordingPolicy
   return null;
 }
 
+/** A file as the recordings page receives it, the same from every route. */
+export function videoItemDto(item: ResolvedVideoItem) {
+  return {
+    drive_id: item.driveId,
+    item_id: item.itemId,
+    name: item.name,
+    size_bytes: item.sizeBytes,
+    duration_seconds: item.durationSeconds,
+    web_url: item.webUrl,
+    folder_path: item.folderPath,
+    drive_type: item.driveType,
+  };
+}
+
 /* ── Is it the same recording? ──────────────────────────────────────────────── */
 
 export interface RecordingFingerprint {

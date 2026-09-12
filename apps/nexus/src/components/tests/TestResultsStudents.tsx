@@ -19,6 +19,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import {
   Box,
   Button,
@@ -78,6 +79,12 @@ export interface StudentResultRow {
   window_open_until: string | null;
   access_request_pending: boolean;
   elsewhere: { attempts: number; best_percentage: number | null; last_at: string | null } | null;
+  /**
+   * How their sitting on this run was decided: the run's own door, another door
+   * inside the window, or a teacher's count. Absent on the paper wide view.
+   */
+  sat_via?: 'run' | 'window' | 'teacher' | null;
+  sat_via_at?: string | null;
 }
 
 export interface StudentResultStats {
@@ -164,11 +171,19 @@ interface Props {
   filter: ResultFilter;
   onFilterChange: (f: ResultFilter) => void;
   acting: string | null;
+  /** Owned by the panel, so a finished send can clear it. */
+  selected: Set<string>;
+  onSelectedChange: (next: Set<string>) => void;
   onOpenSheet: (row: StudentResultRow, ordered: StudentResultRow[]) => void;
+  /** Close a live window. Opening always goes through the reopen sheet. */
   onSetAccess: (studentId: string, action: 'open' | 'close') => void;
   onDecide: (studentId: string, decision: 'granted' | 'declined') => void;
-  onBulkReopen: (studentIds: string[]) => void;
+  /** Reopen for these students and tell them, in one sheet. */
+  onReopen: (rows: StudentResultRow[]) => void;
   onMessage: (rows: StudentResultRow[]) => void;
+  /** Count an attempt this student made through another door. */
+  onCountAttempt: (row: StudentResultRow) => void;
+  onUndoCount: (row: StudentResultRow) => void;
   onExportCsv: () => void;
 }
 
@@ -182,18 +197,21 @@ export default function TestResultsStudents({
   filter,
   onFilterChange,
   acting,
+  selected,
+  onSelectedChange,
   onOpenSheet,
   onSetAccess,
   onDecide,
-  onBulkReopen,
+  onReopen,
   onMessage,
+  onCountAttempt,
+  onUndoCount,
   onExportCsv,
 }: Props) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null);
 
   // Group actions only exist on a run: there is no window to open and no class
@@ -264,21 +282,17 @@ export default function TestResultsStudents({
   const selecting = selected.size > 0;
 
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectedChange(next);
   }
 
   function toggleAllShown() {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (allShownSelected) filtered.forEach((r) => next.delete(r.student_id));
-      else filtered.forEach((r) => next.add(r.student_id));
-      return next;
-    });
+    const next = new Set(selected);
+    if (allShownSelected) filtered.forEach((r) => next.delete(r.student_id));
+    else filtered.forEach((r) => next.add(r.student_id));
+    onSelectedChange(next);
   }
 
   const summary =
@@ -484,13 +498,28 @@ export default function TestResultsStudents({
                           )}
                         </Typography>
 
-                        {r.elsewhere && r.elsewhere.attempts > 0 && (
+                        {/* How the sitting was counted, when it was not the run's
+                            own door. Replaces the self-study line, which would
+                            otherwise describe the same attempts twice. */}
+                        {r.sat_via === 'window' || r.sat_via === 'teacher' ? (
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-                            <MenuBookOutlinedIcon sx={{ fontSize: 14, color: 'info.main' }} />
-                            <Typography variant="caption" sx={{ color: 'info.main' }}>
-                              {selfStudyLine(r.elsewhere)}
+                            <TaskAltOutlinedIcon sx={{ fontSize: 14, color: 'success.main' }} />
+                            <Typography variant="caption" sx={{ color: 'success.dark' }}>
+                              {r.sat_via === 'window'
+                                ? 'Sat it on their own, inside the window'
+                                : `Counted from their own attempt${r.sat_via_at ? ` on ${formatWhen(r.sat_via_at)}` : ''}`}
                             </Typography>
                           </Box>
+                        ) : (
+                          r.elsewhere &&
+                          r.elsewhere.attempts > 0 && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                              <MenuBookOutlinedIcon sx={{ fontSize: 14, color: 'info.main' }} />
+                              <Typography variant="caption" sx={{ color: 'info.main' }}>
+                                {selfStudyLine(r.elsewhere)}
+                              </Typography>
+                            </Box>
+                          )
                         )}
                       </Box>
 
@@ -529,23 +558,51 @@ export default function TestResultsStudents({
                                 Decline
                               </Button>
                             </>
-                          ) : (
+                          ) : r.sat_via === 'teacher' ? (
                             <Button
                               size="small"
                               disabled={acting === r.student_id}
-                              startIcon={
-                                r.window_open_until ? undefined : <LockOpenOutlinedIcon sx={{ fontSize: 16 }} />
-                              }
-                              onClick={() => onSetAccess(r.student_id, r.window_open_until ? 'close' : 'open')}
-                              aria-label={
-                                r.window_open_until
-                                  ? `Close this test for ${r.student_name || 'this student'}`
-                                  : `Open this test for ${r.student_name || 'this student'}`
-                              }
+                              onClick={() => onUndoCount(r)}
+                              aria-label={`Stop counting ${r.student_name || 'this student'}'s own attempt`}
                               sx={{ textTransform: 'none', minHeight: 44 }}
                             >
-                              {r.window_open_until ? 'Close' : sat ? 'Open again' : 'Open for them'}
+                              Undo count
                             </Button>
+                          ) : (
+                            <>
+                              {!sat && r.elsewhere && r.elsewhere.attempts > 0 && (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  disabled={acting === r.student_id}
+                                  onClick={() => onCountAttempt(r)}
+                                  aria-label={`Count ${r.student_name || 'this student'}'s own attempt`}
+                                  sx={{ textTransform: 'none', minHeight: 44 }}
+                                >
+                                  Count their attempt
+                                </Button>
+                              )}
+                              {/* Opening goes through the reopen sheet, so a
+                                  single student is told when it closes too. */}
+                              <Button
+                                size="small"
+                                disabled={acting === r.student_id}
+                                startIcon={
+                                  r.window_open_until ? undefined : <LockOpenOutlinedIcon sx={{ fontSize: 16 }} />
+                                }
+                                onClick={() =>
+                                  r.window_open_until ? onSetAccess(r.student_id, 'close') : onReopen([r])
+                                }
+                                aria-label={
+                                  r.window_open_until
+                                    ? `Close this test for ${r.student_name || 'this student'}`
+                                    : `Open this test for ${r.student_name || 'this student'}`
+                                }
+                                sx={{ textTransform: 'none', minHeight: 44 }}
+                              >
+                                {r.window_open_until ? 'Close' : sat ? 'Open again' : 'Open for them'}
+                              </Button>
+                            </>
                           )}
                         </Box>
                       )}
@@ -599,24 +656,26 @@ export default function TestResultsStudents({
             {selected.size} selected
           </Typography>
           <Box sx={{ flex: 1 }} />
-          <Button onClick={() => setSelected(new Set())} sx={{ minHeight: 48, textTransform: 'none' }}>
+          <Button onClick={() => onSelectedChange(new Set())} sx={{ minHeight: 48, textTransform: 'none' }}>
             Clear
           </Button>
+          {/* Reopen leads: it now carries the message with it. Message alone is
+              for a changed score or a count, where no door needs opening. */}
           <Button
             variant="outlined"
-            startIcon={<LockOpenOutlinedIcon />}
-            onClick={() => onBulkReopen([...selected])}
-            sx={{ minHeight: 48, textTransform: 'none' }}
-          >
-            Reopen ({selected.size})
-          </Button>
-          <Button
-            variant="contained"
             startIcon={<ChatOutlinedIcon />}
             onClick={() => onMessage(selectedRows)}
             sx={{ minHeight: 48, textTransform: 'none' }}
           >
             Message ({selected.size})
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<LockOpenOutlinedIcon />}
+            onClick={() => onReopen(selectedRows)}
+            sx={{ minHeight: 48, textTransform: 'none' }}
+          >
+            Reopen ({selected.size})
           </Button>
         </Box>
       )}

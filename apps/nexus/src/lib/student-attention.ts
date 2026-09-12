@@ -3,16 +3,25 @@
  *
  * Most damaging first: two records for one person split fees and attendance, a
  * class and exam year that disagree put a student in the wrong cohort, a student
- * who never signed in is being taught nothing, and the two missing-data rows are
- * housekeeping. Pure, so the order and the copy are unit tested.
+ * who never signed in is being taught nothing. A missing application form comes
+ * next because it is usually WHY the class and exam year are empty, and the two
+ * missing-data rows are housekeeping after it. Pure, so the order and the copy
+ * are unit tested.
  */
 
-export type AttentionKey = 'duplicates' | 'mismatch' | 'never_signed_in' | 'no_stage' | 'no_year';
+export type AttentionKey =
+  | 'duplicates'
+  | 'mismatch'
+  | 'never_signed_in'
+  | 'no_form'
+  | 'no_stage'
+  | 'no_year';
 
 export type AttentionActionKey =
   | 'review_duplicates'
   | 'review_mismatches'
   | 'show_never_signed_in'
+  | 'review_forms'
   | 'prefill'
   | 'fix_stages'
   | 'fix_years';
@@ -35,6 +44,8 @@ export interface AttentionInput {
   duplicateCount: number;
   mismatchCount: number;
   neverSignedInCount: number;
+  /** Students whose own record holds no application form. Excludes dormant students. */
+  noFormCount: number;
   noStageCount: number;
   noYearCount: number;
   suggestionCount: number;
@@ -68,6 +79,16 @@ export function buildAttentionRows(input: AttentionInput): AttentionRow[] {
       key: 'never_signed_in',
       message: `${input.neverSignedInCount} ${studentHas(input.neverSignedInCount)} never signed in to Nexus.`,
       actions: [{ key: 'show_never_signed_in', label: 'Show them' }],
+    });
+  }
+
+  // Open to every teacher: seeing who has no form, and what might be theirs, is how
+  // someone knows whom to ask. Linking a form is gated inside the sheet.
+  if (input.noFormCount > 0) {
+    rows.push({
+      key: 'no_form',
+      message: `${input.noFormCount} ${studentHas(input.noFormCount)} no application form linked, so their class and exam year cannot be filled in from it.`,
+      actions: [{ key: 'review_forms', label: 'Find their forms', primary: true }],
     });
   }
 

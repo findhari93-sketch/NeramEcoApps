@@ -30,6 +30,7 @@ import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { createPlacement } from './test-repository';
 import { linkExamToClasses } from './exam-eligibility';
 import type { ExamTimerMode } from './exam-timer';
+import { loadRunSittings } from './run-sittings';
 
 // The generated Supabase types do not know these tables until
 // `pnpm supabase:gen:types` is run against a database the exam migrations
@@ -508,7 +509,6 @@ export async function listStudentExams(
   if (exams.length === 0) return [];
 
   const examIds = exams.map((e) => e.id);
-  const testIds = [...new Set(exams.map((e) => e.test_id))];
 
   const makeupMap = new Map<string, ExamMakeup>();
   {
@@ -517,17 +517,55 @@ export async function listStudentExams(
     for (const m of (data || []) as any[]) makeupMap.set(m.exam_id, m as ExamMakeup);
   }
 
-  const attemptByTest = new Map<string, { id: string }>();
+  // Whether each exam is sat, by the rule every staff screen uses
+  // (run-sittings.ts): the exam door, else another door inside the exam window,
+  // else a teacher's count. Any submitted attempt on the paper used to count, so
+  // a chapter practised the week before read here as the exam done.
+  const attemptByExam = new Map<string, { id: string }>();
   {
-    const { data, error } = await supabase
-      .from(ATTEMPTS)
-      .select('id, test_id')
-      .eq('student_id', studentId)
-      .eq('status', 'submitted')
-      .eq('mode', 'official')
-      .in('test_id', testIds);
+    const { data: placements, error } = await supabase
+      .from(PLACEMENTS)
+      .select('id, test_id, context_id, available_from, available_until')
+      .eq('context_type', CONTEXT)
+      .eq('is_active', true)
+      .in('context_id', exams.map((e) => e.scheduled_class_id));
     if (error) throw error;
-    for (const a of (data || []) as any[]) attemptByTest.set(a.test_id, { id: a.id });
+    const placementByClass = new Map<string, any>(
+      ((placements || []) as any[]).map((p) => [p.context_id, p]),
+    );
+
+    const anchored = exams.filter((e) => placementByClass.has(e.scheduled_class_id));
+    if (anchored.length > 0) {
+      const byRun = await loadRunSittings(
+        anchored.map((e) => placementByClass.get(e.scheduled_class_id)),
+        { studentIds: [studentId] },
+        supabase,
+      );
+      for (const exam of anchored) {
+        const mine = byRun.get(placementByClass.get(exam.scheduled_class_id).id)?.get(studentId);
+        if (mine?.first) attemptByExam.set(exam.id, { id: mine.first.id });
+      }
+    }
+
+    // An exam with no placement has no window to read, so the paper wide answer
+    // is still the best that can be said about it.
+    const loose = exams.filter((e) => !placementByClass.has(e.scheduled_class_id));
+    if (loose.length > 0) {
+      const { data, error: attemptError } = await supabase
+        .from(ATTEMPTS)
+        .select('id, test_id')
+        .eq('student_id', studentId)
+        .eq('status', 'submitted')
+        .eq('mode', 'official')
+        .in('test_id', [...new Set(loose.map((e) => e.test_id))]);
+      if (attemptError) throw attemptError;
+      const byTest = new Map<string, string>();
+      for (const a of (data || []) as any[]) byTest.set(a.test_id, a.id);
+      for (const exam of loose) {
+        const id = byTest.get(exam.test_id);
+        if (id) attemptByExam.set(exam.id, { id });
+      }
+    }
   }
 
   const publishedExamIds = exams.filter((e) => e.results_state !== 'unpublished').map((e) => e.id);
@@ -548,7 +586,7 @@ export async function listStudentExams(
 
   return exams.map((exam) => {
     const window = resolveExamWindowForStudent(exam, makeupMap.get(exam.id) || null);
-    const attempt = attemptByTest.get(exam.test_id) || null;
+    const attempt = attemptByExam.get(exam.id) || null;
 
     let result: NexusStudentExamView['result'] = null;
     if (exam.results_state !== 'unpublished') {

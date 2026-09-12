@@ -36,12 +36,17 @@ import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 import type { Rotation } from '@/lib/image-rotation';
 import { compressImage } from '@/utils/imageCompression';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import VoiceFeedbackRecorder from '@/components/drawings/voice/VoiceFeedbackRecorder';
+import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
+import ChatOutlinedIcon from '@mui/icons-material/ChatOutlined';
 
 export default function DrawingReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { getToken } = useNexusAuthContext();
+  // getTeacherToken carries ChatMessage.Send, which Redo and Complete need to put a
+  // card in the student's Teams chat. getToken stays for everything else.
+  const { getToken, getTeacherToken } = useNexusAuthContext();
   const { refreshBadges } = useNavBadges();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -88,6 +93,14 @@ export default function DrawingReviewDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [sketchTrigger, setSketchTrigger] = useState(0);
+  const [voice, setVoice] = useState<VoiceFeedbackView | null>(null);
+  const [voiceByAttempt, setVoiceByAttempt] = useState<Record<string, VoiceFeedbackView>>({});
+  // True while a note is being recorded or saved. Redo and Complete wait for it,
+  // so a review never goes out a few seconds ahead of the note it should carry.
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [studentTeamsEmail, setStudentTeamsEmail] = useState<string | null>(null);
+  // Save and next arrives with who was just told and how many drawings are left.
+  const [notice, setNotice] = useState('');
 
   const handleDeleteSubmission = async () => {
     setDeleting(true);
@@ -148,9 +161,14 @@ export default function DrawingReviewDetailPage() {
       const data = await res.json();
       setSubmission(data.submission || null);
       setAttempts(Array.isArray(data.attempts) ? data.attempts : []);
+      setVoice(data.voice_feedback ?? null);
+      setVoiceByAttempt(data.voice_by_submission ?? {});
+      setStudentTeamsEmail(data.student_teams_email ?? null);
     } catch {
       setSubmission(null);
       setAttempts([]);
+      setVoice(null);
+      setVoiceByAttempt({});
     } finally {
       setLoading(false);
     }
@@ -298,7 +316,10 @@ export default function DrawingReviewDetailPage() {
     setSaving(true);
     setError('');
     try {
-      const token = await getToken();
+      // The teacher token is what lets the review put a card in the student's
+      // Teams chat. If it cannot be had silently, the review still saves on the
+      // ordinary token and the student still gets the Nexus bell and Teams alert.
+      const token = (await getTeacherToken().catch(() => null)) || (await getToken());
       const ws = workspaceRef.current;
       const res = await fetch(`/api/drawing/submissions/${submission!.id}/review`, {
         method: 'PATCH',
@@ -319,8 +340,25 @@ export default function DrawingReviewDetailPage() {
       });
       if (!res.ok) throw new Error('Failed to save review');
 
+      const result = await res.json().catch(() => ({}) as any);
+
       refreshBadges();
-      router.push(backHref);
+
+      // Save and next: open the drawing that has waited longest, carrying a one
+      // line receipt of who was just told. With nothing left, back to the list.
+      const who = String((submission as any)?.student?.name || '').trim().split(/\s+/)[0] || 'the student';
+      const chatMissed = result?.delivery && result.delivery.chat === false;
+      const told =
+        `${reviewAction === 'redo' ? 'Redo' : 'Review'} sent to ${who}.` +
+        (chatMissed ? ' Teams chat did not send, the Nexus bell did.' : '');
+      if (result?.next_submission_id) {
+        const qs = new URLSearchParams();
+        if (fromAssignmentId) qs.set('assignment', fromAssignmentId);
+        qs.set('notice', `${told} ${result.remaining} left to review.`);
+        router.push(`/teacher/drawing-reviews/${result.next_submission_id}?${qs.toString()}`);
+      } else {
+        router.push(backHref);
+      }
       // Refresh so the assignment roster / queue reflect the new reviewed state.
       router.refresh();
     } catch (err) {
@@ -329,6 +367,17 @@ export default function DrawingReviewDetailPage() {
       setSaving(false);
     }
   };
+
+  // The receipt Save and next carried over. Shown once, then taken out of the
+  // address so a refresh does not repeat it.
+  useEffect(() => {
+    const incoming = searchParams.get('notice');
+    if (!incoming) return;
+    setNotice(incoming);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('notice');
+    window.history.replaceState(window.history.state, '', url.toString());
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Every prior attempt of this student's drawing for the same assignment, so the
   // teacher can scroll the redo history while grading the latest.
@@ -481,7 +530,7 @@ export default function DrawingReviewDetailPage() {
           variant="outlined"
           size="small"
           onClick={() => openAttempt(latestAttempt.id)}
-          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, minWidth: 0, px: 1.5 }}
+          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0, px: 1.5 }}
         >
           Latest
         </Button>
@@ -491,7 +540,7 @@ export default function DrawingReviewDetailPage() {
         size="small"
         startIcon={<EditOutlinedIcon />}
         onClick={() => setIsEditMode(true)}
-        sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.78rem', minHeight: 36, px: 2 }}
+        sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.78rem', minHeight: 48, px: 2 }}
       >
         Evaluate
       </Button>
@@ -499,7 +548,9 @@ export default function DrawingReviewDetailPage() {
   );
 
   // Action bar: fixed on mobile (above BottomNav), inline on desktop
-  const actionBar = isEditMode ? (
+  // While a note is being recorded on a phone, the recorder's own Stop bar takes
+  // this spot, and Redo and Complete wait for the note anyway.
+  const actionBar = isEditMode && isMobile && voiceBusy ? null : isEditMode ? (
     <Box sx={barShellSx}>
       {/* Draft: icon-only on mobile, icon+text on desktop */}
       <IconButton
@@ -510,7 +561,7 @@ export default function DrawingReviewDetailPage() {
         title={draftSaving ? 'Saving...' : draftSaved ? 'Draft saved!' : 'Save draft'}
         sx={{
           border: '1px solid', borderColor: draftSaved ? 'success.main' : 'divider',
-          borderRadius: 1.5, width: 36, height: 36,
+          borderRadius: 1.5, width: 48, height: 48,
           ...(!isMobile && { display: 'none' }),
         }}
       >
@@ -524,7 +575,7 @@ export default function DrawingReviewDetailPage() {
           disabled={draftSaving || saving}
           startIcon={draftSaved ? <CheckCircleOutlineIcon /> : <SaveOutlinedIcon />}
           color={draftSaved ? 'success' : 'inherit'}
-          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, minWidth: 0 }}
+          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0 }}
         >
           {draftSaving ? '...' : draftSaved ? 'Saved!' : 'Draft'}
         </Button>
@@ -536,9 +587,9 @@ export default function DrawingReviewDetailPage() {
         color="warning"
         size="small"
         onClick={() => { setAction('redo'); handleSaveReview('redo'); }}
-        disabled={saving || draftSaving}
+        disabled={saving || draftSaving || voiceBusy}
         {...(isMobile ? {} : { startIcon: <ReplayIcon /> })}
-        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, minWidth: 0, px: { xs: 1.5, md: 2 } }}
+        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 } }}
       >
         {saving && action === 'redo' ? '...' : 'Redo'}
       </Button>
@@ -549,9 +600,9 @@ export default function DrawingReviewDetailPage() {
         color="success"
         size="small"
         onClick={() => { setAction('complete'); handleSaveReview('complete'); }}
-        disabled={saving || draftSaving}
+        disabled={saving || draftSaving || voiceBusy}
         {...(isMobile ? {} : { startIcon: <CheckCircleOutlineIcon /> })}
-        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, flex: 1, px: { xs: 1.5, md: 2 } }}
+        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, flex: 1, px: { xs: 1.5, md: 2 } }}
       >
         {/* 'Save' only where it is honest: updating an already-finished review.
             A redo round is still open, and this button completes it. */}
@@ -564,6 +615,7 @@ export default function DrawingReviewDetailPage() {
         onChange={(e) => setShowInGallery(e.target.checked)}
         size="small"
         title="Show in Gallery"
+        inputProps={{ 'aria-label': 'Show in Gallery' }}
       />
       {!isMobile && (
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', lineHeight: 1.2, ml: -0.5 }}>
@@ -628,6 +680,7 @@ export default function DrawingReviewDetailPage() {
         title="Submission history"
         currentKey={submission.id}
         onOpenAttempt={(a) => openAttempt(a.key)}
+        voiceByKey={voiceByAttempt}
       />
     </Paper>
   ) : null;
@@ -639,8 +692,12 @@ export default function DrawingReviewDetailPage() {
     <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#fff8e1' }}>
       <Typography variant="body2" color="warning.dark" fontWeight={600}>
         {submission.status === 'redo'
-          ? 'Sent back for a redo. Grade it here to close it out, or send it back again. The student is notified either way.'
-          : 'Editing a reviewed submission. Changes will notify the student.'}
+          ? sub.assignment_id && !sub.exam_attempt_id
+            ? 'Sent back for a redo. Complete it here to close it out, or send it back again. The student is messaged when the outcome changes or you send a new voice note.'
+            : 'Sent back for a redo. Grade it here to close it out, or send it back again.'
+          : sub.assignment_id && !sub.exam_attempt_id
+            ? 'Editing a reviewed submission. The student is messaged only if the outcome changes or you send a new voice note.'
+            : 'Editing a reviewed submission.'}
       </Typography>
     </Paper>
   ) : null;
@@ -656,12 +713,41 @@ export default function DrawingReviewDetailPage() {
         variant="outlined"
         color="warning"
         onClick={() => openAttempt(latestAttempt.id)}
-        sx={{ mt: 1, textTransform: 'none', fontWeight: 700, minHeight: 36 }}
+        sx={{ mt: 1, textTransform: 'none', fontWeight: 700, minHeight: 48 }}
       >
         Go to latest attempt
       </Button>
     </Paper>
   ) : null;
+
+  // Voice notes are for assignment drawings only. An exam result is embargoed
+  // until it is published, and a practice drawing has no page to play one on.
+  const canUseVoice = !!sub.assignment_id && !sub.exam_attempt_id;
+  const voiceSection = canUseVoice ? (
+    <VoiceFeedbackRecorder
+      key={submission.id}
+      submissionId={submission.id}
+      voice={voice}
+      readOnly={!isEditMode}
+      imageUrl={submission.original_image_url}
+      getToken={getToken}
+      onChange={(v) => {
+        setVoice(v);
+        setVoiceByAttempt((prev) => {
+          const next = { ...prev };
+          if (v) next[submission.id] = v;
+          else delete next[submission.id];
+          return next;
+        });
+      }}
+      onBusyChange={setVoiceBusy}
+    />
+  ) : null;
+
+  // The student's own Teams chat, where any reply to the review card lands.
+  const teamsChatUrl = studentTeamsEmail
+    ? `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(studentTeamsEmail)}`
+    : null;
 
   // Workspace + comments panel content
   const reviewPanel = (
@@ -691,6 +777,8 @@ export default function DrawingReviewDetailPage() {
             <Typography variant="body2" sx={{ mt: 0.25 }}>{submission.self_note}</Typography>
           </Paper>
         )}
+
+        {voiceSection}
 
         <AIFeedbackWorkspace
           submission={sub}
@@ -818,6 +906,8 @@ export default function DrawingReviewDetailPage() {
                 </Paper>
               )}
 
+              {voiceSection}
+
               <AIFeedbackWorkspace
                 submission={sub}
                 getToken={getToken}
@@ -857,7 +947,20 @@ export default function DrawingReviewDetailPage() {
 
         {/* More actions menu */}
         <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-          <MenuItem onClick={() => { setMenuAnchor(null); setDeleteDialogOpen(true); }} sx={{ color: 'error.main' }}>
+          {teamsChatUrl && (
+            <MenuItem
+              component="a"
+              href={teamsChatUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setMenuAnchor(null)}
+              sx={{ minHeight: 48 }}
+            >
+              <ChatOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+              Open Teams chat
+            </MenuItem>
+          )}
+          <MenuItem onClick={() => { setMenuAnchor(null); setDeleteDialogOpen(true); }} sx={{ color: 'error.main', minHeight: 48 }}>
             <DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />
             Delete Submission
           </MenuItem>
@@ -886,6 +989,15 @@ export default function DrawingReviewDetailPage() {
           onClose={() => setError('')}
           message={error}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        />
+
+        {/* Save and next receipt. Top of the screen, clear of the fixed bars. */}
+        <Snackbar
+          open={!!notice}
+          autoHideDuration={5000}
+          onClose={() => setNotice('')}
+          message={notice}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         />
       </>
     );
@@ -991,7 +1103,20 @@ export default function DrawingReviewDetailPage() {
 
       {/* More actions menu */}
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-        <MenuItem onClick={() => { setMenuAnchor(null); setDeleteDialogOpen(true); }} sx={{ color: 'error.main' }}>
+        {teamsChatUrl && (
+          <MenuItem
+            component="a"
+            href={teamsChatUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setMenuAnchor(null)}
+            sx={{ minHeight: 48 }}
+          >
+            <ChatOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+            Open Teams chat
+          </MenuItem>
+        )}
+        <MenuItem onClick={() => { setMenuAnchor(null); setDeleteDialogOpen(true); }} sx={{ color: 'error.main', minHeight: 48 }}>
           <DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />
           Delete Submission
         </MenuItem>
@@ -1020,6 +1145,15 @@ export default function DrawingReviewDetailPage() {
         onClose={() => setError('')}
         message={error}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
+
+      {/* Save and next receipt */}
+      <Snackbar
+        open={!!notice}
+        autoHideDuration={5000}
+        onClose={() => setNotice('')}
+        message={notice}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       />
     </Box>
   );

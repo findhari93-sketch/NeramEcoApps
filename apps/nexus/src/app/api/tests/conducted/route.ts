@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, listExamsForClassroom } from '@neram/database';
+import { getSupabaseAdminClient, listExamsForClassroom, loadRunSittings } from '@neram/database';
 import { resolveExamCaller, isStaff, loadExamRoster } from '@/lib/exam-access';
 import {
   buildConductedRuns,
@@ -45,15 +45,16 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient() as any;
 
-    const [classroom, classes, exams, enrolled] = await Promise.all([
+    const [classroom, classes, exams, rosterIds] = await Promise.all([
       supabase.from('nexus_classrooms').select('id, name').eq('id', classroomId).maybeSingle(),
       supabase
         .from('nexus_scheduled_classes')
         .select('id, title, scheduled_date')
         .eq('classroom_id', classroomId),
       listExamsForClassroom(classroomId),
-      loadExamRoster(classroomId).then((r) => r.length),
+      loadExamRoster(classroomId).then((r) => r.map((s: { id: string }) => s.id)),
     ]);
+    const enrolled = rosterIds.length;
 
     if (classes.error) throw classes.error;
     const classRows = (classes.data || []) as any[];
@@ -104,7 +105,7 @@ export async function GET(request: NextRequest) {
 
     const rows = buildConductedRuns({
       inputs,
-      tallies: await tallyFor(supabase, inputs),
+      tallies: await tallyFor(supabase, inputs, rosterIds),
       enrolled,
       include,
     });
@@ -196,20 +197,38 @@ async function loadPlacements(supabase: any, classroomId: string, classIds: stri
  * surface that reports a score: abandoned sittings would inflate "sat it" into
  * a number a teacher reads as effort.
  */
-async function tallyFor(supabase: any, inputs: ConductedRunInput[]) {
-  const placementIds = inputs.map((i) => i.placement_id);
-  if (placementIds.length === 0) return {};
+async function tallyFor(supabase: any, inputs: ConductedRunInput[], rosterIds: string[]) {
+  if (inputs.length === 0) return {};
 
-  const { data, error } = await supabase
-    .from('nexus_test_attempts')
-    .select('placement_id, student_id, percentage')
-    .in('placement_id', placementIds)
-    .eq('status', 'submitted')
-    .eq('mode', 'official');
-  if (error) throw error;
+  // Who sat each run is decided by run-sittings.ts, the rule every results
+  // screen shares, so this count agrees with the run's own Students tab. A
+  // sitting through another door inside the window, or a teacher's count, is one
+  // attempt: the practice tries around it are not the run. Bounded to the
+  // classroom's roster, because the read spans every door of these papers.
+  const sittings = await loadRunSittings<any>(
+    inputs.map((i) => ({
+      id: i.placement_id,
+      test_id: i.test_id,
+      available_from: i.opens_at,
+      available_until: i.closes_at,
+    })),
+    { studentIds: rosterIds, columns: 'percentage' },
+    supabase,
+  );
+
+  const rows: Array<{ placement_id: string; student_id: string; percentage: number | string | null }> = [];
+  for (const [placementId, byStudent] of sittings) {
+    for (const sitting of byStudent.values()) {
+      const counted = sitting.source === 'run' ? sitting.attempts : sitting.first ? [sitting.first] : [];
+      for (const a of counted) {
+        if (a.status !== 'submitted') continue;
+        rows.push({ placement_id: placementId, student_id: sitting.student_id, percentage: a.percentage ?? null });
+      }
+    }
+  }
 
   const passingByPlacement: Record<string, number | null> = {};
   for (const i of inputs) passingByPlacement[i.placement_id] = i.passing_pct;
 
-  return tallyAttempts((data || []) as any[], passingByPlacement);
+  return tallyAttempts(rows, passingByPlacement);
 }

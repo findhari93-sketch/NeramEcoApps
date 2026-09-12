@@ -4,7 +4,16 @@
  * Resolves the requesting Nexus user, derives a student's "exam set" from their active
  * classroom enrolments (used for audience filtering), and asserts staff access.
  */
-import { getSupabaseAdminClient } from '@neram/database';
+import {
+  getSupabaseAdminClient,
+  getFileById,
+  getFolderById,
+  isFolderVisibleToStudent,
+  effectiveDownloadable,
+  hasActiveDownloadGrant,
+  type NexusStudyFile,
+  type NexusStudyFolder,
+} from '@neram/database';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { ApiError } from '@/lib/api-errors';
 import { TtlCache } from '@/lib/ttl-cache';
@@ -176,4 +185,49 @@ export async function getStudentExamSet(userId: string): Promise<string[]> {
     }
   }
   return [...types];
+}
+
+export interface StudyFileAccess {
+  user: RequestUser;
+  staff: boolean;
+  file: NexusStudyFile;
+  folder: NexusStudyFolder;
+  /** Staff always; else the file or folder setting; else an active download grant. */
+  downloadable: boolean;
+}
+
+/**
+ * May this caller read this study file, and may they keep a copy?
+ *
+ * The one copy of the rule every byte-serving study route applies: the
+ * chapter's own content and its slides. A student must be in the folder's
+ * audience. Downloading is allowed for staff, when the file or its folder
+ * allows it, or while a teacher's time-limited grant covers the file.
+ *
+ * Throws ApiError 404 when the file or folder is gone and 403 when the student
+ * is outside the audience.
+ *
+ * @param authHeader the full Authorization header value, as getRequestUser takes it.
+ */
+export async function authorizeStudyFileRequest(authHeader: string | null, fileId: string): Promise<StudyFileAccess> {
+  const user = await getRequestUser(authHeader);
+
+  const file = (await getFileById(fileId)) as NexusStudyFile | null;
+  if (!file) throw new ApiError('File not found', 404);
+  const folder = (await getFolderById(file.folder_id)) as NexusStudyFolder | null;
+  if (!folder) throw new ApiError('Folder not found', 404);
+
+  const staff = isStaff(user);
+  if (!staff) {
+    const studentExams = await getStudentExamSet(user.id);
+    if (!isFolderVisibleToStudent(folder, studentExams, user.student_program)) {
+      throw new ApiError('Not available', 403);
+    }
+  }
+
+  // A grant is only looked up when nothing cheaper already allows it.
+  const downloadable =
+    staff || effectiveDownloadable(file, folder) || (await hasActiveDownloadGrant(user.id, file));
+
+  return { user, staff, file, folder, downloadable };
 }

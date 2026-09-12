@@ -65,8 +65,39 @@ vi.mock('@/components/tests/RegradePreviewDialog', () => ({
   default: ({ open }: { open: boolean }) => (open ? <div data-testid="regrade" /> : null),
 }));
 vi.mock('@/components/tests/TestMessageDialog', () => ({
-  default: ({ recipients }: { recipients: Array<{ name: string | null }> }) => (
-    <div data-testid="composer">{recipients.map((r) => r.name).join(',')}</div>
+  default: ({
+    recipients,
+    mode,
+    initialTemplate,
+    onSent,
+    onClose,
+  }: {
+    recipients: Array<{ name: string | null }>;
+    mode?: string;
+    initialTemplate?: string;
+    onSent: (summary: any) => void;
+    onClose: () => void;
+  }) => (
+    <div data-testid="composer" data-mode={mode} data-template={initialTemplate}>
+      <span data-testid="composer-names">{recipients.map((r) => r.name).join(',')}</span>
+      {/* Stand-ins for the sheet finishing a send, or being closed without one. */}
+      <button
+        type="button"
+        onClick={() =>
+          onSent({
+            reopened: recipients.length,
+            closesAt: '2026-09-14T18:29:59.000Z',
+            reached: recipients.length,
+            skipped: 0,
+          })
+        }
+      >
+        pretend-send
+      </button>
+      <button type="button" onClick={onClose}>
+        pretend-cancel
+      </button>
+    </div>
   ),
 }));
 
@@ -312,45 +343,61 @@ describe('Students: acting on a group', () => {
     expect(screen.getByText('Message (1)')).not.toBeNull();
   });
 
-  it('reopens the run for everyone selected, in one call', async () => {
-    const authFetch = vi.fn(async (url: string) => {
-      if (url.includes('/access/bulk')) {
-        return { data: { results: [], counts: { requested: 1, ok: 1, failed: 0, off_roster: 0 } } };
-      }
-      return { data: runPayload() };
-    });
-    mount(runPayload(), authFetch);
+  /**
+   * Reopen used to open the door on the spot, with a three day window nobody
+   * picked and nothing but a bell to tell the students. It now opens the sheet,
+   * which carries the deadline and the message.
+   */
+  it('opens the reopen sheet for everyone selected, instead of reopening silently', async () => {
+    const authFetch = mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
     fireEvent.click(tile('not_done'));
     fireEvent.click(screen.getByLabelText('Select all 1 shown'));
     fireEvent.click(screen.getByText('Reopen (1)'));
 
-    await waitFor(() => {
-      const call = authFetch.mock.calls.find((c: any[]) => String(c[0]).includes('/access/bulk'));
-      expect(call).toBeTruthy();
-      expect(JSON.parse((call as any[])[1].body)).toEqual({
-        student_ids: ['m1'],
-        action: 'open',
-      });
-    });
+    const composer = await screen.findByTestId('composer');
+    expect(composer.getAttribute('data-mode')).toBe('reopen');
+    expect(composer.getAttribute('data-template')).toBe('missed');
+    expect(screen.getByTestId('composer-names').textContent).toBe('Chetana Rao');
+    // Nothing is opened until the sheet sends, with its deadline.
+    expect((authFetch as any).mock.calls.some((c: any[]) => String(c[0]).includes('/access/bulk'))).toBe(false);
   });
 
-  it('reports a partial reopen honestly rather than as a success', async () => {
-    const authFetch = vi.fn(async (url: string) => {
-      if (url.includes('/access/bulk')) {
-        return { data: { results: [], counts: { requested: 1, ok: 0, failed: 1, off_roster: 0 } } };
-      }
-      return { data: runPayload() };
-    });
-    mount(runPayload(), authFetch);
+  it('clears the selection once the sheet has sent', async () => {
+    mount(runPayload());
     await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
 
     fireEvent.click(tile('not_done'));
     fireEvent.click(screen.getByLabelText('Select all 1 shown'));
     fireEvent.click(screen.getByText('Reopen (1)'));
+    fireEvent.click(await screen.findByText('pretend-send'));
 
-    await waitFor(() => expect(screen.getByText(/could not be opened/)).not.toBeNull());
+    await waitFor(() => expect(screen.queryByText('1 selected')).toBeNull());
+    expect(screen.getByText(/Reopened for 1 until/)).not.toBeNull();
+  });
+
+  it('keeps the selection when the sheet is closed without sending', async () => {
+    mount(runPayload());
+    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
+
+    fireEvent.click(tile('not_done'));
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
+    fireEvent.click(screen.getByText('Reopen (1)'));
+    fireEvent.click(await screen.findByText('pretend-cancel'));
+
+    expect(screen.getByText('1 selected')).not.toBeNull();
+  });
+
+  it("opens the same sheet from one student's row, for just them", async () => {
+    mount(runPayload());
+    await waitFor(() => expect(screen.getByText('Chetana Rao')).not.toBeNull());
+
+    fireEvent.click(screen.getByLabelText('Open this test for Chetana Rao'));
+
+    const composer = await screen.findByTestId('composer');
+    expect(composer.getAttribute('data-mode')).toBe('reopen');
+    expect(screen.getByTestId('composer-names').textContent).toBe('Chetana Rao');
   });
 
   it('hands the composer exactly the students that were selected', async () => {
@@ -361,7 +408,38 @@ describe('Students: acting on a group', () => {
     fireEvent.click(screen.getByLabelText('Select all 1 shown'));
     fireEvent.click(screen.getByText('Message (1)'));
 
-    await waitFor(() => expect(screen.getByTestId('composer').textContent).toBe('Bala Raj'));
+    await waitFor(() => expect(screen.getByTestId('composer-names').textContent).toBe('Bala Raj'));
+    expect(screen.getByTestId('composer').getAttribute('data-mode')).toBe('message');
+  });
+
+  it('offers to count an attempt made through another door, for a student with no sitting', async () => {
+    const practised = student({
+      student_id: 'i1',
+      student_name: 'Iswarya P',
+      attempts: 0,
+      status: 'missed',
+      passed: null,
+      first_percentage: null,
+      best_percentage: null,
+      first_submitted_at: null,
+      last_submitted_at: null,
+      elsewhere: { attempts: 1, best_percentage: 86, last_at: '2026-08-28T06:37:00Z' },
+    });
+    mount(runPayload({ rows: [passed, practised] }));
+    await waitFor(() => expect(screen.getByText('Iswarya P')).not.toBeNull());
+
+    expect(screen.getByLabelText("Count Iswarya P's own attempt")).not.toBeNull();
+  });
+
+  it('says how a sitting was counted, and offers to undo a teacher count', async () => {
+    const inWindow = student({ student_id: 's1', student_name: 'Samruddhi W', sat_via: 'window', sat_via_at: '2026-08-18T14:12:00Z' });
+    const counted = student({ student_id: 'h1', student_name: 'Hari H', sat_via: 'teacher', sat_via_at: '2026-08-07T12:03:00Z' });
+    mount(runPayload({ rows: [inWindow, counted] }));
+    await waitFor(() => expect(screen.getByText('Samruddhi W')).not.toBeNull());
+
+    expect(screen.getByText('Sat it on their own, inside the window')).not.toBeNull();
+    expect(screen.getByText(/Counted from their own attempt on 7 Aug/)).not.toBeNull();
+    expect(screen.getByLabelText("Stop counting Hari H's own attempt")).not.toBeNull();
   });
 
   it('keeps a selection across groups, so two groups can get one message', async () => {

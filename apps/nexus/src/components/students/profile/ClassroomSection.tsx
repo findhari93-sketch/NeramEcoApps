@@ -61,7 +61,11 @@ export default function ClassroomSection({
           value={STAGE_LABEL[stage]}
           hint={
             enrollment.study_stage_source
-              ? `Set from ${humanise(enrollment.study_stage_source)}${
+              ? `Set from ${
+                  enrollment.study_stage_source === 'application'
+                    ? 'the application form'
+                    : humanise(enrollment.study_stage_source)
+                }${
                   enrollment.study_stage_set_at
                     ? ` on ${formatDateIN(enrollment.study_stage_set_at)}`
                     : ''

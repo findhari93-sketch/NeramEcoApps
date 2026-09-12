@@ -6,6 +6,7 @@ import {
   getSupabaseAdminClient,
   getExamResultRows,
   effectiveAttemptScore,
+  loadRunSittings,
 } from '@neram/database';
 import { resolveExamCaller, isStaff } from '@/lib/exam-access';
 
@@ -42,31 +43,20 @@ export async function GET(
     // ── Student view ────────────────────────────────────────────────────────
     const studentId = resolved.caller.id;
 
-    const [makeup, placementRes, attemptRes] = await Promise.all([
+    const [makeup, placementRes] = await Promise.all([
       getExamMakeup(exam.id, studentId),
       supabase
         .from('nexus_test_placements' as any)
-        .select('id')
+        .select('id, available_from, available_until')
         .eq('context_type', 'exam')
         .eq('context_id', exam.scheduled_class_id)
         .eq('is_active', true)
-        .maybeSingle(),
-      supabase
-        .from('nexus_test_attempts' as any)
-        .select(
-          'id, status, started_at, submitted_at, score, total_marks, percentage, final_score, final_total_marks, final_percentage, finalised_at',
-        )
-        .eq('test_id', exam.test_id)
-        .eq('student_id', studentId)
-        .eq('mode', 'official')
-        .order('attempt_number', { ascending: false })
-        .limit(1)
         .maybeSingle(),
     ]);
 
     const window = resolveExamWindowForStudent(exam, makeup);
     const now = Date.now();
-    const attempt = attemptRes.data as any;
+    const attempt = await loadMyExamAttempt(exam, (placementRes.data as any) ?? null, studentId, supabase);
 
     // Their own result, only once the teacher has published. Reading the
     // snapshot rather than recomputing means the rank a student sees is the
@@ -130,4 +120,59 @@ export async function GET(
     console.error('[Class Exam API] Error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+const MY_ATTEMPT_COLUMNS =
+  'id, status, started_at, submitted_at, score, total_marks, percentage, final_score, final_total_marks, final_percentage, finalised_at';
+
+/**
+ * The attempt that is this student's exam, by the rule the teacher's screens
+ * use (run-sittings.ts in @neram/database).
+ *
+ * Through the exam door it is the latest sitting, so a reopened student part
+ * way through a retake reads as in progress. Through another door inside the
+ * window, or counted by a teacher, it is the one sitting that counts. This used
+ * to be the latest attempt on the paper from any door, so a chapter practised in
+ * Study Materials showed here as the exam submitted.
+ */
+async function loadMyExamAttempt(
+  exam: { test_id: string },
+  placement: { id: string; available_from?: string | null; available_until?: string | null } | null,
+  studentId: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+): Promise<any | null> {
+  if (placement?.id) {
+    const byRun = await loadRunSittings<any>(
+      [
+        {
+          id: placement.id,
+          test_id: exam.test_id,
+          available_from: placement.available_from ?? null,
+          available_until: placement.available_until ?? null,
+        },
+      ],
+      { studentIds: [studentId], columns: MY_ATTEMPT_COLUMNS },
+      supabase,
+    );
+    const mine = byRun.get(placement.id)?.get(studentId);
+    if (!mine) return null;
+    if (mine.source !== 'run') return mine.first;
+    return (
+      [...mine.attempts].sort(
+        (a, b) => (Number(b.attempt_number) || 0) - (Number(a.attempt_number) || 0),
+      )[0] ?? null
+    );
+  }
+
+  // No placement to anchor a window to. The paper wide reading, unchanged.
+  const { data } = await supabase
+    .from('nexus_test_attempts' as any)
+    .select(MY_ATTEMPT_COLUMNS)
+    .eq('test_id', exam.test_id)
+    .eq('student_id', studentId)
+    .eq('mode', 'official')
+    .order('attempt_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as any) ?? null;
 }

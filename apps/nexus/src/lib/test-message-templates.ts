@@ -15,13 +15,14 @@
  *     sendNudge, which is the only thing that knows who is actually reachable.
  */
 
-export type TestMessageTemplate = 'redo' | 'missed' | 'why' | 'regraded' | 'custom';
+export type TestMessageTemplate = 'redo' | 'missed' | 'why' | 'regraded' | 'counted' | 'custom';
 
 export const TEST_MESSAGE_TEMPLATES: TestMessageTemplate[] = [
   'redo',
   'missed',
   'why',
   'regraded',
+  'counted',
   'custom',
 ];
 
@@ -35,6 +36,7 @@ export const TEMPLATE_LABELS: Record<TestMessageTemplate, string> = {
   missed: 'You missed this',
   why: 'Tell me why',
   regraded: 'Score changed',
+  counted: 'No need to retake',
   custom: 'Write my own',
 };
 
@@ -46,6 +48,12 @@ export interface TestMessageContext {
   dueLabel: string | null;
   /** Whether the teacher is also reopening the run in the same press. */
   reopening: boolean;
+  /**
+   * When the reopen closes, already formatted ("Mon 14 Sept, 11:59 PM"). The
+   * deadline is the whole point of a reopen message: "you can take it now"
+   * without saying until when only moves the question.
+   */
+  until?: string | null;
 }
 
 export interface RenderedMessage {
@@ -60,10 +68,11 @@ export interface RenderedMessage {
  * feature could say: the student goes to Nexus, finds the door shut, and stops
  * believing the messages.
  */
-function reopenLine(reopening: boolean): string {
-  return reopening
-    ? 'I have reopened the test for you, so you can start it whenever you are ready.'
-    : 'Ask me to reopen it and I will open it for you.';
+function reopenLine(reopening: boolean, until: string | null): string {
+  if (!reopening) return 'Ask me to reopen it and I will open it for you.';
+  return until
+    ? 'I have reopened the test for you. It is open until {until}, so please finish it before then.'
+    : 'I have reopened the test for you, so you can start it whenever you are ready.';
 }
 
 export function renderTestMessage(
@@ -83,7 +92,7 @@ export function renderTestMessage(
             ? `You scored {score} on {test}, and the pass mark is {pass_mark}.`
             : `You scored {score} on {test}, and I would like you to try again.`,
           '',
-          reopenLine(ctx.reopening),
+          reopenLine(ctx.reopening, ctx.until ?? null),
           '',
           'If something went wrong the first time, reply and tell me what happened.',
         ].join('\n'),
@@ -99,7 +108,7 @@ export function renderTestMessage(
             ? 'You have not sat {test}, which was due on {due}.'
             : 'You have not sat {test} yet.',
           '',
-          reopenLine(ctx.reopening),
+          reopenLine(ctx.reopening, ctx.until ?? null),
           '',
           'If you could not sit it for a reason, reply and let me know.',
         ].join('\n'),
@@ -135,6 +144,22 @@ export function renderTestMessage(
         ].join('\n'),
       };
 
+    case 'counted':
+      // Sent after a teacher counts an attempt the student made through another
+      // door. {date} is per student, filled by sendNudge, because each counted
+      // attempt was made on a different day.
+      return {
+        subject: `No need to retake: ${ctx.testTitle}`,
+        body: [
+          'Hi {name},',
+          '',
+          'You do not need to sit {test} again.',
+          'I have counted your {score} from {date}.',
+          '',
+          'Thank you for doing the work.',
+        ].join('\n'),
+      };
+
     case 'custom':
     default:
       return { subject: '', body: '' };
@@ -154,6 +179,7 @@ export function fillConstants(text: string, ctx: TestMessageContext): string {
     test: ctx.testTitle,
     pass_mark: ctx.passMark == null ? 'the pass mark' : `${Math.round(ctx.passMark)}%`,
     due: ctx.dueLabel || 'the due date',
+    until: ctx.until || 'the new deadline',
   };
   return text.replace(/\{(\w+)\}/g, (whole, key: string) =>
     Object.prototype.hasOwnProperty.call(values, key) ? values[key] : whole,
@@ -172,12 +198,25 @@ export function renderGroupPostHtml(input: {
   testTitle: string;
   count: number;
   reopening: boolean;
+  /** When the reopen closes, already formatted. */
+  until?: string | null;
   /** The teacher's own words, plain text. Escaped by the caller before it arrives. */
   bodyHtml: string;
 }): string {
   const who = `${input.count} student${input.count === 1 ? '' : 's'}`;
+  // The title is text a teacher typed, going into HTML that Teams renders, so it
+  // is escaped here rather than trusted. It used to go in raw.
+  const title = escapeText(input.testTitle);
+  const until = input.until ? `, open until ${escapeText(input.until)}` : '';
   const head = input.reopening
-    ? `<p><b>${input.testTitle}</b> has been reopened for ${who}.</p>`
-    : `<p>A message about <b>${input.testTitle}</b>, for ${who}.</p>`;
+    ? `<p><b>${title}</b> has been reopened for ${who}${until}.</p>`
+    : `<p>A message about <b>${title}</b>, for ${who}.</p>`;
   return `${head}<p>${input.bodyHtml}</p>`;
+}
+
+function escapeText(s: string): string {
+  return s.replace(
+    /[&<>"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string,
+  );
 }

@@ -23,13 +23,21 @@ describe('StudentFilterSheet', () => {
     render(<StudentFilterSheet {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
     fireEvent.click(screen.getByRole('radio', { name: 'Never signed in' }));
-    expect(props.onFiltersChange).toHaveBeenCalledWith({ signIn: 'never', account: 'any' });
+    expect(props.onFiltersChange).toHaveBeenCalledWith({ signIn: 'never', account: 'any', form: 'any' });
+  });
+
+  it('narrows to students with no application form', () => {
+    const props = baseProps();
+    render(<StudentFilterSheet {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'No application form' }));
+    expect(props.onFiltersChange).toHaveBeenCalledWith({ signIn: 'any', account: 'any', form: 'missing' });
   });
 
   it('clears every facet at once', () => {
     const props = {
       ...baseProps(),
-      filters: { signIn: 'never' as const, account: 'no_microsoft' as const },
+      filters: { signIn: 'never' as const, account: 'no_microsoft' as const, form: 'missing' as const },
       examBatchFilter: 'all',
       batchFilter: 'unassigned',
     };
@@ -44,18 +52,36 @@ describe('StudentFilterSheet', () => {
   it('counts every narrowing facet', () => {
     expect(narrowingCount({ filters: DEFAULT_FILTERS, examBatchFilter: 'current', batchFilter: null })).toBe(0);
     expect(
-      narrowingCount({ filters: { signIn: 'never', account: 'any' }, examBatchFilter: 'all', batchFilter: 'b1' }),
-    ).toBe(3);
+      narrowingCount({
+        filters: { signIn: 'never', account: 'any', form: 'missing' },
+        examBatchFilter: 'all',
+        batchFilter: 'b1',
+      }),
+    ).toBe(4);
   });
 });
 
 describe('ActiveFilterChips', () => {
   it('shows a removable chip per facet and removes just that one', () => {
-    const props = { ...baseProps(), filters: { signIn: 'never' as const, account: 'any' as const } };
+    const props = {
+      ...baseProps(),
+      filters: { signIn: 'never' as const, account: 'any' as const, form: 'any' as const },
+    };
     render(<ActiveFilterChips {...props} />);
     const chip = screen.getByRole('button', { name: /Never signed in/ });
     fireEvent.click(chip.querySelector('.MuiChip-deleteIcon') as Element);
-    expect(props.onFiltersChange).toHaveBeenCalledWith({ signIn: 'any', account: 'any' });
+    expect(props.onFiltersChange).toHaveBeenCalledWith({ signIn: 'any', account: 'any', form: 'any' });
+  });
+
+  it('shows the application form filter as a chip too', () => {
+    const props = {
+      ...baseProps(),
+      filters: { signIn: 'any' as const, account: 'any' as const, form: 'missing' as const },
+    };
+    render(<ActiveFilterChips {...props} />);
+    const chip = screen.getByRole('button', { name: /No application form/ });
+    fireEvent.click(chip.querySelector('.MuiChip-deleteIcon') as Element);
+    expect(props.onFiltersChange).toHaveBeenCalledWith({ signIn: 'any', account: 'any', form: 'any' });
   });
 
   it('renders nothing when nothing narrows', () => {

@@ -143,6 +143,16 @@ export default function TakeTestPage() {
   const [canRequestReopen, setCanRequestReopen] = useState(false);
   /** Set when the refusal was "finish catching up first", so the dead end gets an exit. */
   const [catchupBlocked, setCatchupBlocked] = useState(false);
+  /**
+   * Set when a practice door was refused because this paper is the student's
+   * exam (or class test) right now. The refusal carries the way in.
+   */
+  const [liveRun, setLiveRun] = useState<{
+    placement_id: string;
+    test_id: string;
+    kind: 'exam' | 'class_test';
+    closes_at: string;
+  } | null>(null);
   const [reopenNote, setReopenNote] = useState('');
   const [reopenBusy, setReopenBusy] = useState(false);
   const [reopenAsked, setReopenAsked] = useState(false);
@@ -207,13 +217,17 @@ export default function TakeTestPage() {
   // Data fetching
   // -------------------------------------------------------------------------
 
+  // The door is part of the key: "Take the exam" swaps placement_id on the same
+  // paper, and the page has to load the exam rather than keep the refusal.
   useEffect(() => {
     if (!testId) return;
     fetchTestData();
-  }, [testId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [testId, placementId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchTestData() {
     setLoading(true);
+    setLoadError(null);
+    setLiveRun(null);
     try {
       const token = await getToken();
       if (!token) return;
@@ -239,14 +253,18 @@ export default function TakeTestPage() {
           (j?.code === 'CLASS_TEST_CLOSED' || j?.code === 'EXAM_CLOSED') && j?.can_request === true,
         );
         setCatchupBlocked(j?.code === 'CATCHUP_REQUIRED');
+        setLiveRun(j?.code === 'LIVE_RUN' && j?.live_run ? j.live_run : null);
         // A paper that will not open never creates an attempt row, so this
         // failure was previously invisible to everyone: the student saw an
         // error, walked away, and the teacher's screen said "0 attempts".
-        reportTestError({
-          phase: 'load',
-          message: j?.error || `Test failed to load (HTTP ${res.status})`,
-          detail: { status: res.status, placement_id: placementId },
-        });
+        // Being sent to a live exam is the door working, not a failure.
+        if (j?.code !== 'LIVE_RUN') {
+          reportTestError({
+            phase: 'load',
+            message: j?.error || `Test failed to load (HTTP ${res.status})`,
+            detail: { status: res.status, placement_id: placementId },
+          });
+        }
         return;
       }
 
@@ -793,6 +811,37 @@ export default function TakeTestPage() {
           <Typography variant="body1" color="text.secondary">
             {loadError || 'Unable to load test. Please go back and try again.'}
           </Typography>
+          {/* This paper is their exam right now. The practice door says so and
+              hands them the exam, instead of letting a practice run stand in
+              for it the way it did on 18 Aug. */}
+          {liveRun && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                It counts once, and it is open until{' '}
+                {new Date(liveRun.closes_at).toLocaleString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  timeZone: 'Asia/Kolkata',
+                })}
+                .
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  const qs = new URLSearchParams(searchParams.toString());
+                  qs.set('test_id', liveRun.test_id);
+                  qs.set('placement_id', liveRun.placement_id);
+                  router.replace(`/student/tests/take?${qs.toString()}`);
+                }}
+                sx={{ mt: 1.5, textTransform: 'none', minHeight: 48 }}
+              >
+                {liveRun.kind === 'exam' ? 'Take the exam' : 'Take the class test'}
+              </Button>
+            </Box>
+          )}
+
           {/* Naming the classes is only half an answer. Sending them where the
               work actually is turns the refusal into a next step. */}
           {catchupBlocked && (

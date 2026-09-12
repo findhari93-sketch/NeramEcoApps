@@ -11,7 +11,20 @@ import { listStudentExams } from './exams';
 const COLUMNS: Record<string, string[]> = {
   nexus_exams: ['*'],
   nexus_exam_makeups: ['*'],
-  nexus_test_attempts: ['id', 'test_id', 'student_id', 'status', 'mode'],
+  nexus_test_attempts: [
+    'id',
+    'test_id',
+    'student_id',
+    'status',
+    'mode',
+    'placement_id',
+    'started_at',
+    'submitted_at',
+    'attempt_number',
+  ],
+  nexus_test_placements: ['id', 'test_id', 'context_id', 'available_from', 'available_until'],
+  nexus_test_access_requests: ['placement_id', 'student_id', 'opens_at', 'closes_at'],
+  nexus_test_run_credits: ['placement_id', 'student_id', 'attempt_id', 'note', 'credited_by', 'credited_at'],
   nexus_exam_results: ['exam_id', 'student_id', 'rank', 'score', 'total_marks', 'percentage', 'is_provisional', 'absent'],
 };
 
@@ -42,6 +55,7 @@ function stubClient(seed: Record<string, any[]>) {
         in: () => chain,
         order: () => chain,
         limit: () => chain,
+        range: () => chain,
         then: (onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
           result().then(onFulfilled, onRejected),
       };
@@ -151,5 +165,56 @@ describe('listStudentExams', () => {
     const views = await listStudentExams('stu-1', 'c1', client as never);
     expect(views).toEqual([]);
     expect((client as any).__calls['nexus_exam_makeups']).toBeUndefined();
+  });
+
+  /**
+   * The 18 Aug shape. The exam door refused students who had practised, so they
+   * sat the paper through Study Materials instead. Inside the exam window that
+   * counts as the exam; a week before, it does not.
+   */
+  const withExamDoor = (attempts: any[]) =>
+    stubClient({
+      nexus_exams: [{ ...baseExam, results_state: 'unpublished' }],
+      nexus_exam_makeups: [],
+      nexus_test_placements: [
+        {
+          id: 'p-exam',
+          test_id: 't1',
+          context_id: 'sc1',
+          available_from: baseExam.opens_at,
+          available_until: baseExam.closes_at,
+        },
+      ],
+      nexus_test_attempts: attempts,
+      nexus_test_access_requests: [],
+      nexus_test_run_credits: [],
+    });
+
+  const practice = (id: string, started: string, submitted: string) => ({
+    id,
+    test_id: 't1',
+    student_id: 'stu-1',
+    status: 'submitted',
+    mode: 'official',
+    placement_id: 'study-door',
+    started_at: started,
+    submitted_at: submitted,
+    attempt_number: 1,
+  });
+
+  it('counts a Study Materials attempt made inside the exam window as the exam', async () => {
+    const client = withExamDoor([practice('in-window', '2026-08-20T05:00:00Z', '2026-08-20T05:30:00Z')]);
+
+    const [view] = await listStudentExams('stu-1', 'c1', client as never);
+    expect(view.attempted).toBe(true);
+    expect(view.attempt_id).toBe('in-window');
+  });
+
+  it('does not count a chapter practised the week before as the exam', async () => {
+    const client = withExamDoor([practice('early', '2026-08-13T05:00:00Z', '2026-08-13T05:30:00Z')]);
+
+    const [view] = await listStudentExams('stu-1', 'c1', client as never);
+    expect(view.attempted).toBe(false);
+    expect(view.attempt_id).toBeNull();
   });
 });

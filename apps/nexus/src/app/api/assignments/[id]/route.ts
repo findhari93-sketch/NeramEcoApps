@@ -46,6 +46,7 @@ import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
 import { classStartIso } from '@/lib/prework';
 import { resolveSubmitMode, lockedReason } from '@/lib/assignment-submit-window';
 import { composeDrawingBriefText } from '@/lib/drawing-brief-text';
+import { getVoiceFeedbackForSubmissions, signVoiceFeedback } from '@/lib/drawing-voice-feedback';
 
 /**
  * What the student may do with this assignment right now, resolved server-side
@@ -137,7 +138,27 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       // Drawing-type assignments are graded in the Drawing Review screen; return
       // a roster built from drawing_submissions with the drawing id to open.
       if ((detail as any).assignment_type === 'drawing') {
-        const { rows } = await getAssignmentDrawingRoster(params.id);
+        const { rows: baseRows } = await getAssignmentDrawingRoster(params.id);
+        // Whether each student heard the voice note on their latest attempt, so a
+        // teacher can see it before chasing a redo. One query for the whole roster.
+        const drawingIds = baseRows.map((r) => r.drawing?.id).filter((x): x is string => !!x);
+        const voiceRows = await getVoiceFeedbackForSubmissions(drawingIds, { sentOnly: true }).catch(() => []);
+        const voiceBy = new Map(voiceRows.map((v) => [v.submission_id, v]));
+        const rows = baseRows.map((r) => {
+          const v = r.drawing ? voiceBy.get(r.drawing.id) : undefined;
+          return {
+            ...r,
+            voice: v
+              ? {
+                  sent_at: v.sent_at,
+                  first_played_at: v.first_played_at,
+                  heard_fully_at: v.heard_fully_at,
+                  max_position_ms: v.max_position_ms,
+                  duration_ms: v.duration_ms,
+                }
+              : null,
+          };
+        });
         const counts = rows.reduce(
           (acc, r) => {
             acc.total += 1;
@@ -198,10 +219,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         getStudentAssignmentDrawing(user.id, params.id),
         getAssignmentDrawingHistory(params.id, user.id),
       ]);
+      // Voice notes the teacher sent on any attempt, playable for an hour. A draft
+      // stays the teacher's until Redo or Complete sends it.
+      const attemptIds = Array.from(
+        new Set([...(attempts as any[]).map((a) => a.id), (drawing as any)?.id].filter(Boolean)),
+      ) as string[];
+      const voices = await signVoiceFeedback(
+        await getVoiceFeedbackForSubmissions(attemptIds, { sentOnly: true }).catch(() => []),
+      );
       return NextResponse.json({
         assignment: detail,
         drawing_submission: drawing,
         drawing_attempts: attempts,
+        voice_by_submission: Object.fromEntries(voices.map((v) => [v.submission_id, v])),
         enrolled_at: (enrollment as any)?.enrolled_at ?? null,
         recording,
         role: 'student',

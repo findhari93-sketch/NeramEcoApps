@@ -19,9 +19,11 @@ import TuneIcon from '@mui/icons-material/Tune';
 import {
   ACCOUNT_FILTER_LABEL,
   DEFAULT_FILTERS,
+  FORM_FILTER_LABEL,
   SIGN_IN_FILTER_LABEL,
   activeFilterCount,
   type AccountFilter,
+  type FormFilter,
   type RosterFilters,
   type SignInFilter,
 } from '@/lib/student-roster-view';
@@ -187,6 +189,13 @@ export default function StudentFilterSheet(props: StudentFilterSheetProps) {
             labels={ACCOUNT_FILTER_LABEL}
             onChange={(account) => onFiltersChange({ ...filters, account })}
           />
+          <FilterRadios<FormFilter>
+            title="Application form"
+            name="application-form"
+            value={filters.form}
+            labels={FORM_FILTER_LABEL}
+            onChange={(form) => onFiltersChange({ ...filters, form })}
+          />
         </Box>
 
         <Box
@@ -287,6 +296,13 @@ export function ActiveFilterChips(props: Omit<StudentFilterSheetProps, 'examBatc
       key: 'account',
       label: ACCOUNT_FILTER_LABEL[filters.account],
       onDelete: () => onFiltersChange({ ...filters, account: 'any' }),
+    });
+  }
+  if (filters.form !== 'any') {
+    chips.push({
+      key: 'form',
+      label: FORM_FILTER_LABEL[filters.form],
+      onDelete: () => onFiltersChange({ ...filters, form: 'any' }),
     });
   }
 

@@ -29,6 +29,7 @@ function student(over: Partial<RosterStudent> = {}): RosterStudent {
     last_seen_at: iso(NOW - 2 * HOUR),
     attendance: { percentage: 80, total: 10 },
     possible_duplicate_of: null,
+    has_application_form: true,
     ...over,
   };
 }
@@ -60,23 +61,39 @@ describe('matchesFilters', () => {
     student({ name: 'Last week', last_seen_at: iso(NOW - 9 * DAY) }),
     student({ name: 'Gmail', ms_oid: null, first_signed_in_at: null, last_seen_at: null }),
     student({ name: 'Twin', possible_duplicate_of: { id: 'x', name: 'Twin two' } }),
+    student({ name: 'No form', has_application_form: false }),
   ];
-  const names = (filters: RosterFilters) =>
-    roster.filter((s) => matchesFilters(s, filters, NOW)).map((s) => s.name);
+  const names = (filters: Partial<RosterFilters>) =>
+    roster.filter((s) => matchesFilters(s, { ...DEFAULT_FILTERS, ...filters }, NOW)).map((s) => s.name);
 
   it('keeps everyone with the default filters', () => {
-    expect(names(DEFAULT_FILTERS)).toHaveLength(6);
+    expect(names(DEFAULT_FILTERS)).toHaveLength(7);
   });
 
   it('narrows by sign-in activity', () => {
-    expect(names({ signIn: 'never', account: 'any' })).toEqual(['Never']);
-    expect(names({ signIn: 'inactive', account: 'any' })).toEqual(['Stale']);
-    expect(names({ signIn: 'active_week', account: 'any' })).toEqual(['Recent', 'Twin']);
+    expect(names({ signIn: 'never' })).toEqual(['Never']);
+    expect(names({ signIn: 'inactive' })).toEqual(['Stale']);
+    expect(names({ signIn: 'active_week' })).toEqual(['Recent', 'Twin', 'No form']);
   });
 
   it('narrows by account state', () => {
-    expect(names({ signIn: 'any', account: 'no_microsoft' })).toEqual(['Gmail']);
-    expect(names({ signIn: 'any', account: 'possible_duplicate' })).toEqual(['Twin']);
+    expect(names({ account: 'no_microsoft' })).toEqual(['Gmail']);
+    expect(names({ account: 'possible_duplicate' })).toEqual(['Twin']);
+  });
+
+  it('narrows by application form', () => {
+    expect(names({ form: 'missing' })).toEqual(['No form']);
+    expect(names({ form: 'linked' })).toHaveLength(6);
+  });
+
+  it('combines facets instead of letting the account filter end the check', () => {
+    expect(names({ account: 'possible_duplicate', form: 'missing' })).toEqual([]);
+  });
+
+  it('never matches a form filter for a payload without the form check', () => {
+    const old = student({ has_application_form: undefined });
+    expect(matchesFilters(old, { ...DEFAULT_FILTERS, form: 'missing' }, NOW)).toBe(false);
+    expect(matchesFilters(old, { ...DEFAULT_FILTERS, form: 'linked' }, NOW)).toBe(false);
   });
 });
 
@@ -186,18 +203,29 @@ describe('stored preferences', () => {
     expect(parseStoredSort('joined_newest')).toBe('joined_newest');
     expect(parseStoredSort('bogus')).toBe('name');
     expect(parseStoredSort(null)).toBe('name');
-    expect(parseStoredFilters('{"signIn":"never","account":"no_microsoft"}')).toEqual({
+    expect(parseStoredFilters('{"signIn":"never","account":"no_microsoft","form":"missing"}')).toEqual({
       signIn: 'never',
       account: 'no_microsoft',
+      form: 'missing',
     });
     expect(parseStoredFilters('{"signIn":"nope"}')).toEqual(DEFAULT_FILTERS);
     expect(parseStoredFilters('not json')).toEqual(DEFAULT_FILTERS);
     // An inherited property name must not pass as a stored choice.
-    expect(parseStoredFilters('{"signIn":"toString","account":"constructor"}')).toEqual(DEFAULT_FILTERS);
+    expect(parseStoredFilters('{"signIn":"toString","account":"constructor","form":"valueOf"}')).toEqual(
+      DEFAULT_FILTERS,
+    );
+  });
+
+  it('reads filters saved before the form filter existed', () => {
+    expect(parseStoredFilters('{"signIn":"never","account":"any"}')).toEqual({
+      signIn: 'never',
+      account: 'any',
+      form: 'any',
+    });
   });
 
   it('counts only the facets that narrow', () => {
     expect(activeFilterCount(DEFAULT_FILTERS)).toBe(0);
-    expect(activeFilterCount({ signIn: 'never', account: 'no_microsoft' })).toBe(2);
+    expect(activeFilterCount({ signIn: 'never', account: 'no_microsoft', form: 'missing' })).toBe(3);
   });
 });

@@ -38,13 +38,16 @@ export const DEFAULT_SORT: RosterSort = 'name';
 
 export type SignInFilter = 'any' | 'never' | 'inactive' | 'active_week';
 export type AccountFilter = 'any' | 'no_microsoft' | 'possible_duplicate';
+/** Whether the student's own record holds an application form. */
+export type FormFilter = 'any' | 'missing' | 'linked';
 
 export interface RosterFilters {
   signIn: SignInFilter;
   account: AccountFilter;
+  form: FormFilter;
 }
 
-export const DEFAULT_FILTERS: RosterFilters = { signIn: 'any', account: 'any' };
+export const DEFAULT_FILTERS: RosterFilters = { signIn: 'any', account: 'any', form: 'any' };
 
 export const SIGN_IN_FILTER_LABEL: Record<SignInFilter, string> = {
   any: 'Any',
@@ -57,6 +60,12 @@ export const ACCOUNT_FILTER_LABEL: Record<AccountFilter, string> = {
   any: 'Any',
   no_microsoft: 'No Microsoft account',
   possible_duplicate: 'May have two records',
+};
+
+export const FORM_FILTER_LABEL: Record<FormFilter, string> = {
+  any: 'Any',
+  missing: 'No application form',
+  linked: 'Has an application form',
 };
 
 export const SORT_STORAGE_KEY = 'nexus:students:sort';
@@ -83,6 +92,8 @@ export interface RosterStudent {
   last_seen_at?: string | null;
   attendance: { percentage: number; total: number };
   possible_duplicate_of?: { id: string; name: string } | null;
+  /** Undefined in a payload from before the form check, which no form filter matches. */
+  has_application_form?: boolean;
 }
 
 export type StudentActivity = 'no_microsoft' | 'never_signed_in' | 'inactive' | 'active';
@@ -114,13 +125,19 @@ export function matchesFilters(student: RosterStudent, filters: RosterFilters, n
     const seen = timeOf(student.last_seen_at);
     if (seen === null || now - seen > 7 * DAY_MS) return false;
   }
-  if (filters.account === 'no_microsoft') return !student.ms_oid;
-  if (filters.account === 'possible_duplicate') return !!student.possible_duplicate_of;
+  if (filters.account === 'no_microsoft' && student.ms_oid) return false;
+  if (filters.account === 'possible_duplicate' && !student.possible_duplicate_of) return false;
+  if (filters.form === 'missing' && student.has_application_form !== false) return false;
+  if (filters.form === 'linked' && student.has_application_form !== true) return false;
   return true;
 }
 
 export function activeFilterCount(filters: RosterFilters): number {
-  return (filters.signIn !== 'any' ? 1 : 0) + (filters.account !== 'any' ? 1 : 0);
+  return (
+    (filters.signIn !== 'any' ? 1 : 0) +
+    (filters.account !== 'any' ? 1 : 0) +
+    (filters.form !== 'any' ? 1 : 0)
+  );
 }
 
 /** Unknown times always sort last, whichever the direction. */
@@ -228,6 +245,8 @@ export function parseStoredFilters(raw: string | null): RosterFilters {
     return {
       signIn: ownKey(SIGN_IN_FILTER_LABEL, value?.signIn) ? value!.signIn as SignInFilter : 'any',
       account: ownKey(ACCOUNT_FILTER_LABEL, value?.account) ? value!.account as AccountFilter : 'any',
+      // Stored before the form filter existed, so a missing key is the default.
+      form: ownKey(FORM_FILTER_LABEL, value?.form) ? value!.form as FormFilter : 'any',
     };
   } catch {
     return { ...DEFAULT_FILTERS };

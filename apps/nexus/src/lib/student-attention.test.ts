@@ -5,6 +5,7 @@ const none = {
   duplicateCount: 0,
   mismatchCount: 0,
   neverSignedInCount: 0,
+  noFormCount: 0,
   noStageCount: 0,
   noYearCount: 0,
   suggestionCount: 0,
@@ -20,11 +21,19 @@ describe('buildAttentionRows', () => {
       duplicateCount: 1,
       mismatchCount: 2,
       neverSignedInCount: 6,
+      noFormCount: 7,
       noStageCount: 14,
       noYearCount: 3,
       suggestionCount: 0,
     });
-    expect(rows.map((r) => r.key)).toEqual(['duplicates', 'mismatch', 'never_signed_in', 'no_stage', 'no_year']);
+    expect(rows.map((r) => r.key)).toEqual([
+      'duplicates',
+      'mismatch',
+      'never_signed_in',
+      'no_form',
+      'no_stage',
+      'no_year',
+    ]);
   });
 
   it('uses singular and plural copy', () => {
@@ -37,6 +46,15 @@ describe('buildAttentionRows', () => {
     expect(buildAttentionRows({ ...none, noStageCount: 14 })[0].message).toBe(
       '14 students have no class set. Priority and reminders cannot be targeted until they do.',
     );
+    expect(buildAttentionRows({ ...none, noFormCount: 1 })[0].message).toBe(
+      '1 student has no application form linked, so their class and exam year cannot be filled in from it.',
+    );
+  });
+
+  it('lets every teacher look for missing forms', () => {
+    expect(buildAttentionRows({ ...none, noFormCount: 3 })[0].actions).toEqual([
+      { key: 'review_forms', label: 'Find their forms', primary: true },
+    ]);
   });
 
   it('offers the application-form prefill only when there is something to fill', () => {
@@ -62,6 +80,7 @@ describe('buildAttentionRows', () => {
       duplicateCount: 2,
       mismatchCount: 2,
       neverSignedInCount: 2,
+      noFormCount: 2,
       noStageCount: 2,
       noYearCount: 2,
       suggestionCount: 2,

@@ -30,6 +30,11 @@ export interface EnrolledStudent {
   last_seen_at?: string | null;
   /** Another row on this roster that may be the same person. See lib/roster-duplicates. */
   possible_duplicate_of?: { id: string; name: string } | null;
+  /**
+   * The student's own record holds an application form. False usually means the
+   * form sits on a second record that was never linked. See lib/application-form.
+   */
+  has_application_form?: boolean;
 
   batch: StudentBatch | null; // classroom section (nexus_batches)
   exam_batch: string | null; // exam-year cohort (users.academic_year)

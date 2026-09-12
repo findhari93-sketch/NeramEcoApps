@@ -12,16 +12,18 @@ import {
   type SiteDriveItem,
 } from '@/lib/sharepoint';
 import { searchAllDriveItems } from '@/lib/graph-search';
-import { needsPdfRendition } from '@/lib/office-rendition';
+import { isPresentation, needsPdfRendition } from '@/lib/office-rendition';
 
 /**
  * GET /api/sharepoint/search?q=  (staff)
  * GET /api/sharepoint/search?path=Teaching/Decks
  * GET /api/sharepoint/search?q=chapter3&kind=video&scope=both
+ * GET /api/sharepoint/search?q=history&kind=presentation&scope=both
  *
  * The file picker behind "Choose from SharePoint" when attaching reference
- * material to a class, and behind "Search SharePoint or OneDrive" when attaching
- * a class recording to a chapter.
+ * material to a class, behind "Search SharePoint or OneDrive" when attaching
+ * a class recording to a chapter, and behind "Find in SharePoint" when adding a
+ * chapter's PowerPoint slides.
  *
  * STAFF ONLY, and the reason is worth stating: the site half runs app-only, so it
  * reads the library with the application's permissions rather than the caller's.
@@ -44,11 +46,16 @@ import { needsPdfRendition } from '@/lib/office-rendition';
  * it lives. It needs delegated Files.Read.All and therefore a separate consent,
  * so the two-drive search stays underneath as the fallback and the response says
  * through `indexed` and `partial` which one actually answered.
+ *
+ * `kind=presentation` matters most for the index. Teacher decks live in each
+ * Teams class's own SharePoint site, not in the Neram library (which held no
+ * Office files at all when checked on 2026-09-11), so the slides picker searches
+ * with `scope=both` and never browses.
  */
 
 export const dynamic = 'force-dynamic';
 
-type Kind = 'document' | 'video';
+type Kind = 'document' | 'video' | 'presentation';
 type Scope = 'site' | 'mine' | 'both';
 
 /** Where a result came from, so the picker can say so on the row. */
@@ -97,6 +104,10 @@ function isAttachable(item: SiteDriveItem, kind: Kind, searching: boolean): bool
     return mime.startsWith('video/') || VIDEO_EXT.test(item.name);
   }
 
+  // A chapter's slides are PowerPoint and nothing else. A PDF offered here would
+  // be attached, then refused by the slides route as not a presentation.
+  if (kind === 'presentation') return isPresentation(item.mimeType, item.name);
+
   if (mime === 'application/pdf') return true;
   if (mime.startsWith('image/')) return true;
   return needsPdfRendition(item.mimeType, item.name);
@@ -119,6 +130,12 @@ function isGraphBearer(token: string | null): token is string {
 
 function tag(items: SiteDriveItem[], source: Source) {
   return items.map((item) => ({ ...item, source }));
+}
+
+function parseKind(value: string | null): Kind {
+  if (value === 'video') return 'video';
+  if (value === 'presentation') return 'presentation';
+  return 'document';
 }
 
 export async function GET(request: NextRequest) {
@@ -152,7 +169,7 @@ export async function GET(request: NextRequest) {
 
     const params = request.nextUrl.searchParams;
     const q = (params.get('q') || '').trim();
-    const kind: Kind = params.get('kind') === 'video' ? 'video' : 'document';
+    const kind = parseKind(params.get('kind'));
 
     /**
      * A MISSING path means "start wherever this kind should start", which is not
@@ -234,7 +251,14 @@ export async function GET(request: NextRequest) {
         }
         if (site.status === 'rejected') partial = 'Could not reach the Neram library, showing your OneDrive only.';
         else if (mine.status === 'rejected') partial = 'Could not reach your OneDrive, showing the Neram library only.';
-        else partial = 'Searching the Neram library and your own OneDrive only. Files shared with you by someone else are not included yet.';
+        else if (kind === 'presentation') {
+          // Said plainly, because a deck in a Teams class site is exactly what
+          // this fallback cannot see, and an empty list reads as "no such deck".
+          partial =
+            'Searching the Neram library and your own OneDrive only, so decks in Teams class sites are not listed yet. Paste the deck link instead.';
+        } else {
+          partial = 'Searching the Neram library and your own OneDrive only. Files shared with you by someone else are not included yet.';
+        }
 
         items = [...siteItems, ...mineItems];
       }

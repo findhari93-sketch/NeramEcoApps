@@ -43,7 +43,7 @@ export const NOT_RECORDED = 'Not recorded';
 /** Section-level sentences. Used instead of an empty card or a grid of dashes. */
 export const EMPTY_SENTENCE = {
   application:
-    'This student was added by staff, so there is no application form on file.',
+    'No application form is on this student\'s record. It may sit on a second record that was never linked: open Find their forms on the Students list.',
   academicData:
     'No academic background was captured on the application form.',
   guardian:

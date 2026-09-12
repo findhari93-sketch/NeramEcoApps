@@ -42,16 +42,18 @@ const SCHOOL_TYPES = [
   { value: 'government_school', label: 'Government School' },
 ];
 
-// Generate academic year options: current year and next 3 years in "YYYY-YY" format
+// Exam batch options: this academic year and the next three, shown as "YYYY-YY".
+// The VALUE is the calendar year that batch writes the exam (2026-27 writes in 2027),
+// because lead_profiles.target_exam_year holds exam years everywhere else. It used to
+// hold the batch's start year, so every answer saved here landed one year early.
 const generateAcademicYears = () => {
   const now = new Date();
-  const currentMonth = now.getMonth(); // 0-indexed
-  const currentYear = now.getFullYear();
-  // Academic year runs June-June. If before June, start from previous year
-  const startYear = currentMonth < 5 ? currentYear - 1 : currentYear;
+  // The academic year starts in April, as in currentAcademicYear from @neram/database.
+  const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   return Array.from({ length: 4 }, (_, i) => {
     const yr = startYear + i;
-    return { value: yr.toString(), label: `${yr}-${String(yr + 1).slice(2)}` };
+    const yy = String((yr + 1) % 100).padStart(2, '0');
+    return { value: String(yr + 1), label: `${yr}-${yy} (exam in ${yr + 1})` };
   });
 };
 

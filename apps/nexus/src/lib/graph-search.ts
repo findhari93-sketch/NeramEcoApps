@@ -46,6 +46,12 @@ const SEARCH_URL = 'https://graph.microsoft.com/v1.0/search/query';
 // never appears.
 const VIDEO_FILETYPES = ['mp4', 'mkv', 'mov', 'webm', 'm4v', 'avi', 'wmv', 'mpg', 'mpeg', '3gp'];
 const DOCUMENT_FILETYPES = ['pdf', 'pptx', 'ppt', 'docx', 'doc', 'png', 'jpg', 'jpeg'];
+// Kept in step with isPresentation in lib/office-rendition, which the route
+// filters with, for the same reason as the video list above.
+const PRESENTATION_FILETYPES = ['pptx', 'ppt', 'ppsx', 'odp'];
+
+/** Which files a search is for: anything attachable, recordings, or a chapter's slides. */
+export type DriveSearchKind = 'document' | 'video' | 'presentation';
 
 export interface GraphSearchResult {
   /**
@@ -71,8 +77,9 @@ function sourceOf(resource: any): 'site' | 'mine' {
   return resource?.parentReference?.driveType === 'personal' ? 'mine' : 'site';
 }
 
-function filetypeClause(kind: 'document' | 'video'): string {
-  const types = kind === 'video' ? VIDEO_FILETYPES : DOCUMENT_FILETYPES;
+export function filetypeClause(kind: DriveSearchKind): string {
+  const types =
+    kind === 'video' ? VIDEO_FILETYPES : kind === 'presentation' ? PRESENTATION_FILETYPES : DOCUMENT_FILETYPES;
   return `(${types.map((t) => `filetype:${t}`).join(' OR ')})`;
 }
 
@@ -86,7 +93,7 @@ function filetypeClause(kind: 'document' | 'video'): string {
 export async function searchAllDriveItems(
   msToken: string,
   query: string,
-  kind: 'document' | 'video',
+  kind: DriveSearchKind,
   size = 25,
 ): Promise<GraphSearchResult> {
   const q = query.trim();

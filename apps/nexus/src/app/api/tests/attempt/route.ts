@@ -27,6 +27,7 @@ import {
   type GateClassEvidence,
 } from '@/lib/catchup-test-gate';
 import { attemptSeed, seededShuffle } from '@/lib/seeded-shuffle';
+import { describeLiveRun, findLiveRunForStudent } from '@/lib/live-run';
 
 /**
  * The student take engine.
@@ -129,11 +130,14 @@ export async function GET(request: NextRequest) {
     // catch-up gate below must not second-guess them.
     let holdsGrant = false;
     let examForTimer: Awaited<ReturnType<typeof getExam>> = null;
+    // Which door this sitting comes through. Null for a paper opened without one.
+    let doorContext: string | null = null;
 
     // A placement carries its own window and visibility on top of the test's.
     if (placementId) {
       const placement = await getPlacementById(placementId);
       if (placement && placement.test_id === testId) {
+        doorContext = String(placement.context_type);
         if (!placement.is_active || !placement.is_visible) {
           return NextResponse.json({ error: 'This test is not available' }, { status: 403 });
         }
@@ -338,6 +342,14 @@ export async function GET(request: NextRequest) {
           }
         }
       }
+    }
+
+    // A practice door never stands in for a live exam. While this paper is the
+    // student's exam (or class test) and they have not sat it, they are sent
+    // there instead. See lib/live-run.ts for what happened on 18 Aug.
+    if (mode === 'official' && !CLASS_ANCHORED_FOR_GATE.has(String(doorContext))) {
+      const live = await findLiveRunForStudent({ testId, studentId: user.id });
+      if (live) return NextResponse.json(describeLiveRun(live), { status: 409 });
     }
 
     const started = await startOrResumeAttempt({ testId, studentId: user.id, placementId, mode, extraAttempts });
