@@ -73,8 +73,14 @@ describe('ExamResultsSheet', () => {
       json: async () => ({
         data: {
           ...PAYLOAD.data,
-          exam: { ...PAYLOAD.data.exam, results_state: 'final' },
+          // A message id, not merely a publish timestamp: the channel has
+          // actually heard about this exam. A publish whose Graph post failed
+          // stamps the timestamp too, and keying the Teams half on that is what
+          // made a failed announcement permanent.
+          exam: { ...PAYLOAD.data.exam, results_state: 'final', teams_results_message_id: 'msg-1' },
           last_published_at: '2026-08-19T06:00:00.000Z',
+          teams_message_id: 'msg-1',
+          teams_linked: true,
         },
       }),
     })) as never;
@@ -154,5 +160,130 @@ describe('ExamResultsSheet', () => {
     await waitFor(() => expect(screen.getByText(/Nobody has sat this exam yet/)).toBeTruthy());
     expect(screen.queryByTestId('exam-publish-cta')).toBeNull();
     expect(container.querySelectorAll('[disabled], [aria-disabled="true"]')).toHaveLength(0);
+    // "Average 0%, highest 0%" printed beside "Nobody has sat this exam yet"
+    // reads as a class that scored nothing, which is a different and worse
+    // claim than the blocker above it.
+    expect(screen.queryByText(/Average \d+%, highest/)).toBeNull();
+  });
+
+  /**
+   * THE FOURTH STATE, which the original CTA table never enumerated.
+   *
+   * Publish with ungraded drawings, grade them, reopen the sheet: published
+   * before is true and there is no second sitting, so no button rendered at
+   * all. results_state stayed 'provisional' forever, every student's card read
+   * "Provisional" indefinitely, and the publish route's provisional-to-final
+   * point correction could never run.
+   */
+  describe('finalising a provisional result', () => {
+    const provisionalPayload = (over: Record<string, unknown> = {}) => ({
+      data: {
+        ...PAYLOAD.data,
+        exam: {
+          ...PAYLOAD.data.exam,
+          results_state: 'provisional',
+          teams_results_message_id: 'msg-1',
+        },
+        results: {
+          ...PAYLOAD.data.results,
+          drawings_ungraded: 0,
+          rows: PAYLOAD.data.results.rows.filter((r) => r.bucket !== 'second_sitting'),
+        },
+        last_published_at: '2026-08-19T06:00:00.000Z',
+        teams_message_id: 'msg-1',
+        teams_linked: true,
+        warnings: [],
+        ...over,
+      },
+    });
+
+    const serve = (payload: unknown) => {
+      global.fetch = vi.fn(async () => ({ ok: true, json: async () => payload })) as never;
+    };
+
+    it('offers a final publish once the last drawing is marked', async () => {
+      serve(provisionalPayload());
+      open();
+      await waitFor(() => expect(screen.getByTestId('exam-publish-cta')).toBeTruthy());
+      expect(screen.getByTestId('exam-publish-cta').textContent).toBe('Publish final results (1)');
+    });
+
+    it('offers nothing while drawings are still being marked', async () => {
+      serve(
+        provisionalPayload({
+          results: {
+            ...PAYLOAD.data.results,
+            drawings_ungraded: 2,
+            rows: PAYLOAD.data.results.rows.filter((r) => r.bucket !== 'second_sitting'),
+          },
+        }),
+      );
+      const { container } = open();
+      await waitFor(() => expect(screen.getByText('Arun')).toBeTruthy());
+      // Nothing has changed yet, so there is nothing to press, and a disabled
+      // button carrying that refusal would be a dead end.
+      expect(screen.queryByTestId('exam-publish-cta')).toBeNull();
+      expect(container.querySelectorAll('[disabled], [aria-disabled="true"]')).toHaveLength(0);
+    });
+
+    it('offers nothing once the results are already final', async () => {
+      serve(
+        provisionalPayload({
+          exam: {
+            ...PAYLOAD.data.exam,
+            results_state: 'final',
+            teams_results_message_id: 'msg-1',
+          },
+        }),
+      );
+      open();
+      await waitFor(() => expect(screen.getByText('Arun')).toBeTruthy());
+      expect(screen.queryByTestId('exam-publish-cta')).toBeNull();
+      expect(screen.getByText(/Results last went out on/)).toBeTruthy();
+    });
+
+    it('prefers the second sitting label when there is also a late paper', async () => {
+      serve(
+        provisionalPayload({
+          results: { ...PAYLOAD.data.results, drawings_ungraded: 0 },
+        }),
+      );
+      open();
+      await waitFor(() => expect(screen.getByTestId('exam-publish-cta')).toBeTruthy());
+      expect(screen.getByTestId('exam-publish-cta').textContent).toBe('Publish 1 second sitting result');
+    });
+  });
+
+  /**
+   * A publish whose Graph post failed stamps last_published_at all the same, so
+   * the channel was never told and the old sheet offered no way to tell it.
+   */
+  it('offers to post to Teams when the channel was never actually told', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          ...PAYLOAD.data,
+          exam: { ...PAYLOAD.data.exam, results_state: 'final' },
+          results: {
+            ...PAYLOAD.data.results,
+            rows: PAYLOAD.data.results.rows.filter((r) => r.bucket !== 'second_sitting'),
+          },
+          last_published_at: '2026-08-19T06:00:00.000Z',
+          teams_message_id: null,
+          teams_linked: true,
+          warnings: [],
+        },
+      }),
+    })) as never;
+
+    open();
+    await waitFor(() => expect(screen.getByTestId('exam-publish-cta')).toBeTruthy());
+    expect(screen.getByTestId('exam-publish-cta').textContent).toBe(
+      'Post the results to the Teams channel',
+    );
+    // And the preview and the toggle come back with it, so the teacher sees
+    // exactly what is about to reach the channel.
+    expect(screen.getByText(/Post this to the classroom/i)).toBeTruthy();
   });
 });

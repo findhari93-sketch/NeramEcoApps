@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -67,7 +67,13 @@ interface ResultRow {
 }
 
 interface PreviewData {
-  exam: { id: string; title: string | null; results_state: string };
+  exam: {
+    id: string;
+    title: string | null;
+    results_state: 'unpublished' | 'provisional' | 'final';
+    /** Set only once Graph has actually accepted the channel card. */
+    teams_results_message_id?: string | null;
+  };
   results: {
     stats: { roster: number; sat: number; absent: number; still_to_sit: number; average: number; highest: number };
     second: { sat: number; average: number; highest: number; lowest: number; passed: number } | null;
@@ -81,6 +87,10 @@ interface PreviewData {
   warnings: string[];
   preview: { text: string; html: string };
   last_published_at: string | null;
+  /** Mirrors exam.teams_results_message_id. Present from the GET route. */
+  teams_message_id?: string | null;
+  /** False when the classroom has no Teams channel, so there is nothing to retry. */
+  teams_linked?: boolean;
 }
 
 const BUCKETS = [
@@ -91,6 +101,17 @@ const BUCKETS = [
 ] as const;
 
 type BucketId = (typeof BUCKETS)[number]['id'];
+
+/**
+ * Has the channel actually been told about this exam?
+ *
+ * The message id is written only after Graph accepts the card, so it is the one
+ * honest answer. `last_published_at` is stamped on every publish including one
+ * whose post failed, and reading that instead is what made a failed
+ * announcement permanent.
+ */
+const announcedIn = (d: PreviewData): boolean =>
+  Boolean(d.teams_message_id ?? d.exam.teams_results_message_id);
 
 export default function ExamResultsSheet({
   open,
@@ -115,6 +136,18 @@ export default function ExamResultsSheet({
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  /**
+   * The re-entry latch, and it is a ref rather than the `publishing` state on
+   * purpose.
+   *
+   * React batches state updates, so two clicks dispatched inside one batch both
+   * read the old `publishing` value and both get through. It has never been
+   * observed here, but the failure mode is a second irreversible Teams post to
+   * a real classroom, reaching every student and often a parent, and a
+   * guarantee that rests on the scheduler's flush timing is not a guarantee. A
+   * ref is set synchronously, so the second click cannot miss it.
+   */
+  const publishingRef = useRef(false);
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -150,7 +183,11 @@ export default function ExamResultsSheet({
             (json.data.sections as PreviewSection[]).filter((s) => s.toggleable).map((s) => s.id),
           ),
         );
-        setPostToTeams(!json.data.last_published_at);
+        // Keyed on whether the channel has actually heard about the exam, not
+        // on whether a publish has happened. A publish whose Graph post failed
+        // stamps last_published_at all the same, and keying on that left the
+        // class permanently unannounced with no way to retry.
+        setPostToTeams(!announcedIn(json.data));
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Could not build the preview');
       } finally {
@@ -175,7 +212,8 @@ export default function ExamResultsSheet({
     // means no disabled attribute), so this guard is the ONLY thing standing
     // between a double tap and two Teams posts to a real classroom. Reaching
     // every student, and often a parent, twice cannot be undone.
-    if (publishing) return;
+    if (publishingRef.current) return;
+    publishingRef.current = true;
     setPublishing(true);
     setError(null);
     try {
@@ -203,6 +241,7 @@ export default function ExamResultsSheet({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not publish');
     } finally {
+      publishingRef.current = false;
       setPublishing(false);
     }
   };
@@ -222,11 +261,37 @@ export default function ExamResultsSheet({
   const examDay = counts('exam_day');
   const secondSitting = counts('second_sitting');
   const publishedBefore = Boolean(data?.last_published_at);
+  const announced = data ? announcedIn(data) : false;
   // Reused by both branches: nothing is ever announced about the second
   // sitting (the channel hears about an exam once), but its papers are still
   // written and privately notified, on a first publish exactly as on a
   // republish, so the label reads the same either way.
   const secondSittingCta = `Publish ${secondSitting} second sitting result${secondSitting === 1 ? '' : 's'}`;
+
+  /**
+   * Results went out Provisional, the drawings have since been marked, and
+   * nobody new has sat. The original CTA table had three states and stopped
+   * here, so no button rendered at all: results_state stayed 'provisional'
+   * forever, every student's card read "Provisional" indefinitely, and the
+   * publish route's provisional-to-final point correction was unreachable.
+   */
+  const canFinalise =
+    publishedBefore &&
+    secondSitting === 0 &&
+    data?.exam.results_state === 'provisional' &&
+    (data?.results.drawings_ungraded ?? 0) === 0;
+
+  /**
+   * Published, but the Graph post failed, so the channel was never told. One
+   * press sends the card the class should already have had. It disappears the
+   * moment a post is recorded, so it can never produce a second announcement.
+   */
+  const canRetryTeams =
+    publishedBefore &&
+    !announced &&
+    data?.teams_linked === true &&
+    examDay + secondSitting > 0;
+
   const cta = !publishedBefore
     ? examDay > 0
       ? `Publish exam day results (${examDay})`
@@ -235,7 +300,11 @@ export default function ExamResultsSheet({
         : null
     : secondSitting > 0
       ? secondSittingCta
-      : null;
+      : canFinalise
+        ? `Publish final results (${examDay})`
+        : canRetryTeams
+          ? 'Post the results to the Teams channel'
+          : null;
 
   return (
     <Dialog open={open} onClose={onClose} fullScreen={fullScreen} fullWidth maxWidth="sm">
@@ -336,10 +405,15 @@ export default function ExamResultsSheet({
             </Box>
 
             <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                Average {Math.round(data.results.stats.average)}%, highest{' '}
-                {Math.round(data.results.stats.highest)}%
-              </Typography>
+              {/* Nobody has sat it means there is no average, and "Average 0%,
+                  highest 0%" printed beside the blocker saying so reads as a
+                  class that scored nothing. Say nothing instead. */}
+              {data.results.stats.sat > 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  Average {Math.round(data.results.stats.average)}%, highest{' '}
+                  {Math.round(data.results.stats.highest)}%
+                </Typography>
+              )}
               {data.results.second && (
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                   Second sitting: average {Math.round(data.results.second.average)}%, highest{' '}
@@ -397,7 +471,7 @@ export default function ExamResultsSheet({
               )}
             </Box>
 
-            {!publishedBefore && (
+            {!announced && (
               <>
                 <Divider />
 
