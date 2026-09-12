@@ -29,7 +29,6 @@
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { fetchAllRows } from '../../utils/paged-rows';
-import type { TestAccessRequest } from './test-access';
 
 // Cast at the name, as exams.ts does: these tables are not in the generated types.
 const ATTEMPTS = 'nexus_test_attempts' as any;
@@ -55,6 +54,15 @@ export interface SittingAttempt {
 export interface SittingWindow {
   opens_at: string | null;
   closes_at: string | null;
+}
+
+/** One student's live row on one run: a teacher's reopen, or their own ask. */
+export interface RunAccessRequest {
+  status: 'pending' | 'granted';
+  source: string | null;
+  opens_at: string | null;
+  closes_at: string | null;
+  created_at: string | null;
 }
 
 export interface RunSitting<T extends SittingAttempt = SittingAttempt> {
@@ -204,61 +212,32 @@ function isMissingTable(error: any): boolean {
   return code === '42P01' || code === 'PGRST205' || /does not exist|could not find the table/i.test(String(error?.message || ''));
 }
 
-/** placement_id -> student_id -> the window their reopen gave them. */
-export async function loadRunGrantWindows(
-  placementIds: string[],
-  studentIds: string[] | null,
-  client?: TypedSupabaseClient,
-): Promise<Map<string, Map<string, SittingWindow>>> {
-  const out = new Map<string, Map<string, SittingWindow>>();
-  const ids = [...new Set(placementIds)].filter(Boolean);
-  if (ids.length === 0) return out;
-
-  const supabase = (client || getSupabaseAdminClient()) as any;
-  let query = supabase
-    .from(REQUESTS)
-    .select('placement_id, student_id, opens_at, closes_at')
-    .in('placement_id', ids)
-    .eq('status', 'granted');
-  if (studentIds) query = query.in('student_id', studentIds.length > 0 ? studentIds : [NONE]);
-
-  const { data, error } = await query;
-  if (error) {
-    if (isMissingTable(error)) return out;
-    throw error;
-  }
-  for (const r of (data || []) as any[]) {
-    const byStudent = out.get(r.placement_id) || new Map<string, SittingWindow>();
-    byStudent.set(r.student_id, { opens_at: r.opens_at ?? null, closes_at: r.closes_at ?? null });
-    out.set(r.placement_id, byStudent);
-  }
-  return out;
-}
-
 /**
- * placement_id -> student_id -> that student's live access request (pending or
- * granted), across every placement asked about.
+ * placement_id -> student_id -> their one live row on that run.
  *
- * The batched, multi-placement sibling of test-access.ts's
- * loadAccessRequestsForRun. Returns the request itself, status included,
- * rather than loadRunGrantWindows's granted-only window: a caller that must
- * tell a pending ask apart from an actual door (getExamResults does -- a
- * pending ask is a question, not a door) needs the status to make that call
- * itself.
+ * At most one per pair, by uq_test_access_live. This is the ONLY batched reader
+ * of nexus_test_access_requests, and loadRunGrantWindows below is a projection
+ * of it rather than a second query, so no screen can read a grant through one
+ * path and miss it through another.
+ *
+ * That is not hypothetical. The student's own Tests card resolved its exam
+ * window without ever reading this table, so 26 students held a live teacher
+ * grant and every one of them saw a disabled button reading "Closed"
+ * (NXS-0125). Keep the readers at one.
  */
 export async function loadRunAccessRequests(
   placementIds: string[],
   studentIds: string[] | null,
   client?: TypedSupabaseClient,
-): Promise<Map<string, Map<string, TestAccessRequest>>> {
-  const out = new Map<string, Map<string, TestAccessRequest>>();
+): Promise<Map<string, Map<string, RunAccessRequest>>> {
+  const out = new Map<string, Map<string, RunAccessRequest>>();
   const ids = [...new Set(placementIds)].filter(Boolean);
   if (ids.length === 0) return out;
 
   const supabase = (client || getSupabaseAdminClient()) as any;
   let query = supabase
     .from(REQUESTS)
-    .select('*')
+    .select('placement_id, student_id, status, source, opens_at, closes_at, created_at')
     .in('placement_id', ids)
     .in('status', ['pending', 'granted']);
   if (studentIds) query = query.in('student_id', studentIds.length > 0 ? studentIds : [NONE]);
@@ -268,10 +247,40 @@ export async function loadRunAccessRequests(
     if (isMissingTable(error)) return out;
     throw error;
   }
-  for (const r of (data || []) as TestAccessRequest[]) {
-    const byStudent = out.get(r.placement_id) || new Map<string, TestAccessRequest>();
-    byStudent.set(r.student_id, r);
+  for (const r of (data || []) as any[]) {
+    const byStudent = out.get(r.placement_id) || new Map<string, RunAccessRequest>();
+    byStudent.set(r.student_id, {
+      status: r.status,
+      source: r.source ?? null,
+      opens_at: r.opens_at ?? null,
+      closes_at: r.closes_at ?? null,
+      created_at: r.created_at ?? null,
+    });
     out.set(r.placement_id, byStudent);
+  }
+  return out;
+}
+
+/**
+ * placement_id -> student_id -> the window their reopen gave them.
+ *
+ * Granted rows only. A pending ask is not a door, and rule 2 must not widen a
+ * student's window because they asked for one.
+ */
+export async function loadRunGrantWindows(
+  placementIds: string[],
+  studentIds: string[] | null,
+  client?: TypedSupabaseClient,
+): Promise<Map<string, Map<string, SittingWindow>>> {
+  const live = await loadRunAccessRequests(placementIds, studentIds, client);
+  const out = new Map<string, Map<string, SittingWindow>>();
+  for (const [placementId, byStudent] of live) {
+    for (const [studentId, row] of byStudent) {
+      if (row.status !== 'granted') continue;
+      const bucket = out.get(placementId) || new Map<string, SittingWindow>();
+      bucket.set(studentId, { opens_at: row.opens_at, closes_at: row.closes_at });
+      out.set(placementId, bucket);
+    }
   }
   return out;
 }

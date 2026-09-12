@@ -3,26 +3,35 @@
 /**
  * One test, as a student sees it.
  *
- * Extracted from /student/tests when My tests grew folders and a delete, so that
- * the papers a student built for themselves and the papers their teacher set
- * render as the SAME object with the same chips and the same disabled reasons.
- * Forking it would have produced a second, quietly worse card for the section
- * students use most. See the tests hub for what that costs.
+ * Shared by every surface that lists a paper: Class Tests, Exams, and the
+ * papers a student built for themselves. Forking it would produce a second,
+ * quietly worse card for the section students use most.
  *
- * The extras are opt-in and off by default: without `onMenu` there is no kebab,
- * without `selectable` there is no checkbox, so every existing caller renders
- * exactly what it rendered before.
+ * ONE CARD, ONE ANSWER. The card shows a title, what kind of paper it is, one
+ * sentence saying where the student stands, and one button that acts on that
+ * sentence. It decides none of it: `test.card` arrives resolved from the server
+ * (student-test-card-state.ts). This component used to derive the status four
+ * separate ways and could contradict itself, which is how 26 students came to
+ * be shown a disabled "Closed" button on a test their teacher had opened for
+ * them.
+ *
+ * THERE IS NO DISABLED BUTTON HERE, and adding one would undo the redesign. A
+ * greyed control carrying a refusal states a problem and offers no way out. Where
+ * there is nothing to press, `card.action.kind` is 'none' and no button renders.
+ *
+ * The extras stay opt-in: without `onMenu` there is no kebab, without
+ * `selectable` there is no checkbox.
  */
 
 import { Box, Typography, Button, Paper, Chip, LinearProgress, Checkbox, IconButton } from '@neram/ui';
 import MoreVertOutlinedIcon from '@mui/icons-material/MoreVertOutlined';
-import LockClockOutlinedIcon from '@mui/icons-material/LockClockOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
-import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
 import { NEXUS_TEST_KIND_LABELS, type NexusTestKind } from '@neram/database';
+import type { StudentTestCard as CardState } from '@/lib/student-test-card-state';
+import TestStatusStrip from './TestStatusStrip';
 
-export type TestStatus = 'open' | 'upcoming' | 'closed' | 'done';
+export type TestStatus = 'open' | 'upcoming' | 'closed' | 'done' | 'missed';
 
 export interface StudentTest {
   id: string;
@@ -44,23 +53,15 @@ export interface StudentTest {
   best_percentage: number | null;
   last_submitted_at: string | null;
   status?: TestStatus;
-  /**
-   * Class tests only. A SOFT deadline: past it the paper is late, never shut,
-   * which is why it is a field of its own rather than available_until. Putting it
-   * there would disable the button on the one card a student most needs to open.
-   */
   due_at?: string | null;
   required?: boolean | null;
   class_id?: string | null;
   class_title?: string | null;
-  /**
-   * Scheduled exams only (model tests with a hard window and a published
-   * rank). Absent on every ordinary test, so every existing caller renders
-   * exactly what it rendered before.
-   */
   is_exam?: boolean;
-  /** This student is sitting inside a granted makeup window, not the main one. */
   is_makeup?: boolean;
+  /** This student is inside a window opened for them, not the shared one. */
+  is_reopen?: boolean;
+  access_state?: 'none' | 'pending' | 'granted';
   results_state?: 'unpublished' | 'provisional' | 'final';
   exam_result?: {
     rank: number | null;
@@ -71,41 +72,18 @@ export interface StudentTest {
     is_provisional: boolean;
     absent: boolean;
   } | null;
-  /**
-   * Exams only, and only when the exam is linked to specific class(es). The
-   * scheduled exam's own id (distinct from `class_id`, which is the exam's
-   * OWN timetable slot, not the lecture(s) it covers) -- what the self-serve
-   * reschedule routes key on.
-   */
   exam_id?: string | null;
-  /**
-   * Whether this test is actually required of THIS student: attended or
-   * caught up (mandatory), still catching up or joined too recently
-   * (excused). Null on every exam with nothing linked, and on every
-   * non-exam test -- same "absent changes nothing" contract as is_makeup.
-   */
-  eligibility_bucket?:
-    | 'mandatory_attended'
-    | 'mandatory_caught_up'
-    | 'excused_pending_catchup'
-    | 'excused_new_joiner'
-    | 'teacher_override_mandatory'
-    | 'teacher_override_excused'
-    | null;
-  /**
-   * Set only when catch-up is standing between this student and this test.
-   * Named classes, because "finish 2 catch-up classes" sends them hunting.
-   */
+  eligibility_bucket?: string | null;
+  eligibility_auto_bucket?: string | null;
   catchup_gate?: {
     blocked: boolean;
     outstanding: Array<{ id: string; title: string | null; date: string }>;
   } | null;
-  eligibility_auto_bucket?:
-    | 'mandatory_attended'
-    | 'mandatory_caught_up'
-    | 'excused_pending_catchup'
-    | 'excused_new_joiner'
-    | null;
+  /**
+   * The resolved answer. Optional only so a caller mid-migration still renders;
+   * every server response carries it.
+   */
+  card?: CardState | null;
 }
 
 export function formatWhen(iso: string | null): string {
@@ -121,123 +99,45 @@ export function formatWhen(iso: string | null): string {
   });
 }
 
-/** The one line that tells a student what to do with this card. */
-export function windowChip(
-  t: StudentTest,
-): { label: string; color: 'error' | 'warning' | 'default' | 'success' } | null {
-  const now = Date.now();
-  // A class test's own deadline comes first, and reads "Overdue" rather than
-  // "Closed": the door is still open and the student can still finish it. Saying
-  // Closed there would be a lie the Start button immediately contradicts.
-  if (t.due_at) {
-    const due = new Date(t.due_at).getTime();
-    if (!Number.isNaN(due)) {
-      if (due < now) return { label: 'Overdue', color: 'error' };
-      const hoursLeft = (due - now) / 3600000;
-      return {
-        label: `Due ${formatWhen(t.due_at)}`,
-        color: hoursLeft < 24 ? 'error' : hoursLeft < 72 ? 'warning' : 'default',
-      };
-    }
-  }
-  if (t.available_from && new Date(t.available_from).getTime() > now) {
-    return { label: `Opens ${formatWhen(t.available_from)}`, color: 'default' };
-  }
-  if (t.available_until) {
-    const until = new Date(t.available_until).getTime();
-    if (until < now) return { label: 'Closed', color: 'default' };
-    const hoursLeft = (until - now) / 3600000;
-    return {
-      label: `Due ${formatWhen(t.available_until)}`,
-      color: hoursLeft < 24 ? 'error' : hoursLeft < 72 ? 'warning' : 'default',
-    };
-  }
-  return null;
-}
-
 /**
- * This test is not actually required of this student (still catching up, or
- * enrolled too recently to have had a fair shot), and they have not sat it.
- * Once attempted or resulted, the outcome speaks for itself and this stops
- * mattering -- an excused chip beside a published rank would just be noise.
- */
-export function isExcused(t: StudentTest): boolean {
-  return Boolean(
-    t.is_exam &&
-      (t.eligibility_bucket === 'excused_pending_catchup' ||
-        t.eligibility_bucket === 'excused_new_joiner' ||
-        t.eligibility_bucket === 'teacher_override_excused') &&
-      !t.exam_result &&
-      t.attempts === 0,
-  );
-}
-
-/**
- * The one excused reason that needs no teacher: enrolled after the exam's
- * covered class(es), so nobody ever expected them to be ready. Every other
- * excused reason (still catching up, a teacher's own override) routes
- * through a teacher, which this app does not yet have a request/approve
- * inbox for.
- */
-export function canSelfServeReschedule(t: StudentTest): boolean {
-  return isExcused(t) && t.eligibility_auto_bucket === 'excused_new_joiner';
-}
-
-/**
- * Where this student's exam result stands. Exam-only, and null on everything
- * else (including an exam not yet attempted with nothing published), so the
- * chip only ever appears when it has something true to say.
+ * Where this student's exam result stands, once it is out. Rank is the one fact
+ * the sentence cannot carry well, because it is a number a student wants to find
+ * at a glance rather than read.
  */
 export function examResultChip(
   t: StudentTest,
 ): { label: string; color: 'error' | 'warning' | 'default' | 'success' } | null {
   if (!t.is_exam) return null;
   const r = t.exam_result;
-  if (r?.absent) return { label: 'Absent', color: 'error' };
-  if (r) {
-    const label = `Rank ${r.rank ?? '-'} of ${r.total_ranked}`;
-    return r.is_provisional
-      ? { label: `${label} · Provisional`, color: 'warning' }
-      : { label, color: 'success' };
-  }
-  // Attempted (status reads 'done') but results_state has not moved past
-  // 'unpublished' yet: say so rather than leaving the card silent about it.
-  if (t.status === 'done') return { label: 'Result not published yet', color: 'default' };
-  return null;
+  if (r?.absent) return null; // the strip already says it, in a full sentence
+  if (!r) return null;
+  const label = `Rank ${r.rank ?? '-'} of ${r.total_ranked}`;
+  return r.is_provisional ? { label: `${label} · Provisional`, color: 'warning' } : { label, color: 'success' };
 }
 
-/**
- * Names the classes rather than counting them. A student told to "finish 2
- * catch-up classes" still has to work out which two, and the whole value of
- * saying this early is that it ends in something they can go and do.
- */
-export function catchupGateLine(outstanding: Array<{ title: string | null }>): string {
-  const names = outstanding.map((o) => o.title).filter((t): t is string => Boolean(t));
-  if (names.length === 0) {
-    const n = outstanding.length;
-    return `Finish your ${n} pending catch-up ${n === 1 ? 'class' : 'classes'} to unlock this test.`;
-  }
-  const list =
-    names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-  return `Finish your catch-up for ${list} to unlock this test.`;
-}
+const RAIL: Record<CardState['tone'], string> = {
+  urgent: 'error.main',
+  attention: 'warning.main',
+  positive: 'success.main',
+  neutral: 'divider',
+};
 
 export interface StudentTestCardProps {
   test: StudentTest;
   onStart: (t: StudentTest) => void;
   emphasis?: boolean;
-  /** Show a checkbox and make the whole card toggle it instead of starting the test. */
   selectable?: boolean;
   selected?: boolean;
   onToggleSelect?: (id: string) => void;
-  /** Provide to render the overflow kebab. Omit and no kebab appears. */
   onMenu?: (test: StudentTest, anchor: HTMLElement) => void;
-  /**
-   * Provide to let a self-serve-eligible excused student pick their own
-   * make-up date. Omit and the card renders exactly as it did before this
-   * existed -- see canSelfServeReschedule.
-   */
+  /** Opt-in: let a new joiner pick their own make-up date. */
   onReschedule?: (test: StudentTest) => void;
+  /** Opt-in: let a student ask for a sitting on a door that has shut. */
+  onAskTeacher?: (test: StudentTest) => void;
+  /** Opt-in: open a finished attempt. Falls back to onStart when absent. */
+  onReview?: (test: StudentTest) => void;
+  /** Opt-in: where "Go to my catch-up" sends them. */
+  onCatchUp?: (href: string) => void;
 }
 
 export default function StudentTestCard({
@@ -249,49 +149,101 @@ export default function StudentTestCard({
   onToggleSelect,
   onMenu,
   onReschedule,
+  onAskTeacher,
+  onReview,
+  onCatchUp,
 }: StudentTestCardProps) {
-  const chip = windowChip(test);
+  const card = test.card ?? null;
   const resultChip = examResultChip(test);
-  const excused = isExcused(test);
-  const selfServe = canSelfServeReschedule(test) && Boolean(onReschedule);
-  const notOpenYet = Boolean(test.available_from && new Date(test.available_from).getTime() > Date.now());
-  const closed = Boolean(test.available_until && new Date(test.available_until).getTime() < Date.now());
-  const outOfAttempts = Boolean(test.attempt_limit && test.attempts >= test.attempt_limit);
-  const disabled = notOpenYet || closed || outOfAttempts;
-
   const toggle = () => onToggleSelect?.(test.id);
+
+  // The class it came from, when that is not simply the title again. A student
+  // who owes three papers needs to know which lesson each belongs to; printing
+  // the title twice tells them nothing.
+  const provenance =
+    test.class_title && test.class_title !== test.title
+      ? { icon: <ClassOutlinedIcon sx={{ fontSize: 13 }} />, label: test.class_title }
+      : test.folder_label
+        ? { icon: <FolderOutlinedIcon sx={{ fontSize: 13 }} />, label: test.folder_label }
+        : null;
+
+  const act = () => {
+    if (!card) return onStart(test);
+    switch (card.action.kind) {
+      case 'catch_up':
+        return onCatchUp?.(card.action.href);
+      case 'reschedule':
+        return onReschedule?.(test);
+      case 'ask_teacher':
+        return onAskTeacher?.(test);
+      case 'review':
+        return (onReview ?? onStart)(test);
+      default:
+        return onStart(test);
+    }
+  };
+
+  // A button with nowhere to send them is worse than no button. If the caller
+  // did not wire this action up, the card stays silent rather than lying.
+  const wired =
+    !card ||
+    (card.action.kind === 'catch_up'
+      ? Boolean(onCatchUp)
+      : card.action.kind === 'reschedule'
+        ? Boolean(onReschedule)
+        : card.action.kind === 'ask_teacher'
+          ? Boolean(onAskTeacher)
+          : true);
+
+  const showButton = !selectable && (!card || (card.action.kind !== 'none' && wired));
+  const label = card && 'label' in card.action ? card.action.label : 'Start';
+  const primary = card ? card.action.kind === 'start' || card.action.kind === 'retry' : true;
 
   return (
     <Paper
-      variant="outlined"
-      // In selection mode the whole card is the checkbox target. Asking a thumb
-      // to find a 20px box on a 375px screen, once per card, is the difference
-      // between clearing ten papers and giving up after three.
+      elevation={0}
+      /*
+       * In selection mode the whole card is the tap target, because asking a
+       * thumb to find a 20px box once per card is the difference between
+       * clearing ten papers and giving up after three.
+       *
+       * A pointer affordance ONLY. The card used to carry role="checkbox" and
+       * aria-checked itself, which put a second, unlabelled checkbox around the
+       * real one: assistive tech saw two controls for one choice and the outer
+       * one had no name. The Checkbox below is the single accessible control,
+       * and it is reachable by keyboard on its own.
+       */
       onClick={selectable ? toggle : undefined}
-      role={selectable ? 'checkbox' : undefined}
-      aria-checked={selectable ? selected : undefined}
-      tabIndex={selectable ? 0 : undefined}
-      onKeyDown={
-        selectable
-          ? (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggle();
-              }
-            }
-          : undefined
-      }
       sx={{
-        p: emphasis ? 2 : 1.5,
+        position: 'relative',
+        overflow: 'hidden',
+        p: 2,
+        pl: 2.5,
         borderRadius: 2,
-        borderColor: selected ? 'primary.main' : emphasis ? 'primary.main' : 'divider',
-        borderWidth: selected || emphasis ? 2 : 1,
-        bgcolor: selected ? 'action.selected' : undefined,
+        border: 1,
+        borderColor: selected ? 'primary.main' : 'divider',
+        bgcolor: selected ? 'action.selected' : 'background.paper',
         cursor: selectable ? 'pointer' : undefined,
-        transition: 'background-color 150ms, border-color 150ms',
+        // The rail carries the same tone as the strip, so the card's urgency is
+        // legible while scrolling past without reading a word of it.
+        '&::before': card
+          ? {
+              content: '""',
+              position: 'absolute',
+              insetInlineStart: 0,
+              top: 0,
+              bottom: 0,
+              width: 3,
+              bgcolor: RAIL[card.tone],
+            }
+          : undefined,
+        '@media (prefers-reduced-motion: no-preference)': {
+          transition: 'background-color 150ms, border-color 150ms, box-shadow 150ms',
+        },
+        '&:hover': selectable ? undefined : { boxShadow: 1 },
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
         {selectable && (
           <Checkbox
             checked={selected}
@@ -302,35 +254,20 @@ export default function StudentTestCard({
           />
         )}
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant={emphasis ? 'subtitle1' : 'body2'} sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
             {test.title}
           </Typography>
-          {/* The class it came from, when it came from one. A student who owes
-              three papers needs to know which lesson each belongs to before they
-              can decide what to open. */}
-          {test.class_title ? (
+          {provenance && (
             <Typography
               variant="caption"
               color="text.secondary"
               sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}
             >
-              <ClassOutlinedIcon sx={{ fontSize: 13 }} />
-              {test.class_title}
+              {provenance.icon}
+              {provenance.label}
             </Typography>
-          ) : (
-            test.folder_label && (
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}
-              >
-                <FolderOutlinedIcon sx={{ fontSize: 13 }} />
-                {test.folder_label}
-              </Typography>
-            )
           )}
         </Box>
-        {chip && <Chip size="small" label={chip.label} color={chip.color} sx={{ height: 24, flexShrink: 0 }} />}
         {onMenu && !selectable && (
           <IconButton
             aria-label={`More actions for ${test.title}`}
@@ -345,9 +282,9 @@ export default function StudentTestCard({
         )}
       </Box>
 
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', mb: 1.5 }}>
-        {/* What kind of paper this is. Weekly, model and full read very
-            differently to a student and used to be indistinguishable. */}
+      {/* What the paper IS. Facts only: nothing here changes with time or with
+          how this student is doing, which is what the strip below is for. */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', mt: 1 }}>
         {test.test_kind && test.test_kind !== 'classroom_assigned' && (
           <Chip
             size="small"
@@ -357,9 +294,6 @@ export default function StudentTestCard({
             sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700 }}
           />
         )}
-        {/* Only said for a class test, and only when it is optional. "Required"
-            on everything else would be noise; "Optional" is the fact that
-            changes what a student does next. */}
         {test.required === false && (
           <Chip size="small" variant="outlined" label="Optional" sx={{ height: 22, fontSize: '0.7rem' }} />
         )}
@@ -385,30 +319,8 @@ export default function StudentTestCard({
             sx={{ height: 22, fontSize: '0.7rem' }}
           />
         )}
-        {test.attempts > 0 && (
-          <Chip
-            size="small"
-            label={`${test.attempts} attempt${test.attempts !== 1 ? 's' : ''}`}
-            sx={{ height: 22, fontSize: '0.7rem' }}
-          />
-        )}
-        {/* Exam-only: a granted makeup sitting, and where the result stands.
-            Both are opt-in on is_exam, so no other card is affected. */}
         {test.is_exam && test.is_makeup && (
-          <Chip size="small" variant="outlined" color="warning" label="Makeup" sx={{ height: 22, fontSize: '0.7rem' }} />
-        )}
-        {excused && (
-          <Chip
-            size="small"
-            variant="outlined"
-            color={test.eligibility_bucket === 'excused_new_joiner' ? 'info' : 'warning'}
-            label={
-              test.eligibility_bucket === 'excused_new_joiner'
-                ? "Excused: you joined after this"
-                : 'Excused: finish catch-up first'
-            }
-            sx={{ height: 22, fontSize: '0.7rem' }}
-          />
+          <Chip size="small" variant="outlined" color="warning" label="Make-up" sx={{ height: 22, fontSize: '0.7rem' }} />
         )}
         {resultChip && (
           <Chip
@@ -420,86 +332,65 @@ export default function StudentTestCard({
         )}
       </Box>
 
-      {/*
-        The catch-up standing between them and this test, said DAYS AHEAD.
-
-        The attempt route enforces the same rule, but a student who first meets
-        it when they press Start on a timed exam has already lost the sitting:
-        the window is fixed and does not pause while they go and catch up. On
-        the run that prompted this, four of the sixteen who sat the paper had an
-        un-caught-up absence, so this is not a rare corner.
-      */}
-      {test.catchup_gate?.blocked && (
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 0.75,
-            alignItems: 'flex-start',
-            mt: 1,
-            p: 1,
-            borderRadius: 1.5,
-            bgcolor: 'warning.light',
-          }}
-        >
-          <LockClockOutlinedIcon sx={{ fontSize: 16, mt: '2px', flexShrink: 0 }} />
-          <Typography variant="caption" sx={{ fontWeight: 600, lineHeight: 1.4 }}>
-            {catchupGateLine(test.catchup_gate.outstanding)}
-          </Typography>
+      {card && (
+        <Box sx={{ mt: 1.5 }}>
+          <TestStatusStrip card={card} />
         </Box>
       )}
 
-      {test.best_percentage != null && (
-        <Box sx={{ mb: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-            <EmojiEventsOutlinedIcon sx={{ fontSize: 15, color: 'success.main' }} />
-            <Typography variant="caption" sx={{ fontWeight: 700 }}>
-              Best {Math.round(test.best_percentage)}%
+      {/* Their number, labelled for what it actually is. An exam is sat once, so
+          it has a score; a paper they can retake has a best. */}
+      {card?.score_percentage != null && (
+        <Box sx={{ mt: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mb: 0.5 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1 }}>
+              {Math.round(card.score_percentage)}%
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {card.score_label}
             </Typography>
           </Box>
           <LinearProgress
             variant="determinate"
-            value={Math.min(100, test.best_percentage)}
-            color={test.passing_pct != null && test.best_percentage >= test.passing_pct ? 'success' : 'primary'}
+            value={Math.min(100, card.score_percentage)}
+            color={
+              test.passing_pct != null && card.score_percentage >= test.passing_pct ? 'success' : 'primary'
+            }
             sx={{ height: 6, borderRadius: 3 }}
           />
         </Box>
       )}
 
-      {/* Hidden while selecting: a Start button inside a card whose job is to be
-          ticked is a trap, and tapping it would take the student out of the
-          selection they were halfway through building. */}
-      {/* A self-serve-eligible excused student gets their own door instead of
-          the normal Start/Closed ladder: nothing above says this test is even
-          theirs to sit until they have picked a date for it. */}
-      {!selectable && selfServe && (
-        <Button
-          fullWidth
-          variant={emphasis ? 'contained' : 'outlined'}
-          color="info"
-          onClick={() => onReschedule?.(test)}
-          sx={{ textTransform: 'none', minHeight: 44 }}
-        >
-          Pick your make-up date
-        </Button>
+      {/*
+        Practice on the SAME PAPER through another door.
+
+        A footnote, never the headline, and never counted as an attempt on this
+        run. Showing a Study Materials score as the exam's best is exactly the
+        confusion this line exists to end.
+      */}
+      {card?.practice_elsewhere && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+          {`You practised this paper ${card.practice_elsewhere.attempts} time${
+            card.practice_elsewhere.attempts === 1 ? '' : 's'
+          }`}
+          {card.practice_elsewhere.best_percentage != null
+            ? `, best ${Math.round(card.practice_elsewhere.best_percentage)}%`
+            : ''}
+          . Practice scores do not count as this test.
+        </Typography>
       )}
 
-      {!selectable && !selfServe && (
+      {showButton && (
         <Button
           fullWidth
-          variant={emphasis ? 'contained' : 'outlined'}
-          disabled={disabled}
-          onClick={() => onStart(test)}
-          sx={{ textTransform: 'none', minHeight: 44 }}
+          data-testid="test-card-cta"
+          variant={primary && emphasis !== false ? 'contained' : 'outlined'}
+          color={card?.action.kind === 'reschedule' ? 'info' : 'primary'}
+          onClick={act}
+          aria-label={`${label}: ${test.title}`}
+          sx={{ textTransform: 'none', minHeight: 44, mt: 2 }}
         >
-          {outOfAttempts
-            ? 'No attempts left'
-            : notOpenYet
-              ? 'Not open yet'
-              : closed
-                ? 'Closed'
-                : test.attempts > 0
-                  ? 'Try again'
-                  : 'Start'}
+          {label}
         </Button>
       )}
     </Paper>

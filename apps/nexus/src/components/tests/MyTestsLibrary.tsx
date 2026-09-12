@@ -50,6 +50,7 @@ import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import FolderOffOutlinedIcon from '@mui/icons-material/FolderOffOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import StudentTestCard, { type StudentTest } from './StudentTestCard';
+import TestCardGrid from './TestCardGrid';
 import FolderTreeNav, { ALL_FOLDERS, UNFILED, type FolderNode } from './FolderTreeNav';
 import { flattenTestFolders, type FlatTestFolder } from '@/lib/test-folder-path';
 
@@ -372,14 +373,12 @@ export default function MyTestsLibrary({
           ) : (
             <Box
               sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
                 // Room for the fixed action bar, so the last card is never trapped
                 // underneath it.
                 pb: selecting ? 10 : 0,
               }}
             >
+              <TestCardGrid>
               {visible.map((t) => (
                 <StudentTestCard
                   key={t.id}
@@ -394,6 +393,7 @@ export default function MyTestsLibrary({
                   }}
                 />
               ))}
+              </TestCardGrid>
             </Box>
           )}
         </Box>

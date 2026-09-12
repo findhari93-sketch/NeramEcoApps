@@ -21,8 +21,14 @@ const REQUESTS = 'nexus_test_access_requests';
 const COVERED = 'nexus_test_run_covered_classes';
 const OVERRIDES = 'nexus_test_run_eligibility_overrides';
 
-/** How long a student gets once catch-up opens the door for them. */
-export const CLASS_TEST_CATCHUP_BUFFER_DAYS = 3;
+/**
+ * How long a student gets once catch-up opens the door for them.
+ *
+ * Seven, not three, decided with the founder on 2026-09-12. A student catching
+ * up is by definition already behind, and a three day buffer that lands on a
+ * school week costs them the sitting the buffer exists to give back.
+ */
+export const CLASS_TEST_CATCHUP_BUFFER_DAYS = 7;
 
 /** How long an approved reopen lasts when the teacher names no end. */
 export const CLASS_TEST_REOPEN_DAYS = 3;
@@ -299,10 +305,26 @@ export async function grantCatchupTestWindow(
 ): Promise<boolean> {
   try {
     const existing = await getLiveAccessRequest(input.placementId, input.studentId, client);
-    // Already has a live door, whether granted or a pending ask they made
-    // first. Widening it here would let a student shortcut a teacher's pending
-    // decision by finishing a recap.
-    if (existing) return false;
+
+    // Already inside a door somebody opened. Widening it is the real shortcut.
+    if (existing?.status === 'granted') return false;
+
+    // A pending row raised by anyone but the student is not ours to answer.
+    //
+    // A pending row the STUDENT raised is, though. This used to refuse them too,
+    // which punished the ask: a student who politely requested a sitting and
+    // then went and earned one by finishing their catch-up was left waiting days
+    // for a decision the rule had already made. setTestAccessForStudent upserts
+    // over the live row, so the ask is resolved in place with a truthful trail
+    // rather than destroyed.
+    if (existing && existing.source !== 'student_request') return false;
+
+    // A human's no outranks an automatic yes.
+    //
+    // getLiveAccessRequest cannot see one: uq_test_access_live is PARTIAL over
+    // ('pending','granted'), so a declined or revoked row is invisible to it and
+    // this function would insert a grant straight over a teacher's refusal.
+    if (await hasHumanRefusal(input.placementId, input.studentId, client)) return false;
 
     const days = input.days ?? CLASS_TEST_CATCHUP_BUFFER_DAYS;
     await setTestAccessForStudent(
@@ -313,6 +335,7 @@ export async function grantCatchupTestWindow(
         closesAt: new Date(Date.now() + days * 86400000).toISOString(),
         source: 'catchup_auto',
         actorId: null,
+        note: 'Opened automatically when you finished your catch-up.',
       },
       client,
     );
@@ -320,6 +343,31 @@ export async function grantCatchupTestWindow(
   } catch {
     return false;
   }
+}
+
+/**
+ * Has a person already refused this student this run?
+ *
+ * Only a decided row counts: decided_by is null on every automatic write, so an
+ * expired catchup_auto grant must not read as a refusal and lock a student out
+ * of the door their next catch-up earns.
+ */
+async function hasHumanRefusal(
+  placementId: string,
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<boolean> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const { data, error } = await supabase
+    .from(REQUESTS)
+    .select('id')
+    .eq('placement_id', placementId)
+    .eq('student_id', studentId)
+    .in('status', ['declined', 'revoked'])
+    .not('decided_by', 'is', null)
+    .limit(1);
+  if (error) throw error;
+  return ((data || []) as any[]).length > 0;
 }
 
 /** The lecture(s) a run covers. Empty means everyone enrolled is mandatory. */

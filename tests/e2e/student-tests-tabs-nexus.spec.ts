@@ -72,6 +72,22 @@ test.describe('Student tests: Class Tests / My Tests / My Performance tabs', () 
     // A regression that drops this field must fail here, not surface three
     // components downstream as a silently empty Exams section.
     expect(Array.isArray(data.exams)).toBe(true);
+
+    /**
+     * Every item carries its resolved card state.
+     *
+     * The client decides nothing about whether a test can be sat. If this field
+     * stops arriving the card falls back to rendering no button at all, which is
+     * safe but silent, so it has to fail here instead.
+     */
+    const items = [...data.exams, ...(data.all || []), ...(data.due || [])];
+    for (const item of items) {
+      expect(item.card, JSON.stringify({ id: item.id, title: item.title })).toBeTruthy();
+      expect(typeof item.card.state).toBe('string');
+      expect(typeof item.card.reason).toBe('string');
+      expect(item.card.reason.length).toBeGreaterThan(0);
+      expect(typeof item.card.action?.kind).toBe('string');
+    }
   });
 
   test('performance endpoint returns a lifetime summary shaped for the dashboard', async ({ request }) => {
@@ -186,7 +202,7 @@ test.describe('Student tests: Class Tests / My Tests / My Performance tabs', () 
     await expect(page).toHaveURL(/[?&]tab=performance/);
     // Either the dashboard's stat tile or the empty state: this account may or
     // may not have any attempts, and both are a valid loaded state.
-    await expect(page.getByText(/Tests attempted|Attempt a test to start/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Tests attempted|once you have sat your first test/)).toBeVisible({ timeout: 15_000 });
     expect(performanceRequests).toBe(1);
 
     await page.getByRole('tab', { name: 'Class Tests' }).click();
@@ -215,6 +231,34 @@ test.describe('Student tests: Class Tests / My Tests / My Performance tabs', () 
 
       await assertNoHorizontalOverflow(page);
       await assertTouchTargetSize(page, '[role="tab"]', 44);
+
+      /**
+       * NO DEAD ENDS. The whole redesign, in one assertion.
+       *
+       * A greyed-out button carrying a refusal ("Closed", "No attempts left")
+       * states a problem and offers no way out of it, and for 26 students it was
+       * also factually wrong: their teacher had already reopened the exam. Where
+       * there is nothing to press the card now renders no button at all; where
+       * there is anything to do, the button does that instead.
+       */
+      const dead = page.locator(
+        '[data-testid="class-tests"] button[disabled], [data-testid="class-tests"] [aria-disabled="true"]',
+      );
+      await expect(dead).toHaveCount(0);
+
+      // Every card action is thumb-sized, not just the tabs.
+      if ((await page.locator('[data-testid="test-card-cta"]').count()) > 0) {
+        await assertTouchTargetSize(page, '[data-testid="test-card-cta"]', 44);
+      }
+
+      // The filter row scrolls inside itself. The PAGE must not scroll sideways
+      // because of it, which is the new overflow risk this layout introduces.
+      for (const label of ['To do', 'Done', 'Missed', 'Closed']) {
+        const chip = page.getByRole('button', { name: new RegExp(`^${label} \d+$`) });
+        if ((await chip.count()) === 0) continue;
+        await chip.first().click();
+        await assertNoHorizontalOverflow(page);
+      }
     });
 
     // The Performance tab's own data is a classroom-independent lifetime
@@ -235,7 +279,7 @@ test.describe('Student tests: Class Tests / My Tests / My Performance tabs', () 
       }
       await skipWelcomeTour(page);
       await page.goto(`${NEXUS}/student/tests?tab=performance`, { waitUntil: 'domcontentloaded' });
-      await expect(page.getByText(/Tests attempted|Attempt a test to start/)).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText(/Tests attempted|once you have sat your first test/)).toBeVisible({ timeout: 15_000 });
 
       await assertNoHorizontalOverflow(page);
     });

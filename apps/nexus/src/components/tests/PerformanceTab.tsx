@@ -10,6 +10,9 @@
 
 import { useState } from 'react';
 import { Box, Typography, Skeleton, Alert } from '@neram/ui';
+import ShowChartOutlinedIcon from '@mui/icons-material/ShowChartOutlined';
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
+import TestsSection from './TestsSection';
 import PerformanceStatTiles from './PerformanceStatTiles';
 import PerformanceTrendChart from './PerformanceTrendChart';
 import PerformanceMonthlyList, { type PerformanceAttemptRow } from './PerformanceMonthlyList';
@@ -58,7 +61,7 @@ export default function PerformanceTab({
     return (
       <Box sx={{ py: 6, textAlign: 'center' }}>
         <Typography variant="body1" color="text.secondary">
-          Attempt a test to start building your performance record.
+          Your scores will appear here once you have sat your first test.
         </Typography>
       </Box>
     );
@@ -71,24 +74,20 @@ export default function PerformanceTab({
         overallAveragePct={data.summary.overall_average_pct}
         attemptsThisMonth={data.summary.attempts_this_month}
       />
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-          Score trend
-        </Typography>
+      <TestsSection icon={<ShowChartOutlinedIcon />} title="Score trend">
         <PerformanceTrendChart monthly={data.summary.monthly} />
-      </Box>
-      <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-        By month
-      </Typography>
-      {getToken && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Tap any attempt to see your answers.
-        </Typography>
-      )}
-      <PerformanceMonthlyList
-        attempts={data.attempts}
-        onOpen={getToken ? (row) => setOpenRow(row) : undefined}
-      />
+      </TestsSection>
+
+      <TestsSection
+        icon={<CalendarMonthOutlinedIcon />}
+        title="By month"
+        subtitle={getToken ? 'Tap any attempt to see your answers.' : undefined}
+      >
+        <PerformanceMonthlyList
+          attempts={data.attempts}
+          onOpen={getToken ? (row) => setOpenRow(row) : undefined}
+        />
+      </TestsSection>
 
       {getToken && (
         <StudentAttemptSheet

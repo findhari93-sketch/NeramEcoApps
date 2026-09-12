@@ -147,7 +147,21 @@ export async function listStudentAttempts(
   });
 }
 
-/** Best percentage and attempt count per test for one student. */
+/**
+ * Best percentage and attempt count per test for one student. PAPER WIDE.
+ *
+ * Every official attempt on the paper, through every door. That is the right
+ * answer for "how has this student done on this paper" and the WRONG answer for
+ * "how many attempts have they spent on this run".
+ *
+ * NEVER compare this count against a placement's gating.attempt_limit. A paper
+ * is routinely several runs at once, so a chapter practised in Study Materials
+ * would spend the exam's single attempt. It did: students who had practised were
+ * shown "No attempts left" on an exam they had never sat (NXS-0125).
+ *
+ * For the per-door count, use loadRunSittings in run-sittings.ts, which is the
+ * rule the attempt route and every staff screen already follow.
+ */
 export async function getStudentTestStats(
   studentId: string,
   testIds: string[],
