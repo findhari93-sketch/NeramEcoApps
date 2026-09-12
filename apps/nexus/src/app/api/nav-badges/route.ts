@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { listUnflipped } from '@neram/database/queries/nexus';
 import { getRequestUser } from '@/lib/study-materials';
+import { staffStudentIds } from '@/lib/sketchbook-access';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /** How recently a reason has to have arrived to still count as news. */
@@ -36,23 +38,27 @@ export async function GET(request: NextRequest) {
     const badges: Record<string, number> = {};
 
     if (user.user_type === 'teacher' || user.user_type === 'admin') {
-      // Four independent counts, so they go together rather than one after another.
+      // Five independent counts, so they go together rather than one after another.
       // This route is polled every 60 seconds by every signed-in staff member for as
       // long as Nexus is open, so its cost is paid forever, not once.
       const since = new Date(Date.now() - CATCHUP_BADGE_WINDOW_MS).toISOString();
 
-      const [issues, drawings, photoCount, freshReasons] = await Promise.all([
+      const [issues, drawings, photoCount, freshReasons, sketchInbox] = await Promise.all([
         // Count all open + in_progress issues
         supabase
           .from('nexus_foundation_issues')
           .select('id', { count: 'exact', head: true })
           .in('status', ['open', 'in_progress']),
 
-        // Count pending drawing reviews (submitted, not yet reviewed)
+        // Count pending drawing reviews (submitted, not yet reviewed). Sketchbook
+        // uploads insert as 'completed' and never reach this queue, but the
+        // exclusion is belt-and-braces: it keeps this badge honest even if that
+        // insert behaviour ever changes.
         supabase
           .from('drawing_submissions')
           .select('id', { count: 'exact', head: true })
-          .eq('status', 'submitted'),
+          .eq('status', 'submitted')
+          .neq('source_type', 'sketchbook'),
 
         // Profile photos waiting for a human decision, in the classrooms THIS
         // person can open.
@@ -91,12 +97,27 @@ export async function GET(request: NextRequest) {
           .select('id', { count: 'exact', head: true })
           .is('caught_up_at', null)
           .gte('reason_submitted_at', since),
+
+        // Sketches this teacher has not flipped through, in the classrooms
+        // they teach. Scoped to the viewer for the same reason the photo count
+        // is: a number the person cannot drive to zero is not a badge.
+        (async () => {
+          try {
+            const caller = await getRequestUser(request.headers.get('Authorization'));
+            const students = await staffStudentIds(caller, null);
+            const { rows, remaining } = await listUnflipped(caller.id, students, 50);
+            return rows.length + remaining;
+          } catch {
+            return 0;
+          }
+        })(),
       ]);
 
       badges.issues = issues.count ?? 0;
       badges.drawing_reviews = drawings.count ?? 0;
       badges.photo_review = typeof photoCount.data === 'number' ? photoCount.data : 0;
       badges.catchup = freshReasons.count ?? 0;
+      badges.sketchbook_inbox = sketchInbox;
     } else {
       const [issues, catchup] = await Promise.all([
         // Student: count their own open + in_progress issues

@@ -88,6 +88,10 @@ export const FEATURES: FeatureDef[] = [
 
   { id: 'student.tests', label: 'Tests', surface: 'student', group: 'Practice', paths: ['/student/tests'], defaultEnabled: false },
   { id: 'student.drawings', label: 'Drawings', surface: 'student', group: 'Practice', paths: ['/student/drawings'], defaultEnabled: false },
+  { id: 'student.sketchbook', label: 'Sketchbook', surface: 'student', group: 'Practice', paths: ['/student/sketchbook'], defaultEnabled: false },
+  // Peer-visible: classmates see featured sketches on the Sketchbook home. A
+  // behaviour switch, not a page, and enforced server side in /api/sketchbook/featured.
+  { id: 'student.sketchbook-featured-shelf', label: 'Show featured sketches to classmates', surface: 'student', group: 'Practice', paths: [], defaultEnabled: false },
   { id: 'student.exam-recall', label: 'Recall', surface: 'student', group: 'Practice', paths: ['/student/exam-recall'], defaultEnabled: false },
 
   { id: 'student.documents', label: 'Documents', surface: 'student', group: 'Manage', paths: ['/student/documents'], defaultEnabled: false },
@@ -136,6 +140,7 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.course-plans', label: 'Course Plans', surface: 'staff', group: 'Teaching', paths: ['/teacher/course-plans'], defaultEnabled: true },
   { id: 'staff.assignments', label: 'Assignments', surface: 'staff', group: 'Teaching', paths: ['/teacher/assignments'], defaultEnabled: true },
   { id: 'staff.drawing-reviews', label: 'Drawing Reviews', surface: 'staff', group: 'Teaching', paths: ['/teacher/drawing-reviews'], defaultEnabled: true },
+  { id: 'staff.sketchbook', label: 'Sketchbooks', surface: 'staff', group: 'Teaching', paths: ['/teacher/sketchbook'], defaultEnabled: true },
   { id: 'staff.attendance', label: 'Attendance', surface: 'staff', group: 'Teaching', paths: ['/teacher/attendance'], defaultEnabled: true },
   { id: 'staff.leaderboard', label: 'Leaderboard', surface: 'staff', group: 'Teaching', paths: ['/teacher/leaderboard'], defaultEnabled: true },
   { id: 'staff.exams', label: 'Exams', surface: 'staff', group: 'Teaching', paths: ['/teacher/exams'], defaultEnabled: true },
