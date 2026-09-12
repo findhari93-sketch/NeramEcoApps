@@ -461,35 +461,45 @@ test.describe('Drawing Module API', () => {
   });
 
   // ============================================================
-  // AI Feedback (Phase 8+9)
+  // AI Feedback: the tombstone
+  //
+  // /api/drawing/ai-feedback was gutted on 2026-04-14 because the previous
+  // Gemini integration produced generic art critique that did not match how
+  // these sheets are actually graded. What is left is a deliberate 410, and
+  // these tests guard the 410 rather than the behaviour it replaced.
+  //
+  // They used to assert 400 / 404 / 401, which the route stopped doing the day
+  // it was gutted. The first one failed, and because this file runs serially
+  // the other two never ran at all, so the block read as coverage while
+  // testing nothing.
+  //
+  // AI evaluation lives at /api/drawing/evaluations now, behind two switches
+  // (the staff.drawing-eval flag and the nexus.drawing-eval budget mode), and
+  // is exercised by drawing-anchors-nexus.spec.ts. If anyone ever revives this
+  // path instead, that is a paid call on a dead surface and these fail.
   // ============================================================
   test.describe('AI Feedback', () => {
-    test('POST /api/drawing/ai-feedback requires submission_id', async ({ request }) => {
-      const res = await request.post(`${BASE}/api/drawing/ai-feedback`, {
-        headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
-        data: {},
-        failOnStatusCode: false,
-      });
-      expect(res.status()).toBe(400);
+    test('POST /api/drawing/ai-feedback is gone, whatever you send it', async ({ request }) => {
+      for (const data of [{}, { submission_id: '00000000-0000-0000-0000-000000000000' }]) {
+        const res = await request.post(`${BASE}/api/drawing/ai-feedback`, {
+          headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
+          data,
+          failOnStatusCode: false,
+        });
+        expect(res.status(), `body ${JSON.stringify(data)}`).toBe(410);
+        expect((await res.json()).error).toMatch(/disabled/i);
+      }
     });
 
-    test('POST /api/drawing/ai-feedback returns 404 for invalid submission', async ({ request }) => {
-      const res = await request.post(`${BASE}/api/drawing/ai-feedback`, {
-        headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
-        data: { submission_id: '00000000-0000-0000-0000-000000000000' },
-        failOnStatusCode: false,
-      });
-      // 404 (not found) or 503 (AI not configured) are both acceptable
-      expect([404, 503]).toContain(res.status());
-    });
-
-    test('POST /api/drawing/ai-feedback requires auth', async ({ request }) => {
+    test('POST /api/drawing/ai-feedback is gone without auth too', async ({ request }) => {
+      // The tombstone answers before any auth check, on purpose: there is
+      // nothing behind it to protect, and a 401 would imply there is.
       const res = await request.post(`${BASE}/api/drawing/ai-feedback`, {
         headers: { 'Content-Type': 'application/json' },
         data: { submission_id: 'test' },
         failOnStatusCode: false,
       });
-      expect([401, 500]).toContain(res.status());
+      expect(res.status()).toBe(410);
     });
   });
 });

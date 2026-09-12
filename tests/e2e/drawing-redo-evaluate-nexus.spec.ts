@@ -34,25 +34,33 @@ test.describe('Drawing redo: evaluate and complete', () => {
   test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
   let assignmentId: string | null = null;
+  let createdAssignmentId: string | null = null;
   let redoSubmissionId: string | null = null;
   let resubmittedId: string | null = null;
 
-  // Delete only the rows this run created. Without this the shared E2E drawing
-  // assignment grows by two attempts per run, and the history timeline it seeds
-  // eventually stops resembling anything a teacher would see.
+  // Take the whole fixture away again, submissions first.
+  //
+  // This suite used to borrow the shared "E2E Redo History Test" assignment and
+  // delete only its own two rows. Any run that was interrupted left its rounds
+  // behind, and once the newest of those was `completed` the student could not
+  // submit at all: setup hit `test.skip` and every test below it skipped too, so
+  // the spec read green while running nothing. It had been doing that since
+  // 31 July. Owning the assignment means residue can never gate the next run.
+  //
+  // Submissions before the assignment: deleting a submission also clears its
+  // images and any voice note out of storage, which the assignment delete (a
+  // database cascade) would not.
   test.afterAll(async ({ playwright }) => {
-    const ids = [redoSubmissionId, resubmittedId].filter(Boolean) as string[];
-    if (!ids.length) return;
     const api = await playwright.request.newContext();
     try {
       const teacher = await getTestAuthToken(api, 'teacher');
       if (!teacher) return;
-      for (const id of ids) {
-        await api
-          .delete(`${APP_URLS.nexus}/api/drawing/submissions/${id}`, {
-            headers: { Authorization: `Bearer ${teacher.testToken}` },
-          })
-          .catch(() => {});
+      const headers = { Authorization: `Bearer ${teacher.testToken}` };
+      for (const id of [redoSubmissionId, resubmittedId].filter(Boolean) as string[]) {
+        await api.delete(`${APP_URLS.nexus}/api/drawing/submissions/${id}`, { headers }).catch(() => {});
+      }
+      if (createdAssignmentId) {
+        await api.delete(`${APP_URLS.nexus}/api/assignments/${createdAssignmentId}`, { headers }).catch(() => {});
       }
     } finally {
       await api.dispose();
@@ -85,25 +93,40 @@ test.describe('Drawing redo: evaluate and complete', () => {
     const student = await getTestAuthToken(request, 'student');
     test.skip(!teacher || !student, 'Test auth not configured');
 
-    const listRes = await request.get(`${APP_URLS.nexus}/api/student/assignments`, {
-      headers: { Authorization: `Bearer ${student!.testToken}` },
+    const classroomId = student!.classrooms?.[0]?.id;
+    test.skip(!classroomId, 'The test student is enrolled in no classroom');
+    const teacherHeaders = { Authorization: `Bearer ${teacher!.testToken}`, 'Content-Type': 'application/json' };
+
+    // Its own assignment, dated today, rather than a shared fixture whose
+    // submission window has closed and whose leftovers gate the next run.
+    const created = await request.post(`${APP_URLS.nexus}/api/assignments`, {
+      headers: teacherHeaders,
+      data: {
+        action: 'create',
+        classroom_id: classroomId,
+        title: `E2E redo history ${Date.now()}`,
+        assignment_type: 'drawing',
+        evaluation_type: 'stars',
+      },
     });
-    test.skip(!listRes.ok(), 'Could not load student assignments');
-    const assignments = (await listRes.json()).assignments || [];
-    // Prefer the dedicated seed in the E2E classroom so submissions never land
-    // in a real batch; fall back to any drawing assignment.
-    const drawing =
-      assignments.find(
-        (a: any) => a.assignment_type === 'drawing' && /E2E Redo History Test/i.test(a.title || ''),
-      ) || assignments.find((a: any) => a.assignment_type === 'drawing');
-    test.skip(!drawing, 'Student has no drawing assignment to exercise');
-    assignmentId = drawing.id;
+    expect(created.ok(), 'the teacher can create a drawing assignment').toBeTruthy();
+    createdAssignmentId = (await created.json()).assignment?.id ?? null;
+    expect(createdAssignmentId).toBeTruthy();
+    assignmentId = createdAssignmentId;
+
+    // 'reopen' publishes quietly. 'publish' would announce a test fixture to the
+    // class Teams channel and ring every student's bell.
+    const published = await request.post(`${APP_URLS.nexus}/api/assignments/${assignmentId}`, {
+      headers: teacherHeaders,
+      data: { action: 'reopen' },
+    });
+    expect(published.ok(), 'the assignment is visible to students').toBeTruthy();
 
     const submitted = await request.post(`${APP_URLS.nexus}/api/drawing/submissions`, {
       headers: { Authorization: `Bearer ${student!.testToken}`, 'Content-Type': 'application/json' },
       data: { assignment_id: assignmentId, source_type: 'assignment', original_image_url: PLACEHOLDER_IMG },
     });
-    test.skip(!submitted.ok(), 'Could not create the first submission');
+    expect(submitted.ok(), 'the student can submit a first attempt').toBeTruthy();
     redoSubmissionId = (await submitted.json()).submission?.id ?? null;
     expect(redoSubmissionId).toBeTruthy();
 
@@ -165,11 +188,27 @@ test.describe('Drawing redo: evaluate and complete', () => {
     const student = await getTestAuthToken(request, 'student');
     test.skip(!student, 'Test auth not configured');
 
+    // The previous test COMPLETED this round, and a completed round is shut to
+    // the student on purpose (assignment-submit-window.ts: "Your teacher has
+    // already marked this"). So the teacher reopens it first, which is what a
+    // real second redo cycle looks like anyway. Without this the POST below
+    // answers 403 and every remaining test in this serial file never runs.
+    const teacher = await getTestAuthToken(request, 'teacher');
+    test.skip(!teacher, 'Test auth not configured');
+    const reopened = await request.patch(
+      `${APP_URLS.nexus}/api/drawing/submissions/${redoSubmissionId}/review`,
+      {
+        headers: { Authorization: `Bearer ${teacher!.testToken}`, 'Content-Type': 'application/json' },
+        data: { action: 'redo' },
+      },
+    );
+    expect(reopened.ok(), 'the teacher can send a completed round back').toBeTruthy();
+
     const resubmit = await request.post(`${APP_URLS.nexus}/api/drawing/submissions`, {
       headers: { Authorization: `Bearer ${student!.testToken}`, 'Content-Type': 'application/json' },
       data: { assignment_id: assignmentId, source_type: 'assignment', original_image_url: PLACEHOLDER_IMG },
     });
-    expect(resubmit.ok()).toBeTruthy();
+    expect(resubmit.ok(), 'the student can submit a newer attempt once it is reopened').toBeTruthy();
     resubmittedId = (await resubmit.json()).submission?.id ?? null;
     expect(resubmittedId).toBeTruthy();
 
