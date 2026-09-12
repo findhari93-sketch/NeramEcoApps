@@ -61,13 +61,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       throw new ApiError('Already featured in this classroom.', 409);
     }
 
+    const supabase = getSupabaseAdminClient();
     // `ms_assignment_channel_id` predates the generated types regenerating for
     // this table (same drift teams-group-post.ts and classrooms/[id]/route.ts
-    // work around), so the client is cast here rather than typed against a
-    // column tsc does not yet know about.
-    const supabase = getSupabaseAdminClient() as any;
+    // work around), so only this one query chain is cast; the `users` select
+    // and the later `drawing_submissions` updates stay on the typed client.
     const [{ data: classroom, error: classroomError }, { data: student, error: studentError }] = await Promise.all([
-      supabase.from('nexus_classrooms').select('id, name, ms_team_id, ms_channel_id, ms_group_chat_id, ms_assignment_channel_id').eq('id', classroomId).maybeSingle(),
+      (supabase as any).from('nexus_classrooms').select('id, name, ms_team_id, ms_channel_id, ms_group_chat_id, ms_assignment_channel_id').eq('id', classroomId).maybeSingle(),
       supabase.from('users').select('id, name, ms_oid').eq('id', sketch.student_id).maybeSingle(),
     ]);
     if (classroomError) throw classroomError;
@@ -92,6 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const r = await postChannelMessageDetailed(token, c.ms_team_id, channelId, html, mentions);
         if (isPostError(r)) teams.errors.push(`channel: ${r.error}`); else { teams.channel = true; channelMessageId = r.id; }
       }
+      if (!channelId) teams.errors.push('channel: no channel could be resolved for this team');
     }
     if (c.ms_group_chat_id) {
       const r = await postChatMessageDetailed(token, c.ms_group_chat_id, html, mentions);
