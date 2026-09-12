@@ -1,30 +1,35 @@
 'use client';
 
+/**
+ * Reviewing one drawing.
+ *
+ * This file owns the data, the handlers and the banners. Everything visual lives
+ * in `components/drawings/review/`, and `ReviewShell` is the only thing that
+ * decides anything from the viewport width. Before that split the page carried
+ * two complete `return`s, one per layout, so the feedback rail existed twice and
+ * every change to it had to be made in both or it silently applied to one width.
+ */
+
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
-  Box, IconButton, Skeleton, Typography, Chip, Paper,
-  Button, useMediaQuery, useTheme, Switch, Snackbar, alpha,
-  Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  Box, Skeleton, Typography, Paper,
+  Button, useMediaQuery, useTheme, alpha,
   Breadcrumbs, Link as MuiLink,
 } from '@neram/ui';
 import NextLink from 'next/link';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import ReplayIcon from '@mui/icons-material/Replay';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import CategoryBadge from '@/components/drawings/CategoryBadge';
 import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
-import AIFeedbackWorkspace, { type WorkspaceData } from '@/components/drawings/AIFeedbackWorkspace';
-import CommentSection from '@/components/drawings/CommentSection';
-import TagEditor from '@/components/drawings/TagEditor';
+import { type WorkspaceData } from '@/components/drawings/AIFeedbackWorkspace';
 import SubmissionHistoryTimeline from '@/components/assignments/SubmissionHistoryTimeline';
+import ReviewShell from '@/components/drawings/review/ReviewShell';
+import ReviewHeader from '@/components/drawings/review/ReviewHeader';
+import ReviewPanelBody from '@/components/drawings/review/ReviewPanelBody';
+import ReviewActionBar from '@/components/drawings/review/ReviewActionBar';
+import ReviewDialogs from '@/components/drawings/review/ReviewDialogs';
 import {
   drawingAttemptsToViews,
   attemptStatusLabel,
@@ -35,10 +40,8 @@ import type { DrawingSubmission, DrawingSubmissionWithDetails, DrawingTag } from
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 import type { Rotation } from '@/lib/image-rotation';
 import { compressImage } from '@/utils/imageCompression';
-import StudentAvatar from '@/components/students/StudentAvatar';
 import VoiceFeedbackRecorder from '@/components/drawings/voice/VoiceFeedbackRecorder';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
-import ChatOutlinedIcon from '@mui/icons-material/ChatOutlined';
 
 export default function DrawingReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -49,6 +52,8 @@ export default function DrawingReviewDetailPage() {
   const { getToken, getTeacherToken } = useNexusAuthContext();
   const { refreshBadges } = useNavBadges();
   const theme = useTheme();
+  // Only still read for the avatar, whose size is a number rather than a style.
+  // Layout is ReviewShell's job and is expressed as breakpoints.
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   // Where "Back" and post-review navigation return to. When this drawing was
@@ -491,140 +496,6 @@ export default function DrawingReviewDetailPage() {
     </Box>
   );
 
-  // Shared shell for both bar states so the locked bar sits exactly where the
-  // grading bar does (fixed above BottomNav on mobile, inline on desktop).
-  const barShellSx = {
-    display: 'flex', alignItems: 'center',
-    gap: { xs: 0.5, md: 0.75 },
-    px: { xs: 1, md: 1 },
-    py: 0.75,
-    borderTop: '1px solid', borderColor: 'divider',
-    bgcolor: 'background.paper',
-    ...(!isMobile && { flexShrink: 0 }),
-    ...(isMobile && {
-      position: 'fixed' as const,
-      bottom: 64, // BottomNav height
-      left: 0,
-      right: 0,
-      zIndex: 10,
-      boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-    }),
-  };
-
-  // Locked rounds (finished, or superseded by a newer attempt) used to render no
-  // bar at all, which left the teacher on a screen with no visible way to grade.
-  // They now get an explicit way back into grading.
-  const lockedBar = (
-    <Box sx={barShellSx}>
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ flex: 1, minWidth: 0, fontWeight: 600, lineHeight: 1.3 }}
-      >
-        {isSuperseded
-          ? `Attempt ${attemptIndex} of ${attempts.length}, a newer attempt exists`
-          : `${attemptStatusLabel(submission.status)}, review is locked`}
-      </Typography>
-      {isSuperseded && latestAttempt && (
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={() => openAttempt(latestAttempt.id)}
-          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0, px: 1.5 }}
-        >
-          Latest
-        </Button>
-      )}
-      <Button
-        variant="contained"
-        size="small"
-        startIcon={<EditOutlinedIcon />}
-        onClick={() => setIsEditMode(true)}
-        sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.78rem', minHeight: 48, px: 2 }}
-      >
-        Evaluate
-      </Button>
-    </Box>
-  );
-
-  // Action bar: fixed on mobile (above BottomNav), inline on desktop
-  // While a note is being recorded on a phone, the recorder's own Stop bar takes
-  // this spot, and Redo and Complete wait for the note anyway.
-  const actionBar = isEditMode && isMobile && voiceBusy ? null : isEditMode ? (
-    <Box sx={barShellSx}>
-      {/* Draft: icon-only on mobile, icon+text on desktop */}
-      <IconButton
-        onClick={handleSaveDraft}
-        disabled={draftSaving || saving}
-        color={draftSaved ? 'success' : 'default'}
-        size="small"
-        title={draftSaving ? 'Saving...' : draftSaved ? 'Draft saved!' : 'Save draft'}
-        sx={{
-          border: '1px solid', borderColor: draftSaved ? 'success.main' : 'divider',
-          borderRadius: 1.5, width: 48, height: 48,
-          ...(!isMobile && { display: 'none' }),
-        }}
-      >
-        {draftSaved ? <CheckCircleOutlineIcon fontSize="small" /> : <SaveOutlinedIcon fontSize="small" />}
-      </IconButton>
-      {!isMobile && (
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={handleSaveDraft}
-          disabled={draftSaving || saving}
-          startIcon={draftSaved ? <CheckCircleOutlineIcon /> : <SaveOutlinedIcon />}
-          color={draftSaved ? 'success' : 'inherit'}
-          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0 }}
-        >
-          {draftSaving ? '...' : draftSaved ? 'Saved!' : 'Draft'}
-        </Button>
-      )}
-
-      {/* Redo */}
-      <Button
-        variant="outlined"
-        color="warning"
-        size="small"
-        onClick={() => { setAction('redo'); handleSaveReview('redo'); }}
-        disabled={saving || draftSaving || voiceBusy}
-        {...(isMobile ? {} : { startIcon: <ReplayIcon /> })}
-        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 } }}
-      >
-        {saving && action === 'redo' ? '...' : 'Redo'}
-      </Button>
-
-      {/* Complete / Save: primary action, takes remaining space */}
-      <Button
-        variant="contained"
-        color="success"
-        size="small"
-        onClick={() => { setAction('complete'); handleSaveReview('complete'); }}
-        disabled={saving || draftSaving || voiceBusy}
-        {...(isMobile ? {} : { startIcon: <CheckCircleOutlineIcon /> })}
-        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, flex: 1, px: { xs: 1.5, md: 2 } }}
-      >
-        {/* 'Save' only where it is honest: updating an already-finished review.
-            A redo round is still open, and this button completes it. */}
-        {saving && action === 'complete' ? '...' : ['reviewed', 'completed'].includes(submission.status) ? 'Save' : 'Complete'}
-      </Button>
-
-      {/* Gallery visibility toggle: off unless the teacher opts this drawing in */}
-      <Switch
-        checked={showInGallery}
-        onChange={(e) => setShowInGallery(e.target.checked)}
-        size="small"
-        title="Show in Gallery"
-        inputProps={{ 'aria-label': 'Show in Gallery' }}
-      />
-      {!isMobile && (
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', lineHeight: 1.2, ml: -0.5 }}>
-          Gallery
-        </Typography>
-      )}
-    </Box>
-  ) : lockedBar;
-
   // Question text (for prompt context)
   //
   // An exam drawing points straight at the bank question and has no
@@ -642,7 +513,7 @@ export default function DrawingReviewDetailPage() {
     .map((r: any) => (typeof r === 'string' ? r : r?.url))
     .filter((u: any): u is string => typeof u === 'string' && u.length > 0);
   const referenceStrip = referenceImages.length > 0 ? (
-    <Box sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+    <Box sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', flexShrink: 0 }}>
       <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>
         Reference{referenceImages.length > 1 ? ` (${referenceImages.length})` : ''}
       </Typography>
@@ -749,322 +620,58 @@ export default function DrawingReviewDetailPage() {
     ? `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(studentTeamsEmail)}`
     : null;
 
-  // Workspace + comments panel content
-  const reviewPanel = (
-    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <Box sx={{
-        flex: 1, overflowY: 'auto', p: 2, WebkitOverflowScrolling: 'touch',
-        scrollbarWidth: 'thin',
-        scrollbarColor: 'transparent transparent',
-        '&:hover': { scrollbarColor: 'rgba(0,0,0,0.15) transparent' },
-        '&::-webkit-scrollbar': { width: 4 },
-        '&::-webkit-scrollbar-track': { background: 'transparent' },
-        '&::-webkit-scrollbar-thumb': {
-          background: 'transparent',
-          borderRadius: 2,
-        },
-        '&:hover::-webkit-scrollbar-thumb': {
-          background: 'rgba(0,0,0,0.15)',
-          '&:hover': { background: 'rgba(0,0,0,0.25)' },
-        },
-      }}>
-        {supersededBanner}
-        {reReviewNotice}
-
-        {submission.self_note && (
-          <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#f0f7ff' }}>
-            <Typography variant="caption" fontWeight={600} color="primary.dark">Student&apos;s Note</Typography>
-            <Typography variant="body2" sx={{ mt: 0.25 }}>{submission.self_note}</Typography>
-          </Paper>
-        )}
-
-        {voiceSection}
-
-        <AIFeedbackWorkspace
-          submission={sub}
-          getToken={getToken}
-          onChange={handleWorkspaceChange}
-          defaultCollapsed={isMobile}
-          readOnly={!isEditMode}
-          sketchTrigger={sketchTrigger}
-          evaluationType={submission.assignment?.evaluation_type ?? 'stars'}
-          maxMarks={submission.assignment?.max_marks ?? 5}
-        />
-
-        {previousAttemptsPanel}
-
-        {isEditMode && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-              Tags
-            </Typography>
-            <TagEditor value={tagLabels} onChange={setTagLabels} />
-          </Box>
-        )}
-
-        <Box sx={{ mt: 2 }}>
-          <CommentSection submissionId={submission.id} getToken={getToken} canComment={true} />
-        </Box>
-      </Box>
-      {actionBar}
+  const panelHeader = (
+    <Box
+      sx={{
+        px: { xs: 1.5, md: 2 },
+        py: { xs: 0.75, md: 1 },
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+      }}
+    >
+      <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>
+        Feedback
+      </Typography>
+      {!isEditMode && (
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<EditOutlinedIcon />}
+          onClick={() => setIsEditMode(true)}
+          sx={{ textTransform: 'none', minHeight: 28, fontSize: { xs: '0.72rem', md: '0.75rem' } }}
+        >
+          Edit
+        </Button>
+      )}
     </Box>
   );
 
-  // ===================== MOBILE LAYOUT =====================
-  if (isMobile) {
-    return (
-      <>
-        <Box sx={{ mx: { xs: -2, sm: -3 }, mt: -2, mb: -10 }}>
-          {/* Compact header: avatar + name + time + category + menu in one row */}
-          <Box sx={{
-            display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
-            bgcolor: '#fff', borderBottom: '1px solid', borderColor: 'divider',
-          }}>
-            <IconButton onClick={() => router.push(backHref)} size="small" sx={{ p: 0.5 }}>
-              <ArrowBackIcon fontSize="small" />
-            </IconButton>
-            <StudentAvatar
-              userId={sub.student?.id}
-              src={sub.student?.avatar_url}
-              name={sub.student?.name}
-              size={28}
-            />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.82rem' }}>
-                  {sub.student?.name || 'Student'}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                  {timeAgo}
-                </Typography>
-              </Box>
-              {/* Question text inline, truncated */}
-              {questionText && (
-                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.68rem', lineHeight: 1.3 }}>
-                  {questionText}
-                </Typography>
-              )}
-            </Box>
-            {attempts.length > 1 && attemptIndex > 0 && (
-              <Chip label={`Attempt ${attemptIndex}/${attempts.length}`} size="small" color="warning" variant="outlined" sx={{ height: 22, fontWeight: 700 }} />
-            )}
-            <Chip
-              label={attemptStatusLabel(submission.status)}
-              size="small"
-              color={statusChipColor}
-              sx={{ height: 22, fontWeight: 700, fontSize: '0.65rem' }}
-            />
-            {submission.question && <CategoryBadge category={submission.question.category} />}
-            <IconButton size="small" onClick={(e) => setMenuAnchor(e.currentTarget)} sx={{ p: 0.5 }}>
-              <MoreVertIcon fontSize="small" />
-            </IconButton>
-          </Box>
-
-          {assignmentContextBar}
-          {referenceStrip}
-
-          {/* Image with toggle tabs + region annotations */}
-          <Box sx={{ height: '50vh', bgcolor: '#1a1a1a', px: 0.5, pt: 0.5, pb: 0.5 }}>
-            <ImageToggleTabs
-              originalImageUrl={submission.original_image_url}
-              overlayAnnotations={(sub.ai_overlay_annotations as any) || undefined}
-              overlayImageUrl={workspaceData.overlayImageUrl}
-              correctedImageUrl={workspaceData.correctedImageUrl}
-              isEditMode={isEditMode}
-              regionAnnotations={regionAnnotations}
-              onRegionAnnotationsChange={setRegionAnnotations}
-              questionCategory={submission.question?.category}
-              questionContext={questionText}
-              onOpenSketch={() => setSketchTrigger(t => t + 1)}
-              onRotate={isEditMode ? handleRotate : undefined}
-            />
-          </Box>
-
-          {/* Feedback Workspace */}
-          <Box sx={{ bgcolor: 'background.paper' }}>
-            <Box sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center' }}>
-              <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>Feedback</Typography>
-              {!isEditMode && (
-                <Button
-                  size="small" variant="outlined" startIcon={<EditOutlinedIcon />}
-                  onClick={() => setIsEditMode(true)}
-                  sx={{ textTransform: 'none', minHeight: 28, fontSize: '0.72rem' }}
-                >
-                  Edit
-                </Button>
-              )}
-            </Box>
-
-            <Box sx={{ p: 1.5 }}>
-              {supersededBanner}
-              {reReviewNotice}
-
-              {submission.self_note && (
-                <Paper variant="outlined" sx={{ p: 1, mb: 1.5, bgcolor: '#f0f7ff' }}>
-                  <Typography variant="caption" fontWeight={600} color="primary.dark">Student&apos;s Note</Typography>
-                  <Typography variant="body2" sx={{ mt: 0.25, fontSize: '0.82rem' }}>{submission.self_note}</Typography>
-                </Paper>
-              )}
-
-              {voiceSection}
-
-              <AIFeedbackWorkspace
-                submission={sub}
-                getToken={getToken}
-                onChange={handleWorkspaceChange}
-                defaultCollapsed={false}
-                readOnly={!isEditMode}
-                sketchTrigger={sketchTrigger}
-                evaluationType={submission.assignment?.evaluation_type ?? 'stars'}
-                maxMarks={submission.assignment?.max_marks ?? 5}
-              />
-
-              {previousAttemptsPanel}
-
-              {isEditMode && (
-                <Box sx={{ mt: 1.5 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    Tags
-                  </Typography>
-                  <TagEditor value={tagLabels} onChange={setTagLabels} />
-                </Box>
-              )}
-
-              <Box sx={{ mt: 2 }}>
-                <CommentSection submissionId={submission.id} getToken={getToken} canComment={true} />
-              </Box>
-            </Box>
-
-            {/* Bottom padding to clear fixed action bar (48px) + BottomNav (64px).
-                Both the grading bar and the locked bar are fixed, so reserve the
-                same space either way. */}
-            <Box sx={{ height: 120, flexShrink: 0 }} />
-          </Box>
-        </Box>
-
-        {/* Fixed action bar above BottomNav */}
-        {actionBar}
-
-        {/* More actions menu */}
-        <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-          {teamsChatUrl && (
-            <MenuItem
-              component="a"
-              href={teamsChatUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => setMenuAnchor(null)}
-              sx={{ minHeight: 48 }}
-            >
-              <ChatOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-              Open Teams chat
-            </MenuItem>
-          )}
-          <MenuItem onClick={() => { setMenuAnchor(null); setDeleteDialogOpen(true); }} sx={{ color: 'error.main', minHeight: 48 }}>
-            <DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />
-            Delete Submission
-          </MenuItem>
-        </Menu>
-
-        {/* Delete confirmation dialog */}
-        <Dialog open={deleteDialogOpen} onClose={() => !deleting && setDeleteDialogOpen(false)}>
-          <DialogTitle>Delete Submission?</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              This will permanently delete the submission and all associated images. This cannot be undone.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>Cancel</Button>
-            <Button onClick={handleDeleteSubmission} color="error" variant="contained" disabled={deleting}>
-              {deleting ? 'Deleting...' : 'Delete'}
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Error snackbar */}
-        <Snackbar
-          open={!!error}
-          autoHideDuration={5000}
-          onClose={() => setError('')}
-          message={error}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        />
-
-        {/* Save and next receipt. Top of the screen, clear of the fixed bars. */}
-        <Snackbar
-          open={!!notice}
-          autoHideDuration={5000}
-          onClose={() => setNotice('')}
-          message={notice}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        />
-      </>
-    );
-  }
-
-  // ===================== DESKTOP LAYOUT =====================
   return (
-    <Box sx={{
-      // Negate parent padding to go edge-to-edge
-      mx: { md: -4, sm: -3, xs: -2 },
-      mt: { md: -3, xs: -2 },
-      mb: { md: -3, xs: -10 },
-      display: 'flex',
-      height: 'calc(100vh - 64px)',
-      overflow: 'hidden',
-      // Break out of Container maxWidth on wide screens
-      width: { md: 'calc(100% + 64px)', sm: 'calc(100% + 48px)' },
-      maxWidth: { md: 'none' },
-    }}>
-      {/* LEFT: image with toggle tabs */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        {/* Header */}
-        <Box sx={{
-          display: 'flex', alignItems: 'center', gap: 1.5,
-          px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider',
-          bgcolor: 'background.paper', flexShrink: 0,
-        }}>
-          <IconButton onClick={() => router.push(backHref)} size="small">
-            <ArrowBackIcon />
-          </IconButton>
-          <StudentAvatar
-            userId={sub.student?.id}
-            src={sub.student?.avatar_url}
-            name={sub.student?.name}
-            size={36}
+    <>
+      <ReviewShell
+        header={
+          <ReviewHeader
+            onBack={() => router.push(backHref)}
+            studentId={sub.student?.id}
+            studentName={sub.student?.name}
+            studentAvatarUrl={sub.student?.avatar_url}
+            timeAgo={timeAgo}
+            questionText={questionText}
+            category={submission.question?.category}
+            attemptIndex={attemptIndex}
+            attemptTotal={attempts.length}
+            statusLabel={attemptStatusLabel(submission.status)}
+            statusColor={statusChipColor}
+            onOpenMenu={setMenuAnchor}
+            compact={isMobile}
           />
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2" fontWeight={600} noWrap>{sub.student?.name || 'Student'}</Typography>
-              <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
-            </Box>
-            {questionText && (
-              <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-                {questionText}
-              </Typography>
-            )}
-          </Box>
-          {submission.question && <CategoryBadge category={submission.question.category} />}
-          {attempts.length > 1 && attemptIndex > 0 && (
-            <Chip label={`Attempt ${attemptIndex}/${attempts.length}`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 700 }} />
-          )}
-          <Chip
-            label={attemptStatusLabel(submission.status)}
-            size="small"
-            color={statusChipColor}
-            sx={{ fontWeight: 700 }}
-          />
-          <IconButton size="small" onClick={(e) => setMenuAnchor(e.currentTarget)}>
-            <MoreVertIcon />
-          </IconButton>
-        </Box>
-
-        {assignmentContextBar}
-        {referenceStrip}
-
-        {/* Image with toggle + region annotations */}
-        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', p: 1.5, bgcolor: '#e8e8e8' }}>
+        }
+        contextBar={assignmentContextBar}
+        referenceStrip={referenceStrip}
+        stage={
           <ImageToggleTabs
             originalImageUrl={submission.original_image_url}
             overlayAnnotations={(sub.ai_overlay_annotations as any) || undefined}
@@ -1075,87 +682,69 @@ export default function DrawingReviewDetailPage() {
             onRegionAnnotationsChange={setRegionAnnotations}
             questionCategory={submission.question?.category}
             questionContext={questionText}
-            onOpenSketch={() => setSketchTrigger(t => t + 1)}
+            onOpenSketch={() => setSketchTrigger((t) => t + 1)}
             onRotate={isEditMode ? handleRotate : undefined}
           />
-        </Box>
-      </Box>
-
-      {/* RIGHT: Feedback Workspace */}
-      <Box sx={{
-        width: 400, flexShrink: 0, borderLeft: '1px solid', borderColor: 'divider',
-        bgcolor: 'background.paper', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}>
-        <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>Feedback</Typography>
-          {!isEditMode && (
-            <Button
-              size="small" variant="outlined" startIcon={<EditOutlinedIcon />}
-              onClick={() => setIsEditMode(true)}
-              sx={{ textTransform: 'none', minHeight: 28, fontSize: '0.75rem' }}
-            >
-              Edit
-            </Button>
-          )}
-        </Box>
-        {reviewPanel}
-      </Box>
-
-      {/* More actions menu */}
-      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-        {teamsChatUrl && (
-          <MenuItem
-            component="a"
-            href={teamsChatUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setMenuAnchor(null)}
-            sx={{ minHeight: 48 }}
-          >
-            <ChatOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-            Open Teams chat
-          </MenuItem>
-        )}
-        <MenuItem onClick={() => { setMenuAnchor(null); setDeleteDialogOpen(true); }} sx={{ color: 'error.main', minHeight: 48 }}>
-          <DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />
-          Delete Submission
-        </MenuItem>
-      </Menu>
-
-      {/* Delete confirmation dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => !deleting && setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete Submission?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            This will permanently delete the submission and all associated images. This cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>Cancel</Button>
-          <Button onClick={handleDeleteSubmission} color="error" variant="contained" disabled={deleting}>
-            {deleting ? 'Deleting...' : 'Delete'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Error snackbar */}
-      <Snackbar
-        open={!!error}
-        autoHideDuration={5000}
-        onClose={() => setError('')}
-        message={error}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        }
+        panelHeader={panelHeader}
+        panelBody={
+          <ReviewPanelBody
+            submissionId={submission.id}
+            submission={sub}
+            getToken={getToken}
+            onWorkspaceChange={handleWorkspaceChange}
+            isEditMode={isEditMode}
+            sketchTrigger={sketchTrigger}
+            evaluationType={submission.assignment?.evaluation_type ?? 'stars'}
+            maxMarks={submission.assignment?.max_marks ?? 5}
+            selfNote={submission.self_note}
+            supersededBanner={supersededBanner}
+            reReviewNotice={reReviewNotice}
+            voiceSection={voiceSection}
+            previousAttemptsPanel={previousAttemptsPanel}
+            tagLabels={tagLabels}
+            onTagLabelsChange={setTagLabels}
+          />
+        }
+        actionBar={
+          <ReviewActionBar
+            isEditMode={isEditMode}
+            isSuperseded={isSuperseded}
+            attemptIndex={attemptIndex}
+            attemptTotal={attempts.length}
+            statusLabel={attemptStatusLabel(submission.status)}
+            alreadyReviewed={['reviewed', 'completed'].includes(submission.status)}
+            onEvaluate={() => setIsEditMode(true)}
+            onOpenLatest={latestAttempt ? () => openAttempt(latestAttempt.id) : null}
+            onSaveDraft={handleSaveDraft}
+            draftSaving={draftSaving}
+            draftSaved={draftSaved}
+            onRedo={() => { setAction('redo'); handleSaveReview('redo'); }}
+            onComplete={() => { setAction('complete'); handleSaveReview('complete'); }}
+            saving={saving}
+            pendingAction={action}
+            voiceBusy={voiceBusy}
+            showInGallery={showInGallery}
+            onShowInGalleryChange={setShowInGallery}
+          />
+        }
       />
 
-      {/* Save and next receipt */}
-      <Snackbar
-        open={!!notice}
-        autoHideDuration={5000}
-        onClose={() => setNotice('')}
-        message={notice}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      <ReviewDialogs
+        menuAnchor={menuAnchor}
+        onCloseMenu={() => setMenuAnchor(null)}
+        teamsChatUrl={teamsChatUrl}
+        onRequestDelete={() => { setMenuAnchor(null); setDeleteDialogOpen(true); }}
+        deleteOpen={deleteDialogOpen}
+        deleting={deleting}
+        onCancelDelete={() => setDeleteDialogOpen(false)}
+        onConfirmDelete={handleDeleteSubmission}
+        error={error}
+        onClearError={() => setError('')}
+        notice={notice}
+        onClearNotice={() => setNotice('')}
       />
-    </Box>
+    </>
   );
 }
 
