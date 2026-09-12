@@ -22,7 +22,8 @@ export async function assertStaffSeesStudent(caller: RequestUser, studentId: str
 export async function staffClassroomIds(caller: RequestUser): Promise<string[]> {
   if (!isStaff(caller)) throw new ApiError('Not authorized', 403);
   if (isInternalStaff(caller)) {
-    const { data } = await getSupabaseAdminClient().from('nexus_classrooms').select('id').eq('is_active', true);
+    const { data, error } = await getSupabaseAdminClient().from('nexus_classrooms').select('id').eq('is_active', true);
+    if (error) throw new ApiError('Failed to load classrooms', 500);
     return (data || []).map((c: { id: string }) => c.id);
   }
   return listUserClassroomIds(caller.id, 'teacher');
