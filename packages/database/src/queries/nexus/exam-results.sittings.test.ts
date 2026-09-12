@@ -133,3 +133,114 @@ describe('getExamResults: who sat the exam', () => {
     expect(result.stats.absent).toBe(1);
   });
 });
+
+/**
+ * The load-bearing path: whether a student with no submitted paper is
+ * still_to_sit or absent. 28 real students on the History of Architecture
+ * exam hold live windows, and getting this wrong tells each of them,
+ * privately, that they were marked absent.
+ */
+describe('getExamResults: still_to_sit, absent and the podium', () => {
+  const FUTURE = '2099-01-01T00:00:00.000Z';
+
+  const seedWindows = () =>
+    createFakeDb({
+      nexus_test_placements: [
+        {
+          id: EXAM_DOOR,
+          test_id: 't1',
+          context_type: 'exam',
+          context_id: 'sc1',
+          is_active: true,
+          available_from: '2026-08-18T08:30:00Z',
+          available_until: '2026-08-18T17:15:00Z',
+        },
+      ],
+      nexus_test_attempts: [
+        // Sat through the exam's own door, but started well after the shared
+        // close: a second sitting, ranked 1 in its own list of one.
+        attempt('k1', 'kavya', EXAM_DOOR, '2026-08-19T09:00:00Z', '2026-08-19T09:30:00Z', 95, 1),
+      ],
+      nexus_test_draws: [],
+      nexus_test_access_requests: [
+        // Granted: an actual door.
+        {
+          placement_id: EXAM_DOOR,
+          student_id: 'priya',
+          status: 'granted',
+          source: 'teacher_grant',
+          opens_at: '2026-09-01T00:00:00.000Z',
+          closes_at: FUTURE,
+          created_at: '2026-09-01T00:00:00.000Z',
+        },
+        // Pending: a question, not a door.
+        {
+          placement_id: EXAM_DOOR,
+          student_id: 'raj',
+          status: 'pending',
+          source: 'student_request',
+          opens_at: null,
+          closes_at: null,
+          created_at: '2026-09-01T00:00:00.000Z',
+        },
+      ],
+      nexus_exam_makeups: [
+        {
+          id: 'mk-1',
+          exam_id: 'exam-1',
+          student_id: 'meera',
+          opens_at: '2026-09-01T00:00:00.000Z',
+          closes_at: FUTURE,
+          reason: 'Missed class',
+          granted_by: 'teacher-1',
+          granted_at: '2026-09-01T00:00:00.000Z',
+          revoked_at: null,
+          source: 'teacher_grant',
+        },
+      ],
+      nexus_test_run_credits: [],
+    });
+
+  const WINDOW_ROSTER = [
+    { id: 'priya', name: 'Priya Iyer' },
+    { id: 'raj', name: 'Raj Kannan' },
+    { id: 'meera', name: 'Meera Pillai' },
+    { id: 'kavya', name: 'Kavya Suresh' },
+  ];
+
+  it('a granted access request keeps the student still_to_sit, with that window', async () => {
+    const result = await getExamResults('exam-1', WINDOW_ROSTER, seedWindows().client);
+    const row = result.rows.find((r) => r.student_id === 'priya')!;
+
+    expect(row.bucket).toBe('still_to_sit');
+    expect(row.absent).toBe(false);
+    expect(row.window_closes_at).toBe(FUTURE);
+  });
+
+  it('a pending access request is not a door: absent, not still_to_sit', async () => {
+    const result = await getExamResults('exam-1', WINDOW_ROSTER, seedWindows().client);
+    const row = result.rows.find((r) => r.student_id === 'raj')!;
+
+    expect(row.bucket).toBe('absent');
+    expect(row.absent).toBe(true);
+    expect(row.window_closes_at).toBeNull();
+  });
+
+  it('a live make-up keeps the student still_to_sit, with the make-up window', async () => {
+    const result = await getExamResults('exam-1', WINDOW_ROSTER, seedWindows().client);
+    const row = result.rows.find((r) => r.student_id === 'meera')!;
+
+    expect(row.bucket).toBe('still_to_sit');
+    expect(row.absent).toBe(false);
+    expect(row.window_closes_at).toBe(FUTURE);
+  });
+
+  it('never lets a second-sitting finisher onto the podium, even ranked 1 in their own sitting', async () => {
+    const result = await getExamResults('exam-1', WINDOW_ROSTER, seedWindows().client);
+    const kavya = result.rows.find((r) => r.student_id === 'kavya')!;
+
+    expect(kavya.sitting).toBe('second');
+    expect(kavya.rank).toBe(1);
+    expect(result.podium.some((r) => r.student_id === 'kavya')).toBe(false);
+  });
+});

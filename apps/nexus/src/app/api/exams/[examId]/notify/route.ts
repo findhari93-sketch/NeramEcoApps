@@ -68,6 +68,13 @@ export async function POST(
                 time_spent_seconds: null,
                 section_scores: Array.isArray(row.section_scores) ? (row.section_scores as any) : [],
                 rank: row.rank,
+                // Placeholder until Task 5 rewrites this route to read the
+                // per-sitting fields off the snapshot; the notify message
+                // itself only branches on absent/attempt_id today.
+                sitting: row.absent ? null : 'main',
+                bucket: row.absent ? 'absent' : 'exam_day',
+                sitting_size: 0,
+                window_closes_at: null,
               },
               totalSat,
               provisional: row.is_provisional,

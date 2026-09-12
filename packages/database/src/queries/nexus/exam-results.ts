@@ -329,7 +329,10 @@ export async function getExamResults(
       total_marks: v.total,
     })),
     podium: rows.filter((r) => r.sitting === 'main' && r.rank != null && r.rank <= 3),
-    drawings_ungraded: sat.reduce(
+    // Across BOTH sittings, unlike stats and section_averages: a second-sitting
+    // drawing still needs a teacher's mark, and this count is what tells them
+    // grading work remains.
+    drawings_ungraded: [...sat, ...late].reduce(
       (n, r) => n + r.section_scores.reduce((m, s) => m + s.ungraded, 0),
       0,
     ),
