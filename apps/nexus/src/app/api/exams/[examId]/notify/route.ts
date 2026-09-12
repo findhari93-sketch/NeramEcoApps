@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getExamResultRows, markExamResultsNotified } from '@neram/database';
+import { getExamResultRows, markExamResultsNotified, isRankedResultRow } from '@neram/database';
 import { requireExamStaff } from '@/lib/exam-access';
 import { sendNudge } from '@/lib/nudge-delivery';
 import { buildStudentResultMessage } from '@/lib/exam-results-model';
@@ -48,8 +48,11 @@ export async function POST(
       return NextResponse.json({ data: { notified: 0, already: rows.length } }, { status: 200 });
     }
 
+    // isRankedResultRow, not a predicate written out here, because the student's
+    // own card has to reach the same number and once did not: it said "Rank 3
+    // of 44" about the very result this message calls "3rd of 16".
     const sizeOf = (sitting: 'main' | 'second') =>
-      rows.filter((r) => !r.absent && r.attempt_id && (r.sitting ?? 'main') === sitting).length;
+      rows.filter((r) => isRankedResultRow(r) && (r.sitting ?? 'main') === sitting).length;
     const sittingSize = { main: sizeOf('main'), second: sizeOf('second') };
     const notified: string[] = [];
     const failed: string[] = [];

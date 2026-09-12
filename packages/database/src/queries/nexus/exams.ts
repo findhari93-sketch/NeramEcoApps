@@ -495,8 +495,9 @@ export interface NexusStudentExamView {
     /** Which of the exam's two rank lists this result was ranked in. */
     sitting: 'main' | 'second';
     /**
-     * Non-absent candidates IN THE SAME SITTING, for rendering "Rank 3 of 16".
+     * Ranked candidates IN THE SAME SITTING, for rendering "Rank 3 of 16".
      * A rank never travels without the denominator it was won against.
+     * See isRankedResultRow for what counts.
      */
     total_ranked: number;
     score: number | null;
@@ -608,7 +609,9 @@ export async function listStudentExams(
   if (publishedExamIds.length > 0) {
     const { data, error } = await supabase
       .from(RESULTS)
-      .select('exam_id, student_id, rank, sitting, score, total_marks, percentage, is_provisional, absent')
+      // attempt_id is here for isRankedResultRow, not to be shown: a row with
+      // no attempt is not a result and must not swell anybody's denominator.
+      .select('exam_id, student_id, attempt_id, rank, sitting, score, total_marks, percentage, is_provisional, absent')
       .in('exam_id', publishedExamIds);
     if (error) throw error;
     for (const raw of (data || []) as any[]) {
@@ -635,7 +638,9 @@ export async function listStudentExams(
         result = {
           rank: mine.rank,
           sitting,
-          total_ranked: rows.filter((r) => !r.absent && (r.sitting ?? 'main') === sitting).length,
+          total_ranked: rows.filter(
+            (r) => isRankedResultRow(r) && (r.sitting ?? 'main') === sitting,
+          ).length,
           score: mine.score,
           total_marks: mine.total_marks,
           percentage: mine.percentage,
@@ -1102,6 +1107,39 @@ export interface ExamResultRow {
   published_at: string;
 }
 
+/**
+ * Does this snapshot row count towards a sitting's rank denominator?
+ *
+ * ONE function, because three surfaces have to agree on the answer and twice
+ * now they have not. The student's card rendered "Rank 3 of 44" on an exam
+ * where the private message they had just been sent said "3rd of 16" and the
+ * teacher's sheet said 16, because the card's filter read `!absent` alone and
+ * counted rows belonging to students who had not sat the paper at all.
+ *
+ * `absent` is not enough on its own. A row can be non-absent and still hold no
+ * paper: that is a student whose personal window is open and who has simply not
+ * sat it yet. The attempt is the thing that makes a row a result.
+ *
+ * Import this rather than writing the predicate again.
+ */
+export function isRankedResultRow(row: {
+  absent: boolean;
+  attempt_id?: string | null;
+}): boolean {
+  return !row.absent && Boolean(row.attempt_id);
+}
+
+/**
+ * The result snapshot, written on every publish.
+ *
+ * `notified_at` is deliberately NOT in the payload, so ON CONFLICT DO UPDATE
+ * leaves it alone and a republish cannot message a student twice. The other
+ * half of that bargain is the caller's: a row must only be written for a
+ * student who HAS a paper (or who is genuinely absent). Write a row for a
+ * student whose window is still open and the first publish stamps them
+ * notified, so when they finally sit weeks later their result reaches nobody.
+ * Nothing in this repo ever clears the stamp.
+ */
 export async function saveExamResults(
   examId: string,
   rows: Array<Omit<ExamResultRow, 'exam_id' | 'published_at' | 'notified_at'>>,

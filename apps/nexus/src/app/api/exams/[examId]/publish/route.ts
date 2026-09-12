@@ -12,6 +12,7 @@ import {
 import { requireExamStaff, loadExamRoster } from '@/lib/exam-access';
 import { extractBearerToken } from '@/lib/ms-verify';
 import { buildExamResultSections } from '@/lib/exam-results-model';
+import { snapshotRows } from '@/lib/exam-snapshot-rows';
 import { renderShareHtml, renderShareText } from '@/lib/class-share-render';
 import { postChannelMessageDetailed, isPostError, resolveMeetingChannelId } from '@/lib/teams-class-announcements';
 import { examBadgesFor, examPointsFor } from '@/lib/exam-badges';
@@ -136,6 +137,12 @@ export async function GET(
             html: renderShareHtml(sections, enabled),
           },
           last_published_at: exam.results_published_at ?? null,
+          // Whether the channel has actually heard about this exam, and whether
+          // there is a channel to hear it. The sheet needs both to offer a
+          // retry after a failed Graph post without ever offering a second
+          // announcement after a successful one.
+          teams_message_id: exam.teams_results_message_id ?? null,
+          teams_linked: Boolean((classroom as any)?.ms_team_id),
         },
       },
       { status: 200 },
@@ -163,8 +170,17 @@ export async function POST(
      * deliberately never announced: naming it would tell forty classmates, and
      * often their parents, exactly who missed the class. So a republish writes
      * rows and sends private messages, and posts nothing.
+     *
+     * READ THE MESSAGE ID, NOT results_published_at. The timestamp is stamped
+     * unconditionally at step 2 below, including on a publish whose Graph post
+     * failed and came back as teams_error. Gating on it meant a single failed
+     * post silenced the announcement permanently: the class never heard about
+     * the exam and no press could recover it, which inverts this file's own
+     * trade at step 4 (a duplicate announcement is far less harmful than a
+     * silently missing one). recordExamTeamsPost writes the id only after Graph
+     * has actually accepted the card, so the id is the honest record of it.
      */
-    const alreadyAnnounced = Boolean(exam.results_published_at);
+    const alreadyAnnounced = Boolean(exam.teams_results_message_id);
 
     const body = await request.json().catch(() => ({}));
     const requestedSections: string[] = Array.isArray(body?.sections) ? body.sections : [];
@@ -221,9 +237,27 @@ export async function POST(
     // ── 1. The snapshot, FIRST ──────────────────────────────────────────────
     // Ranks are per sitting, so writing the second sitting cannot disturb the
     // exam-day ranks already named in a Teams post and in private messages.
+    //
+    // ONLY STUDENTS WHO HAVE A PAPER GET A ROW, and this filter is the whole
+    // reason the table means one thing. A `still_to_sit` student is not a
+    // result: their window is open and they have not sat yet. Writing a row for
+    // them used to cause three separate wrongs at once:
+    //
+    //   1. They counted in the rank denominator, so a card read "Rank 3 of 44"
+    //      beside a private message saying "3rd of 16".
+    //   2. The first publish stamped notified_at on their row, and nothing in
+    //      this repo ever clears it, so when they sat weeks later and the
+    //      teacher republished, notify found nobody pending and their result
+    //      reached no one. Unrecoverable from the UI.
+    //   3. The row counted as an exam sat, inflating the Regular badge and
+    //      making previousBestPct 0 instead of null, which handed a Personal
+    //      Best to students on their genuinely first exam.
+    //
+    // They reappear here the moment they sit, or the moment their window shuts
+    // and they become `absent`.
     await saveExamResults(
       params.examId,
-      results.rows.map((row) => ({
+      snapshotRows(results.rows).map((row) => ({
         student_id: row.student_id,
         attempt_id: row.attempt_id,
         rank: row.rank,
@@ -348,11 +382,16 @@ async function awardExamGamification(input: {
   // How many scheduled exams each of these students has now sat, and their best
   // previous percentage. One query each rather than per student.
   const studentIds = sat.map((r) => r.student_id);
+  // Belt and braces beside the snapshot filter above: a row with no attempt is
+  // not an exam anybody sat, so it must not push examsSat towards the Regular
+  // badge, and it must not turn previousBestPct from null (no history) into 0,
+  // which is what handed Personal Best to students on their first ever exam.
   const { data: priorResults } = await supabase
     .from('nexus_exam_results' as any)
     .select('student_id, exam_id, percentage')
     .in('student_id', studentIds.length > 0 ? studentIds : ['00000000-0000-0000-0000-000000000000'])
-    .eq('absent', false);
+    .eq('absent', false)
+    .not('attempt_id', 'is', null);
 
   const history = new Map<string, { count: number; best: number | null }>();
   for (const r of (priorResults || []) as any[]) {

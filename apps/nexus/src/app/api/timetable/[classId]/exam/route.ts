@@ -5,6 +5,7 @@ import {
   resolveExamWindowForStudent,
   getSupabaseAdminClient,
   getExamResultRows,
+  isRankedResultRow,
   effectiveAttemptScore,
   loadRunSittings,
 } from '@neram/database';
@@ -66,15 +67,26 @@ export async function GET(
       const rows = await getExamResultRows(exam.id, supabase);
       const mine = rows.find((r) => r.student_id === studentId);
       if (mine) {
+        // THE FOURTH SURFACE THAT HAS TO AGREE on what a rank is out of, after
+        // the private message, the teacher's sheet and the student's own test
+        // card. Two things it has to get right, and it had neither: the count
+        // must skip rows with no paper (a student whose window is still open is
+        // not a result), and it must be this student's OWN sitting, because a
+        // rank is 1-based within a sitting. Counting both sittings told a
+        // second-sitting student "2nd of 25" about a rank won among 9.
+        const sitting = (mine.sitting ?? 'main') as 'main' | 'second';
         myResult = {
           rank: mine.rank,
+          sitting,
           score: mine.score,
           total_marks: mine.total_marks,
           percentage: mine.percentage,
           section_scores: mine.section_scores,
           is_provisional: mine.is_provisional,
           absent: mine.absent,
-          total_sat: rows.filter((r) => !r.absent && r.attempt_id).length,
+          total_sat: rows.filter(
+            (r) => isRankedResultRow(r) && (r.sitting ?? 'main') === sitting,
+          ).length,
         };
       }
     }

@@ -168,7 +168,7 @@ export interface ExamResultsSummary {
    * the average a class was told on results day has to stay true afterwards.
    */
   second: { sat: number; average: number; highest: number; lowest: number; passed: number } | null;
-  /** Averages per section across everyone who sat it. */
+  /** Averages per section across the main sitting, like every other figure in stats. */
   section_averages: Array<{ section: string | null; label: string; average: number; total_marks: number }>;
   /** Ranks 1 to 3 of the main sitting, already resolved. Shorter when fewer sat. */
   podium: RankedCandidate[];

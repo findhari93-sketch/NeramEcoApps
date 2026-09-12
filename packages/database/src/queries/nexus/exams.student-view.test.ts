@@ -25,7 +25,7 @@ const COLUMNS: Record<string, string[]> = {
   nexus_test_placements: ['id', 'test_id', 'context_id', 'available_from', 'available_until'],
   nexus_test_access_requests: ['placement_id', 'student_id', 'status', 'source', 'opens_at', 'closes_at', 'created_at'],
   nexus_test_run_credits: ['placement_id', 'student_id', 'attempt_id', 'note', 'credited_by', 'credited_at'],
-  nexus_exam_results: ['exam_id', 'student_id', 'rank', 'sitting', 'score', 'total_marks', 'percentage', 'is_provisional', 'absent'],
+  nexus_exam_results: ['exam_id', 'student_id', 'attempt_id', 'rank', 'sitting', 'score', 'total_marks', 'percentage', 'is_provisional', 'absent'],
 };
 
 function stubClient(seed: Record<string, any[]>) {
@@ -150,9 +150,9 @@ describe('listStudentExams', () => {
       nexus_exam_makeups: [],
       nexus_test_attempts: [{ id: 'att-1', test_id: 't1' }],
       nexus_exam_results: [
-        { exam_id: 'ex1', student_id: 'stu-1', rank: 2, score: 80, total_marks: 100, percentage: 80, is_provisional: false, absent: false },
-        { exam_id: 'ex1', student_id: 'stu-2', rank: 1, score: 90, total_marks: 100, percentage: 90, is_provisional: false, absent: false },
-        { exam_id: 'ex1', student_id: 'stu-3', rank: null, score: null, total_marks: 100, percentage: null, is_provisional: false, absent: true },
+        { exam_id: 'ex1', student_id: 'stu-1', attempt_id: 'att-1', rank: 2, score: 80, total_marks: 100, percentage: 80, is_provisional: false, absent: false },
+        { exam_id: 'ex1', student_id: 'stu-2', attempt_id: 'att-2', rank: 1, score: 90, total_marks: 100, percentage: 90, is_provisional: false, absent: false },
+        { exam_id: 'ex1', student_id: 'stu-3', attempt_id: null, rank: null, score: null, total_marks: 100, percentage: null, is_provisional: false, absent: true },
       ],
     });
 
@@ -324,6 +324,10 @@ describe('listStudentExams', () => {
     const resultRow = (student_id: string, sitting: 'main' | 'second', rank: number, percentage: number, absent = false) => ({
       exam_id: 'ex1',
       student_id,
+      // A result row carries the paper it is a result of. Only a row with an
+      // attempt counts towards a sitting's denominator, so every fixture that
+      // is meant to be counted has to carry one.
+      attempt_id: `att-${student_id}`,
       rank,
       sitting,
       score: percentage,
@@ -365,6 +369,88 @@ describe('listStudentExams', () => {
 
       const [view] = await listStudentExams('stu-1', 'c1', client as never);
       expect(view.result).toMatchObject({ rank: 1, sitting: 'main', total_ranked: 2 });
+    });
+  });
+
+  /**
+   * THE DENOMINATOR BUG, pinned.
+   *
+   * The publish route used to write a nexus_exam_results row for every roster
+   * student, including the ones whose personal window was still open. Those
+   * rows carry absent: false, rank: null, attempt_id: null and the default
+   * sitting 'main', and total_ranked counted them because its filter read
+   * `!absent` alone.
+   *
+   * On the real exam that meant a student's card rendered "Rank 3 of 44" while
+   * the private message they had just received said "3rd of 16" and the
+   * teacher's sheet said 16. Three surfaces, three numbers, one paper.
+   *
+   * Publish no longer writes those rows at all, and this is the second lock:
+   * even if one exists, from a legacy publish or a hand-written row, it must
+   * not swell anybody's denominator.
+   */
+  describe('a student who has not sat yet is not a result', () => {
+    const paperless = (student_id: string) => ({
+      exam_id: 'ex1',
+      student_id,
+      // Exactly the shape the old publish route wrote: no paper, not absent,
+      // and the sitting column's 'main' default.
+      attempt_id: null,
+      rank: null,
+      sitting: 'main' as const,
+      score: null,
+      total_marks: null,
+      percentage: null,
+      is_provisional: false,
+      absent: false,
+    });
+
+    const sat = (student_id: string, rank: number, percentage: number) => ({
+      exam_id: 'ex1',
+      student_id,
+      attempt_id: `att-${student_id}`,
+      rank,
+      sitting: 'main' as const,
+      score: percentage,
+      total_marks: 100,
+      percentage,
+      is_provisional: false,
+      absent: false,
+    });
+
+    it('does not count a row with no attempt towards total_ranked', async () => {
+      const client = stubClient({
+        nexus_exams: [{ ...baseExam, results_state: 'final' }],
+        nexus_exam_makeups: [],
+        nexus_test_attempts: [],
+        nexus_exam_results: [
+          sat('stu-1', 3, 76),
+          sat('other-1', 1, 95),
+          sat('other-2', 2, 80),
+          // Twenty-eight of these on the real exam. Before the fix they each
+          // added one to the denominator on everybody else's card.
+          paperless('open-1'),
+          paperless('open-2'),
+          paperless('open-3'),
+        ],
+      });
+
+      const [view] = await listStudentExams('stu-1', 'c1', client as never);
+      // 3, not 6: the number the private message and the teacher's sheet both
+      // report for this same exam.
+      expect(view.result).toMatchObject({ rank: 3, sitting: 'main', total_ranked: 3 });
+    });
+
+    it('still counts the student themselves when they have sat and others have not', async () => {
+      const client = stubClient({
+        nexus_exams: [{ ...baseExam, results_state: 'final' }],
+        nexus_exam_makeups: [],
+        nexus_test_attempts: [],
+        nexus_exam_results: [sat('stu-1', 1, 88), paperless('open-1')],
+      });
+
+      const [view] = await listStudentExams('stu-1', 'c1', client as never);
+      expect(view.result).toMatchObject({ rank: 1, total_ranked: 1 });
     });
   });
 });
