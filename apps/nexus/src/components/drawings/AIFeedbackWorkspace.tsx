@@ -16,6 +16,7 @@ import type { DrawingSubmission, TutorResource, GalleryReactionType } from '@ner
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import { compressImage } from '@/utils/imageCompression';
+import type { DrawingMark } from '@/lib/drawing-marks';
 import ReactionPicker from '@/components/assignments/ReactionPicker';
 
 export interface WorkspaceData {
@@ -62,6 +63,16 @@ export default function AIFeedbackWorkspace({
     (submission as any).tutor_marks != null ? String((submission as any).tutor_marks) : '',
   );
   const [reaction, setReaction] = useState<GalleryReactionType | null>((submission as any).reaction ?? null);
+
+  /**
+   * The teacher's marks on this drawing as vectors, loaded before the canvas
+   * opens so a second visit continues the correction instead of starting a
+   * fresh overlay over the original. `marks` on this screen is already the
+   * numeric grade, hence the longer name.
+   */
+  const [canvasMarks, setCanvasMarks] = useState<DrawingMark[] | null>(null);
+  /** The image saved but the vectors did not. Worth saying, not worth blocking. */
+  const [marksWarning, setMarksWarning] = useState(false);
 
   // UI state
   const [sketchOpen, setSketchOpen] = useState(false);
@@ -118,7 +129,41 @@ export default function AIFeedbackWorkspace({
     }
   }, [getToken, notify]);
 
-  const handleSketchSave = async (blob: Blob) => {
+  /**
+   * Save the marks twice over, on purpose.
+   *
+   * The flattened PNG is what the review stage and the student's card show, and
+   * it stays the quickest way to hand someone one picture. The vectors are what
+   * make the marks mean anything afterwards: they let the canvas reopen with the
+   * corrections still editable, and they are the only form the learning loop can
+   * read, because a flattened image has no coordinates.
+   *
+   * The image is now the derived artifact of the two.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`/api/drawing/submissions/${submission.id}/marks`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        // A 503 means this environment has no marks tables yet. The canvas still
+        // works; it just starts empty, exactly as it always did.
+        if (!res.ok) { if (!cancelled) setCanvasMarks([]); return; }
+        const body = await res.json();
+        if (!cancelled) setCanvasMarks(Array.isArray(body.marks) ? (body.marks as DrawingMark[]) : []);
+      } catch {
+        // Settle on "none" rather than leaving it loading forever, or the canvas
+        // would wait for marks that are never coming.
+        if (!cancelled) setCanvasMarks([]);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submission.id]);
+
+  const handleSketchSave = async (blob: Blob, nextMarks: DrawingMark[]) => {
     try {
       const token = await getToken();
       const compressed = await compressImage(blob, 1920, 0.85, 'overlay.jpg').catch(() => blob);
@@ -132,6 +177,26 @@ export default function AIFeedbackWorkspace({
       });
       if (!res.ok) throw new Error('Upload failed');
       const { url } = await res.json();
+
+      // Vectors after the image, and never fatal: a teacher who has just spent
+      // ten minutes marking a sheet should not lose the overlay because the
+      // marks table was unreachable. They keep the picture and a warning.
+      try {
+        const saved = await fetch(`/api/drawing/submissions/${submission.id}/marks`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope: 'canvas', marks: nextMarks }),
+        });
+        if (saved.ok) {
+          setCanvasMarks(nextMarks);
+          setMarksWarning(false);
+        } else {
+          setMarksWarning(true);
+        }
+      } catch {
+        setMarksWarning(true);
+      }
+
       setOverlayImageUrl(url);
       setSketchOpen(false);
       notify({ overlayImageUrl: url });
@@ -338,6 +403,21 @@ export default function AIFeedbackWorkspace({
                 Ctrl+V pastes into the first empty slot
               </Typography>
             )}
+
+            {/* The picture saved, the shapes behind it did not. Say so, because
+                the next time this canvas opens those marks will not be there to
+                edit, and the overlay on screen gives no hint of that. */}
+            {marksWarning && (
+              <Typography
+                role="status"
+                variant="caption"
+                color="warning.dark"
+                sx={{ display: 'block', mt: 1, textAlign: 'center', fontWeight: 600, fontSize: '0.68rem' }}
+              >
+                Your overlay image saved, but the marks behind it did not. Reopening the canvas will
+                start from the original drawing.
+              </Typography>
+            )}
           </Box>
         </Collapse>
       </Paper>
@@ -499,6 +579,7 @@ export default function AIFeedbackWorkspace({
       <Dialog open={sketchOpen} onClose={() => setSketchOpen(false)} maxWidth="xl" fullWidth>
         <SketchOverCanvas
           imageUrl={submission.original_image_url}
+          initialMarks={canvasMarks}
           onSave={handleSketchSave}
           onClose={() => setSketchOpen(false)}
         />

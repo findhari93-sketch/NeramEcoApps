@@ -21,6 +21,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { arrowHead, hitTestItem, textBounds, type CanvasItem, type Point } from '../../lib/sketch-geometry';
 import { buildStrokeOutline, smoothCentreline, splitStrokeAtHits } from '../../lib/sketch-stroke';
+import { canvasItemsToMarks, marksToCanvasItems, type DrawingMark } from '../../lib/drawing-marks';
 import { normPoint, type SketchOp } from '../../lib/sketch-timeline';
 
 /**
@@ -36,8 +37,23 @@ export interface SketchRecording {
 
 interface SketchOverCanvasProps {
   imageUrl: string;
-  onSave: (blob: Blob) => Promise<void> | void;
+  /**
+   * The flattened image for display, and the marks as vectors.
+   *
+   * Both, not either: the student's card and the review stage want one picture,
+   * and the learning loop wants coordinates. The picture is the derived one.
+   */
+  onSave: (blob: Blob, marks: DrawingMark[]) => Promise<void> | void;
   onClose: () => void;
+  /**
+   * Marks from a previous sitting, so reopening the canvas continues the
+   * correction rather than starting a fresh overlay over the original. Applied
+   * once the image size is known, because they are fractions of it.
+   *
+   * `null` means "still loading", `[]` means "loaded, there are none". The
+   * difference matters: the canvas can open before the fetch lands.
+   */
+  initialMarks?: DrawingMark[] | null;
   recording?: SketchRecording | null;
   /** Recording controls, shown in the top toolbar beside Undo and Save. */
   headerExtra?: React.ReactNode;
@@ -198,6 +214,7 @@ export default function SketchOverCanvas({
   imageUrl,
   onSave,
   onClose,
+  initialMarks,
   recording = null,
   headerExtra,
   saveDisabled = false,
@@ -370,6 +387,27 @@ export default function SketchOverCanvas({
   }, [composite]);
 
   useEffect(() => () => { if (rafRef.current != null) cancelAnimationFrame(rafRef.current); }, []);
+
+  // Previous marks arrive as fractions, so they can only be laid down once the
+  // image's own size is known. Keyed on the image: a different drawing starts
+  // clean rather than inheriting the last one's corrections.
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (canvasRes.width === 0 || canvasRes.height === 0) return;
+    if (restoredFor.current === imageUrl) return;
+    // `null` means the marks are still loading. Claiming this image as restored
+    // now would mean never restoring it: a teacher who opens the canvas faster
+    // than the fetch would get a blank overlay and the next save would wipe the
+    // corrections they made last time, which is the exact bug this replaces.
+    if (!initialMarks) return;
+    // Never overwrite a stroke already drawn in this sitting.
+    if (items.length > 0) { restoredFor.current = imageUrl; return; }
+
+    restoredFor.current = imageUrl;
+    const restored = marksToCanvasItems(initialMarks, canvasRes.width, canvasRes.height);
+    if (restored.length) setItems(restored);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasRes, imageUrl, initialMarks]);
 
   // --- Coordinate conversion ---
   const getCanvasPoint = useCallback((clientX: number, clientY: number): Point => {
@@ -790,7 +828,7 @@ export default function SketchOverCanvas({
     if (!blob) { setSaving(false); setSaveStatus('error'); return; }
 
     try {
-      await onSave(blob);
+      await onSave(blob, canvasItemsToMarks(items, canvasRes.width, canvasRes.height));
       setSaveStatus('success');
       setTimeout(() => onClose(), 800);
     } catch {

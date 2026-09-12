@@ -184,16 +184,9 @@ test.describe('Draw Corrections canvas', () => {
     await expect(page.locator('canvas[aria-label="Drawing canvas"]')).toBeVisible({ timeout: 15_000 });
   };
 
-  test('a pen stroke carrying pressure is drawn, not dropped', async ({ page }) => {
-    test.skip(!submissionId, 'No submission from setup');
-    await openCanvas(page);
 
-    const undo = page.getByRole('button', { name: 'Undo' });
-    await expect(undo).toBeDisabled();
-
-    // Playwright's mouse cannot carry pressure, so the stylus is simulated with
-    // real PointerEvents. pointerType 'pen' with a varying pressure is what
-    // makes the renderer taper rather than draw one flat width.
+  /** Draw one left-to-right stroke with a rising stylus pressure. */
+  const drawPressuredStroke = async (page: import('@playwright/test').Page) => {
     await page.evaluate(() => {
       const canvas = document.querySelector('canvas[aria-label="Drawing canvas"]') as HTMLCanvasElement;
       const r = canvas.getBoundingClientRect();
@@ -216,6 +209,16 @@ test.describe('Draw Corrections canvas', () => {
       for (let i = 1; i <= 12; i++) fire('pointermove', 0.2 + i * 0.04, 0.5, 0.15 + i * 0.07);
       fire('pointerup', 0.68, 0.5, 0.95);
     });
+  };
+
+  test('a pen stroke carrying pressure is drawn, not dropped', async ({ page }) => {
+    test.skip(!submissionId, 'No submission from setup');
+    await openCanvas(page);
+
+    const undo = page.getByRole('button', { name: 'Undo' });
+    await expect(undo).toBeDisabled();
+
+    await drawPressuredStroke(page);
 
     await expect(undo).toBeEnabled();
   });
@@ -295,5 +298,60 @@ test.describe('Draw Corrections canvas', () => {
     };
 
     expect(await sizeWith('Comment size L')).toBeGreaterThan(await sizeWith('Comment size S'));
+  });
+
+  /**
+   * The regression this whole change exists for.
+   *
+   * The canvas always opened on original_image_url with an empty item list, so a
+   * teacher who reopened it to add one more mark started from a blank overlay
+   * and the next save overwrote everything drawn before. Nothing warned them.
+   * Marks kept as vectors come back, and come back editable.
+   */
+  test('marks survive closing the canvas and come back editable', async ({ page, request }) => {
+    test.skip(!submissionId, 'No submission from setup');
+    await openCanvas(page);
+
+    const clearAll = page.getByRole('button', { name: 'Clear all' });
+    // Nothing drawn on this sheet yet, so there is nothing to clear.
+    await expect(clearAll).toBeDisabled();
+
+    await drawPressuredStroke(page);
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
+
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    // Saving closes the canvas once the upload lands.
+    await expect(page.getByText('Draw Corrections', { exact: true })).toHaveCount(0, { timeout: 60_000 });
+
+    // The shapes are stored, as fractions of the image and nothing else.
+    const teacher = await getTestAuthToken(request, 'teacher');
+    const saved = await request.get(
+      `${APP_URLS.nexus}/api/drawing/submissions/${submissionId}/marks`,
+      { headers: { Authorization: `Bearer ${teacher!.testToken}` } },
+    );
+    test.skip(saved.status() === 503, 'Drawing marks are not migrated in this environment');
+    expect(saved.ok()).toBeTruthy();
+    const marks = (await saved.json()).marks as Array<{
+      kind: string;
+      geometry: number[][];
+      style: { pressures?: number[]; w?: number };
+    }>;
+    const strokes = marks.filter((m) => m.kind === 'stroke');
+    expect(strokes.length).toBeGreaterThan(0);
+
+    for (const point of strokes[0].geometry) {
+      expect(point).toHaveLength(2);
+      point.forEach((n) => {
+        expect(n).toBeGreaterThanOrEqual(0);
+        expect(n).toBeLessThanOrEqual(1);
+      });
+    }
+    // A stylus stroke keeps its pressure, which is what lets it taper on replay.
+    expect(strokes[0].style.pressures?.length).toBe(strokes[0].geometry.length);
+    expect(strokes[0].style.w).toBeGreaterThan(0);
+
+    // And the canvas opens on them rather than on a blank overlay.
+    await openCanvas(page);
+    await expect(page.getByRole('button', { name: 'Clear all' })).toBeEnabled();
   });
 });
