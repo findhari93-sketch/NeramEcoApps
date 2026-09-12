@@ -1138,7 +1138,23 @@ export function isRankedResultRow(row: {
  * student who HAS a paper (or who is genuinely absent). Write a row for a
  * student whose window is still open and the first publish stamps them
  * notified, so when they finally sit weeks later their result reaches nobody.
- * Nothing in this repo ever clears the stamp.
+ *
+ * THE ONE CASE WHERE THE STAMP MUST GO, and it is the journey the product
+ * itself signposts. An absent student correctly gets a row and is correctly
+ * told "you were marked absent... speak to your teacher: they can open a second
+ * window for you". They do, they sit the paper, and the republish turns that
+ * paperless row into a real second-sitting result. Their stamp is day one's,
+ * about a different thing entirely, so notify found nobody pending, returned
+ * { notified: 0 }, and the teacher was shown a success message while the one
+ * student who followed the instruction heard nothing.
+ *
+ * So a row that held no paper and is now a result loses its stamp, scoped
+ * exactly to that transition: the UPDATE runs BEFORE the upsert (afterwards the
+ * stored attempt_id is no longer null) and filters on the STORED attempt_id, so
+ * an exam-day student who was correctly told on the day keeps theirs and is
+ * never messaged twice. This stays here beside the omission it repairs, because
+ * the two rules are one rule and splitting them across a caller is how the
+ * first half survived three reviews on its own.
  */
 export async function saveExamResults(
   examId: string,
@@ -1147,6 +1163,17 @@ export async function saveExamResults(
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
   if (rows.length === 0) return;
+
+  const nowHaveAPaper = rows.filter((r) => r.attempt_id).map((r) => r.student_id);
+  if (nowHaveAPaper.length > 0) {
+    const { error: clearError } = await supabase
+      .from(RESULTS)
+      .update({ notified_at: null })
+      .eq('exam_id', examId)
+      .in('student_id', nowHaveAPaper)
+      .is('attempt_id', null);
+    if (clearError) throw clearError;
+  }
 
   const { error } = await supabase.from(RESULTS).upsert(
     rows.map((r) => ({ ...r, exam_id: examId, published_at: new Date().toISOString() })),

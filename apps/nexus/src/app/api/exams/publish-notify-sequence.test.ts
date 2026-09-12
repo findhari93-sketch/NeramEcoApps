@@ -55,6 +55,8 @@ const H = vi.hoisted(() => {
     teamsPosts: [] as string[],
     /** Make the next Graph post fail. */
     teamsFails: false,
+    /** Make storing the posted card's id fail, with the card already sent. */
+    recordFails: false,
     pointEvents: [] as string[],
     badges: [] as string[],
   };
@@ -70,13 +72,29 @@ vi.mock('@neram/database', () => ({
    * Upsert on (exam_id, student_id), and crucially notified_at is NOT in the
    * payload, so an existing row keeps whatever stamp it already had. That is
    * exactly what ON CONFLICT DO UPDATE does against the real column list.
+   *
+   * Plus the one clause that repairs it: the scoped
+   * `UPDATE ... SET notified_at = NULL WHERE attempt_id IS NULL` the real
+   * saveExamResults runs BEFORE the upsert, so a row that held no paper and is
+   * now a result is pending again, while a row that already had a paper keeps
+   * its stamp. Modelled here because it is the database's half of the bargain;
+   * the real SQL is exercised directly in
+   * packages/database/src/queries/nexus/exams.notified-reset.test.ts.
    */
   saveExamResults: async (examId: string, rows: any[]) => {
     for (const r of rows) {
       const at = H.table.findIndex((x) => x.exam_id === examId && x.student_id === r.student_id);
       const next = { ...r, exam_id: examId, published_at: new Date().toISOString() };
-      if (at === -1) H.table.push({ ...next, notified_at: null });
-      else H.table[at] = { ...H.table[at], ...next };
+      if (at === -1) {
+        H.table.push({ ...next, notified_at: null });
+        continue;
+      }
+      const wasPaperless = H.table[at].attempt_id == null;
+      H.table[at] = {
+        ...H.table[at],
+        ...next,
+        ...(wasPaperless && r.attempt_id != null ? { notified_at: null } : {}),
+      };
     }
   },
   getExamResultRows: async (examId: string) =>
@@ -95,6 +113,7 @@ vi.mock('@neram/database', () => ({
     H.exam.results_published_at = new Date().toISOString();
   },
   recordExamTeamsPost: async (_examId: string, messageId: string | null) => {
+    if (H.recordFails) throw new Error('write timed out');
     H.exam.teams_results_message_id = messageId;
   },
   recordPointEvent: async (e: any) => {
@@ -284,6 +303,7 @@ beforeEach(() => {
   H.pointEvents.length = 0;
   H.badges.length = 0;
   H.teamsFails = false;
+  H.recordFails = false;
   H.exam = {
     id: EXAM_ID,
     classroom_id: 'c1',
@@ -351,6 +371,17 @@ describe('publishing twice, notifying twice', () => {
     expect(H.table.find((r) => r.student_id === 'kaveya')).toBeUndefined();
   });
 
+  it('counts the rows it wrote, not the roster it read', async () => {
+    H.results = summary(DAY_ONE);
+    const res = await publish(req(), PARAMS);
+    const body = await (res as Response).json();
+
+    // Four on the roster, three rows written. The sheet renders this number as
+    // "Published to N students", and saying 4 claims kaveya got something.
+    expect(body.data.students).toBe(3);
+    expect(H.table).toHaveLength(3);
+  });
+
   it('tells an exam-day student their rank out of the exam-day count alone', async () => {
     H.results = summary(DAY_ONE);
     await publish(req(), PARAMS);
@@ -358,8 +389,87 @@ describe('publishing twice, notifying twice', () => {
 
     const his = H.nudges.find((n) => n.studentId === 'hari');
     // 2, the number the teacher's sheet and the student's own card both show.
-    // With a row for kaveya in the table this read "2nd of 3".
+    // The notify predicate has always required an attempt before it names a
+    // sitting size, so this number was right even before the snapshot filter
+    // landed. It is pinned here because the two now have to agree: the filter
+    // decides who is in the table, sizeOf decides who is counted, and a change
+    // to either alone is what makes the card and the message disagree.
     expect(his?.plain).toContain('Your rank: 2nd of 2');
+  });
+
+  /**
+   * THE ABSENT HALF OF THE SAME DEFECT, and the journey the product itself
+   * signposts.
+   *
+   * An absent student is deliberately kept in the snapshot: the door shut on
+   * them and that is a real answer, so they get a row and they are told
+   * "You were marked absent... speak to your teacher: they can open a second
+   * window for you." That message stamps notified_at.
+   *
+   * So they do exactly that. The teacher opens a window, they sit the paper,
+   * the teacher republishes. The upsert omits notified_at, so day one's stamp
+   * survived, notify found nobody pending and returned { notified: 0 }, and the
+   * sheet printed it as a success. The student who followed the instruction was
+   * the one person never told their result.
+   */
+  const MEERA_SAT_LATE = [
+    examDay('arun', 1, 84),
+    examDay('hari', 2, 76),
+    stillToSit('kaveya'),
+    secondSitting('meera', 68),
+  ];
+
+  it('tells an absent student their result once they sit the second window', async () => {
+    H.results = summary(DAY_ONE);
+    await publish(req(), PARAMS);
+    await notify(req(), PARAMS);
+
+    const dayOne = H.nudges.filter((n) => n.studentId === 'meera');
+    expect(dayOne).toHaveLength(1);
+    expect(dayOne[0].plain).toContain('You were marked absent');
+    // The instruction the whole journey hangs on.
+    expect(dayOne[0].plain).toContain('they can open a second window for you');
+
+    // She speaks to her teacher, the window opens, she sits it.
+    H.results = summary(MEERA_SAT_LATE);
+    await publish(req({ post_to_teams: false }), PARAMS);
+    const second = await notify(req(), PARAMS);
+    const body = await (second as Response).json();
+
+    // Before the fix: 0. Her row still carried day one's stamp.
+    expect(body.data.notified).toBe(1);
+
+    const hers = H.nudges.filter((n) => n.studentId === 'meera');
+    const told = hers.filter((n) => n.plain.includes('Your rank'));
+    // Exactly one message carries her result: not none, and not a second copy
+    // on the next republish either.
+    expect(told).toHaveLength(1);
+    expect(told[0].plain).toContain('Your rank: 1st of 1 in the second sitting');
+    // Two messages in total, and the first one is the absent notice she was
+    // correctly sent on the day. Clearing the stamp must not resend that.
+    expect(hers).toHaveLength(2);
+
+    // And the students who were correctly told on the day are not told again.
+    const ids = H.nudges.map((n) => n.studentId);
+    expect(ids.filter((id) => id === 'arun')).toHaveLength(1);
+    expect(ids.filter((id) => id === 'hari')).toHaveLength(1);
+    // Her window is still open, so she is still not a result.
+    expect(ids.filter((id) => id === 'kaveya')).toHaveLength(0);
+  });
+
+  it('does not clear the stamp of a student who already had a paper', async () => {
+    H.results = summary(DAY_ONE);
+    await publish(req(), PARAMS);
+    await notify(req(), PARAMS);
+    const stampedOnTheDay = H.table.find((r) => r.student_id === 'hari')?.notified_at;
+    expect(stampedOnTheDay).toBeTruthy();
+
+    // A republish after the drawings are marked rewrites hari's row with the
+    // same attempt. He was told correctly and must not be told twice.
+    H.results = summary(MEERA_SAT_LATE);
+    await publish(req({ post_to_teams: false }), PARAMS);
+
+    expect(H.table.find((r) => r.student_id === 'hari')?.notified_at).toBe(stampedOnTheDay);
   });
 
   it('gives points to whoever sat, and nothing to the student still to sit', async () => {
@@ -430,6 +540,30 @@ describe('the Teams announcement', () => {
     // one transient Graph error silenced the class forever.
     expect(H.teamsPosts).toHaveLength(1);
     expect(H.exam.teams_results_message_id).toBe('msg-1');
+  });
+
+  /**
+   * Graph accepted the card and the id write then failed.
+   *
+   * Throwing there 500'd the handler with the card already in the channel and
+   * nothing recorded, so the teacher read a failed publish and the next press
+   * posted a SECOND card to the whole class. The post cannot be unsent, so the
+   * only safe answer is to keep the knowledge that it went and say what
+   * happened.
+   */
+  it('does not fail the publish when the posted card id cannot be stored', async () => {
+    H.recordFails = true;
+    const res = await publish(req(), PARAMS);
+    const body = await (res as Response).json();
+
+    expect((res as Response).status).toBe(200);
+    expect(H.teamsPosts).toHaveLength(1);
+    expect(body.data.published).toBe(true);
+    // The post succeeded, so this is not a teams_error: that would tell the
+    // teacher to press again, which is the one thing they must not do.
+    expect(body.data.teams_error).toBeNull();
+    expect(body.data.teams_message_id).toBe('msg-1');
+    expect(body.data.teams_record_error).toContain('Do not publish again');
   });
 
   it('is never sent a second time once Graph has accepted it', async () => {

@@ -255,9 +255,13 @@ export async function POST(
     //
     // They reappear here the moment they sit, or the moment their window shuts
     // and they become `absent`.
+    // Hoisted because this, not the roster, is what was published. Reporting
+    // results.rows.length told the teacher "Published to 47 students" on a
+    // press that wrote 28 rows and left 19 of them with nothing.
+    const written = snapshotRows(results.rows);
     await saveExamResults(
       params.examId,
-      snapshotRows(results.rows).map((row) => ({
+      written.map((row) => ({
         student_id: row.student_id,
         attempt_id: row.attempt_id,
         rank: row.rank,
@@ -292,6 +296,15 @@ export async function POST(
     //      less harmful than a silently missing one.
     let teamsMessageId: string | null = null;
     let teamsError: string | null = null;
+    /**
+     * Set when Graph accepted the card but Nexus could not store its id.
+     *
+     * Separate from teamsError on purpose: the two need opposite advice. A
+     * teams_error means the class was NOT told and pressing again is the fix. A
+     * record failure means the class WAS told and pressing again posts a second
+     * card to forty students and their parents.
+     */
+    let teamsRecordError: string | null = null;
 
     if (postToTeams && (classroom as any)?.ms_team_id && graphToken) {
       const sections = buildExamResultSections({
@@ -322,7 +335,18 @@ export async function POST(
           teamsError = posted.error;
         } else {
           teamsMessageId = posted.id;
-          await recordExamTeamsPost(params.examId, posted.id);
+          // NEVER FATAL. The card is already in the channel and cannot be
+          // unsent, so throwing here threw away the only knowledge that it
+          // went: the handler 500'd, the teacher read it as a failed publish,
+          // and the next press posted a second card to the whole class.
+          // Say so instead, and keep the id in the response.
+          try {
+            await recordExamTeamsPost(params.examId, posted.id);
+          } catch (err) {
+            console.error('[Exam Publish] the card posted but its id did not save:', err);
+            teamsRecordError =
+              'The card reached the channel, but Nexus could not record that it did. Do not publish again, it would post a second card. Ask an administrator to check the exam.';
+          }
         }
       } else {
         teamsError = 'No channel could be resolved for this classroom.';
@@ -334,9 +358,11 @@ export async function POST(
         data: {
           published: true,
           state: provisional ? 'provisional' : 'final',
-          students: results.rows.length,
+          // Rows actually written, not the roster.
+          students: written.length,
           teams_message_id: teamsMessageId,
           teams_error: teamsError,
+          teams_record_error: teamsRecordError,
           ...gamification,
         },
       },
