@@ -29,6 +29,7 @@
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { fetchAllRows } from '../../utils/paged-rows';
+import type { TestAccessRequest } from './test-access';
 
 // Cast at the name, as exams.ts does: these tables are not in the generated types.
 const ATTEMPTS = 'nexus_test_attempts' as any;
@@ -229,6 +230,47 @@ export async function loadRunGrantWindows(
   for (const r of (data || []) as any[]) {
     const byStudent = out.get(r.placement_id) || new Map<string, SittingWindow>();
     byStudent.set(r.student_id, { opens_at: r.opens_at ?? null, closes_at: r.closes_at ?? null });
+    out.set(r.placement_id, byStudent);
+  }
+  return out;
+}
+
+/**
+ * placement_id -> student_id -> that student's live access request (pending or
+ * granted), across every placement asked about.
+ *
+ * The batched, multi-placement sibling of test-access.ts's
+ * loadAccessRequestsForRun. Returns the request itself, status included,
+ * rather than loadRunGrantWindows's granted-only window: a caller that must
+ * tell a pending ask apart from an actual door (getExamResults does -- a
+ * pending ask is a question, not a door) needs the status to make that call
+ * itself.
+ */
+export async function loadRunAccessRequests(
+  placementIds: string[],
+  studentIds: string[] | null,
+  client?: TypedSupabaseClient,
+): Promise<Map<string, Map<string, TestAccessRequest>>> {
+  const out = new Map<string, Map<string, TestAccessRequest>>();
+  const ids = [...new Set(placementIds)].filter(Boolean);
+  if (ids.length === 0) return out;
+
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  let query = supabase
+    .from(REQUESTS)
+    .select('*')
+    .in('placement_id', ids)
+    .in('status', ['pending', 'granted']);
+  if (studentIds) query = query.in('student_id', studentIds.length > 0 ? studentIds : [NONE]);
+
+  const { data, error } = await query;
+  if (error) {
+    if (isMissingTable(error)) return out;
+    throw error;
+  }
+  for (const r of (data || []) as TestAccessRequest[]) {
+    const byStudent = out.get(r.placement_id) || new Map<string, TestAccessRequest>();
+    byStudent.set(r.student_id, r);
     out.set(r.placement_id, byStudent);
   }
   return out;

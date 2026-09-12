@@ -29,15 +29,20 @@ vi.mock('./test-repository', async () => {
   };
 });
 
-vi.mock('./exams', () => ({
-  getExam: vi.fn(async () => ({
-    id: 'exam-1',
-    test_id: 't1',
-    scheduled_class_id: 'sc1',
-    closes_at: '2026-08-18T17:15:00Z',
-    passing_pct: 80,
-  })),
-}));
+vi.mock('./exams', async () => {
+  const actual = await vi.importActual<typeof import('./exams')>('./exams');
+  return {
+    ...actual,
+    getExam: vi.fn(async () => ({
+      id: 'exam-1',
+      test_id: 't1',
+      scheduled_class_id: 'sc1',
+      opens_at: '2026-08-18T08:30:00Z',
+      closes_at: '2026-08-18T17:15:00Z',
+      passing_pct: 80,
+    })),
+  };
+});
 
 vi.mock('../../client', () => ({
   getSupabaseAdminClient: () => {

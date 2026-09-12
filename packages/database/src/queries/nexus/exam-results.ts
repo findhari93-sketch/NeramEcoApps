@@ -16,8 +16,8 @@ import {
   loadAttemptDraws,
 } from './test-repository';
 import { gradeQBAnswerStrict } from './question-bank';
-import { getExam } from './exams';
-import { loadRunSittings } from './run-sittings';
+import { getExam, listExamMakeups, resolveExamWindowForStudent } from './exams';
+import { loadRunSittings, loadRunAccessRequests } from './run-sittings';
 
 /** Which of an exam's two rank lists a paper belongs to. */
 export type ExamSitting = 'main' | 'second';
@@ -66,6 +66,28 @@ export interface RankedCandidate extends ExamCandidate {
   rank: number | null;
   /** How many sat in that same sitting, so a rank always travels with its denominator. */
   sitting_size: number;
+}
+
+/**
+ * Which sitting one paper belongs to.
+ *
+ * STARTED, not submitted. Production holds a paper begun at 17:00 and handed in
+ * at 18:05 against a 17:15 close: that student sat on the day and overran, and
+ * an overrun is the common case rather than the exception. Reading submitted_at
+ * would move them out of the podium they competed for.
+ *
+ * Deliberately does NOT read the grant or make-up tables. A grant overlapping
+ * the normal window should move nobody, and the only question that matters is
+ * whether the student beat the shared deadline.
+ */
+export function examSittingFor(
+  attempt: { started_at?: string | null; submitted_at?: string | null },
+  examClosesAt: string,
+): ExamSitting {
+  const closes = Date.parse(examClosesAt);
+  const began = Date.parse(attempt.started_at ?? attempt.submitted_at ?? '');
+  if (Number.isNaN(began) || Number.isNaN(closes)) return 'main';
+  return began <= closes ? 'main' : 'second';
 }
 
 /**
@@ -127,19 +149,28 @@ export function rankExamCandidates(candidates: ExamCandidate[]): RankedCandidate
 
 export interface ExamResultsSummary {
   rows: RankedCandidate[];
+  /** Every figure here is main-sitting only, so a class's announced average never moves later. */
   stats: {
     roster: number;
     sat: number;
     absent: number;
+    still_to_sit: number;
     average: number;
     highest: number;
     lowest: number;
     passed: number;
     passing_pct: number | null;
   };
+  /**
+   * The second sitting's own figures, null until somebody sits late.
+   *
+   * Kept OUT of `stats` on purpose: the channel card is built from `stats`, and
+   * the average a class was told on results day has to stay true afterwards.
+   */
+  second: { sat: number; average: number; highest: number; lowest: number; passed: number } | null;
   /** Averages per section across everyone who sat it. */
   section_averages: Array<{ section: string | null; label: string; average: number; total_marks: number }>;
-  /** Ranks 1 to 3, already resolved. Shorter when fewer sat. */
+  /** Ranks 1 to 3 of the main sitting, already resolved. Shorter when fewer sat. */
   podium: RankedCandidate[];
   /** Drawings still waiting for a teacher, across the whole exam. */
   drawings_ungraded: number;
@@ -162,7 +193,22 @@ export async function getExamResults(
   if (!exam) throw new Error('EXAM_NOT_FOUND');
 
   const studentIds = roster.map((r) => r.id);
-  const bestByStudent = await loadExamSittings(exam, studentIds, supabase);
+  const { placementId, byStudent: bestByStudent } = await loadExamSittings(exam, studentIds, supabase);
+
+  // Who still has time. Resolved through resolveExamWindowForStudent, the one
+  // function that decides whether a door is open for one student, so the
+  // teacher's roster and that student's own card cannot disagree.
+  const [makeups, accessByPlacement] = await Promise.all([
+    listExamMakeups(examId, supabase),
+    placementId
+      ? loadRunAccessRequests([placementId], studentIds, supabase)
+      : Promise.resolve(new Map()),
+  ]);
+  const makeupByStudent = new Map(makeups.map((m) => [m.student_id, m]));
+  const grantByStudent = placementId
+    ? (accessByPlacement.get(placementId) ?? new Map())
+    : new Map();
+  const now = Date.now();
 
   const [questions, draws] = await Promise.all([
     getComposedTestQuestions(exam.test_id, true, supabase),
@@ -172,11 +218,17 @@ export async function getExamResults(
     // the total (read from the attempt row) still looks right beside them.
     loadAttemptDraws({ testIds: [exam.test_id] }, supabase),
   ]);
-  const closed = new Date(exam.closes_at) <= new Date();
 
   const candidates: ExamCandidate[] = roster.map((student) => {
     const attempt = bestByStudent.get(student.id);
+
     if (!attempt || attempt.status !== 'submitted') {
+      // A granted row only. A pending ask is a question, not a door.
+      const grant = grantByStudent.get(student.id);
+      const reopen = grant?.status === 'granted' ? grant : null;
+      const window = resolveExamWindowForStudent(exam, makeupByStudent.get(student.id) ?? null, reopen);
+      const stillOpen = Date.parse(window.closes_at) > now;
+
       return {
         student_id: student.id,
         student_name: student.name,
@@ -186,21 +238,21 @@ export async function getExamResults(
         total_marks: 0,
         percentage: 0,
         provisional: false,
-        // Not "absent" while the door is still open: they may simply not have
-        // started yet. Same rule as the invigilation roster.
-        absent: closed,
+        // Absent means no paper AND no way left to produce one. A student whose
+        // window is still open has simply not sat it yet.
+        absent: !stillOpen,
         time_spent_seconds: null,
         section_scores: [],
-        // Provisional: Task 2 derives sitting and bucket from started_at and window times.
         sitting: null,
-        bucket: closed ? 'absent' : 'still_to_sit',
-        window_closes_at: null,
+        bucket: stillOpen ? ('still_to_sit' as const) : ('absent' as const),
+        window_closes_at: stillOpen ? window.closes_at : null,
       };
     }
 
     const eff = effectiveAttemptScore(attempt);
     const draw = draws.get(attemptDrawKey(exam.test_id, student.id, attempt.attempt_number));
     const review = buildReviewFromAnswers(questions, answersAsOriginal(attempt.answers, draw));
+    const sitting = examSittingFor(attempt, exam.closes_at);
 
     return {
       student_id: student.id,
@@ -222,15 +274,15 @@ export async function getExamResults(
         })),
         review,
       ),
-      // Provisional: Task 2 derives sitting and bucket from started_at and window times.
-      sitting: 'main',
-      bucket: 'exam_day',
+      sitting,
+      bucket: sitting === 'second' ? ('second_sitting' as const) : ('exam_day' as const),
       window_closes_at: null,
     };
   });
 
   const rows = rankExamCandidates(candidates);
-  const sat = rows.filter((r) => !r.absent && r.attempt_id);
+  const sat = rows.filter((r) => r.bucket === 'exam_day');
+  const late = rows.filter((r) => r.bucket === 'second_sitting');
   const percentages = sat.map((r) => r.percentage);
   const passingPct = exam.passing_pct == null ? null : Number(exam.passing_pct);
 
@@ -251,20 +303,32 @@ export async function getExamResults(
     stats: {
       roster: roster.length,
       sat: sat.length,
-      absent: rows.filter((r) => r.absent).length,
+      absent: rows.filter((r) => r.bucket === 'absent').length,
+      still_to_sit: rows.filter((r) => r.bucket === 'still_to_sit').length,
       average: percentages.length ? round2(avg(percentages)) : 0,
       highest: percentages.length ? Math.max(...percentages) : 0,
       lowest: percentages.length ? Math.min(...percentages) : 0,
       passed: passingPct == null ? sat.length : sat.filter((r) => r.percentage >= passingPct).length,
       passing_pct: passingPct,
     },
+    second:
+      late.length === 0
+        ? null
+        : {
+            sat: late.length,
+            average: round2(avg(late.map((r) => r.percentage))),
+            highest: Math.max(...late.map((r) => r.percentage)),
+            lowest: Math.min(...late.map((r) => r.percentage)),
+            passed:
+              passingPct == null ? late.length : late.filter((r) => r.percentage >= passingPct).length,
+          },
     section_averages: Array.from(sectionTotals.entries()).map(([key, v]) => ({
       section: key === '__none__' ? null : key,
       label: v.label,
       average: v.n > 0 ? round2(v.sum / v.n) : 0,
       total_marks: v.total,
     })),
-    podium: rows.filter((r) => r.rank != null && r.rank <= 3),
+    podium: rows.filter((r) => r.sitting === 'main' && r.rank != null && r.rank <= 3),
     drawings_ungraded: sat.reduce(
       (n, r) => n + r.section_scores.reduce((m, s) => m + s.ungraded, 0),
       0,
@@ -273,7 +337,7 @@ export async function getExamResults(
 }
 
 const EXAM_ATTEMPT_COLUMNS =
-  'id, student_id, status, attempt_number, score, total_marks, percentage, final_score, final_total_marks, final_percentage, finalised_at, time_spent_seconds, answers';
+  'id, student_id, status, attempt_number, score, total_marks, percentage, final_score, final_total_marks, final_percentage, finalised_at, time_spent_seconds, started_at, submitted_at, answers';
 
 /**
  * The one attempt that is each student's exam.
@@ -291,9 +355,9 @@ async function loadExamSittings(
   exam: { test_id: string; scheduled_class_id?: string | null },
   studentIds: string[],
   supabase: TypedSupabaseClient,
-): Promise<Map<string, any>> {
+): Promise<{ placementId: string | null; byStudent: Map<string, any> }> {
   const out = new Map<string, any>();
-  if (studentIds.length === 0) return out;
+  if (studentIds.length === 0) return { placementId: null, byStudent: out };
 
   const { data: placement } = await (supabase as any)
     .from('nexus_test_placements')
@@ -312,7 +376,7 @@ async function loadExamSittings(
     byRun.get(placement.id)?.forEach((sitting, studentId) => {
       out.set(studentId, sitting.first ?? sitting.attempts[0] ?? null);
     });
-    return out;
+    return { placementId: placement.id, byStudent: out };
   }
 
   // No placement to anchor a window to. The paper wide reading, unchanged.
@@ -332,7 +396,7 @@ async function loadExamSittings(
       out.set(a.student_id, a);
     }
   }
-  return out;
+  return { placementId: null, byStudent: out };
 }
 
 /**
