@@ -208,10 +208,28 @@ export default function ApplicationSection({
           <AssignmentIcon sx={{ color: 'primary.main', fontSize: 20 }} />
           <Typography variant="subtitle1" fontWeight={700}>Application</Typography>
         </Box>
-        <Box sx={{ py: 4, textAlign: 'center' }}>
+        <Box sx={{ py: 4, px: 3, textAlign: 'center' }}>
           <AssignmentIcon sx={{ fontSize: 36, color: 'grey.300', mb: 1 }} />
           <Typography variant="body2" color="text.secondary">No application submitted yet.</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            Fill it in from what the student told you. Nexus reads their class and exam year from it.
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => setEditDialogOpen(true)}
+            sx={{ mt: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none' }}
+          >
+            Fill application form
+          </Button>
         </Box>
+        <EditApplicationDialog
+          open={editDialogOpen}
+          onClose={() => setEditDialogOpen(false)}
+          detail={detail}
+          adminId={adminId}
+          onSaved={onStatusChange}
+        />
       </Paper>
     );
   }
