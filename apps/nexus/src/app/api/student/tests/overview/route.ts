@@ -448,9 +448,12 @@ export async function GET(request: NextRequest) {
          */
         is_reopen: ev?.is_reopen ?? false,
         // Said BEFORE they sit, while the door is still shut. A personal window
-        // that begins after exam day closed will rank them in the second sitting.
+        // that begins after exam day closed will rank them in the second
+        // sitting, whichever door opened it: a make-up counts exactly as a
+        // reopen does, because the ranking reads started_at and not the grant.
         ranks_in_second_sitting: willRankInSecondSitting({
           is_reopen: ev?.is_reopen,
+          is_makeup: ev?.is_makeup,
           opens_at: ev?.opens_at,
           exam_closes_at: ev?.exam_closes_at,
         }),

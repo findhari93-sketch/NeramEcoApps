@@ -372,6 +372,62 @@ describe('resolveStudentTestCard', () => {
       );
       expect(card.reason).not.toMatch(/—|--|&mdash;/);
     });
+
+    /**
+     * THE MAKE-UP HOLE.
+     *
+     * The warning first shipped inside the `reopened` branch alone, so a
+     * student holding a make-up window scheduled after exam day flowed through
+     * the make-up branches and was told nothing at all, while their paper was
+     * still ranked in the second sitting. Two such windows were live in
+     * production. Every branch that can render a personal window says it now.
+     */
+    it('warns a student whose make-up sitting is open right now', () => {
+      const card = resolve({
+        is_exam: true,
+        is_makeup: true,
+        available_from: past(DAY),
+        available_until: future(6 * DAY),
+        ranks_in_second_sitting: true,
+      });
+      expect(card.state).toBe('open');
+      expect(card.reason).toContain('Your make-up sitting is open.');
+      expect(card.reason).toContain('You will be ranked with the second sitting');
+      expect(card.reason).not.toMatch(/—|--|&mdash;/);
+    });
+
+    it('warns a student whose make-up sitting has not opened yet', () => {
+      const card = resolve({
+        is_exam: true,
+        is_makeup: true,
+        available_from: future(2 * DAY),
+        available_until: future(6 * DAY),
+        ranks_in_second_sitting: true,
+      });
+      expect(card.state).toBe('upcoming');
+      expect(card.reason).toContain('Your make-up sitting opens');
+      // Said days before the door opens, which is the only point at which it
+      // can still change what a student does about it.
+      expect(card.reason).toContain('You will be ranked with the second sitting');
+      expect(card.action.kind).toBe('none');
+    });
+
+    it('says nothing about sittings on a make-up that still beats the shared close', () => {
+      const card = resolve({
+        is_exam: true,
+        is_makeup: true,
+        available_from: past(DAY),
+        available_until: future(6 * DAY),
+        ranks_in_second_sitting: false,
+      });
+      expect(card.reason).not.toContain('second sitting');
+    });
+
+    it('says nothing about sittings on the shared window', () => {
+      const card = resolve({ is_exam: true, available_until: future(DAY) });
+      expect(card.state).toBe('open');
+      expect(card.reason).not.toContain('second sitting');
+    });
   });
 
   describe('a finished result names its sitting', () => {
@@ -413,6 +469,26 @@ describe('resolveStudentTestCard', () => {
       });
       expect(c.state).toBe('done');
       expect(c.reason).toContain('You were ranked in the second sitting.');
+    });
+
+    /**
+     * Which list you were ranked in is a fact about the paper you sat, true
+     * from the moment you submitted it. Naming it only once the drawings came
+     * back would read as something that had changed.
+     */
+    it('names the sitting while the drawings are still being marked', () => {
+      const c = resolve({
+        is_exam: true,
+        attempts: 1,
+        last_submitted_at: past(DAY),
+        results_state: 'provisional',
+        exam_result: { rank: 2, total_ranked: 9, percentage: 76, is_provisional: true, absent: false },
+        result_sitting: 'second',
+      });
+      expect(c.state).toBe('done');
+      expect(c.reason).toContain('You were ranked in the second sitting.');
+      expect(c.reason).toContain('still being marked');
+      expect(c.reason).not.toMatch(/—|--|&mdash;/);
     });
 
     it('uses no em dash or double dash in the finished sitting sentence', () => {

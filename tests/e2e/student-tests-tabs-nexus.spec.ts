@@ -254,7 +254,10 @@ test.describe('Student tests: Class Tests / My Tests / My Performance tabs', () 
       // The filter row scrolls inside itself. The PAGE must not scroll sideways
       // because of it, which is the new overflow risk this layout introduces.
       for (const label of ['To do', 'Done', 'Missed', 'Closed']) {
-        const chip = page.getByRole('button', { name: new RegExp(`^${label} \d+$`) });
+        // `\\d`, not `\d`: inside a template literal a single backslash is
+        // dropped, so this pattern was /^To do d+$/, matched nothing, and the
+        // count() === 0 guard below skipped every overflow check silently.
+        const chip = page.getByRole('button', { name: new RegExp(`^${label} \\d+$`) });
         if ((await chip.count()) === 0) continue;
         await chip.first().click();
         await assertNoHorizontalOverflow(page);
