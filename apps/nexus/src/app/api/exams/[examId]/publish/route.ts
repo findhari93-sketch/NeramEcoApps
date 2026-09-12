@@ -136,9 +136,19 @@ export async function POST(
     if (!access.ok) return access.response;
     const exam = access.exam;
 
+    /**
+     * The channel hears about an exam once.
+     *
+     * A second publish exists to add the second sitting, and that sitting is
+     * deliberately never announced: naming it would tell forty classmates, and
+     * often their parents, exactly who missed the class. So a republish writes
+     * rows and sends private messages, and posts nothing.
+     */
+    const alreadyAnnounced = Boolean(exam.results_published_at);
+
     const body = await request.json().catch(() => ({}));
     const requestedSections: string[] = Array.isArray(body?.sections) ? body.sections : [];
-    const postToTeams = body?.post_to_teams !== false;
+    const postToTeams = body?.post_to_teams !== false && !alreadyAnnounced;
 
     const supabase = getSupabaseAdminClient();
     const { data: classroom } = await supabase

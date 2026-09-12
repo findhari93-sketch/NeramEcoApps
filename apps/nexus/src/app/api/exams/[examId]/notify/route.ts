@@ -16,6 +16,9 @@ import { buildStudentResultMessage } from '@/lib/exam-results-model';
  *
  * Reads the SNAPSHOT rather than recomputing, so the rank a student is told
  * privately is byte-identical to the one the channel card was built from.
+ *
+ * The notified_at filter is also what makes the second sitting safe to publish
+ * later: the exam day students are not messaged twice.
  */
 
 /** Chunked so one long request does not hold a function open for a minute. */
@@ -45,7 +48,9 @@ export async function POST(
       return NextResponse.json({ data: { notified: 0, already: rows.length } }, { status: 200 });
     }
 
-    const totalSat = rows.filter((r) => !r.absent && r.attempt_id).length;
+    const sizeOf = (sitting: 'main' | 'second') =>
+      rows.filter((r) => !r.absent && r.attempt_id && (r.sitting ?? 'main') === sitting).length;
+    const sittingSize = { main: sizeOf('main'), second: sizeOf('second') };
     const notified: string[] = [];
     const failed: string[] = [];
 
@@ -54,11 +59,14 @@ export async function POST(
       await Promise.all(
         batch.map(async (row) => {
           try {
+            const sitting = (row.sitting ?? 'main') as 'main' | 'second';
+            const size = sittingSize[sitting];
             const { subject, plain } = buildStudentResultMessage({
               examTitle: exam.title || 'Exam',
               row: {
                 student_id: row.student_id,
                 student_name: '',
+                avatar_url: null,
                 attempt_id: row.attempt_id,
                 score: Number(row.score) || 0,
                 total_marks: Number(row.total_marks) || 0,
@@ -68,17 +76,21 @@ export async function POST(
                 time_spent_seconds: null,
                 section_scores: Array.isArray(row.section_scores) ? (row.section_scores as any) : [],
                 rank: row.rank,
-                // Placeholder until Task 5 rewrites this route to read the
-                // per-sitting fields off the snapshot; the notify message
-                // itself only branches on absent/attempt_id today.
-                sitting: row.absent ? null : 'main',
-                bucket: row.absent ? 'absent' : 'exam_day',
-                sitting_size: 0,
+                sitting: row.attempt_id ? sitting : null,
+                sitting_size: row.attempt_id ? size : 0,
+                bucket: row.attempt_id
+                  ? sitting === 'second'
+                    ? 'second_sitting'
+                    : 'exam_day'
+                  : row.absent
+                    ? 'absent'
+                    : 'still_to_sit',
                 window_closes_at: null,
               },
-              totalSat,
+              totalSat: size,
               provisional: row.is_provisional,
               passingPct: exam.passing_pct == null ? null : Number(exam.passing_pct),
+              sitting: row.attempt_id ? sitting : null,
             });
 
             await sendNudge({
