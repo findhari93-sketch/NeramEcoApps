@@ -36,4 +36,10 @@ describe('SketchbookHomeCard', () => {
     expect(swr).toHaveBeenCalledWith(null);
     expect(swr).not.toHaveBeenCalledWith('/api/sketchbook/me?summary=1');
   });
+
+  it('renders nothing (not a permanent skeleton) when the fetch errors', () => {
+    swr.mockReturnValue({ data: undefined, isLoading: false, error: new Error('boom') });
+    const { container } = render(<SketchbookHomeCard />);
+    expect(container.firstChild).toBe(null);
+  });
 });

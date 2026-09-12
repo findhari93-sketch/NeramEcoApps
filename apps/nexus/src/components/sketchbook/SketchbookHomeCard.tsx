@@ -16,8 +16,11 @@ import { rhythmLine, type Rhythm } from '@/lib/sketchbook-rhythm';
 export default function SketchbookHomeCard() {
   const { isFeatureEnabled } = useNexusAuthContext();
   const enabled = isFeatureEnabled('student.sketchbook');
-  const { data, isLoading } = useAuthSWR<{ rhythm: Rhythm }>(enabled ? '/api/sketchbook/me?summary=1' : null);
+  const { data, isLoading, error } = useAuthSWR<{ rhythm: Rhythm }>(enabled ? '/api/sketchbook/me?summary=1' : null);
   if (!enabled) return null;
+  // An optional dashboard card must never hold a permanent skeleton: the
+  // sketchbook page itself is where a fetch failure is shown for real.
+  if (error) return null;
   if (isLoading || !data) return <Skeleton variant="rounded" height={96} sx={{ borderRadius: 2, mb: 2 }} />;
 
   const r = data.rhythm;

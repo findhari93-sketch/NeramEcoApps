@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { APP_URLS, STUDENT_ACCOUNT, TEACHER_ACCOUNT, injectAuthForPage } from '../utils/credentials';
+import { APP_URLS, STUDENT_ACCOUNT, TEACHER_ACCOUNT, injectAuthForPage, getTestAuthToken } from '../utils/credentials';
 import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
 
 /**
@@ -15,6 +15,15 @@ import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
  * not landed on this dev database (probed once in setup, below). The two
  * guard cases (role check, token check) run either way: both refuse before
  * touching a sketchbook table.
+ *
+ * The "Sketchbook API" describe's `tablesReady` is module-level state shared
+ * only WITHIN that describe (it runs `mode: 'serial'`, guaranteeing one
+ * worker for its own tests). It is not read by the "on a phone" describe:
+ * with `fullyParallel: true` in the root config, Playwright is free to run
+ * different describes in this same file on separate worker PROCESSES, each
+ * with its own copy of module state, so the phone describe cannot rely on a
+ * flag the API describe computed elsewhere. Its one table-dependent
+ * assertion (the dashboard card) instead runs the same probe itself.
  */
 
 const NEXUS = APP_URLS.nexus;
@@ -128,7 +137,10 @@ test.describe('Sketchbook on a phone', () => {
     try { await shell.waitFor({ timeout: 90_000 }); } catch { return 'down'; }
     const skip = page.getByRole('button', { name: 'Skip' });
     if (await skip.isVisible().catch(() => false)) await skip.click();
-    if (await page.getByText(/not available|switched off/i).first().isVisible().catch(() => false)) return 'off';
+    // Mirrors FeatureGate.tsx's FeatureUnavailable copy: "<label> is coming
+    // soon" / "We are getting this ready for you...". Neither half names the
+    // feature, so this matches whichever feature the gate is for.
+    if (await page.getByText(/is coming soon|getting this ready for you/i).first().isVisible().catch(() => false)) return 'off';
     return 'ok';
   }
 
@@ -136,7 +148,11 @@ test.describe('Sketchbook on a phone', () => {
     const state = await open(page, '/student/sketchbook');
     test.skip(state === 'down', 'Nexus not running');
     test.skip(state === 'off', 'student.sketchbook is off in this environment');
-    await expect(page.getByRole('heading', { name: 'Sketchbook' })).toBeVisible();
+    // exact: true, because without the migration the page's own empty state
+    // renders an "Your sketchbook is empty" heading, and getByRole's default
+    // substring match on "Sketchbook" resolves both, which is a strict-mode
+    // violation rather than a pass.
+    await expect(page.getByRole('heading', { name: 'Sketchbook', exact: true })).toBeVisible();
     await assertNoHorizontalOverflow(page);
     const fab = page.getByRole('button', { name: 'Add a sketch' });
     await expect(fab).toBeVisible();
@@ -147,9 +163,27 @@ test.describe('Sketchbook on a phone', () => {
   });
 
   test('dashboard shows the sketchbook card', async ({ page }) => {
+    // open() already budgets up to 90s for a cold compile (see its own
+    // shell.waitFor above), and this test does two more round trips on top
+    // of that (a fresh token, then the probe), so the default 30s test
+    // timeout is too tight for a cold dev server.
+    test.setTimeout(90_000);
     const state = await open(page, '/student/dashboard');
     test.skip(state !== 'ok', 'Nexus not running or flag off');
-    await expect(page.getByRole('link', { name: /open sketchbook/i })).toBeVisible();
+    // The dashboard layout itself must never scroll sideways, regardless of
+    // whether the sketchbook card below has data to show.
     await assertNoHorizontalOverflow(page);
+    // Same probe as the API describe's setup, run locally: this describe can
+    // land on a different worker process than that one, so its `tablesReady`
+    // is not visible here. Without the migration, SketchbookHomeCard correctly
+    // renders nothing (see SketchbookHomeCard.tsx's `if (error) return null;`),
+    // so there is no link to find; skip only that assertion, not the whole run.
+    const auth = await getTestAuthToken(page.request, 'student');
+    const probe = await page.request.get(`${NEXUS}/api/sketchbook/me?summary=1`, {
+      headers: auth ? { Authorization: `Bearer ${auth.testToken}` } : {},
+      failOnStatusCode: false,
+    });
+    test.skip(probe.status() !== 200, 'sketchbook migration not applied to the dev database');
+    await expect(page.getByRole('link', { name: /open sketchbook/i })).toBeVisible();
   });
 });
