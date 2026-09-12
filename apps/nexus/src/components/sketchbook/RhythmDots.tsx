@@ -16,7 +16,7 @@ interface RhythmDotsProps {
 export default function RhythmDots({ days, todayIndex, size = 20 }: RhythmDotsProps) {
   const theme = useTheme();
   return (
-    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', minHeight: 48 }}>
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', minHeight: size >= 20 ? 48 : undefined }}>
       {days.map((on, i) => (
         <Box key={i} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
           <Box
@@ -31,9 +31,11 @@ export default function RhythmDots({ days, todayIndex, size = 20 }: RhythmDotsPr
               boxSizing: 'border-box',
             }}
           />
-          <Box component="span" aria-hidden sx={{ fontSize: 11, color: theme.palette.text.secondary }}>
-            {DAY_LETTERS[i]}
-          </Box>
+          {size >= 16 && (
+            <Box component="span" aria-hidden sx={{ fontSize: 11, color: theme.palette.text.secondary }}>
+              {DAY_LETTERS[i]}
+            </Box>
+          )}
         </Box>
       ))}
     </Box>
