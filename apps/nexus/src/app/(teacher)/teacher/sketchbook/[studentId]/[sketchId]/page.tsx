@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { Box, Skeleton, EmptyState } from '@neram/ui';
+import PageHeader from '@/components/PageHeader';
 import SketchPageView from '@/components/sketchbook/SketchPageView';
 import TeacherSketchActions from '@/components/sketchbook/TeacherSketchActions';
 import { useAuthSWR } from '@/lib/nexus-swr';
@@ -18,7 +19,14 @@ export default function TeacherSketchPage() {
   const sketch = data?.sketches.find((s) => s.id === sketchId) ?? null;
 
   if (isLoading) return <Skeleton variant="rounded" height={420} sx={{ borderRadius: 2 }} />;
-  if (error || !sketch) return <EmptyState title="Sketch not found" description="It may have been deleted." />;
+  if (error || !sketch) {
+    return (
+      <Box>
+        <PageHeader title="Sketch" backHref={`/teacher/sketchbook/${studentId}`} />
+        <EmptyState title="Sketch not found" description="It may have been deleted." />
+      </Box>
+    );
+  }
 
   return (
     <Box>
