@@ -65,7 +65,10 @@ export async function GET(
     const blockers: string[] = [];
     const warnings: string[] = [];
 
-    if (results.stats.sat === 0) {
+    // Both sittings. A teacher who never published on the day and comes back
+    // once the catch-up group has sat does have results to publish.
+    const anySat = results.rows.some((r) => r.bucket === 'exam_day' || r.bucket === 'second_sitting');
+    if (!anySat) {
       blockers.push('Nobody has sat this exam yet, so there is nothing to publish.');
     }
     if (new Date(exam.closes_at) > new Date()) {
@@ -76,6 +79,12 @@ export async function GET(
     if (results.drawings_ungraded > 0) {
       warnings.push(
         `${results.drawings_ungraded} drawing${results.drawings_ungraded === 1 ? ' is' : 's are'} not graded yet. Publishing now marks these results Provisional.`,
+      );
+    }
+    if (results.stats.still_to_sit > 0) {
+      const n = results.stats.still_to_sit;
+      warnings.push(
+        `${n} student${n === 1 ? ' still has' : 's still have'} an open window. Publishing now announces exam day results only. They will be ranked in the second sitting.`,
       );
     }
     if (!(classroom as any)?.ms_team_id) {
@@ -167,7 +176,10 @@ export async function POST(
 
     // Re-derived server side. The client only chose which sections to show.
     const { results } = await buildModel(params.examId, exam.classroom_id);
-    if (results.stats.sat === 0) {
+    // Both sittings. A teacher who never published on the day and comes back
+    // once the catch-up group has sat does have results to publish.
+    const anySat = results.rows.some((r) => r.bucket === 'exam_day' || r.bucket === 'second_sitting');
+    if (!anySat) {
       return NextResponse.json(
         { error: 'Nobody has sat this exam yet, so there is nothing to publish.' },
         { status: 400 },
@@ -177,15 +189,15 @@ export async function POST(
     const provisional = results.drawings_ungraded > 0;
 
     // ── 1. The snapshot, FIRST ──────────────────────────────────────────────
-    // Rank is frozen here on purpose: it is about to be named in a Teams post
-    // and in a private message, and a makeup sitting three days later must not
-    // silently renumber a podium that has already been announced.
+    // Ranks are per sitting, so writing the second sitting cannot disturb the
+    // exam-day ranks already named in a Teams post and in private messages.
     await saveExamResults(
       params.examId,
       results.rows.map((row) => ({
         student_id: row.student_id,
         attempt_id: row.attempt_id,
         rank: row.rank,
+        sitting: row.sitting ?? 'main',
         score: row.score,
         total_marks: row.total_marks,
         percentage: row.percentage,

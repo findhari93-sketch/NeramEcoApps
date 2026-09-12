@@ -1076,6 +1076,8 @@ export interface ExamResultRow {
   student_id: string;
   attempt_id: string | null;
   rank: number | null;
+  /** Which of the exam's two rank lists this row belongs to. */
+  sitting: 'main' | 'second';
   score: number | null;
   total_marks: number | null;
   percentage: number | null;
