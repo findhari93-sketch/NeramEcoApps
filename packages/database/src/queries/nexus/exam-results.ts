@@ -191,6 +191,10 @@ export async function getExamResults(
         absent: closed,
         time_spent_seconds: null,
         section_scores: [],
+        // Provisional: Task 2 derives sitting and bucket from started_at and window times.
+        sitting: null,
+        bucket: closed ? 'absent' : 'still_to_sit',
+        window_closes_at: null,
       };
     }
 
@@ -218,6 +222,10 @@ export async function getExamResults(
         })),
         review,
       ),
+      // Provisional: Task 2 derives sitting and bucket from started_at and window times.
+      sitting: 'main',
+      bucket: 'exam_day',
+      window_closes_at: null,
     };
   });
 
