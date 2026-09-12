@@ -481,12 +481,23 @@ export interface NexusStudentExamView {
   duration_minutes: number | null;
   passing_pct: number | null;
   results_state: ExamResultsState;
+  /**
+   * The exam's OWN close, not this student's. `closes_at` above is already
+   * resolved through the make-up and the reopen, so it cannot say whether a
+   * personal window begins after exam day ended.
+   */
+  exam_closes_at: string;
   attempted: boolean;
   attempt_id: string | null;
   /** Null until results_state moves off 'unpublished'. */
   result: {
     rank: number | null;
-    /** Count of non-absent candidates, for rendering "Rank 3 of 42". */
+    /** Which of the exam's two rank lists this result was ranked in. */
+    sitting: 'main' | 'second';
+    /**
+     * Non-absent candidates IN THE SAME SITTING, for rendering "Rank 3 of 16".
+     * A rank never travels without the denominator it was won against.
+     */
     total_ranked: number;
     score: number | null;
     total_marks: number | null;
@@ -597,7 +608,7 @@ export async function listStudentExams(
   if (publishedExamIds.length > 0) {
     const { data, error } = await supabase
       .from(RESULTS)
-      .select('exam_id, student_id, rank, score, total_marks, percentage, is_provisional, absent')
+      .select('exam_id, student_id, rank, sitting, score, total_marks, percentage, is_provisional, absent')
       .in('exam_id', publishedExamIds);
     if (error) throw error;
     for (const raw of (data || []) as any[]) {
@@ -620,9 +631,11 @@ export async function listStudentExams(
       const rows = resultsByExam.get(exam.id) || [];
       const mine = rows.find((r) => r.student_id === studentId) || null;
       if (mine) {
+        const sitting = (mine.sitting ?? 'main') as 'main' | 'second';
         result = {
           rank: mine.rank,
-          total_ranked: rows.filter((r) => !r.absent).length,
+          sitting,
+          total_ranked: rows.filter((r) => !r.absent && (r.sitting ?? 'main') === sitting).length,
           score: mine.score,
           total_marks: mine.total_marks,
           percentage: mine.percentage,
@@ -645,6 +658,7 @@ export async function listStudentExams(
       duration_minutes: exam.duration_minutes,
       passing_pct: exam.passing_pct,
       results_state: exam.results_state,
+      exam_closes_at: exam.closes_at,
       attempted: Boolean(attempt),
       attempt_id: attempt?.id ?? null,
       result,

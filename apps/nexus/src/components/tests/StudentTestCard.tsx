@@ -66,6 +66,7 @@ export interface StudentTest {
   exam_result?: {
     rank: number | null;
     total_ranked: number;
+    sitting?: 'main' | 'second';
     score: number | null;
     total_marks: number | null;
     percentage: number | null;

@@ -25,7 +25,7 @@ const COLUMNS: Record<string, string[]> = {
   nexus_test_placements: ['id', 'test_id', 'context_id', 'available_from', 'available_until'],
   nexus_test_access_requests: ['placement_id', 'student_id', 'status', 'source', 'opens_at', 'closes_at', 'created_at'],
   nexus_test_run_credits: ['placement_id', 'student_id', 'attempt_id', 'note', 'credited_by', 'credited_at'],
-  nexus_exam_results: ['exam_id', 'student_id', 'rank', 'score', 'total_marks', 'percentage', 'is_provisional', 'absent'],
+  nexus_exam_results: ['exam_id', 'student_id', 'rank', 'sitting', 'score', 'total_marks', 'percentage', 'is_provisional', 'absent'],
 };
 
 function stubClient(seed: Record<string, any[]>) {
@@ -318,5 +318,53 @@ describe('listStudentExams', () => {
     // Falling back would re-impose the very window the grant exists to escape.
     expect(view.closes_at).toBe('9999-12-31T23:59:59.999Z');
     expect(view.is_reopen).toBe(true);
+  });
+
+  describe('a published result names its sitting', () => {
+    const resultRow = (student_id: string, sitting: 'main' | 'second', rank: number, percentage: number, absent = false) => ({
+      exam_id: 'ex1',
+      student_id,
+      rank,
+      sitting,
+      score: percentage,
+      total_marks: 100,
+      percentage,
+      is_provisional: false,
+      absent,
+    });
+
+    it('counts the second sitting, not everyone who sat', async () => {
+      const client = stubClient({
+        nexus_exams: [{ ...baseExam, results_state: 'final' }],
+        nexus_exam_makeups: [],
+        nexus_test_attempts: [],
+        nexus_exam_results: [
+          resultRow('stu-1', 'second', 2, 76),
+          resultRow('other-1', 'second', 1, 90),
+          resultRow('other-2', 'main', 1, 95),
+          resultRow('other-3', 'main', 2, 80),
+          resultRow('other-4', 'main', 3, 70, true),
+        ],
+      });
+
+      const [view] = await listStudentExams('stu-1', 'c1', client as never);
+      expect(view.result).toMatchObject({ rank: 2, sitting: 'second', total_ranked: 2 });
+    });
+
+    it('counts the main sitting for a student who sat on the day', async () => {
+      const client = stubClient({
+        nexus_exams: [{ ...baseExam, results_state: 'final' }],
+        nexus_exam_makeups: [],
+        nexus_test_attempts: [],
+        nexus_exam_results: [
+          resultRow('stu-1', 'main', 1, 95),
+          resultRow('other-1', 'main', 2, 80),
+          resultRow('other-2', 'second', 1, 99),
+        ],
+      });
+
+      const [view] = await listStudentExams('stu-1', 'c1', client as never);
+      expect(view.result).toMatchObject({ rank: 1, sitting: 'main', total_ranked: 2 });
+    });
   });
 });

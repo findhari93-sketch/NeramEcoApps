@@ -105,6 +105,8 @@ export interface StudentTestFacts {
    * kind of surprise a student is right to resent.
    */
   ranks_in_second_sitting?: boolean;
+  /** Which sitting their published result was ranked in. Null until results are out. */
+  result_sitting?: 'main' | 'second' | null;
   results_state?: 'unpublished' | 'provisional' | 'final';
   exam_result?: {
     rank: number | null;
@@ -198,7 +200,9 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
    *    student a human had just let in, which is this bug in reverse. */
   if (t.is_reopen && (closes == null || closes > now) && (opens == null || opens <= now)) {
     if (sat && attemptsLeft === 0) {
-      return card('done', `You sat this on ${on(t.last_submitted_at)}.`, { kind: 'review', label: 'See your answers' }, 'positive');
+      const sittingNote =
+        t.result_sitting === 'second' ? ' You were ranked in the second sitting.' : '';
+      return card('done', `You sat this on ${on(t.last_submitted_at)}.${sittingNote}`, { kind: 'review', label: 'See your answers' }, 'positive');
     }
     const sittingNote = t.ranks_in_second_sitting
       ? ' You will be ranked with the second sitting, because exam day has passed.'
@@ -273,7 +277,9 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
           'neutral',
         );
       }
-      return card('done', `You sat this${when}.`, { kind: 'review', label: 'See your answers' }, 'positive');
+      const sittingNote =
+        t.result_sitting === 'second' ? ' You were ranked in the second sitting.' : '';
+      return card('done', `You sat this${when}.${sittingNote}`, { kind: 'review', label: 'See your answers' }, 'positive');
     }
     // Not an exam, so it can be retaken if the door and the limit both allow.
     const shut = closes != null && closes < now;

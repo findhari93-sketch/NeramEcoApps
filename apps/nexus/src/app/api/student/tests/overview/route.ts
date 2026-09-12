@@ -446,9 +446,18 @@ export async function GET(request: NextRequest) {
          * replaced days earlier (NXS-0125).
          */
         is_reopen: ev?.is_reopen ?? false,
+        // Said BEFORE they sit, while the door is still shut. A personal window
+        // that begins after exam day closed will rank them in the second sitting.
+        ranks_in_second_sitting: Boolean(
+          ev?.is_reopen &&
+            ev?.opens_at &&
+            ev?.exam_closes_at &&
+            Date.parse(ev.opens_at) > Date.parse(ev.exam_closes_at),
+        ),
         access_state: ev?.access_state ?? 'none',
         results_state: ev?.results_state ?? 'unpublished',
         exam_result: ev?.result ?? null,
+        result_sitting: ev?.result?.sitting ?? null,
         // Additive, and null on every exam with nothing linked -- same
         // "opt-in, absent changes nothing" contract as is_makeup/results_state.
         // exam_id (not to be confused with class_id above, the exam's OWN

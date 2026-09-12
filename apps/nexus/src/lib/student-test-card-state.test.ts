@@ -373,4 +373,58 @@ describe('resolveStudentTestCard', () => {
       expect(card.reason).not.toMatch(/—|--|&mdash;/);
     });
   });
+
+  describe('a finished result names its sitting', () => {
+    it('tells a student their result was ranked in the second sitting', () => {
+      const c = resolve({
+        is_exam: true,
+        attempts: 1,
+        last_submitted_at: past(DAY),
+        results_state: 'final',
+        exam_result: { rank: 2, total_ranked: 9, percentage: 76, is_provisional: false, absent: false },
+        result_sitting: 'second',
+      });
+      expect(c.state).toBe('done');
+      expect(c.reason).toContain('You were ranked in the second sitting.');
+    });
+
+    it('says nothing about sittings for a student who sat on exam day', () => {
+      const c = resolve({
+        is_exam: true,
+        attempts: 1,
+        last_submitted_at: past(DAY),
+        results_state: 'final',
+        exam_result: { rank: 1, total_ranked: 20, percentage: 95, is_provisional: false, absent: false },
+        result_sitting: 'main',
+      });
+      expect(c.reason).not.toContain('second sitting');
+    });
+
+    it('names the sitting even on a reopened exam once the student has used their attempt', () => {
+      const c = resolve({
+        is_exam: true,
+        is_reopen: true,
+        access_state: 'granted',
+        attempts: 1,
+        attempt_limit: 1,
+        last_submitted_at: past(DAY),
+        available_until: future(DAY),
+        result_sitting: 'second',
+      });
+      expect(c.state).toBe('done');
+      expect(c.reason).toContain('You were ranked in the second sitting.');
+    });
+
+    it('uses no em dash or double dash in the finished sitting sentence', () => {
+      const c = resolve({
+        is_exam: true,
+        attempts: 1,
+        last_submitted_at: past(DAY),
+        results_state: 'final',
+        exam_result: { rank: 2, total_ranked: 9, percentage: 76, is_provisional: false, absent: false },
+        result_sitting: 'second',
+      });
+      expect(c.reason).not.toMatch(/—|--|&mdash;/);
+    });
+  });
 });
