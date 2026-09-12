@@ -38,11 +38,18 @@ export async function POST(request: NextRequest) {
       original_image_url: originalUrl,
       self_note: caption || null,
     });
-    // createDrawingSubmission predates these two columns; set them in one follow-up write.
-    await supabase
+    // createDrawingSubmission hardcodes status 'submitted'; this write is what
+    // actually turns the row into a sketch (status 'completed'), plus the two
+    // columns createDrawingSubmission predates.
+    const { error: finishError } = await supabase
       .from('drawing_submissions')
       .update({ status: 'completed', thumbnail_url: thumbnailUrl, thread_id: submission.id })
       .eq('id', submission.id);
+    if (finishError) {
+      // Never leave a half-made sketch behind as a 'submitted' orphan in the review queue.
+      await supabase.from('drawing_submissions').delete().eq('id', submission.id);
+      throw finishError;
+    }
 
     const today = istDate(submission.submitted_at || new Date());
     const { isNewDay } = await upsertPracticeDay(caller.id, today, submission.id);
