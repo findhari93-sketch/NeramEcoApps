@@ -124,12 +124,13 @@ export async function upsertPracticeDay(
   client?: TypedSupabaseClient,
 ): Promise<{ isNewDay: boolean }> {
   const supabase = client || getSupabaseAdminClient();
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('nexus_sketchbook_practice_days')
     .select('sketch_count')
     .eq('student_id', studentId)
     .eq('practice_date', practiceDate)
     .maybeSingle();
+  if (existingError) throw existingError;
   if (!existing) {
     const { error } = await supabase
       .from('nexus_sketchbook_practice_days')
@@ -166,15 +167,21 @@ export async function repairPracticeDay(
   if (error) throw error;
   const sameDay = (rows || []).filter((r) => istDateOf(r.submitted_at) === practiceDate);
   if (sameDay.length === 0) {
-    await supabase.from('nexus_sketchbook_practice_days').delete().eq('student_id', studentId).eq('practice_date', practiceDate);
+    const { error: deleteError } = await supabase
+      .from('nexus_sketchbook_practice_days')
+      .delete()
+      .eq('student_id', studentId)
+      .eq('practice_date', practiceDate);
+    if (deleteError) throw deleteError;
     return;
   }
-  await supabase
+  const { error: upsertError } = await supabase
     .from('nexus_sketchbook_practice_days')
     .upsert(
       { student_id: studentId, practice_date: practiceDate, sketch_count: sameDay.length, first_submission_id: sameDay[0].id },
       { onConflict: 'student_id,practice_date' },
     );
+  if (upsertError) throw upsertError;
 }
 
 // ── Goal ─────────────────────────────────────────────────────────────────────
@@ -276,26 +283,41 @@ export async function listUnflipped(
 ): Promise<{ rows: SketchbookInboxRow[]; remaining: number }> {
   const supabase = client || getSupabaseAdminClient();
   if (studentIds.length === 0) return { rows: [], remaining: 0 };
-  const { data: flips } = await supabase
-    .from('nexus_sketchbook_flips')
-    .select('submission_id')
-    .eq('teacher_id', teacherId);
-  const flipped = (flips || []).map((f) => f.submission_id);
 
+  // Bounded candidate window, not a teacher's whole flip history: joining every
+  // flipped id into one `.not('id', 'in', (...))` query breaks once a teacher
+  // has flipped enough sketches that the id list overflows the Supabase-proxy
+  // request line (roughly 220 UUIDs, reached within about two weeks at ~115
+  // flips/week). Fetch a capped window of the newest candidate sketches
+  // instead, then only ask which of those were already flipped.
+  const candidateLimit = Math.min(limit * 5, 200);
   // drawing_submissions has exactly one FK to users (student_id), so the
   // relationship is unambiguous and needs no !hint.
-  let query = supabase
+  const { data: candidates, error: candidatesError } = await supabase
     .from('drawing_submissions')
-    .select(`${SKETCH_COLUMNS}, student:users(id, name, avatar_url, ms_oid)`, { count: 'exact' })
+    .select(`${SKETCH_COLUMNS}, student:users(id, name, avatar_url, ms_oid)`)
     .eq('source_type', 'sketchbook')
     .in('student_id', studentIds)
     .order('submitted_at', { ascending: false })
-    .limit(limit);
-  if (flipped.length > 0) query = query.not('id', 'in', `(${flipped.join(',')})`);
-  const { data, count, error } = await query;
-  if (error) throw error;
-  const rows = data || [];
-  return { rows, remaining: Math.max(0, (count ?? rows.length) - rows.length) };
+    .limit(candidateLimit);
+  if (candidatesError) throw candidatesError;
+  const candidateRows = candidates || [];
+  if (candidateRows.length === 0) return { rows: [], remaining: 0 };
+
+  const candidateIds = candidateRows.map((r) => r.id);
+  const { data: flips, error: flipsError } = await supabase
+    .from('nexus_sketchbook_flips')
+    .select('submission_id')
+    .eq('teacher_id', teacherId)
+    .in('submission_id', candidateIds);
+  if (flipsError) throw flipsError;
+  const flippedSet = new Set((flips || []).map((f) => f.submission_id));
+
+  const unflippedInWindow = candidateRows.filter((r) => !flippedSet.has(r.id));
+  const rows = unflippedInWindow.slice(0, limit);
+  // `remaining` counts only what is left unflipped within this bounded
+  // candidate window, not across the student's entire sketchbook history.
+  return { rows, remaining: Math.max(0, unflippedInWindow.length - rows.length) };
 }
 
 export async function recordFlip(
@@ -305,16 +327,21 @@ export async function recordFlip(
   client?: TypedSupabaseClient,
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('nexus_sketchbook_flips')
     .select('id, action')
     .eq('teacher_id', teacherId)
     .eq('submission_id', submissionId)
     .maybeSingle();
+  if (existingError) throw existingError;
   // 'seen' is the stronger fact; never downgrade it to 'skipped'.
   if (existing) {
     if (existing.action === 'skipped' && action === 'seen') {
-      await supabase.from('nexus_sketchbook_flips').update({ action: 'seen' }).eq('id', existing.id);
+      const { error: updateError } = await supabase
+        .from('nexus_sketchbook_flips')
+        .update({ action: 'seen' })
+        .eq('id', existing.id);
+      if (updateError) throw updateError;
     }
     return;
   }
@@ -418,11 +445,12 @@ export async function markUnfeatured(featureId: string, client?: TypedSupabaseCl
 
 export async function hasAnyLiveFeature(submissionId: string, client?: TypedSupabaseClient): Promise<boolean> {
   const supabase = client || getSupabaseAdminClient();
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('nexus_sketchbook_features')
     .select('id', { count: 'exact', head: true })
     .eq('submission_id', submissionId)
     .is('unfeatured_at', null);
+  if (error) throw error;
   return (count ?? 0) > 0;
 }
 
@@ -454,7 +482,13 @@ export async function setSketchbookReaction(
   client?: TypedSupabaseClient,
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
-  const { error } = await supabase.from('drawing_submissions').update({ reaction }).eq('id', submissionId);
+  // Scoped to source_type = 'sketchbook' so a wrong id can never overwrite the
+  // shared `reaction` column on an assignment or exam drawing_submissions row.
+  const { error } = await supabase
+    .from('drawing_submissions')
+    .update({ reaction })
+    .eq('id', submissionId)
+    .eq('source_type', 'sketchbook');
   if (error) throw error;
 }
 
@@ -466,6 +500,7 @@ export async function setFeatureOptOut(userId: string, optOut: boolean, client?:
 
 export async function getFeatureOptOut(userId: string, client?: TypedSupabaseClient): Promise<boolean> {
   const supabase = client || getSupabaseAdminClient();
-  const { data } = await supabase.from('users').select('sketchbook_feature_opt_out').eq('id', userId).maybeSingle();
+  const { data, error } = await supabase.from('users').select('sketchbook_feature_opt_out').eq('id', userId).maybeSingle();
+  if (error) throw error;
   return !!data?.sketchbook_feature_opt_out;
 }
