@@ -150,6 +150,7 @@ export const PANELS: PanelConfig[] = [
       { label: 'Course Plans', path: COURSE_PLANS_PATH, icon: <PlaylistAddCheckOutlinedIcon />, group: 'Curriculum' },
       { label: 'Assignments', path: '/teacher/assignments', icon: <AssignmentTurnedInOutlinedIcon />, group: 'Student work' },
       { label: 'Drawing Reviews', path: '/teacher/drawing-reviews', icon: <BrushOutlinedIcon />, group: 'Student work' },
+      { label: 'Sketchbooks', path: '/teacher/sketchbook', icon: <AutoStoriesOutlinedIcon />, group: 'Student work' },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon />, group: 'Records' },
       { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon />, group: 'Records' },
       { label: 'Exams', path: '/teacher/exams', icon: <DateRangeOutlinedIcon />, group: 'Records' },
@@ -311,6 +312,7 @@ const CLASSROOM: ZoneConfig = {
       items: [
         { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
         { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
+        { label: 'Sketchbook', path: '/student/sketchbook', icon: <AutoStoriesOutlinedIcon /> },
         { label: 'Recall', path: '/student/exam-recall', icon: <HistoryEduOutlinedIcon /> },
       ],
     },

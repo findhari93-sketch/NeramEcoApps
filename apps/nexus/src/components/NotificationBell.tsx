@@ -146,6 +146,15 @@ function getNavigationUrl(
         ? `/${nexusRole || 'student'}/timetable/${classId}/exam`
         : `/${nexusRole || 'student'}/tests`;
     }
+    // Both land on the sketch itself. A student taps through to see the
+    // reaction next to the drawing; a staff viewer (impersonation) gets the
+    // teacher route for the same sketch.
+    case 'sketch_reaction':
+    case 'sketch_featured': {
+      const submissionId = notification.metadata?.submission_id as string | undefined;
+      if (!submissionId) return '/student/sketchbook';
+      return nexusRole === 'student' ? `/student/sketchbook/${submissionId}` : '/teacher/sketchbook';
+    }
     default:
       return null;
   }

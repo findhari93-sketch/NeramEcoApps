@@ -35,6 +35,7 @@ import type { ClassImageRef } from '@/lib/class-cover';
 import ExamCountdown from '@/components/ExamCountdown';
 import type { ExamCountdownTarget } from '@/lib/exam-countdown';
 import type { NexusFoundationChapterWithProgress } from '@neram/database/types';
+import SketchbookHomeCard from '@/components/sketchbook/SketchbookHomeCard';
 
 interface UpcomingClass {
   id: string;
@@ -488,6 +489,9 @@ export default function StudentDashboard() {
       {loading && (
         <Skeleton variant="rounded" height={80} sx={{ borderRadius: 2, mb: 2 }} />
       )}
+
+      {/* ── Sketchbook: today's practice, one tap away ── */}
+      <SketchbookHomeCard />
 
       {/* ── Progress Stats: Horizontal scroll on mobile, Grid on desktop ── */}
       <Box sx={{ mb: 2, overflow: 'hidden' }}>

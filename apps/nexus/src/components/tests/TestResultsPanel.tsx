@@ -53,6 +53,7 @@ import QuestionEditDialog from '@/components/tests/QuestionEditDialog';
 import RegradePreviewDialog from '@/components/tests/RegradePreviewDialog';
 import TestMessageDialog, { type MessageRecipient } from '@/components/tests/TestMessageDialog';
 import CountAttemptSheet from '@/components/tests/CountAttemptSheet';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import { isResultFilter, type ResultFilter } from '@/lib/test-result-filters';
 import {
   DEFAULT_QUESTION_FILTERS,
@@ -474,9 +475,22 @@ export default function TestResultsPanel({
               </Button>
             }
           >
-            {reopenedButSat.length === 1
-              ? `${reopenedButSat[0].student_name || '1 student'} is reopened but already sat this inside the window.`
-              : `${reopenedButSat.length} students you reopened already sat this inside the window.`}
+            {reopenedButSat.length === 1 ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <StudentAvatar
+                  userId={reopenedButSat[0].student_id}
+                  name={reopenedButSat[0].student_name}
+                  src={reopenedButSat[0].avatar_url}
+                  size={32}
+                />
+                <span>
+                  {reopenedButSat[0].student_name || '1 student'} is reopened but already sat this inside the
+                  window.
+                </span>
+              </Box>
+            ) : (
+              `${reopenedButSat.length} students you reopened already sat this inside the window.`
+            )}
           </Alert>
         )}
         <TestResultsStudents

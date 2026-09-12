@@ -23,7 +23,7 @@ interface DrawingSubmissionSheetProps {
   questionId?: string;
   /** Set when submitting against a drawing-type class assignment. */
   assignmentId?: string;
-  sourceType: 'question_bank' | 'free_practice' | 'assignment';
+  sourceType: 'question_bank' | 'free_practice' | 'assignment' | 'sketchbook';
   /** When resubmitting after a redo, the teacher's ask, shown up top. */
   redoFeedback?: string | null;
   /** Teacher's corrected reference from the last review, shown as a reminder. */
@@ -44,13 +44,25 @@ interface DrawingSubmissionSheetProps {
    */
   submitUrl?: string;
   /** The body for `submitUrl`. Required when submitUrl is set. */
-  submitBody?: (uploadedUrl: string, selfNote: string | null) => unknown;
+  submitBody?: (uploadedUrl: string, selfNote: string | null, thumbnailUrl: string | null) => unknown;
+  /**
+   * Also upload a 400px JPEG and pass its URL as the third submitBody
+   * argument. Grids that show many sketches load only the thumbnail.
+   */
+  withThumbnail?: boolean;
+  /** Copy overrides. The drawing module keeps its defaults. */
+  title?: string;
+  noteLabel?: string;
+  notePlaceholder?: string;
+  noteMaxLength?: number;
+  submitLabel?: string;
 }
 
 export default function DrawingSubmissionSheet({
   open, onClose, questionId, assignmentId, sourceType, redoFeedback, referenceImageUrl,
   redoVoice, onRedoVoiceProgress, getToken, onSubmitted,
-  submitUrl, submitBody,
+  submitUrl, submitBody, withThumbnail = false, title, noteLabel = 'Self-reflection note (optional)',
+  notePlaceholder = 'e.g., I struggled with the shadow direction...', noteMaxLength, submitLabel,
 }: DrawingSubmissionSheetProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const canCapture = useCanCapturePhoto();
@@ -118,6 +130,24 @@ export default function DrawingSubmissionSheet({
     if (selected) handleFile(selected);
   };
 
+  const uploadOne = async (token: string, blob: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', blob);
+    formData.append('bucket', 'drawing-uploads');
+    const res = await fetch('/api/drawing/upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      if (res.status === 413) throw new Error('That image is too large to upload. Please try a smaller photo.');
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Upload failed. Please check your connection and try again.');
+    }
+    const { url } = await res.json();
+    return url as string;
+  };
+
   const handleSubmit = async () => {
     if (!file) return;
     setUploading(true);
@@ -153,25 +183,20 @@ export default function DrawingSubmissionSheet({
       }
       setProgress(30);
 
-      const formData = new FormData();
-      formData.append('file', toUpload);
-      formData.append('bucket', 'drawing-uploads');
+      const url = await uploadOne(token, toUpload);
+      setProgress(withThumbnail ? 45 : 60);
 
-      const uploadRes = await fetch('/api/drawing/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      if (!uploadRes.ok) {
-        if (uploadRes.status === 413) {
-          throw new Error('That image is too large to upload. Please try a smaller photo.');
+      let thumbnailUrl: string | null = null;
+      if (withThumbnail) {
+        try {
+          const thumb = await compressImage(toUpload, 400, 0.8, 'thumb.jpg', 0);
+          thumbnailUrl = await uploadOne(token, thumb);
+        } catch {
+          // A missing thumbnail costs bandwidth in the grid, not the sketch. Never block on it.
+          thumbnailUrl = null;
         }
-        const errData = await uploadRes.json().catch(() => ({}));
-        throw new Error(errData.error || 'Upload failed. Please check your connection and try again.');
+        setProgress(60);
       }
-      const { url } = await uploadRes.json();
-      setProgress(60);
 
       const submitRes = await fetch(submitUrl || '/api/drawing/submissions', {
         method: 'POST',
@@ -181,7 +206,7 @@ export default function DrawingSubmissionSheet({
         },
         body: JSON.stringify(
           submitUrl && submitBody
-            ? submitBody(url, selfNote || null)
+            ? submitBody(url, selfNote || null, thumbnailUrl)
             : {
                 question_id: questionId || null,
                 assignment_id: assignmentId || null,
@@ -215,7 +240,7 @@ export default function DrawingSubmissionSheet({
       <Paper sx={{ p: 2, maxHeight: '90vh', overflow: 'auto' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <Typography variant="subtitle1" fontWeight={600} sx={{ flex: 1 }}>
-            Submit Your Drawing
+            {title ?? 'Submit Your Drawing'}
           </Typography>
           <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
         </Box>
@@ -370,13 +395,15 @@ export default function DrawingSubmissionSheet({
         )}
 
         <TextField
-          label="Self-reflection note (optional)"
-          placeholder="e.g., I struggled with the shadow direction..."
+          label={noteLabel}
+          placeholder={notePlaceholder}
           multiline
           rows={2}
           fullWidth
           value={selfNote}
-          onChange={(e) => setSelfNote(e.target.value)}
+          onChange={(e) => setSelfNote(noteMaxLength ? e.target.value.slice(0, noteMaxLength) : e.target.value)}
+          inputProps={noteMaxLength ? { maxLength: noteMaxLength } : undefined}
+          helperText={noteMaxLength ? `${selfNote.length}/${noteMaxLength}` : undefined}
           sx={{ mb: 2 }}
         />
 
@@ -390,7 +417,7 @@ export default function DrawingSubmissionSheet({
           onClick={handleSubmit}
           sx={{ minHeight: 48, textTransform: 'none' }}
         >
-          {uploading ? 'Submitting...' : 'Submit Drawing'}
+          {uploading ? 'Submitting...' : (submitLabel ?? 'Submit Drawing')}
         </Button>
       </Paper>
     </Drawer>

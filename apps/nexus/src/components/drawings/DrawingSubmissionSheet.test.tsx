@@ -149,3 +149,57 @@ describe('DrawingSubmissionSheet rotation', () => {
     expect(compressImage.mock.calls[0][4]).toBe(0);
   });
 });
+
+describe('sketchbook mode', () => {
+  it('shows the sketchbook note label and submit label', () => {
+    render(
+      <DrawingSubmissionSheet
+        open
+        onClose={() => {}}
+        sourceType="sketchbook"
+        getToken={async () => 'tok'}
+        onSubmitted={() => {}}
+        noteLabel="One line about this sketch (optional)"
+        submitLabel="Add to sketchbook"
+      />,
+    );
+    expect(screen.getByLabelText('One line about this sketch (optional)')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add to sketchbook' })).toBeTruthy();
+  });
+
+  it('uploads a thumbnail as well and hands its url to submitBody', async () => {
+    const calls: string[] = [];
+    (globalThis.fetch as any) = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(url);
+      if (url === '/api/drawing/upload') {
+        const n = calls.filter((u) => u === '/api/drawing/upload').length;
+        return { ok: true, json: async () => ({ url: `https://x/${n}.jpg` }) } as Response;
+      }
+      return { ok: true, json: async () => ({ body: init?.body }) } as Response;
+    });
+    const submitBody = vi.fn((url: string, note: string | null, thumb: string | null) => ({ url, note, thumb }));
+    render(
+      <DrawingSubmissionSheet
+        open
+        onClose={() => {}}
+        sourceType="sketchbook"
+        getToken={async () => 'tok'}
+        onSubmitted={() => {}}
+        withThumbnail
+        submitUrl="/api/sketchbook/entries"
+        submitBody={submitBody}
+        submitLabel="Add to sketchbook"
+      />,
+    );
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['x'], 'a.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [file] } });
+    // Controller ruling: the sheet can contain more than one button matching
+    // /submit|add/i, so pin the query to the exact label passed above.
+    await screen.findByRole('button', { name: 'Add to sketchbook' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to sketchbook' }));
+    await waitFor(() => expect(submitBody).toHaveBeenCalled());
+    expect(submitBody.mock.calls[0][0]).toBe('https://x/1.jpg');
+    expect(submitBody.mock.calls[0][2]).toBe('https://x/2.jpg');
+  });
+});
