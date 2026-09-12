@@ -19,6 +19,19 @@ import { gradeQBAnswerStrict } from './question-bank';
 import { getExam } from './exams';
 import { loadRunSittings } from './run-sittings';
 
+/** Which of an exam's two rank lists a paper belongs to. */
+export type ExamSitting = 'main' | 'second';
+
+/**
+ * Where one roster student stands. Exactly one per student, and the four
+ * always sum to the roster.
+ *
+ * still_to_sit exists because "no paper" is not the same as "absent": 28
+ * students on the History of Architecture exam hold live windows, and calling
+ * them absent would privately tell each of them so.
+ */
+export type ExamBucket = 'exam_day' | 'second_sitting' | 'still_to_sit' | 'absent';
+
 export interface ExamCandidate {
   student_id: string;
   student_name: string;
@@ -33,11 +46,26 @@ export interface ExamCandidate {
   absent: boolean;
   time_spent_seconds: number | null;
   section_scores: ExamSectionScore[];
+  /** Null when they have not submitted a paper. */
+  sitting: ExamSitting | null;
+  bucket: ExamBucket;
+  /**
+   * When this student's own window shuts. Set only on a still_to_sit row, so a
+   * teacher deciding whether to publish now can see whether they are waiting
+   * two days or three weeks.
+   */
+  window_closes_at: string | null;
 }
 
 export interface RankedCandidate extends ExamCandidate {
-  /** 1-based, dense: two students on the same percentage share a rank. Null when absent. */
+  /**
+   * 1-based, dense, WITHIN this student's own sitting: two students on the
+   * same percentage share a rank and the next rank skips. Null when they did
+   * not sit.
+   */
   rank: number | null;
+  /** How many sat in that same sitting, so a rank always travels with its denominator. */
+  sitting_size: number;
 }
 
 /**
@@ -53,37 +81,47 @@ export interface RankedCandidate extends ExamCandidate {
  * thing that ends up in a parent's message. Time only orders the LIST, never
  * separates equal marks.
  *
- * An absent student is not ranked at all. They appear in the roster, never on
- * the ladder.
+ * TWO SITTINGS, RANKED SEPARATELY. A student who started the paper after the
+ * exam's shared window closed had days or weeks longer to prepare, so they are
+ * ranked among themselves rather than against the people who sat on the day.
+ * The partition, not a freeze flag, is what stops a late sitting renumbering a
+ * podium that has already been announced: a second-sitting paper simply cannot
+ * enter the main set.
  */
 export function rankExamCandidates(candidates: ExamCandidate[]): RankedCandidate[] {
+  const byMarks = (a: ExamCandidate, b: ExamCandidate) =>
+    b.percentage - a.percentage ||
+    (a.time_spent_seconds ?? Number.MAX_SAFE_INTEGER) -
+      (b.time_spent_seconds ?? Number.MAX_SAFE_INTEGER) ||
+    a.student_name.localeCompare(b.student_name);
+
+  const rankGroup = (group: ExamCandidate[]): RankedCandidate[] => {
+    const ordered = [...group].sort(byMarks);
+    const out: RankedCandidate[] = [];
+    let lastPct: number | null = null;
+    let lastRank = 0;
+
+    ordered.forEach((c, i) => {
+      const rank = lastPct !== null && c.percentage === lastPct ? lastRank : i + 1;
+      lastPct = c.percentage;
+      lastRank = rank;
+      out.push({ ...c, rank, sitting_size: group.length });
+    });
+
+    return out;
+  };
+
   const sat = candidates.filter((c) => !c.absent && c.attempt_id);
-  const absent = candidates.filter((c) => c.absent || !c.attempt_id);
-
-  const ordered = [...sat].sort(
-    (a, b) =>
-      b.percentage - a.percentage ||
-      (a.time_spent_seconds ?? Number.MAX_SAFE_INTEGER) -
-        (b.time_spent_seconds ?? Number.MAX_SAFE_INTEGER) ||
-      a.student_name.localeCompare(b.student_name),
-  );
-
-  const ranked: RankedCandidate[] = [];
-  let lastPct: number | null = null;
-  let lastRank = 0;
-
-  ordered.forEach((c, i) => {
-    const rank = lastPct !== null && c.percentage === lastPct ? lastRank : i + 1;
-    lastPct = c.percentage;
-    lastRank = rank;
-    ranked.push({ ...c, rank });
-  });
+  const unsat = candidates.filter((c) => c.absent || !c.attempt_id);
 
   return [
-    ...ranked,
-    ...absent
+    ...rankGroup(sat.filter((c) => c.sitting !== 'second')),
+    ...rankGroup(sat.filter((c) => c.sitting === 'second')),
+    // The absent flag is NOT forced here. A student holding a live window has
+    // no paper and is not absent, and getExamResults has already said which.
+    ...unsat
       .sort((a, b) => a.student_name.localeCompare(b.student_name))
-      .map((c) => ({ ...c, rank: null, absent: true })),
+      .map((c) => ({ ...c, rank: null, sitting_size: 0 })),
   ];
 }
 

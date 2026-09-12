@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rankExamCandidates, type ExamCandidate } from './exam-results';
+import { rankExamCandidates, type ExamCandidate, type ExamSitting } from './exam-results';
 import { resolveExamWindowForStudent } from './exams';
 
 const candidate = (
@@ -8,6 +8,7 @@ const candidate = (
   percentage: number,
   time: number | null = 100,
   absent = false,
+  sitting: ExamSitting | null = 'main',
 ): ExamCandidate => ({
   student_id: id,
   student_name: name,
@@ -19,6 +20,9 @@ const candidate = (
   absent,
   time_spent_seconds: time,
   section_scores: [],
+  sitting: absent ? null : sitting,
+  bucket: absent ? 'absent' : sitting === 'second' ? 'second_sitting' : 'exam_day',
+  window_closes_at: null,
 });
 
 describe('rankExamCandidates', () => {
@@ -81,6 +85,91 @@ describe('rankExamCandidates', () => {
 
   it('survives an empty exam', () => {
     expect(rankExamCandidates([])).toEqual([]);
+  });
+});
+
+describe('rankExamCandidates, two sittings', () => {
+  it('ranks each sitting from 1, independently', () => {
+    const out = rankExamCandidates([
+      candidate('a', 'Arun', 60, 100, false, 'main'),
+      candidate('b', 'Bhavya', 90, 100, false, 'main'),
+      candidate('c', 'Chitra', 99, 100, false, 'second'),
+      candidate('d', 'Divya', 70, 100, false, 'second'),
+    ]);
+    const rankOf = (id: string) => out.find((r) => r.student_id === id)!.rank;
+    expect(rankOf('b')).toBe(1);
+    expect(rankOf('a')).toBe(2);
+    expect(rankOf('c')).toBe(1);
+    expect(rankOf('d')).toBe(2);
+  });
+
+  it('gives every ranked student the size of their OWN sitting', () => {
+    const out = rankExamCandidates([
+      candidate('a', 'Arun', 60, 100, false, 'main'),
+      candidate('b', 'Bhavya', 90, 100, false, 'main'),
+      candidate('c', 'Chitra', 99, 100, false, 'second'),
+    ]);
+    expect(out.find((r) => r.student_id === 'a')!.sitting_size).toBe(2);
+    expect(out.find((r) => r.student_id === 'c')!.sitting_size).toBe(1);
+  });
+
+  // THE INVARIANT THE WHOLE DESIGN RESTS ON. A podium is announced in a Teams
+  // channel and in a private message to each student; a sitting three weeks
+  // later must not silently renumber it.
+  it('a second sitting never changes a main sitting rank', () => {
+    const main = [
+      candidate('a', 'Arun', 60, 100, false, 'main'),
+      candidate('b', 'Bhavya', 90, 100, false, 'main'),
+      candidate('c', 'Chitra', 90, 200, false, 'main'),
+    ];
+    const before = rankExamCandidates(main).filter((r) => r.sitting === 'main');
+
+    for (let n = 1; n <= 20; n += 1) {
+      const late = Array.from({ length: n }, (_, i) =>
+        candidate(`late${i}`, `Late ${i}`, 100 - i, 50, false, 'second'),
+      );
+      const after = rankExamCandidates([...main, ...late]).filter((r) => r.sitting === 'main');
+      expect(after.map((r) => [r.student_id, r.rank, r.sitting_size])).toEqual(
+        before.map((r) => [r.student_id, r.rank, r.sitting_size]),
+      );
+    }
+  });
+
+  it('shares a rank on a tie inside a sitting, without leaking across sittings', () => {
+    const out = rankExamCandidates([
+      candidate('a', 'Arun', 90, 200, false, 'main'),
+      candidate('b', 'Bhavya', 90, 100, false, 'main'),
+      candidate('c', 'Chitra', 50, 100, false, 'main'),
+      candidate('d', 'Divya', 90, 100, false, 'second'),
+    ]);
+    expect(out.filter((r) => r.sitting === 'main').map((r) => r.rank)).toEqual([1, 1, 3]);
+    expect(out.find((r) => r.student_id === 'd')!.rank).toBe(1);
+  });
+
+  // A student with an open window has not sat and is NOT absent. The old code
+  // forced absent: true on everyone without an attempt, which would privately
+  // tell 28 students with live windows that they were marked absent.
+  it('leaves the absent flag alone on a student who still has time', () => {
+    const stillToSit: ExamCandidate = {
+      student_id: 'z',
+      student_name: 'Zara',
+      attempt_id: null,
+      score: 0,
+      total_marks: 0,
+      percentage: 0,
+      provisional: false,
+      absent: false,
+      time_spent_seconds: null,
+      section_scores: [],
+      sitting: null,
+      bucket: 'still_to_sit',
+      window_closes_at: '2026-09-19T12:34:00.000Z',
+    };
+    const out = rankExamCandidates([candidate('a', 'Arun', 60), stillToSit]);
+    const row = out.find((r) => r.student_id === 'z')!;
+    expect(row.absent).toBe(false);
+    expect(row.rank).toBeNull();
+    expect(row.bucket).toBe('still_to_sit');
   });
 });
 
