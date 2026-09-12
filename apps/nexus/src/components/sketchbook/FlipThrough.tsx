@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button, Paper, Skeleton, Typography, EmptyState } from '@neram/ui';
 import DoneAllOutlinedIcon from '@mui/icons-material/DoneAllOutlined';
-import type { SketchbookInboxRow } from '@neram/database/queries/nexus';
+import type { SketchbookFeatureFact, SketchbookInboxRow } from '@neram/database/queries/nexus';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useNavBadges } from '@/components/NavBadgeProvider';
@@ -26,11 +26,12 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
   const { getToken } = useNexusAuthContext();
   const { refreshBadges } = useNavBadges();
   const { factsFor } = useStudentStageFacts();
-  const { data, isLoading, mutate } = useAuthSWR<{ sketches: SketchbookInboxRow[]; remaining: number }>(
-    `/api/sketchbook/inbox?classroom=${encodeURIComponent(classroomId)}`,
-  );
+  const { data, isLoading, mutate } = useAuthSWR<{
+    sketches: Array<SketchbookInboxRow & { featured: SketchbookFeatureFact[] }>;
+    remaining: number;
+  }>(`/api/sketchbook/inbox?classroom=${encodeURIComponent(classroomId)}`);
   const [index, setIndex] = useState(0);
-  const [local, setLocal] = useState<Record<string, { reaction?: string | null; featured?: boolean }>>({});
+  const [local, setLocal] = useState<Record<string, { reaction?: string | null; featured?: SketchbookFeatureFact[] }>>({});
   const seenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const list = data?.sketches ?? [];
@@ -102,7 +103,7 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
           compact
           sketchId={current.id}
           reaction={(state.reaction as never) ?? current.reaction}
-          featured={state.featured ? [{ classroom_id: classroomId, classroom_name: 'this class', featured_at: new Date().toISOString() }] : []}
+          featured={state.featured ?? current.featured}
           selfNote={current.self_note}
           onChanged={(c) => setLocal((m) => ({ ...m, [current.id]: { ...m[current.id], ...c } }))}
         />

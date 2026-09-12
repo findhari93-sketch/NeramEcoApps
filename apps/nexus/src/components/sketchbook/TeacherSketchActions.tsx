@@ -27,8 +27,8 @@ interface TeacherSketchActionsProps {
   featured: SketchbookFeatureFact[];
   selfNote: string | null;
   /** Called after any change so the parent can refetch. */
-  onChanged: (change: { reaction?: SketchbookReaction | null; featured?: boolean }) => void;
-  /** Compact: no comment box (used inside the flip card). */
+  onChanged: (change: { reaction?: SketchbookReaction | null; featured?: SketchbookFeatureFact[] }) => void;
+  /** Compact: the comment box starts collapsed behind a "Comment" toggle (used inside the flip card). */
   compact?: boolean;
 }
 
@@ -36,6 +36,7 @@ export default function TeacherSketchActions({ sketchId, reaction, featured, sel
   const { getToken } = useNexusAuthContext();
   const [busy, setBusy] = useState<string | null>(null);
   const [comment, setComment] = useState('');
+  const [commentOpen, setCommentOpen] = useState(false);
   const [sent, setSent] = useState<SketchbookReaction | null>(null);
   const [featureOpen, setFeatureOpen] = useState(false);
   const [error, setError] = useState('');
@@ -59,11 +60,17 @@ export default function TeacherSketchActions({ sketchId, reaction, featured, sel
             {REACTION_LABEL[r]}
           </Button>
         ))}
+        {compact && (
+          <Button variant="text" disabled={busy !== null} onClick={() => setCommentOpen((o) => !o)}
+            aria-expanded={commentOpen} sx={{ minHeight: 48 }}>
+            Comment
+          </Button>
+        )}
         {live ? (
           <Button variant="text" color="warning" startIcon={<StarOutlinedIcon />} disabled={busy !== null} sx={{ minHeight: 48 }}
             onClick={async () => {
               setBusy('unfeature'); setError('');
-              try { await unfeatureSketch(getToken, sketchId, live.classroom_id); onChanged({ featured: false }); }
+              try { await unfeatureSketch(getToken, sketchId, live.classroom_id); onChanged({ featured: [] }); }
               catch (e) { setError(e instanceof Error ? e.message : 'Could not un-feature'); } finally { setBusy(null); }
             }}>
             Un-feature
@@ -76,13 +83,13 @@ export default function TeacherSketchActions({ sketchId, reaction, featured, sel
       </Box>
       {sent && <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 0.5 }}>Sent {REACTION_LABEL[sent]}</Typography>}
       {live && <Chip size="small" icon={<StarOutlinedIcon />} color="warning" label={`Featured in ${live.classroom_name}`} sx={{ mt: 1 }} />}
-      {!compact && (
+      {(!compact || commentOpen) && (
         <TextField label="Add a line (optional, sent with your reaction)" value={comment} onChange={(e) => setComment(e.target.value.slice(0, 300))}
           fullWidth size="small" sx={{ mt: 1.5 }} inputProps={{ 'aria-label': 'Comment' }} />
       )}
       {error && <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>{error}</Typography>}
       <FeatureSheet open={featureOpen} onClose={() => setFeatureOpen(false)} sketchId={sketchId} defaultCaption={selfNote || ''}
-        onFeatured={() => onChanged({ featured: true })} />
+        onFeatured={(fact) => onChanged({ featured: [fact] })} />
     </Box>
   );
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listUnflipped } from '@neram/database/queries/nexus';
+import { listLiveFeatures, listUnflipped } from '@neram/database/queries/nexus';
 import { getRequestUser } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { staffStudentIds } from '@/lib/sketchbook-access';
@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
     const studentIds = await staffStudentIds(caller, asked);
 
     const { rows, remaining } = await listUnflipped(caller.id, studentIds, PAGE);
-    return NextResponse.json({ sketches: rows, remaining }, { headers: { 'Cache-Control': 'no-store' } });
+    const features = await listLiveFeatures(rows.map((r) => r.id));
+    const sketches = rows.map((r) => ({ ...r, featured: features[r.id] ?? [] }));
+    return NextResponse.json({ sketches, remaining }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return errorResponse(err, 'Could not load the inbox');
   }

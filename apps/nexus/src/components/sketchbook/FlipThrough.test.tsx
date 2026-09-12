@@ -22,6 +22,7 @@ const row = (id: string) => ({
   id, student_id: 's1', original_image_url: `https://x/${id}.jpg`, thumbnail_url: null, self_note: 'a chair',
   reaction: null, submitted_at: '2026-09-09T10:00:00.000Z', is_gallery_visible: false,
   student: { id: 's1', name: 'Asha Rao', avatar_url: null, ms_oid: null },
+  featured: [],
 });
 
 describe('FlipThrough', () => {

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   Box, Button, Drawer, FormControl, InputLabel, MenuItem, Select, TextField, Typography, Alert,
 } from '@neram/ui';
+import type { SketchbookFeatureFact } from '@neram/database/queries/nexus';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { featureSketch } from './sketchbook-api';
 
@@ -12,7 +13,7 @@ interface FeatureSheetProps {
   onClose: () => void;
   sketchId: string;
   defaultCaption: string;
-  onFeatured: () => void;
+  onFeatured: (fact: SketchbookFeatureFact) => void;
 }
 
 /**
@@ -71,7 +72,11 @@ export default function FeatureSheet({ open, onClose, sketchId, defaultCaption, 
               try {
                 const r = await featureSketch(getToken, sketchId, classroomId, caption.trim());
                 setResult(r.teams);
-                onFeatured();
+                onFeatured({
+                  classroom_id: classroomId,
+                  classroom_name: classrooms.find((c) => c.id === classroomId)?.name ?? '',
+                  featured_at: new Date().toISOString(),
+                });
               } catch (e) {
                 setError(e instanceof Error ? e.message : 'Could not feature the sketch');
               } finally { setBusy(false); }
