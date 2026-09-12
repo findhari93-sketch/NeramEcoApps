@@ -327,4 +327,50 @@ describe('resolveStudentTestCard', () => {
     const c = resolveStudentTestCard(test({ available_until: 'not a date' }), NOW);
     expect(c.state).toBe('open');
   });
+
+  describe('the second sitting is announced before the student sits', () => {
+    const NOW_TASK6 = Date.parse('2026-09-12T06:00:00.000Z');
+
+    // A student who sits late and learns only afterwards that they were in a
+    // separate list will feel cheated, and would be right.
+    it('says so on a reopened exam that will be ranked in the second sitting', () => {
+      const card = resolveStudentTestCard(
+        {
+          is_exam: true,
+          is_reopen: true,
+          access_state: 'granted',
+          available_from: '2026-09-11T12:23:00.000Z',
+          available_until: '2026-09-19T12:34:00.000Z',
+          ranks_in_second_sitting: true,
+        },
+        NOW_TASK6,
+      );
+      expect(card.state).toBe('reopened');
+      expect(card.reason).toContain('second sitting');
+      expect(card.action.kind).toBe('start');
+    });
+
+    it('says nothing about sittings when the reopen is still inside exam day', () => {
+      const card = resolveStudentTestCard(
+        {
+          is_exam: true,
+          is_reopen: true,
+          access_state: 'granted',
+          available_until: '2026-09-19T12:34:00.000Z',
+          ranks_in_second_sitting: false,
+        },
+        NOW_TASK6,
+      );
+      expect(card.state).toBe('reopened');
+      expect(card.reason).not.toContain('second sitting');
+    });
+
+    it('uses no em dash or double dash in the second sitting sentence', () => {
+      const card = resolveStudentTestCard(
+        { is_exam: true, is_reopen: true, access_state: 'granted', available_until: '2026-09-19T12:34:00.000Z', ranks_in_second_sitting: true },
+        NOW_TASK6,
+      );
+      expect(card.reason).not.toMatch(/—|--|&mdash;/);
+    });
+  });
 });

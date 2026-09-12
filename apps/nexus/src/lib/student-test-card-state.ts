@@ -97,6 +97,14 @@ export interface StudentTestFacts {
   is_makeup?: boolean;
   is_reopen?: boolean;
   access_state?: 'none' | 'pending' | 'granted';
+  /**
+   * True when sitting this now puts the student in the exam's second rank list.
+   *
+   * Stated on the card BEFORE they sit. Learning afterwards that you were
+   * ranked in a separate list, having been given no chance to weigh it, is the
+   * kind of surprise a student is right to resent.
+   */
+  ranks_in_second_sitting?: boolean;
   results_state?: 'unpublished' | 'provisional' | 'final';
   exam_result?: {
     rank: number | null;
@@ -192,9 +200,12 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
     if (sat && attemptsLeft === 0) {
       return card('done', `You sat this on ${on(t.last_submitted_at)}.`, { kind: 'review', label: 'See your answers' }, 'positive');
     }
+    const sittingNote = t.ranks_in_second_sitting
+      ? ' You will be ranked with the second sitting, because exam day has passed.'
+      : '';
     return card(
       'reopened',
-      `Your teacher opened this for you.${untilPhrase}`,
+      `Your teacher opened this for you.${untilPhrase}${sittingNote}`,
       { kind: sat ? 'retry' : 'start', label: sat ? 'Try again' : 'Start the test' },
       'attention',
     );
