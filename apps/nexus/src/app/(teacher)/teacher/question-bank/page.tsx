@@ -71,6 +71,11 @@ const MORE_TOOLS: { label: string; desc: string; href: string }[] = [
     href: '/teacher/question-bank/reclassify',
   },
   {
+    label: 'Fix numbering clashes',
+    desc: 'Questions crammed onto the same number',
+    href: '/teacher/question-bank/section-collisions',
+  },
+  {
     label: 'Reported questions',
     desc: 'What students flagged as wrong',
     href: '/teacher/question-bank/reports',

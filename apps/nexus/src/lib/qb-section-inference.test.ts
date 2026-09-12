@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { inferPaperSections, type QBSectionInferenceInput } from './qb-section-inference';
+import { inferPaperSections, type QBSectionInferenceInput, contentSignal } from './qb-section-inference';
 
 /**
  * The paper this was written against: JEE Paper 2 (B.Arch) 2006, 92 questions,
@@ -190,5 +190,27 @@ describe('inferPaperSections', () => {
     const results = inferPaperSections(rows);
     expect(results.slice(0, 6).every((r) => r.section === 'math_mcq')).toBe(true);
     expect(results.slice(6).every((r) => r.section === 'aptitude')).toBe(true);
+  });
+});
+
+describe('contentSignal', () => {
+  it('is exported for reuse outside the paper-wide boundary scan', () => {
+    const signal = contentSignal({
+      id: 'q1',
+      question_number: 1,
+      question_format: 'MCQ',
+      question_text: 'Solution of the differential equation $(1 + y^2)dx$',
+    });
+    expect(signal).toBe(1);
+  });
+
+  it('reads aptitude vocabulary the same way it does inside inferPaperSections', () => {
+    const signal = contentSignal({
+      id: 'q2',
+      question_number: 1,
+      question_format: 'MCQ',
+      question_text: 'Which of the following building represents the colonial Architectural pattern in India?',
+    });
+    expect(signal).toBe(-1);
   });
 });
