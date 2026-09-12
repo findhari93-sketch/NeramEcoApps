@@ -91,10 +91,68 @@ describe('ExamResultsSheet', () => {
     expect(container.querySelectorAll('[disabled], [aria-disabled="true"]')).toHaveLength(0);
   });
 
+  // The button stays mounted and clickable while publishing (no dead ends
+  // means no disabled attribute), so handlePublish's own re-entry guard is the
+  // ONLY thing standing between a double tap and two Teams posts to a real
+  // classroom, reaching every student and often a parent twice.
+  it('a double tap does not publish twice', async () => {
+    const calls: string[] = [];
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`);
+      if (init?.method === 'POST' && String(url).includes('/notify')) {
+        return { ok: true, json: async () => ({ data: { notified: 1 } }) };
+      }
+      if (init?.method === 'POST') {
+        return {
+          ok: true,
+          json: async () => ({ data: { students: 16, teams_message_id: 'm1', teams_error: null } }),
+        };
+      }
+      return { ok: true, json: async () => PAYLOAD };
+    }) as never;
+
+    open();
+    const cta = await screen.findByTestId('exam-publish-cta');
+    fireEvent.click(cta);
+    fireEvent.click(cta);
+    await waitFor(() => expect(screen.getByText(/Published to/)).toBeTruthy());
+
+    expect(calls.filter((c) => c.startsWith('POST') && c.includes('/publish')).length).toBe(1);
+  });
+
   it('shows the open window warning rather than hiding it behind publish', async () => {
     open();
     await waitFor(() =>
       expect(screen.getByText(/19 students still have an open window/)).toBeTruthy(),
     );
+  });
+
+  // The rule this whole screen is built around: where there is nothing to do,
+  // render no button, never a disabled one.
+  it('renders no button when nobody has sat the exam yet', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          ...PAYLOAD.data,
+          results: {
+            ...PAYLOAD.data.results,
+            stats: { ...PAYLOAD.data.results.stats, sat: 0, still_to_sit: 2, absent: 0 },
+            second: null,
+            rows: [
+              { student_id: '3', student_name: 'Zara', avatar_url: null, bucket: 'still_to_sit', sitting: null, rank: null, sitting_size: 0, score: 0, total_marks: 0, percentage: 0, provisional: false, window_closes_at: '2026-09-19T12:34:00.000Z' },
+              { student_id: '5', student_name: 'Divya', avatar_url: null, bucket: 'still_to_sit', sitting: null, rank: null, sitting_size: 0, score: 0, total_marks: 0, percentage: 0, provisional: false, window_closes_at: '2026-09-20T12:34:00.000Z' },
+            ],
+          },
+          blockers: ['Nobody has sat this exam yet, so there is nothing to publish.'],
+          warnings: [],
+        },
+      }),
+    })) as never;
+
+    const { container } = open();
+    await waitFor(() => expect(screen.getByText(/Nobody has sat this exam yet/)).toBeTruthy());
+    expect(screen.queryByTestId('exam-publish-cta')).toBeNull();
+    expect(container.querySelectorAll('[disabled], [aria-disabled="true"]')).toHaveLength(0);
   });
 });

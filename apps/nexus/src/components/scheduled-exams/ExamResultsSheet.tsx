@@ -171,6 +171,11 @@ export default function ExamResultsSheet({
   }, [open, examId]);
 
   const handlePublish = async () => {
+    // The button stays mounted and clickable while publishing (no dead ends
+    // means no disabled attribute), so this guard is the ONLY thing standing
+    // between a double tap and two Teams posts to a real classroom. Reaching
+    // every student, and often a parent, twice cannot be undone.
+    if (publishing) return;
     setPublishing(true);
     setError(null);
     try {
@@ -217,12 +222,19 @@ export default function ExamResultsSheet({
   const examDay = counts('exam_day');
   const secondSitting = counts('second_sitting');
   const publishedBefore = Boolean(data?.last_published_at);
+  // Reused by both branches: nothing is ever announced about the second
+  // sitting (the channel hears about an exam once), but its papers are still
+  // written and privately notified, on a first publish exactly as on a
+  // republish, so the label reads the same either way.
+  const secondSittingCta = `Publish ${secondSitting} second sitting result${secondSitting === 1 ? '' : 's'}`;
   const cta = !publishedBefore
-    ? examDay > 0 || secondSitting > 0
+    ? examDay > 0
       ? `Publish exam day results (${examDay})`
-      : null
+      : secondSitting > 0
+        ? secondSittingCta
+        : null
     : secondSitting > 0
-      ? `Publish ${secondSitting} second sitting result${secondSitting === 1 ? '' : 's'}`
+      ? secondSittingCta
       : null;
 
   return (
@@ -306,6 +318,10 @@ export default function ExamResultsSheet({
                       bgcolor: selected ? 'action.selected' : 'background.paper',
                       font: 'inherit',
                       color: 'inherit',
+                      '@media (prefers-reduced-motion: no-preference)': {
+                        transition: 'box-shadow 150ms',
+                      },
+                      '&:hover': { boxShadow: 1 },
                     }}
                   >
                     <Typography variant="h6" component="div" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
@@ -317,6 +333,19 @@ export default function ExamResultsSheet({
                   </Paper>
                 );
               })}
+            </Box>
+
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                Average {Math.round(data.results.stats.average)}%, highest{' '}
+                {Math.round(data.results.stats.highest)}%
+              </Typography>
+              {data.results.second && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  Second sitting: average {Math.round(data.results.second.average)}%, highest{' '}
+                  {Math.round(data.results.second.highest)}%
+                </Typography>
+              )}
             </Box>
 
             <Box component="ol" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -360,9 +389,11 @@ export default function ExamResultsSheet({
                 </Box>
               ))}
               {shown.length === 0 && (
-                <Typography variant="caption" color="text.secondary">
-                  Nobody is in this group.
-                </Typography>
+                <Box component="li" sx={{ py: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Nobody is in this group.
+                  </Typography>
+                </Box>
               )}
             </Box>
 
