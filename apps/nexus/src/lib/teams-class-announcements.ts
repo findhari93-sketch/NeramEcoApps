@@ -225,6 +225,35 @@ export function buildWrapUpHtml(
 }
 
 /**
+ * The "Featured sketch" card a teacher posts to the class. The image is the
+ * public drawing-uploads URL; anything that is not https is dropped rather than
+ * embedded (the spike in the sketchbook plan decides whether Teams renders an
+ * external image or needs hostedContents; this builder is the same either way).
+ */
+export function buildFeaturedSketchHtml(input: {
+  studentName: string;
+  caption: string | null;
+  imageUrl: string;
+  nexusUrl: string;
+}): string {
+  const name = escapeMessageHtml(input.studentName);
+  const caption = input.caption ? `<p><i>${escapeMessageHtml(input.caption)}</i></p>` : '';
+  const img = /^https:\/\//.test(input.imageUrl)
+    ? `<p><img src="${escapeMessageHtml(input.imageUrl)}" alt="Sketch by ${name}" width="480"></p>`
+    : '';
+  const link = /^https:\/\//.test(input.nexusUrl)
+    ? `<p><a href="${escapeMessageHtml(input.nexusUrl)}">Open in Nexus</a></p>`
+    : '';
+  return (
+    `<h3>Featured sketch</h3>` +
+    `<p><b>${name}</b> drew this in their sketchbook.</p>` +
+    img +
+    caption +
+    link
+  );
+}
+
+/**
  * Outcome of a Graph post. `error` carries whatever Graph said, truncated.
  *
  * The swallow-to-null helpers below are right for the automatic callers (a
