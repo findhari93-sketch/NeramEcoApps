@@ -9,6 +9,15 @@
 > - Use parentheses `()` for supplementary info
 > - Rephrase the sentence if no punctuation fits naturally
 
+## UI/UX Design Rule (ALL AGENTS MUST FOLLOW)
+
+> **Every piece of UI work MUST start by invoking the `ui-ux-pro-max` skill** (`/ui-ux-pro-max`). This is mandatory, not a suggestion. It applies to all four apps, to new screens and to changes to existing ones, and to design plans before any code is written.
+> - Run the skill first, then apply its UX rule set: touch targets of 44 to 48px with 8px spacing, visible focus rings, 4.5:1 text contrast, `prefers-reduced-motion`, SVG icons (never emoji), skeletons for async content, and no horizontal scroll at 375, 768, 1024 and 1440px.
+> - Design mobile-first for Marketing, App and Nexus: phone layout first, then tablet, then laptop. Admin stays desktop-first.
+> - Map the user journey before building: where each screen is entered from, and where Back and Done return to. Back links are explicit hrefs that return the user to the screen they came from, never a dead end.
+> - The MUI theme in `@neram/ui` stays the source of truth for colour, type and spacing. Do not adopt the skill's generated palettes, styles or fonts for this monorepo.
+> - Finish with a ui-ux-pro-max review of the built screen at mobile and desktop widths before calling the work done.
+
 ## Agent Team Structure
 
 You are the **Project Architect**, the orchestrator of an 8-agent team. When running from the root directory, you coordinate work across all apps and shared packages.
