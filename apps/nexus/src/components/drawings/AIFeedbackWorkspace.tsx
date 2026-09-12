@@ -17,6 +17,7 @@ import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import { compressImage } from '@/utils/imageCompression';
 import type { DrawingMark } from '@/lib/drawing-marks';
+import RubricScorePanel from './review/RubricScorePanel';
 import ReactionPicker from '@/components/assignments/ReactionPicker';
 
 export interface WorkspaceData {
@@ -456,12 +457,9 @@ export default function AIFeedbackWorkspace({
                         </Typography>
                       </Box>
                     )
-                  : rating > 0 && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                        <Rating value={rating} readOnly size="medium" />
-                        <Typography variant="body2" fontWeight={600} color="text.secondary">
-                          {RATING_LABELS[rating] || ''}
-                        </Typography>
+                  : (
+                      <Box sx={{ mb: 1.5 }}>
+                        <RubricScorePanel submissionId={submission.id} getToken={getToken} readOnly />
                       </Box>
                     )}
                 {tutorFeedback ? (
@@ -496,42 +494,45 @@ export default function AIFeedbackWorkspace({
               </Box>
             ) : (
               <Box>
-                {/* Grade: numeric marks or a 1-5 star rating, per the assignment. */}
+                {/*
+                  An assignment marked out of N keeps its number. Everything
+                  else is scored per criterion now: five anonymous stars told a
+                  student nothing to act on and told the next teacher nothing
+                  comparable. The rubric still feeds the star column, so the
+                  queue, the gallery, the roster and the student page are
+                  unchanged.
+                */}
                 <Box sx={{ mb: 2 }}>
-                  <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                    {isMarks ? 'MARKS' : 'RATING'}
-                  </Typography>
                   {isMarks ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <TextField
-                        value={marks}
-                        onChange={(e) => {
-                          const v = e.target.value.replace(/[^0-9.]/g, '');
-                          setMarks(v);
-                          notify({ marks: v.trim() === '' ? null : Number(v) });
-                        }}
-                        inputProps={{ inputMode: 'decimal' }}
-                        size="small"
-                        sx={{ width: 100 }}
-                        placeholder="0"
-                      />
-                      <Typography color="text.secondary">out of {maxMarks}</Typography>
-                    </Box>
-                  ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Rating
-                        value={rating}
-                        onChange={(_, v) => { setRating(v || 0); notify({ rating: v || 0 }); }}
-                        size="large"
-                      />
-                      <Typography
-                        variant="body2"
-                        fontWeight={600}
-                        color={rating >= 4 ? 'success.main' : rating >= 3 ? 'primary.main' : rating >= 1 ? 'warning.main' : 'text.disabled'}
-                      >
-                        {rating > 0 ? RATING_LABELS[rating] : 'Tap to rate'}
+                    <>
+                      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        MARKS
                       </Typography>
-                    </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <TextField
+                          value={marks}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/[^0-9.]/g, '');
+                            setMarks(v);
+                            notify({ marks: v.trim() === '' ? null : Number(v) });
+                          }}
+                          inputProps={{ inputMode: 'decimal' }}
+                          size="small"
+                          sx={{ width: 100 }}
+                          placeholder="0"
+                        />
+                        <Typography color="text.secondary">out of {maxMarks}</Typography>
+                      </Box>
+                    </>
+                  ) : (
+                    <RubricScorePanel
+                      submissionId={submission.id}
+                      getToken={getToken}
+                      onOverallChange={(stars) => {
+                        setRating(stars ?? 0);
+                        notify({ rating: stars ?? 0 });
+                      }}
+                    />
                   )}
                 </Box>
 
