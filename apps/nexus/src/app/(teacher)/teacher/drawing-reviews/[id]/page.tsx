@@ -353,9 +353,12 @@ export default function DrawingReviewDetailPage() {
       // line receipt of who was just told. With nothing left, back to the list.
       const who = String((submission as any)?.student?.name || '').trim().split(/\s+/)[0] || 'the student';
       const chatMissed = result?.delivery && result.delivery.chat === false;
-      const told =
-        `${reviewAction === 'redo' ? 'Redo' : 'Review'} sent to ${who}.` +
-        (chatMissed ? ' Teams chat did not send, the Nexus bell did.' : '');
+      // A held assignment tells nobody on Complete, so the receipt must not say
+      // "sent": that would be the one sentence on this screen that is false.
+      const told = result?.held
+        ? `${reviewAction === 'redo' ? 'Redo' : 'Review'} for ${who} held. ${result.held_count} waiting to hand back.`
+        : `${reviewAction === 'redo' ? 'Redo' : 'Review'} sent to ${who}.` +
+          (chatMissed ? ' Teams chat did not send, the Nexus bell did.' : '');
       if (result?.next_submission_id) {
         const qs = new URLSearchParams();
         if (fromAssignmentId) qs.set('assignment', fromAssignmentId);

@@ -48,6 +48,7 @@ import AssignmentBrief from '@/components/assignments/AssignmentBrief';
 import AssignmentResultsGrid from '@/components/assignments/AssignmentResultsGrid';
 import GradeDisplay from '@/components/assignments/GradeDisplay';
 import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
+import DrawingHandBackPanel from '@/components/drawings/review/DrawingHandBackPanel';
 import ShareAssignmentDialog from '@/components/assignments/ShareAssignmentDialog';
 import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 import QuestionsSummaryCard from '@/components/assignments/QuestionsSummaryCard';
@@ -618,6 +619,8 @@ export default function AssignmentReviewPage() {
 
           {isDrawing ? (
             <>
+              <DrawingHandBackPanel assignmentId={id} getToken={getTeacherToken} onReleased={load} />
+
               <ToggleButtonGroup
                 value={dTab}
                 exclusive

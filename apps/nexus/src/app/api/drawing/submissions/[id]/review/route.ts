@@ -16,6 +16,8 @@ import { shareBaseUrl } from '@/lib/class-share-links';
 import { buildReviewMessage, gradeLabel, shouldNotifyStudent } from '@/lib/drawing-review-message';
 import { markVoiceSent } from '@/lib/drawing-voice-feedback';
 import { pickNextPending } from '@/lib/review-next';
+import { evalTables } from '@/lib/drawing-eval/db';
+import { heldSubmissionIds, holdReview, releaseModeFor } from '@/lib/drawing-hold';
 
 // One student, but a Teams chat post (chat create, card, maybe a plain retry)
 // runs inside this request, and the default budget is tight for that.
@@ -111,6 +113,63 @@ export async function PATCH(
         await setSubmissionTags(id, tag_labels, user.id);
       }
       return NextResponse.json({ ok: true, draft: true });
+    }
+
+    // Held assignments: finish the review, tell nobody yet.
+    //
+    // The default is 'immediate', so every assignment that existed before this
+    // behaves exactly as it always has and this branch is never taken. A new
+    // drawing assignment can opt into holding, and then Complete and Redo stop
+    // being the moment the student hears: a separate hand-back is.
+    //
+    // Nothing below this point runs in that case: no status flip, no voice note
+    // marked sent, no gamification, no sendNudge. Those all belong to the
+    // release, because they are the things the student can see.
+    const releaseMode = await releaseModeFor(supabase, sub?.assignment_id ?? null);
+    if (releaseMode === 'held') {
+      const held = await holdReview({
+        supabase,
+        evalDb: evalTables(supabase),
+        submissionId: id,
+        userId: user.id,
+        intent: reviewAction === 'redo' ? 'redo' : 'complete',
+        fields: {
+          tutor_rating: tutor_rating || null,
+          tutor_marks: tutorMarks,
+          tutor_feedback: tutor_feedback || null,
+          reviewed_image_url: reviewed_image_url || null,
+          corrected_image_url: corrected_image_url || null,
+          ai_overlay_annotations: ai_overlay_annotations || null,
+          tutor_resources: tutor_resources || [],
+          reaction,
+        },
+      });
+      if (Array.isArray(tag_labels)) {
+        await setSubmissionTags(id, tag_labels, user.id);
+      }
+
+      // "Next" skips anything already held. A held review keeps its
+      // 'submitted' status on purpose, so the student sees nothing, which also
+      // means the plain pending filter would hand the teacher back the sheets
+      // they had just finished, round and round.
+      const { rows } = await getAssignmentDrawingRoster(sub.assignment_id);
+      const pending = rows
+        .filter((r: any) => r.drawing && ['submitted', 'under_review'].includes(r.drawing.status))
+        .map((r: any) => ({ id: r.drawing.id as string, submitted_at: r.drawing.submitted_at }));
+      const alreadyHeld = await heldSubmissionIds(supabase, pending.map((p: { id: string }) => p.id));
+      const next = pickNextPending(
+        pending.filter((p: { id: string }) => !alreadyHeld.has(p.id)),
+        id,
+      );
+
+      return NextResponse.json({
+        ok: true,
+        held: true,
+        intent: held.intent,
+        held_count: held.heldCount,
+        next_submission_id: next.nextId,
+        remaining: next.remaining,
+      });
     }
 
     const submission = await saveDrawingReviewWithAction(id, {

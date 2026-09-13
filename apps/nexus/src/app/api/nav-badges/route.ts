@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { listUnflipped } from '@neram/database/queries/nexus';
 import { getRequestUser } from '@/lib/study-materials';
 import { staffStudentIds } from '@/lib/sketchbook-access';
+import { heldSubmissionIds } from '@/lib/drawing-hold';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /** How recently a reason has to have arrived to still count as news. */
@@ -50,15 +51,37 @@ export async function GET(request: NextRequest) {
           .select('id', { count: 'exact', head: true })
           .in('status', ['open', 'in_progress']),
 
-        // Count pending drawing reviews (submitted, not yet reviewed). Sketchbook
-        // uploads insert as 'completed' and never reach this queue, but the
-        // exclusion is belt-and-braces: it keeps this badge honest even if that
-        // insert behaviour ever changes.
-        supabase
-          .from('drawing_submissions')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'submitted')
-          .neq('source_type', 'sketchbook'),
+        // Drawings waiting on THIS teacher, in the classrooms they teach, minus
+        // anything they have already finished and are only holding.
+        //
+        // This used to count every submitted drawing in the tenant, across every
+        // source and every classroom: a number no single teacher could drive to
+        // zero, which the two badges beside it had already been fixed to avoid.
+        // Held reviews come off too. A held review keeps status 'submitted' so
+        // the student sees nothing, and counting it would leave work the teacher
+        // has finished looking like work they have not started.
+        //
+        // Sketchbook uploads insert as 'completed' and never reach this queue;
+        // the exclusion stays as belt-and-braces.
+        (async () => {
+          try {
+            const caller = await getRequestUser(request.headers.get('Authorization'));
+            const students = await staffStudentIds(caller, null);
+            if (students.length === 0) return 0;
+            const { data: pending } = await supabase
+              .from('drawing_submissions')
+              .select('id')
+              .eq('status', 'submitted')
+              .neq('source_type', 'sketchbook')
+              .in('student_id', students);
+            const ids = ((pending ?? []) as Array<{ id: string }>).map((r) => r.id);
+            if (ids.length === 0) return 0;
+            const held = await heldSubmissionIds(supabase, ids);
+            return ids.length - held.size;
+          } catch {
+            return 0;
+          }
+        })(),
 
         // Profile photos waiting for a human decision, in the classrooms THIS
         // person can open.
@@ -114,7 +137,7 @@ export async function GET(request: NextRequest) {
       ]);
 
       badges.issues = issues.count ?? 0;
-      badges.drawing_reviews = drawings.count ?? 0;
+      badges.drawing_reviews = typeof drawings === 'number' ? drawings : 0;
       badges.photo_review = typeof photoCount.data === 'number' ? photoCount.data : 0;
       badges.catchup = freshReasons.count ?? 0;
       badges.sketchbook_inbox = sketchInbox;
