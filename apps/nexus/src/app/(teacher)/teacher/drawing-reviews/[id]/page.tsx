@@ -42,6 +42,7 @@ import type { Rotation } from '@/lib/image-rotation';
 import { compressImage } from '@/utils/imageCompression';
 import VoiceFeedbackRecorder from '@/components/drawings/voice/VoiceFeedbackRecorder';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
+import { useReviewQueue } from '@/hooks/useReviewQueue';
 
 export default function DrawingReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -413,6 +414,55 @@ export default function DrawingReviewDetailPage() {
     [router, fromAssignmentId],
   );
 
+  // The queue this drawing belongs to, for J and K and the "3 / 12" chip.
+  const queue = useReviewQueue(
+    fromAssignmentId ?? ((submission as any)?.assignment_id as string | null) ?? null,
+    id,
+    getToken,
+  );
+
+  // Handlers change identity every render; the key listener reads the latest.
+  const saveReviewRef = useRef(handleSaveReview);
+  saveReviewRef.current = handleSaveReview;
+  const keyStateRef = useRef({ isEditMode, saving, draftSaving, voiceBusy, queue });
+  keyStateRef.current = { isEditMode, saving, draftSaving, voiceBusy, queue };
+
+  /**
+   * J next, K previous, Enter completes.
+   *
+   * Only when nothing interactive has focus. Enter on a button activates that
+   * button, Enter in the feedback box is a new line, and nothing here fires
+   * while a dialog or the canvas is open. Completing tells the student on an
+   * assignment that does not hold its reviews, so a stray Enter from inside a
+   * control must never reach it.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, button, a, [contenteditable="true"], [role="dialog"], [role="menu"]')) {
+        return;
+      }
+      const state = keyStateRef.current;
+      const go = (to: string | null) => {
+        if (!to) return;
+        e.preventDefault();
+        const qs = fromAssignmentId ? `?assignment=${fromAssignmentId}` : '';
+        router.push(`/teacher/drawing-reviews/${to}${qs}`);
+      };
+      if (e.key === 'j' || e.key === 'J') go(state.queue.nextId);
+      else if (e.key === 'k' || e.key === 'K') go(state.queue.prevId);
+      else if (e.key === 'Enter') {
+        if (!state.isEditMode || state.saving || state.draftSaving || state.voiceBusy) return;
+        e.preventDefault();
+        setAction('complete');
+        void saveReviewRef.current('complete');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fromAssignmentId, router]);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', gap: 2, p: 2, height: '80vh' }}>
@@ -670,6 +720,7 @@ export default function DrawingReviewDetailPage() {
             statusColor={statusChipColor}
             onOpenMenu={setMenuAnchor}
             compact={isMobile}
+            queue={queue}
           />
         }
         contextBar={assignmentContextBar}

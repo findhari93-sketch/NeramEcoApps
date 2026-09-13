@@ -203,6 +203,9 @@ export default function RubricScorePanel({
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 1 }}>
+        <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
+          01
+        </Typography>
         <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.04em' }}>
           SCORE
         </Typography>

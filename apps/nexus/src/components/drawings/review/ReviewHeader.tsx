@@ -37,11 +37,13 @@ export interface ReviewHeaderProps {
   onOpenMenu: (anchor: HTMLElement) => void;
   /** Narrow layout: a smaller avatar. Everything else is a breakpoint. */
   compact: boolean;
+  /** Where this drawing sits among the assignment's pending reviews. */
+  queue?: { position: number | null; total: number };
 }
 
 export default function ReviewHeader({
   onBack, studentId, studentName, studentAvatarUrl, timeAgo, questionText,
-  category, attemptIndex, attemptTotal, statusLabel, statusColor, onOpenMenu, compact,
+  category, attemptIndex, attemptTotal, statusLabel, statusColor, onOpenMenu, compact, queue,
 }: ReviewHeaderProps) {
   return (
     <Box
@@ -107,6 +109,17 @@ export default function ReviewHeader({
           color="warning"
           variant="outlined"
           sx={{ height: { xs: 22, md: 24 }, fontWeight: 700 }}
+        />
+      )}
+
+      {queue && queue.position != null && queue.total > 0 && (
+        <Chip
+          label={`${queue.position} / ${queue.total}`}
+          size="small"
+          variant="outlined"
+          aria-label={`Drawing ${queue.position} of ${queue.total} waiting for review. J and K move between them.`}
+          title="J next, K previous"
+          sx={{ height: { xs: 22, md: 24 }, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
         />
       )}
 

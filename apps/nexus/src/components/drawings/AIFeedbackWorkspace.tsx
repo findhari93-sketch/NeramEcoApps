@@ -47,11 +47,30 @@ interface AIFeedbackWorkspaceProps {
   evaluationType?: 'marks' | 'stars';
   /** Marks ceiling when evaluationType is 'marks'. */
   maxMarks?: number;
+  /**
+   * The voice note, placed beside the written feedback so "say it" is one stage
+   * rather than two panels a screen apart.
+   */
+  voiceSlot?: React.ReactNode;
+}
+
+/** The step markers on the rail: 01 Score, 02 Say it. The action bar is 03. */
+function StageLabel({ step, label }: { step: string; label: string }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mb: 0.75 }}>
+      <Typography component="span" variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
+        {step}
+      </Typography>
+      <Typography component="span" variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.04em' }}>
+        {label}
+      </Typography>
+    </Box>
+  );
 }
 
 export default function AIFeedbackWorkspace({
   submission, getToken, onChange, defaultCollapsed = false, readOnly = false,
-  sketchTrigger = 0, evaluationType = 'stars', maxMarks = 5,
+  sketchTrigger = 0, evaluationType = 'stars', maxMarks = 5, voiceSlot,
 }: AIFeedbackWorkspaceProps) {
   const isMarks = evaluationType === 'marks';
   // Workspace state
@@ -79,7 +98,9 @@ export default function AIFeedbackWorkspace({
   const [sketchOpen, setSketchOpen] = useState(false);
   const [uploadingOverlay, setUploadingOverlay] = useState(false);
   const [uploadingCorrected, setUploadingCorrected] = useState(false);
-  const [imagesExpanded, setImagesExpanded] = useState(!defaultCollapsed);
+  const [imagesExpanded, setImagesExpanded] = useState(
+    () => !defaultCollapsed && !!(submission.reviewed_image_url || (submission as any).corrected_image_url),
+  );
   const [feedbackExpanded, setFeedbackExpanded] = useState(true);
   const [pasteTarget, setPasteTarget] = useState<'overlay' | 'corrected' | null>(null);
 
@@ -359,71 +380,8 @@ export default function AIFeedbackWorkspace({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
 
-      {/* Section 1: Review Images */}
-      <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-        <Box
-          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 0.75 : 1, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
-          onClick={() => setImagesExpanded(!imagesExpanded)}
-        >
-          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>
-            Review Images
-          </Typography>
-          {(overlayImageUrl || correctedImageUrl) && (
-            <Typography variant="caption" color="success.main" fontWeight={600} sx={{ mr: 1 }}>
-              {[overlayImageUrl && 'Overlay', correctedImageUrl && 'Reference'].filter(Boolean).join(' + ')}
-            </Typography>
-          )}
-          {imagesExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-        </Box>
-        <Collapse in={imagesExpanded}>
-          <Box sx={{ p: isMobile ? 1.5 : 2 }}>
-            {/* Side-by-side thumbnail drop zones */}
-            <Box sx={{ display: 'flex', gap: 1.5 }}>
-              {renderDropZone(
-                'Overlay',
-                <LayersOutlinedIcon sx={{ fontSize: 28 }} />,
-                overlayImageUrl,
-                'overlay',
-                uploadingOverlay,
-                setOverlayImageUrl,
-                overlayFileRef,
-              )}
-              {renderDropZone(
-                'Reference',
-                <ImageOutlinedIcon sx={{ fontSize: 28 }} />,
-                correctedImageUrl,
-                'corrected',
-                uploadingCorrected,
-                setCorrectedImageUrl,
-                correctedFileRef,
-              )}
-            </Box>
-
-            {!readOnly && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center', fontSize: '0.68rem' }}>
-                Ctrl+V pastes into the first empty slot
-              </Typography>
-            )}
-
-            {/* The picture saved, the shapes behind it did not. Say so, because
-                the next time this canvas opens those marks will not be there to
-                edit, and the overlay on screen gives no hint of that. */}
-            {marksWarning && (
-              <Typography
-                role="status"
-                variant="caption"
-                color="warning.dark"
-                sx={{ display: 'block', mt: 1, textAlign: 'center', fontWeight: 600, fontSize: '0.68rem' }}
-              >
-                Your overlay image saved, but the marks behind it did not. Reopening the canvas will
-                start from the original drawing.
-              </Typography>
-            )}
-          </Box>
-        </Collapse>
-      </Paper>
-
-      {/* Section 2: Feedback & Rating */}
+      {/* The verdict, first. 01 Score, then 02 Say it (written feedback and the
+          voice note together), then the action bar is 03 Send. */}
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         <Box
           sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 0.75 : 1, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
@@ -505,9 +463,7 @@ export default function AIFeedbackWorkspace({
                 <Box sx={{ mb: 2 }}>
                   {isMarks ? (
                     <>
-                      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                        MARKS
-                      </Typography>
+                      <StageLabel step="01" label="MARKS" />
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <TextField
                           value={marks}
@@ -536,6 +492,7 @@ export default function AIFeedbackWorkspace({
                   )}
                 </Box>
 
+                <StageLabel step="02" label="SAY IT" />
                 {/* Written feedback */}
                 <TextField
                   placeholder="Paste feedback from Gemini or write your own..."
@@ -559,6 +516,8 @@ export default function AIFeedbackWorkspace({
                   }}
                 />
 
+                {voiceSlot && <Box sx={{ mb: 2 }}>{voiceSlot}</Box>}
+
                 {/* Resources */}
                 <ResourceLinkSearch
                   resources={resources}
@@ -571,6 +530,72 @@ export default function AIFeedbackWorkspace({
                   <ReactionPicker value={reaction} onChange={(v) => { setReaction(v); notify({ reaction: v }); }} />
                 </Box>
               </Box>
+            )}
+          </Box>
+        </Collapse>
+      </Paper>
+
+      {/* Reference and overlay images. After the score, and folded away when
+          empty: two blank upload slots used to sit above the verdict, so the
+          first thing on the rail was the least used thing on it. */}
+      <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+        <Box
+          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 0.75 : 1, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
+          onClick={() => setImagesExpanded(!imagesExpanded)}
+        >
+          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>
+            Review Images
+          </Typography>
+          {(overlayImageUrl || correctedImageUrl) && (
+            <Typography variant="caption" color="success.main" fontWeight={600} sx={{ mr: 1 }}>
+              {[overlayImageUrl && 'Overlay', correctedImageUrl && 'Reference'].filter(Boolean).join(' + ')}
+            </Typography>
+          )}
+          {imagesExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+        </Box>
+        <Collapse in={imagesExpanded}>
+          <Box sx={{ p: isMobile ? 1.5 : 2 }}>
+            {/* Side-by-side thumbnail drop zones */}
+            <Box sx={{ display: 'flex', gap: 1.5 }}>
+              {renderDropZone(
+                'Overlay',
+                <LayersOutlinedIcon sx={{ fontSize: 28 }} />,
+                overlayImageUrl,
+                'overlay',
+                uploadingOverlay,
+                setOverlayImageUrl,
+                overlayFileRef,
+              )}
+              {renderDropZone(
+                'Reference',
+                <ImageOutlinedIcon sx={{ fontSize: 28 }} />,
+                correctedImageUrl,
+                'corrected',
+                uploadingCorrected,
+                setCorrectedImageUrl,
+                correctedFileRef,
+              )}
+            </Box>
+
+            {!readOnly && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center', fontSize: '0.68rem' }}>
+                Ctrl+V pastes into the first empty slot
+              </Typography>
+            )}
+
+            {/* The picture saved, the shapes behind it did not. Say so, because
+                the next time this canvas opens those marks will not be there to
+                edit, and the overlay on screen gives no hint of that. */}
+            {marksWarning && (
+              <Typography
+                role="status"
+                variant="caption"
+                color="warning.dark"
+                sx={{ display: 'block', mt: 1, textAlign: 'center', fontWeight: 600, fontSize: '0.68rem' }}
+              >
+                Your overlay image saved, but the marks behind it did not. Reopening the canvas will
+                start from the original drawing.
+              </Typography>
             )}
           </Box>
         </Collapse>

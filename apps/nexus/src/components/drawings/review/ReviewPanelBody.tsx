@@ -19,6 +19,7 @@ import { Box, Paper, Typography } from '@neram/ui';
 import AIFeedbackWorkspace, { type WorkspaceData } from '@/components/drawings/AIFeedbackWorkspace';
 import CommentSection from '@/components/drawings/CommentSection';
 import TagEditor from '@/components/drawings/TagEditor';
+import QuietLinksRow, { type QuietLink } from './QuietLinksRow';
 
 export interface ReviewPanelBodyProps {
   submissionId: string;
@@ -49,6 +50,22 @@ export default function ReviewPanelBody({
   supersededBanner, reReviewNotice, voiceSection, previousAttemptsPanel,
   tagLabels, onTagLabelsChange,
 }: ReviewPanelBodyProps) {
+  const quietLinks: QuietLink[] = [
+    ...(isEditMode
+      ? [{
+          key: 'tags',
+          label: 'Tags',
+          meta: tagLabels.length ? String(tagLabels.length) : undefined,
+          content: <TagEditor value={tagLabels} onChange={onTagLabelsChange} />,
+        }]
+      : []),
+    {
+      key: 'comments',
+      label: 'Comments',
+      content: <CommentSection submissionId={submissionId} getToken={getToken} canComment={true} />,
+    },
+  ];
+
   return (
     <>
       {supersededBanner}
@@ -68,8 +85,8 @@ export default function ReviewPanelBody({
         </Paper>
       )}
 
-      {voiceSection}
-
+      {/* 01 Score and 02 Say it live together in the workspace, with the voice
+          note beside the written feedback. The action bar below is 03 Send. */}
       <AIFeedbackWorkspace
         submission={submission}
         getToken={getToken}
@@ -79,22 +96,13 @@ export default function ReviewPanelBody({
         sketchTrigger={sketchTrigger}
         evaluationType={evaluationType}
         maxMarks={maxMarks}
+        voiceSlot={voiceSection}
       />
 
+      {/* Kept open: on a redo round the earlier attempts are the context. */}
       {previousAttemptsPanel}
 
-      {isEditMode && (
-        <Box sx={{ mt: { xs: 1.5, md: 2 } }}>
-          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-            Tags
-          </Typography>
-          <TagEditor value={tagLabels} onChange={onTagLabelsChange} />
-        </Box>
-      )}
-
-      <Box sx={{ mt: 2 }}>
-        <CommentSection submissionId={submissionId} getToken={getToken} canComment={true} />
-      </Box>
+      <QuietLinksRow items={quietLinks} />
     </>
   );
 }
