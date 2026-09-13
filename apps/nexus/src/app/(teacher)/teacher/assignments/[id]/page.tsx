@@ -50,6 +50,7 @@ import GradeDisplay from '@/components/assignments/GradeDisplay';
 import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
 import DrawingHandBackPanel from '@/components/drawings/review/DrawingHandBackPanel';
 import TriageBandCards, { BAND_TONE } from '@/components/drawings/triage/TriageBandCards';
+import AssignmentBriefPicker from '@/components/drawings/briefs/AssignmentBriefPicker';
 import { useDrawingTriage } from '@/hooks/useDrawingTriage';
 import { BAND_LABEL, type TriageBand } from '@/lib/drawing-triage';
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
@@ -642,6 +643,8 @@ export default function AssignmentReviewPage() {
                 getToken={getTeacherToken}
                 onReleased={() => { void load(); triage.refresh(); }}
               />
+
+              <AssignmentBriefPicker assignmentId={id} getToken={getTeacherToken} />
 
               <ToggleButtonGroup
                 value={dTab}

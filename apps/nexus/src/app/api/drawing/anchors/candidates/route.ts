@@ -3,6 +3,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 
 import { verifyMsToken } from '@/lib/ms-verify';
 import { evalTables } from '@/lib/drawing-eval/db';
+import { overallFromBands, overallToStars, SHARED_CRITERIA, BRIEF_CRITERION, type BandMap } from '@/lib/drawing-rubric';
 
 /**
  * Graded sheets that could anchor a band for one brief type.
@@ -17,6 +18,13 @@ import { evalTables } from '@/lib/drawing-eval/db';
  * them. Picking an anchor is the moment that judgement gets pinned down, which
  * is why this returns a shortlist for a person to look at rather than choosing
  * the top-rated sheet automatically.
+ *
+ * Two additions since per-criterion scoring:
+ *  - sheets from ASSIGNMENTS tagged with the brief are candidates too, which is
+ *    where most drawings now live;
+ *  - a sheet scored on the rubric is placed by its rubric overall, the mean of
+ *    five judged criteria, rather than by the one star beside it. Band 1 had no
+ *    examples as a whole-sheet star; as a rubric overall it can.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -61,27 +69,82 @@ export async function GET(request: NextRequest) {
       .select('id')
       .eq('category', briefType.category)
       .eq('sub_type', briefType.sub_type);
-
     const questionIds = ((questions || []) as Array<{ id: string }>).map((q) => q.id);
-    if (questionIds.length === 0) return NextResponse.json({ candidates: [] });
 
-    let query = supabase
-      .from('drawing_submissions')
-      .select('id, original_image_url, tutor_rating, tutor_marks, reviewed_at, question_id, student:users!drawing_submissions_student_id_fkey(id, name)')
-      .in('question_id', questionIds)
-      .in('status', ['completed', 'reviewed'])
-      .not('original_image_url', 'is', null)
-      .order('reviewed_at', { ascending: false })
-      .limit(40);
+    let assignmentIds: string[] = [];
+    try {
+      const { data: tagged } = await (supabase as any)
+        .from('nexus_class_assignments')
+        .select('id')
+        .eq('brief_type_id', (briefType as any).id);
+      assignmentIds = ((tagged || []) as Array<{ id: string }>).map((a) => a.id);
+    } catch {
+      assignmentIds = [];
+    }
+    if (questionIds.length === 0 && assignmentIds.length === 0) return NextResponse.json({ candidates: [] });
 
-    if (band !== null && Number.isInteger(band) && band >= 1 && band <= 5) {
-      query = query.eq('tutor_rating', band);
+    const columns = 'id, original_image_url, tutor_rating, tutor_marks, reviewed_at, question_id, assignment_id, student:users!drawing_submissions_student_id_fkey(id, name)';
+    const pool = async (column: 'question_id' | 'assignment_id', ids: string[]) => {
+      if (ids.length === 0) return [] as any[];
+      const { data } = await (supabase as any)
+        .from('drawing_submissions')
+        .select(columns)
+        .in(column, ids)
+        .in('status', ['completed', 'reviewed'])
+        .not('original_image_url', 'is', null)
+        .order('reviewed_at', { ascending: false })
+        .limit(200);
+      return (data || []) as any[];
+    };
+    const [fromQuestions, fromAssignments] = await Promise.all([pool('question_id', questionIds), pool('assignment_id', assignmentIds)]);
+    const byId = new Map<string, any>();
+    for (const row of [...fromQuestions, ...fromAssignments]) byId.set(row.id, row);
+    const all = Array.from(byId.values());
+
+    // Rubric overall per sheet, from its manual criterion scores.
+    const criteria = [...SHARED_CRITERIA, ...(BRIEF_CRITERION[key] ? [BRIEF_CRITERION[key]] : [])];
+    const overallBySub = new Map<string, number>();
+    if (all.length > 0) {
+      const { data: evals } = await db
+        .from('drawing_evaluation')
+        .select('id, submission_id')
+        .in('submission_id', all.map((r) => r.id))
+        .eq('source', 'manual');
+      const evalToSub = new Map<string, string>(((evals || []) as Array<{ id: string; submission_id: string }>).map((e) => [e.id, e.submission_id]));
+      if (evalToSub.size > 0) {
+        const { data: rows } = await db
+          .from('drawing_evaluation_criterion')
+          .select('evaluation_id, criterion_key, final_band')
+          .in('evaluation_id', Array.from(evalToSub.keys()));
+        const bandsBySub = new Map<string, BandMap>();
+        for (const r of (rows || []) as Array<{ evaluation_id: string; criterion_key: string; final_band: number | null }>) {
+          const sub = evalToSub.get(r.evaluation_id);
+          if (!sub || !r.final_band) continue;
+          const bands = bandsBySub.get(sub) ?? {};
+          bands[r.criterion_key] = r.final_band as 1 | 2 | 3 | 4 | 5;
+          bandsBySub.set(sub, bands);
+        }
+        for (const [sub, bands] of Array.from(bandsBySub.entries())) {
+          const overall = overallFromBands(bands, criteria);
+          if (overall != null) overallBySub.set(sub, overall);
+        }
+      }
     }
 
-    const { data: candidates } = await query;
+    const wantBand = band !== null && Number.isInteger(band) && band >= 1 && band <= 5 ? band : null;
+    const candidates = all
+      .map((row) => ({ ...row, rubric_overall: overallBySub.get(row.id) ?? null }))
+      .filter((row) => {
+        if (wantBand === null) return true;
+        return row.rubric_overall != null ? overallToStars(row.rubric_overall) === wantBand : row.tutor_rating === wantBand;
+      })
+      // Rubric-scored sheets first: five judgements beat one star.
+      .sort((a, b) => Number(b.rubric_overall != null) - Number(a.rubric_overall != null)
+        || String(b.reviewed_at ?? '').localeCompare(String(a.reviewed_at ?? '')))
+      .slice(0, 40);
 
     return NextResponse.json({
-      candidates: candidates || [],
+      candidates,
       // Surfaced so the screen can say "no sheets were ever rated 1" rather
       // than showing an empty list that looks like a loading failure. Band 1
       // has no examples in the graded history at all.

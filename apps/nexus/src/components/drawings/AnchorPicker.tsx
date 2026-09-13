@@ -32,6 +32,8 @@ interface Candidate {
   id: string;
   original_image_url: string;
   tutor_rating: number | null;
+  /** Mean of the sheet's rubric scores, when it was scored per criterion. */
+  rubric_overall?: number | null;
   reviewed_at: string | null;
   student?: { id: string; name: string | null } | null;
 }
@@ -374,7 +376,12 @@ export default function AnchorPicker({
                     <Typography variant="caption" noWrap sx={{ flex: 1, minWidth: 0 }}>
                       {c.student?.name || 'Unknown'}
                     </Typography>
-                    <Chip size="small" label={c.tutor_rating ?? '?'} sx={{ height: 20, fontSize: '0.7rem' }} />
+                    <Chip
+                      size="small"
+                      label={c.rubric_overall != null ? `Rubric ${c.rubric_overall.toFixed(1)}` : c.tutor_rating ?? '?'}
+                      title={c.rubric_overall != null ? 'Mean of the criterion scores' : 'Whole-sheet star rating'}
+                      sx={{ height: 20, fontSize: '0.7rem' }}
+                    />
                   </Box>
                   {saving === c.id && (
                     <Box

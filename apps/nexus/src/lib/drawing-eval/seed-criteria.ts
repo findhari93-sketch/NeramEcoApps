@@ -135,9 +135,14 @@ const DEPTH_PERSPECTIVE: SeedCriterion = {
 };
 
 /**
- * The three brief types to start with, chosen by graded depth in production:
+ * The brief types. The first three were chosen by graded depth in production:
  * still_life 35 graded across 19 questions, geometric_shapes 31 across 11,
  * logo 10 across 3. Together 76 of the 129 graded sheets.
+ *
+ * Perspective construction is the fourth, added for assignments. No practice
+ * question carries its sub_type; drawings reach it only through an assignment
+ * tagged with it (nexus_class_assignments.brief_type_id), which is how the 69
+ * assignment sheets that resolved to nothing become evaluable.
  */
 export const SEED_BRIEF_TYPES: SeedBriefType[] = [
   {
@@ -166,6 +171,15 @@ export const SEED_BRIEF_TYPES: SeedBriefType[] = [
     description:
       'A mark judged on legibility at size, balance, and the discipline of its construction.',
     criteria: [COMPOSITION, PROPORTION, DESIGN_PRINCIPLE, TONAL_QUALITY, LINE_QUALITY],
+  },
+  {
+    key: '3d_composition.perspective_construction',
+    category: '3d_composition',
+    subType: 'perspective_construction',
+    title: 'Perspective construction',
+    description:
+      'Blocks, steps and interiors built in one, two or three point perspective, judged on construction, convergence and line.',
+    criteria: [COMPOSITION, PROPORTION, DEPTH_PERSPECTIVE, TONAL_QUALITY, LINE_QUALITY],
   },
 ];
 

@@ -44,7 +44,10 @@ export type ContextOutcome =
  * at each call site.
  *
  * Precedence: the question the student answered, then the exam question, then
- * the assignment's backing question row. A submission that resolves to nothing
+ * the brief the ASSIGNMENT was tagged with. An assignment's backing question
+ * carries sub_type 'assignment', a marker rather than a brief, so for the
+ * assignment drawings that make up most of the queue the tag is the only
+ * answer. It is set by a teacher, never inferred. A submission that resolves to nothing
  * is simply not evaluable. It is skipped, never guessed: evaluating a still
  * life against geometric-composition anchors would produce a confident,
  * plausible and completely wrong result.
@@ -90,6 +93,22 @@ export async function resolveBriefType(
       .eq('id', examId)
       .maybeSingle();
     if (data) questionText = data.question_text ?? questionText;
+  }
+
+  if ((!category || !subType || subType === 'assignment') && submission.assignment_id) {
+    const { data: assignment } = await supabase
+      .from('nexus_class_assignments')
+      .select('brief_type_id')
+      .eq('id', submission.assignment_id)
+      .maybeSingle();
+    if (assignment?.brief_type_id) {
+      const { data: tagged } = await supabase
+        .from('drawing_brief_type')
+        .select('id, key, category, sub_type, title, description, is_active')
+        .eq('id', assignment.brief_type_id)
+        .maybeSingle();
+      if (tagged) return { briefType: tagged as BriefTypeRow, questionText };
+    }
   }
 
   if (!category || !subType || subType === 'assignment') {

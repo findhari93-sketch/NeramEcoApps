@@ -15,19 +15,21 @@ import {
 } from './seed-criteria';
 
 describe('the seeded brief types', () => {
-  it('covers the three with real graded depth in production', () => {
+  it('covers the three with real graded depth in production, then perspective for assignments', () => {
     expect(SEED_BRIEF_TYPES.map((b) => b.key)).toEqual([
       '3d_composition.still_life',
       '2d_composition.geometric_shapes',
       '2d_composition.logo',
+      '3d_composition.perspective_construction',
     ]);
   });
 
   it('uses the sub_type values production actually stores', () => {
     // Getting one of these wrong makes every submission of that type resolve
-    // to no brief type and silently stop being evaluable.
+    // to no brief type and silently stop being evaluable. Perspective
+    // construction is reached through an assignment tag, not a question.
     const subTypes = SEED_BRIEF_TYPES.map((b) => b.subType);
-    expect(subTypes).toEqual(['still_life', 'geometric_shapes', 'logo']);
+    expect(subTypes).toEqual(['still_life', 'geometric_shapes', 'logo', 'perspective_construction']);
   });
 
   it('keys each brief type as category.sub_type', () => {

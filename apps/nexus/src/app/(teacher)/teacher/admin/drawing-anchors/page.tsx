@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Divider,
@@ -15,6 +16,8 @@ import {
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
+import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import AnchorPicker, { type AnchorRow } from '@/components/drawings/AnchorPicker';
@@ -227,9 +230,20 @@ export default function DrawingAnchorsPage() {
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                     Band wording has to be written by hand. The existing review text cannot be used
                     for it: almost all of it is model output pasted back from the manual workflow,
-                    and it reads as praise at every band.
+                    and it reads as praise at every band. The wording screen offers the sentences
+                    you typed while scoring instead.
                   </Typography>
                 )}
+                <Button
+                  component={NextLink}
+                  href={`/teacher/admin/drawing-anchors/${encodeURIComponent(briefType.key)}/bands`}
+                  size="small"
+                  variant={criteriaReady ? 'text' : 'outlined'}
+                  startIcon={<EditNoteOutlinedIcon />}
+                  sx={{ mt: 1.25, minHeight: 44, textTransform: 'none' }}
+                >
+                  {criteriaReady ? 'Band wording and switch on' : 'Write band wording'}
+                </Button>
               </Box>
 
               <Divider sx={{ mb: 2 }} />
