@@ -38,7 +38,7 @@ export interface ReviewHeaderProps {
   /** Narrow layout: a smaller avatar. Everything else is a breakpoint. */
   compact: boolean;
   /** Where this drawing sits among the assignment's pending reviews. */
-  queue?: { position: number | null; total: number };
+  queue?: { position: number | null; total: number; laneLabel?: string | null };
 }
 
 export default function ReviewHeader({
@@ -117,7 +117,11 @@ export default function ReviewHeader({
           label={`${queue.position} / ${queue.total}`}
           size="small"
           variant="outlined"
-          aria-label={`Drawing ${queue.position} of ${queue.total} waiting for review. J and K move between them.`}
+          aria-label={
+            queue.laneLabel
+              ? `Drawing ${queue.position} of ${queue.total} in ${queue.laneLabel}. J and K move between them.`
+              : `Drawing ${queue.position} of ${queue.total} waiting for review. J and K move between them.`
+          }
           title="J next, K previous"
           sx={{ height: { xs: 22, md: 24 }, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
         />

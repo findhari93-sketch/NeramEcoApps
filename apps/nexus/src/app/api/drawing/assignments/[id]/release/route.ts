@@ -67,8 +67,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const preflight = buildReleasePreflight({
       held: held.length,
-      // Triage and open-tracking arrive with Phase 3. Zero is the honest answer
-      // today: there is nothing flagged or unopened this screen can know about.
+      // Zero by construction while every held review is a teacher's own: a
+      // person opened each one to write it. These count once AI drafts can be
+      // held unread, and they block the button then.
       flagged: 0,
       unopened: 0,
       withoutTeamsEmail,

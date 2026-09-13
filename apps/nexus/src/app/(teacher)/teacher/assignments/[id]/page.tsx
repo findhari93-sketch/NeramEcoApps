@@ -49,6 +49,10 @@ import AssignmentResultsGrid from '@/components/assignments/AssignmentResultsGri
 import GradeDisplay from '@/components/assignments/GradeDisplay';
 import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
 import DrawingHandBackPanel from '@/components/drawings/review/DrawingHandBackPanel';
+import TriageBandCards, { BAND_TONE } from '@/components/drawings/triage/TriageBandCards';
+import { useDrawingTriage } from '@/hooks/useDrawingTriage';
+import { BAND_LABEL, type TriageBand } from '@/lib/drawing-triage';
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import ShareAssignmentDialog from '@/components/assignments/ShareAssignmentDialog';
 import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 import QuestionsSummaryCard from '@/components/assignments/QuestionsSummaryCard';
@@ -247,6 +251,9 @@ export default function AssignmentReviewPage() {
   }, [authLoading, load]);
 
   const isDrawing = assignment?.assignment_type === 'drawing';
+  // What each waiting drawing needs, so the teacher opens the right ones first.
+  const triage = useDrawingTriage(isDrawing ? id : null, getTeacherToken, isDrawing);
+  const [bandFilter, setBandFilter] = useState<TriageBand | null>(null);
   // Reference / expected-output images: prefer the multi-image set (the canonical
   // store is the backing question's reference_images), fall back to the single
   // legacy content image so older assignments still render. Same rule the student
@@ -277,6 +284,17 @@ export default function AssignmentReviewPage() {
   }, [rows, tab]);
   const dBucketRows = useMemo(() => {
     const list = drawingRows.filter((r) => r.bucket === dTab);
+    if (dTab === 'submitted' && triage.items.length + triage.heldIds.size > 0) {
+      // Triage order: flagged, needs a look, routine, then reviews already
+      // finished and waiting to be handed back.
+      const rank = new Map(triage.items.map((t, i) => [t.submission_id, i]));
+      const last = Number.MAX_SAFE_INTEGER;
+      const place = (r: DrawingRosterRow) => (r.drawing ? rank.get(r.drawing.id) ?? last : last);
+      const shown = bandFilter
+        ? list.filter((r) => r.drawing && triage.byId.get(r.drawing.id)?.band === bandFilter)
+        : list;
+      return [...shown].sort((a, b) => place(a) - place(b));
+    }
     if (dTab === 'submitted') {
       return [...list].sort((a, b) => {
         const ar = a.drawing?.is_resubmission ? 1 : 0;
@@ -286,7 +304,7 @@ export default function AssignmentReviewPage() {
       });
     }
     return list;
-  }, [drawingRows, dTab]);
+  }, [drawingRows, dTab, triage.items, triage.heldIds, triage.byId, bandFilter]);
   const dResubmitCount = useMemo(
     () => drawingRows.filter((r) => r.bucket === 'submitted' && r.drawing?.is_resubmission).length,
     [drawingRows],
@@ -619,7 +637,11 @@ export default function AssignmentReviewPage() {
 
           {isDrawing ? (
             <>
-              <DrawingHandBackPanel assignmentId={id} getToken={getTeacherToken} onReleased={load} />
+              <DrawingHandBackPanel
+                assignmentId={id}
+                getToken={getTeacherToken}
+                onReleased={() => { void load(); triage.refresh(); }}
+              />
 
               <ToggleButtonGroup
                 value={dTab}
@@ -636,9 +658,25 @@ export default function AssignmentReviewPage() {
                 ))}
               </ToggleButtonGroup>
 
+              {dTab === 'submitted' && (counts.submitted ?? 0) > 0 && (
+                <TriageBandCards
+                  counts={triage.counts}
+                  selected={bandFilter}
+                  onSelect={setBandFilter}
+                  loading={triage.loading}
+                  failed={triage.failed}
+                  checking={triage.checking}
+                  onOpenFastLane={() => {
+                    const first = triage.items.find((t) => t.band === 'routine');
+                    if (first) router.push(`/teacher/drawing-reviews/${first.submission_id}?assignment=${id}&lane=routine`);
+                  }}
+                />
+              )}
+
               <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
                   {dBucketRows.length} {dBucketRows.length === 1 ? 'student' : 'students'}
+                  {dTab === 'submitted' && bandFilter ? `, ${BAND_LABEL[bandFilter].toLowerCase()}` : ''}
                 </Typography>
                 {dTab === 'missing' && dBucketRows.length > 0 && (
                   <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => { setNudgeRecipient(null); setNudgeOpen(true); }} sx={{ minHeight: 40 }}>
@@ -671,18 +709,29 @@ export default function AssignmentReviewPage() {
               {dBucketRows.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 5, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
                   <Typography variant="body2" color="text.disabled">
-                    {dTab === 'missing' ? 'Everyone has submitted.' : 'No drawings here yet.'}
+                    {dTab === 'missing'
+                      ? 'Everyone has submitted.'
+                      : dTab === 'submitted' && bandFilter
+                        ? `Nothing in ${BAND_LABEL[bandFilter]} right now.`
+                        : 'No drawings here yet.'}
                   </Typography>
                 </Box>
               ) : (
                 <Stack spacing={1}>
                   {dBucketRows.map((row) => {
                     const clickable = !!row.drawing;
+                    const triaged = dTab === 'submitted' && row.drawing ? triage.byId.get(row.drawing.id) : undefined;
+                    const isHeld = dTab === 'submitted' && !!row.drawing && triage.heldIds.has(row.drawing.id);
+                    const tone = triaged ? BAND_TONE[triaged.band] : null;
+                    const BandIcon = tone?.Icon;
+                    // A filtered list is a lane: J and K on the review screen walk the same band.
+                    const lane = triaged && bandFilter ? `&lane=${bandFilter}` : '';
                     return (
                       <Box
                         key={row.student.id}
                         role={clickable ? 'button' : undefined}
-                        onClick={clickable ? () => router.push(`/teacher/drawing-reviews/${row.drawing!.id}?assignment=${id}`) : undefined}
+                        data-band={triaged?.band}
+                        onClick={clickable ? () => router.push(`/teacher/drawing-reviews/${row.drawing!.id}?assignment=${id}${lane}`) : undefined}
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
@@ -721,6 +770,23 @@ export default function AssignmentReviewPage() {
                                 ? ` · attempt ${row.drawing.attempt_count ?? row.drawing.attempt_number}`
                                 : ''}
                             </Typography>
+                          )}
+                          {triaged && tone && BandIcon && (
+                            <Stack direction="row" alignItems="flex-start" spacing={0.5} sx={{ mt: 0.25 }} data-testid="triage-explainer">
+                              <BandIcon aria-hidden sx={{ fontSize: 14, mt: '2px', color: tone.fg }} />
+                              <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.4 }}>
+                                <Box component="span" sx={{ fontWeight: 700, color: tone.fg }}>{BAND_LABEL[triaged.band]}.</Box>{' '}
+                                {triaged.explainer}
+                              </Typography>
+                            </Stack>
+                          )}
+                          {isHeld && (
+                            <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 0.25 }}>
+                              <PauseCircleOutlineIcon aria-hidden sx={{ fontSize: 14, color: 'primary.main' }} />
+                              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                Reviewed. Waiting to hand back.
+                              </Typography>
+                            </Stack>
                           )}
                           {row.voice?.sent_at && (
                             <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 0.25 }}>

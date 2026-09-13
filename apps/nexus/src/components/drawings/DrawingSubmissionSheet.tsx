@@ -13,6 +13,7 @@ import RotateRightIcon from '@mui/icons-material/RotateRight';
 import ClipboardPasteZone from './ClipboardPasteZone';
 import VoiceNotePlayer, { type VoiceProgressReport } from './voice/VoiceNotePlayer';
 import { compressImage } from '@/utils/imageCompression';
+import { measureImageQuality } from '@/lib/measure-image-quality';
 import { nextRotation, prevRotation, rotationTransform, type Rotation } from '@/lib/image-rotation';
 import { useCanCapturePhoto } from '@/hooks/useCanCapturePhoto';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
@@ -183,6 +184,11 @@ export default function DrawingSubmissionSheet({
       }
       setProgress(30);
 
+      // Measured from the exact pixels being uploaded, while they are still on
+      // the device, so the teacher's triage knows a blank or unreadable photo
+      // before anyone opens it. Never blocks: a failed measure is just unknown.
+      const qualityPromise = measureImageQuality(toUpload);
+
       const url = await uploadOne(token, toUpload);
       setProgress(withThumbnail ? 45 : 60);
 
@@ -197,6 +203,8 @@ export default function DrawingSubmissionSheet({
         }
         setProgress(60);
       }
+
+      const imageQuality = await qualityPromise;
 
       const submitRes = await fetch(submitUrl || '/api/drawing/submissions', {
         method: 'POST',
@@ -213,6 +221,7 @@ export default function DrawingSubmissionSheet({
                 source_type: sourceType,
                 original_image_url: url,
                 self_note: selfNote || null,
+                image_quality: imageQuality,
               },
         ),
       });

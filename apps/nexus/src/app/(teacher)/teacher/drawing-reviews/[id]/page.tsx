@@ -42,7 +42,8 @@ import type { Rotation } from '@/lib/image-rotation';
 import { compressImage } from '@/utils/imageCompression';
 import VoiceFeedbackRecorder from '@/components/drawings/voice/VoiceFeedbackRecorder';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
-import { useReviewQueue } from '@/hooks/useReviewQueue';
+import { parseLane, useReviewQueue } from '@/hooks/useReviewQueue';
+import { BAND_LABEL } from '@/lib/drawing-triage';
 
 export default function DrawingReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -61,6 +62,9 @@ export default function DrawingReviewDetailPage() {
   // opened from a specific assignment (roster link carries ?assignment=<id>),
   // return to that assignment instead of the shared Drawing Reviews queue.
   const fromAssignmentId = searchParams.get('assignment');
+  // Opened from a triage band ("Looks routine"): J, K and Save and next stay in it.
+  const lane = fromAssignmentId ? parseLane(searchParams.get('lane')) : null;
+  const laneQs = lane ? `&lane=${lane}` : '';
   const backHref = fromAssignmentId
     ? `/teacher/assignments/${fromAssignmentId}`
     : '/teacher/drawing-reviews';
@@ -360,11 +364,17 @@ export default function DrawingReviewDetailPage() {
         ? `${reviewAction === 'redo' ? 'Redo' : 'Review'} for ${who} held. ${result.held_count} waiting to hand back.`
         : `${reviewAction === 'redo' ? 'Redo' : 'Review'} sent to ${who}.` +
           (chatMissed ? ' Teams chat did not send, the Nexus bell did.' : '');
-      if (result?.next_submission_id) {
+      // In a lane, next means next in that band, and the count is that band's.
+      const nextId = lane ? queue.afterId : result?.next_submission_id;
+      const left = lane
+        ? `${Math.max(0, queue.total - (queue.position != null ? 1 : 0))} left in ${BAND_LABEL[lane]}.`
+        : `${result?.remaining} left to review.`;
+      if (nextId) {
         const qs = new URLSearchParams();
         if (fromAssignmentId) qs.set('assignment', fromAssignmentId);
-        qs.set('notice', `${told} ${result.remaining} left to review.`);
-        router.push(`/teacher/drawing-reviews/${result.next_submission_id}?${qs.toString()}`);
+        if (lane) qs.set('lane', lane);
+        qs.set('notice', `${told} ${left}`);
+        router.push(`/teacher/drawing-reviews/${nextId}?${qs.toString()}`);
       } else {
         router.push(backHref);
       }
@@ -408,10 +418,10 @@ export default function DrawingReviewDetailPage() {
   // "Back" still returns where the teacher came from.
   const openAttempt = useCallback(
     (attemptId: string) => {
-      const qs = fromAssignmentId ? `?assignment=${fromAssignmentId}` : '';
+      const qs = fromAssignmentId ? `?assignment=${fromAssignmentId}${laneQs}` : '';
       router.push(`/teacher/drawing-reviews/${attemptId}${qs}`);
     },
-    [router, fromAssignmentId],
+    [router, fromAssignmentId, laneQs],
   );
 
   // The queue this drawing belongs to, for J and K and the "3 / 12" chip.
@@ -419,6 +429,7 @@ export default function DrawingReviewDetailPage() {
     fromAssignmentId ?? ((submission as any)?.assignment_id as string | null) ?? null,
     id,
     getToken,
+    lane,
   );
 
   // Handlers change identity every render; the key listener reads the latest.
@@ -447,7 +458,7 @@ export default function DrawingReviewDetailPage() {
       const go = (to: string | null) => {
         if (!to) return;
         e.preventDefault();
-        const qs = fromAssignmentId ? `?assignment=${fromAssignmentId}` : '';
+        const qs = fromAssignmentId ? `?assignment=${fromAssignmentId}${laneQs}` : '';
         router.push(`/teacher/drawing-reviews/${to}${qs}`);
       };
       if (e.key === 'j' || e.key === 'J') go(state.queue.nextId);
@@ -461,7 +472,7 @@ export default function DrawingReviewDetailPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [fromAssignmentId, router]);
+  }, [fromAssignmentId, laneQs, router]);
 
   if (loading) {
     return (
@@ -720,7 +731,7 @@ export default function DrawingReviewDetailPage() {
             statusColor={statusChipColor}
             onOpenMenu={setMenuAnchor}
             compact={isMobile}
-            queue={queue}
+            queue={{ ...queue, laneLabel: lane ? BAND_LABEL[lane] : null }}
           />
         }
         contextBar={assignmentContextBar}

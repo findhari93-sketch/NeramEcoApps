@@ -9,13 +9,29 @@ import {
 } from '@neram/database/queries/nexus';
 import { isSubmissionOnTime } from '@/lib/assignment-clock';
 import { resolveSubmitMode, lockedReason } from '@/lib/assignment-submit-window';
+import { parseQuality } from '@/lib/image-quality';
+
+/**
+ * Keep the phone's photo measurement for triage. Best effort: an environment
+ * without the column, or a measurement that fails validation, costs nothing
+ * but an unmeasured photo, never the submission.
+ */
+async function storeQuality(supabase: any, submissionId: string, raw: unknown) {
+  const quality = parseQuality(raw);
+  if (!quality) return;
+  try {
+    await supabase.from('drawing_submissions').update({ image_quality: quality }).eq('id', submissionId);
+  } catch {
+    // Unmeasured is a valid state.
+  }
+}
 
 
 export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const body = await request.json();
-    const { question_id, assignment_id, source_type, original_image_url, self_note } = body;
+    const { question_id, assignment_id, source_type, original_image_url, self_note, image_quality } = body;
 
     if (!original_image_url || !source_type) {
       return NextResponse.json(
@@ -65,6 +81,7 @@ export async function POST(request: NextRequest) {
           // No points here on purpose: this is the same submission corrected, and
           // both the drawing_submitted event and the on-time bonus were already
           // awarded when it first arrived.
+          await storeQuality(supabase, replaced.id, image_quality);
           return NextResponse.json(
             { submission: replaced, attemptNumber: replaced.attempt_number ?? 1, replaced: true },
             { status: 200 },
@@ -81,6 +98,7 @@ export async function POST(request: NextRequest) {
       original_image_url,
       self_note: self_note || null,
     });
+    await storeQuality(supabase, submission.id, image_quality);
 
     // Gamification
     try {
