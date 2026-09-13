@@ -17,6 +17,10 @@
  * When a score lands two bands away from its reference (the previous attempt,
  * the student's last drawing, the class, or later the AI draft), the row asks
  * why, inline. See components/drawings/learning/TeachingMomentCard.tsx.
+ *
+ * With an AI draft, a criterion the model was sure of arrives scored and
+ * read-only, one tap to change; anything less arrives as a hint beside an
+ * unscored row. See lib/drawing-ai-draft.ts.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +31,8 @@ import RuleOutlinedIcon from '@mui/icons-material/RuleOutlined';
 import TeachingMomentCard, { type NotedReason } from '@/components/drawings/learning/TeachingMomentCard';
 import { REASONS, shouldAsk, type ReasonCode, type Reference } from '@/lib/drawing-teaching-moment';
 import { rulesForCriterion, type GradingRule } from '@/lib/drawing-grading-rules';
+import { prefillBands, rowMode, type AiDraft } from '@/lib/drawing-ai-draft';
+import DraftThisButton from '@/components/drawings/learning/DraftThisButton';
 import {
   criteriaForBrief,
   isFullyScored,
@@ -61,6 +67,10 @@ export interface RubricScorePanelProps {
    * panel only tells it what to write.
    */
   onOverallChange?: (stars: Band | null, overall: number | null) => void;
+  /** The AI draft on this sheet, when one exists. */
+  aiDraft?: AiDraft | null;
+  /** Called after Draft this returns a draft, so the screen can load it. */
+  onDrafted?: () => void;
 }
 
 export default function RubricScorePanel({
@@ -68,6 +78,8 @@ export default function RubricScorePanel({
   getToken,
   readOnly = false,
   onOverallChange,
+  aiDraft = null,
+  onDrafted,
 }: RubricScorePanelProps) {
   const theme = useTheme();
   const [criteria, setCriteria] = useState<RubricCriterion[]>(() => criteriaForBrief(null));
@@ -84,6 +96,9 @@ export default function RubricScorePanel({
   const [askKey, setAskKey] = useState<string | null>(null);
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [noted, setNoted] = useState<Record<string, NotedReason>>({});
+  /** Confident draft rows the teacher chose to take over. */
+  const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
+  const prefilledFor = useRef<string | null>(null);
 
   const overall = overallFromBands(bands, criteria);
   const done = scoredCount(bands, criteria);
@@ -189,6 +204,24 @@ export default function RubricScorePanel({
     void flush();
   }, [flush]);
 
+  // A confident draft fills the gaps once, as soon as both the saved scores and
+  // the draft are in. Saved at once so the review record matches the screen:
+  // approving without touching a row is agreeing with it.
+  useEffect(() => {
+    if (readOnly || loading || unavailable || !aiDraft) return;
+    if (prefilledFor.current === aiDraft.evaluation_id) return;
+    prefilledFor.current = aiDraft.evaluation_id;
+    const allowed = new Set(criteria.map((c) => c.key));
+    const next = prefillBands(
+      { ...aiDraft, criteria: Object.fromEntries(Object.entries(aiDraft.criteria).filter(([k]) => allowed.has(k))) },
+      bands,
+    );
+    if (Object.keys(next).length !== Object.keys(bands).length) {
+      setBands(next);
+      save(next);
+    }
+  }, [readOnly, loading, unavailable, aiDraft, criteria, bands, save]);
+
   const setBand = useCallback((key: string, band: Band) => {
     const clearing = bands[key] === band;
     setBands((prev) => {
@@ -283,6 +316,14 @@ export default function RubricScorePanel({
         <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
           {readOnly ? `${done} of ${criteria.length} scored` : 'keys 1 to 5'}
         </Typography>
+        {aiDraft && (
+          <Chip
+            size="small"
+            label="AI DRAFT"
+            data-testid="ai-draft-chip"
+            sx={{ height: 20, fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.04em', bgcolor: alpha(theme.palette.primary.main, 0.12), color: 'primary.dark' }}
+          />
+        )}
         {/* role=status so the total is announced as it changes, rather than a
             screen-reader user having to hunt for it after every keystroke. */}
         <Typography
@@ -299,6 +340,10 @@ export default function RubricScorePanel({
           <Typography component="span" variant="caption" color="text.secondary">/5</Typography>
         </Typography>
       </Box>
+
+      {!readOnly && !aiDraft && onDrafted && (
+        <DraftThisButton submissionId={submissionId} getToken={getToken} onDrafted={onDrafted} />
+      )}
 
       {unavailable && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
@@ -367,6 +412,44 @@ export default function RubricScorePanel({
                 );
               })()}
 
+              {(() => {
+                const mode = readOnly ? 'input' : rowMode(criterion.key, aiDraft, band, unlocked.has(criterion.key));
+                const drafted = aiDraft?.criteria[criterion.key];
+                if (mode === 'suggested' && drafted) {
+                  return (
+                    <Typography variant="caption" data-testid="ai-suggested" sx={{ display: 'block', mb: 0.75, fontSize: '0.72rem', lineHeight: 1.35, color: 'primary.dark' }}>
+                      Draft says {drafted.ai_band}, unsure. Your call.{drafted.reasoning ? ` ${drafted.reasoning}` : ''}
+                    </Typography>
+                  );
+                }
+                return null;
+              })()}
+
+              {!readOnly && band && rowMode(criterion.key, aiDraft, band, unlocked.has(criterion.key)) === 'confirmed' ? (
+                <Box data-testid="ai-confirmed" sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 44 }}>
+                  <Typography variant="body2" sx={{ flex: 1, minWidth: 0, fontSize: '0.8rem', lineHeight: 1.35 }}>
+                    <Box component="span" sx={{ fontWeight: 700 }}>Draft: {band}, {BAND_LABEL[band]}.</Box>
+                    {aiDraft?.criteria[criterion.key]?.reasoning ? ` ${aiDraft.criteria[criterion.key].reasoning}` : ''}
+                  </Typography>
+                  <Box
+                    component="button"
+                    type="button"
+                    aria-label={`Change ${criterion.title}, drafted as ${band}`}
+                    onClick={() => {
+                      setUnlocked((prev) => new Set(prev).add(criterion.key));
+                      setFocusedKey(criterion.key);
+                    }}
+                    sx={{
+                      all: 'unset', cursor: 'pointer', flexShrink: 0, minHeight: 44, minWidth: 44, px: 1,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.78rem', fontWeight: 700, color: 'primary.main', borderRadius: 1,
+                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                    }}
+                  >
+                    Change
+                  </Box>
+                </Box>
+              ) : (
               <Box role="group" aria-label={criterion.title} sx={{ display: 'flex', gap: 0.5 }}>
                 {BANDS.map((value) => {
                   const selected = band === value;
@@ -411,6 +494,7 @@ export default function RubricScorePanel({
                   );
                 })}
               </Box>
+              )}
 
               {(() => {
                 const reference = references[criterion.key] ?? null;

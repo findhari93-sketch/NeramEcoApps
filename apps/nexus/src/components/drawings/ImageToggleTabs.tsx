@@ -57,6 +57,12 @@ interface ImageToggleTabsProps {
    * Should resolve once the new image is saved, and reject to keep the turn.
    */
   onRotate?: (rotation: Rotation, tab: DisplayTab, clearAnnotations: boolean) => Promise<void>;
+  /**
+   * Marks from an AI draft, image-relative. Drawn solid where the model was sure
+   * of the criterion and dashed where it was not, in the theme colour so they
+   * never read as the teacher's own red boxes.
+   */
+  aiMarks?: Array<{ id: string; x: number; y: number; width: number; height: number; comment: string | null; confident: boolean }>;
 }
 
 type DisplayTab = 'original' | 'overlay' | 'corrected';
@@ -109,6 +115,7 @@ export default function ImageToggleTabs({
   onOpenSketch,
   studentView = false,
   onRotate,
+  aiMarks = [],
 }: ImageToggleTabsProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -409,6 +416,36 @@ export default function ImageToggleTabs({
                     }}
                   />
                 )}
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {/* AI draft marks: solid when the model was sure, dashed when not. */}
+        {activeTab === 'original' && !annotateMode && rotation === 0 && canPlaceAnnotations && aiMarks.length > 0 && (
+          <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }}>
+            {aiMarks.map((mark) => (
+              <Box
+                key={mark.id}
+                data-testid="ai-mark"
+                data-confident={mark.confident ? 'true' : 'false'}
+                style={{ position: 'absolute', ...toStyle(mark, annotationBox) }}
+                sx={{
+                  border: `2px ${mark.confident ? 'solid' : 'dashed'} rgba(124, 58, 237, 0.75)`,
+                  bgcolor: 'rgba(124, 58, 237, 0.05)',
+                  borderRadius: '4px',
+                }}
+              >
+                <Chip
+                  label={mark.comment ? `AI: ${mark.comment}` : 'AI'}
+                  size="small"
+                  sx={{
+                    position: 'absolute', bottom: -12, left: 4, maxWidth: '90%',
+                    height: 22, fontSize: '0.7rem', fontWeight: 600,
+                    bgcolor: 'rgba(255,255,255,0.92)', border: '1px solid rgba(124,58,237,0.45)',
+                    color: '#5B21B6', '& .MuiChip-label': { px: 1 },
+                  }}
+                />
               </Box>
             ))}
           </Box>

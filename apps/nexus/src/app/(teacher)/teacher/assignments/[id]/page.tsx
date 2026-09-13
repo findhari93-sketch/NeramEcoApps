@@ -255,6 +255,7 @@ export default function AssignmentReviewPage() {
   // What each waiting drawing needs, so the teacher opens the right ones first.
   const triage = useDrawingTriage(isDrawing ? id : null, getTeacherToken, isDrawing);
   const [bandFilter, setBandFilter] = useState<TriageBand | null>(null);
+  const [handBackKey, setHandBackKey] = useState(0);
   // Reference / expected-output images: prefer the multi-image set (the canonical
   // store is the backing question's reference_images), fall back to the single
   // legacy content image so older assignments still render. Same rule the student
@@ -642,6 +643,7 @@ export default function AssignmentReviewPage() {
                 assignmentId={id}
                 getToken={getTeacherToken}
                 onReleased={() => { void load(); triage.refresh(); }}
+                refreshKey={handBackKey}
               />
 
               <AssignmentBriefPicker assignmentId={id} getToken={getTeacherToken} />
@@ -669,6 +671,22 @@ export default function AssignmentReviewPage() {
                   loading={triage.loading}
                   failed={triage.failed}
                   checking={triage.checking}
+                  routineDrafts={triage.routineDrafts}
+                  unreadGate={triage.unreadGate}
+                  onApproveDrafts={async () => {
+                    const token = await getTeacherToken();
+                    const res = await fetch(`/api/drawing/assignments/${id}/approve-drafts`, {
+                      method: 'POST',
+                      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                      body: '{}',
+                    });
+                    const body = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(body.error || 'Nothing was approved.');
+                    triage.refresh();
+                    setHandBackKey((k) => k + 1);
+                    void load();
+                    return `${body.held} held for hand back.${body.skipped_unsure ? ` ${body.skipped_unsure} had an unsure score and are left for you.` : ''}`;
+                  }}
                   onOpenFastLane={() => {
                     const first = triage.items.find((t) => t.band === 'routine');
                     if (first) router.push(`/teacher/drawing-reviews/${first.submission_id}?assignment=${id}&lane=routine`);

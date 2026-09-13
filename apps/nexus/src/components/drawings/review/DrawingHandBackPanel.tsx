@@ -36,11 +36,13 @@ export interface DrawingHandBackPanelProps {
   getToken: () => Promise<string | null>;
   /** Called after a hand-back so the roster can refresh its buckets. */
   onReleased?: () => void;
+  /** Bump to re-read what is held, after something outside this panel held more. */
+  refreshKey?: number;
 }
 
 type Phase = 'idle' | 'releasing' | 'notifying' | 'done' | 'error';
 
-export default function DrawingHandBackPanel({ assignmentId, getToken, onReleased }: DrawingHandBackPanelProps) {
+export default function DrawingHandBackPanel({ assignmentId, getToken, onReleased, refreshKey = 0 }: DrawingHandBackPanelProps) {
   const [pre, setPre] = useState<Preflight | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -75,7 +77,7 @@ export default function DrawingHandBackPanel({ assignmentId, getToken, onRelease
     }
   }, [assignmentId, authed]);
 
-  useEffect(() => { void loadPreflight(); }, [loadPreflight]);
+  useEffect(() => { void loadPreflight(); }, [loadPreflight, refreshKey]);
 
   const setMode = async (held: boolean) => {
     setModeSaving(true);

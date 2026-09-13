@@ -13,6 +13,7 @@
  * branch feeding two copies of the tree, and is now breakpoints on one.
  */
 
+import { completeLabel } from '@/lib/drawing-ai-draft';
 import { Box, Button, IconButton, Switch, Typography } from '@neram/ui';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -65,6 +66,8 @@ export interface ReviewActionBarProps {
 
   onRedo: () => void;
   onComplete: () => void;
+  /** An AI draft is on this sheet, so completing it is approving it. */
+  hasAiDraft?: boolean;
   saving: boolean;
   /** Which action is in flight, so only that button shows its spinner text. */
   pendingAction: 'redo' | 'complete';
@@ -80,7 +83,7 @@ export default function ReviewActionBar({
   isEditMode, isSuperseded, attemptIndex, attemptTotal, statusLabel, alreadyReviewed,
   onEvaluate, onOpenLatest,
   onSaveDraft, draftSaving, draftSaved,
-  onRedo, onComplete, saving, pendingAction,
+  onRedo, onComplete, saving, pendingAction, hasAiDraft,
   voiceBusy, showInGallery, onShowInGalleryChange,
 }: ReviewActionBarProps) {
   if (!isEditMode) {
@@ -192,7 +195,7 @@ export default function ReviewActionBar({
       >
         {/* 'Save' only where it is honest: updating an already-finished review.
             A redo round is still open, and this button completes it. */}
-        {saving && pendingAction === 'complete' ? '...' : alreadyReviewed ? 'Save' : 'Complete'}
+        {saving && pendingAction === 'complete' ? '...' : completeLabel({ hasDraft: !!hasAiDraft, alreadyReviewed })}
       </Button>
 
       {/* Gallery visibility: off unless the teacher opts this drawing in. */}

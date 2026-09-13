@@ -43,6 +43,7 @@ import { compressImage } from '@/utils/imageCompression';
 import VoiceFeedbackRecorder from '@/components/drawings/voice/VoiceFeedbackRecorder';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 import { parseLane, useReviewQueue } from '@/hooks/useReviewQueue';
+import { useAiDraft } from '@/hooks/useAiDraft';
 import { BAND_LABEL } from '@/lib/drawing-triage';
 
 export default function DrawingReviewDetailPage() {
@@ -424,6 +425,9 @@ export default function DrawingReviewDetailPage() {
     [router, fromAssignmentId, laneQs],
   );
 
+  // The AI draft on this sheet, if evaluation ever produced one. Null otherwise.
+  const { draft: aiDraft, reload: reloadAiDraft } = useAiDraft(id, getToken);
+
   // The queue this drawing belongs to, for J and K and the "3 / 12" chip.
   const queue = useReviewQueue(
     fromAssignmentId ?? ((submission as any)?.assignment_id as string | null) ?? null,
@@ -749,6 +753,7 @@ export default function DrawingReviewDetailPage() {
             questionContext={questionText}
             onOpenSketch={() => setSketchTrigger((t) => t + 1)}
             onRotate={isEditMode ? handleRotate : undefined}
+            aiMarks={aiDraft?.marks}
           />
         }
         panelHeader={panelHeader}
@@ -769,6 +774,8 @@ export default function DrawingReviewDetailPage() {
             previousAttemptsPanel={previousAttemptsPanel}
             tagLabels={tagLabels}
             onTagLabelsChange={setTagLabels}
+            aiDraft={aiDraft}
+            onDrafted={reloadAiDraft}
           />
         }
         actionBar={
@@ -786,6 +793,7 @@ export default function DrawingReviewDetailPage() {
             draftSaved={draftSaved}
             onRedo={() => { setAction('redo'); handleSaveReview('redo'); }}
             onComplete={() => { setAction('complete'); handleSaveReview('complete'); }}
+            hasAiDraft={!!aiDraft}
             saving={saving}
             pendingAction={action}
             voiceBusy={voiceBusy}

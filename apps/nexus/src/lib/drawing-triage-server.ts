@@ -13,6 +13,7 @@
 import { heldSubmissionIds } from './drawing-hold';
 import { parseQuality } from './image-quality';
 import { triageDrawing, triageOrder, bandCounts, type TriageBand, type TriageReasonCode } from './drawing-triage';
+import { submissionsWithDrafts } from './drawing-ai-draft-server';
 
 const PENDING = new Set(['submitted', 'under_review']);
 const GRADED = ['completed', 'redo', 'reviewed'];
@@ -24,6 +25,8 @@ export interface TriageItem {
   attempt_count: number;
   image_url: string;
   quality_measured: boolean;
+  /** An AI draft is waiting on this sheet. */
+  has_ai_draft: boolean;
   band: TriageBand;
   reasons: TriageReasonCode[];
   explainer: string;
@@ -80,6 +83,7 @@ export async function loadAssignmentTriage(supabase: any, assignmentId: string):
   }
 
   const studentIds = open.map((w) => w.latest.student_id);
+  const drafted = await submissionsWithDrafts(supabase, open.map((w) => w.latest.id));
   const [{ data: users }, { data: graded }] = await Promise.all([
     supabase.from('users').select('id, name, avatar_url').in('id', studentIds),
     supabase
@@ -125,6 +129,7 @@ export async function loadAssignmentTriage(supabase: any, assignmentId: string):
       attempt_count: attempts.length,
       image_url: latest.original_image_url,
       quality_measured: !!quality,
+      has_ai_draft: drafted.has(latest.id),
       band: triage.band,
       reasons: triage.reasons.map((r) => r.code),
       explainer: triage.explainer,

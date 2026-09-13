@@ -18,6 +18,7 @@ import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import { compressImage } from '@/utils/imageCompression';
 import type { DrawingMark } from '@/lib/drawing-marks';
 import RubricScorePanel from './review/RubricScorePanel';
+import { feedbackPrefill, type AiDraft } from '@/lib/drawing-ai-draft';
 import ReactionPicker from '@/components/assignments/ReactionPicker';
 
 export interface WorkspaceData {
@@ -52,6 +53,9 @@ interface AIFeedbackWorkspaceProps {
    * rather than two panels a screen apart.
    */
   voiceSlot?: React.ReactNode;
+  /** The AI draft on this sheet, when one exists. */
+  aiDraft?: AiDraft | null;
+  onDrafted?: () => void;
 }
 
 /** The step markers on the rail: 01 Score, 02 Say it. The action bar is 03. */
@@ -70,13 +74,17 @@ function StageLabel({ step, label }: { step: string; label: string }) {
 
 export default function AIFeedbackWorkspace({
   submission, getToken, onChange, defaultCollapsed = false, readOnly = false,
-  sketchTrigger = 0, evaluationType = 'stars', maxMarks = 5, voiceSlot,
+  sketchTrigger = 0, evaluationType = 'stars', maxMarks = 5, voiceSlot, aiDraft = null, onDrafted,
 }: AIFeedbackWorkspaceProps) {
   const isMarks = evaluationType === 'marks';
   // Workspace state
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(submission.reviewed_image_url);
   const [correctedImageUrl, setCorrectedImageUrl] = useState<string | null>((submission as any).corrected_image_url || null);
   const [tutorFeedback, setTutorFeedback] = useState(submission.tutor_feedback || '');
+  // The draft's paragraph opens the feedback box only when the teacher has
+  // written nothing, and only once per draft, so it can never overwrite words.
+  const draftPrefilled = useRef<string | null>(null);
+  const [feedbackFromDraft, setFeedbackFromDraft] = useState(false);
   const [resources, setResources] = useState<TutorResource[]>(submission.tutor_resources || []);
   const [rating, setRating] = useState(submission.tutor_rating || 0);
   const [marks, setMarks] = useState(
@@ -120,6 +128,16 @@ export default function AIFeedbackWorkspace({
       ...overrides,
     });
   }, [correctedImageUrl, onChange, overlayImageUrl, rating, marks, reaction, resources, tutorFeedback]);
+
+  useEffect(() => {
+    if (readOnly || !aiDraft || draftPrefilled.current === aiDraft.evaluation_id) return;
+    draftPrefilled.current = aiDraft.evaluation_id;
+    const text = feedbackPrefill(tutorFeedback, aiDraft);
+    if (!text) return;
+    setTutorFeedback(text);
+    setFeedbackFromDraft(true);
+    notify({ tutorFeedback: text });
+  }, [readOnly, aiDraft, tutorFeedback, notify]);
 
   // ─── Upload handlers ────────────────────────────────────────────────────────
 
@@ -484,6 +502,8 @@ export default function AIFeedbackWorkspace({
                     <RubricScorePanel
                       submissionId={submission.id}
                       getToken={getToken}
+                      aiDraft={aiDraft}
+                      onDrafted={onDrafted}
                       onOverallChange={(stars) => {
                         setRating(stars ?? 0);
                         notify({ rating: stars ?? 0 });
@@ -493,6 +513,11 @@ export default function AIFeedbackWorkspace({
                 </Box>
 
                 <StageLabel step="02" label="SAY IT" />
+                {feedbackFromDraft && (
+                  <Typography variant="caption" color="primary.dark" data-testid="feedback-from-draft" sx={{ display: 'block', mb: 0.5 }}>
+                    Drafted. Edit it, or record over it.
+                  </Typography>
+                )}
                 {/* Written feedback */}
                 <TextField
                   placeholder="Paste feedback from Gemini or write your own..."

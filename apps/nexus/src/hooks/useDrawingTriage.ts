@@ -21,6 +21,7 @@ export interface TriageRow {
   attempt_count: number;
   image_url: string;
   quality_measured: boolean;
+  has_ai_draft?: boolean;
   band: TriageBand;
   reasons: TriageReasonCode[];
   explainer: string;
@@ -35,6 +36,10 @@ export interface DrawingTriageState {
   failed: boolean;
   /** Photos still being checked in the background. */
   checking: number;
+  /** Routine sheets carrying an AI draft. */
+  routineDrafts: number;
+  /** Whether those may be approved unread, and why not. Null with no drafts. */
+  unreadGate: { ready: boolean; reason: string } | null;
   refresh: () => void;
 }
 
@@ -53,6 +58,8 @@ export function useDrawingTriage(
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [checking, setChecking] = useState(0);
+  const [routineDrafts, setRoutineDrafts] = useState(0);
+  const [unreadGate, setUnreadGate] = useState<{ ready: boolean; reason: string } | null>(null);
   const [version, setVersion] = useState(0);
   // getToken is a fresh function every render; see RubricScorePanel.
   const tokenRef = useRef(getToken);
@@ -78,6 +85,8 @@ export function useDrawingTriage(
         setItems(rows);
         setCounts(body.counts ?? EMPTY_COUNTS);
         setHeldIds(new Set((body.held_ids ?? []) as string[]));
+        setRoutineDrafts(body.routine_drafts ?? 0);
+        setUnreadGate(body.unread_gate ?? null);
         setFailed(false);
         setLoading(false);
 
@@ -121,6 +130,8 @@ export function useDrawingTriage(
     loading,
     failed,
     checking,
+    routineDrafts,
+    unreadGate,
     refresh,
   };
 }

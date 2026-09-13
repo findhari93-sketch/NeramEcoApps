@@ -134,12 +134,20 @@ export default function DrawingAnchorsPage() {
       <Typography variant="h5" fontWeight={700} gutterBottom>
         Drawing evaluation references
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 720 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, maxWidth: 720 }}>
         Five graded sheets per brief type, one per band. An evaluation is never an absolute score:
         the model is asked where a new sheet sits between these five, so these are the judgement
         and everything else is plumbing. Changing one changes every evaluation of that brief
         type from then on.
       </Typography>
+      <Button
+        component={NextLink}
+        href="/teacher/admin/drawing-anchors/agreement"
+        size="small"
+        sx={{ mb: 3, ml: -1, minHeight: 44, textTransform: 'none' }}
+      >
+        Drafts beside your grading
+      </Button>
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>

@@ -11,6 +11,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireDrawingStaff, isNotMigrated } from '@/lib/drawing-staff-auth';
 import { loadAssignmentTriage } from '@/lib/drawing-triage-server';
+import { loadScorePairs } from '@/lib/drawing-ai-draft-server';
+import { shadowAgreement, unreadDraftsGate } from '@/lib/drawing-ai-draft';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -25,7 +27,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .maybeSingle();
     if (!assignment) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
 
-    return NextResponse.json(await loadAssignmentTriage(auth.supabase, id));
+    const triage = await loadAssignmentTriage(auth.supabase, id);
+    // The unread-approval gate only matters where there are drafts to approve,
+    // so the agreement read is skipped for every assignment without one.
+    const routineDrafts = triage.items.filter((t) => t.band === 'routine' && t.has_ai_draft).length;
+    const unreadGate = routineDrafts > 0
+      ? unreadDraftsGate(shadowAgreement(await loadScorePairs(auth.supabase).catch(() => [])))
+      : null;
+    return NextResponse.json({ ...triage, routine_drafts: routineDrafts, unread_gate: unreadGate });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not sort the drawings';
     if (isNotMigrated(message)) {

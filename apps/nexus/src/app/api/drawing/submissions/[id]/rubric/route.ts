@@ -34,6 +34,7 @@ import {
 import { referenceFor } from '@/lib/drawing-teaching-moment';
 import { ensureManualEvaluation, loadReferenceInputs } from '@/lib/drawing-reference-server';
 import { briefKeyForSubmission } from '@/lib/drawing-brief-resolve';
+import { aiBandsFor } from '@/lib/drawing-ai-draft-server';
 
 function parseBands(input: unknown): BandMap | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
@@ -188,6 +189,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     );
 
     const evaluationId = await ensureManualEvaluation(supabase, id, auth.user.id);
+    // With a draft on this sheet, each score carries the draft's band beside it,
+    // so agreeing and overriding are both recorded where they happened.
+    const aiBands = await aiBandsFor(supabase, id);
+    const beside = (key: string, band: number) =>
+      aiBands[key] ? { ai_band: aiBands[key], was_corrected: aiBands[key] !== band } : {};
 
     const { data: existingRows, error: readError } = await supabase
       .from('drawing_evaluation_criterion')
@@ -210,7 +216,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         const { error } = await supabase.from('drawing_evaluation_criterion').upsert(
           // ai_band stays null: nothing drafted this. When the model does, it
           // fills ai_band and was_corrected starts meaning something.
-          { evaluation_id: evaluationId, criterion_key: key, final_band: band },
+          { evaluation_id: evaluationId, criterion_key: key, final_band: band, ...beside(key, band) },
           { onConflict: 'evaluation_id,criterion_key' },
         );
         if (error) throw new Error(error.message);
@@ -219,7 +225,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         // score still disagrees, the screen asks again.
         let { error } = await supabase
           .from('drawing_evaluation_criterion')
-          .update({ final_band: band, ...CORRECTION_CLEARED })
+          .update({ final_band: band, ...beside(key, band), ...CORRECTION_CLEARED })
           .eq('id', row.id);
         if (error && isNotMigrated(error.message)) {
           ({ error } = await supabase.from('drawing_evaluation_criterion').update({ final_band: band }).eq('id', row.id));

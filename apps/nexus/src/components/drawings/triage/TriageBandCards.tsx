@@ -9,9 +9,14 @@
  *
  * LOOKS ROUTINE opens a fast lane, not a release. Nothing has read those sheets
  * yet, so the quickest honest thing is to walk them one after another.
+ *
+ * Once AI drafts exist, routine sheets with a sure draft can be approved
+ * unread, but only after the shadow comparison says the drafts grade like the
+ * teacher. Until then the button stays disabled with that reason in words.
  */
 
-import { Box, Button, Skeleton, Stack, Typography, alpha } from '@neram/ui';
+import { useState } from 'react';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Skeleton, Stack, Typography, alpha } from '@neram/ui';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
@@ -35,9 +40,19 @@ interface Props {
   loading?: boolean;
   failed?: boolean;
   checking?: number;
+  routineDrafts?: number;
+  unreadGate?: { ready: boolean; reason: string } | null;
+  /** Resolves with a sentence to show, once the approved drafts are held. */
+  onApproveDrafts?: () => Promise<string>;
 }
 
-export default function TriageBandCards({ counts, selected, onSelect, onOpenFastLane, loading, failed, checking = 0 }: Props) {
+export default function TriageBandCards({
+  counts, selected, onSelect, onOpenFastLane, loading, failed, checking = 0, routineDrafts = 0, unreadGate = null, onApproveDrafts,
+}: Props) {
+  const [confirming, setConfirming] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [approveNote, setApproveNote] = useState<string | null>(null);
+
   if (failed) {
     return (
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
@@ -121,6 +136,53 @@ export default function TriageBandCards({ counts, selected, onSelect, onOpenFast
               : 'One after another. J and K move, Enter completes.'}
           </Typography>
         </Stack>
+      )}
+
+      {!loading && routineDrafts > 0 && onApproveDrafts && (
+        <Box sx={{ mt: 1 }} data-testid="approve-drafts">
+          <Button
+            size="small"
+            variant="contained"
+            disabled={!unreadGate?.ready || approving}
+            onClick={() => setConfirming(true)}
+            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
+          >
+            Approve {routineDrafts} {routineDrafts === 1 ? 'draft' : 'drafts'} unread
+          </Button>
+          <Typography variant="caption" color="text.secondary" aria-live="polite" sx={{ display: 'block', mt: 0.5, lineHeight: 1.4 }}>
+            {approveNote ?? unreadGate?.reason ?? ''}
+          </Typography>
+          <Dialog open={confirming} onClose={() => !approving && setConfirming(false)} maxWidth="xs" fullWidth>
+            <DialogTitle>Approve {routineDrafts} drafts without opening them?</DialogTitle>
+            <DialogContent>
+              <Typography variant="body2">
+                Only drafts sure of every criterion are approved; the rest stay for you. Nothing is sent: approved drafts wait in Hand back until you hand them back.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setConfirming(false)} disabled={approving} sx={{ minHeight: 44 }}>Cancel</Button>
+              <Button
+                variant="contained"
+                disabled={approving}
+                sx={{ minHeight: 44 }}
+                onClick={async () => {
+                  setApproving(true);
+                  try {
+                    setApproveNote(await onApproveDrafts());
+                    setConfirming(false);
+                  } catch (e) {
+                    setApproveNote(e instanceof Error ? e.message : 'Nothing was approved.');
+                    setConfirming(false);
+                  } finally {
+                    setApproving(false);
+                  }
+                }}
+              >
+                {approving ? 'Approving' : 'Approve and hold'}
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </Box>
       )}
     </Box>
   );

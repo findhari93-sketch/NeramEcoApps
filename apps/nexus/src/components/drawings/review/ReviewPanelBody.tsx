@@ -20,6 +20,7 @@ import AIFeedbackWorkspace, { type WorkspaceData } from '@/components/drawings/A
 import CommentSection from '@/components/drawings/CommentSection';
 import TagEditor from '@/components/drawings/TagEditor';
 import QuietLinksRow, { type QuietLink } from './QuietLinksRow';
+import type { AiDraft } from '@/lib/drawing-ai-draft';
 
 export interface ReviewPanelBodyProps {
   submissionId: string;
@@ -42,13 +43,16 @@ export interface ReviewPanelBodyProps {
 
   tagLabels: string[];
   onTagLabelsChange: (labels: string[]) => void;
+
+  aiDraft?: AiDraft | null;
+  onDrafted?: () => void;
 }
 
 export default function ReviewPanelBody({
   submissionId, submission, getToken, onWorkspaceChange, isEditMode, sketchTrigger,
   evaluationType, maxMarks, selfNote,
   supersededBanner, reReviewNotice, voiceSection, previousAttemptsPanel,
-  tagLabels, onTagLabelsChange,
+  tagLabels, onTagLabelsChange, aiDraft = null, onDrafted,
 }: ReviewPanelBodyProps) {
   const quietLinks: QuietLink[] = [
     ...(isEditMode
@@ -97,6 +101,8 @@ export default function ReviewPanelBody({
         evaluationType={evaluationType}
         maxMarks={maxMarks}
         voiceSlot={voiceSection}
+        aiDraft={aiDraft}
+        onDrafted={onDrafted}
       />
 
       {/* Kept open: on a redo round the earlier attempts are the context. */}

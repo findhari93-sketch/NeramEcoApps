@@ -71,6 +71,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         applied_rule_id: rule?.id ?? null,
         // Only an override of a model's band is a correction in the training sense.
         was_corrected: c.reference_kind === 'ai',
+        ...(c.reference_kind === 'ai' ? { ai_band: c.reference_band } : {}),
       },
       { onConflict: 'evaluation_id,criterion_key' },
     );
