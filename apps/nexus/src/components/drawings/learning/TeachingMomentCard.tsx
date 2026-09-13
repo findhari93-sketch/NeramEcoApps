@@ -110,7 +110,7 @@ export default function TeachingMomentCard({ criterionTitle, finalBand, referenc
             Why the {finalBand}?
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.4 }}>
-            {promptFor(finalBand, reference)} Your reason teaches the grading, and a typed one can become this band&apos;s description.
+            {promptFor(finalBand, reference)}
           </Typography>
         </Box>
         <Button size="small" onClick={onSkip} sx={{ minHeight: 36, minWidth: 0, textTransform: 'none', flexShrink: 0 }}>
@@ -158,7 +158,7 @@ export default function TeachingMomentCard({ criterionTitle, finalBand, referenc
               size="small"
               value={text}
               onChange={(e) => setText(e.target.value.slice(0, 400))}
-              placeholder={`What makes this a ${finalBand} for ${criterionTitle.toLowerCase()}?`}
+              placeholder={`What makes this a ${finalBand}? A typed reason can become this band's description.`}
               inputProps={{ 'aria-label': `Your reason for ${finalBand}`, style: { fontSize: 16 } }}
               sx={{ bgcolor: 'background.paper' }}
             />
@@ -168,7 +168,7 @@ export default function TeachingMomentCard({ criterionTitle, finalBand, referenc
                 variant="contained"
                 disabled={text.trim().length < 3 || !!busy}
                 onClick={() => submit('other', text.trim())}
-                sx={{ minHeight: 40, textTransform: 'none' }}
+                sx={{ minHeight: 40, textTransform: 'none', '&.Mui-disabled': { background: 'none', bgcolor: 'action.disabledBackground', color: 'text.disabled', boxShadow: 'none' } }}
               >
                 {busy === 'other' ? 'Saving' : 'Save reason'}
               </Button>

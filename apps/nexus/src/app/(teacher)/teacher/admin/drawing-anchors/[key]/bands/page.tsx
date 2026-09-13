@@ -205,7 +205,7 @@ export default function BandWordingPage() {
                   Switch off
                 </Button>
               ) : (
-                <Button variant="contained" onClick={() => toggle(true)} disabled={switching} sx={{ minHeight: 44, textTransform: 'none' }}>
+                <Button variant="contained" onClick={() => toggle(true)} disabled={switching} sx={{ minHeight: 44, textTransform: 'none', '&.Mui-disabled': { background: 'none', bgcolor: 'action.disabledBackground', color: 'text.disabled', boxShadow: 'none' } }}>
                   {switching ? 'Checking' : 'Switch on for evaluation'}
                 </Button>
               )
@@ -289,7 +289,7 @@ export default function BandWordingPage() {
                         variant="contained"
                         onClick={() => save(c)}
                         disabled={!dirty(c) || saving === c.key}
-                        sx={{ minHeight: 44, textTransform: 'none' }}
+                        sx={{ minHeight: 44, textTransform: 'none', '&.Mui-disabled': { background: 'none', bgcolor: 'action.disabledBackground', color: 'text.disabled', boxShadow: 'none' } }}
                       >
                         {saving === c.key ? <CircularProgress size={18} color="inherit" /> : `Save ${c.title}`}
                       </Button>

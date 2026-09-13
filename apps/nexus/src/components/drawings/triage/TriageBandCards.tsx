@@ -139,13 +139,15 @@ export default function TriageBandCards({
       )}
 
       {!loading && routineDrafts > 0 && onApproveDrafts && (
-        <Box sx={{ mt: 1 }} data-testid="approve-drafts">
+        // Not on a phone: a bulk approval of grades nobody opened is a desk
+        // decision, and the easiest thing to do by accident with a thumb.
+        <Box sx={{ mt: 1, display: { xs: 'none', sm: 'block' } }} data-testid="approve-drafts">
           <Button
             size="small"
             variant="contained"
             disabled={!unreadGate?.ready || approving}
             onClick={() => setConfirming(true)}
-            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
+            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600, '&.Mui-disabled': { background: 'none', bgcolor: 'action.disabledBackground', color: 'text.disabled', boxShadow: 'none' } }}
           >
             Approve {routineDrafts} {routineDrafts === 1 ? 'draft' : 'drafts'} unread
           </Button>

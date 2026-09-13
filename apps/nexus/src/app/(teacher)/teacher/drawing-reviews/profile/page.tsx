@@ -176,7 +176,7 @@ export default function GradingProfilePage() {
                   variant="contained"
                   onClick={addRule}
                   disabled={adding || draft.trim().length < 3}
-                  sx={{ minHeight: 48, flexShrink: 0, textTransform: 'none' }}
+                  sx={{ minHeight: 48, flexShrink: 0, textTransform: 'none', '&.Mui-disabled': { background: 'none', bgcolor: 'action.disabledBackground', color: 'text.disabled', boxShadow: 'none' } }}
                 >
                   {adding ? 'Keeping' : 'Keep rule'}
                 </Button>

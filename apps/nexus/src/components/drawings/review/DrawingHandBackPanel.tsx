@@ -164,7 +164,7 @@ export default function DrawingHandBackPanel({ assignmentId, getToken, onRelease
             />
           }
           label={
-            <Box sx={{ pt: 0.75 }}>
+            <Box sx={{ pt: 0.75, pl: 0.5 }}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 Hold reviews until I hand them back
               </Typography>
