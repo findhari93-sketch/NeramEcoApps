@@ -18,6 +18,7 @@ import { markVoiceSent } from '@/lib/drawing-voice-feedback';
 import { pickNextPending } from '@/lib/review-next';
 import { evalTables } from '@/lib/drawing-eval/db';
 import { heldSubmissionIds, holdReview, releaseModeFor } from '@/lib/drawing-hold';
+import { syncRegionMarks } from '@/lib/drawing-region-sync';
 
 // One student, but a Teams chat post (chat create, card, maybe a plain retry)
 // runs inside this request, and the default budget is tight for that.
@@ -92,6 +93,18 @@ export async function PATCH(
       tutor_marks !== null && tutor_marks !== undefined && tutor_marks !== '' && Number.isFinite(Number(tutor_marks))
         ? Number(tutor_marks)
         : null;
+
+    // Mirror the region boxes onto drawing_annotation, beside the canvas marks
+    // and the AI's own. Every save path passes through here, so none can skip
+    // it. Only when the field was actually sent, and never allowed to fail the
+    // review: a sheet must still save where the marks tables do not exist.
+    if (Object.prototype.hasOwnProperty.call(body, 'ai_overlay_annotations')) {
+      try {
+        await syncRegionMarks(supabase, id, user.id, ai_overlay_annotations);
+      } catch (err) {
+        console.error('[Drawing review] region boxes were not mirrored:', err);
+      }
+    }
 
     // Draft: save fields without changing status or sending notifications
     if (reviewAction === 'draft') {

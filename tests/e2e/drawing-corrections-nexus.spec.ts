@@ -354,4 +354,48 @@ test.describe('Draw Corrections canvas', () => {
     await openCanvas(page);
     await expect(page.getByRole('button', { name: 'Clear all' })).toBeEnabled();
   });
+
+  /**
+   * Region boxes are mirrored beside the canvas marks, and neither surface can
+   * wipe the other. The previous test left a stroke on this submission.
+   */
+  test('saving region boxes adds them beside the strokes without touching them', async ({ request }) => {
+    test.skip(!submissionId, 'No submission from setup');
+    const teacher = await getTestAuthToken(request, 'teacher');
+    const th = { Authorization: `Bearer ${teacher!.testToken}`, 'Content-Type': 'application/json' };
+    const kinds = async () => {
+      const res = await request.get(`${APP_URLS.nexus}/api/drawing/submissions/${submissionId}/marks`, { headers: th });
+      test.skip(res.status() === 503, 'Drawing marks are not migrated in this environment');
+      return ((await res.json()).marks as Array<{ kind: string; comment: string | null }>);
+    };
+
+    const before = await kinds();
+    const strokes = before.filter((m) => m.kind === 'stroke').length;
+    expect(strokes, 'the previous test left a stroke to protect').toBeGreaterThan(0);
+
+    const withBox = await request.patch(`${APP_URLS.nexus}/api/drawing/submissions/${submissionId}/review`, {
+      headers: th,
+      data: {
+        action: 'draft',
+        ai_overlay_annotations: [{ id: 'r1', x: 0.1, y: 0.2, width: 0.3, height: 0.25, comment: 'Shadow direction' }],
+      },
+    });
+    expect(withBox.ok()).toBeTruthy();
+
+    const after = await kinds();
+    const regions = after.filter((m) => m.kind === 'region');
+    expect(regions).toHaveLength(1);
+    expect(regions[0].comment).toBe('Shadow direction');
+    expect(after.filter((m) => m.kind === 'stroke').length).toBe(strokes);
+
+    // Clearing the boxes clears only the boxes.
+    const cleared = await request.patch(`${APP_URLS.nexus}/api/drawing/submissions/${submissionId}/review`, {
+      headers: th,
+      data: { action: 'draft', ai_overlay_annotations: null },
+    });
+    expect(cleared.ok()).toBeTruthy();
+    const end = await kinds();
+    expect(end.filter((m) => m.kind === 'region')).toHaveLength(0);
+    expect(end.filter((m) => m.kind === 'stroke').length).toBe(strokes);
+  });
 });
