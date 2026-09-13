@@ -103,7 +103,9 @@ export default function AssignmentBriefPicker({ assignmentId, getToken }: Props)
       >
         {status === 'error'
           ? 'Could not change the brief. Nothing was changed.'
-          : status === 'saved'
+          : status === 'saving'
+            ? 'Saving the brief.'
+            : status === 'saved'
             ? 'Saved. Scores already given on the shared four criteria are kept.'
             : 'Decides the fifth score only, so you can set or change it after drawings arrive.'}
       </Typography>

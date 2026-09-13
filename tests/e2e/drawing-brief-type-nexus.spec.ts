@@ -129,7 +129,9 @@ test.describe('Drawing brief types', () => {
     await expect(picker).toBeVisible({ timeout: 90_000 });
     await picker.getByLabel('Brief type').click();
     await page.getByRole('option', { name: 'Perspective construction' }).click();
-    await expect(picker).toContainText('Saved.');
+    // A save against staging can outlast the 5s default while the page is also
+    // loading triage and checking photos; the caption says Saving meanwhile.
+    await expect(picker).toContainText('Saved.', { timeout: 30_000 });
     await expect.poll(async () => {
       const res = await request.get(`${APP_URLS.nexus}/api/drawing/assignments/${assignmentId}/brief-type`, { headers: th() });
       return (await res.json()).brief_type_id;
