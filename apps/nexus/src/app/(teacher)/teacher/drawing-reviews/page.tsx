@@ -8,6 +8,8 @@ import {
 } from '@neram/ui';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import RuleOutlinedIcon from '@mui/icons-material/RuleOutlined';
+import NextLink from 'next/link';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import GalleryFeed from '@/components/drawings/GalleryFeed';
@@ -116,7 +118,16 @@ export default function DrawingReviewsPage() {
   return (
     <Box sx={{ px: { xs: 2, sm: 3 }, py: 2, maxWidth: 900, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
-        <Typography variant="h6" fontWeight={700}>Drawing Reviews</Typography>
+        <Typography variant="h6" fontWeight={700} sx={{ flex: 1, minWidth: 0 }}>Drawing Reviews</Typography>
+        <Button
+          component={NextLink}
+          href="/teacher/drawing-reviews/profile"
+          size="small"
+          startIcon={<RuleOutlinedIcon sx={{ fontSize: 18 }} />}
+          sx={{ minHeight: 44, textTransform: 'none', flexShrink: 0 }}
+        >
+          Your rules
+        </Button>
         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
       </Box>
 

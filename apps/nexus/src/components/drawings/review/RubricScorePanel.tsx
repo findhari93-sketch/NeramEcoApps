@@ -13,10 +13,20 @@
  * and moves to the next unscored one, so a straightforward sheet is five
  * keystrokes and no mouse. The rows are still ordinary buttons, so tab and
  * arrow keys work for anyone not using the numbers.
+ *
+ * When a score lands two bands away from its reference (the previous attempt,
+ * the student's last drawing, the class, or later the AI draft), the row asks
+ * why, inline. See components/drawings/learning/TeachingMomentCard.tsx.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
 import { Box, Chip, Skeleton, Typography, alpha, useTheme } from '@neram/ui';
+import RuleOutlinedIcon from '@mui/icons-material/RuleOutlined';
+import TeachingMomentCard, { type NotedReason } from '@/components/drawings/learning/TeachingMomentCard';
+import { REASONS, shouldAsk, type ReasonCode, type Reference } from '@/lib/drawing-teaching-moment';
+import { rulesForCriterion, type GradingRule } from '@/lib/drawing-grading-rules';
 import {
   criteriaForBrief,
   isFullyScored,
@@ -66,6 +76,14 @@ export default function RubricScorePanel({
   /** Set when this environment has no evaluation tables. */
   const [unavailable, setUnavailable] = useState(false);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const router = useRouter();
+  const [references, setReferences] = useState<Record<string, Reference | null>>({});
+  const [rules, setRules] = useState<GradingRule[]>([]);
+  const [assignmentId, setAssignmentId] = useState<string | null>(null);
+  /** The disagreement whose question is open. Others wait as a one-line prompt. */
+  const [askKey, setAskKey] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
+  const [noted, setNoted] = useState<Record<string, NotedReason>>({});
 
   const overall = overallFromBands(bands, criteria);
   const done = scoredCount(bands, criteria);
@@ -101,6 +119,16 @@ export default function RubricScorePanel({
         if (cancelled) return;
         if (Array.isArray(body.criteria) && body.criteria.length) setCriteria(body.criteria);
         setBands(body.bands ?? {});
+        setReferences(body.references ?? {});
+        setRules(Array.isArray(body.rules) ? body.rules : []);
+        setAssignmentId(body.assignment_id ?? null);
+        // Reasons already given on this sheet show as noted, not as questions.
+        const existing = (body.corrections ?? {}) as Record<string, { reason_code: string | null; reason_text: string | null }>;
+        setNoted(Object.fromEntries(Object.entries(existing).map(([key, c]) => [key, {
+          label: c.reason_text || REASONS.find((r) => r.code === c.reason_code)?.label || 'your own reason',
+          rule: null,
+          matches: [],
+        }])));
       } catch {
         if (!cancelled) setUnavailable(true);
       } finally {
@@ -162,6 +190,7 @@ export default function RubricScorePanel({
   }, [flush]);
 
   const setBand = useCallback((key: string, band: Band) => {
+    const clearing = bands[key] === band;
     setBands((prev) => {
       // Pressing the same number again clears it, which is the only way back
       // from a misclick without a separate control.
@@ -171,10 +200,52 @@ export default function RubricScorePanel({
       void save(next);
       return next;
     });
+    // A new score makes any earlier answer stale (the server clears it too).
+    setNoted((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setSkipped((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    if (!clearing && shouldAsk(band, references[key] ?? null)) setAskKey(key);
+    else if (askKey === key) setAskKey(null);
     const index = criteria.findIndex((c) => c.key === key);
     const nextGap = criteria.slice(index + 1).find((c) => !bands[c.key]);
     setFocusedKey(nextGap?.key ?? null);
-  }, [criteria, bands, save]);
+  }, [criteria, bands, save, references, askKey]);
+
+  const recordReason = useCallback(async (
+    key: string,
+    reference: Reference,
+    finalBand: Band,
+    input: { reason_code: ReasonCode; reason_text: string | null; remember: boolean },
+  ) => {
+    const token = await tokenRef.current();
+    const res = await fetch(`/api/drawing/submissions/${submissionId}/rubric/correction`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        criterion_key: key,
+        final_band: finalBand,
+        reference_band: reference.band,
+        reference_kind: reference.kind,
+        ...input,
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || 'Could not save that reason');
+    const label = input.reason_text || REASONS.find((r) => r.code === input.reason_code)?.label || 'your own reason';
+    setNoted((prev) => ({ ...prev, [key]: { label, rule: body.rule ?? null, matches: body.matches ?? [] } }));
+    if (body.rule) setRules((prev) => [{ ...body.rule, teacher_id: '', brief_type_id: null, criterion_key: key, reason_code: input.reason_code, is_active: true, applied_count: 0, created_at: new Date().toISOString() }, ...prev]);
+    setAskKey((current) => (current === key ? null : current));
+    return { rule: body.rule ?? null, matches: body.matches ?? [] };
+  }, [submissionId]);
 
   useEffect(() => {
     if (readOnly) return;
@@ -275,6 +346,26 @@ export default function RubricScorePanel({
               >
                 {criterion.hint}
               </Typography>
+              {(() => {
+                const mine = readOnly ? [] : rulesForCriterion(rules, criterion.key);
+                if (mine.length === 0) return null;
+                return (
+                  <Box data-testid="grading-rule-hint" sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, mb: 0.75 }}>
+                    <RuleOutlinedIcon aria-hidden sx={{ fontSize: 14, mt: '1px', color: 'primary.main' }} />
+                    <Typography variant="caption" sx={{ fontSize: '0.7rem', lineHeight: 1.35, color: 'text.secondary' }}>
+                      Your rule: {mine[0].text}
+                      {mine.length > 1 && (
+                        <>
+                          {' '}
+                          <Box component={NextLink} href="/teacher/drawing-reviews/profile" sx={{ color: 'primary.main', fontWeight: 600 }}>
+                            +{mine.length - 1} more
+                          </Box>
+                        </>
+                      )}
+                    </Typography>
+                  </Box>
+                );
+              })()}
 
               <Box role="group" aria-label={criterion.title} sx={{ display: 'flex', gap: 0.5 }}>
                 {BANDS.map((value) => {
@@ -320,6 +411,54 @@ export default function RubricScorePanel({
                   );
                 })}
               </Box>
+
+              {(() => {
+                const reference = references[criterion.key] ?? null;
+                if (readOnly || !band || !reference || !shouldAsk(band, reference)) return null;
+                const note = noted[criterion.key] ?? null;
+                if (!note && skipped.has(criterion.key)) return null;
+                if (!note && askKey !== criterion.key) {
+                  return (
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={() => setAskKey(criterion.key)}
+                      sx={{
+                        all: 'unset', cursor: 'pointer', mt: 0.5, minHeight: 32, display: 'flex', alignItems: 'center',
+                        fontSize: '0.72rem', fontWeight: 600, color: 'primary.main',
+                        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                      }}
+                    >
+                      {band} against {reference.band}: say why
+                    </Box>
+                  );
+                }
+                return (
+                  <TeachingMomentCard
+                    criterionTitle={criterion.title}
+                    finalBand={band}
+                    reference={reference}
+                    noted={note}
+                    onSubmit={(input) => recordReason(criterion.key, reference, band, input)}
+                    onSkip={() => {
+                      setSkipped((prev) => new Set(prev).add(criterion.key));
+                      setAskKey(null);
+                    }}
+                    onReopen={() => {
+                      setNoted((prev) => {
+                        const next = { ...prev };
+                        delete next[criterion.key];
+                        return next;
+                      });
+                      setAskKey(criterion.key);
+                    }}
+                    onShowMatches={(ids) => {
+                      const qs = assignmentId ? `?assignment=${assignmentId}` : '';
+                      if (ids[0]) router.push(`/teacher/drawing-reviews/${ids[0]}${qs}`);
+                    }}
+                  />
+                );
+              })()}
             </Box>
           );
         })}
