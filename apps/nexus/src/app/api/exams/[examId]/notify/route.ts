@@ -75,6 +75,8 @@ export async function POST(
             });
 
             await sendNudge({
+              // The teacher's own Teams chat (their connected login if this token cannot chat).
+              teacher: { authHeader: request.headers.get('Authorization'), userId: access.caller.id },
               studentIds: [row.student_id],
               subject,
               plain,

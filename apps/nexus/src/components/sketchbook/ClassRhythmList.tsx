@@ -13,6 +13,7 @@ import { RHYTHM_STATUS_LABEL, RHYTHM_STATUS_ORDER, compareByNeed, type RhythmSta
 import RhythmRow, { type RhythmStudent } from './RhythmRow';
 import WeeklyGoalSheet from './WeeklyGoalSheet';
 import NudgeSheet from './NudgeSheet';
+import TeamsSenderCard from './TeamsSenderCard';
 
 interface RhythmPayload {
   goal: number;
@@ -145,6 +146,8 @@ export default function ClassRhythmList({ classroomId }: { classroomId: string }
           Edit
         </Button>
       </Box>
+
+      <TeamsSenderCard classroomId={classroomId} />
 
       {noStudents ? (
         <>

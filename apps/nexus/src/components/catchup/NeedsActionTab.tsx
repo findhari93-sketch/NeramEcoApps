@@ -32,6 +32,9 @@ import {
   useTheme,
 } from '@neram/ui';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StageFilter from '@/components/students/list/StageFilter';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import GridOnOutlinedIcon from '@mui/icons-material/GridOnOutlined';
@@ -60,20 +63,19 @@ const GROUP_PAGE = 15;
 /** Above this the grid stops being readable and starts being a rendering cost. */
 const MATRIX_LIMIT = 30;
 
-function matches(row: Row, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return (
-    (row.student.name || '').toLowerCase().includes(q) ||
-    (row.student.email || '').toLowerCase().includes(q)
-  );
-}
+const ACCESSORS: ListAccessors<Row> = {
+  id: (r) => r.student.id,
+  name: (r) => r.student.name,
+  email: (r) => r.student.email,
+};
+
+// The server's order is the worklist order; search still ranks by name match.
+const SORTS = [suggestedOrder<Row>()];
 
 export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany }: TabProps) {
   const theme = useTheme();
   const canShowMatrix = useMediaQuery(theme.breakpoints.up('md'));
 
-  const [query, setQuery] = useState('');
   const [bucketFilter, setBucketFilter] = useState<CatchupBucket | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [view, setView] = useState<'cards' | 'matrix'>('cards');
@@ -109,13 +111,20 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
     [data.students],
   );
 
-  const filtered = useMemo(
-    () =>
-      chaseStudents.filter(
-        (s) => (bucketFilter === null || s.bucket === bucketFilter) && matches(s, query),
-      ),
-    [chaseStudents, bucketFilter, query],
-  );
+  // The shared student list: ranked name search, the stage ring filter, and
+  // paused students hidden. The bucket pills stay this screen's own filter.
+  const inBucket = useCallback((s: Row) => bucketFilter === null || s.bucket === bucketFilter, [bucketFilter]);
+  const listView = useStudentListView<Row, 'suggested'>({
+    rows: chaseStudents,
+    accessors: ACCESSORS,
+    extraSorts: SORTS,
+    defaultSort: 'suggested',
+    prefilter: inBucket,
+    urlKeys: false,
+  });
+  const query = listView.query;
+  const setQuery = listView.setQuery;
+  const filtered = listView.shown;
 
   /**
    * The pinned list at the top: we chased them, and nothing has moved since.
@@ -149,7 +158,7 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
 
   // Once you have narrowed the list yourself, being made to open a group as well
   // is one interaction too many: you already said what you wanted to see.
-  const narrowing = bucketFilter !== null || query.trim() !== '';
+  const narrowing = bucketFilter !== null || query.trim() !== '' || listView.stages.length > 0;
 
   const isOpen = useCallback(
     (bucket: CatchupBucket, index: number) =>
@@ -215,7 +224,7 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
         <Alert severity="success" sx={{ borderRadius: 2 }}>
           Nobody is behind. Every student has cleared the classes they missed.
         </Alert>
-        <HiddenDormantNote count={data.totals.hiddenDormant} />
+        <HiddenDormantNote count={data.totals.hiddenDormant + listView.pausedHidden} />
       </>
     );
   }
@@ -230,6 +239,15 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
         tally={data.totals.byBucket}
         total={chaseStudents.length}
       />
+      <Box sx={{ mb: 1.5 }}>
+        <StageFilter
+          value={listView.stages}
+          counts={listView.stageCounts}
+          onToggle={listView.toggleStage}
+          onClear={listView.clearStages}
+          disabled={!listView.stageReady}
+        />
+      </Box>
 
       {/*
         Above the filter results rather than inside them, because it is a
@@ -275,6 +293,7 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
             onClick={() => {
               setQuery('');
               setBucketFilter(null);
+              listView.clearStages();
             }}
             sx={{ textTransform: 'none', minHeight: 44 }}
           >
@@ -416,7 +435,7 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
         />
       )}
 
-      <HiddenDormantNote count={data.totals.hiddenDormant} />
+      <HiddenDormantNote count={data.totals.hiddenDormant + listView.pausedHidden} />
     </>
   );
 }
@@ -433,8 +452,8 @@ function HiddenDormantNote({ count }: { count: number }) {
       color="text.disabled"
       sx={{ display: 'block', mt: 3, textAlign: 'center' }}
     >
-      {count === 1 ? '1 dormant student is' : `${count} dormant students are`} hidden here and left
-      out of the counts above. Dormant students keep their Nexus access; they are only excluded from
+      {count === 1 ? '1 paused student is' : `${count} paused students are`} not shown here and left
+      out of the counts above. Paused students keep their Nexus access; they are only left out of
       chasing. Manage them in Students.
     </Typography>
   );

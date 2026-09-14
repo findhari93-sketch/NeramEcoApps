@@ -8,6 +8,9 @@ import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
 import EditIcon from '@mui/icons-material/Edit';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ListAccessors } from '@/lib/student-list-view';
 import type { EligibilityBucket, EligibilityRosterRow } from '@/lib/exam-eligibility-roster';
 
 /**
@@ -49,6 +52,20 @@ const BUCKET_META: Record<
   teacher_override_excused: { label: 'Excused', caption: 'Teacher override', color: 'default', Icon: EditIcon },
 };
 
+type Group = 'mandatory' | 'catchup' | 'new_joiner';
+
+/** Same split as summariseEligibilityRoster, so each chip's count is the rows it filters to. */
+const groupOf = (row: EligibilityRosterRow): Group =>
+  row.is_mandatory ? 'mandatory' : row.bucket === 'excused_new_joiner' ? 'new_joiner' : 'catchup';
+
+const GROUP_ORDER: readonly Group[] = ['mandatory', 'catchup', 'new_joiner'];
+
+const ACCESSORS: ListAccessors<EligibilityRosterRow> = {
+  id: (r) => r.student_id,
+  name: (r) => r.name,
+  joinedAt: (r) => r.enrolled_at,
+};
+
 export interface EligibilityRosterSummaryCounts {
   mandatory: number;
   excusedPendingCatchup: number;
@@ -74,7 +91,7 @@ export default function EligibilityRosterPanel({
   readOnly = false,
 }: EligibilityRosterPanelProps) {
   const theme = useTheme();
-  const { getToken } = useNexusAuthContext();
+  const { getTeacherToken } = useNexusAuthContext();
 
   const [rows, setRows] = useState<EligibilityRosterRow[]>([]);
   const [summary, setSummary] = useState<EligibilityRosterSummaryCounts | null>(null);
@@ -83,10 +100,23 @@ export default function EligibilityRosterPanel({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selecting, setSelecting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pausedHidden, setPausedHidden] = useState(0);
+
+  // The shared student list. Paused students are already left out by the
+  // server (its count comes back as paused_hidden); the chips are the filters.
+  const view = useStudentListView<EligibilityRosterRow, never, Group>({
+    rows,
+    accessors: ACCESSORS,
+    defaultSort: 'name',
+    status: { of: groupOf, order: GROUP_ORDER },
+    // Also opened inside the schedule dialog: keep the page URL untouched.
+    urlKeys: false,
+  });
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
-      const token = await getToken();
+      // Teacher token: some of these calls message students in Teams as the teacher.
+      const token = await getTeacherToken();
       if (!token) throw new Error('Not signed in');
       const res = await fetch(url, {
         ...init,
@@ -100,7 +130,7 @@ export default function EligibilityRosterPanel({
       if (!res.ok) throw new Error(json.error || 'Request failed');
       return json;
     },
-    [getToken],
+    [getTeacherToken],
   );
 
   const load = useCallback(async () => {
@@ -115,6 +145,7 @@ export default function EligibilityRosterPanel({
           });
       setRows(json?.data?.rows || []);
       setSummary(json?.data?.summary || null);
+      setPausedHidden(Number(json?.data?.paused_hidden) || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load who this is mandatory for');
     } finally {
@@ -201,10 +232,31 @@ export default function EligibilityRosterPanel({
             borderBottom: `1px solid ${theme.palette.divider}`,
           }}
         >
-          <Chip size="small" color="success" label={`Mandatory ${summary.mandatory}`} />
-          <Chip size="small" color="warning" label={`Catch-up pending ${summary.excusedPendingCatchup}`} />
-          <Chip size="small" color="info" label={`New joiner ${summary.excusedNewJoiner}`} />
-          {summary.overridden > 0 && <Chip size="small" label={`Overridden ${summary.overridden}`} />}
+          {([
+            { key: 'mandatory', label: 'Mandatory', color: 'success' },
+            { key: 'catchup', label: 'Catch-up pending', color: 'warning' },
+            { key: 'new_joiner', label: 'New joiner', color: 'info' },
+          ] as const).map((c) => {
+            const on = view.status === c.key;
+            return (
+              <Chip
+                key={c.key}
+                color={c.color}
+                variant={on ? 'filled' : 'outlined'}
+                label={`${c.label} ${view.statusCounts[c.key] ?? 0}`}
+                onClick={() => view.setStatus(on ? 'all' : c.key)}
+                aria-pressed={on}
+                sx={{ minHeight: 44, flexShrink: 0, fontWeight: 600 }}
+              />
+            );
+          })}
+          {summary.overridden > 0 && <Chip label={`Overridden ${summary.overridden}`} sx={{ minHeight: 44, flexShrink: 0 }} />}
+        </Box>
+      )}
+
+      {rows.length > 0 && (
+        <Box sx={{ px: 2, pt: 1.5 }}>
+          <StudentListToolbar view={view} />
         </Box>
       )}
 
@@ -222,7 +274,12 @@ export default function EligibilityRosterPanel({
             Nobody is enrolled in this classroom yet.
           </Typography>
         )}
-        {rows.map((row) => {
+        {rows.length > 0 && view.shown.length === 0 && (
+          <Typography variant="body2" color="text.secondary">
+            No students match this filter.
+          </Typography>
+        )}
+        {view.shown.map((row) => {
           const meta = BUCKET_META[row.bucket];
           const autoMeta = BUCKET_META[row.auto_bucket];
           return (
@@ -238,7 +295,7 @@ export default function EligibilityRosterPanel({
                   sx={{ p: 0.5 }}
                 />
               )}
-              <StudentAvatar name={row.name || 'Student'} src={row.avatar_url} size={36} />
+              <StudentAvatar userId={row.student_id} name={row.name || 'Student'} src={row.avatar_url} size={36} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
                   {row.name || 'Student'}
@@ -257,6 +314,7 @@ export default function EligibilityRosterPanel({
             </Paper>
           );
         })}
+        <PausedFootnote count={pausedHidden + view.pausedHidden} />
       </Stack>
 
       {!readOnly && Boolean(examId) && selecting && selected.size > 0 && (

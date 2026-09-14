@@ -31,7 +31,6 @@ import {
   Typography,
   alpha,
 } from '@neram/ui';
-import SearchIcon from '@mui/icons-material/Search';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useAuthFetch } from '@/components/curriculum/shared';
@@ -52,6 +51,9 @@ import {
   type WatchlistStage,
 } from '@/lib/watchlist-templates';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ExtraSort, type ListAccessors } from '@/lib/student-list-view';
 
 interface WatchRow {
   student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
@@ -87,6 +89,24 @@ interface WatchData {
   stats: Record<InactivityTier, number> & { total: number; attendanceMeasured: boolean };
   rows: WatchRow[];
 }
+
+type WatchSort = 'risk' | 'quiet_longest';
+
+const ACCESSORS: ListAccessors<WatchRow> = {
+  id: (r) => r.student.id,
+  name: (r) => r.student.name || r.student.email,
+  email: (r) => r.student.email,
+};
+
+// The server ranks by the inactivity score; that ranking is the default order.
+const SORTS: ExtraSort<WatchRow, WatchSort>[] = [
+  suggestedOrder<WatchRow, WatchSort>('Most at risk first', 'risk'),
+  {
+    key: 'quiet_longest',
+    label: 'Quiet longest',
+    compare: (a, b) => (b.signals.days_since_last ?? -1) - (a.signals.days_since_last ?? -1),
+  },
+];
 
 const ACTION_LABEL: Record<WatchlistAction, string> = {
   nudge: 'Send a friendly nudge',
@@ -132,8 +152,6 @@ export default function StudentWatchlistPage() {
 
   const [classroomId, setClassroomId] = useState('');
   const [data, setData] = useState<WatchData | null>(null);
-  const [filter, setFilter] = useState<'all' | InactivityTier>('all');
-  const [search, setSearch] = useState('');
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [open, setOpen] = useState<WatchRow | null>(null);
   const [removing, setRemoving] = useState<WatchRow | null>(null);
@@ -165,18 +183,25 @@ export default function StudentWatchlistPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const visibleRows = useMemo(() => {
-    const rows = data?.rows || [];
-    const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (filter !== 'all' && r.tier !== filter) return false;
-      if (q && !(r.student.name || r.student.email || '').toLowerCase().includes(q)) return false;
-      if (!showSnoozed && r.watchlist?.snoozed_until && r.watchlist.snoozed_until > today) {
-        return false;
-      }
-      return true;
-    });
-  }, [data, filter, search, showSnoozed, today]);
+  const notSnoozed = useCallback(
+    (r: WatchRow) => showSnoozed || !(r.watchlist?.snoozed_until && r.watchlist.snoozed_until > today),
+    [showSnoozed, today],
+  );
+  const tierStatus = useMemo(() => ({ of: (r: WatchRow) => r.tier, order: TIER_ORDER }), []);
+
+  // The shared student list: ranked search, sort, stage ring filter, paused
+  // students hidden. The tier buttons are its status filter.
+  const view = useStudentListView<WatchRow, WatchSort, InactivityTier>({
+    rows: data?.rows,
+    accessors: ACCESSORS,
+    extraSorts: SORTS,
+    defaultSort: 'risk',
+    status: tierStatus,
+    prefilter: notSnoozed,
+    urlKeys: { status: 'tier' },
+    storageKey: 'nexus:watchlist:sort',
+  });
+  const visibleRows = view.shown;
 
   const act = useCallback(
     async (row: WatchRow, action: WatchlistAction, extra?: { snoozeUntil?: string }) => {
@@ -283,37 +308,31 @@ export default function StudentWatchlistPage() {
         ))}
       </Stack>
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1.5 }}>
-        <ToggleButtonGroup
-          value={filter}
-          exclusive
-          size="small"
-          onChange={(_, v) => v && setFilter(v)}
-          sx={{ flexWrap: 'wrap', '& .MuiToggleButton-root': { textTransform: 'none', minHeight: 44 } }}
-        >
-          <ToggleButton value="all">All</ToggleButton>
-          {TIER_ORDER.map((t) => (
-            <ToggleButton key={t} value={t}>
-              {TIER_LABEL[t]}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-        <TextField
-          size="small"
-          placeholder="Search students"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          InputProps={{
-            startAdornment: <SearchIcon sx={{ fontSize: 18, mr: 0.5, color: 'text.disabled' }} />,
-          }}
-          sx={{ flex: 1 }}
-        />
-      </Stack>
+      <StudentListToolbar
+        view={view}
+        statusSlot={
+          <ToggleButtonGroup
+            value={view.status}
+            exclusive
+            size="small"
+            onChange={(_, v) => v && view.setStatus(v)}
+            aria-label="Filter by how quiet"
+            sx={{ flexWrap: 'wrap', mb: 1, '& .MuiToggleButton-root': { textTransform: 'none', minHeight: 44 } }}
+          >
+            <ToggleButton value="all">All</ToggleButton>
+            {TIER_ORDER.map((t) => (
+              <ToggleButton key={t} value={t}>
+                {TIER_LABEL[t]}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        }
+      />
 
       <Button
         size="small"
         onClick={() => setShowSnoozed((v) => !v)}
-        sx={{ mb: 1, minHeight: 40, textTransform: 'none' }}
+        sx={{ mb: 1, minHeight: 44, textTransform: 'none' }}
       >
         {showSnoozed ? 'Hide snoozed students' : 'Show snoozed students'}
       </Button>

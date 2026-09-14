@@ -207,6 +207,7 @@ export async function POST(request: NextRequest) {
           eventType: 'test_scheduled',
           title: `${effectiveMode === 'practice' ? 'Practice test' : 'Exam'} scheduled: ${exam.title || 'Exam'}`,
           message: `Opens ${when}.`,
+          teacher: { authHeader: request.headers.get('Authorization'), userId: resolved.caller.id },
         });
       } catch (notifyErr) {
         console.error('[Exams API] Student notify failed (non-blocking):', notifyErr);

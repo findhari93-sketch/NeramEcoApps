@@ -9,6 +9,7 @@ import { loadDrawingDays, loadReactivations } from '@/lib/drawing-activity-store
 import { loadReminderLogs } from '@/lib/sketchbook-reminder-store';
 import { buildTeacherDigest, decideReminder } from '@/lib/sketchbook-reminders';
 import { sendNudge } from '@/lib/nudge-delivery';
+import { renewSenders } from '@/lib/teams-sender';
 
 export const maxDuration = 60;
 
@@ -29,10 +30,29 @@ export async function GET(request: NextRequest) {
   if (unauthorized) return unauthorized;
 
   try {
+    // Keep every "Connect Teams" login alive, whatever the flags say: a login left
+    // unused goes stale, and then automatic reminders stop without anyone noticing.
+    // A teacher whose login stopped working is told once, on their bell.
+    const renewal = await renewSenders().catch((e) => {
+      console.error('[cron/sketchbook-digest] sender renewal failed:', e);
+      return { renewed: 0, failed: [] as Array<{ userId: string; reason: string; revoked: boolean }> };
+    });
+    for (const f of renewal.failed.filter((x) => x.revoked)) {
+      await sendNudge({
+        studentIds: [f.userId],
+        audience: 'staff',
+        subject: 'Reconnect Teams to keep automatic reminders going',
+        plain: 'Nexus can no longer send reminders from your Teams. Open Sketchbooks, Class rhythm, and press Connect Teams again. Until then students get reminders on the Nexus bell only.',
+        eventType: 'sketch_digest',
+        metadata: { teams_sender_problem: true },
+        source: { kind: 'teams_sender_lost' },
+      });
+    }
+
     const setting = await getNexusSetting(FEATURE_FLAGS_KEY).catch(() => null);
     const flags = resolveFlags((setting?.value as Record<string, boolean>) || {});
     if (!isFeatureEnabled('staff.sketchbook', flags) || !isFeatureEnabled('staff.sketchbook-digest', flags)) {
-      return NextResponse.json({ skipped: 'Sketchbook digest is switched off in Features.' });
+      return NextResponse.json({ skipped: 'Sketchbook digest is switched off in Features.', sendersRenewed: renewal.renewed });
     }
 
     const supabase = getSupabaseAdminClient() as any;
@@ -129,7 +149,6 @@ export async function GET(request: NextRequest) {
       const { results } = await sendNudge({
         studentIds: [teacherId],
         audience: 'staff',
-        bot: false,
         subject: digest.subject,
         plain: digest.plain,
         eventType: 'sketch_digest',
@@ -144,7 +163,14 @@ export async function GET(request: NextRequest) {
       sent += 1;
     }
 
-    return NextResponse.json({ today, teachers: byTeacher.size, sent, nothingToSay: quiet });
+    return NextResponse.json({
+      today,
+      teachers: byTeacher.size,
+      sent,
+      nothingToSay: quiet,
+      sendersRenewed: renewal.renewed,
+      sendersLost: renewal.failed.filter((f) => f.revoked).length,
+    });
   } catch (err) {
     console.error('[cron/sketchbook-digest] failed:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Sketchbook digest failed' }, { status: 500 });

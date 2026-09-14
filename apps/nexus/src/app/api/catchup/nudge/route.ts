@@ -49,6 +49,8 @@ export async function POST(request: NextRequest) {
     const catchUpUrl = `${shareBaseUrl(request.nextUrl.origin)}/student/catch-up`;
 
     const { results, counts } = await sendNudge({
+      // The teacher's own Teams chat (their connected login if this token cannot chat).
+      teacher: { authHeader: request.headers.get('Authorization'), userId: staff.id },
       studentIds,
       subject,
       plain: `${text}\n\nOpen it here: ${catchUpUrl}`,

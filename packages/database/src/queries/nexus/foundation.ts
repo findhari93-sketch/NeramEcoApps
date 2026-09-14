@@ -1,4 +1,5 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { filterTrackedStudentIds } from './roster';
 import type {
   NexusFoundationChapter,
   NexusFoundationChapterWithProgress,
@@ -480,7 +481,10 @@ export async function getFoundationDashboard(
     .from('nexus_enrollments')
     .select('user_id, users:users!nexus_enrollments_user_id_fkey!inner(id, name, email, avatar_url)')
     .eq('role', 'student')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    // Paused students and alumni are in no list or count (founder rule, 2026-09-13).
+    .eq('participation_status', 'active')
+    .eq('users.is_alumni', false);
 
   if (filters?.classroom_id) {
     studentQuery = studentQuery.eq('classroom_id', filters.classroom_id);
@@ -1268,7 +1272,12 @@ export async function getChapterStudentScores(
     .eq('chapter_id', chapterId);
   if (progError) throw progError;
 
-  const studentIds = [...new Set((progressRows || []).map((p: any) => p.student_id))];
+  // Paused students are in no list (founder rule, 2026-09-13). The dormant check is
+  // global because this view is not scoped to one classroom.
+  const { kept: studentIds } = await filterTrackedStudentIds(
+    [...new Set((progressRows || []).map((p: any) => p.student_id as string))],
+    supabase,
+  );
   if (!studentIds.length) return [];
 
   // Fetch student details

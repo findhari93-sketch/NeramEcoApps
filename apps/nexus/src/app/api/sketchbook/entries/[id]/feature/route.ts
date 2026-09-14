@@ -116,6 +116,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const msg = featuredMessage(firstName(caller.name), (classroom as { name: string }).name);
     await sendNudge({
+      // The teacher's own Teams chat (their connected login if this token cannot chat).
+      teacher: { authHeader: request.headers.get('Authorization'), userId: caller.id },
       studentIds: [sketch.student_id],
       subject: msg.subject,
       plain: msg.plain,

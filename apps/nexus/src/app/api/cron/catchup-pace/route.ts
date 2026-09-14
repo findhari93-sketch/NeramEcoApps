@@ -9,6 +9,7 @@ import {
 } from '@neram/database';
 import { assertCronRequest } from '@/lib/cron-auth';
 import { sendNudge } from '@/lib/nudge-delivery';
+import { senderLookup } from '@/lib/teams-sender';
 import { computeCatchupPace, describeCatchupPace } from '@/lib/catchup-pace';
 
 export const dynamic = 'force-dynamic';
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     const cooldownBefore = new Date(Date.now() - NUDGE_COOLDOWN_DAYS * 86_400_000).toISOString();
     const behindByClassroom = new Map<string, number>();
-    const toNudge: Array<{ journeyId: string; studentId: string; message: string }> = [];
+    const toNudge: Array<{ journeyId: string; studentId: string; classroomId: string; message: string }> = [];
 
     for (const journey of journeys) {
       try {
@@ -103,6 +104,7 @@ export async function GET(request: NextRequest) {
         toNudge.push({
           journeyId: journey.id,
           studentId: journey.student_id,
+          classroomId: journey.classroom_id,
           message: describeCatchupPace(pace, quota),
         });
       } catch (err) {
@@ -114,10 +116,13 @@ export async function GET(request: NextRequest) {
 
     // Nudge. One message each, and the wording is the same sentence the student
     // sees on their own screen, so the two never contradict each other.
+    const senderFor = senderLookup(supabase);
     for (const n of toNudge) {
       try {
         await sendNudge({
           studentIds: [n.studentId],
+          // As the class's connected teacher: their own Teams chat.
+          ...(await senderFor(n.classroomId)),
           subject: 'Your catch-up list',
           plain: `${n.message}\n\nOpen Nexus and pick up where you left off.`,
           teamsText: n.message,

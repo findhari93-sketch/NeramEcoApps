@@ -676,6 +676,7 @@ export async function PATCH(request: NextRequest) {
         )}.`,
         teamsText: 'A class has been moved',
         metadata: { class_id: id },
+        teacher: { authHeader: request.headers.get('Authorization'), userId: editorUserId },
       }).catch(() => {
         /* the class is already moved; a failed announcement must not undo it */
       });

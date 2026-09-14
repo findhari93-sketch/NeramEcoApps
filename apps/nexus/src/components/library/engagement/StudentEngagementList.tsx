@@ -1,11 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
-  TextField,
   useMediaQuery,
   useTheme,
   Table,
@@ -16,12 +14,13 @@ import {
   TableRow,
   TableSortLabel,
   Paper,
-  InputAdornment,
 } from '@neram/ui';
-import SearchIcon from '@mui/icons-material/Search';
 import EngagementStatusDot from './EngagementStatusDot';
 import StudentEngagementCard from './StudentEngagementCard';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ExtraSort, ListAccessors } from '@/lib/student-list-view';
 
 interface StudentData {
   id: string;
@@ -45,6 +44,20 @@ interface StudentEngagementListProps {
 
 type SortKey = 'name' | 'videos_watched' | 'total_watch_hours' | 'avg_completion_pct' | 'current_streak' | 'engagement_score';
 
+const fullName = (s: StudentData) => `${s.first_name || ''} ${s.last_name || ''}`.trim();
+
+const ACCESSORS: ListAccessors<StudentData> = { id: (s) => s.id, name: fullName };
+
+const highFirst = (pick: (s: StudentData) => number) => (a: StudentData, b: StudentData) => pick(b) - pick(a);
+
+const SORTS: ExtraSort<StudentData, SortKey>[] = [
+  { key: 'engagement_score', label: 'Highest score', compare: highFirst((s) => s.engagement_score) },
+  { key: 'videos_watched', label: 'Most videos', compare: highFirst((s) => s.videos_watched) },
+  { key: 'total_watch_hours', label: 'Most hours', compare: highFirst((s) => s.total_watch_hours) },
+  { key: 'avg_completion_pct', label: 'Highest completion', compare: highFirst((s) => s.avg_completion_pct) },
+  { key: 'current_streak', label: 'Longest streak', compare: highFirst((s) => s.current_streak) },
+];
+
 function formatHours(hours: number): string {
   if (hours <= 0) return '0m';
   const h = Math.floor(hours);
@@ -59,93 +72,22 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const router = useRouter();
 
-  const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('engagement_score');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-
-  const filteredStudents = useMemo(() => {
-    let list = students;
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (s) =>
-          s.first_name.toLowerCase().includes(q) ||
-          s.last_name.toLowerCase().includes(q)
-      );
-    }
-
-    list = [...list].sort((a, b) => {
-      let aVal: string | number;
-      let bVal: string | number;
-
-      switch (sortKey) {
-        case 'name':
-          aVal = `${a.first_name} ${a.last_name}`;
-          bVal = `${b.first_name} ${b.last_name}`;
-          break;
-        case 'videos_watched':
-          aVal = a.videos_watched;
-          bVal = b.videos_watched;
-          break;
-        case 'total_watch_hours':
-          aVal = a.total_watch_hours;
-          bVal = b.total_watch_hours;
-          break;
-        case 'avg_completion_pct':
-          aVal = a.avg_completion_pct;
-          bVal = b.avg_completion_pct;
-          break;
-        case 'current_streak':
-          aVal = a.current_streak;
-          bVal = b.current_streak;
-          break;
-        default:
-          aVal = a.engagement_score;
-          bVal = b.engagement_score;
-      }
-
-      if (typeof aVal === 'string') {
-        return sortDir === 'asc' ? aVal.localeCompare(bVal as string) : (bVal as string).localeCompare(aVal);
-      }
-      return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
-    });
-
-    return list;
-  }, [students, search, sortKey, sortDir]);
-
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir('desc');
-    }
-  };
+  // The shared student list: ranked search, sort (these columns plus name and
+  // join date), stage filter, paused students hidden, all in the URL.
+  const view = useStudentListView<StudentData, SortKey>({
+    rows: students,
+    accessors: ACCESSORS,
+    extraSorts: SORTS,
+    defaultSort: 'engagement_score',
+    storageKey: 'nexus:library-engagement:sort',
+  });
+  const filteredStudents = view.shown;
+  const sortKey = view.sort;
+  const handleSort = (key: SortKey) => view.setSort(key);
 
   return (
     <Box>
-      <TextField
-        size="small"
-        placeholder="Search students..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon sx={{ fontSize: '1.1rem', color: 'text.disabled' }} />
-            </InputAdornment>
-          ),
-        }}
-        sx={{
-          mb: 2,
-          width: '100%',
-          '& .MuiOutlinedInput-root': {
-            borderRadius: 2,
-            fontSize: '0.85rem',
-          },
-        }}
-      />
+      <StudentListToolbar view={view} />
 
       {isMobile ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -172,7 +114,7 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
                 <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>
                   <TableSortLabel
                     active={sortKey === 'name'}
-                    direction={sortKey === 'name' ? sortDir : 'asc'}
+                    direction="asc"
                     onClick={() => handleSort('name')}
                   >
                     Name
@@ -181,7 +123,7 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
                 <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.75rem' }}>
                   <TableSortLabel
                     active={sortKey === 'videos_watched'}
-                    direction={sortKey === 'videos_watched' ? sortDir : 'desc'}
+                    direction="desc"
                     onClick={() => handleSort('videos_watched')}
                   >
                     Videos
@@ -190,7 +132,7 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
                 <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.75rem' }}>
                   <TableSortLabel
                     active={sortKey === 'total_watch_hours'}
-                    direction={sortKey === 'total_watch_hours' ? sortDir : 'desc'}
+                    direction="desc"
                     onClick={() => handleSort('total_watch_hours')}
                   >
                     Hours
@@ -199,7 +141,7 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
                 <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.75rem' }}>
                   <TableSortLabel
                     active={sortKey === 'avg_completion_pct'}
-                    direction={sortKey === 'avg_completion_pct' ? sortDir : 'desc'}
+                    direction="desc"
                     onClick={() => handleSort('avg_completion_pct')}
                   >
                     Completion
@@ -208,7 +150,7 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
                 <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.75rem' }}>
                   <TableSortLabel
                     active={sortKey === 'current_streak'}
-                    direction={sortKey === 'current_streak' ? sortDir : 'desc'}
+                    direction="desc"
                     onClick={() => handleSort('current_streak')}
                   >
                     Streak
@@ -217,7 +159,7 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
                 <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.75rem' }}>
                   <TableSortLabel
                     active={sortKey === 'engagement_score'}
-                    direction={sortKey === 'engagement_score' ? sortDir : 'desc'}
+                    direction="desc"
                     onClick={() => handleSort('engagement_score')}
                   >
                     Score
@@ -291,6 +233,7 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
           </Table>
         </TableContainer>
       )}
+      <PausedFootnote count={view.pausedHidden} />
     </Box>
   );
 }

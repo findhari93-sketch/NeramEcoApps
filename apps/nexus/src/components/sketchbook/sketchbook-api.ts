@@ -39,7 +39,7 @@ export const unfeatureSketch = (getToken: GetToken, id: string, classroomId: str
   call<{ ok: true; failures: string[] }>(getToken, `/api/sketchbook/entries/${id}/feature?classroom=${encodeURIComponent(classroomId)}`, { method: 'DELETE' });
 
 export interface NudgeResponse {
-  counts: { total: number; chat: number; bot?: number; teams: number; inapp: number; email: number; failed: number; skipped: number; unreached: number };
+  counts: { total: number; chat: number; teams: number; inapp: number; failed: number; skipped: number; unreached: number };
   results: Array<{ studentId: string; name: string | null; channel: string; reasons: Record<string, string> | null }>;
   dropped: number;
 }

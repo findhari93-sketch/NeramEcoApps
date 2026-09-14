@@ -106,6 +106,8 @@ export async function POST(request: NextRequest) {
         // Through the one door. This used to insert a `type` column that does not
         // exist; the error was never checked, so nobody was ever told.
         const { counts } = await sendNudge({
+          // The teacher's own Teams chat (their connected login if this token cannot chat).
+          teacher: { authHeader: request.headers.get('Authorization'), userId: user.id },
           studentIds: [...new Set<string>(registrations.map((reg: any) => reg.student_id))],
           subject: `${String(exam_type).toUpperCase()} scorecard released`,
           plain: message || `${String(exam_type).toUpperCase()} exam scorecards are now available. Please upload your scorecard.`,

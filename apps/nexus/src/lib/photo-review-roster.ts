@@ -52,7 +52,11 @@ export async function loadPhotoRoster(
     )
     .eq('classroom_id', classroomId)
     .eq('role', 'student')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    // Paused students are in no list or count (founder rule, 2026-09-13). The badge
+    // RPC (20260918090200) carries the same clause; photo-review-predicate.test.ts
+    // holds the two together.
+    .eq('participation_status', 'active');
   // Deliberately no filter on nexus_classrooms.is_active / is_archived here.
   // That rule already lives in the two places that need it and agree:
   // /api/auth/me, which builds the dropdown this classroomId comes from, and

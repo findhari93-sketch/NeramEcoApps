@@ -13,7 +13,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   PANELS,
+  QB_NAV_GROUP,
   ZONES,
+  filterNavTree,
+  flattenNavItems,
   groupNavItems,
   panelBottomNav,
   panelOverflow,
@@ -29,7 +32,8 @@ describe('nav-config: every desktop item is reachable on a phone', () => {
     '%s panel: no sidebar item is missing from the bottom bar or the More sheet',
     (_id, panel) => {
       const mobile = new Set([...paths(panelBottomNav(panel)), ...paths(panelOverflow(panel))]);
-      const unreachable = paths(panel.sidebarItems).filter((p) => !mobile.has(p));
+      // A folder's destinations are its links; its own path only redirects to one.
+      const unreachable = paths(flattenNavItems(panel.sidebarItems)).filter((p) => !mobile.has(p));
       expect(unreachable).toEqual([]);
     },
   );
@@ -144,6 +148,78 @@ describe('nav-config: the configuration itself is sound', () => {
         expect(item.group, `${zone.id}: ${item.label}`).toBeTruthy();
       }
     }
+  });
+});
+
+/**
+ * Folders (Question Bank > JEE Paper 2, NATA).
+ *
+ * A folder's links live inside it in the sidebar, which is hidden below 900px.
+ * If the phone lists were built from top-level items only, both exams would be
+ * unreachable on every phone: the exact bug this file exists to prevent.
+ */
+describe('nav-config: folders', () => {
+  const EXAM_PATHS = (surface: 'student' | 'teacher') => [
+    `/${surface}/question-bank/jee-paper-2`,
+    `/${surface}/question-bank/nata`,
+  ];
+
+  it.each(ZONES.map((z) => [z.id, z] as const))(
+    '%s zone: both Question Bank exams are in the More sheet, under their own heading',
+    (_id, zone) => {
+      const overflow = zoneOverflow(zone);
+      expect(paths(overflow)).toEqual(expect.arrayContaining(EXAM_PATHS('student')));
+      for (const item of overflow.filter((i) => i.path.startsWith('/student/question-bank/'))) {
+        expect(item.group).toBe(QB_NAV_GROUP);
+      }
+      // The bar keeps its one QB tab, which forwards to the exam used last.
+      expect(paths(zone.bottomNavItems)).toContain('/student/question-bank');
+    },
+  );
+
+  it('Management panel: both Question Bank exams are in the More sheet', () => {
+    const management = PANELS.find((p) => p.id === 'management')!;
+    expect(paths(panelOverflow(management))).toEqual(expect.arrayContaining(EXAM_PATHS('teacher')));
+  });
+
+  it.each(PANELS.map((p) => [p.id, p] as const))(
+    '%s panel has no duplicate paths once folders are opened',
+    (_id, panel) => {
+      const folders = panel.sidebarItems.filter((i) => i.children?.length);
+      const all = paths([...folders, ...flattenNavItems(panel.sidebarItems)]);
+      expect(new Set(all).size).toBe(all.length);
+    },
+  );
+
+  it('lists JEE Paper 2 before NATA', () => {
+    const study = ZONES.find((z) => z.id === 'study')!;
+    const folder = study.navGroups.flatMap((g) => g.items).find((i) => i.children)!;
+    expect(folder.label).toBe('Question Bank');
+    expect(folder.children!.map((c) => c.label)).toEqual(['JEE Paper 2', 'NATA']);
+  });
+
+  it('filterNavTree drops a folder whose every link is filtered out, and keeps the rest', () => {
+    const icon = null;
+    const tree: NavItem[] = [
+      { label: 'A', path: '/a', icon },
+      {
+        label: 'QB',
+        path: '/qb',
+        icon,
+        children: [
+          { label: 'One', path: '/qb/one', icon },
+          { label: 'Two', path: '/qb/two', icon },
+        ],
+      },
+    ];
+    const onlyTwo = filterNavTree(tree, (i) => i.path !== '/qb/one');
+    expect(onlyTwo[1].children!.map((c) => c.path)).toEqual(['/qb/two']);
+
+    const noQB = filterNavTree(tree, (i) => !i.path.startsWith('/qb/'));
+    expect(paths(noQB)).toEqual(['/a']);
+
+    const parentOff = filterNavTree(tree, (i) => i.path !== '/qb');
+    expect(paths(parentOff)).toEqual(['/a']);
   });
 });
 

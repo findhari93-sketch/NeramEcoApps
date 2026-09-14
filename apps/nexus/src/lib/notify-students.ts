@@ -1,23 +1,23 @@
 import { getSupabaseAdminClient } from '@neram/database';
-import { sendTeamsActivityNotification } from '@neram/auth';
+import { sendNudge } from './nudge-delivery';
 
 /**
- * Reach a set of students on more than one channel.
+ * Tell a class (or part of it) about something that happened to the CLASS: a
+ * cancelled or moved class, a new assignment, a scheduled test, a missed class.
  *
- * Extracted from the assignment nudge route so anything that needs to tell
- * students something urgent, a cancelled class, a moved class, a missed class,
- * delivers it the same way instead of each caller inventing its own fan-out.
+ * Two records, then the one door:
  *
- * Two channels, in order of usefulness:
+ *  1. The timetable bell (nexus_timetable_notifications), the classroom-scoped
+ *     list on the timetable page. Written first: it is the class's own record.
+ *  2. sendNudge, like every other student message (founder rule): a Teams chat
+ *     from the teacher when one is passed, the Teams activity feed otherwise, and
+ *     the main Nexus bell, with a receipt per student.
  *
- *  1. The Neram Assistant Teams app, an activity-feed ping. This is the one
- *     students actually see, because Teams is already open on their machine.
- *     Needs TEAMS_APP_CATALOG_ID and the student's ms_oid.
- *  2. An in-app notification, always. The bell is the durable record: a Teams
- *     ping that arrives while the phone is off is gone, the bell is not.
+ * Dormant students are included on purpose. A message that exists because a
+ * class exists (it moved, it was cancelled) still reaches a paused student, who
+ * keeps their access and their invites; only "you have not done X" chasing stops.
  *
- * Never throws. A student with no Microsoft identity still gets the in-app
- * notification, and a Teams outage must not roll back the thing being announced.
+ * Never throws. A Teams outage must not roll back the thing being announced.
  */
 
 export interface NotifyStudentsInput {
@@ -36,29 +36,25 @@ export interface NotifyStudentsInput {
     | 'assignment_linked';
   /** Bell headline. */
   title: string;
-  /** Bell body, and the Teams preview line. */
+  /** Bell body, the Teams preview line and the chat text. */
   message: string;
   /** Short Teams headline. Falls back to the title. */
   teamsText?: string;
   metadata?: Record<string, unknown>;
-  /** Set false to write the bell notification only. */
+  /** Set false for the bells only: no Teams chat, no activity feed. */
   teams?: boolean;
-  /**
-   * Also write the TOP-BAR bell (`user_notifications`), the one visible on every
-   * page rather than only inside a classroom's timetable.
-   *
-   * Off by default so the existing class-lifecycle callers keep their current
-   * reach. Turn it on for things a student must not miss by simply never
-   * opening the timetable, which is exactly how new assignments went unnoticed.
-   */
+  /** The teacher acting, so each student gets it as that teacher's own Teams chat. */
+  teacher?: { authHeader: string | null; userId: string };
+  /** @deprecated Every notice now reaches the main bell through sendNudge. Kept so callers compile. */
   topBar?: boolean;
 }
 
 export interface NotifyStudentsResult {
   recipients: number;
+  /** Reached on Teams, by chat or activity feed. */
   teamsDelivered: number;
   inAppDelivered: number;
-  /** Rows written to the top-bar bell. 0 when `topBar` was not requested. */
+  /** Rows written to the main Nexus bell. */
   topBarDelivered: number;
 }
 
@@ -81,7 +77,7 @@ export async function notifyStudents(input: NotifyStudentsInput): Promise<Notify
     return { recipients: 0, teamsDelivered: 0, inAppDelivered: 0, topBarDelivered: 0 };
   }
 
-  // The bell first: it is the record, so it should not depend on Teams working.
+  // The timetable bell first: it is the class's record, so it should not depend on Teams.
   let inAppDelivered = 0;
   const { error: bellError } = await supabase.from('nexus_timetable_notifications').insert(
     ids.map((userId) => ({
@@ -93,46 +89,24 @@ export async function notifyStudents(input: NotifyStudentsInput): Promise<Notify
       metadata: input.metadata || null,
     })),
   );
-  if (!bellError) inAppDelivered = ids.length;
+  if (bellError) console.error(`${input.eventType} timetable bell failed:`, bellError.message);
+  else inAppDelivered = ids.length;
 
-  // The top-bar bell, when the caller asked for it. Separate table, separate
-  // failure: a rejected enum value here must not cost the classroom bell above.
-  let topBarDelivered = 0;
-  if (input.topBar) {
-    const { error: topBarError } = await supabase.from('user_notifications').insert(
-      ids.map((userId) => ({
-        user_id: userId,
-        event_type: input.eventType,
-        title: input.title,
-        message: input.message,
-        metadata: input.metadata || null,
-        is_read: false,
-      })),
-    );
-    // Never swallow this silently: the enum behind user_notifications.event_type
-    // rejects unknown values, and that failure is otherwise invisible.
-    if (topBarError) console.error(`${input.eventType} top-bar notify failed:`, topBarError.message);
-    else topBarDelivered = ids.length;
+  try {
+    const { counts } = await sendNudge({
+      studentIds: ids,
+      respectDormancy: false,
+      subject: input.title,
+      plain: input.message,
+      teamsText: input.teamsText || input.title,
+      eventType: input.eventType,
+      metadata: { classroom_id: input.classroomId, ...(input.metadata || {}) },
+      ...(input.teams === false ? { bellOnly: true } : input.teacher ? { teacher: input.teacher } : {}),
+      source: { kind: input.eventType, refId: input.classroomId },
+    });
+    return { recipients: ids.length, teamsDelivered: counts.chat + counts.teams, inAppDelivered, topBarDelivered: counts.inapp };
+  } catch (err) {
+    console.error(`${input.eventType} sendNudge failed:`, err);
+    return { recipients: ids.length, teamsDelivered: 0, inAppDelivered, topBarDelivered: 0 };
   }
-
-  let teamsDelivered = 0;
-  const catalogAppId = process.env.TEAMS_APP_CATALOG_ID;
-  if (input.teams !== false && catalogAppId) {
-    const { data: users } = await supabase.from('users').select('id, ms_oid').in('id', ids);
-
-    const results = await Promise.allSettled(
-      (users || [])
-        .filter((u: any) => u.ms_oid)
-        .map((u: any) =>
-          sendTeamsActivityNotification(u.ms_oid, {
-            text: input.teamsText || input.title,
-            preview: input.message,
-            catalogAppId,
-          }),
-        ),
-    );
-    teamsDelivered = results.filter((r) => r.status === 'fulfilled' && (r.value as any)?.ok).length;
-  }
-
-  return { recipients: ids.length, teamsDelivered, inAppDelivered, topBarDelivered };
 }

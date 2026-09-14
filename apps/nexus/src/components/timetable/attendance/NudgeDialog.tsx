@@ -29,8 +29,8 @@ import SendIcon from '@mui/icons-material/Send';
  */
 
 export interface NudgeOutcome {
-  counts: { total: number; teams: number; inapp: number; email: number; failed: number };
-  parents?: { emailed: number };
+  counts: { total: number; chat?: number; teams: number; inapp: number; failed: number };
+  parents?: { emailed?: number; notified?: number };
   teamsPost?: { channel: boolean; chat: boolean; error?: string | null };
 }
 
@@ -48,11 +48,13 @@ interface NudgeDialogProps {
 
 function summarise(o: NudgeOutcome): string {
   const parts: string[] = [];
+  const chat = o.counts.chat ?? 0;
+  if (chat) parts.push(`${chat} in your Teams chat`);
   if (o.counts.teams) parts.push(`${o.counts.teams} pinged in Teams`);
-  if (o.counts.email) parts.push(`${o.counts.email} emailed`);
-  const onlyInApp = o.counts.inapp - o.counts.teams - o.counts.email;
+  const onlyInApp = o.counts.inapp - chat - o.counts.teams;
   if (onlyInApp > 0) parts.push(`${onlyInApp} in Nexus only`);
-  if (o.parents?.emailed) parts.push(`${o.parents.emailed} parent emailed`);
+  const parents = o.parents?.notified ?? o.parents?.emailed ?? 0;
+  if (parents) parts.push(`${parents} parent${parents === 1 ? '' : 's'} told in Nexus`);
   if (o.teamsPost?.channel) parts.push('posted to the class channel');
   if (o.teamsPost?.chat) parts.push('posted to the group chat');
   if (o.counts.failed) parts.push(`${o.counts.failed} could not be reached`);
@@ -124,8 +126,8 @@ export default function NudgeDialog({
             />
 
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
-              Each student gets a Teams ping and a Nexus notification, and an email if Teams cannot
-              reach them. Every one of them carries a link that opens this class&rsquo;s catch-up page,
+              Each student gets it as your Teams chat and a Nexus notification. Every one of them
+              carries a link that opens this class&rsquo;s catch-up page,
               so they can start from the message. A parent is copied only for anyone who has already
               been nudged about this class once.
             </Typography>

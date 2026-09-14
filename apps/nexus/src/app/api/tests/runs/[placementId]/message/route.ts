@@ -293,12 +293,11 @@ function formatDay(iso: string | null): string | null {
  * receipt says one line per cause instead of listing 23 identical refusals.
  */
 function groupReasons(results: NudgeResult[]) {
-  const out: Record<'chat' | 'teams' | 'email', Array<{ reason: string; count: number }>> = {
+  const out: Record<'chat' | 'teams', Array<{ reason: string; count: number }>> = {
     chat: [],
     teams: [],
-    email: [],
   };
-  for (const tier of ['chat', 'teams', 'email'] as const) {
+  for (const tier of ['chat', 'teams'] as const) {
     const tally = new Map<string, number>();
     for (const r of results) {
       const reason = r.reasons?.[tier];

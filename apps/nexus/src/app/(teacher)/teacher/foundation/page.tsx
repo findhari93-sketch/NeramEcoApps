@@ -17,6 +17,9 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ExtraSort, ListAccessors } from '@/lib/student-list-view';
 
 interface StudentProgress {
   student: { id: string; name: string; email: string; avatar_url: string | null };
@@ -26,12 +29,55 @@ interface StudentProgress {
   last_activity: string | null;
 }
 
+type Progress = 'completed' | 'in_progress' | 'not_started';
+type SortKey = 'stuck_first' | 'most_done';
+
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+function progressOf(s: StudentProgress): Progress {
+  if (s.total_chapters > 0 && s.completed_chapters === s.total_chapters) return 'completed';
+  return s.completed_chapters === 0 ? 'not_started' : 'in_progress';
+}
+
+/** Not finished, and never active or quiet for more than 3 days. */
+function isStuck(s: StudentProgress): boolean {
+  if (progressOf(s) === 'completed') return false;
+  if (!s.last_activity) return true;
+  return Math.floor((Date.now() - new Date(s.last_activity).getTime()) / DAY_MS) > 3;
+}
+
+const ACCESSORS: ListAccessors<StudentProgress> = {
+  id: (s) => s.student.id,
+  name: (s) => s.student.name,
+  email: (s) => s.student.email,
+};
+
+const SORTS: ExtraSort<StudentProgress, SortKey>[] = [
+  {
+    key: 'stuck_first',
+    label: 'Stuck first',
+    compare: (a, b) => Number(isStuck(b)) - Number(isStuck(a)) || a.completed_chapters - b.completed_chapters,
+  },
+  { key: 'most_done', label: 'Most chapters done', compare: (a, b) => b.completed_chapters - a.completed_chapters },
+];
+
+const PROGRESS_ORDER: readonly Progress[] = ['completed', 'in_progress', 'not_started'];
+
 export default function TeacherFoundationDashboard() {
   const theme = useTheme();
   const router = useRouter();
   const { activeClassroom, getToken, loading: authLoading } = useNexusAuthContext();
   const [students, setStudents] = useState<StudentProgress[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const view = useStudentListView<StudentProgress, SortKey, Progress>({
+    rows: students,
+    accessors: ACCESSORS,
+    extraSorts: SORTS,
+    defaultSort: 'stuck_first',
+    status: { of: progressOf, order: PROGRESS_ORDER },
+    storageKey: 'nexus:foundation-progress:sort',
+  });
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
@@ -86,19 +132,6 @@ export default function TeacherFoundationDashboard() {
     return theme.palette.primary.main;
   };
 
-  // Sort: stuck students first, then by completion (ascending)
-  const sortedStudents = [...students].sort((a, b) => {
-    const aColor = getStatusColor(a);
-    const bColor = getStatusColor(b);
-    if (aColor === theme.palette.error.main && bColor !== theme.palette.error.main) return -1;
-    if (bColor === theme.palette.error.main && aColor !== theme.palette.error.main) return 1;
-    return a.completed_chapters - b.completed_chapters;
-  });
-
-  const completedAll = students.filter(s => s.completed_chapters === s.total_chapters).length;
-  const inProgress = students.filter(s => s.completed_chapters > 0 && s.completed_chapters < s.total_chapters).length;
-  const notStarted = students.filter(s => s.completed_chapters === 0).length;
-
   return (
     <Box>
       <PageHeader
@@ -116,40 +149,36 @@ export default function TeacherFoundationDashboard() {
         }
       />
 
-      {/* Summary Stats */}
+      {/* The counts are the filters: tap one to show only those students. */}
       {!loading && students.length > 0 && (
-        <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
-          <Chip
-            label={`${completedAll} Completed`}
-            size="small"
-            sx={{
-              bgcolor: alpha(theme.palette.success.main, 0.1),
-              color: theme.palette.success.main,
-              fontWeight: 700,
-              fontSize: '0.75rem',
-            }}
-          />
-          <Chip
-            label={`${inProgress} In Progress`}
-            size="small"
-            sx={{
-              bgcolor: alpha(theme.palette.primary.main, 0.1),
-              color: theme.palette.primary.main,
-              fontWeight: 700,
-              fontSize: '0.75rem',
-            }}
-          />
-          <Chip
-            label={`${notStarted} Not Started`}
-            size="small"
-            sx={{
-              bgcolor: alpha(theme.palette.error.main, 0.1),
-              color: theme.palette.error.main,
-              fontWeight: 700,
-              fontSize: '0.75rem',
-            }}
-          />
-        </Box>
+        <>
+          <Box sx={{ display: 'flex', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
+            {([
+              { key: 'completed', label: 'Completed', color: theme.palette.success.main },
+              { key: 'in_progress', label: 'In progress', color: theme.palette.primary.main },
+              { key: 'not_started', label: 'Not started', color: theme.palette.error.main },
+            ] as const).map((c) => {
+              const on = view.status === c.key;
+              return (
+                <Chip
+                  key={c.key}
+                  label={`${view.statusCounts[c.key] ?? 0} ${c.label}`}
+                  onClick={() => view.setStatus(on ? 'all' : c.key)}
+                  aria-pressed={on}
+                  sx={{
+                    minHeight: 44,
+                    bgcolor: on ? c.color : alpha(c.color, 0.1),
+                    color: on ? theme.palette.common.white : c.color,
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    '&:hover': { bgcolor: on ? c.color : alpha(c.color, 0.18) },
+                  }}
+                />
+              );
+            })}
+          </Box>
+          <StudentListToolbar view={view} />
+        </>
       )}
 
       {/* Student List */}
@@ -158,7 +187,7 @@ export default function TeacherFoundationDashboard() {
           ? Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} variant="rectangular" height={80} sx={{ borderRadius: 2.5 }} />
             ))
-          : sortedStudents.length === 0 ? (
+          : view.shown.length === 0 ? (
               <Paper
                 elevation={0}
                 sx={{
@@ -172,13 +201,15 @@ export default function TeacherFoundationDashboard() {
                   No students found
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.disabled', mt: 0.5 }}>
-                  {activeClassroom
+                  {students.length > 0
+                    ? 'No students match this filter.'
+                    : activeClassroom
                     ? 'No students are enrolled in this classroom.'
                     : 'Select a classroom to view student progress.'}
                 </Typography>
               </Paper>
             )
-          : sortedStudents.map((sp, index) => {
+          : view.shown.map((sp, index) => {
               const pct = sp.total_chapters > 0
                 ? Math.round((sp.completed_chapters / sp.total_chapters) * 100)
                 : 0;
@@ -262,6 +293,7 @@ export default function TeacherFoundationDashboard() {
               );
             })}
       </Box>
+      <PausedFootnote count={view.pausedHidden} />
     </Box>
   );
 }

@@ -51,6 +51,7 @@ import type {
   QBQuestionFormat,
 } from '@neram/database';
 import { MAX_STUDENT_TEST_QUESTIONS } from '@/lib/test-limits';
+import { isQBExamType, qbExamPath, rememberQBExam } from '@/lib/qb-exam-routes';
 
 /** Stable identity, so a render with no counts does not re-trigger consumers. */
 const EMPTY_COUNTS: Record<string, number> = {};
@@ -280,6 +281,12 @@ export default function QuestionListPage() {
     }
     fetchQuestions(1);
   }, [activeClassroom, authLoading, filters, selectedExam, selectedYear, selectedSession]);
+
+  // A search scoped to one exam belongs to that exam's page: the sidebar
+  // highlights it, and the QB tab returns to it.
+  useEffect(() => {
+    if (isQBExamType(selectedExam)) rememberQBExam(selectedExam);
+  }, [selectedExam]);
 
   // Sync filters + exam context to URL
   useEffect(() => {
@@ -855,7 +862,13 @@ export default function QuestionListPage() {
         <Button
           size="small"
           startIcon={<ArrowBackIcon />}
-          onClick={() => router.push('/student/question-bank')}
+          onClick={() =>
+            router.push(
+              isQBExamType(selectedExam)
+                ? qbExamPath('student', selectedExam)
+                : '/student/question-bank',
+            )
+          }
           sx={{
             textTransform: 'none',
             color: 'text.secondary',

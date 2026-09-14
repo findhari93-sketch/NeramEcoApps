@@ -169,6 +169,7 @@ function getNavigationUrl(
       return notification.event_type === 'sketch_rhythm_nudge' ? '/student/sketchbook?add=1' : '/student/sketchbook';
     // The teacher's evening digest opens Class rhythm on whoever needs a call, else the new sketches.
     case 'sketch_digest': {
+      if (notification.metadata?.teams_sender_problem) return '/teacher/sketchbook?view=rhythm';
       const needsCall = Number(notification.metadata?.needs_call || 0);
       return needsCall > 0 ? '/teacher/sketchbook?view=rhythm&status=needs_call' : '/teacher/sketchbook';
     }
@@ -177,6 +178,42 @@ function getNavigationUrl(
       return `/${nexusRole || 'student'}/documents`;
     case 'exam_date_reminder':
       return `/${nexusRole || 'student'}/exam-schedule`;
+    // Class notices, now on the main bell too. Each opens the class it is about.
+    case 'class_cancelled':
+    case 'class_rescheduled':
+    case 'class_created':
+    case 'recording_available': {
+      const classId = notification.metadata?.class_id as string | undefined;
+      return classId ? `/${nexusRole || 'student'}/timetable/${classId}` : `/${nexusRole || 'student'}/timetable`;
+    }
+    case 'week_published':
+      return `/${nexusRole || 'student'}/timetable`;
+    case 'absence_reason_needed': {
+      const classId = notification.metadata?.class_id as string | undefined;
+      return classId ? `/student/timetable/${classId}/catch-up` : '/student/catch-up';
+    }
+    case 'test_scheduled':
+      return `/${nexusRole || 'student'}/tests`;
+    case 'assignment_published':
+    case 'assignment_linked': {
+      const assignmentId = notification.metadata?.assignment_id as string | undefined;
+      return assignmentId ? `/${nexusRole || 'student'}/assignments/${assignmentId}` : `/${nexusRole || 'student'}/assignments`;
+    }
+    case 'test_access_granted':
+    case 'test_access_declined': {
+      const testId = notification.metadata?.test_id as string | undefined;
+      const placementId = notification.metadata?.placement_id as string | undefined;
+      if (!testId) return '/student/tests';
+      return `/student/tests/take?test_id=${testId}${placementId ? `&placement_id=${encodeURIComponent(placementId)}` : ''}`;
+    }
+    case 'catchup_overdue':
+    case 'prework_reason_needed':
+    case 'recap_needs_review': {
+      const href = notification.metadata?.href as string | undefined;
+      if (href && href.startsWith('/')) return href;
+      const classId = (notification.metadata?.scheduled_class_id || notification.metadata?.class_id) as string | undefined;
+      return classId ? `/${nexusRole || 'student'}/timetable/${classId}` : null;
+    }
     default:
       return null;
   }

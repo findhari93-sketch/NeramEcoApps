@@ -72,6 +72,8 @@ export async function POST(request: NextRequest) {
     const teamsText = assignmentIds.length ? `${subject}: ${primaryTitle}` : subject;
 
     const { results, counts } = await sendNudge({
+      // The teacher's own Teams chat (their connected login if this token cannot chat).
+      teacher: { authHeader: request.headers.get('Authorization'), userId: user.id },
       studentIds,
       subject,
       plain: text + linksText,

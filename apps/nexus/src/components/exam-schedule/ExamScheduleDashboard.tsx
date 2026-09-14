@@ -22,7 +22,7 @@ import RecentlyCompletedStrip from './RecentlyCompletedStrip';
 import AddExamDateSheet from './AddExamDateSheet';
 
 export default function ExamScheduleDashboard() {
-  const { user, activeClassroom, getToken, nexusRole } = useNexusAuthContext();
+  const { user, activeClassroom, getToken, getTeacherToken, nexusRole } = useNexusAuthContext();
   const isTeacher = nexusRole === 'teacher' || nexusRole === 'admin';
 
   const [data, setData] = useState<ExamScheduleData | null>(null);
@@ -72,7 +72,7 @@ export default function ExamScheduleDashboard() {
     if (!activeClassroom) return;
     setReminding(true);
     try {
-      const token = await getToken();
+      const token = await getTeacherToken();
       const res = await fetch('/api/exam-schedule/remind', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

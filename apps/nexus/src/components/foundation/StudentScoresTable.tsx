@@ -12,6 +12,9 @@ import {
 } from '@neram/ui';
 import DownloadIcon from '@mui/icons-material/Download';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ExtraSort, ListAccessors } from '@/lib/student-list-view';
 
 interface ChapterStudentScore {
   student_id: string;
@@ -40,8 +43,22 @@ interface StudentScoresTableProps {
   getToken: () => Promise<string | null>;
 }
 
+type SortKey = 'score' | 'lowest_score' | 'watch';
+
+const ACCESSORS: ListAccessors<ChapterStudentScore> = {
+  id: (s) => s.student_id,
+  name: (s) => s.student_name,
+  email: (s) => s.student_email,
+};
+
+const SORTS: ExtraSort<ChapterStudentScore, SortKey>[] = [
+  { key: 'score', label: 'Highest score', compare: (a, b) => b.overall_score_pct - a.overall_score_pct },
+  { key: 'lowest_score', label: 'Lowest score', compare: (a, b) => a.overall_score_pct - b.overall_score_pct },
+  { key: 'watch', label: 'Most watch time', compare: (a, b) => b.total_watch_seconds - a.total_watch_seconds },
+];
+
 function formatWatchTime(seconds: number): string {
-  if (seconds <= 0) return '—';
+  if (seconds <= 0) return '-';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   if (m === 0) return `${s}s`;
@@ -60,7 +77,7 @@ function ScoreCell({ score, passed }: { score: number | null; passed: boolean })
   if (score === null) {
     return (
       <Box sx={{ textAlign: 'center', color: 'text.disabled', fontSize: '0.75rem' }}>
-        —
+        -
       </Box>
     );
   }
@@ -126,6 +143,17 @@ export default function StudentScoresTable({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const view = useStudentListView<ChapterStudentScore, SortKey>({
+    rows: scores,
+    accessors: ACCESSORS,
+    extraSorts: SORTS,
+    defaultSort: 'score',
+    // Opened inside a chapter view: keep the page URL untouched.
+    urlKeys: false,
+    storageKey: 'nexus:foundation-scores:sort',
+  });
+  const shown = view.shown;
+
   const fetchScores = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -165,7 +193,8 @@ export default function StudentScoresTable({
       sectionHeaders.push(`${label} Seeks`);
     });
     const header = ['Student Name', 'Email', ...sectionHeaders, 'Overall %', 'Sections Passed', 'Total Watch Time'].join(',');
-    const rows = scores.map(s => [
+    // The export is the list on screen: same search, filter and order.
+    const rows = shown.map(s => [
       `"${s.student_name}"`,
       s.student_email,
       ...s.sections.flatMap(sec => [
@@ -187,7 +216,7 @@ export default function StudentScoresTable({
     a.download = `chapter-${chapterNumber ?? chapterId}-scores.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [scores, chapterId, chapterNumber]);
+  }, [scores, shown, chapterId, chapterNumber]);
 
   if (loading) {
     return (
@@ -225,7 +254,7 @@ export default function StudentScoresTable({
       {/* Header with export */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, px: 1 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-          Student Scores ({scores.length} students)
+          Student Scores ({view.total} students)
         </Typography>
         <Tooltip title="Export to CSV">
           <Button
@@ -237,6 +266,10 @@ export default function StudentScoresTable({
             Export
           </Button>
         </Tooltip>
+      </Box>
+
+      <Box sx={{ px: 1 }}>
+        <StudentListToolbar view={view} />
       </Box>
 
       {/* Legend */}
@@ -304,7 +337,7 @@ export default function StudentScoresTable({
             </tr>
           </thead>
           <tbody>
-            {scores.map((student) => (
+            {shown.map((student) => (
               <tr key={student.student_id}>
                 <Box
                   component="td"
@@ -376,6 +409,12 @@ export default function StudentScoresTable({
           </tbody>
         </Box>
       </Box>
+      {shown.length === 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+          No students match this filter.
+        </Typography>
+      )}
+      <PausedFootnote count={view.pausedHidden} />
     </Box>
   );
 }

@@ -201,6 +201,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         },
         kind: 'linked',
         token: extractBearerToken(request.headers.get('Authorization')),
+        actorUserId: access.userId,
         shareBase: shareBaseUrl(request.nextUrl.origin),
         supabase,
       }).catch((e) => console.error('announceAssignment (link) failed:', e));

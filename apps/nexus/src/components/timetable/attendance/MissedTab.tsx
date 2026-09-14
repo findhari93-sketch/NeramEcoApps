@@ -19,6 +19,17 @@ import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import { stageKeyOf } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
 import type { AttendanceTabProps, StudentInsight } from './types';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
+
+const INSIGHT_ACCESSORS: ListAccessors<StudentInsight> = {
+  id: (s) => s.id,
+  name: (s) => s.name,
+  joinedAt: (s) => s.enrolled_at,
+  dormant: (s) => s.dormant,
+};
+const GROUP_ORDER = [suggestedOrder<StudentInsight>('Grouped by follow-up')];
 
 /**
  * Who was not here, grouped by whether anything is being done about it.
@@ -390,15 +401,25 @@ export default function MissedTab({
   onSelect,
   onSelectMany,
 }: AttendanceTabProps) {
+  // The shared list first (search, stage filter, paused hidden), then the fixed
+  // groups over what it shows, so every count and Select all follows the filter.
+  const view = useStudentListView<StudentInsight, 'suggested'>({
+    rows: insights?.students,
+    accessors: INSIGHT_ACCESSORS,
+    extraSorts: GROUP_ORDER,
+    defaultSort: 'suggested',
+    urlKeys: false,
+  });
+
   const groups = useMemo(() => {
-    const students = insights?.students ?? [];
+    const students = view.shown;
     return {
       silent: students.filter((s) => s.bucket === 'missed_no_reason'),
       explained: students.filter((s) => s.bucket === 'missed_with_reason'),
       lateJoiners: students.filter((s) => s.bucket === 'late_joiner'),
       done: students.filter((s) => s.bucket === 'caught_up' || s.bucket === 'excused'),
     };
-  }, [insights]);
+  }, [view.shown]);
 
   /**
    * Everyone the actions are for, in the order they are shown. Built from the
@@ -422,7 +443,9 @@ export default function MissedTab({
 
   if (!insights) return <Alert severity="info">Could not load this class.</Alert>;
 
-  const nobodyMissed = outstandingIds.length === 0 && groups.done.length === 0;
+  const nobodyMissed = !(insights.students ?? []).some((s) =>
+    ['missed_no_reason', 'missed_with_reason', 'late_joiner', 'caught_up', 'excused'].includes(String(s.bucket)),
+  );
 
   if (nobodyMissed) {
     return (
@@ -439,6 +462,7 @@ export default function MissedTab({
 
   return (
     <>
+      <StudentListToolbar view={view} />
       {outstandingIds.length > 0 && (
         <SelectAllBar ids={outstandingIds} selected={selected} onSelectMany={onSelectMany} />
       )}
@@ -480,6 +504,7 @@ export default function MissedTab({
         defaultOpen={false}
         note={turnaroundNote}
       />
+      <PausedFootnote count={view.pausedHidden} />
     </>
   );
 }

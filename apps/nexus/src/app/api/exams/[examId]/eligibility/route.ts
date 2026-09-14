@@ -18,10 +18,12 @@ export async function GET(request: NextRequest, { params }: { params: { examId: 
     if (!access.ok) return access.response;
 
     const facts = await loadExamEligibilityFacts(params.examId, access.exam.classroom_id);
-    const rows = buildExamEligibilityRoster(facts);
+    // Paused students are in no list or count (founder rule, 2026-09-13).
+    const pausedHidden = facts.students.filter((s) => s.dormant).length;
+    const rows = buildExamEligibilityRoster({ ...facts, students: facts.students.filter((s) => !s.dormant) });
 
     return NextResponse.json({
-      data: { covered_classes: facts.coveredClasses, rows, summary: summariseEligibilityRoster(rows) },
+      data: { covered_classes: facts.coveredClasses, rows, summary: summariseEligibilityRoster(rows), paused_hidden: pausedHidden },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';

@@ -30,7 +30,7 @@ export default function UnifiedExamsContainer() {
   const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, activeClassroom, getToken, nexusRole } = useNexusAuthContext();
+  const { user, activeClassroom, getToken, getTeacherToken, nexusRole } = useNexusAuthContext();
   const isTeacher = nexusRole === 'teacher' || nexusRole === 'admin';
 
   const [data, setData] = useState<UnifiedExamsResponse | null>(null);
@@ -88,7 +88,7 @@ export default function UnifiedExamsContainer() {
     if (!activeClassroom) return;
     setReminding(true);
     try {
-      const token = await getToken();
+      const token = await getTeacherToken();
       const res = await fetch('/api/exam-schedule/remind', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
         if (sendsMessage(action)) {
           const tpl = buildTemplate(action, { name: nameBy.get(sid) || '', reasons });
           const sent = await sendNudge({
+            teacher: { authHeader: request.headers.get('Authorization'), userId: staff.id },
             studentIds: [sid],
             subject: tpl.subject,
             plain: tpl.body,

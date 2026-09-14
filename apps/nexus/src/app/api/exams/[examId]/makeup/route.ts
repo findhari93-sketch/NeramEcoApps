@@ -58,6 +58,8 @@ export async function POST(
       const opens = new Date(makeup.opens_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
       const closes = new Date(makeup.closes_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
       await sendNudge({
+        // The teacher's own Teams chat (their connected login if this token cannot chat).
+        teacher: { authHeader: request.headers.get('Authorization'), userId: access.caller.id },
         studentIds: [studentId],
         subject: `You can now sit ${access.exam.title || 'the exam'}`,
         plain: `Your teacher has opened a second window for ${access.exam.title || 'the exam'}. It runs from ${opens} to ${closes}. You get one attempt.`,

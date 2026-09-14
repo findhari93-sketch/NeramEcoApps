@@ -36,6 +36,7 @@ import {
   type CatchupWindows,
 } from '@neram/database';
 import { sendNudge } from './nudge-delivery';
+import { senderLookup } from '@/lib/teams-sender';
 
 /** Do not chase the same student about the same class twice in a week. */
 export const OVERDUE_COOLDOWN_DAYS = 6;
@@ -183,6 +184,7 @@ export async function sweepOverdueMissedClasses(supabase: any): Promise<OverdueS
   const targets = [...oldestByStudent.values()].slice(0, MAX_NUDGES_PER_RUN);
   result.capped = oldestByStudent.size > MAX_NUDGES_PER_RUN;
 
+  const senderFor = senderLookup(supabase);
   for (const t of targets) {
     const n = countByStudent.get(t.student_id) || 1;
     const line =
@@ -193,6 +195,8 @@ export async function sweepOverdueMissedClasses(supabase: any): Promise<OverdueS
     try {
       await sendNudge({
         studentIds: [t.student_id],
+        // As the class's connected teacher: their own Teams chat.
+        ...(await senderFor(t.classroom_id)),
         subject: n === 1 ? 'A class you missed is still open' : `${n} classes still to catch up on`,
         plain: `${line}\n\nOpen Nexus, watch the recording, finish the work, and it clears itself.`,
         teamsText: line,

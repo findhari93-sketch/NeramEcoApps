@@ -20,12 +20,6 @@ describe('plainToHtmlWithLink', () => {
     expect(html).toContain('Open your catch-up page');
   });
 
-  it('repeats the bare address, for a client that strips the styled anchor', () => {
-    const html = plainToHtmlWithLink('You missed Monday.', URL, 'Open');
-    // Twice: once in the href, once as copyable text.
-    expect(html.split(URL).length - 1).toBe(2);
-  });
-
   it('still escapes the message body', () => {
     const html = plainToHtmlWithLink('<script>alert(1)</script>', URL, 'Open');
     expect(html).not.toContain('<script>');

@@ -86,10 +86,12 @@ test.describe('QB teacher: publish state is visible', () => {
 test.describe('QB teacher: never lost', () => {
   test.describe.configure({ timeout: COLD_COMPILE_BUDGET });
 
-  // Every route in the section. The hub is exempt from needing a back control
-  // because it IS the top of the section.
+  // Every route in the section. The exam pages are exempt from needing a back
+  // control because they ARE the top of the section (the sidebar lists each).
+  // `/teacher/question-bank` itself only forwards to one of them now.
   const ROUTES: { path: string; title: RegExp; isHub?: boolean }[] = [
-    { path: '/teacher/question-bank', title: /question bank/i, isHub: true },
+    { path: '/teacher/question-bank/jee-paper-2', title: /^jee paper 2$/i, isHub: true },
+    { path: '/teacher/question-bank/nata', title: /^nata$/i, isHub: true },
     { path: '/teacher/question-bank/questions', title: /questions/i },
     { path: '/teacher/question-bank/papers', title: /uploaded papers/i },
     { path: '/teacher/question-bank/tags', title: /tags and themes/i },
@@ -173,10 +175,10 @@ test.describe('QB teacher: mobile', () => {
     expect(overflow).toBeLessThanOrEqual(1);
   });
 
-  test('the hub reaches every tool in the section', async ({ page }) => {
+  test('an exam page reaches every tool in the section', async ({ page }) => {
     if (!(await signInOrSkip(page))) return;
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto('/teacher/question-bank', { waitUntil: 'domcontentloaded' });
+    await page.goto('/teacher/question-bank/jee-paper-2', { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 60_000 });
 
     // Seven routes used to have no door at all: the only way in was a typed URL.

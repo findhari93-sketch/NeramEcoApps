@@ -3,10 +3,12 @@
 /**
  * StudyNudgeDialog — teacher composes a message to selected students about a study file, from a
  * template (congratulate / nudge / not-opened / custom) or free text, and sends it. Delivery tries
- * a Teams DM and falls back to in-app + email; per-recipient results are shown after sending.
+ * the teacher's own Teams chat, with the Teams activity feed as a fallback and the
+ * Nexus bell always; per-recipient results are shown after sending.
  */
 
 import { useState, useEffect } from 'react';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Box, Typography, TextField, Button, Alert,
   CircularProgress, Divider, ToggleButton, ToggleButtonGroup, IconButton, Chip, useMediaQuery,
@@ -24,7 +26,8 @@ interface StudyNudgeDialogProps {
   fileId: string;
   fileTitle: string;
   recipients: Recipient[];
-  getToken: () => Promise<string | null>;
+  /** @deprecated The dialog uses the teacher token from context. Kept so callers compile. */
+  getToken?: () => Promise<string | null>;
   onClose: () => void;
 }
 
@@ -52,7 +55,8 @@ function templateFor(key: TemplateKey, chapter: string): { subject: string; body
   }
 }
 
-export default function StudyNudgeDialog({ open, fileId, fileTitle, recipients, getToken, onClose }: StudyNudgeDialogProps) {
+export default function StudyNudgeDialog({ open, fileId, fileTitle, recipients, onClose }: StudyNudgeDialogProps) {
+  const { getTeacherToken } = useNexusAuthContext();
   const fullScreen = useMediaQuery('(max-width:599px)');
   const [template, setTemplate] = useState<TemplateKey>('nudge');
   const [subject, setSubject] = useState('');
@@ -84,7 +88,8 @@ export default function StudyNudgeDialog({ open, fileId, fileTitle, recipients, 
     setSending(true);
     setError('');
     try {
-      const token = await getToken();
+      // The teacher token carries Teams chat permission, so this goes as their own chat.
+      const token = await getTeacherToken();
       const res = await fetch(`/api/study-materials/files/${fileId}/nudge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -124,9 +129,11 @@ export default function StudyNudgeDialog({ open, fileId, fileTitle, recipients, 
               Message sent to {results.total} student{results.total === 1 ? '' : 's'}.
             </Alert>
             <Typography variant="body2" color="text.secondary">
-              {results.viaTeams > 0
-                ? `${results.viaTeams} delivered via Microsoft Teams; the rest via in-app notification and email.`
-                : 'Delivered via in-app notification and email. (Teams direct messages need a one-time Microsoft admin setup, once enabled, messages will go to Teams automatically.)'}
+              {results.viaTeams >= results.total && results.total > 0
+                ? 'Delivered on Microsoft Teams and saved to their Nexus notifications.'
+                : results.viaTeams > 0
+                  ? `${results.viaTeams} delivered on Microsoft Teams; the rest on the Nexus bell only.`
+                  : 'Saved to their Nexus notifications. Teams did not deliver this time.'}
             </Typography>
           </Box>
         ) : (

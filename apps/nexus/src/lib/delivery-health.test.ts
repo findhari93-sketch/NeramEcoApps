@@ -11,21 +11,22 @@ describe('delivery health', () => {
     expect(decodeTokenRoles('garbage')).toEqual([]);
   });
 
-  it('flags a missing key and one pasted with a Windows newline', () => {
-    const report = envReport({ AZ_CLIENT_ID: 'x', TEAMS_APP_CATALOG_ID: 'abc\r\n', RESEND_API_KEY: '  ' });
+  it('flags a missing key and one pasted with a Windows newline, and never asks for an email key', () => {
+    const report = envReport({ AZ_CLIENT_ID: 'x', TEAMS_APP_CATALOG_ID: 'abc\r\n' });
     expect(report.AZ_CLIENT_ID).toBe('set');
     expect(report.TEAMS_APP_CATALOG_ID).toBe('has_whitespace');
-    expect(report.RESEND_API_KEY).toBe('missing');
+    expect(report.AZ_TENANT_ID).toBe('missing');
+    expect(Object.keys(report)).not.toContain('RESEND_API_KEY');
   });
 
   it('counts bell-only sends and surfaces the most common reason per tier', () => {
-    const base = { event_type: 'assignment_nudge', chat: false, bot: false, email: false, reasons: null };
+    const base = { event_type: 'assignment_nudge', chat: false, reasons: null };
     const summary = summariseReceipts([
-      { ...base, teams: false, inapp: true, channel: 'inapp', reasons: { teams: 'install 403', email: 'no key' } },
+      { ...base, teams: false, inapp: true, channel: 'inapp', reasons: { teams: 'install 403', chat: 'not connected' } },
       { ...base, teams: false, inapp: true, channel: 'inapp', reasons: { teams: 'install 403' } },
-      { ...base, teams: true, inapp: true, channel: 'teams+inapp' },
+      { ...base, chat: true, teams: false, inapp: true, channel: 'chat+inapp' },
       { ...base, teams: false, inapp: false, channel: 'dormant' },
     ]);
-    expect(summary[0]).toMatchObject({ sends: 3, skipped: 1, teams: 1, inapp: 3, bellOnly: 2, topReasons: { teams: 'install 403', email: 'no key' } });
+    expect(summary[0]).toMatchObject({ sends: 3, skipped: 1, chat: 1, inapp: 3, bellOnly: 2, topReasons: { teams: 'install 403', chat: 'not connected' } });
   });
 });

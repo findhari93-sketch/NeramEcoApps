@@ -26,6 +26,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { IMPERSONATION_BANNER_HEIGHT } from './ImpersonationBanner';
 import { useSidebarContext, SIDEBAR_EXPANDED, SIDEBAR_ICONS } from './SidebarProvider';
 import { COURSE_PLANS_PATH, COURSE_PLAN_SUBNAV } from '@/lib/nav-config';
+import { examFromPathname, useRememberedQBExam } from '@/lib/qb-exam-routes';
 import { useNavBadges } from './NavBadgeProvider';
 
 // Re-export for backward compat (layouts import this)
@@ -35,6 +36,8 @@ interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
+  /** A folder: rendered as an expandable row with these links under it. */
+  children?: NavItem[];
 }
 
 interface NavGroup {
@@ -63,6 +66,10 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
 
   // Collapsed groups (by label) — empty set means all expanded
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // Folders the user closed (by path). Open by default: a folder of two links
+  // that hides them until clicked is a folder nobody finds.
+  const [closedFolders, setClosedFolders] = useState<Set<string>>(new Set());
+  const rememberedQBExam = useRememberedQBExam();
 
   // Course Plans left-rail sub-nav: which plan its screens point at.
   const onCoursePlans = pathname.startsWith(COURSE_PLANS_PATH);
@@ -87,6 +94,17 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
   useEffect(() => {
     if (onCoursePlans) setCoursePlansOpen(true);
   }, [onCoursePlans]);
+  // Same for any folder: arriving inside one reopens it, so the current page's
+  // link is never hidden in a folder closed earlier.
+  useEffect(() => {
+    setClosedFolders((prev) => {
+      const entered = Array.from(prev).filter((p) => pathname === p || pathname.startsWith(p + '/'));
+      if (entered.length === 0) return prev;
+      const next = new Set(prev);
+      entered.forEach((p) => next.delete(p));
+      return next;
+    });
+  }, [pathname]);
 
   // Click delay pattern: single click waits 250ms, double-click cancels and fires toggle
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -296,6 +314,120 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
     );
   };
 
+  /**
+   * A folder row with its links indented under it (Question Bank, with one link
+   * per exam). Same visual language as the Course Plans rail above.
+   *
+   * The row itself opens and closes the folder rather than navigating: its path
+   * is only a redirect, and the links it would redirect to are right there.
+   */
+  const renderNavFolder = (item: NavItem) => {
+    const children = item.children ?? [];
+    const insideFolder = isActive(item.path);
+    const open = !closedFolders.has(item.path);
+    const onAnyChild = children.some((c) => isActive(c.path));
+    const childActive = (child: NavItem) => {
+      if (isActive(child.path)) return true;
+      // On a page both exams share (question search, a paper), no child path
+      // matches. The exam the person came from stands in, so the sidebar still
+      // says where Back will take them.
+      if (!insideFolder || onAnyChild) return false;
+      const exam = examFromPathname(child.path);
+      return exam !== null && exam === rememberedQBExam;
+    };
+    const toggleFolder = () =>
+      setClosedFolders((prev) => {
+        const next = new Set(prev);
+        if (open) next.add(item.path);
+        else next.delete(item.path);
+        return next;
+      });
+    const listId = `nav-folder-${item.path.replace(/[^a-z0-9]+/gi, '-')}`;
+
+    return (
+      <Box key={item.path}>
+        <ListItemButton
+          onClick={toggleFolder}
+          aria-expanded={open}
+          aria-controls={listId}
+          sx={{
+            borderRadius: 2.5,
+            mb: 0.5,
+            px: 1.5,
+            py: 1,
+            minHeight: 44,
+            bgcolor: insideFolder ? alpha('#fff', 0.14) : 'transparent',
+            color: insideFolder ? '#fff' : alpha('#fff', 0.7),
+            '&:hover': { bgcolor: alpha('#fff', 0.08) },
+            '&.Mui-focusVisible': { outline: `2px solid ${alpha('#fff', 0.8)}`, outlineOffset: -2 },
+            transition: TRANSITION,
+          }}
+        >
+          <ListItemIcon
+            sx={{ minWidth: 36, color: 'inherit', '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
+          >
+            {item.icon}
+          </ListItemIcon>
+          <ListItemText
+            primary={item.label}
+            primaryTypographyProps={{ variant: 'body2', fontWeight: insideFolder ? 600 : 500 }}
+          />
+          <ExpandMoreIcon
+            aria-hidden
+            sx={{
+              fontSize: '1.1rem',
+              color: alpha('#fff', 0.5),
+              transform: open ? 'rotate(0)' : 'rotate(-90deg)',
+              transition: 'transform 200ms ease',
+              '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+            }}
+          />
+        </ListItemButton>
+        <Collapse in={open} timeout={200}>
+          <Box
+            id={listId}
+            sx={{ ml: 2.5, pl: 1, borderLeft: `2px solid ${alpha('#fff', 0.15)}`, mb: 0.5 }}
+          >
+            {children.map((child) => {
+              const active = childActive(child);
+              return (
+                <ListItemButton
+                  key={child.path}
+                  onClick={() => router.push(child.path)}
+                  aria-current={active ? 'page' : undefined}
+                  sx={{
+                    borderRadius: 2,
+                    mb: 0.25,
+                    px: 1.25,
+                    py: 0.75,
+                    minHeight: 44,
+                    bgcolor: active ? alpha('#fff', 0.18) : 'transparent',
+                    color: active ? '#fff' : alpha('#fff', 0.7),
+                    '&:hover': { bgcolor: active ? alpha('#fff', 0.22) : alpha('#fff', 0.08) },
+                    '&.Mui-focusVisible': { outline: `2px solid ${alpha('#fff', 0.8)}`, outlineOffset: -2 },
+                    transition: TRANSITION,
+                  }}
+                >
+                  <ListItemText
+                    primary={child.label}
+                    primaryTypographyProps={{
+                      variant: 'body2',
+                      fontSize: '0.8125rem',
+                      fontWeight: active ? 600 : 500,
+                    }}
+                  />
+                  {active && (
+                    <Box sx={{ width: 4, height: 18, borderRadius: 2, bgcolor: '#fff', ml: 1 }} />
+                  )}
+                </ListItemButton>
+              );
+            })}
+          </Box>
+        </Collapse>
+      </Box>
+    );
+  };
+
   const renderNavContent = () => {
     // Icon-only mode or flat items: render flat list
     if (isIcons || !groups) {
@@ -304,7 +436,9 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
           {flatItems.map((item) =>
             isExpanded && item.path === COURSE_PLANS_PATH
               ? renderCoursePlans(item.icon)
-              : renderNavItem(item),
+              : isExpanded && item.children?.length
+                ? renderNavFolder(item)
+                : renderNavItem(item),
           )}
         </List>
       );
@@ -360,7 +494,9 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
               {/* Group items */}
               <Collapse in={!isGroupCollapsed} timeout={200}>
                 <List disablePadding>
-                  {group.items.map(renderNavItem)}
+                  {group.items.map((item) =>
+                    item.children?.length ? renderNavFolder(item) : renderNavItem(item),
+                  )}
                 </List>
               </Collapse>
             </Box>

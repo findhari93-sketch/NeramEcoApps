@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
         .select('id, title, scheduled_date')
         .eq('classroom_id', classroomId),
       listExamsForClassroom(classroomId),
-      loadExamRoster(classroomId).then((r) => r.map((s: { id: string }) => s.id)),
+      // Tracked students only: a paused student is in no count.
+      loadExamRoster(classroomId).then((r) => r.filter((s) => !s.dormant).map((s) => s.id)),
     ]);
     const enrolled = rosterIds.length;
 

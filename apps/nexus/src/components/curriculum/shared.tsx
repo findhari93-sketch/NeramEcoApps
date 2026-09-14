@@ -120,11 +120,16 @@ export function DeliveryIcon({ delivery }: { delivery: NexusTopicDelivery }) {
  */
 let lastReauthAt = 0;
 
-export function useAuthFetch() {
-  const { getToken, signIn } = useNexusAuthContext();
+/**
+ * Pass { teacher: true } for a request that sends a Teams message as the teacher
+ * (nudges, reminders): that token carries ChatMessage.Send.
+ */
+export function useAuthFetch(opts?: { teacher?: boolean }) {
+  const { getToken, getTeacherToken, signIn } = useNexusAuthContext();
+  const teacher = opts?.teacher === true;
   return useCallback(
     async (url: string, init?: RequestInit) => {
-      const token = await getToken();
+      const token = await (teacher ? getTeacherToken() : getToken());
       if (!token) {
         // No token means the Microsoft session is gone (silent renewal failed
         // and the auto-redirect was suppressed or has not landed yet). Treat it
@@ -156,6 +161,6 @@ export function useAuthFetch() {
       if (!res.ok) throw new Error(payload.error || 'Request failed');
       return payload;
     },
-    [getToken, signIn],
+    [teacher, getToken, getTeacherToken, signIn],
   );
 }

@@ -61,7 +61,7 @@ export default function TeacherExamPage() {
   const router = useRouter();
   const params = useParams();
   const classId = params.classId as string;
-  const { getToken, getTeacherToken } = useNexusAuthContext();
+  const { getTeacherToken } = useNexusAuthContext();
 
   const [exam, setExam] = useState<ExamRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,7 +76,8 @@ export default function TeacherExamPage() {
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
-      const token = await getToken();
+      // Teacher token: some of these calls message students in Teams as the teacher.
+      const token = await getTeacherToken();
       if (!token) throw new Error('Not signed in');
       const res = await fetch(url, {
         ...init,
@@ -90,7 +91,7 @@ export default function TeacherExamPage() {
       if (!res.ok) throw new Error(json.error || 'Request failed');
       return json;
     },
-    [getToken],
+    [getTeacherToken],
   );
 
   const load = useCallback(async () => {

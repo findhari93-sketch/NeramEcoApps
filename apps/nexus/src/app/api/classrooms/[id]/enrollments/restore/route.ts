@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, restoreEnrollment, createUserNotification } from '@neram/database';
+import { getSupabaseAdminClient, restoreEnrollment } from '@neram/database';
+import { sendNudge } from '@/lib/nudge-delivery';
 import { canUser } from '@/lib/staff-capabilities';
 
 /**
@@ -54,16 +55,15 @@ export async function POST(
         .single();
 
       if (enrollment && classroom) {
-        await createUserNotification(
-          {
-            user_id: enrollment.user_id,
-            event_type: 'classroom_restored',
-            title: 'Restored to Classroom',
-            message: `You have been restored to "${classroom.name}".`,
-            metadata: { classroom_id: id, classroom_name: classroom.name },
-          },
-          supabase
-        );
+        await sendNudge({
+          studentIds: [enrollment.user_id],
+          respectDormancy: false,
+          subject: 'Restored to Classroom',
+          plain: `You have been restored to "${classroom.name}".`,
+          eventType: 'classroom_restored',
+          metadata: { classroom_id: id, classroom_name: classroom.name },
+          source: { kind: 'classroom_restored', refId: id },
+        });
       }
     } catch (notifErr) {
       console.warn('Failed to send restore notification:', notifErr);

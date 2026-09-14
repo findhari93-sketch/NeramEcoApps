@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
     let counts = null;
     if (targetIds.length > 0) {
       ({ counts } = await sendNudge({
+        teacher: { authHeader: request.headers.get('Authorization'), userId: user.id },
         studentIds: targetIds,
         // A teacher who picked students by hand can see who they picked.
         respectDormancy: !(student_ids && student_ids.length),

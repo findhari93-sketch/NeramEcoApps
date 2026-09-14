@@ -27,6 +27,9 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import PageHeader from '@/components/PageHeader';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ExtraSort, type ListAccessors } from '@/lib/student-list-view';
 import { downloadCsv } from '@/lib/csv-export';
 import {
   ChapterStatusCell,
@@ -68,6 +71,17 @@ interface Matrix {
   };
 }
 
+type SortKey = 'behind' | 'most_done' | 'average';
+
+const ACCESSORS: ListAccessors<StudentRow> = { id: (s) => s.student_id, name: (s) => s.name || s.email, email: (s) => s.email };
+
+// The server already sends furthest behind first; that order is the worklist.
+const SORTS: ExtraSort<StudentRow, SortKey>[] = [
+  suggestedOrder<StudentRow, SortKey>('Furthest behind first', 'behind'),
+  { key: 'most_done', label: 'Most chapters done', compare: (a, b) => b.completed_count - a.completed_count },
+  { key: 'average', label: 'Highest average', compare: (a, b) => (b.average_score_pct ?? -1) - (a.average_score_pct ?? -1) },
+];
+
 export default function FoundationReportPage() {
   const params = useParams();
   const search = useSearchParams();
@@ -82,6 +96,13 @@ export default function FoundationReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openStudent, setOpenStudent] = useState<StudentRow | null>(null);
+
+  const view = useStudentListView<StudentRow, SortKey>({
+    rows: data?.students,
+    accessors: ACCESSORS,
+    extraSorts: SORTS,
+    defaultSort: 'behind',
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,7 +130,8 @@ export default function FoundationReportPage() {
       'Average score %',
       ...data.chapters.flatMap((c) => [c.title, `${c.title} score %`, `${c.title} language`]),
     ];
-    const rows = data.students.map((s) => [
+    // The CSV is the list on screen: same search, filter and order.
+    const rows = view.shown.map((s) => [
       s.name,
       s.email,
       s.completed_count,
@@ -175,11 +197,15 @@ export default function FoundationReportPage() {
         <Chip color="warning" variant="outlined" label={`${data.stats.not_started} not started`} />
       </Box>
 
+      {data.students.length > 0 && <StudentListToolbar view={view} />}
+
       {!data.students.length ? (
         <EmptyState
           title="No students to report on"
           description="This classroom has no active students, or every one of them has graduated."
         />
+      ) : !view.shown.length ? (
+        <EmptyState title="No students match" description="Try another name or clear the filters." />
       ) : (
         // The matrix scrolls horizontally inside its own container, with the
         // student name pinned. The page itself must never scroll sideways.
@@ -220,7 +246,7 @@ export default function FoundationReportPage() {
               </Typography>
             </Box>
 
-            {data.students.map((s) => (
+            {view.shown.map((s) => (
               <Box
                 key={s.student_id}
                 onClick={() => setOpenStudent(s)}
@@ -267,6 +293,7 @@ export default function FoundationReportPage() {
           </Box>
         </Paper>
       )}
+      <PausedFootnote count={view.pausedHidden} />
 
       {/* View 2: one student across every chapter. */}
       <Dialog open={!!openStudent} onClose={() => setOpenStudent(null)} maxWidth="sm" fullWidth fullScreen={isMobile}>

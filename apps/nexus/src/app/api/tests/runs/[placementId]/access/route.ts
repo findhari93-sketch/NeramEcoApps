@@ -126,6 +126,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { placem
       decision,
       closesAt: row.closes_at,
       note: row.decision_note,
+      teacher: { authHeader: request.headers.get('Authorization'), userId: (staff.caller as any).id },
     });
 
     return NextResponse.json({ data: { request: row } });

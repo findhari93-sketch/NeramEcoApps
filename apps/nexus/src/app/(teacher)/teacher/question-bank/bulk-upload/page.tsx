@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -37,6 +37,7 @@ import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import DataObjectIcon from '@mui/icons-material/DataObject';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import PageHeader from '@/components/PageHeader';
+import { isQBExamType } from '@/lib/qb-exam-routes';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { QBExamType } from '@neram/database';
 import type { ReviewQuestion, UploadMethod } from '@/lib/bulk-upload-schema';
@@ -78,6 +79,13 @@ export default function BulkUploadPage() {
 
   // Step 1: Paper Info
   const [examType, setExamType] = useState<QBExamType>('JEE_PAPER_2');
+  // An exam page's Bulk Upload button passes ?exam=. Read after mount rather
+  // than through useSearchParams, which would pull this page out of static
+  // prerendering without a Suspense boundary above it.
+  useEffect(() => {
+    const exam = new URLSearchParams(window.location.search).get('exam');
+    if (isQBExamType(exam)) setExamType(exam);
+  }, []);
   const [year, setYear] = useState<number>(2026);
   const [session, setSession] = useState('');
   const [hasShifts, setHasShifts] = useState(false);

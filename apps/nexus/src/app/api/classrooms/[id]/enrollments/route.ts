@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, createUserNotification, removeEnrollments } from '@neram/database';
+import { getSupabaseAdminClient, removeEnrollments } from '@neram/database';
+import { sendNudge } from '@/lib/nudge-delivery';
 import { canUser } from '@/lib/staff-capabilities';
 import { addMemberToTeam } from '@/lib/teams-sync';
 import type { RemovalReasonCategory } from '@neram/database';
@@ -192,16 +193,17 @@ export async function POST(
     try {
       const classroomName = targetClassroom.name || 'a classroom';
 
-      await createUserNotification(
-        {
-          user_id: resolvedUserId,
-          event_type: 'classroom_enrolled',
-          title: 'Added to Classroom',
-          message: `You have been added to "${classroomName}" as a ${role}.`,
-          metadata: { classroom_id: id, classroom_name: classroomName, role },
-        },
-        supabase
-      );
+      // Membership notices go through the one door too: Teams feed and the bell.
+      // No chat: nobody wrote this to the student, the roster changed.
+      await sendNudge({
+        studentIds: [resolvedUserId],
+        respectDormancy: false,
+        subject: 'Added to Classroom',
+        plain: `You have been added to "${classroomName}" as a ${role}.`,
+        eventType: 'classroom_enrolled',
+        metadata: { classroom_id: id, classroom_name: classroomName, role },
+        source: { kind: 'classroom_enrolled', refId: id },
+      });
     } catch (notifErr) {
       console.warn('Failed to send enrollment notification:', notifErr);
     }
@@ -284,23 +286,22 @@ export async function PATCH(
         const notifications = currentEnrollments
           .filter((e: any) => e.batch_id !== batch_id)
           .map((e: any) =>
-            createUserNotification(
-              {
-                user_id: e.user_id,
-                event_type: e.batch_id ? 'batch_changed' : 'batch_assigned',
-                title: e.batch_id ? 'Batch Changed' : 'Assigned to Batch',
-                message: e.batch_id
-                  ? `You have been moved to "${batchName}" in "${classroomName}".`
-                  : `You have been assigned to "${batchName}" in "${classroomName}".`,
-                metadata: {
-                  classroom_id: classroomId,
-                  classroom_name: classroomName,
-                  batch_id,
-                  batch_name: batchName,
-                },
+            sendNudge({
+              studentIds: [e.user_id],
+              respectDormancy: false,
+              subject: e.batch_id ? 'Batch Changed' : 'Assigned to Batch',
+              plain: e.batch_id
+                ? `You have been moved to "${batchName}" in "${classroomName}".`
+                : `You have been assigned to "${batchName}" in "${classroomName}".`,
+              eventType: e.batch_id ? 'batch_changed' : 'batch_assigned',
+              metadata: {
+                classroom_id: classroomId,
+                classroom_name: classroomName,
+                batch_id,
+                batch_name: batchName,
               },
-              supabase
-            )
+              source: { kind: 'batch_assigned', refId: classroomId },
+            })
           );
 
         await Promise.allSettled(notifications);
@@ -391,16 +392,15 @@ export async function DELETE(
 
       if (removedEnrollments) {
         const notifications = removedEnrollments.map((e: any) =>
-          createUserNotification(
-            {
-              user_id: e.user_id,
-              event_type: 'classroom_removed',
-              title: 'Removed from Classroom',
-              message: `You have been removed from "${classroomName}".`,
-              metadata: { classroom_id: id, classroom_name: classroomName, reason_category },
-            },
-            supabase
-          )
+          sendNudge({
+            studentIds: [e.user_id],
+            respectDormancy: false,
+            subject: 'Removed from Classroom',
+            plain: `You have been removed from "${classroomName}".`,
+            eventType: 'classroom_removed',
+            metadata: { classroom_id: id, classroom_name: classroomName, reason_category },
+            source: { kind: 'classroom_removed', refId: id },
+          })
         );
         await Promise.allSettled(notifications);
       }

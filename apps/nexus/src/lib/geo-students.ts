@@ -88,6 +88,8 @@ export async function getActiveGeoStudents(): Promise<ActiveGeoStudent[]> {
     )
     .eq('is_active', true)
     .eq('role', 'student')
+    // Paused students are in no list or count (founder rule, 2026-09-13).
+    .eq('participation_status', 'active')
     .in('classroom_id', classroomIds)
     .eq('users.is_alumni', false)
     .eq('users.user_type', 'student');

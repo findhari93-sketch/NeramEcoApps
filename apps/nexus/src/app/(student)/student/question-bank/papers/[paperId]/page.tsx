@@ -31,7 +31,7 @@
  * measure now, as it does on every other student screen.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -59,6 +59,7 @@ import PageHeader from '@/components/PageHeader';
 import PaperSectionBreakdown from '@/components/question-bank/PaperSectionBreakdown';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
 import { takeTestHref } from '@/lib/test-return';
+import { QB_EXAM_LABELS, isQBExamType, qbExamPath, rememberQBExam } from '@/lib/qb-exam-routes';
 import type { NexusQBPaperDetail, NexusQBPaperRecentAttempt } from '@neram/database';
 
 const QB_HOME = '/student/question-bank';
@@ -153,6 +154,14 @@ export default function PaperDetailPage() {
     }
   };
 
+  // Back returns to this paper's own exam, and the sidebar highlights it.
+  const paperExam = paper && isQBExamType(paper.exam_type) ? paper.exam_type : null;
+  const qbHome = paperExam ? qbExamPath('student', paperExam) : QB_HOME;
+  const qbCrumb = paperExam ? `Question Bank: ${QB_EXAM_LABELS[paperExam]}` : 'Question Bank';
+  useEffect(() => {
+    if (paperExam) rememberQBExam(paperExam);
+  }, [paperExam]);
+
   const metaLine = useMemo(() => {
     if (!paper) return '';
     return [
@@ -199,8 +208,8 @@ export default function PaperDetailPage() {
       <PageHeader
         title={paper.title}
         subtitle={metaLine}
-        backHref={QB_HOME}
-        breadcrumbs={[{ label: 'Question Bank', href: QB_HOME }]}
+        backHref={qbHome}
+        breadcrumbs={[{ label: qbCrumb, href: qbHome }]}
       />
 
       {error && (

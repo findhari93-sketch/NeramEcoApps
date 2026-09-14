@@ -20,7 +20,6 @@ import {
   getAssignmentDrawingHistory,
   updateDrawingQuestion,
   deleteDrawingQuestion,
-  createUserNotification,
   getSupabaseAdminClient,
   getAssignmentPaper,
   getAssignmentAttempt,
@@ -33,6 +32,7 @@ import type { GalleryReactionType } from '@neram/database/types';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { notifyAssignmentReviewed } from '@/lib/timetable-notifications';
+import { sendNudge } from '@/lib/nudge-delivery';
 import { announceAssignment, shouldAnnounceLink } from '@/lib/teams-assignment-announcements';
 import {
   buildClassLinkUpdate,
@@ -499,6 +499,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             },
             kind: 'linked',
             token: extractBearerToken(request.headers.get('Authorization')),
+            actorUserId: user.id,
             shareBase: shareBaseUrl(request.nextUrl.origin),
             supabase: getSupabaseAdminClient(),
           }).catch((e) => console.error('announceAssignment (link) failed:', e));
@@ -536,6 +537,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           },
           kind: 'published',
           token: extractBearerToken(request.headers.get('Authorization')),
+          actorUserId: user.id,
           shareBase: shareBaseUrl(request.nextUrl.origin),
           supabase: getSupabaseAdminClient(),
         }).catch((e) => console.error('announceAssignment (publish) failed:', e));
@@ -722,13 +724,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                 ? `${finalMarks}/${assignment.max_marks} marks`
                 : 'your marks';
             const emoji = reactionEmoji(reaction);
-            createUserNotification({
-              user_id: studentId,
-              event_type: 'assignment_reviewed',
-              title: `Assignment reviewed: ${assignment.title}`,
-              message: `You got ${gradeText}. ${emoji ? emoji + ' ' : ''}${praiseFor(reaction)}`.trim(),
+            // The one door: the teacher's Teams chat, the feed as fallback, the bell.
+            sendNudge({
+              studentIds: [studentId],
+              respectDormancy: false,
+              subject: `Assignment reviewed: ${assignment.title}`,
+              plain: `You got ${gradeText}. ${emoji ? emoji + ' ' : ''}${praiseFor(reaction)}`.trim(),
+              eventType: 'assignment_reviewed',
               metadata: { assignment_id: params.id },
-            }).catch((e) => console.error('assignment_reviewed bell notify failed:', e));
+              teacher: { authHeader: request.headers.get('Authorization'), userId: user.id },
+              source: { kind: 'assignment_reviewed', refId: params.id },
+            }).catch((e) => console.error('assignment_reviewed notify failed:', e));
           }
 
           // Marks feed the leaderboard: up to 20 pts scaled by the score, awarded

@@ -19,6 +19,8 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
 import {
   PANELS,
+  filterNavTree,
+  flattenNavItems,
   groupNavItems,
   panelBottomNav,
   panelOverflow,
@@ -33,7 +35,8 @@ export { COURSE_PLANS_PATH, COURSE_PLAN_SUBNAV } from '@/lib/nav-config';
 // Map paths to panels for URL-based auto-sync
 const PATH_TO_PANEL: Record<string, PanelId> = {};
 for (const panel of PANELS) {
-  for (const item of panel.sidebarItems) {
+  // Folder children too, so an exam page resolves by exact match.
+  for (const item of [...panel.sidebarItems, ...flattenNavItems(panel.sidebarItems)]) {
     PATH_TO_PANEL[item.path] = panel.id;
   }
 }
@@ -181,7 +184,7 @@ export default function PanelProvider({ children }: { children: React.ReactNode 
       setActivePanel,
       availablePanels: availablePanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon })),
       currentPanelTitle: resolvedPanel.title,
-      currentSidebarItems: filterItems(resolvedPanel.sidebarItems),
+      currentSidebarItems: filterNavTree(resolvedPanel.sidebarItems, isItemVisible),
       currentBottomNavItems: filterItems(panelBottomNav(resolvedPanel)),
       currentOverflowItems: overflow,
       currentOverflowGroups: groupNavItems(overflow),

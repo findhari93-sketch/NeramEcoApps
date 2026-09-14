@@ -54,6 +54,8 @@ export async function listLateJoiners(
     .eq('classroom_id', classroomId)
     .eq('role', 'student')
     .eq('is_active', true)
+    // Paused students are in no list (founder rule, 2026-09-13).
+    .eq('participation_status', 'active')
     .gt('enrolled_at', `${planStartDate}T23:59:59+05:30`)
     .order('enrolled_at', { ascending: false });
   if (error) throw error;

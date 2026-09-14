@@ -34,7 +34,9 @@ export async function getExamRoster(
     .select('user_id')
     .in('classroom_id', classroomIds)
     .eq('role', 'student')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    // Paused students are in no list (founder rule, 2026-09-13).
+    .eq('participation_status', 'active');
 
   const studentIds = [
     ...new Set((allStudentEnrollments || []).map((e: any) => e.user_id)),

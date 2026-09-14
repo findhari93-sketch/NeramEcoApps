@@ -31,6 +31,8 @@ export async function POST(
     // attempt the teacher has already decided to give.
     try {
       await sendNudge({
+        // The teacher's own Teams chat (their connected login if this token cannot chat).
+        teacher: { authHeader: request.headers.get('Authorization'), userId: access.caller.id },
         studentIds: [studentId],
         subject: `You have another attempt at ${access.exam.title || 'the test'}`,
         plain: `Your teacher has given you one more attempt at ${access.exam.title || 'the test'}. Open it from your Tests tab to try again.`,

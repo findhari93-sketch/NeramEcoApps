@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * On 11 Sept a reopen message to 26 students came back as "Teams chat 0, Teams
  * alert 0, Nexus bell 23, Reached nobody 3". The three "reached nobody" were
  * dormant students skipped on purpose, the chats and alerts had failed for
- * reasons nobody could see, and the email backstop was never configured.
+ * reasons nobody could see. There is no email channel (2026-09-14).
  */
 
 const state = vi.hoisted(() => ({
@@ -15,21 +15,23 @@ const state = vi.hoisted(() => ({
   inserted: [] as any[],
   dormant: [] as string[],
   chatCalls: [] as string[],
-  chat: (_recipient: string): any => ({ ok: true, status: 201 }),
+  chat: (_recipient: string, _token?: string): any => ({ ok: true, status: 201 }),
   activityCalls: [] as Array<{ id: string; catalogAppId: string }>,
   activity: (): any => ({ ok: true, status: 204 }),
-  email: (): any => ({ success: true }),
-  emailCalls: 0,
-  botConfigured: false,
-  botCalls: [] as Array<{ id: string; text: string; card?: any }>,
-  bot: (): any => ({ ok: true, status: 201 }),
+  chatTokens: [] as string[],
+  chatHtml: [] as string[],
+  sender: (_id: string): any => 'sender-token',
+  touched: [] as string[],
 }));
 
-vi.mock('./teams-bot', () => ({
-  botConfig: () => (state.botConfigured ? { appId: 'app' } : null),
-  sendBotMessage: vi.fn(async (user: { id: string }, msg: { text: string; card?: any }) => {
-    state.botCalls.push({ id: user.id, text: msg.text, card: msg.card });
-    return state.bot();
+vi.mock('./teams-sender', () => ({
+  getSenderAccessToken: vi.fn(async (id: string) => {
+    const r = state.sender(id);
+    if (r instanceof Error) throw r;
+    return r;
+  }),
+  touchSender: vi.fn(async (id: string) => {
+    state.touched.push(id);
   }),
 }));
 
@@ -52,10 +54,6 @@ vi.mock('@neram/database', () => ({
       return chain;
     },
   }),
-  sendEmail: vi.fn(async () => {
-    state.emailCalls += 1;
-    return state.email();
-  }),
   filterTrackedStudentIds: vi.fn(async (ids: string[]) => ({
     kept: ids.filter((id) => !state.dormant.includes(id)),
     dropped: ids.filter((id) => state.dormant.includes(id)),
@@ -70,9 +68,11 @@ vi.mock('@neram/auth', () => ({
 }));
 
 vi.mock('./teams-messaging', () => ({
-  sendTeamsChatMessage: vi.fn(async (_token: string, recipient: string) => {
+  sendTeamsChatMessage: vi.fn(async (token: string, recipient: string, html: string) => {
     state.chatCalls.push(recipient);
-    return state.chat(recipient);
+    state.chatTokens.push(token);
+    state.chatHtml.push(html);
+    return state.chat(recipient, token);
   }),
 }));
 
@@ -101,11 +101,10 @@ beforeEach(() => {
   state.activityCalls = [];
   state.chat = () => ({ ok: true, status: 201 });
   state.activity = () => ({ ok: true, status: 204 });
-  state.email = () => ({ success: true });
-  state.emailCalls = 0;
-  state.botConfigured = false;
-  state.botCalls = [];
-  state.bot = () => ({ ok: true, status: 201 });
+  state.chatTokens = [];
+  state.chatHtml = [];
+  state.sender = () => 'sender-token';
+  state.touched = [];
   process.env.TEAMS_APP_CATALOG_ID = '27d1b57f-fc6d-4a5d-b5b1-ad4b5a9814f9';
 });
 
@@ -132,46 +131,59 @@ describe('sendNudge: one door, chat first (2026-09-13)', () => {
     expect(results[0].channel).toBe('chat+inapp');
   });
 
-  it('sends automated messages through the bot when it is set up, with the card, and skips the feed', async () => {
-    state.botConfigured = true;
+  it('sends an automatic message as the connected teacher, through the same chat path, and skips the feed', async () => {
     state.users = [student('asha', 'Asha Bavi')];
     const { results, counts } = await sendNudge({
       ...BASE,
+      subject: 'Time for a sketch, {firstName}',
+      plain: 'Ten minutes is enough.',
       studentIds: ['asha'],
-      bot: { card: { title: 'Time for a sketch, {firstName}', body: 'Ten minutes is enough.', buttonLabel: 'Add a sketch', url: 'https://x.test' } },
+      sendAs: { senderUserId: 'teacher-1', link: { url: 'https://x.test/add', label: 'Add a sketch' } },
     });
-    expect(state.botCalls[0].card.title).toBe('Time for a sketch, Asha');
+    expect(state.chatTokens).toEqual(['sender-token']);
+    expect(state.chatHtml[0]).toContain('Time for a sketch, Asha');
+    expect(state.chatHtml[0]).toContain('href="https://x.test/add"');
     expect(state.activityCalls).toHaveLength(0);
-    expect(state.emailCalls).toBe(0);
-    expect(results[0].channel).toBe('bot+inapp');
-    expect(counts.bot).toBe(1);
+    expect(results[0].channel).toBe('chat+inapp');
+    expect(counts.chat).toBe(1);
+    expect(state.touched).toEqual(['teacher-1']);
   });
 
-  it('falls back to the activity feed, and says why, when the bot could not send', async () => {
-    state.botConfigured = true;
-    state.bot = () => ({ ok: false, status: 0, reason: 'Could not upgrade Neram Assistant (403)' });
-    state.users = [student('asha', 'Asha')];
-    const { results } = await sendNudge({ ...BASE, studentIds: ['asha'] });
-    expect(state.activityCalls).toHaveLength(1);
+  it('falls back to the activity feed, and says why, when the teacher connection is not working', async () => {
+    state.sender = () => new Error('The Teams connection stopped working and needs reconnecting');
+    state.users = [student('asha', 'Asha'), student('bala', 'Bala')];
+    const { results } = await sendNudge({ ...BASE, studentIds: ['asha', 'bala'], sendAs: { senderUserId: 'teacher-1' } });
+    expect(state.chatCalls).toHaveLength(0);
+    expect(state.activityCalls).toHaveLength(2);
     expect(results[0].channel).toBe('teams+inapp');
-    expect(results[0].reasons?.bot).toContain('403');
+    expect(results[0].reasons?.chat).toContain('needs reconnecting');
   });
 
-  it('never uses the bot when a teacher wrote the chat, and never when told not to', async () => {
-    state.botConfigured = true;
+  it('prefers the teacher who pressed Send over the connected sender', async () => {
     state.users = [student('asha', 'Asha')];
-    await sendNudge({ ...BASE, studentIds: ['asha'], chat: { delegatedToken: 't', html: '<p>Hi</p>' } });
-    await sendNudge({ ...BASE, studentIds: ['asha'], bot: false });
-    expect(state.botCalls).toHaveLength(0);
+    await sendNudge({
+      ...BASE, studentIds: ['asha'], chat: { delegatedToken: 'pressed-send', html: '<p>Hi</p>' }, sendAs: { senderUserId: 'teacher-1' },
+    });
+    expect(state.chatTokens).toEqual(['pressed-send']);
   });
 
-  it('staff messages skip the dormant filter and never fall back to email', async () => {
+  it('rescues a pressed Send whose browser token cannot chat, using that teacher\'s connected login', async () => {
+    state.users = [student('asha', 'Asha'), student('bala', 'Bala')];
+    state.chat = (_r: string, token?: string) =>
+      token === 'no-chat-scope' ? { ok: false, status: 403, reason: 'Could not start the chat (403 Forbidden)' } : { ok: true, status: 201 };
+    const { results } = await sendNudge({
+      ...BASE, studentIds: ['asha', 'bala'], chat: { delegatedToken: 'no-chat-scope', html: '<p>Hi</p>' }, sendAs: { senderUserId: 'teacher-1' },
+    });
+    expect(state.chatTokens.filter((t) => t === 'sender-token')).toHaveLength(2);
+    expect(results.every((r) => r.channel === 'chat+inapp')).toBe(true);
+  });
+
+  it('staff messages skip the dormant filter', async () => {
     state.users = [student('teacher', 'Teacher')];
     state.dormant = ['teacher'];
     state.activity = () => ({ ok: false, status: 0, reason: 'nope' });
     const { results } = await sendNudge({ ...BASE, studentIds: ['teacher'], audience: 'staff' });
     expect(results[0].channel).toBe('inapp');
-    expect(state.emailCalls).toBe(0);
   });
 
   it('writes one receipt per recipient, dormant skips included', async () => {
@@ -242,14 +254,13 @@ describe('sendNudge', () => {
   it('says why each tier failed when a student gets only the Nexus bell', async () => {
     state.users = [student('asha', 'Asha')];
     state.activity = () => ({ ok: false, status: 0, reason: 'install 403: forbidden' });
-    state.email = () => ({ success: false, error: 'RESEND_API_KEY environment variable is not set' });
 
     const { results, counts } = await sendNudge({ ...BASE, studentIds: ['asha'], respectDormancy: false });
 
     expect(counts.inapp).toBe(1);
     expect(results[0].channel).toBe('inapp');
     expect(results[0].reasons?.teams).toContain('install 403');
-    expect(results[0].reasons?.email).toContain('RESEND_API_KEY');
+    expect(Object.keys(results[0].reasons || {})).toEqual(['teams']);
   });
 
   it('says so when Teams alerts are not set up at all', async () => {

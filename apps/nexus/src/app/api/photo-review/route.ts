@@ -316,6 +316,8 @@ export async function POST(request: NextRequest) {
       await Promise.all(
         rejected.map((d) =>
           sendNudge({
+            // The teacher's own Teams chat (their connected login if this token cannot chat).
+            teacher: { authHeader: request.headers.get('Authorization'), userId: reviewer.id },
             studentIds: [d.studentId],
             subject: 'Your profile photo needs a change',
             plain:

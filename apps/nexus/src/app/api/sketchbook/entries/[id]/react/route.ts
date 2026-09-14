@@ -42,6 +42,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const who = firstName(caller.name);
       const msg = reaction ? reactionMessage(who, reaction) : { subject: `${who} commented on your sketch`, plain: comment };
       await sendNudge({
+        // The teacher's own Teams chat (their connected login if this token cannot chat).
+        teacher: { authHeader: request.headers.get('Authorization'), userId: caller.id },
         studentIds: [sketch.student_id],
         subject: msg.subject,
         plain: comment && reaction ? `${msg.plain} ${who} wrote: ${comment}` : msg.plain,

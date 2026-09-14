@@ -16,8 +16,11 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { usePathname, useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
+import { QB_EXAM_ORDER, isExamPathListed } from '@/lib/qb-exam-routes';
+import type { QBExamType } from '@neram/database';
 import {
   ZONES,
+  filterNavTree,
   groupNavItems,
   zoneOverflow,
   QB_PATH,
@@ -87,6 +90,12 @@ interface StudentZoneContextValue {
   currentOverflowGroups: NavGroup[];
   currentHomePath: string;
   currentZoneTitle: string;
+  /**
+   * The exams the Question Bank lists for this student, in sidebar order, or
+   * null while the classroom check is still out. Read by the `/question-bank`
+   * redirect so it does not make the same request a second time.
+   */
+  qbExams: readonly QBExamType[] | null;
 }
 
 const StudentZoneContext = createContext<StudentZoneContextValue>({
@@ -99,6 +108,7 @@ const StudentZoneContext = createContext<StudentZoneContextValue>({
   currentOverflowGroups: [],
   currentHomePath: '/student/dashboard',
   currentZoneTitle: 'Classroom',
+  qbExams: null,
 });
 
 export function useStudentZoneContext() {
@@ -108,9 +118,16 @@ export function useStudentZoneContext() {
 export default function StudentZoneProvider({
   children,
   isQBEnabled = true,
+  qbExams = QB_EXAM_ORDER,
 }: {
   children: React.ReactNode;
   isQBEnabled?: boolean;
+  /**
+   * The exams the Question Bank folder lists (see `studentSidebarExams`), or
+   * null while that is unknown. Unknown filters nothing: the folder is hidden by
+   * the classroom gate until the same check answers anyway.
+   */
+  qbExams?: readonly QBExamType[] | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -156,12 +173,16 @@ export default function StudentZoneProvider({
   // flag, so it shows only when BOTH are on.
   const value = useMemo<StudentZoneContextValue>(() => {
     const isItemEnabled = (path: string) => {
-      if (path === QB_PATH && !isQBEnabled) return false;
+      // A prefix, not an exact match: the exam links live under QB_PATH, and an
+      // exact match would wave them past the classroom gate.
+      const inQB = path === QB_PATH || path.startsWith(QB_PATH + '/');
+      if (inQB && !isQBEnabled) return false;
+      if (qbExams && !isExamPathListed(path, qbExams)) return false;
       return isPathEnabled(path, featureFlags);
     };
     const filterGroups = (groups: NavGroup[]) =>
       groups
-        .map((g) => ({ ...g, items: g.items.filter((i) => isItemEnabled(i.path)) }))
+        .map((g) => ({ ...g, items: filterNavTree(g.items, (i) => isItemEnabled(i.path)) }))
         .filter((g) => g.items.length > 0);
     const filterItems = (items: NavItem[]) => items.filter((i) => isItemEnabled(i.path));
 
@@ -199,8 +220,9 @@ export default function StudentZoneProvider({
       currentOverflowGroups: groupNavItems(overflow),
       currentHomePath: effective.defaultPath,
       currentZoneTitle: effective.title,
+      qbExams,
     };
-  }, [activeZone, setActiveZone, isQBEnabled, featureFlags]);
+  }, [activeZone, setActiveZone, isQBEnabled, qbExams, featureFlags]);
 
   return <StudentZoneContext.Provider value={value}>{children}</StudentZoneContext.Provider>;
 }

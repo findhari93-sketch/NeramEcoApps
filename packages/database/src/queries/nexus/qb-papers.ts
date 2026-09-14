@@ -1241,6 +1241,8 @@ export async function getPaperProgressMatrix(
     .eq('classroom_id', classroomId)
     .eq('role', 'student')
     .eq('is_active', true)
+    // Paused students are in no list (founder rule, 2026-09-13).
+    .eq('participation_status', 'active')
     .eq('users.is_alumni', false);
 
   const students = ((enrolments || []) as any[])

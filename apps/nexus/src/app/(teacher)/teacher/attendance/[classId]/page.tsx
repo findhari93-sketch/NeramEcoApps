@@ -39,6 +39,12 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { RSVP_REASONS } from '@/lib/rsvp-reasons';
 import { RADIUS, SHADOW, tagSx } from '@/components/timetable/timetable-theme';
 import { formatTime } from '@/components/timetable/date-utils';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
+
+const STUDENT_ACCESSORS: ListAccessors<StudentRow> = { id: (s) => s.id, name: (s) => s.name, email: (s) => s.email };
+const SUGGESTED = [suggestedOrder<StudentRow>('Class order')];
 
 interface StudentRow {
   id: string;
@@ -170,6 +176,15 @@ export default function ClassReconciliationPage() {
     () => (data?.students || []).filter((s) => s.absence?.kind === 'no_show'),
     [data],
   );
+
+  // The shared student list: ranked search, sort, stage filter, paused students hidden.
+  const studentView = useStudentListView<StudentRow, 'suggested'>({
+    rows: data?.students,
+    accessors: STUDENT_ACCESSORS,
+    extraSorts: SUGGESTED,
+    defaultSort: 'suggested',
+    storageKey: 'nexus:class-attendance:sort',
+  });
 
   const openDialog = (ids: string[]) => {
     if (!data) return;
@@ -325,8 +340,10 @@ export default function ClassReconciliationPage() {
         </Box>
       )}
 
+      <StudentListToolbar view={studentView} />
+
       <Stack spacing={0.875}>
-        {students.map((s) => {
+        {studentView.shown.map((s) => {
           const isNoShow = s.absence?.kind === 'no_show';
           const explained = !!s.absence?.reason_code;
           return (
@@ -440,6 +457,7 @@ export default function ClassReconciliationPage() {
           );
         })}
       </Stack>
+      <PausedFootnote count={studentView.pausedHidden} />
 
       {/* Follow-up */}
       <Dialog

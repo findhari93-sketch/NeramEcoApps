@@ -205,6 +205,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       teamsText: `${access.userName} is asking about a missed class`,
       metadata: { class_id: params.classId, catch_up: true },
       teams: body.teams !== false,
+      teacher: { authHeader: request.headers.get('Authorization'), userId: access.userId },
     });
 
     await supabase

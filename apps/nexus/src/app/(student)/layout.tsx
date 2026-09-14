@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Box, Container } from '@neram/ui';
 import { usePathname } from 'next/navigation';
 import { isFullBleedRoute, isChromelessRoute } from '@/lib/full-bleed-routes';
@@ -17,6 +17,7 @@ import StudentZoneProvider, { useStudentZoneContext } from '@/components/Student
 import FeatureGate from '@/components/FeatureGate';
 import ReportIssueFab from '@/components/ReportIssueFab';
 import { installErrorCapture } from '@/lib/error-buffer';
+import { studentSidebarExams } from '@/lib/qb-exam-routes';
 
 /**
  * Inner shell — consumes the active student zone (Classroom / Study Zone) and renders the
@@ -90,12 +91,17 @@ function StudentShell({ children }: { children: React.ReactNode }) {
 }
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
-  const { isQBEnabled } = useQBAccess();
+  const { isQBEnabled, publishedExams } = useQBAccess();
+  // Null until the classroom check answers, so nothing acts on the placeholder.
+  const qbExams = useMemo(
+    () => (isQBEnabled === null ? null : studentSidebarExams(publishedExams)),
+    [isQBEnabled, publishedExams],
+  );
 
   return (
     <RoleGuard allowedRoles={['student']}>
       <NavBadgeProvider>
-        <StudentZoneProvider isQBEnabled={isQBEnabled ?? false}>
+        <StudentZoneProvider isQBEnabled={isQBEnabled ?? false} qbExams={qbExams}>
           <StudentShell>{children}</StudentShell>
         </StudentZoneProvider>
       </NavBadgeProvider>

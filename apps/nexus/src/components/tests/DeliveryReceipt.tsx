@@ -5,7 +5,7 @@
  *
  * The receipt this replaces said "Reached nobody 3" about three students who
  * were skipped on purpose (they are marked dormant), and said nothing at all
- * about why 23 students got no Teams chat, no Teams alert and no email. So:
+ * about why 23 students got no Teams chat and no Teams alert. So:
  *   - a deliberate skip is its own neutral count, with the names;
  *   - "Reached nobody" counts only real failures;
  *   - every channel that failed says why, once, with how many it hit;
@@ -34,7 +34,6 @@ export interface DeliveryResult {
   chat: boolean;
   teams: boolean;
   inapp: boolean;
-  email: boolean;
   ok: boolean;
   channel: string;
 }
@@ -45,7 +44,6 @@ export interface DeliveryReceiptData {
     chat: number;
     teams: number;
     inapp: number;
-    email: number;
     failed: number;
     skipped?: number;
     unreached?: number;
@@ -55,14 +53,13 @@ export interface DeliveryReceiptData {
   reopened?: number;
   closes_at?: string | null;
   skipped_dormant?: Array<{ id: string; name: string | null }>;
-  reasons?: Record<'chat' | 'teams' | 'email', Array<{ reason: string; count: number }>> | null;
+  reasons?: Record<'chat' | 'teams', Array<{ reason: string; count: number }>> | null;
   graph_skipped?: boolean;
 }
 
-const TIER_LABELS: Record<'chat' | 'teams' | 'email', string> = {
+const TIER_LABELS: Record<'chat' | 'teams', string> = {
   chat: 'Teams chat',
   teams: 'Teams alert',
-  email: 'Email',
 };
 
 function channelsOf(r: DeliveryResult): string[] {
@@ -70,7 +67,6 @@ function channelsOf(r: DeliveryResult): string[] {
     r.chat ? 'Teams chat' : '',
     r.teams ? 'Teams alert' : '',
     r.inapp ? 'Nexus' : '',
-    r.email ? 'Email' : '',
   ].filter(Boolean);
 }
 
@@ -101,7 +97,6 @@ export default function DeliveryReceipt({ data }: { data: DeliveryReceiptData })
         <Chip label={`Teams chat ${counts.chat}`} color={counts.chat ? 'success' : 'default'} />
         <Chip label={`Teams alert ${counts.teams}`} color={counts.teams ? 'success' : 'default'} />
         <Chip label={`Nexus bell ${counts.inapp}`} color={counts.inapp ? 'success' : 'default'} />
-        {counts.email > 0 && <Chip label={`Email ${counts.email}`} color="info" />}
         {skipped > 0 && <Chip label={`Skipped (dormant) ${skipped}`} variant="outlined" />}
         {unreached > 0 && <Chip label={`Reached nobody ${unreached}`} color="error" />}
       </Box>
@@ -125,7 +120,7 @@ export default function DeliveryReceipt({ data }: { data: DeliveryReceiptData })
         </Alert>
       )}
 
-      {(['chat', 'teams', 'email'] as const).map((tier) =>
+      {(['chat', 'teams'] as const).map((tier) =>
         (data.reasons?.[tier] ?? []).map((r) => (
           <Alert key={`${tier}:${r.reason}`} severity="warning" sx={{ mb: 1.5 }}>
             {TIER_LABELS[tier]} did not send for {r.count}: {r.reason}

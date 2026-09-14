@@ -9,7 +9,17 @@ import DiagnosticsStepList from '../DiagnosticsStepList';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import { stageKeyOf } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
-import type { AttendanceTabProps, DiagnosticsResult } from './types';
+import type { AttendanceRecord, AttendanceTabProps, DiagnosticsResult } from './types';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
+
+const RECORD_ACCESSORS: ListAccessors<AttendanceRecord> = {
+  id: (r) => r.student_id,
+  name: (r) => r.student?.name,
+  email: (r) => r.student?.email,
+};
+const REGISTER_SORTS = [suggestedOrder<AttendanceRecord>('Register order')];
 
 function formatDuration(minutes: number | null) {
   if (!minutes) return '-';
@@ -46,6 +56,14 @@ export default function RegisterTab({
   onOpenImport,
   onNotify,
 }: AttendanceTabProps) {
+  // The shared student list. Inside a dialog, so the URL is left alone.
+  const view = useStudentListView<AttendanceRecord, 'suggested'>({
+    rows: records,
+    accessors: RECORD_ACCESSORS,
+    extraSorts: REGISTER_SORTS,
+    defaultSort: 'suggested',
+    urlKeys: false,
+  });
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
 
@@ -149,8 +167,10 @@ export default function RegisterTab({
           No students enrolled in this classroom yet
         </Typography>
       ) : (
+        <>
+        <StudentListToolbar view={view} />
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {records.map((record) => (
+          {view.shown.map((record) => (
             <Box
               key={record.student_id}
               sx={{
@@ -222,6 +242,8 @@ export default function RegisterTab({
             </Box>
           ))}
         </Box>
+        <PausedFootnote count={view.pausedHidden} />
+        </>
       )}
     </>
   );

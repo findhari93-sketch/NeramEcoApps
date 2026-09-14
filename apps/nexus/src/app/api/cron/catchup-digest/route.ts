@@ -9,9 +9,8 @@ import {
   type CatchupKind,
   type CatchupWindows,
 } from '@neram/database';
-import { sendTeamsActivityNotification } from '@neram/auth';
 import { assertCronRequest } from '@/lib/cron-auth';
-import { plainToHtml } from '@/lib/nudge-delivery';
+import { plainToHtml, sendNudge } from '@/lib/nudge-delivery';
 import { resolveParentContacts } from '@/lib/parent-notify';
 import {
   buildStaffDigest,
@@ -43,7 +42,7 @@ const MAX_PARENT_EMAILS = 200;
  * notification per teacher per day. The live signal is the nav badge on
  * Catch-up; this is the summary, and it links straight to the reasons feed.
  *
- * Staff get it on `user_notifications`, the TopBar bell, NOT on
+ * Staff get it through sendNudge (the TopBar bell and Teams), NOT on
  * `nexus_timetable_notifications`. That table is only rendered on the timetable
  * page for one selected classroom, which is why the teacher alerts the other
  * crons already write have gone effectively unseen.
@@ -75,9 +74,6 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdminClient() as any;
     const since = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000).toISOString();
     const today = istTodayYmd();
-    // Unset means the Teams app is not published for this environment, which is
-    // not an error: the bell is the guaranteed channel and Teams is the extra.
-    const catalogAppId = process.env.TEAMS_APP_CATALOG_ID || '';
 
     // Everything that moved in the window, in one read. `or` rather than two
     // queries because a row can be both: a student can explain a class and clear
@@ -210,42 +206,25 @@ export async function GET(request: NextRequest) {
         ].filter(Boolean);
         if (recipientIds.length === 0) continue;
 
-        const { error: insertErr } = await supabase.from('user_notifications').insert(
-          recipientIds.map((userId) => ({
-            user_id: userId,
-            event_type: 'catchup_digest',
-            title: digest.title,
-            message: digest.message,
-            metadata: {
-              classroom_id: classroomId,
-              reasons: events.filter((e) => e.kind === 'reason').length,
-              completed: events.filter((e) => e.kind === 'completed').length,
-            },
-            is_read: false,
-          })),
-        );
-        if (insertErr) throw insertErr;
-        stats.staffNotified += recipientIds.length;
-
-        // Teams, best effort. sendTeamsActivityNotification never throws, and a
-        // teacher who missed the Teams ping still has the bell.
-        if (catalogAppId) {
-          const { data: recipients } = await supabase
-            .from('users')
-            .select('id, ms_oid')
-            .in('id', recipientIds);
-          for (const r of recipients || []) {
-            // A parent's ms_oid is synthetic ("parent:...") and means nothing to
-            // Graph, so it is skipped rather than sent and failed.
-            if (!r.ms_oid || String(r.ms_oid).startsWith('parent:')) continue;
-            const sent = await sendTeamsActivityNotification(r.ms_oid, {
-              text: digest.teamsText,
-              preview: digest.teamsText,
-              catalogAppId,
-            });
-            if (sent?.ok) stats.teamsSent += 1;
-          }
-        }
+        // The one door, for staff: the Teams activity feed and the bell, with a
+        // receipt. Parents' synthetic Microsoft ids fail the feed with a reason
+        // and still get the bell.
+        const { counts } = await sendNudge({
+          studentIds: recipientIds,
+          audience: 'staff',
+          subject: digest.title,
+          plain: digest.message,
+          teamsText: digest.teamsText,
+          eventType: 'catchup_digest',
+          metadata: {
+            classroom_id: classroomId,
+            reasons: events.filter((e) => e.kind === 'reason').length,
+            completed: events.filter((e) => e.kind === 'completed').length,
+          },
+          source: { kind: 'catchup_digest', refId: classroomId },
+        });
+        stats.staffNotified += counts.inapp;
+        stats.teamsSent += counts.teams + counts.chat;
       } catch (err) {
         stats.errors.push(
           `classroom ${classroomId}: ${err instanceof Error ? err.message : 'unknown error'}`,

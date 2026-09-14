@@ -39,8 +39,14 @@ async function buildModel(examId: string, classroomId: string) {
     console.error('[Exam Publish] could not refresh drawing scores:', err);
   });
 
-  const roster = await loadExamRoster(classroomId);
-  const results = await getExamResults(examId, roster);
+  const everyone = await loadExamRoster(classroomId);
+  const raw = await getExamResults(examId, everyone);
+  // Paused students count only if they really sat it (founder rule, 2026-09-13):
+  // a paused absentee must not appear in the results or inflate "absent".
+  const dormant = new Set(everyone.filter((s) => s.dormant).map((s) => s.id));
+  const rows = raw.rows.filter((r) => !dormant.has(r.student_id) || Boolean(r.attempt_id));
+  const results = { ...raw, rows, stats: { ...raw.stats, roster: rows.length, absent: rows.filter((r) => r.absent).length } };
+  const roster = everyone.filter((s) => !dormant.has(s.id) || rows.some((r) => r.student_id === s.id));
   return { roster, results };
 }
 

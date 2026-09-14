@@ -20,7 +20,7 @@ import { hasMicrosoftAccount } from './microsoft-account';
 
 const MIGRATION = resolve(
   __dirname,
-  '../../../../supabase/migrations/20260910090300_photo_review_badge_viewer_scoped.sql',
+  '../../../../supabase/migrations/20260918090200_photo_review_badge_hide_paused.sql',
 );
 
 const sql = readFileSync(MIGRATION, 'utf8').replace(/\s+/g, ' ');
@@ -31,6 +31,8 @@ describe('count_pending_photo_reviews', () => {
     expect(sql).toContain('u.is_alumni IS NOT TRUE');
     expect(sql).toContain("e.role = 'student'");
     expect(sql).toContain('u.ms_oid IS NOT NULL');
+    // Paused students are in no list and no count (loadPhotoRoster filters the same).
+    expect(sql).toContain("e.participation_status = 'active'");
   });
 
   /** Both halves of one rule, asserted together so it reads as a pair. */

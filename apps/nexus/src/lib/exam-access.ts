@@ -98,16 +98,18 @@ export interface ExamRosterStudent {
   id: string;
   name: string;
   avatar_url: string | null;
+  /** Paused in this classroom. See keepSittingOrTracked. */
+  dormant: boolean;
 }
 
 /**
- * The students an exam is sat by.
+ * The students an exam is sat by, dormant ones flagged.
  *
  * loadClassroomRoster already restricts to role = 'student' and drops alumni and
- * removed enrolments. Dormant students are INCLUDED here, unlike most surfaces:
- * dormant means "we have stopped chasing them", not "they are not in this
- * class", and an exam roster that quietly omitted them would under-report the
- * absentees a teacher needs to see.
+ * removed enrolments. Dormant students are loaded but FLAGGED: founder rule
+ * (2026-09-13) is that a paused student is in no list and no count, yet a paused
+ * student who really sat the exam keeps their row, so their marks are not lost.
+ * Callers apply that with keepSittingOrTracked once they know who sat it.
  */
 export async function loadExamRoster(classroomId: string): Promise<ExamRosterStudent[]> {
   // No userColumns needed: id, name and avatar_url are already in
@@ -122,6 +124,18 @@ export async function loadExamRoster(classroomId: string): Promise<ExamRosterStu
       id: m.user?.id ?? m.user_id,
       name: m.user?.name || 'Student',
       avatar_url: m.user?.avatar_url ?? null,
+      dormant: m.participation_status === 'dormant',
     }))
     .filter((s) => Boolean(s.id));
+}
+
+/**
+ * Tracked students, plus paused students who really sat it. Everyone else who is
+ * paused leaves the list, so they never inflate "absent" or "not started".
+ */
+export function keepSittingOrTracked<T extends { id: string; dormant: boolean }>(
+  students: readonly T[],
+  satIds: ReadonlySet<string>,
+): T[] {
+  return students.filter((s) => !s.dormant || satIds.has(s.id));
 }

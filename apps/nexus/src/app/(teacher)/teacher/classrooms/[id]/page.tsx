@@ -48,11 +48,13 @@ import RemoveStudentDialog from '@/components/RemoveStudentDialog';
 import HistoricalStudentsTab from '@/components/HistoricalStudentsTab';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
-import SortIcon from '@mui/icons-material/Sort';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import TagIcon from '@mui/icons-material/Tag';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import { parseTeamsChatId } from '@/lib/teams-ids';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ListAccessors } from '@/lib/student-list-view';
 
 interface ClassroomDetail {
   id: string;
@@ -87,9 +89,19 @@ interface Enrollment {
   user_id: string;
   role: string;
   batch_id: string | null;
+  enrolled_at?: string | null;
+  participation_status?: string | null;
   user: { id: string; name: string; email: string; avatar_url: string | null; ms_oid?: string | null };
   batch: { id: string; name: string } | null;
 }
+
+const ENROLLMENT_ACCESSORS: ListAccessors<Enrollment> = {
+  id: (e) => e.user_id,
+  name: (e) => e.user?.name,
+  email: (e) => e.user?.email,
+  joinedAt: (e) => e.enrolled_at,
+  dormant: (e) => e.participation_status === 'dormant',
+};
 
 const typeLabels: Record<string, string> = {
   nata: 'NATA',
@@ -121,8 +133,6 @@ export default function ClassroomDetailPage() {
   const [qbEnabled, setQbEnabled] = useState<boolean | null>(null);
   const [qbToggling, setQbToggling] = useState(false);
 
-  // Student sorting
-  const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc' | 'enrolled-desc' | 'enrolled-asc'>('name-asc');
 
   // Student selection & removal state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -591,22 +601,15 @@ export default function ClassroomDetailPage() {
     await Promise.all([fetchClassroom(), fetchEnrollments()]);
   };
 
-  // Sort enrollments client-side
-  const sortedEnrollments = [...enrollments].sort((a, b) => {
-    switch (sortBy) {
-      case 'name-asc':
-        return (a.user.name || '').localeCompare(b.user.name || '');
-      case 'name-desc':
-        return (b.user.name || '').localeCompare(a.user.name || '');
-      case 'enrolled-asc':
-        return 0; // API returns desc, reverse it
-      case 'enrolled-desc':
-      default:
-        return 0; // Already sorted by API
-    }
+  // The shared student list: ranked search, sort, stage filter, paused students hidden.
+  const rosterView = useStudentListView<Enrollment>({
+    rows: enrollments,
+    accessors: ENROLLMENT_ACCESSORS,
+    defaultSort: 'name',
+    urlKeys: { q: 'sq', sort: 'ssort', stage: 'sstage', status: 'sstatus' },
+    storageKey: 'nexus:classroom-students:sort',
   });
-  // For enrolled-asc, reverse the API's default desc order
-  if (sortBy === 'enrolled-asc') sortedEnrollments.reverse();
+  const sortedEnrollments = rosterView.shown;
 
   const handleQuickBatchAssign = async () => {
     if (selectedIds.size === 0 || !quickBatchTarget) return;
@@ -1199,7 +1202,7 @@ export default function ClassroomDetailPage() {
       {/* Tab: Students */}
       {tab === 3 && (
         <Box>
-          {/* Batch filter chips + Sort control */}
+          {/* Batch filter chips */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
             <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', flex: 1, pb: 0.5 }}>
               <Chip
@@ -1230,28 +1233,9 @@ export default function ClassroomDetailPage() {
                 />
               ))}
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <SortIcon fontSize="small" color="action" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                style={{
-                  border: '1px solid #ccc',
-                  borderRadius: 6,
-                  padding: '4px 8px',
-                  fontSize: 13,
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  minHeight: 32,
-                }}
-              >
-                <option value="name-asc">Name A-Z</option>
-                <option value="name-desc">Name Z-A</option>
-                <option value="enrolled-desc">Newest First</option>
-                <option value="enrolled-asc">Oldest First</option>
-              </select>
-            </Box>
           </Box>
+
+          <StudentListToolbar view={rosterView} />
 
           {/* Action buttons (hidden for archived read-only cohorts) */}
           {!readOnly && (
@@ -1409,6 +1393,8 @@ export default function ClassroomDetailPage() {
           )}
 
           {/* Mobile FAB for batch assignment */}
+          <PausedFootnote count={rosterView.pausedHidden} />
+
           {!readOnly && !selectionMode && sortedEnrollments.length > 0 && batches.length > 0 && (
             <Fab
               color="primary"

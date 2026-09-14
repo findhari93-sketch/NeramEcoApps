@@ -31,7 +31,7 @@ const BROADCAST_TYPES = [
 ];
 
 export default function BroadcastDialog({ open, onClose, classroomId, examType }: BroadcastDialogProps) {
-  const { getToken } = useNexusAuthContext();
+  const { getTeacherToken } = useNexusAuthContext();
   const [selectedExamType, setSelectedExamType] = useState(examType || 'jee');
   const [broadcastType, setBroadcastType] = useState('scorecard_released');
   const [message, setMessage] = useState('');
@@ -45,7 +45,7 @@ export default function BroadcastDialog({ open, onClose, classroomId, examType }
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const token = await getToken();
+      const token = await getTeacherToken();
       if (!token) return;
 
       const res = await fetch('/api/documents/exam-broadcasts', {

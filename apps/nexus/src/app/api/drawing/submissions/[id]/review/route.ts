@@ -338,7 +338,7 @@ export async function PATCH(
         });
         const r = results[0];
         delivery = r
-          ? { chat: r.chat, teams: r.teams, inapp: r.inapp, email: r.email, reasons: r.reasons ?? null }
+          ? { chat: r.chat, teams: r.teams, inapp: r.inapp, reasons: r.reasons ?? null }
           : null;
       } catch (err) {
         console.error('[Drawing review] student was not notified:', err);

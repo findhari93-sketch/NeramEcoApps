@@ -15,6 +15,17 @@ import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import { stageKeyOf } from '@/lib/student-stage';
 import { rankByTimeInRoom } from '@/lib/attendance-quality';
 import type { AttendanceTabProps, StudentInsight } from './types';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
+
+const INSIGHT_ACCESSORS: ListAccessors<StudentInsight> = {
+  id: (s) => s.id,
+  name: (s) => s.name,
+  joinedAt: (s) => s.enrolled_at,
+  dormant: (s) => s.dormant,
+};
+const TIME_IN_ROOM = [suggestedOrder<StudentInsight>('Shortest time in the room first')];
 
 /**
  * Who came, ranked by how long they were actually in the room.
@@ -175,6 +186,15 @@ export default function AttendedTab({
     () => rankByTimeInRoom((insights?.students ?? []).filter((s) => s.attended)),
     [insights],
   );
+  // The order IS the analysis here, so the shared list keeps it by default and
+  // adds search, the stage filter and the other sorts on top.
+  const view = useStudentListView<StudentInsight, 'suggested'>({
+    rows: ranked,
+    accessors: INSIGHT_ACCESSORS,
+    extraSorts: TIME_IN_ROOM,
+    defaultSort: 'suggested',
+    urlKeys: false,
+  });
 
   if (insightsLoading) {
     return (
@@ -227,8 +247,9 @@ export default function AttendedTab({
               class is flagged. They still count as present.
             </Typography>
           )}
+          <StudentListToolbar view={view} />
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            {ranked.map((student) => (
+            {view.shown.map((student) => (
               <AttendedRow
                 key={student.id}
                 student={student}
@@ -239,6 +260,7 @@ export default function AttendedTab({
               />
             ))}
           </Box>
+          <PausedFootnote count={view.pausedHidden} />
         </>
       )}
     </>

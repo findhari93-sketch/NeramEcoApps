@@ -18,13 +18,19 @@
  * 20260903090000_test_access_notifications.sql has not run yet. The enum insert
  * fails, it is swallowed, and the door still opens.
  */
-import {
-  createAdminNotification,
-  createUserNotification,
-  getSupabaseAdminClient,
-} from '@neram/database';
+import { createAdminNotification } from '@neram/database';
+import { sendNudge } from './nudge-delivery';
 
-/** What the student is told when a door opens or shuts on them. */
+/**
+ * What the student is told when a door opens or shuts on them. Through sendNudge
+ * like every student message.
+ *
+ * A grant goes to the Nexus bell and the Teams feed only, never a chat: every
+ * screen that grants access (the reopen sheet, the bulk reopen) already sends the
+ * teacher's own message through the test message route, and a second chat saying
+ * the same thing reads as a mistake. A decline has no such message, so it goes as
+ * the deciding teacher's Teams chat when `teacher` is passed.
+ */
 export async function notifyStudentAccessDecision(input: {
   studentId: string;
   testId: string;
@@ -33,6 +39,7 @@ export async function notifyStudentAccessDecision(input: {
   decision: 'granted' | 'declined';
   closesAt?: string | null;
   note?: string | null;
+  teacher?: { authHeader: string | null; userId: string };
 }): Promise<void> {
   const title = input.testTitle || 'your test';
   try {
@@ -48,35 +55,30 @@ export async function notifyStudentAccessDecision(input: {
             timeZone: 'Asia/Kolkata',
           })
         : null;
-      await createUserNotification(
-        {
-          user_id: input.studentId,
-          event_type: 'test_access_granted' as never,
-          title: 'Your teacher opened a test for you',
-          message: until
-            ? `You can now take ${title}. It closes on ${until}.`
-            : `You can now take ${title}.`,
-          metadata: { test_id: input.testId, placement_id: input.placementId },
-        },
-        getSupabaseAdminClient(),
-      );
+      await sendNudge({
+        studentIds: [input.studentId],
+        respectDormancy: false,
+        subject: 'Your teacher opened a test for you',
+        plain: until ? `You can now take ${title}. It closes on ${until}.` : `You can now take ${title}.`,
+        eventType: 'test_access_granted',
+        metadata: { test_id: input.testId, placement_id: input.placementId },
+        source: { kind: 'test_access_granted', refId: input.placementId },
+      });
       return;
     }
 
-    await createUserNotification(
-      {
-        user_id: input.studentId,
-        event_type: 'test_access_declined' as never,
-        title: 'Your teacher did not reopen that test',
-        // The reason travels with the decision. A bare "declined" is the thing
-        // students bring straight back to the teacher to ask about.
-        message: input.note?.trim()
-          ? `${title}: ${input.note.trim()}`
-          : `Your request to retake ${title} was not approved.`,
-        metadata: { test_id: input.testId, placement_id: input.placementId },
-      },
-      getSupabaseAdminClient(),
-    );
+    await sendNudge({
+      studentIds: [input.studentId],
+      respectDormancy: false,
+      subject: 'Your teacher did not reopen that test',
+      // The reason travels with the decision. A bare "declined" is the thing
+      // students bring straight back to the teacher to ask about.
+      plain: input.note?.trim() ? `${title}: ${input.note.trim()}` : `Your request to retake ${title} was not approved.`,
+      eventType: 'test_access_declined',
+      metadata: { test_id: input.testId, placement_id: input.placementId },
+      ...(input.teacher ? { teacher: input.teacher } : {}),
+      source: { kind: 'test_access_declined', refId: input.placementId },
+    });
   } catch (err) {
     console.warn('[test-access] student notification skipped:', (err as Error)?.message);
   }

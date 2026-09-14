@@ -150,6 +150,8 @@ export async function POST(request: NextRequest, { params }: { params: { classId
     const subject = `Catch up: ${title}`;
 
     const { results, counts } = await sendNudge({
+      // The teacher's own Teams chat (their connected login if this token cannot chat).
+      teacher: { authHeader: request.headers.get('Authorization'), userId: staff.id },
       studentIds,
       subject,
       plain,

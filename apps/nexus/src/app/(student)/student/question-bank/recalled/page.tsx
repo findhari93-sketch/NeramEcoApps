@@ -4,13 +4,16 @@ import { useRouter } from 'next/navigation';
 import { Box, Typography, IconButton } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import RecalledPaperBrowser from '@/components/question-bank/RecalledPaperBrowser';
+import { qbExamPath } from '@/lib/qb-exam-routes';
 
 export default function RecalledPapersPage() {
   const router = useRouter();
 
   const handleSessionClick = (paperId: string, session: string) => {
     router.push(
-      `/student/question-bank/questions?exam_type=NATA&session=${encodeURIComponent(session)}&paper_source=recalled`
+      // `exam`, not `exam_type`: the questions page reads `exam`, so this link
+      // used to open an unscoped search across both exams.
+      `/student/question-bank/questions?exam=NATA&session=${encodeURIComponent(session)}&paper_source=recalled`
     );
   };
 
@@ -32,7 +35,11 @@ export default function RecalledPapersPage() {
           zIndex: 10,
         }}
       >
-        <IconButton size="small" onClick={() => router.push('/student/question-bank')}>
+        <IconButton
+          onClick={() => router.push(qbExamPath('student', 'NATA'))}
+          aria-label="Back to NATA Question Bank"
+          sx={{ width: 44, height: 44 }}
+        >
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h6" fontWeight={700} fontSize={{ xs: '1rem', md: '1.25rem' }}>

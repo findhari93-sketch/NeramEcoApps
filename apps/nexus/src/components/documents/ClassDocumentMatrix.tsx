@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -16,6 +16,9 @@ import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ListAccessors } from '@/lib/student-list-view';
 
 interface Student {
   id: string;
@@ -37,6 +40,19 @@ interface MatrixCell {
   document_id: string;
 }
 
+type DocStatus = 'missing' | 'pending' | 'rejected' | 'complete';
+
+const ACCESSORS: ListAccessors<Student> = { id: (s) => s.id, name: (s) => s.name, email: (s) => s.email };
+
+const DOC_STATUS_ORDER: readonly DocStatus[] = ['missing', 'rejected', 'pending', 'complete'];
+
+const DOC_STATUS_LABEL: Record<DocStatus, string> = {
+  missing: 'Missing required',
+  rejected: 'Rejected',
+  pending: 'Waiting to verify',
+  complete: 'All verified',
+};
+
 export default function ClassDocumentMatrix() {
   const theme = useTheme();
   const router = useRouter();
@@ -45,6 +61,28 @@ export default function ClassDocumentMatrix() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [matrix, setMatrix] = useState<Record<string, Record<string, MatrixCell | null>>>({});
   const [loading, setLoading] = useState(true);
+
+  // A student's worst required document decides their group: a missing one
+  // matters more than a rejected one, which matters more than one waiting.
+  const docStatusOf = useCallback(
+    (s: Student): DocStatus => {
+      const cells = templates.filter((t) => t.is_required).map((t) => matrix[s.id]?.[t.id]?.status ?? null);
+      if (cells.some((c) => !c)) return 'missing';
+      if (cells.some((c) => c === 'rejected')) return 'rejected';
+      if (cells.some((c) => c !== 'verified')) return 'pending';
+      return 'complete';
+    },
+    [templates, matrix],
+  );
+  const statusConfig = useMemo(() => ({ of: docStatusOf, order: DOC_STATUS_ORDER }), [docStatusOf]);
+
+  const view = useStudentListView<Student, never, DocStatus>({
+    rows: students,
+    accessors: ACCESSORS,
+    defaultSort: 'name',
+    status: statusConfig,
+    urlKeys: { q: 'dq', sort: 'dsort', stage: 'dstage', status: 'dstatus' },
+  });
 
   const fetchOverview = useCallback(async () => {
     if (!activeClassroom) return;
@@ -81,7 +119,8 @@ export default function ClassDocumentMatrix() {
 
   const exportCSV = () => {
     const headers = ['Student', 'Email', ...templates.map((t) => t.name)];
-    const rows = students.map((s) => [
+    // The export is the list on screen: same search and filters.
+    const rows = view.shown.map((s) => [
       s.name,
       s.email,
       ...templates.map((t) => {
@@ -130,16 +169,37 @@ export default function ClassDocumentMatrix() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1.5 }}>
-        <Button
-          size="small"
-          startIcon={<DownloadOutlinedIcon />}
-          onClick={exportCSV}
-          sx={{ textTransform: 'none' }}
-        >
-          Export CSV
-        </Button>
-      </Box>
+      <StudentListToolbar
+        view={view}
+        statusSlot={
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {DOC_STATUS_ORDER.map((key) => {
+              const on = view.status === key;
+              return (
+                <Chip
+                  key={key}
+                  label={`${DOC_STATUS_LABEL[key]} ${view.statusCounts[key] ?? 0}`}
+                  variant={on ? 'filled' : 'outlined'}
+                  color={on ? 'primary' : 'default'}
+                  onClick={() => view.setStatus(on ? 'all' : key)}
+                  aria-pressed={on}
+                  sx={{ minHeight: 44, fontWeight: 600 }}
+                />
+              );
+            })}
+          </Box>
+        }
+        actionsSlot={
+          <Button
+            size="small"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={exportCSV}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Export CSV
+          </Button>
+        }
+      />
 
       <Box
         sx={{
@@ -196,7 +256,7 @@ export default function ClassDocumentMatrix() {
             </tr>
           </thead>
           <tbody>
-            {students.map((s) => (
+            {view.shown.map((s) => (
               <tr
                 key={s.id}
                 style={{ cursor: 'pointer' }}
@@ -252,6 +312,12 @@ export default function ClassDocumentMatrix() {
           </tbody>
         </table>
       </Box>
+      {view.shown.length === 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+          No students match this filter.
+        </Typography>
+      )}
+      <PausedFootnote count={view.pausedHidden} />
     </Box>
   );
 }

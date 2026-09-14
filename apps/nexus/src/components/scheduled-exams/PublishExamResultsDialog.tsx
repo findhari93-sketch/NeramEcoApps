@@ -66,7 +66,7 @@ export default function PublishExamResultsDialog({
 }) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
-  const { getToken } = useNexusAuthContext();
+  const { getTeacherToken } = useNexusAuthContext();
 
   const [data, setData] = useState<PreviewData | null>(null);
   const [enabled, setEnabled] = useState<Set<string>>(new Set());
@@ -78,7 +78,8 @@ export default function PublishExamResultsDialog({
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
-      const token = await getToken();
+      // Teacher token: some of these calls message students in Teams as the teacher.
+      const token = await getTeacherToken();
       if (!token) throw new Error('Not signed in');
       const res = await fetch(url, {
         ...init,
@@ -92,7 +93,7 @@ export default function PublishExamResultsDialog({
       if (!res.ok) throw new Error(json.error || 'Request failed');
       return json;
     },
-    [getToken],
+    [getTeacherToken],
   );
 
   useEffect(() => {

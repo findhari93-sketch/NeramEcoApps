@@ -72,6 +72,17 @@ export interface ExtraSort<T, S extends string = string> {
   key: S;
   label: string;
   compare: (a: T, b: T) => number;
+  /** Ties keep the order the rows arrived in, instead of falling back to name. */
+  keepOrder?: boolean;
+}
+
+/**
+ * The screen's own order, as a sort option: for lists whose order IS the
+ * information (worst first, time in the room, a triage band). Search still ranks
+ * by name match; this only decides the order when nothing is typed.
+ */
+export function suggestedOrder<T, S extends string = 'suggested'>(label = 'Suggested order', key = 'suggested' as S): ExtraSort<T, S> {
+  return { key, label, compare: () => 0, keepOrder: true };
 }
 
 export type FactsLookup = (id: string) => { stage: StageKey; dormant: boolean } | null;
@@ -150,7 +161,7 @@ export function comparatorFor<T, S extends string>(
 ): (x: T, y: T) => number {
   const custom = extra.find((e) => e.key === sort);
   if (custom) {
-    return (x, y) => custom.compare(x, y) || byName(a)(x, y);
+    return custom.keepOrder ? custom.compare : (x, y) => custom.compare(x, y) || byName(a)(x, y);
   }
   if (sort === 'joined_newest') return byJoined(a, true);
   if (sort === 'joined_oldest') return byJoined(a, false);

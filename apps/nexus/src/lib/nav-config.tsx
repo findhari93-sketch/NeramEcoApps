@@ -53,6 +53,8 @@ import FaceRetouchingNaturalOutlinedIcon from '@mui/icons-material/FaceRetouchin
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import ArchitectureOutlinedIcon from '@mui/icons-material/ArchitectureOutlined';
+import { QB_EXAM_LABELS, QB_EXAM_ORDER, qbExamPath, qbHomePath, type QBSurface } from '@/lib/qb-exam-routes';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
@@ -78,11 +80,48 @@ export interface NavItem {
    * fourteen links needs sections or nobody finds the fifteenth.
    */
   group?: string;
+  /**
+   * Makes this item a folder. The sidebar renders the children indented under
+   * it; the bottom bar and the More sheet, which have no room for nesting, list
+   * the children in its place (see `flattenNavItems`). The parent keeps its own
+   * `path` for the icons-only sidebar and for a bottom-bar tab.
+   */
+  children?: NavItem[];
 }
 
 export interface NavGroup {
   label: string;
   items: NavItem[];
+}
+
+// ── Question Bank ───────────────────────────────────────────────────────────
+
+/** Heading the exam links sit under in the More sheet. */
+export const QB_NAV_GROUP = 'Question Bank';
+
+const QB_EXAM_ICONS = {
+  JEE_PAPER_2: <LibraryBooksOutlinedIcon />,
+  NATA: <ArchitectureOutlinedIcon />,
+} as const;
+
+/**
+ * "Question Bank" as a folder with one link per exam. The parent path is a
+ * redirect to the exam used last, which is what a bottom-bar tab or an
+ * icons-only sidebar button needs from a folder it cannot open.
+ */
+function questionBankFolder(surface: QBSurface, label: string, group?: string): NavItem {
+  return {
+    label,
+    path: qbHomePath(surface),
+    icon: <LibraryBooksOutlinedIcon />,
+    group,
+    children: QB_EXAM_ORDER.map((exam) => ({
+      label: QB_EXAM_LABELS[exam],
+      path: qbExamPath(surface, exam),
+      icon: QB_EXAM_ICONS[exam],
+      group: QB_NAV_GROUP,
+    })),
+  };
 }
 
 // ── Panels (teacher / admin) ────────────────────────────────────────────────
@@ -188,7 +227,7 @@ export const PANELS: PanelConfig[] = [
       { label: 'Catch-up', path: '/teacher/catch-up', icon: <HistoryToggleOffOutlinedIcon />, group: 'Progress' },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon />, group: 'Content' },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon />, group: 'Content' },
-      { label: 'Question Bank', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon />, group: 'Assessment' },
+      questionBankFolder('teacher', 'Question Bank', 'Assessment'),
       { label: 'Tests', path: '/teacher/tests', icon: <FactCheckOutlinedIcon />, group: 'Assessment' },
       { label: 'Recall', path: '/teacher/exam-recall', icon: <HistoryEduOutlinedIcon />, group: 'Assessment' },
       { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon />, group: 'Content' },
@@ -302,7 +341,7 @@ const CLASSROOM: ZoneConfig = {
       label: 'Learn',
       items: [
         { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
-        { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
+        questionBankFolder('student', 'Question Bank'),
         { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
         { label: 'Leaderboard', path: '/student/leaderboard', icon: <LeaderboardOutlinedIcon /> },
       ],
@@ -360,7 +399,7 @@ const STUDY: ZoneConfig = {
     {
       label: 'Learn',
       items: [
-        { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
+        questionBankFolder('student', 'Question Bank'),
         { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
       ],
     },
@@ -409,22 +448,49 @@ export function groupNavItems(items: NavItem[]): NavGroup[] {
   return groups;
 }
 
+/**
+ * A list as a phone sees it: every folder replaced by its children.
+ *
+ * The bottom bar and the More sheet have no nesting, so a folder's links would
+ * otherwise exist only in a sidebar that is hidden below 900px, which is the bug
+ * this file was written to end.
+ */
+export function flattenNavItems(items: NavItem[]): NavItem[] {
+  return items.flatMap((i) => (i.children?.length ? i.children : [i]));
+}
+
+/**
+ * Filter a list, folders included. A folder whose every child is filtered out
+ * goes too, so the sidebar never shows a heading that opens onto nothing.
+ */
+export function filterNavTree(items: NavItem[], keep: (item: NavItem) => boolean): NavItem[] {
+  return items.flatMap((item) => {
+    if (!keep(item)) return [];
+    if (!item.children) return [item];
+    const children = item.children.filter(keep);
+    return children.length > 0 ? [{ ...item, children }] : [];
+  });
+}
+
 /** The bottom bar for a panel, resolved from `bottomNavPaths` in bar order. */
 export function panelBottomNav(panel: PanelConfig): NavItem[] {
+  const reachable = [...panel.sidebarItems, ...flattenNavItems(panel.sidebarItems)];
   return panel.bottomNavPaths
-    .map((path) => panel.sidebarItems.find((i) => i.path === path))
+    .map((path) => reachable.find((i) => i.path === path))
     .filter((i): i is NavItem => !!i);
 }
 
 /** Everything the bottom bar did not take. This is the whole point of the file. */
 export function panelOverflow(panel: PanelConfig): NavItem[] {
   const promoted = new Set(panel.bottomNavPaths);
-  return panel.sidebarItems.filter((i) => !promoted.has(i.path));
+  return flattenNavItems(panel.sidebarItems).filter((i) => !promoted.has(i.path));
 }
 
 /** Every item a zone can reach from its sidebar, flattened, each tagged with its heading. */
 export function zoneSidebarItems(zone: ZoneConfig): NavItem[] {
-  return zone.navGroups.flatMap((g) => g.items.map((i) => ({ ...i, group: i.group ?? g.label })));
+  return zone.navGroups.flatMap((g) =>
+    flattenNavItems(g.items).map((i) => ({ ...i, group: i.group ?? g.label })),
+  );
 }
 
 /** Everything the zone's bottom bar did not take, plus its overflow-only extras. */

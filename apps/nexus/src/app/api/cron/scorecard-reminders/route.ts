@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, filterTrackedStudentIds } from '@neram/database';
 import { assertCronRequest } from '@/lib/cron-auth';
 import { sendNudge } from '@/lib/nudge-delivery';
+import { senderLookup } from '@/lib/teams-sender';
 
 /**
  * GET /api/cron/scorecard-reminders
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
 
     // Create notifications for each attempt
     // Check if user_notifications table exists, if not just mark as sent
+    const senderFor = senderLookup(supabase);
     let notificationCount = 0;
     let skippedDormant = 0;
     for (const attempt of attempts) {
@@ -65,6 +67,7 @@ export async function GET(request: NextRequest) {
       const { results } = await sendNudge({
         studentIds: [attempt.student_id],
         respectDormancy: false, // already filtered above
+        ...(await senderFor(attempt.classroom_id)),
         subject: 'Upload your NATA scorecard, {firstName}',
         plain: `Your NATA ${attempt.phase === 'phase_1' ? 'Phase 1' : 'Phase 2'} Attempt ${attempt.attempt_number} scorecard should be available now. Please upload it.`,
         eventType: 'scorecard_reminder',

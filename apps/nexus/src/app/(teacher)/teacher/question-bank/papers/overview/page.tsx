@@ -16,7 +16,20 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import PageHeader from '@/components/PageHeader';
 import PaperProgressMatrix from '@/components/question-bank/PaperProgressMatrix';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ExtraSort, ListAccessors } from '@/lib/student-list-view';
 import type { NexusQBPaperMatrix } from '@neram/database';
+
+type MatrixRow = NexusQBPaperMatrix['rows'][number];
+type SortKey = 'fewest_done' | 'most_done';
+
+const ACCESSORS: ListAccessors<MatrixRow> = { id: (r) => r.student_id, name: (r) => r.student_name };
+
+const SORTS: ExtraSort<MatrixRow, SortKey>[] = [
+  { key: 'fewest_done', label: 'Fewest papers done', compare: (a, b) => a.papers_completed - b.papers_completed },
+  { key: 'most_done', label: 'Most papers done', compare: (a, b) => b.papers_completed - a.papers_completed },
+];
 
 export default function PapersOverviewPage() {
   const router = useRouter();
@@ -28,6 +41,15 @@ export default function PapersOverviewPage() {
       ? `/api/question-bank/papers/overview?classroom_id=${classroomId}`
       : null,
   );
+
+  const matrix = data?.data;
+  const view = useStudentListView<MatrixRow, SortKey>({
+    rows: matrix?.rows,
+    accessors: ACCESSORS,
+    extraSorts: SORTS,
+    defaultSort: 'name',
+    storageKey: 'nexus:paper-progress:sort',
+  });
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200, mx: 'auto' }}>
@@ -64,8 +86,18 @@ export default function PapersOverviewPage() {
           <Alert severity="info" sx={{ borderRadius: 2 }}>
             Pick a classroom to see how its students are doing.
           </Alert>
-        ) : data?.data ? (
-          <PaperProgressMatrix matrix={data.data} />
+        ) : matrix ? (
+          <>
+            {matrix.papers.length > 0 && matrix.rows.length > 0 && <StudentListToolbar view={view} />}
+            {matrix.rows.length > 0 && view.shown.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
+                No students match this filter.
+              </Typography>
+            ) : (
+              <PaperProgressMatrix matrix={{ ...matrix, rows: view.shown }} />
+            )}
+            <PausedFootnote count={view.pausedHidden} />
+          </>
         ) : null}
       </Box>
 

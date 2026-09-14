@@ -26,7 +26,7 @@ const ALLOWED: Record<string, string> = {
   'packages/database/src/queries/nexus/exam-eligibility.ts':
     'Returns a dormant flag so test results can keep a paused student\'s real attempt (tagged, not counted) and drop the rest.',
   'apps/nexus/src/lib/exam-access.ts':
-    'Scheduled exam roster (invigilation, publish). Still to migrate: see feedback_shared_student_list rollout checklist.',
+    'Flags dormant; every caller applies keepSittingOrTracked (a paused student stays only if they sat it) or counts tracked only.',
 };
 
 const SCAN_DIRS = ['apps/nexus/src', 'packages/database/src'];

@@ -16,7 +16,7 @@ import {
   cleanupIssueScreenshots,
   deleteFoundationIssue,
 } from '@neram/database/queries/nexus';
-import { createUserNotification } from '@neram/database/queries';
+import { notifyUser } from '@/lib/nudge-delivery';
 import type { FoundationIssueStatus } from '@neram/database/types';
 
 async function verifyTeacherOrAdmin(request: NextRequest) {
@@ -144,7 +144,7 @@ export async function PATCH(
             .eq('id', body.assigned_to)
             .single();
 
-          await createUserNotification({
+          await notifyUser({
             user_id: body.assigned_to,
             event_type: 'foundation_issue_assigned',
             title: 'Issue Assigned to You',
@@ -155,7 +155,7 @@ export async function PATCH(
 
         // Notify the student that issue is being worked on
         if (issueData) {
-          await createUserNotification({
+          await notifyUser({
             user_id: issueData.student_id,
             event_type: 'foundation_issue_in_progress',
             title: 'Issue Being Reviewed',
@@ -173,7 +173,7 @@ export async function PATCH(
         issue = await delegateFoundationIssue(issueId, body.delegated_to, user.id, body.reason.trim());
 
         // Notify the new assignee
-        await createUserNotification({
+        await notifyUser({
           user_id: body.delegated_to,
           event_type: 'foundation_issue_delegated',
           title: 'Issue Delegated to You',
@@ -197,10 +197,10 @@ export async function PATCH(
 
         // Notify the student
         if (issueData) {
-          await createUserNotification({
+          await notifyUser({
             user_id: issueData.student_id,
             event_type: 'foundation_issue_awaiting_confirmation',
-            title: 'Issue Resolved — Please Confirm',
+            title: 'Issue resolved. Please confirm',
             message: `Your issue "${issueData.title}" has been resolved: ${note}. Please confirm if the fix works.`,
             metadata: {
               issue_id: issueId,
@@ -247,7 +247,7 @@ export async function PATCH(
         await cleanupIssueScreenshots(issueId).catch(console.error);
 
         if (issueData) {
-          await createUserNotification({
+          await notifyUser({
             user_id: issueData.resolved_by || issueData.student_id,
             event_type: 'foundation_issue_closed',
             title: 'Issue Confirmed Resolved',
@@ -281,7 +281,7 @@ export async function PATCH(
 
         const notifyUserId = ownIssue.assigned_to || issueData?.resolved_by;
         if (notifyUserId) {
-          await createUserNotification({
+          await notifyUser({
             user_id: notifyUserId,
             event_type: 'foundation_issue_reopened',
             title: 'Issue Reopened',
@@ -305,10 +305,10 @@ export async function PATCH(
           issue = await resolveFoundationIssue(issueId, user.id, note);
 
           if (issueData) {
-            await createUserNotification({
+            await notifyUser({
               user_id: issueData.student_id,
               event_type: 'foundation_issue_awaiting_confirmation',
-              title: 'Issue Resolved — Please Confirm',
+              title: 'Issue resolved. Please confirm',
               message: `Your issue "${issueData.title}" has been resolved: ${note}. Please confirm if the fix works.`,
               metadata: { issue_id: issueId, resolution_note: note, resolved_by: user.name },
             }).catch(console.error);
@@ -318,7 +318,7 @@ export async function PATCH(
 
           // Notify student when marked in progress
           if (status === 'in_progress' && issueData) {
-            await createUserNotification({
+            await notifyUser({
               user_id: issueData.student_id,
               event_type: 'foundation_issue_in_progress',
               title: 'Issue Being Reviewed',

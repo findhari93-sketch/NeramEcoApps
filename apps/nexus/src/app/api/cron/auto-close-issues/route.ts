@@ -5,7 +5,7 @@ import {
   getExpiredAwaitingIssues,
   cleanupIssueScreenshots,
 } from '@neram/database/queries/nexus';
-import { createUserNotification } from '@neram/database/queries';
+import { notifyUser } from '@/lib/nudge-delivery';
 
 export async function GET(request: NextRequest) {
   // Same check this route used to spell out inline, now shared with the other
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
       await cleanupIssueScreenshots(issue.id).catch(console.error);
 
-      await createUserNotification({
+      await notifyUser({
         user_id: issue.student_id,
         event_type: 'foundation_issue_closed',
         title: 'Issue Auto-Closed',

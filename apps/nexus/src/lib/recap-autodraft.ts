@@ -49,7 +49,6 @@ import {
   createRecapForClass,
   replaceRecapSections,
   setRecapReadiness,
-  createUserNotification,
   type GeneratedRecapSection,
   type NexusClassRecap,
 } from '@neram/database';
@@ -57,6 +56,7 @@ import { generateSectionsAndQuestions } from './ai-generate';
 import { readStoredTranscript } from './transcript-resolver';
 import { preflight, scoreRecapGeneration } from './recap-quality';
 import { readRecapDefaults, questionsToPass } from './recap-defaults';
+import { sendNudge } from './nudge-delivery';
 
 /**
  * Classes drafted per run.
@@ -457,19 +457,20 @@ async function notifyHeld(supabase: any, recapId: string, detail: string): Promi
       .eq('is_active', true)
       .limit(25);
 
-    for (const s of staff || []) {
-      await createUserNotification(
-        {
-          user_id: s.id,
-          event_type: 'recap_needs_review' as any,
-          title: 'A class recap needs a look',
-          message: detail
-            ? `It generated but did not clear the automatic checks. ${detail}`
-            : 'It generated but did not clear the automatic checks.',
-          metadata: { recap_id: recapId, href: '/teacher/catch-up?tab=classes' },
-        },
-        supabase,
-      );
+    const ids = ((staff || []) as Array<{ id: string }>).map((s) => s.id);
+    if (ids.length) {
+      // The one door, for staff: Teams activity feed and the bell, no dormant filter.
+      await sendNudge({
+        studentIds: ids,
+        audience: 'staff',
+        subject: 'A class recap needs a look',
+        plain: detail
+          ? `It generated but did not clear the automatic checks. ${detail}`
+          : 'It generated but did not clear the automatic checks.',
+        eventType: 'recap_needs_review',
+        metadata: { recap_id: recapId, href: '/teacher/catch-up?tab=classes' },
+        source: { kind: 'recap_needs_review', refId: recapId },
+      });
     }
   } catch (err) {
     console.error('[recap] hold notification failed:', err instanceof Error ? err.message : err);

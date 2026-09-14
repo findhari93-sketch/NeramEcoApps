@@ -7,6 +7,7 @@ import {
   parseListParams,
   pausedFootnote,
   searchAndSort,
+  suggestedOrder,
   type FactsLookup,
   type ListAccessors,
   type ListState,
@@ -74,6 +75,11 @@ describe('searchAndSort', () => {
     const scored = rows.map((r, i) => ({ ...r, score: i % 2 }));
     const extra = [{ key: 'score_high' as const, label: 'Score high to low', compare: (x: Row, y: Row) => (y.score ?? 0) - (x.score ?? 0) }];
     expect(searchAndSort(scored, '', 'score_high', a, extra).map((r) => r.student_id)).toEqual(['asha', 'bala', 'charu', 'dev', 'ezhil']);
+  });
+
+  it('a suggested order keeps the rows as they arrived', () => {
+    const extra = [suggestedOrder<Row>()];
+    expect(searchAndSort(rows, '', 'suggested', a, extra).map((r) => r.student_id)).toEqual(['dev', 'asha', 'charu', 'bala', 'ezhil']);
   });
 
   it('while searching, a name that starts with the letters comes before one that only contains them', () => {

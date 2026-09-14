@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Box, Typography, IconButton } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import TopicIntelligenceList from '@/components/question-bank/TopicIntelligenceList';
+import { qbExamPath } from '@/lib/qb-exam-routes';
 
 export default function TopicIntelligencePage() {
   const router = useRouter();
@@ -26,7 +27,11 @@ export default function TopicIntelligencePage() {
           zIndex: 10,
         }}
       >
-        <IconButton size="small" onClick={() => router.push('/student/question-bank')}>
+        <IconButton
+          onClick={() => router.push(qbExamPath('student', 'NATA'))}
+          aria-label="Back to NATA Question Bank"
+          sx={{ width: 44, height: 44 }}
+        >
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h6" fontWeight={700} fontSize={{ xs: '1rem', md: '1.25rem' }}>

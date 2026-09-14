@@ -39,9 +39,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const enabled = await isQBEnabledForClassroom(classroomId);
+    // Which exams have a published paper, so the student sidebar can leave an
+    // exam out until there is something in it. Asked here because every student
+    // page already makes this request at boot; a separate route would add one.
+    const [enabled, { data: visiblePapers, error: visibleError }] = await Promise.all([
+      isQBEnabledForClassroom(classroomId),
+      // `as any`: the generated types predate is_student_visible (see qb-papers.ts).
+      supabase
+        .from('nexus_qb_original_papers' as any)
+        .select('exam_type')
+        .eq('is_student_visible', true),
+    ]);
+    if (visibleError) throw visibleError;
+    const published_exams = Array.from(
+      new Set(((visiblePapers ?? []) as unknown as { exam_type: string }[]).map((p) => p.exam_type)),
+    );
 
-    return NextResponse.json({ data: { enabled, is_active: enabled } }, { status: 200 });
+    return NextResponse.json(
+      { data: { enabled, is_active: enabled, published_exams } },
+      { status: 200 },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[QB API] Error:', describeError(err));

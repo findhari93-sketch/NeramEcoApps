@@ -12,14 +12,16 @@
  * a table this dense actually fits.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  Box, Typography, Card, Button, IconButton, TextField, InputAdornment, Chip, Skeleton,
+  Box, Typography, Card, Button, IconButton, Chip, Skeleton,
   Alert, Checkbox, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel,
   ToggleButton, ToggleButtonGroup, Paper, EmptyState, Dialog, alpha, useTheme, useMediaQuery,
 } from '@neram/ui';
 import StudentAvatar from '@/components/students/StudentAvatar';
-import SearchIcon from '@mui/icons-material/Search';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ExtraSort, ListAccessors } from '@/lib/student-list-view';
 import SendIcon from '@mui/icons-material/Send';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
@@ -86,7 +88,18 @@ function fmtTime(sec: number): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-type SortKey = 'name' | 'status' | 'score' | 'time' | 'days';
+type SortKey = 'status' | 'score' | 'time' | 'days';
+
+const ACCESSORS: ListAccessors<Row> = { id: (r) => r.student_id, name: (r) => r.name, email: (r) => r.email };
+
+const SORTS: ExtraSort<Row, SortKey>[] = [
+  { key: 'status', label: 'Furthest behind first', compare: (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] },
+  { key: 'score', label: 'Highest score', compare: (a, b) => (b.best_score_pct ?? -1) - (a.best_score_pct ?? -1) },
+  { key: 'time', label: 'Most time spent', compare: (a, b) => b.active_seconds - a.active_seconds },
+  { key: 'days', label: 'Started longest ago', compare: (a, b) => (b.days_since_started ?? -1) - (a.days_since_started ?? -1) },
+];
+
+const STATUS_FILTER: readonly Status[] = ['completed', 'studying', 'not_opened', 'video_pending', 'test_pending'];
 
 interface ChapterCompletionPanelProps {
   fileId: string;
@@ -103,9 +116,6 @@ export default function ChapterCompletionPanel({ fileId, classroomId, getToken }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | Status>('all');
-  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'status', dir: 'asc' });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [nudgeOpen, setNudgeOpen] = useState(false);
 
@@ -157,26 +167,20 @@ export default function ChapterCompletionPanel({ fileId, classroomId, getToken }
 
   useEffect(() => { load(); }, [load]);
 
-  const rows = useMemo(() => {
-    let list = data?.students || [];
-    if (statusFilter !== 'all') list = list.filter((s) => s.status === statusFilter);
-    const q = search.trim().toLowerCase();
-    if (q) list = list.filter((s) => (s.name || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q));
-    const dir = sort.dir === 'asc' ? 1 : -1;
-    return [...list].sort((a, b) => {
-      switch (sort.key) {
-        case 'name': return dir * (a.name || '').localeCompare(b.name || '');
-        case 'status': return dir * (STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
-        case 'score': return dir * ((a.best_score_pct ?? -1) - (b.best_score_pct ?? -1));
-        case 'time': return dir * (a.active_seconds - b.active_seconds);
-        case 'days': return dir * ((a.days_since_started ?? -1) - (b.days_since_started ?? -1));
-        default: return 0;
-      }
-    });
-  }, [data, statusFilter, search, sort]);
-
-  const toggleSort = (key: SortKey) =>
-    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
+  // The shared student list: ranked search, sorts, stage ring filter, the
+  // status toggle, and paused students hidden. `rows` is what the teacher sees,
+  // so select all and the response sheet's prev/next walk the same list.
+  const view = useStudentListView<Row, SortKey, Status>({
+    rows: data?.students,
+    accessors: ACCESSORS,
+    extraSorts: SORTS,
+    defaultSort: 'status',
+    status: { of: (r) => r.status, order: STATUS_FILTER },
+    urlKeys: { q: 'sq', sort: 'ssort', stage: 'sstage', status: 'sstatus' },
+    storageKey: 'nexus:chapter-completion:sort',
+  });
+  const rows = view.shown;
+  const filtering = !!view.query.trim() || view.activeFilterCount > 0;
 
   const toggleOne = (id: string) =>
     setSelected((prev) => {
@@ -273,22 +277,21 @@ export default function ChapterCompletionPanel({ fileId, classroomId, getToken }
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {/* Controls */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
-        <TextField
-          size="small" placeholder="Search students..." value={search} onChange={(e) => setSearch(e.target.value)}
-          sx={{ flex: 1, minWidth: 180 }}
-          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
-        />
-        <ToggleButtonGroup
-          value={statusFilter} exclusive size="small" onChange={(_, v) => v && setStatusFilter(v)}
-          sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 1.25, minHeight: 40 } }}
-        >
-          <ToggleButton value="all">All</ToggleButton>
-          <ToggleButton value="completed">Done</ToggleButton>
-          <ToggleButton value="studying">Studying</ToggleButton>
-          <ToggleButton value="not_opened">Not opened</ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
+      <StudentListToolbar
+        view={view}
+        statusSlot={
+          <ToggleButtonGroup
+            value={view.status} exclusive size="small" onChange={(_, v) => v && view.setStatus(v)}
+            aria-label="Filter by status"
+            sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 1.25, minHeight: 44 } }}
+          >
+            <ToggleButton value="all">All</ToggleButton>
+            <ToggleButton value="completed">Done</ToggleButton>
+            <ToggleButton value="studying">Studying</ToggleButton>
+            <ToggleButton value="not_opened">Not opened</ToggleButton>
+          </ToggleButtonGroup>
+        }
+      />
 
       {/* Selection action bar */}
       {selected.size > 0 && (
@@ -305,7 +308,7 @@ export default function ChapterCompletionPanel({ fileId, classroomId, getToken }
       {loading ? (
         <Skeleton variant="rounded" height={300} />
       ) : rows.length === 0 ? (
-        <EmptyState title="No students" description={search || statusFilter !== 'all' ? 'No students match this filter.' : 'No students in this classroom yet.'} />
+        <EmptyState title="No students" description={filtering ? 'No students match this filter.' : 'No students in this classroom yet.'} />
       ) : isMobile ? (
         // Mobile cards
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -364,12 +367,12 @@ export default function ChapterCompletionPanel({ fileId, classroomId, getToken }
                 <TableCell padding="checkbox">
                   <Checkbox size="small" checked={allVisibleSelected} indeterminate={!allVisibleSelected && rows.some((r) => selected.has(r.student_id))} onChange={toggleAll} />
                 </TableCell>
-                <TableCell><TableSortLabel active={sort.key === 'name'} direction={sort.dir} onClick={() => toggleSort('name')}>Student</TableSortLabel></TableCell>
-                <TableCell><TableSortLabel active={sort.key === 'status'} direction={sort.dir} onClick={() => toggleSort('status')}>Status</TableSortLabel></TableCell>
+                <TableCell><TableSortLabel active={view.sort === 'name'} direction="asc" onClick={() => view.setSort('name')}>Student</TableSortLabel></TableCell>
+                <TableCell><TableSortLabel active={view.sort === 'status'} direction="asc" onClick={() => view.setSort('status')}>Status</TableSortLabel></TableCell>
                 <TableCell>Watched</TableCell>
-                <TableCell align="right"><TableSortLabel active={sort.key === 'score'} direction={sort.dir} onClick={() => toggleSort('score')}>Score</TableSortLabel></TableCell>
-                <TableCell align="right"><TableSortLabel active={sort.key === 'time'} direction={sort.dir} onClick={() => toggleSort('time')}>Time</TableSortLabel></TableCell>
-                <TableCell align="right"><TableSortLabel active={sort.key === 'days'} direction={sort.dir} onClick={() => toggleSort('days')}>Days</TableSortLabel></TableCell>
+                <TableCell align="right"><TableSortLabel active={view.sort === 'score'} direction="desc" onClick={() => view.setSort('score')}>Score</TableSortLabel></TableCell>
+                <TableCell align="right"><TableSortLabel active={view.sort === 'time'} direction="desc" onClick={() => view.setSort('time')}>Time</TableSortLabel></TableCell>
+                <TableCell align="right"><TableSortLabel active={view.sort === 'days'} direction="desc" onClick={() => view.setSort('days')}>Days</TableSortLabel></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -432,6 +435,7 @@ export default function ChapterCompletionPanel({ fileId, classroomId, getToken }
           </Table>
         </TableContainer>
       )}
+      <PausedFootnote count={view.pausedHidden} />
 
       {data && (
         <StudyNudgeDialog

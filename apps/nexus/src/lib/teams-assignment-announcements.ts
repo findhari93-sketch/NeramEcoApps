@@ -259,6 +259,8 @@ export interface AnnounceAssignmentInput {
   kind: 'published' | 'linked';
   /** The teacher's delegated Graph bearer, or null when there isn't a real one. */
   token: string | null;
+  /** The teacher acting, so each student also gets it as their own Teams chat. */
+  actorUserId?: string | null;
   /** Base origin for the student deep link, from shareBaseUrl(). */
   shareBase: string;
   supabase: AdminClient;
@@ -363,7 +365,7 @@ export async function announceAssignment(input: AnnounceAssignmentInput): Promis
           : `"${a.title}" has been assigned.${dueLine} Please complete it.`,
       teamsText: kind === 'linked' ? `Assignment added: ${a.title}` : `New assignment: ${a.title}`,
       metadata: { assignment_id: a.id, scheduled_class_id: a.scheduled_class_id },
-      topBar: true,
+      ...(token && input.actorUserId ? { teacher: { authHeader: `Bearer ${token}`, userId: input.actorUserId } } : {}),
     });
   } catch (err) {
     console.error('[assignment announce] Student notify failed (non-blocking):', err);

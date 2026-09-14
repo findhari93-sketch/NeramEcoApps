@@ -347,7 +347,7 @@ describe('NeedsActionTab', () => {
 
   it('explains the students it removed rather than dropping them silently', () => {
     renderTab(THREE, { totals: { ...payload(THREE).totals, hiddenDormant: 3 } });
-    expect(screen.getByText(/3 dormant students are/)).toBeTruthy();
+    expect(screen.getByText(/3 paused students are/)).toBeTruthy();
   });
 
   it('says nothing about dormant students when none were hidden', () => {

@@ -15,11 +15,13 @@ import {
 import StudentAvatar from '@/components/students/StudentAvatar';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SendIcon from '@mui/icons-material/Send';
-import SearchIcon from '@mui/icons-material/Search';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
 import PreworkEscalationCard from '@/components/assignments/PreworkEscalationCard';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ListAccessors } from '@/lib/student-list-view';
 
 type Status = 'active' | 'partial' | 'inactive';
 interface EngagementRow {
@@ -33,11 +35,20 @@ interface EngagementRow {
   last_submitted_at: string | null;
   days_since_last: number | null;
   status: Status;
+  enrolled_at?: string | null;
 }
 interface Engagement {
   stats: { total_students: number; active: number; partial: number; inactive: number; avg_marks_pct: number | null };
   rows: EngagementRow[];
 }
+
+const ENGAGEMENT_ACCESSORS: ListAccessors<EngagementRow> = {
+  id: (r) => r.student.id,
+  name: (r) => r.student.name,
+  email: (r) => r.student.email,
+  joinedAt: (r) => r.enrolled_at,
+};
+const ENGAGEMENT_STATUS = { of: (r: EngagementRow) => r.status, order: ['active', 'partial', 'inactive'] as Status[] };
 
 const STATUS_COLOR: Record<Status, string> = { active: '#2E7D32', partial: '#B8860B', inactive: '#C62828' };
 const STATUS_LABEL: Record<Status, string> = { active: 'Active', partial: 'Partial', inactive: 'Inactive' };
@@ -50,8 +61,6 @@ export default function AssignmentsOverviewPage() {
   const [classroomId, setClassroomId] = useState('');
   const [data, setData] = useState<Engagement | null>(null);
   const [assignments, setAssignments] = useState<{ id: string; title: string }[]>([]);
-  const [filter, setFilter] = useState<'all' | Status>('all');
-  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [nudgeOpen, setNudgeOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; severity: 'success' | 'error' | 'warning' } | null>(null);
@@ -80,15 +89,17 @@ export default function AssignmentsOverviewPage() {
     if (!authLoading && classroomId) load();
   }, [authLoading, classroomId, load]);
 
-  const visibleRows = useMemo(() => {
-    const rows = data?.rows || [];
-    const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (filter !== 'all' && r.status !== filter) return false;
-      if (q && !(r.student.name || r.student.email || '').toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [data, filter, search]);
+  // The shared student list: ranked search, sort, stage filter and the status
+  // toggle, all in the URL; paused students are hidden (the server already drops them).
+  const view = useStudentListView<EngagementRow, never, Status>({
+    rows: data?.rows,
+    accessors: ENGAGEMENT_ACCESSORS,
+    defaultSort: 'name',
+    status: ENGAGEMENT_STATUS,
+    storageKey: 'nexus:assignments-overview:sort',
+  });
+  const visibleRows = view.shown;
+  const filter = view.status;
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -161,23 +172,25 @@ export default function AssignmentsOverviewPage() {
         ))}
       </Stack>
 
-      {/* Filter + search */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1.5 }}>
-        <ToggleButtonGroup value={filter} exclusive size="small" onChange={(_, v) => v && setFilter(v)} sx={{ '& .MuiToggleButton-root': { textTransform: 'none', minHeight: 40 } }}>
-          <ToggleButton value="all">All</ToggleButton>
-          <ToggleButton value="active">Active</ToggleButton>
-          <ToggleButton value="partial">Partial</ToggleButton>
-          <ToggleButton value="inactive">Inactive</ToggleButton>
-        </ToggleButtonGroup>
-        <TextField
-          size="small"
-          placeholder="Search students"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          InputProps={{ startAdornment: <SearchIcon sx={{ fontSize: 18, mr: 0.5, color: 'text.disabled' }} /> }}
-          sx={{ flex: 1 }}
-        />
-      </Stack>
+      {/* Status, then the shared search, sort and stage filter */}
+      <StudentListToolbar
+        view={view}
+        statusSlot={
+          <ToggleButtonGroup
+            value={filter}
+            exclusive
+            size="small"
+            aria-label="Filter by status"
+            onChange={(_, v) => v && view.setStatus(v)}
+            sx={{ mb: 1, flexWrap: 'wrap', '& .MuiToggleButton-root': { textTransform: 'none', minHeight: 44 } }}
+          >
+            <ToggleButton value="all">All</ToggleButton>
+            <ToggleButton value="active">Active {view.statusCounts.active ?? 0}</ToggleButton>
+            <ToggleButton value="partial">Partial {view.statusCounts.partial ?? 0}</ToggleButton>
+            <ToggleButton value="inactive">Inactive {view.statusCounts.inactive ?? 0}</ToggleButton>
+          </ToggleButtonGroup>
+        }
+      />
 
       {data === null ? (
         <Stack spacing={1}>
@@ -246,6 +259,7 @@ export default function AssignmentsOverviewPage() {
           </Stack>
         </>
       )}
+      <PausedFootnote count={view.pausedHidden} />
 
       {/* Sticky selection bar */}
       {selected.size > 0 && (

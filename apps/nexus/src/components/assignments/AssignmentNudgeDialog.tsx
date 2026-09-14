@@ -3,7 +3,8 @@
 /**
  * AssignmentNudgeDialog — teacher messages selected students about one or more
  * assignments, from a template (nudge / not-submitted / congratulate / custom)
- * or free text. Delivery tries a Teams DM and falls back to in-app + email; the
+ * or free text. It goes as the teacher's own Teams chat, with the Teams activity
+ * feed as a fallback and the Nexus bell always; the
  * selected assignment link(s) are auto-attached server-side. Mirrors
  * StudyNudgeDialog so the two flows feel identical.
  */
@@ -59,6 +60,18 @@ function templateFor(key: TemplateKey, what: string): { subject: string; body: s
   }
 }
 
+/** Where it landed, in plain words. Every student also gets it on the Nexus bell. */
+function teamsLine(r: { total: number; chat: number; teams: number; failed: number }): string {
+  const reached = r.total - r.failed;
+  if (r.chat === reached && reached > 0) return 'Sent as your Teams chat, and saved to their Nexus notifications.';
+  const parts = [
+    r.chat ? `${r.chat} in your Teams chat` : '',
+    r.teams ? `${r.teams} as a Teams alert` : '',
+    reached - r.chat - r.teams > 0 ? `${reached - r.chat - r.teams} on the Nexus bell only` : '',
+  ].filter(Boolean);
+  return `${parts.join(', ')}.`;
+}
+
 export default function AssignmentNudgeDialog({
   open,
   assignments,
@@ -74,9 +87,9 @@ export default function AssignmentNudgeDialog({
   const [error, setError] = useState('');
   const [results, setResults] = useState<{
     total: number;
+    chat: number;
     teams: number;
     inapp: number;
-    email: number;
     failed: number;
   } | null>(null);
 
@@ -122,9 +135,9 @@ export default function AssignmentNudgeDialog({
       const total = data.counts?.total ?? (data.results || []).length;
       setResults({
         total,
+        chat: data.counts?.chat ?? 0,
         teams: data.counts?.teams ?? data.viaTeams ?? 0,
         inapp: data.counts?.inapp ?? 0,
-        email: data.counts?.email ?? 0,
         failed: data.counts?.failed ?? 0,
       });
     } catch (e: any) {
@@ -168,11 +181,7 @@ export default function AssignmentNudgeDialog({
                 : `Reminder sent to ${results.total} student${results.total === 1 ? '' : 's'}.`}
             </Alert>
             <Typography variant="body2" color="text.secondary">
-              {results.teams > 0
-                ? results.teams === results.total
-                  ? 'Delivered to their Microsoft Teams activity feed and saved to their in-app notifications.'
-                  : `${results.teams} reached on Microsoft Teams; the rest by in-app notification and email.`
-                : 'Saved to their in-app notifications and emailed. (Microsoft Teams delivery turns on automatically once the one-time Teams setup is done.)'}
+              {teamsLine(results)}
             </Typography>
             {results.failed > 0 && (
               <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 1 }}>

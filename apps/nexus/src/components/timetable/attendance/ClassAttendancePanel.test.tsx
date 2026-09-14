@@ -240,7 +240,9 @@ describe('ClassAttendancePanel', () => {
     await screen.findByText('Abhitha Saravanan');
 
     fireEvent.click(screen.getByRole('tab', { name: /Attended/i }));
-    const short = await screen.findByText('Rahul Kumar');
+    // The tab mounts the shared student list toolbar; under a full parallel run
+    // that can take longer than the 1s default wait.
+    const short = await screen.findByText('Rahul Kumar', {}, { timeout: 5000 });
     const long = screen.getByText('Sanjay Patel');
 
     // Six minutes above ninety. compareDocumentPosition returns FOLLOWING (4)

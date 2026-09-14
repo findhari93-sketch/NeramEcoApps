@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBStaff } from '@/lib/qb-auth';
 import {
+  getSupabaseAdminClient,
   listOriginalPapers,
   listOriginalPapersWithBreakdown,
   getOrCreateOriginalPaper,
@@ -9,6 +10,7 @@ import {
 import type { QBExamType, QBShift, NTAParsedQuestion } from '@neram/database';
 
 import { describeError } from '@/lib/api-errors';
+import { countPaperSolutions } from '@/lib/qb-paper-solutions';
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,10 +23,24 @@ export async function GET(request: NextRequest) {
     // The management list needs per paper counts; the hub does not. Opt in, so
     // the cheaper callers keep the cheaper query.
     const withBreakdown = request.nextUrl.searchParams.get('breakdown') === '1';
-    const papers = withBreakdown
+    // The exam pages' to-do list also needs solution counts, which cost two
+    // more reads, so that is a second opt-in on top of the breakdown.
+    const withSolutions = request.nextUrl.searchParams.get('solutions') === '1';
+    const papers = withBreakdown || withSolutions
       ? await listOriginalPapersWithBreakdown()
       : await listOriginalPapers();
-    return NextResponse.json({ data: papers }, { status: 200 });
+
+    if (!withSolutions) return NextResponse.json({ data: papers }, { status: 200 });
+
+    const counts = await countPaperSolutions(
+      papers.map((p) => p.id),
+      getSupabaseAdminClient(),
+    );
+    const data = papers.map((p) => {
+      const c = counts.get(p.id);
+      return { ...p, solvable_count: c?.solvable ?? 0, solution_count: c?.solved ?? 0 };
+    });
+    return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[Papers API] GET Error:', describeError(err));

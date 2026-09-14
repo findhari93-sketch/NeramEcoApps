@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
   "manifestVersion": "1.16",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "id": "df4f6b2d-ea18-46d1-8934-f508ac248e6c",
   "packageName": "com.neramclasses.assistant",
   "developer": {
@@ -16,7 +16,7 @@
   },
   "description": {
     "short": "Reminders and updates from Neram Classes.",
-    "full": "Neram Assistant sends your reminders and updates from Neram Classes as a short chat message, with a button that opens the right page in Nexus. It only sends, it does not read your chats."
+    "full": "Neram Assistant delivers your assignment and study reminders to your Teams activity feed and links you straight to your work in Nexus, without cluttering your chats."
   },
   "icons": {
     "color": "color.png",
@@ -30,16 +30,6 @@
       "contentUrl": "https://nexus.neramclasses.com/student/assignments",
       "websiteUrl": "https://nexus.neramclasses.com/student/assignments",
       "scopes": ["personal"]
-    }
-  ],
-  "bots": [
-    {
-      "botId": "aa039c70-50d2-4c91-bd0e-5675df5e50ff",
-      "scopes": ["personal"],
-      "isNotificationOnly": true,
-      "supportsFiles": false,
-      "supportsCalling": false,
-      "supportsVideo": false
     }
   ],
   "permissions": ["identity"],

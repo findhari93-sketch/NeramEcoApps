@@ -54,6 +54,8 @@ function TeacherCatchUpWorkspace() {
   const searchParams = useSearchParams();
   const { loading: authLoading, activeClassroom } = useNexusAuthContext();
   const authFetch = useAuthFetch();
+  // Nudges go out as the teacher's own Teams chat, which needs the chat-capable token.
+  const teacherFetch = useAuthFetch({ teacher: true });
 
   const [busy, setBusy] = useState<string | null>(null);
   const [snack, setSnack] = useState<{
@@ -169,7 +171,7 @@ function TeacherCatchUpWorkspace() {
     async (studentId: string, journeyId: string | null) => {
       setBusy(studentId);
       try {
-        await authFetch('/api/catchup/nudge', {
+        await teacherFetch('/api/catchup/nudge', {
           method: 'POST',
           body: JSON.stringify({
             studentIds: [studentId],
@@ -183,7 +185,7 @@ function TeacherCatchUpWorkspace() {
         setBusy(null);
       }
     },
-    [authFetch],
+    [teacherFetch],
   );
 
   /**
@@ -196,7 +198,7 @@ function TeacherCatchUpWorkspace() {
     async (studentIds: string[], journeyIds: string[]) => {
       setBusy('bulk');
       try {
-        await authFetch('/api/catchup/nudge', {
+        await teacherFetch('/api/catchup/nudge', {
           method: 'POST',
           body: JSON.stringify({ studentIds, journeyIds }),
         });
@@ -213,7 +215,7 @@ function TeacherCatchUpWorkspace() {
         setBusy(null);
       }
     },
-    [authFetch],
+    [teacherFetch],
   );
 
   const onReload = useCallback(async () => {

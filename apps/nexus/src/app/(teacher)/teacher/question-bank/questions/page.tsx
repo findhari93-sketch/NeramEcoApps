@@ -80,7 +80,11 @@ function QuestionsListContent() {
   const [search, setSearch] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [category, setCategory] = useState('');
-  const [examRelevance, setExamRelevance] = useState('');
+  // Starts from the URL so an exam page's "Questions" card opens already scoped.
+  const [examRelevance, setExamRelevance] = useState(() => {
+    const raw = searchParams?.get('exam_relevance') ?? '';
+    return ['JEE', 'NATA', 'BOTH'].includes(raw) ? raw : '';
+  });
   const [questionStatus, setQuestionStatus] = useState('');
   const [solutionFilter, setSolutionFilter] = useState('');
   const [origin, setOrigin] = useState('');

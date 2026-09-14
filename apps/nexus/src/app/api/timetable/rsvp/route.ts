@@ -99,7 +99,9 @@ export async function GET(request: NextRequest) {
           .select('user_id', { count: 'exact', head: true })
           .eq('classroom_id', classroomId)
           .eq('role', 'student')
-          .eq('is_active', true),
+          .eq('is_active', true)
+          // Paused students are in no count (founder rule, 2026-09-13).
+          .eq('participation_status', 'active'),
         supabase
           .from('nexus_class_rsvp')
           .select('*, student:users!nexus_class_rsvp_student_id_fkey(id, name, avatar_url)')

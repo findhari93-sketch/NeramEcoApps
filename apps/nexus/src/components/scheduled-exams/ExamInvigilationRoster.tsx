@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -21,6 +21,9 @@ import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
 import type { ExamRosterRow, ExamRosterStatus, ExamRosterSummary } from '@/lib/scheduled-exam-roster';
 
 /**
@@ -49,6 +52,17 @@ const STATUS_META: Record<
 
 type Filter = 'all' | ExamRosterStatus;
 
+const STATUS_ORDER: readonly ExamRosterStatus[] = ['in_progress', 'not_started', 'submitted', 'absent', 'makeup_open', 'excused'];
+
+const ACCESSORS: ListAccessors<ExamRosterRow> = { id: (r) => r.student_id, name: (r) => r.name };
+
+const SORTS = [suggestedOrder<ExamRosterRow>('Roster order')];
+
+const STATUS_CONFIG = { of: (r: ExamRosterRow) => r.status, order: STATUS_ORDER };
+
+// A paused student who really sat it keeps their row, tagged "Paused".
+const keepSitting = (r: ExamRosterRow) => !!r.paused;
+
 function formatRemaining(seconds: number | null): string {
   if (seconds == null) return '';
   if (seconds <= 0) return 'time up';
@@ -72,10 +86,10 @@ export default function ExamInvigilationRoster({
 
   const [rows, setRows] = useState<ExamRosterRow[]>([]);
   const [summary, setSummary] = useState<ExamRosterSummary | null>(null);
+  const [pausedHidden, setPausedHidden] = useState(0);
   const [isLive, setIsLive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>('all');
   const [filterOpen, setFilterOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -93,6 +107,7 @@ export default function ExamInvigilationRoster({
       }
       setRows(json.data.rows || []);
       setSummary(json.data.summary || null);
+      setPausedHidden(Number(json.data.paused_hidden) || 0);
       setIsLive(Boolean(json.data.is_live));
       setError(null);
     } catch {
@@ -114,10 +129,21 @@ export default function ExamInvigilationRoster({
     return () => clearInterval(id);
   }, [isLive, load]);
 
-  const filtered = useMemo(
-    () => (filter === 'all' ? rows : rows.filter((r) => r.status === filter)),
-    [rows, filter],
-  );
+  // The shared student list: search, sort, stage ring filter. The counters are
+  // its status filter; paused students who never sat it are already gone.
+  const view = useStudentListView<ExamRosterRow, 'suggested', ExamRosterStatus>({
+    rows,
+    accessors: ACCESSORS,
+    extraSorts: SORTS,
+    defaultSort: 'suggested',
+    status: STATUS_CONFIG,
+    keepDormant: keepSitting,
+    urlKeys: false,
+  });
+  const filter: Filter = view.status;
+  const setFilter = view.setStatus;
+  const filtered = view.shown;
+  const narrowed = filter !== 'all' || !!view.query.trim() || view.stages.length > 0;
 
   if (loading) {
     return (
@@ -170,7 +196,7 @@ export default function ExamInvigilationRoster({
             onClick={() => setFilter(filter === c.key ? 'all' : c.key)}
             variant={filter === c.key ? 'filled' : 'outlined'}
             color={filter === c.key ? 'primary' : 'default'}
-            sx={{ minHeight: 36, flexShrink: 0, cursor: 'pointer' }}
+            sx={{ minHeight: 44, flexShrink: 0, cursor: 'pointer' }}
           />
         ))}
         <Box sx={{ flex: 1 }} />
@@ -178,11 +204,17 @@ export default function ExamInvigilationRoster({
           size="small"
           startIcon={<FilterListIcon />}
           onClick={() => setFilterOpen(true)}
-          sx={{ display: { xs: 'inline-flex', md: 'none' }, minHeight: 36, flexShrink: 0 }}
+          sx={{ display: { xs: 'inline-flex', md: 'none' }, minHeight: 44, flexShrink: 0 }}
         >
           Filter
         </Button>
       </Box>
+
+      {rows.length > 0 && (
+        <Box sx={{ pt: 1.5 }}>
+          <StudentListToolbar view={view} />
+        </Box>
+      )}
 
       {isLive && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 1 }}>
@@ -193,7 +225,7 @@ export default function ExamInvigilationRoster({
       {filtered.length === 0 ? (
         <Box sx={{ py: 5, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
-            {filter === 'all' ? 'Nobody is enrolled in this classroom yet.' : 'Nobody in that state.'}
+            {!narrowed ? 'Nobody is enrolled in this classroom yet.' : filter !== 'all' && !view.query.trim() ? 'Nobody in that state.' : 'No students match this filter.'}
           </Typography>
         </Box>
       ) : (
@@ -231,9 +263,20 @@ export default function ExamInvigilationRoster({
                 />
 
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                    {row.name}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                      {row.name}
+                    </Typography>
+                    {row.paused && (
+                      <Chip
+                        size="small"
+                        label="Paused"
+                        aria-label="Paused, not counted"
+                        title="Dormant. Shown because they sat it; not counted in the numbers above."
+                        sx={{ height: 22, fontWeight: 700, bgcolor: 'action.selected', color: 'text.secondary' }}
+                      />
+                    )}
+                  </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <Icon sx={{ fontSize: 14, color: `${meta.color}.main` }} aria-hidden />
                     <Typography variant="caption" color="text.secondary">
@@ -327,6 +370,7 @@ export default function ExamInvigilationRoster({
           </Box>
         </Box>
       </SwipeableDrawer>
+      <PausedFootnote count={pausedHidden + view.pausedHidden} />
     </Box>
   );
 }

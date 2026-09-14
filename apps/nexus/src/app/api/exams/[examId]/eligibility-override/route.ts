@@ -40,6 +40,8 @@ export async function POST(request: NextRequest, { params }: { params: { examId:
           ? `Your teacher has marked ${access.exam.title || 'this test'} as required for you.`
           : `Your teacher has excused you from ${access.exam.title || 'this test'}.`;
       await sendNudge({
+        // The teacher's own Teams chat (their connected login if this token cannot chat).
+        teacher: { authHeader: request.headers.get('Authorization'), userId: access.caller.id },
         studentIds: [studentId],
         subject,
         plain,

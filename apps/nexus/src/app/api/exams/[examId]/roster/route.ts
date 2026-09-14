@@ -10,7 +10,7 @@ import {
   resolveExamTimer,
   loadRunSittings,
 } from '@neram/database';
-import { requireExamStaff, loadExamRoster } from '@/lib/exam-access';
+import { requireExamStaff, loadExamRoster, keepSittingOrTracked } from '@/lib/exam-access';
 import {
   buildExamRoster,
   summariseExamRoster,
@@ -40,7 +40,7 @@ export async function GET(
     const exam = access.exam;
     const supabase = getSupabaseAdminClient();
 
-    const [students, makeupRows, placement, eligibilityFacts, testMeta] = await Promise.all([
+    const [everyone, makeupRows, placement, eligibilityFacts, testMeta] = await Promise.all([
       loadExamRoster(exam.classroom_id),
       listExamMakeups(params.examId),
       getExamPlacement(params.examId),
@@ -52,12 +52,18 @@ export async function GET(
       buildExamEligibilityRoster(eligibilityFacts).map((row) => [row.student_id, !row.is_mandatory]),
     );
 
-    const studentIds = students.map((s) => s.id);
+    const everyoneIds = everyone.map((s) => s.id);
     const [attempts, attemptOverrides, violationCounts] = await Promise.all([
-      loadRosterAttempts(exam, placement as any, studentIds, supabase),
+      loadRosterAttempts(exam, placement as any, everyoneIds, supabase),
       getExamAttemptOverrides(params.examId),
-      getViolationCountsForTest(exam.test_id, studentIds),
+      getViolationCountsForTest(exam.test_id, everyoneIds),
     ]);
+
+    // Paused students leave the roster unless they really sat it (founder rule).
+    const satIds = new Set<string>(((attempts || []) as any[]).map((a) => a.student_id as string));
+    const students = keepSittingOrTracked(everyone, satIds);
+    const pausedIds = new Set(students.filter((s) => s.dormant).map((s) => s.id));
+    const pausedHidden = everyone.filter((s) => s.dormant).length - pausedIds.size;
 
     const makeups = new Map<string, ExamRosterMakeup>(
       makeupRows.map((m) => [
@@ -85,7 +91,7 @@ export async function GET(
         attemptOverrides,
         violationCounts,
         excused,
-      }),
+      }).map((row) => (pausedIds.has(row.student_id) ? { ...row, paused: true } : row)),
     );
 
     const now = Date.now();
@@ -95,6 +101,7 @@ export async function GET(
           exam,
           rows,
           summary: summariseExamRoster(rows),
+          paused_hidden: pausedHidden,
           // The client stops polling on this rather than on a clock it keeps
           // itself, so a laptop with a wrong time does not poll forever.
           is_live: now >= new Date(exam.opens_at).getTime() && now <= new Date(exam.closes_at).getTime(),

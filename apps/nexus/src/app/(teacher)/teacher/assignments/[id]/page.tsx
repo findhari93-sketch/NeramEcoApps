@@ -44,6 +44,9 @@ import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { GalleryReactionType } from '@neram/database/types';
 import SubmissionReviewSheet, { type ReviewRow } from '@/components/assignments/SubmissionReviewSheet';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
 import AssignmentBrief from '@/components/assignments/AssignmentBrief';
 import AssignmentResultsGrid from '@/components/assignments/AssignmentResultsGrid';
 import GradeDisplay from '@/components/assignments/GradeDisplay';
@@ -125,6 +128,18 @@ interface ReminderSummary {
   count: number;
   last_sent_at: string;
 }
+
+type RosterPerson = { student: { id: string; name: string | null; email: string | null } };
+
+const ROSTER_ACCESSORS: ListAccessors<RosterPerson> = {
+  id: (r) => r.student.id,
+  name: (r) => r.student.name || r.student.email,
+  email: (r) => r.student.email,
+};
+
+// Each tab already has the order that matters (resubmissions first, triage
+// bands); search ranks by name and the other sorts are a tap away.
+const ROSTER_SORTS = [suggestedOrder<RosterPerson>('Suggested order')];
 
 export default function AssignmentReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -271,7 +286,7 @@ export default function AssignmentReviewPage() {
   const isDocResubmission = (r: ReviewRow) =>
     !!r.submission && (r.submission.attempt_number || 1) > 1 && r.submission.status === 'submitted';
 
-  const bucketRows = useMemo(() => {
+  const bucketRowsInOrder = useMemo(() => {
     const list = rows.filter((r) => r.bucket === tab);
     // In "Submitted", surface resubmissions (a redo came back) at the top, newest first.
     if (tab === 'submitted') {
@@ -284,7 +299,7 @@ export default function AssignmentReviewPage() {
     }
     return list;
   }, [rows, tab]);
-  const dBucketRows = useMemo(() => {
+  const dBucketRowsInOrder = useMemo(() => {
     const list = drawingRows.filter((r) => r.bucket === dTab);
     if (dTab === 'submitted' && triage.items.length + triage.heldIds.size > 0) {
       // Triage order: flagged, needs a look, routine, then reviews already
@@ -307,6 +322,26 @@ export default function AssignmentReviewPage() {
     }
     return list;
   }, [drawingRows, dTab, triage.items, triage.heldIds, triage.byId, bandFilter]);
+
+  // The shared student list over the visible tab: ranked search, sort, stage
+  // ring filter, paused students hidden. Everything below (review prev and
+  // next, Copy names, Message all) works on what is shown.
+  const docView = useStudentListView<ReviewRow, 'suggested'>({
+    rows: bucketRowsInOrder,
+    accessors: ROSTER_ACCESSORS,
+    extraSorts: ROSTER_SORTS,
+    defaultSort: 'suggested',
+    urlKeys: false,
+  });
+  const drawView = useStudentListView<DrawingRosterRow, 'suggested'>({
+    rows: dBucketRowsInOrder,
+    accessors: ROSTER_ACCESSORS,
+    extraSorts: ROSTER_SORTS,
+    defaultSort: 'suggested',
+    urlKeys: false,
+  });
+  const bucketRows = docView.shown;
+  const dBucketRows = drawView.shown;
   const dResubmitCount = useMemo(
     () => drawingRows.filter((r) => r.bucket === 'submitted' && r.drawing?.is_resubmission).length,
     [drawingRows],
@@ -331,10 +366,14 @@ export default function AssignmentReviewPage() {
     if (!answered) return null;
     return `${answered} ${answered === 1 ? 'student has' : 'students have'} already answered these questions, so the paper can no longer be changed.`;
   }, [rows]);
-  const missingDrawingRecipients = useMemo(
-    () => drawingRows.filter((r) => r.bucket === 'missing').map((r) => ({ id: r.student.id, name: r.student.name })),
-    [drawingRows],
-  );
+  // "Message all" sits on the Missing tab, so it messages the students shown there.
+  const missingRecipients = useMemo(() => {
+    const onMissing = isDrawing ? dTab === 'missing' : tab === 'missing';
+    const list: RosterPerson[] = isDrawing
+      ? onMissing ? dBucketRows : drawingRows.filter((r) => r.bucket === 'missing')
+      : onMissing ? bucketRows : rows.filter((r) => r.bucket === 'missing');
+    return list.map((r) => ({ id: r.student.id, name: r.student.name }));
+  }, [isDrawing, dTab, tab, dBucketRows, drawingRows, bucketRows, rows]);
 
   // Review navigation runs across the currently visible bucket.
   const openReview = (row: ReviewRow) => {
@@ -694,6 +733,7 @@ export default function AssignmentReviewPage() {
                 />
               )}
 
+              {dBucketRowsInOrder.length > 0 && <StudentListToolbar view={drawView} />}
               <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
                   {dBucketRows.length} {dBucketRows.length === 1 ? 'student' : 'students'}
@@ -730,7 +770,9 @@ export default function AssignmentReviewPage() {
               {dBucketRows.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 5, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
                   <Typography variant="body2" color="text.disabled">
-                    {dTab === 'missing'
+                    {dBucketRowsInOrder.length > 0
+                      ? 'No students match this filter.'
+                      : dTab === 'missing'
                       ? 'Everyone has submitted.'
                       : dTab === 'submitted' && bandFilter
                         ? `Nothing in ${BAND_LABEL[bandFilter]} right now.`
@@ -869,6 +911,7 @@ export default function AssignmentReviewPage() {
                   })}
                 </Stack>
               )}
+              <PausedFootnote count={drawView.pausedHidden} />
             </>
           ) : (
             <>
@@ -900,6 +943,7 @@ export default function AssignmentReviewPage() {
                 />
               ) : (
               <>
+              {bucketRowsInOrder.length > 0 && <StudentListToolbar view={docView} />}
               <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
                   {bucketRows.length} {bucketRows.length === 1 ? 'student' : 'students'}
@@ -942,7 +986,7 @@ export default function AssignmentReviewPage() {
               {bucketRows.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 5, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
                   <Typography variant="body2" color="text.disabled">
-                    {tab === 'missing' ? 'Everyone has submitted.' : 'No one here yet.'}
+                    {bucketRowsInOrder.length > 0 ? 'No students match this filter.' : tab === 'missing' ? 'Everyone has submitted.' : 'No one here yet.'}
                   </Typography>
                 </Box>
               ) : (
@@ -1034,6 +1078,7 @@ export default function AssignmentReviewPage() {
                   })}
                 </Stack>
               )}
+              <PausedFootnote count={docView.pausedHidden} />
               </>
               )}
             </>
@@ -1063,9 +1108,7 @@ export default function AssignmentReviewPage() {
           recipients={
             nudgeRecipient
               ? [nudgeRecipient]
-              : isDrawing
-                ? missingDrawingRecipients
-                : rows.filter((r) => r.bucket === 'missing').map((r) => ({ id: r.student.id, name: r.student.name }))
+              : missingRecipients
           }
           getToken={getTeacherToken}
           onClose={() => {

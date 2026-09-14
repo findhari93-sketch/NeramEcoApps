@@ -8,6 +8,7 @@ import {
 } from '@neram/database';
 import { assertCronRequest } from '@/lib/cron-auth';
 import { sendNudge } from '@/lib/nudge-delivery';
+import { senderLookup } from '@/lib/teams-sender';
 import { classifyPrework, classEndIso, formatIstTime } from '@/lib/prework';
 import { evaluateChronicPrework, preworkWindowStart } from '@/lib/prework-chronic';
 
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest) {
   if (unauthorized) return unauthorized;
 
   const supabase = getSupabaseAdminClient() as any;
+  const senderFor = senderLookup(supabase);
   const startedAt = Date.now();
   const today = istToday();
   const windowStart = preworkWindowStart(today);
@@ -172,6 +174,8 @@ export async function GET(request: NextRequest) {
         const at = formatIstTime(p.due_at || '') || cls.start_time?.slice(0, 5);
         const { results } = await sendNudge({
           studentIds: targets.slice(0, nudgeBudget()),
+          // As the class's connected teacher: their own Teams chat.
+          ...(await senderFor(cls.classroom_id)),
           subject: 'Work due before your class tonight',
           plain:
             `${p.title} is due before ${cls.title} starts at ${at}.\n\n` +
@@ -289,6 +293,7 @@ export async function GET(request: NextRequest) {
 
           const { results } = await sendNudge({
             studentIds: targets.slice(0, nudgeBudget()),
+            ...(await senderFor(cls.classroom_id)),
             subject: `Test to finish: ${title}`,
             plain:
               `${title} from ${cls.title || 'your class'} is due.\n\n` +

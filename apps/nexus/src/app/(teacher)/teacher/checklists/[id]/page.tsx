@@ -53,6 +53,9 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ExtraSort, ListAccessors } from '@/lib/student-list-view';
 import React from 'react';
 import { LinearProgress } from '@neram/ui';
 
@@ -178,6 +181,36 @@ const SlideTransition = React.forwardRef(function Transition(
 
 // --- Component ---
 
+interface ProgressStudent {
+  id: string;
+  name: string;
+  completedEntries: number;
+  totalEntries: number;
+  percentage: number;
+  lastActivity: string | null;
+  currentStepTitle: string | null;
+  currentStepStatus: string | null;
+  currentStepStartedAt: string | null;
+  daysSinceLastActivity: number | null;
+  isStale: boolean;
+}
+
+type ProgressSort = 'least_done' | 'most_done' | 'idle_longest';
+type ProgressStatus = 'stuck' | 'moving';
+
+const PROGRESS_ACCESSORS: ListAccessors<ProgressStudent> = { id: (s) => s.id, name: (s) => s.name };
+
+const PROGRESS_SORTS: ExtraSort<ProgressStudent, ProgressSort>[] = [
+  { key: 'least_done', label: 'Least done first', compare: (a, b) => a.percentage - b.percentage },
+  { key: 'most_done', label: 'Most done first', compare: (a, b) => b.percentage - a.percentage },
+  { key: 'idle_longest', label: 'Idle longest', compare: (a, b) => (b.daysSinceLastActivity ?? -1) - (a.daysSinceLastActivity ?? -1) },
+];
+
+const PROGRESS_STATUS = {
+  of: (s: ProgressStudent): ProgressStatus => (s.isStale ? 'stuck' : 'moving'),
+  order: ['stuck', 'moving'] as const,
+};
+
 export default function ChecklistDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -227,24 +260,23 @@ export default function ChecklistDetailPage() {
 
   // Student progress
   const [progressData, setProgressData] = useState<{
-    students: {
-      id: string;
-      name: string;
-      completedEntries: number;
-      totalEntries: number;
-      percentage: number;
-      lastActivity: string | null;
-      currentStepTitle: string | null;
-      currentStepStatus: string | null;
-      currentStepStartedAt: string | null;
-      daysSinceLastActivity: number | null;
-      isStale: boolean;
-    }[];
+    students: ProgressStudent[];
     overall: { averageCompletion: number; totalStudents: number; staleStudents: number };
   } | null>(null);
-  const [showStaleOnly, setShowStaleOnly] = useState(false);
   const [progressLoading, setProgressLoading] = useState(false);
   const [progressClassroomId, setProgressClassroomId] = useState<string | null>(null);
+  // The shared student list. "Stuck" is its status filter, so the stuck chip
+  // and the toolbar are one filter, not two that disagree.
+  const progressView = useStudentListView<ProgressStudent, ProgressSort, ProgressStatus>({
+    rows: progressData?.students,
+    accessors: PROGRESS_ACCESSORS,
+    extraSorts: PROGRESS_SORTS,
+    defaultSort: 'least_done',
+    status: PROGRESS_STATUS,
+    urlKeys: false,
+    storageKey: 'nexus:checklist-progress:sort',
+  });
+  const showStaleOnly = progressView.status === 'stuck';
 
   // --- Fetch checklist ---
   const fetchChecklist = useCallback(async () => {
@@ -1176,7 +1208,7 @@ export default function ChecklistDetailPage() {
                     icon={<WarningAmberIcon sx={{ fontSize: '0.85rem !important' }} />}
                     label={`${progressData.overall.staleStudents} stuck`}
                     size="small"
-                    onClick={() => setShowStaleOnly((v) => !v)}
+                    onClick={() => progressView.setStatus(showStaleOnly ? 'all' : 'stuck')}
                     variant={showStaleOnly ? 'filled' : 'outlined'}
                     color="warning"
                     sx={{
@@ -1200,9 +1232,8 @@ export default function ChecklistDetailPage() {
             </Box>
           ) : progressData && progressData.students.length > 0 ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {progressData.students
-                .filter((s) => !showStaleOnly || s.isStale)
-                .map((student) => (
+              <StudentListToolbar view={progressView} />
+              {progressView.shown.map((student) => (
                 <Paper
                   key={student.id}
                   elevation={0}
@@ -1312,11 +1343,14 @@ export default function ChecklistDetailPage() {
                   </Box>
                 </Paper>
               ))}
-              {showStaleOnly && progressData.students.filter((s) => s.isStale).length === 0 && (
+              {progressView.shown.length === 0 && (
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                  No stuck students — everyone is making progress!
+                  {showStaleOnly && !progressView.query.trim()
+                    ? 'No stuck students. Everyone is making progress.'
+                    : 'No students match this filter.'}
                 </Typography>
               )}
+              <PausedFootnote count={progressView.pausedHidden} />
             </Box>
           ) : progressData ? (
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>

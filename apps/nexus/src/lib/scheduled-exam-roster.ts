@@ -70,6 +70,8 @@ export interface ExamRosterRow {
   attempts_allowed: number | null;
   /** attempts_allowed reached and nothing currently in progress -- the "+1 attempt" button shows for this row. */
   exhausted: boolean;
+  /** A dormant student shown only because they sat it. Never counted in the summary. */
+  paused?: boolean;
 }
 
 export interface ExamRosterSummary {
@@ -233,7 +235,7 @@ export function summariseExamRoster(rows: ExamRosterRow[]): ExamRosterSummary {
     makeup_open: 0,
   };
   for (const r of rows) {
-    if (r.status === 'excused') continue;
+    if (r.status === 'excused' || r.paused) continue;
     out[r.status] += 1;
   }
   return out;

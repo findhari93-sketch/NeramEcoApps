@@ -10,6 +10,7 @@ import { claimAutoReminder, finishReminder, loadReminderLogs } from '@/lib/sketc
 import { planReminderRun, reminderMessage, type PlannedSend, type ReminderCandidate } from '@/lib/sketchbook-reminders';
 import { sendNudge } from '@/lib/nudge-delivery';
 import { shareBaseUrl } from '@/lib/class-share-links';
+import { classroomSenders } from '@/lib/teams-sender';
 
 export const maxDuration = 60;
 
@@ -22,8 +23,9 @@ const FALLBACK_ORIGIN = 'https://nexus.neramclasses.com';
  * Reminds students who have not drawn for 3, 6 and 9 days (sketchbook-reminders.ts
  * has the rules and why). Each step is CLAIMED in nexus_sketchbook_reminders
  * before it is sent, so a rerun or two overlapping runs cannot double-message.
- * Everything goes through sendNudge: bot chat when set up, activity feed as the
- * fallback, the Nexus bell always, and a receipt per student. Never a group post.
+ * Everything goes through sendNudge: a Teams chat from the classroom's connected
+ * teacher (lib/teams-sender.ts), the activity feed only when no chat landed, the
+ * Nexus bell always, and a receipt per student. Never a group post.
  *
  * Off until `staff.sketchbook-reminders` is switched on in Features. A dry run
  * works either way, so the first real evening can be previewed.
@@ -112,18 +114,22 @@ export async function GET(request: NextRequest) {
       if (r.claimed) claimed.push({ ...s, claimId: r.id });
     }
 
-    // One sendNudge per message variant, so each batch shares its words.
+    // One sendNudge per classroom and message variant: each batch shares its words
+    // and is sent as that classroom's connected teacher (their own Teams chat).
+    const senders = await classroomSenders([...new Set(claimed.map((s) => s.classroomId))]);
     const groups = new Map<string, typeof claimed>();
     for (const s of claimed) {
-      const key = `${s.step}|${s.lastDrawingDate ? 'drew' : 'never'}|${s.goal}`;
+      const key = `${s.classroomId}|${s.step}|${s.lastDrawingDate ? 'drew' : 'never'}|${s.goal}`;
       groups.set(key, [...(groups.get(key) || []), s]);
     }
     const url = `${shareBaseUrl(FALLBACK_ORIGIN)}/student/sketchbook?add=1`;
     let reached = 0;
     let unreached = 0;
+    let viaChat = 0;
     for (const group of groups.values()) {
       const first = group[0];
       const msg = reminderMessage(first.step, !first.lastDrawingDate, first.goal);
+      const sender = senders[first.classroomId];
       const { results } = await sendNudge({
         studentIds: group.map((g) => g.studentId),
         subject: msg.subject,
@@ -131,9 +137,12 @@ export async function GET(request: NextRequest) {
         teamsText: msg.subject,
         eventType: 'sketch_rhythm_nudge',
         metadata: { source: 'sketchbook_reminder', step: first.step },
-        bot: { card: { title: msg.subject, body: msg.plain, buttonLabel: msg.buttonLabel, url } },
-        source: { kind: 'sketchbook_reminder' },
+        // No teacher connected for this class: the activity feed and bell still run,
+        // and the receipt says why there was no chat.
+        ...(sender ? { sendAs: { senderUserId: sender.userId, link: { url, label: msg.buttonLabel } } } : {}),
+        source: { kind: 'sketchbook_reminder', refId: first.classroomId },
       });
+      viaChat += results.filter((r) => r.chat).length;
       const byId = new Map(results.map((r) => [r.studentId, r]));
       for (const g of group) {
         const r = byId.get(g.studentId);
@@ -148,6 +157,7 @@ export async function GET(request: NextRequest) {
       candidates: candidates.length,
       sent: claimed.length,
       reached,
+      viaChat,
       unreached,
       needsCall: plan.needsCall.length,
       skipped: plan.skipped,

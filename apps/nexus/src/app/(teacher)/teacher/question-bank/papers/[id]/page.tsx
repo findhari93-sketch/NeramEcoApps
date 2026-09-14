@@ -37,6 +37,7 @@ import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { QB_EXAM_TYPE_LABELS, qbSectionLabel } from '@neram/database';
+import { QB_EXAM_LABELS, isQBExamType, qbExamPath, rememberQBExam } from '@/lib/qb-exam-routes';
 import type {
   NexusQBOriginalPaper,
   NexusQBQuestion,
@@ -68,6 +69,11 @@ export default function PaperDetailPage() {
   const { getToken } = useNexusAuthContext();
 
   const [paper, setPaper] = useState<NexusQBOriginalPaper | null>(null);
+  // Back returns to this paper's own exam page, and the sidebar highlights it.
+  const paperExam = paper && isQBExamType(paper.exam_type) ? paper.exam_type : null;
+  useEffect(() => {
+    if (paperExam) rememberQBExam(paperExam);
+  }, [paperExam]);
   const [questions, setQuestions] = useState<NexusQBQuestion[]>([]);
   /** Source rows per question id, this paper's row first. Feeds Source & Format. */
   const [sources, setSources] = useState<Record<string, NexusQBQuestionSource[]>>({});
@@ -456,12 +462,14 @@ export default function PaperDetailPage() {
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexShrink: 0 }}>
         <IconButton
           size="small"
-          aria-label="Back to the question bank"
-          // Always the hub, not the flat /papers table: that table is a separate
-          // destination a teacher rarely visits directly, and landing there
-          // after opening a paper from the hub's Original papers tab put you on
-          // a page you never navigated to in this session.
-          onClick={() => router.push('/teacher/question-bank')}
+          aria-label={paperExam ? `Back to ${QB_EXAM_LABELS[paperExam]} papers` : 'Back to the question bank'}
+          // Always the paper's exam page, not the flat /papers table: that table
+          // is a separate destination a teacher rarely visits directly, and
+          // landing there after opening a paper from the exam page put you on a
+          // page you never navigated to in this session.
+          onClick={() =>
+            router.push(paperExam ? qbExamPath('teacher', paperExam) : '/teacher/question-bank')
+          }
           sx={{ minWidth: 44, minHeight: 44 }}
         >
           <ArrowBackIcon />

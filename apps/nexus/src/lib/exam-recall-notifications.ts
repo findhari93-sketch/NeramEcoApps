@@ -1,10 +1,13 @@
 /**
  * Exam Recall notification helpers.
- * Sends in-app notifications via the user_notifications table.
+ *
+ * Through sendNudge like every student message: the Teams activity feed and the
+ * Nexus bell, with a receipt. No Teams chat, because these come from classmates'
+ * actions, not from a teacher writing to the student.
  */
 
-import { createUserNotification } from '@neram/database/queries';
 import type { NotificationEventType } from '@neram/database';
+import { sendNudge } from './nudge-delivery';
 
 interface RecallNotification {
   userId: string;
@@ -16,12 +19,13 @@ interface RecallNotification {
 
 async function notify(n: RecallNotification) {
   try {
-    await createUserNotification({
-      user_id: n.userId,
-      event_type: n.eventType,
-      title: n.title,
-      message: n.message,
+    await sendNudge({
+      studentIds: [n.userId],
+      subject: n.title,
+      plain: n.message,
+      eventType: n.eventType,
       metadata: n.metadata,
+      source: { kind: String(n.eventType) },
     });
   } catch (err) {
     // Notifications should not block the main flow
