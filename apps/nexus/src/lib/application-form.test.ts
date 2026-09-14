@@ -3,6 +3,8 @@ import {
   formClassLabel,
   formExamYear,
   isApplicationForm,
+  maskEmail,
+  maskPhone,
   pickApplicationForm,
   planApplicationFill,
   type ApplicationForm,
@@ -162,5 +164,22 @@ describe('planApplicationFill', () => {
     ];
     expect(sentences.length).toBeGreaterThan(0);
     for (const sentence of sentences) expect(sentence).not.toMatch(/—|--/);
+  });
+});
+
+describe('masking contact detail', () => {
+  it('keeps the last four digits, which is what a person checks against', () => {
+    expect(maskPhone('+91 98765 43210')).toBe('XXXXX 3210');
+  });
+
+  it('returns null rather than a misleading stub when there is nothing to mask', () => {
+    expect(maskPhone(null)).toBeNull();
+    expect(maskPhone('12')).toBeNull();
+    expect(maskEmail(null)).toBeNull();
+    expect(maskEmail('not-an-address')).toBeNull();
+  });
+
+  it('leaves the domain readable, because that is the recognisable part', () => {
+    expect(maskEmail('ayana.khan@gmail.com')).toBe('aXXX@gmail.com');
   });
 });

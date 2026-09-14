@@ -32,6 +32,7 @@ export const EMPTY_PAYLOAD: Payload = {
   completed: [],
   noRecording: [],
   pendingRecap: [],
+  celebrationsUnavailable: false,
   totals: {
     studentsBehind: 0,
     studentsCatchingUp: 0,
@@ -75,9 +76,11 @@ export function withPayloadDefaults(payload: CachedPayload | undefined): Payload
   return {
     ...EMPTY_PAYLOAD,
     ...payload,
+    celebrationsUnavailable: payload.celebrationsUnavailable ?? false,
     students: (payload.students || []).map((s) => ({
       ...s,
       standing: s?.standing ? { ...EMPTY_STANDING, ...s.standing } : EMPTY_STANDING,
+      celebration: s?.celebration ?? null,
     })),
     totals: {
       ...EMPTY_PAYLOAD.totals,

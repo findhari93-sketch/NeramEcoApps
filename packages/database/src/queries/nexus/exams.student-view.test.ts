@@ -23,7 +23,7 @@ const COLUMNS: Record<string, string[]> = {
     'attempt_number',
   ],
   nexus_test_placements: ['id', 'test_id', 'context_id', 'available_from', 'available_until'],
-  nexus_test_access_requests: ['placement_id', 'student_id', 'opens_at', 'closes_at'],
+  nexus_test_access_requests: ['placement_id', 'student_id', 'status', 'source', 'opens_at', 'closes_at', 'created_at'],
   nexus_test_run_credits: ['placement_id', 'student_id', 'attempt_id', 'note', 'credited_by', 'credited_at'],
   nexus_exam_results: ['exam_id', 'student_id', 'rank', 'score', 'total_marks', 'percentage', 'is_provisional', 'absent'],
 };
@@ -138,6 +138,8 @@ describe('listStudentExams', () => {
 
     const [view] = await listStudentExams('stu-1', 'c1', client as never);
     expect(view.is_makeup).toBe(true);
+    expect(view.is_reopen).toBe(false);
+    expect(view.access_state).toBe('none');
     expect(view.opens_at).toBe('2026-08-22T04:30:00Z');
     expect(view.closes_at).toBe('2026-08-22T07:30:00Z');
   });
@@ -216,5 +218,105 @@ describe('listStudentExams', () => {
     const [view] = await listStudentExams('stu-1', 'c1', client as never);
     expect(view.attempted).toBe(false);
     expect(view.attempt_id).toBeNull();
+  });
+
+  /**
+   * NXS-0125. A teacher reopened the 18 Aug exam for 26 students. The teacher
+   * roster showed a live window, the attempt route would have let them in, and
+   * every one of them saw a disabled button reading "Closed", because this
+   * function resolved the window without ever reading the grant.
+   *
+   * These tests exist because their absence is what let that ship. Do not
+   * delete them to make a refactor pass.
+   */
+  const withGrant = (rows: any[]) =>
+    stubClient({
+      nexus_exams: [{ ...baseExam, results_state: 'unpublished' }],
+      nexus_exam_makeups: [],
+      nexus_test_placements: [
+        {
+          id: 'p-exam',
+          test_id: 't1',
+          context_id: 'sc1',
+          available_from: baseExam.opens_at,
+          available_until: baseExam.closes_at,
+        },
+      ],
+      nexus_test_attempts: [],
+      nexus_test_access_requests: rows,
+      nexus_test_run_credits: [],
+    });
+
+  const grant = (over: Record<string, unknown> = {}) => ({
+    placement_id: 'p-exam',
+    student_id: 'stu-1',
+    status: 'granted',
+    source: 'teacher_grant',
+    opens_at: '2026-09-11T12:23:32Z',
+    closes_at: '2026-09-14T12:23:32Z',
+    created_at: '2026-09-11T12:23:32Z',
+    ...over,
+  });
+
+  it('a granted access request REPLACES the exam window on the student view', async () => {
+    const [view] = await listStudentExams('stu-1', 'c1', withGrant([grant()]) as never);
+
+    // Kaveya's exact row. Before the fix this read 2026-08-20T07:30:00Z and the
+    // card rendered a disabled "Closed" button on a door that was open.
+    expect(view.closes_at).toBe('2026-09-14T12:23:32Z');
+    expect(view.opens_at).toBe('2026-09-11T12:23:32Z');
+    expect(view.is_reopen).toBe(true);
+    expect(view.is_makeup).toBe(false);
+    expect(view.access_state).toBe('granted');
+  });
+
+  it('a reopen beats a live makeup when the student holds both', async () => {
+    const client = stubClient({
+      nexus_exams: [{ ...baseExam, results_state: 'unpublished' }],
+      nexus_exam_makeups: [
+        {
+          id: 'm1',
+          exam_id: 'ex1',
+          student_id: 'stu-1',
+          opens_at: '2026-08-22T04:30:00Z',
+          closes_at: '2026-08-22T07:30:00Z',
+          reason: 'Medical',
+          granted_by: 'staff-1',
+          granted_at: '2026-08-21T00:00:00Z',
+          revoked_at: null,
+        },
+      ],
+      nexus_test_placements: [
+        { id: 'p-exam', test_id: 't1', context_id: 'sc1', available_from: baseExam.opens_at, available_until: baseExam.closes_at },
+      ],
+      nexus_test_attempts: [],
+      nexus_test_access_requests: [grant()],
+      nexus_test_run_credits: [],
+    });
+
+    const [view] = await listStudentExams('stu-1', 'c1', client as never);
+    // A reopen is always the later, more deliberate act. See
+    // resolveExamWindowForStudent.
+    expect(view.closes_at).toBe('2026-09-14T12:23:32Z');
+    expect(view.is_reopen).toBe(true);
+    expect(view.is_makeup).toBe(false);
+  });
+
+  it('a pending ask leaves the window alone but is reported, so the card can say so', async () => {
+    const rows = [grant({ status: 'pending', source: 'student_request', opens_at: null, closes_at: null })];
+    const [view] = await listStudentExams('stu-1', 'c1', withGrant(rows) as never);
+
+    expect(view.closes_at).toBe(baseExam.closes_at);
+    expect(view.is_reopen).toBe(false);
+    // A question is not a door, but the student still needs telling it was asked.
+    expect(view.access_state).toBe('pending');
+  });
+
+  it('a grant with no end does not fall back to the exam close', async () => {
+    const [view] = await listStudentExams('stu-1', 'c1', withGrant([grant({ closes_at: null })]) as never);
+
+    // Falling back would re-impose the very window the grant exists to escape.
+    expect(view.closes_at).toBe('9999-12-31T23:59:59.999Z');
+    expect(view.is_reopen).toBe(true);
   });
 });

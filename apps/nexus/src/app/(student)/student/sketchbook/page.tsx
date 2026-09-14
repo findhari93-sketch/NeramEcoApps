@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { patchQuery, readSearch } from '@/lib/list-url-state';
 import { Box } from '@neram/ui';
 import PageHeader from '@/components/PageHeader';
 import SketchbookView from '@/components/sketchbook/SketchbookView';
@@ -16,6 +17,16 @@ export default function StudentSketchbookPage() {
   const [month, setMonth] = useState(() => istDate(new Date()).slice(0, 7));
   const [adding, setAdding] = useState(false);
   const { data, isLoading, mutate } = useAuthSWR<SketchbookPayload>(`/api/sketchbook/me?month=${month}`);
+
+  // A reminder's "Add a sketch" button lands here with ?add=1: open the sheet
+  // straight away rather than making the student find the button. The param is
+  // removed so Back or a refresh does not reopen it.
+  useEffect(() => {
+    if (new URLSearchParams(readSearch()).get('add') === '1') {
+      setAdding(true);
+      patchQuery({ add: null });
+    }
+  }, []);
 
   const onOptOutChange = useCallback(async (optOut: boolean) => {
     await setOptOut(getToken, optOut);

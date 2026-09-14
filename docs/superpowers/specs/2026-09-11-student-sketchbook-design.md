@@ -207,7 +207,15 @@ All routes: `getRequestUser` (fails closed on parent tokens except the parent ro
 | `PATCH /settings?classroom=` | staff with class access (`resolveClassStaffAccess`) | `{ weekly_goal: 1..7 }` | Updates `nexus_classrooms.sketchbook_weekly_goal`, appends a `nexus_sketchbook_goal_history` row effective from the current week's Monday, returns `{ goal }`. |
 | `GET /api/nav-badges` | existing | | Gains `sketchbook_inbox` (unflipped count in the teacher's classrooms, 0 when the flag is off). |
 
-Cron (phase 2): `GET /api/cron/sketchbook-rhythm-nudge`, Fridays 12:30 UTC (18:00 IST), `assertCronRequest`, one `sendNudge` per student who is 2 or more days short of the goal with 2 days left, `respectDormancy` default. Never to students who have never uploaded (they get the dashboard card, not a nudge).
+~~Cron (phase 2): `GET /api/cron/sketchbook-rhythm-nudge`, Fridays 12:30 UTC, for students 2+ days short of the goal; never to students who have never uploaded.~~
+
+**Superseded 2026-09-13 (founder decisions).** The rules live in `apps/nexus/src/lib/sketchbook-status.ts` and `apps/nexus/src/lib/sketchbook-reminders.ts`.
+- **Tracking start** per student = latest of `nexus_classrooms.sketchbook_started_on` (launch day for existing classrooms), enrolment date, return from dormant. "No sketches in 8 weeks" is gone.
+- **Any drawing counts** (sketchbook, assignment, question bank, free practice), computed on read by the `nexus_drawing_days` RPC. `nexus_sketchbook_practice_days` is now only the points ledger.
+- **Class rhythm** is status cards that are the filters (Needs a call, Needs a nudge, Behind goal, Not started, On track), the shared student toolbar, compact rows with a 14-day strip and the latest sketch thumbnail. Dormant students are a count only.
+- **Reminders:** daily `GET /api/cron/sketchbook-reminders` at 12:30 UTC (18:00 IST) on quiet day 3, 6 and 9 of a quiet stretch, including students who have never uploaded (counted from their tracking start). After three, automatic reminders stop and the student shows as "Needs a call". Behind the `staff.sketchbook-reminders` flag, default OFF. Delivered through `sendNudge` (bot chat, activity feed fallback, bell). Never a group post.
+- **Teacher nudge:** "Nudge all shown" on the quiet cards sends the teacher's own Teams chat (`POST /api/sketchbook/nudge`); it blocks that day's automatic reminder and is not a strike.
+- **Teacher digest:** `GET /api/cron/sketchbook-digest` at 16:00 UTC (21:30 IST), one message per teacher, nothing sent when there is nothing to say.
 
 ## 9. Rhythm engine
 

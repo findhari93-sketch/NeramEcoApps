@@ -49,6 +49,14 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   // Amber, deliberately louder than the other two: a score that moved is the
   // one notification a student must not scroll past.
   test_regraded: '#ed6c02',
+  sketch_reaction: '#db2777',
+  sketch_featured: '#7c3aed',
+  sketch_rhythm_nudge: '#ed6c02',
+  sketch_milestone: '#2E7D32',
+  sketch_digest: '#7c3aed',
+  scorecard_reminder: '#0ea5e9',
+  scorecard_released: '#2E7D32',
+  exam_date_reminder: '#ed6c02',
 };
 
 function getNavigationUrl(
@@ -155,6 +163,20 @@ function getNavigationUrl(
       if (!submissionId) return '/student/sketchbook';
       return nexusRole === 'student' ? `/student/sketchbook/${submissionId}` : '/teacher/sketchbook';
     }
+    // "Time for a quick sketch": straight into adding one, not onto a page to find the button.
+    case 'sketch_rhythm_nudge':
+    case 'sketch_milestone':
+      return notification.event_type === 'sketch_rhythm_nudge' ? '/student/sketchbook?add=1' : '/student/sketchbook';
+    // The teacher's evening digest opens Class rhythm on whoever needs a call, else the new sketches.
+    case 'sketch_digest': {
+      const needsCall = Number(notification.metadata?.needs_call || 0);
+      return needsCall > 0 ? '/teacher/sketchbook?view=rhythm&status=needs_call' : '/teacher/sketchbook';
+    }
+    case 'scorecard_reminder':
+    case 'scorecard_released':
+      return `/${nexusRole || 'student'}/documents`;
+    case 'exam_date_reminder':
+      return `/${nexusRole || 'student'}/exam-schedule`;
     default:
       return null;
   }

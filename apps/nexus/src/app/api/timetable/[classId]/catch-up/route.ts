@@ -13,7 +13,7 @@ import {
   isOverdue,
   istTodayYmd,
   activateCatchupItem,
-  releaseCatchupClock,
+  markCatchupItemCaughtUp,
   readCatchupWindows,
   catchupDueOn,
   catchupDaysLeft,
@@ -543,11 +543,14 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         // no longer disagree about whether this class is finishable.
         const why = whyNotComplete(itemFacts, recap, test);
         if (why) return NextResponse.json({ error: why }, { status: 400 });
-        patch.caught_up_at = new Date().toISOString();
-        // Finishing frees the clock so the next class can take it. Banked, not
-        // zeroed, so a teacher who later resets the test does not hand back a
-        // window this student already spent.
-        await releaseCatchupClock(item.id, supabase);
+        // Stamping, freeing the clock and opening the test the finish earns all
+        // live in markCatchupItemCaughtUp. They used to be separate here, and
+        // the third one was missing: a student who finished by submitting the
+        // last assignment was marked caught up with the test still shut.
+        await markCatchupItemCaughtUp(
+          { itemId: item.id, studentId: access.userId, scheduledClassId: params.classId },
+          supabase,
+        );
         break;
       }
 

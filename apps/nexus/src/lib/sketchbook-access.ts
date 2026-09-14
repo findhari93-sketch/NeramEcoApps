@@ -30,10 +30,14 @@ export async function staffClassroomIds(caller: RequestUser): Promise<string[]> 
 }
 
 /**
- * The students whose sketchbooks this staff member flips through: everyone
- * in the classrooms they teach, or in the one classroom asked for. Dormant
- * students are included on purpose; they keep uploading and the teacher
- * should see what arrived.
+ * The students whose sketchbooks this staff member flips through: every TRACKED
+ * student in the classrooms they teach, or in the one classroom asked for.
+ *
+ * Dormant students are left out (founder rule, 2026-09-13: a paused student
+ * appears in no list and no count). This also feeds the Flip through inbox and
+ * the sketchbook and drawing-review nav badges, so all three agree with the
+ * Class rhythm screen. A dormant student's own sketchbook still opens from their
+ * profile, because assertStaffSeesStudent is an access check, not a roster.
  *
  * `loadClassroomRoster(null, ...)` (every classroom) does not restrict to
  * active classrooms, only nexus_enrollments.is_active, so it cannot be used
@@ -46,11 +50,11 @@ export async function staffStudentIds(caller: RequestUser, classroomId: string |
   const mine = await staffClassroomIds(caller);
   if (classroomId) {
     if (!mine.includes(classroomId)) throw new ApiError('You do not teach this classroom.', 403);
-    const roster = await loadClassroomRoster(classroomId, { includeDormant: true });
-    return roster.members.map((m) => m.user_id);
+    const roster = await loadClassroomRoster(classroomId);
+    return roster.ids;
   }
-  const rosters = await Promise.all(mine.map((id) => loadClassroomRoster(id, { includeDormant: true })));
-  return [...new Set(rosters.flatMap((r) => r.members.map((m) => m.user_id)))];
+  const rosters = await Promise.all(mine.map((id) => loadClassroomRoster(id)));
+  return [...new Set(rosters.flatMap((r) => r.ids))];
 }
 
 /** Nexus's own test, impersonation and parent tokens are not Microsoft's. */

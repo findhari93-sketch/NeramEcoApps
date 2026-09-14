@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { sendNudge } from '@/lib/nudge-delivery';
 
 /**
  * POST /api/exam-schedule/remind
@@ -83,30 +84,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create notifications for target students
+    // Through the one door. This used to insert a `type` column that does not
+    // exist; the error was never checked, so no student ever got this reminder.
+    let counts = null;
     if (targetIds.length > 0) {
-      const notifications = targetIds.map((studentId: string) => ({
-        user_id: studentId,
-        type: 'exam_date_reminder',
-        title: 'Submit your NATA Exam Date',
-        message: 'Please submit your NATA exam date, city, and session on the Exam Schedule page.',
-        metadata: {
-          broadcast_id: broadcast.id,
-          classroom_id,
-        },
-        is_read: false,
+      ({ counts } = await sendNudge({
+        studentIds: targetIds,
+        // A teacher who picked students by hand can see who they picked.
+        respectDormancy: !(student_ids && student_ids.length),
+        subject: 'Submit your NATA exam date, {firstName}',
+        plain: 'Please submit your NATA exam date, city and session on the Exam Schedule page.',
+        eventType: 'exam_date_reminder',
+        metadata: { broadcast_id: broadcast.id, classroom_id },
+        source: { kind: 'exam_date_reminder', refId: broadcast.id },
       }));
-
-      try {
-        await db.from('user_notifications').insert(notifications);
-      } catch {
-        console.warn('Could not create notifications, user_notifications table may not exist');
-      }
     }
 
     return NextResponse.json({
       broadcast,
-      reminded_count: targetIds.length,
+      reminded_count: counts ? counts.total - counts.failed : 0,
+      delivery: counts,
     }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to send reminders';

@@ -44,6 +44,8 @@ export default function StudentsTabs() {
         Students
       </Typography>
 
+      {/* The tabs never wrap, and three of them are wider than a 375px phone.
+          The bar may scroll itself; it must never push the page sideways. */}
       <Box
         role="tablist"
         aria-label="Students views"
@@ -55,6 +57,9 @@ export default function StudentsTabs() {
           bgcolor: alpha(theme.palette.primary.main, 0.06),
           border: `1px solid ${theme.palette.divider}`,
           maxWidth: '100%',
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
         }}
       >
         {tabs.map(({ label, href, Icon }) => {
@@ -80,6 +85,7 @@ export default function StudentsTabs() {
                 px: { xs: 1.75, sm: 2.5 },
                 py: 1,
                 minHeight: 40,
+                flexShrink: 0,
                 borderRadius: 2,
                 fontWeight: 700,
                 fontSize: '0.875rem',

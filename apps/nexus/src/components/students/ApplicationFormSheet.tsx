@@ -1,21 +1,41 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Chip, Drawer, Paper, Skeleton, Typography } from '@neram/ui';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Dialog,
+  Drawer,
+  Paper,
+  Skeleton,
+  Typography,
+  useMediaQuery,
+  useTheme,
+} from '@neram/ui';
 import AlternateEmailOutlinedIcon from '@mui/icons-material/AlternateEmailOutlined';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import FamilyRestroomOutlinedIcon from '@mui/icons-material/FamilyRestroomOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import PhoneIphoneOutlinedIcon from '@mui/icons-material/PhoneIphoneOutlined';
 import StudentAvatar from './StudentAvatar';
+import ApplicationFormDetail from './ApplicationFormDetail';
 import { adminCrmUrl } from '@/lib/admin-links';
 import { shortDate } from '@/lib/student-roster-view';
 import { STAGE_LABEL, stageKeyOf } from '@/lib/student-stage';
-import type { FormCandidateView, FormLinkResult, StudentFormReview } from '@/lib/application-form';
+import { useNexusSWR } from '@/lib/nexus-swr';
+import type {
+  FormCandidateView,
+  FormDetailView,
+  FormLinkResult,
+  StudentFormReview,
+} from '@/lib/application-form';
 
 /**
  * The students with no application form on their own record, and the forms on
@@ -26,20 +46,28 @@ import type { FormCandidateView, FormLinkResult, StudentFormReview } from '@/lib
  * form is rarely missing; it is unlinked. This sheet is where a person says "yes,
  * that is theirs", and where a teacher sees whom to ask when nothing turns up.
  *
- * Linking merges two records and cannot be undone, so it asks once more before it
- * happens, inline, where the evidence is still on screen.
+ * Linking merges two records and cannot be undone, so there are two ways to
+ * arrive at it and both are deliberate. From the card, a second tap confirms,
+ * because the decision was made from four lines of summary. From "View full
+ * form", the reviewer has just read the whole thing, so the warning sits above
+ * the button and there is no second tap to train them out of reading.
+ *
+ * ONE OVERLAY, TWO VIEWS. The form opens by swapping this sheet's own content,
+ * never by stacking a second Dialog on top: two MUI portals do not nest, they
+ * land as siblings and the inner one loses the z-index compare. Back, Escape and
+ * a backdrop tap all pop the form first and leave the list where it was.
  */
 
 type Reason = FormCandidateView['reasons'][number];
 
-const REASON: Record<Reason, { label: string; Icon: React.ElementType }> = {
+export const REASON: Record<Reason, { label: string; Icon: React.ElementType }> = {
   phone: { label: 'Same phone number', Icon: PhoneIphoneOutlinedIcon },
   email: { label: 'Same email address', Icon: AlternateEmailOutlinedIcon },
   full_name: { label: 'Same full name', Icon: BadgeOutlinedIcon },
   father_name: { label: "Father's name fits", Icon: FamilyRestroomOutlinedIcon },
 };
 
-const BLOCKED_TEXT: Record<NonNullable<FormCandidateView['blocked']>, string> = {
+export const BLOCKED_TEXT: Record<NonNullable<FormCandidateView['blocked']>, string> = {
   other_microsoft_account:
     'That record has its own Microsoft account, so it may be a different student. If it is the same person, merge the two records in Admin.',
   both_fee_records:
@@ -62,6 +90,12 @@ interface LoadState {
   error: string | null;
   students: StudentFormReview[];
   canLink: boolean;
+}
+
+/** Which candidate's full form is open, if any. */
+interface Viewing {
+  student: StudentFormReview;
+  candidate: FormCandidateView;
 }
 
 /** A message to paste into WhatsApp when nothing was found. */
@@ -96,6 +130,11 @@ export default function ApplicationFormSheet({
   onClose,
   onChanged,
 }: ApplicationFormSheetProps) {
+  const theme = useTheme();
+  // A bottom sheet is the right shape on a phone and the wrong one on a monitor.
+  // Same breakpoint as components/study-materials/recordings/ResponsiveSheet.
+  const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
+
   const [state, setState] = useState<LoadState>({ loading: false, error: null, students: [], canLink: false });
   /** `${studentId}:${formUserId}` awaiting the second "Link form" tap. */
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -104,7 +143,10 @@ export default function ApplicationFormSheet({
   /** Students linked while the sheet is open, with what happened. */
   const [linked, setLinked] = useState<Record<string, string>>({});
   const [copiedFor, setCopiedFor] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<Viewing | null>(null);
   const [now] = useState(() => Date.now());
+  /** The card button that opened the form, so focus can go back to it. */
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -134,8 +176,20 @@ export default function ApplicationFormSheet({
     setConfirming(null);
     setActionError(null);
     setCopiedFor(null);
+    setViewing(null);
     load();
   }, [open, load]);
+
+  // Cached by SWR, so stepping back into a form already read costs nothing.
+  const detailKey = viewing
+    ? `/api/students/application-forms/detail?classroom=${classroomId}&student=${viewing.student.id}&form=${viewing.candidate.userId}`
+    : null;
+  const {
+    data: detail,
+    error: detailError,
+    isLoading: detailLoading,
+    mutate: reloadDetail,
+  } = useNexusSWR<FormDetailView>(detailKey, getToken);
 
   const act = async (kind: 'link' | 'dismiss', student: StudentFormReview, candidate: FormCandidateView) => {
     const key = `${student.id}:${candidate.userId}`;
@@ -167,6 +221,8 @@ export default function ApplicationFormSheet({
         ),
       }));
       setConfirming(null);
+      // The decision is made, so the form it was made from is done with.
+      setViewing(null);
       onChanged();
     } catch (err) {
       setActionError({ key, message: err instanceof Error ? err.message : 'Something went wrong.' });
@@ -184,6 +240,25 @@ export default function ApplicationFormSheet({
     }
   };
 
+  const openForm = (student: StudentFormReview, candidate: FormCandidateView, trigger: HTMLElement | null) => {
+    returnFocusRef.current = trigger;
+    setActionError(null);
+    setViewing({ student, candidate });
+  };
+
+  const closeForm = () => {
+    setViewing(null);
+    // Back to the button that opened it, not the top of the sheet.
+    returnFocusRef.current?.focus();
+  };
+
+  /** Escape, the backdrop and the Android back gesture pop the form first. */
+  const handleClose = () => {
+    if (busy) return;
+    if (viewing) closeForm();
+    else onClose();
+  };
+
   const adminHref = (id: string) =>
     adminCrmUrl(id, {
       nexusOrigin: typeof window === 'undefined' ? null : window.location.origin,
@@ -192,32 +267,42 @@ export default function ApplicationFormSheet({
     });
 
   const { loading, error, students, canLink } = state;
+  const viewingKey = viewing ? `${viewing.student.id}:${viewing.candidate.userId}` : null;
 
-  return (
-    <Drawer
-      anchor="bottom"
-      open={open}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
-      PaperProps={{
-        role: 'dialog',
-        'aria-labelledby': 'application-forms-title',
-        sx: {
-          borderTopLeftRadius: 16,
-          borderTopRightRadius: 16,
-          maxHeight: '88dvh',
-          width: '100%',
-          maxWidth: 720,
-          mx: 'auto',
-        },
-      }}
-    >
+  const body = viewing ? (
+    <ApplicationFormDetail
+      studentId={viewing.student.id}
+      studentName={viewing.student.name}
+      studentEmail={viewing.student.email}
+      data={detail ?? null}
+      loading={detailLoading}
+      error={detailError ? detailError.message : null}
+      busyKind={busy?.key === viewingKey ? busy.kind : null}
+      anyBusy={!!busy}
+      actionError={actionError?.key === viewingKey ? actionError.message : null}
+      blockedText={viewing.candidate.blocked ? BLOCKED_TEXT[viewing.candidate.blocked] : null}
+      onBack={closeForm}
+      onRetry={() => reloadDetail()}
+      onLink={() => act('link', viewing.student, viewing.candidate)}
+      onDismiss={() => act('dismiss', viewing.student, viewing.candidate)}
+    />
+  ) : (
+    <>
       <Box
         aria-busy={loading}
         sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5, overflowY: 'auto', flex: 1 }}
       >
-        <Box>
+        <Box
+          sx={{
+            position: 'sticky',
+            top: -16,
+            zIndex: 1,
+            bgcolor: 'background.paper',
+            pt: 0.5,
+            pb: 1,
+            mt: -0.5,
+          }}
+        >
           <Typography id="application-forms-title" component="h2" sx={{ fontWeight: 800, fontSize: '1.05rem' }}>
             Application forms
           </Typography>
@@ -300,6 +385,7 @@ export default function ApplicationFormSheet({
                       onCancelConfirm={() => setConfirming(null)}
                       onLink={() => act('link', student, candidate)}
                       onDismiss={() => act('dismiss', student, candidate)}
+                      onView={(trigger) => openForm(student, candidate, trigger)}
                     />
                   );
                 })
@@ -360,6 +446,47 @@ export default function ApplicationFormSheet({
           Done
         </Button>
       </Box>
+    </>
+  );
+
+  const paperSx = {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    maxHeight: '88dvh',
+    width: '100%',
+    maxWidth: 720,
+    mx: 'auto',
+  };
+
+  if (isDesktop) {
+    return (
+      <Dialog
+        open={open}
+        onClose={handleClose}
+        fullWidth
+        maxWidth="sm"
+        aria-labelledby={viewing ? undefined : 'application-forms-title'}
+        aria-label={viewing ? 'Application form' : undefined}
+        PaperProps={{ sx: { ...paperSx, borderRadius: 3 } }}
+      >
+        {body}
+      </Dialog>
+    );
+  }
+
+  return (
+    <Drawer
+      anchor="bottom"
+      open={open}
+      onClose={handleClose}
+      PaperProps={{
+        role: 'dialog',
+        'aria-labelledby': viewing ? undefined : 'application-forms-title',
+        'aria-label': viewing ? 'Application form' : undefined,
+        sx: { ...paperSx, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+      }}
+    >
+      {body}
     </Drawer>
   );
 }
@@ -377,6 +504,7 @@ function CandidateBlock({
   onCancelConfirm,
   onLink,
   onDismiss,
+  onView,
 }: {
   studentName: string;
   candidate: FormCandidateView;
@@ -390,6 +518,7 @@ function CandidateBlock({
   onCancelConfirm: () => void;
   onLink: () => void;
   onDismiss: () => void;
+  onView: (trigger: HTMLElement | null) => void;
 }) {
   const who = [candidate.fatherName ? `Father: ${candidate.fatherName}` : null, candidate.place]
     .filter(Boolean)
@@ -405,12 +534,14 @@ function CandidateBlock({
 
   return (
     <Box
+      component="article"
+      aria-label={candidate.name ? `Form filled in as ${candidate.name}` : 'Form with no name typed on it'}
       sx={{
         mt: 1.25,
         p: 1.25,
         borderRadius: 1.5,
         border: 1,
-        borderColor: candidate.strength === 'strong' ? 'success.light' : 'divider',
+        borderColor: candidate.strength === 'strong' ? 'success.main' : 'divider',
         bgcolor: 'background.default',
       }}
     >
@@ -449,6 +580,19 @@ function CandidateBlock({
           {candidate.applicationNumber}
         </Typography>
       )}
+
+      {/* Reading the form is available to everyone who can see this sheet,
+          including teachers who cannot link: knowing whose form it is, is how
+          they know whom to ask. */}
+      <Button
+        fullWidth
+        startIcon={<DescriptionOutlinedIcon />}
+        onClick={(event) => onView(event.currentTarget)}
+        disabled={anyBusy}
+        sx={{ mt: 1, minHeight: 48, justifyContent: 'center' }}
+      >
+        View full form
+      </Button>
 
       {candidate.blocked && (
         <Box sx={{ mt: 1, display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
@@ -491,7 +635,7 @@ function CandidateBlock({
       )}
 
       {!candidate.blocked && canLink && !confirming && (
-        <Box sx={{ mt: 1.25, display: 'flex', gap: 1, flexDirection: { xs: 'column-reverse', sm: 'row' } }}>
+        <Box sx={{ mt: 1, display: 'flex', gap: 1, flexDirection: { xs: 'column-reverse', sm: 'row' } }}>
           <Button onClick={onDismiss} disabled={anyBusy} sx={{ minHeight: 48, flex: { sm: 1 } }}>
             {busyKind === 'dismiss' ? 'Saving…' : 'Not this student'}
           </Button>

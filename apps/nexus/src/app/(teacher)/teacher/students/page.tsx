@@ -967,7 +967,7 @@ export default function TeacherStudents() {
           <StudentSegmentBar value={segment} counts={segmentTotals} onChange={handleSegmentChange} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
           <StudentFilterSheet
             filters={filters}
             examBatchFilter={examBatchFilter}
@@ -1116,44 +1116,59 @@ export default function TeacherStudents() {
           </Box>
         </Paper>
       ) : (
-        <Box
-          role={selectMode ? 'listbox' : undefined}
-          aria-multiselectable={selectMode || undefined}
-          sx={
-            viewMode === 'cards'
-              ? { display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 1.5 }
-              : { display: 'flex', flexDirection: 'column', gap: viewMode === 'compact' ? 1 : 1.5 }
-          }
-        >
-          {visibleStudents.map((student) => {
-            const checklistPct = student.checklist.total > 0
-              ? Math.round((student.checklist.completed / student.checklist.total) * 100)
-              : 0;
-            const attColor = student.attendance.percentage >= 75 ? theme.palette.success.main : theme.palette.warning.main;
-            const doneColor = checklistPct >= 50 ? theme.palette.info.main : theme.palette.text.disabled;
-            const presenceStatus = student.ms_oid ? presenceMap[student.ms_oid]?.availability : undefined;
+        // The column count follows THIS box, not the window. The sidebar takes
+        // 260px, 72px or nothing out of the page width, so a viewport media query
+        // cannot know how wide a card actually gets: at a 920px window it called
+        // for three columns inside a 596px column, and the third card was clipped
+        // off the right edge where nothing could scroll to it. auto-fit is not the
+        // answer either, since it would stretch a single search result across the
+        // whole page; fixed counts at container widths keep the cards honest.
+        <Box sx={{ containerType: 'inline-size' }}>
+          <Box
+            role={selectMode ? 'listbox' : undefined}
+            aria-multiselectable={selectMode || undefined}
+            sx={
+              viewMode === 'cards'
+                ? {
+                    display: 'grid',
+                    gap: 1.5,
+                    gridTemplateColumns: '1fr',
+                    '@container (min-width: 560px)': { gridTemplateColumns: 'repeat(2, 1fr)' },
+                    '@container (min-width: 900px)': { gridTemplateColumns: 'repeat(3, 1fr)' },
+                  }
+                : { display: 'flex', flexDirection: 'column', gap: viewMode === 'compact' ? 1 : 1.5 }
+            }
+          >
+            {visibleStudents.map((student) => {
+              const checklistPct = student.checklist.total > 0
+                ? Math.round((student.checklist.completed / student.checklist.total) * 100)
+                : 0;
+              const attColor = student.attendance.percentage >= 75 ? theme.palette.success.main : theme.palette.warning.main;
+              const doneColor = checklistPct >= 50 ? theme.palette.info.main : theme.palette.text.disabled;
+              const presenceStatus = student.ms_oid ? presenceMap[student.ms_oid]?.availability : undefined;
 
-            const rowProps = {
-              student,
-              checklistPct,
-              attColor,
-              doneColor,
-              presenceStatus,
-              currentBatch,
-              isMobile,
-              now,
-              query: trimmedQuery,
-              selectMode,
-              selected: selectedIds.has(student.id),
-              onToggleSelect: () => toggleSelect(student.id),
-              onOpen: () => router.push(`/teacher/students/${student.id}`),
-              actions: <StudentRowMenu title={student.name} items={menuItemsFor(student)} />,
-            };
+              const rowProps = {
+                student,
+                checklistPct,
+                attColor,
+                doneColor,
+                presenceStatus,
+                currentBatch,
+                isMobile,
+                now,
+                query: trimmedQuery,
+                selectMode,
+                selected: selectedIds.has(student.id),
+                onToggleSelect: () => toggleSelect(student.id),
+                onOpen: () => router.push(`/teacher/students/${student.id}`),
+                actions: <StudentRowMenu title={student.name} items={menuItemsFor(student)} />,
+              };
 
-            if (viewMode === 'compact') return <CompactRow key={student.id} {...rowProps} />;
-            if (viewMode === 'cards') return <StudentCard key={student.id} {...rowProps} />;
-            return <DetailedRow key={student.id} {...rowProps} />;
-          })}
+              if (viewMode === 'compact') return <CompactRow key={student.id} {...rowProps} />;
+              if (viewMode === 'cards') return <StudentCard key={student.id} {...rowProps} />;
+              return <DetailedRow key={student.id} {...rowProps} />;
+            })}
+          </Box>
         </Box>
       )}
 

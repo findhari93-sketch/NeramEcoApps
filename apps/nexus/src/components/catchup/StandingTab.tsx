@@ -23,7 +23,7 @@ import { SECTION_HEADING_SX } from './shared';
 import type { TabProps } from './types';
 
 export default function StandingTab(props: TabProps) {
-  const { data, busy, onCelebrate } = props;
+  const { data, busy, onCelebrate, onMarkCelebrated } = props;
 
   const allClear = useMemo(
     () => data.students.filter((s) => s.bucket === 'all_clear'),
@@ -35,7 +35,9 @@ export default function StandingTab(props: TabProps) {
       <AllClearWall
         students={allClear}
         busy={busy === 'celebrate'}
+        celebrationsUnavailable={data.celebrationsUnavailable}
         onShare={onCelebrate ? (rows) => onCelebrate(rows) : undefined}
+        onMarkCelebrated={onMarkCelebrated ? (rows) => onMarkCelebrated(rows) : undefined}
       />
 
       <Typography sx={SECTION_HEADING_SX}>Recently finished</Typography>

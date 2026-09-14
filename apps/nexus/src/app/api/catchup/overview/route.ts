@@ -17,6 +17,7 @@ import {
 import { canUser } from '@/lib/staff-capabilities';
 import { BUCKET_ORDER, catchupBucket, emptyTally, tallyBuckets } from '@/lib/catchup-buckets';
 import { catchupStanding } from '@/lib/catchup-standing';
+import { celebrationInfo, latestCelebrationByStudent } from '@/lib/catchup-celebration';
 import { loadClassFactsForStudents } from '@/lib/catchup-facts';
 import { computeCatchupPace } from '@/lib/catchup-pace';
 import { tallyReasons } from '@/lib/rsvp-reasons';
@@ -498,6 +499,32 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // ── Who has already been congratulated ──────────────────────────────────
+    // One read, scoped to the students who are clear right now, because the
+    // wall is the only thing that asks. A failed read is reported rather than
+    // swallowed into "nobody was congratulated": that answer pre-selects the
+    // whole wall, and a missing table on a drifted environment would then
+    // re-post every student the teacher already named.
+    let celebrationsUnavailable = false;
+    const clearIds = students.filter((s) => s.bucket === 'all_clear').map((s) => s.student.id);
+    if (clearIds.length > 0) {
+      const { data: celebrationRows, error: celebrationError } = await supabase
+        .from('nexus_catchup_celebrations')
+        .select('id, student_id, source, last_cleared_at, celebrated_at')
+        .eq('classroom_id', classroomId)
+        .in('student_id', clearIds);
+      if (celebrationError) {
+        celebrationsUnavailable = true;
+        console.error('[catchup/overview] could not read celebrations', celebrationError);
+      } else {
+        const byStudent = latestCelebrationByStudent(celebrationRows || []);
+        for (const s of students) {
+          if (s.bucket !== 'all_clear') continue;
+          s.celebration = celebrationInfo(s.standing.lastClearedAt, byStudent.get(s.student.id));
+        }
+      }
+    }
+
     // Sorted as a work queue, not a register. Bucket leads so the client can
     // group by simply walking the array, and the tie-breaks then order the rows
     // within a group: whoever owes the most, first.
@@ -566,6 +593,7 @@ export async function GET(request: NextRequest) {
       pendingRecap: [...pendingRecap.values()].sort((a, b) =>
         String(a.scheduled_date).localeCompare(String(b.scheduled_date)),
       ),
+      celebrationsUnavailable,
       totals: {
         // A count of the buckets on the rows above, and the only thing the tiles
         // read. studentsBehind used to be computed here with its own predicate,

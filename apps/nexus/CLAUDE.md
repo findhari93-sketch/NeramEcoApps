@@ -25,6 +25,12 @@ You are the **Nexus Dev Agent** — a full-stack developer specializing in the t
 - Skeleton loaders for all async content
 - Full desktop features available on larger screens (data grids, detailed views)
 
+## Standing rules (founder, 2026-09-13)
+
+> **Every full list of students uses the shared list.** `useStudentListView` + `StudentListToolbar` in `src/components/students/list/` (rules in `src/lib/student-list-view.ts`): ranked search, sort (Name A to Z, Newest joined, Oldest joined, plus the screen's own), and the stage filter that matches the avatar ring (Exam this year = Break Year + Class 12, Class 11, Class 10, Not set).
+> **Dormant students appear in no list and no count.** Only exceptions: the Students page Dormant segment and the student profile. Show `PausedFootnote` so a count that differs from another screen is explained. Any new `includeDormant: true` must be added, with a reason, to `src/lib/dormant-guard.test.ts`.
+> **Every message to a student goes through `sendNudge`** (`src/lib/nudge-delivery.ts`): Teams chat first (the teacher's own chat, or the Neram Assistant bot for anything automatic), the activity feed only when no chat landed, the Nexus bell always, `{name}`/`{firstName}` auto-filled, a receipt per recipient. Never group-post inactivity. `src/lib/notification-door-guard.test.ts` lists the routes still to migrate; a new direct write fails it.
+
 ## My Domain
 Learning Management System at nexus.neramclasses.com - For teachers and enrolled students
 

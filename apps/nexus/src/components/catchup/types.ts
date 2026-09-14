@@ -7,6 +7,7 @@
  */
 import type { BucketTally, CatchupBucket } from '@/lib/catchup-buckets';
 import type { CatchupStanding } from '@/lib/catchup-standing';
+import type { CelebrationInfo } from '@/lib/catchup-celebration';
 
 /**
  * `current`, `locked` and `open` are gone.
@@ -115,6 +116,12 @@ export interface Row {
    * backlog is genuinely theirs, and whether they have answered a nudge.
    */
   standing: CatchupStanding;
+  /**
+   * Whether this student has already been congratulated for being all clear.
+   * Only set on `all_clear` rows, and null when they never have been. Optional
+   * because a payload cached before it existed has no such key.
+   */
+  celebration?: CelebrationInfo | null;
   items: Item[];
 }
 
@@ -145,6 +152,12 @@ export interface Payload {
   completed: FeedRow[];
   noRecording: Array<{ id: string; title: string | null; scheduled_date: string; affected: number }>;
   pendingRecap: Array<{ id: string; title: string | null; scheduled_date: string; affected: number }>;
+  /**
+   * The congratulation records could not be read. The wall then pre-selects
+   * nobody, because "nobody was congratulated" and "we could not tell" look the
+   * same on a row, and guessing the first would re-post everyone.
+   */
+  celebrationsUnavailable?: boolean;
   totals: {
     studentsBehind: number;
     studentsCatchingUp: number;
@@ -185,5 +198,10 @@ export interface TabProps {
    * button, rather than offering one that fails when pressed.
    */
   onCelebrate?: (students: Row[]) => void;
+  /**
+   * Record these students as congratulated without posting anything. For a
+   * congratulation that happened outside Nexus, so it is not repeated.
+   */
+  onMarkCelebrated?: (students: Row[]) => void;
   onReload: () => void;
 }

@@ -7,7 +7,9 @@ import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
 import NoAccountsOutlinedIcon from '@mui/icons-material/NoAccountsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import AssignmentLateOutlinedIcon from '@mui/icons-material/AssignmentLateOutlined';
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import { statusLineOf, type RosterStudent, type StudentActivity } from '@/lib/student-roster-view';
+import { placeLabel } from '@/lib/student-place';
 
 const ICON: Record<StudentActivity, React.ElementType> = {
   active: CheckCircleOutlineIcon,
@@ -25,9 +27,14 @@ const TONE_COLOR = {
 const TEXT = { fontSize: '0.75rem', lineHeight: 1.4 } as const;
 
 /**
- * One line under a student's name: when they joined, whether they actually use
- * Nexus, and anything missing from their record. Text plus an icon, never colour
- * alone.
+ * One line under a student's name: where they live, when they joined, whether
+ * they actually use Nexus, and anything missing from their record. Text plus an
+ * icon, never colour alone.
+ *
+ * The place leads, because it is the fact that tells two students of the same
+ * name apart. A student whose application form was never linked has no city, and
+ * then the place is simply absent: "No application form" further along the same
+ * line already says why, so a second placeholder would only add noise.
  *
  * Deliberately not an avatar ring. The ring already carries the study stage
  * (solid), "not set" (dotted) and dormant (dashed); a fourth meaning would make
@@ -38,18 +45,30 @@ export default function StudentStatusLine({
   now,
   attendance,
 }: {
-  student: RosterStudent;
+  student: RosterStudent & { city?: string | null; state?: string | null };
   now: number;
   /** Shown only when the classroom has completed classes; pass null otherwise. */
   attendance?: number | null;
 }) {
   const { joined, activity } = statusLineOf(student, now);
   const Icon = ICON[activity.key];
+  const place = student.city ? placeLabel({ city: student.city, state: student.state ?? null }) : null;
 
   return (
     <Box
       sx={{ display: 'flex', alignItems: 'center', columnGap: 1, rowGap: 0.25, flexWrap: 'wrap', minWidth: 0, mt: 0.25 }}
     >
+      {place && (
+        <Box
+          component="span"
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, color: 'text.secondary', minWidth: 0 }}
+        >
+          <LocationOnOutlinedIcon aria-hidden sx={{ fontSize: '0.95rem', flexShrink: 0 }} />
+          <Typography component="span" sx={{ ...TEXT, color: 'inherit' }}>
+            {place}
+          </Typography>
+        </Box>
+      )}
       {joined && (
         <Typography component="span" sx={{ ...TEXT, color: 'text.secondary' }}>
           {joined}

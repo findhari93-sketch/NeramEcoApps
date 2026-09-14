@@ -1178,6 +1178,53 @@ export async function markJourneyCompleted(
 const REWATCH_COMPLETION_RATIO = 0.9;
 
 /**
+ * Stamp caught_up_at, free the clock, and open whatever finishing earns.
+ *
+ * THE ONLY WRITER OF caught_up_at, deliberately.
+ *
+ * Four events could reach "this student is caught up" and only two of them ever
+ * opened the test door. The recap route and the rewatch each called
+ * grantClassTestWindowForClass; this stamp and the mark_caught_up button did
+ * not. So a student whose last outstanding step was an assignment or the
+ * catch-up paper became caught up with the exam still shut, and the rule the
+ * whole feature exists to keep, finish catching up and the test opens by
+ * itself, quietly did not hold for them.
+ *
+ * Same reasoning as resolveExamWindowForStudent's header: the thing that opens
+ * a door belongs to the event that earns it, not to whichever route happened to
+ * notice. A fifth caller gets the grant for free.
+ *
+ * Idempotent on both halves, and silent if the grant fails: a student must never
+ * see their catch-up fail because a window could not be written.
+ */
+export async function markCatchupItemCaughtUp(
+  input: { itemId: string; studentId: string; scheduledClassId: string },
+  client?: TypedSupabaseClient,
+): Promise<{ granted: boolean }> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+
+  // `.is(null)` keeps the original stamp when this runs twice, so a second call
+  // cannot quietly move the date a teacher is looking at.
+  await supabase
+    .from(ITEMS)
+    .update({ caught_up_at: new Date().toISOString() })
+    .eq('id', input.itemId)
+    .is('caught_up_at', null);
+
+  // Finishing frees the clock for the next class. Banked, not zeroed: if a
+  // teacher later resets the test and re-opens this one, it resumes with the
+  // time already spent rather than handing back a fresh window.
+  await releaseCatchupClock(input.itemId, supabase);
+
+  const granted = await grantClassTestWindowForClass(
+    input.studentId,
+    input.scheduledClassId,
+    supabase,
+  );
+  return { granted };
+}
+
+/**
  * Stamp caught_up_at when every gate on a class is finally cleared.
  *
  * Called after the test is passed rather than trusting a button, because for a
@@ -1203,14 +1250,10 @@ export async function recomputeCatchupItemCompletion(
   const complete = isCatchupItemComplete(toFacts(item, facts));
 
   if (complete && !item.caught_up_at) {
-    await supabase
-      .from(ITEMS)
-      .update({ caught_up_at: new Date().toISOString() })
-      .eq('id', item.id);
-    // Finishing frees the clock for the next class. Banked, not zeroed: if a
-    // teacher later resets the test and re-opens this one, it resumes with the
-    // time already spent rather than handing back a fresh window.
-    await releaseCatchupClock(item.id, supabase);
+    await markCatchupItemCaughtUp(
+      { itemId: item.id, studentId, scheduledClassId: classId },
+      supabase,
+    );
   } else if (!complete && item.caught_up_at) {
     // It went backwards. A teacher restoring an item they had excused, or
     // resetting a passed test, un-does the class.

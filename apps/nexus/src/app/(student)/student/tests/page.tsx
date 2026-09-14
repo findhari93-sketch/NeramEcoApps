@@ -21,6 +21,7 @@ import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined
 import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
 import { pickUnexplainedAttempt } from '@/lib/unfinished-test-prompt';
 import UnfinishedTestSheet, { type UnfinishedAttempt } from '@/components/tests/UnfinishedTestSheet';
 import { type StudentTest } from '@/components/tests/StudentTestCard';
@@ -28,6 +29,7 @@ import MyTestsLibrary from '@/components/tests/MyTestsLibrary';
 import TestsSection from '@/components/tests/TestsSection';
 import ClassTestsTab, { type RecentAttempt } from '@/components/tests/ClassTestsTab';
 import StudentRescheduleSheet from '@/components/tests/StudentRescheduleSheet';
+import AskTeacherSheet from '@/components/tests/AskTeacherSheet';
 import PerformanceTab, { type PerformanceTabData } from '@/components/tests/PerformanceTab';
 
 interface Overview {
@@ -80,6 +82,8 @@ export default function StudentTestsPage() {
 
   /** The exam a self-serve-eligible excused student is picking a date for. */
   const [rescheduleTest, setRescheduleTest] = useState<StudentTest | null>(null);
+  /** The test a student is asking their teacher to reopen. */
+  const [askTest, setAskTest] = useState<StudentTest | null>(null);
 
   const tabParam = searchParams.get('tab');
   const tab: TabKey = TAB_KEYS.includes(tabParam as TabKey) ? (tabParam as TabKey) : 'class';
@@ -99,8 +103,6 @@ export default function StudentTestsPage() {
   // initial page load with everything else. Mirrors the teacher tests hub's
   // "By location" tab: gated on tab === 'performance' && data === null, so
   // switching away and back does not re-fetch.
-  const [performanceData, setPerformanceData] = useState<PerformanceTabData | null>(null);
-  const [performanceError, setPerformanceError] = useState<string | null>(null);
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -125,6 +127,22 @@ export default function StudentTestsPage() {
 
   const classroomParam = activeClassroom?.id ? `?classroom=${activeClassroom.id}` : '';
 
+  const performanceKey = tab === 'performance' ? `/api/student/tests/performance${classroomParam}` : null;
+  const { data: performancePayload, error: performanceFetchError } = useAuthSWR<{ data: PerformanceTabData }>(
+    performanceKey,
+    {
+      // Fetched once and then reused. Revalidating on every return to the tab
+      // would cost a student on 3G a round trip to redraw a chart that has not
+      // moved, and the payload is the one genuinely expensive read here.
+      revalidateIfStale: false,
+      revalidateOnMount: undefined,
+    },
+  );
+  const performanceData = performancePayload?.data ?? null;
+  const performanceError = performanceFetchError
+    ? performanceFetchError.message || 'Could not load your performance'
+    : null;
+
   const load = useCallback(async () => {
     try {
       const json = await authFetch(`/api/student/tests/overview${classroomParam}`);
@@ -146,22 +164,6 @@ export default function StudentTestsPage() {
     load();
   }, [authLoading, load]);
 
-  useEffect(() => {
-    if (tab !== 'performance' || performanceData !== null || performanceError) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const json = await authFetch(`/api/student/tests/performance${classroomParam}`);
-        if (!cancelled) setPerformanceData(json.data);
-      } catch (err) {
-        if (!cancelled) setPerformanceError(err instanceof Error ? err.message : 'Could not load your performance');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tab, performanceData, performanceError, authFetch, classroomParam]);
-
   const start = useCallback(
     (t: StudentTest) => {
       const params = new URLSearchParams({ test_id: t.id });
@@ -169,6 +171,24 @@ export default function StudentTestsPage() {
       router.push(`/student/tests/take?${params.toString()}`);
     },
     [router],
+  );
+
+  /**
+   * Everything a card's single action can do.
+   *
+   * Bundled so that every surface rendering a StudentTestCard offers the same
+   * ways out. A card that says "Ask my teacher" on one tab and shows nothing on
+   * another is the scattered behaviour this redesign removed.
+   */
+  const cardHandlers = useMemo(
+    () => ({
+      onStart: start,
+      onReview: start,
+      onReschedule: setRescheduleTest,
+      onAskTeacher: setAskTest,
+      onCatchUp: (href: string) => router.push(href),
+    }),
+    [start, router],
   );
 
   async function practiseMistakes() {
@@ -248,7 +268,7 @@ export default function StudentTestsPage() {
   return (
     // My Tests gets the teacher-page's full width for its folder sidebar; the
     // other tabs are single-column content that stays readable narrower.
-    <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: tab === 'mine' ? 1100 : 800, mx: 'auto', pb: 8 }}>
+    <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: tab === 'mine' ? 1100 : 840, mx: 'auto', pb: 12 }}>
       <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 0.25 }}>
         Tests
       </Typography>
@@ -324,10 +344,9 @@ export default function StudentTestsPage() {
             <ClassTestsTab
               data={{ due: data.due, all: allTests, exams: data.exams || [], practice_groups: data.practice_groups }}
               hasActiveClassroom={Boolean(activeClassroom?.id)}
-              onStart={start}
-              onReschedule={setRescheduleTest}
               recentAttempt={data.recent[0]}
               onViewPerformance={() => setTab('performance')}
+              {...cardHandlers}
             />
           )}
 
@@ -369,6 +388,11 @@ export default function StudentTestsPage() {
           the test was abandoned. Above every tab, not inside one: it is not
           about Class Tests, My Tests, or Performance specifically. */}
       <UnfinishedTestSheet attempt={askAbout} onDismiss={() => setAskedThisVisit(true)} onSubmit={submitReason} />
+
+      {/* The way out of a shut door, offered FROM the card. A student used to
+          reach this only by pressing Start and reading the 403 that came back,
+          which hid the way through the door behind the door. */}
+      <AskTeacherSheet test={askTest} onClose={() => setAskTest(null)} getToken={getToken} />
 
       <StudentRescheduleSheet
         test={rescheduleTest}

@@ -219,6 +219,33 @@ describe('getTestResults', () => {
     expect(stats.excused).toBe(1);
   });
 
+  /**
+   * Founder rule, 2026-09-13: a paused (dormant) student is in no list and no
+   * count. One who really sat it keeps a row for their marks, tagged, but never
+   * moves the average, the pass count or the "not done" tallies.
+   */
+  it('drops paused students with no sitting and keeps a paused sitting out of every stat', async () => {
+    const client = stubClient(seedOneAttempt());
+    const { rows, stats } = await getTestResults(
+      'test-1',
+      {
+        closesAt: '2026-08-08T04:00:00Z',
+        pausedStudentIds: ['stu-1', 'stu-2'],
+        roster: [
+          { student_id: 'stu-1', name: 'Hari Heera', avatar_url: null, bucket: 'mandatory_attended', is_mandatory: true },
+          { student_id: 'stu-2', name: 'Meera S', avatar_url: null, bucket: 'mandatory_attended', is_mandatory: true },
+          { student_id: 'stu-3', name: 'Arun P', avatar_url: null, bucket: 'mandatory_attended', is_mandatory: true },
+        ],
+      },
+      client,
+    );
+
+    expect(rows.map((r) => r.student_id).sort()).toEqual(['stu-1', 'stu-3']);
+    expect(rows.find((r) => r.student_id === 'stu-1')!.paused).toBe(true);
+    expect(rows.find((r) => r.student_id === 'stu-3')!.paused).toBe(false);
+    expect(stats).toMatchObject({ students: 0, attempts: 0, average: null, passed: 0, roster_total: 1, missed: 1 });
+  });
+
   it('does not mark a student missed while they hold a window of their own', async () => {
     const client = stubClient(seedOneAttempt());
     const { rows } = await getTestResults(

@@ -38,5 +38,15 @@ export const featureSketch = (getToken: GetToken, id: string, classroomId: strin
 export const unfeatureSketch = (getToken: GetToken, id: string, classroomId: string) =>
   call<{ ok: true; failures: string[] }>(getToken, `/api/sketchbook/entries/${id}/feature?classroom=${encodeURIComponent(classroomId)}`, { method: 'DELETE' });
 
-export const setWeeklyGoal = (getToken: GetToken, classroomId: string, goal: number) =>
+export interface NudgeResponse {
+  counts: { total: number; chat: number; bot?: number; teams: number; inapp: number; email: number; failed: number; skipped: number; unreached: number };
+  results: Array<{ studentId: string; name: string | null; channel: string; reasons: Record<string, string> | null }>;
+  dropped: number;
+}
+
+/** Needs the teacher token (chat scopes): the message goes as the teacher's own Teams chat. */
+export const nudgeStudents = (getTeacherToken: GetToken, classroomId: string, studentIds: string[]) =>
+  call<NudgeResponse>(getTeacherToken, '/api/sketchbook/nudge', { method: 'POST', body: JSON.stringify({ classroom_id: classroomId, student_ids: studentIds }) });
+
+export const setWeeklyGoal =(getToken: GetToken, classroomId: string, goal: number) =>
   call<{ goal: number }>(getToken, `/api/sketchbook/settings?classroom=${encodeURIComponent(classroomId)}`, { method: 'PATCH', body: JSON.stringify({ weekly_goal: goal }) });

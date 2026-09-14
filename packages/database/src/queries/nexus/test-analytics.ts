@@ -147,7 +147,21 @@ export async function listStudentAttempts(
   });
 }
 
-/** Best percentage and attempt count per test for one student. */
+/**
+ * Best percentage and attempt count per test for one student. PAPER WIDE.
+ *
+ * Every official attempt on the paper, through every door. That is the right
+ * answer for "how has this student done on this paper" and the WRONG answer for
+ * "how many attempts have they spent on this run".
+ *
+ * NEVER compare this count against a placement's gating.attempt_limit. A paper
+ * is routinely several runs at once, so a chapter practised in Study Materials
+ * would spend the exam's single attempt. It did: students who had practised were
+ * shown "No attempts left" on an exam they had never sat (NXS-0125).
+ *
+ * For the per-door count, use loadRunSittings in run-sittings.ts, which is the
+ * rule the attempt route and every staff screen already follow.
+ */
 export async function getStudentTestStats(
   studentId: string,
   testIds: string[],
@@ -483,6 +497,8 @@ export interface NexusTestResultRow {
   sat_via: RunSittingSource | null;
   /** When the counted sitting was submitted, for "counted from Study Materials, 28 Aug". */
   sat_via_at: string | null;
+  /** A dormant student kept only because they really sat it. Never counted in stats. */
+  paused: boolean;
 }
 
 export type NexusTestResultStatus =
@@ -545,6 +561,13 @@ export interface NexusTestResultsOptions {
   windowsByStudent?: Record<string, string | null>;
   /** Students who have asked to be let back in and are still waiting. */
   pendingRequestStudentIds?: string[];
+  /**
+   * Dormant (paused) students on the roster. They appear in no list and no
+   * count, so a paused student with no sitting is dropped entirely. One who
+   * really sat it keeps a row tagged `paused`, so the marks are not lost, but is
+   * left out of every stat.
+   */
+  pausedStudentIds?: string[];
 }
 
 /**
@@ -624,6 +647,7 @@ function emptyRow(studentId: string): NexusTestResultRow {
     access_request_pending: false,
     sat_via: null,
     sat_via_at: null,
+    paused: false,
   };
 }
 
@@ -812,6 +836,18 @@ export async function getTestResults(
     });
   }
 
+  // Paused students leave the report unless they really sat it. Spliced in place
+  // so every read below sees the same list.
+  const pausedIds = new Set(opts?.pausedStudentIds || []);
+  if (pausedIds.size > 0) {
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i];
+      if (!pausedIds.has(r.student_id)) continue;
+      if (r.attempts > 0 || inProgressBy.has(r.student_id)) r.paused = true;
+      else rows.splice(i, 1);
+    }
+  }
+
   if (rows.length > 0) {
     // `name` is the display column on users; there is no full_name. Asking for
     // one makes PostgREST reject the whole request, and because this call used
@@ -838,9 +874,12 @@ export async function getTestResults(
   }
 
   rows.sort((a, b) => (b.best_percentage ?? -1) - (a.best_percentage ?? -1));
-  const scored = rows.filter((r) => r.best_percentage != null);
-  const firstScored = rows.filter((r) => r.first_percentage != null);
+  // A paused student's row is shown for their marks but never counted.
+  const counted = rows.filter((r) => !r.paused);
+  const scored = counted.filter((r) => r.best_percentage != null);
+  const firstScored = counted.filter((r) => r.first_percentage != null);
   const hasRoster = (opts?.roster?.length ?? 0) > 0;
+  const countedStudentIds = new Set(counted.map((r) => r.student_id));
 
   return {
     rows,
@@ -848,20 +887,20 @@ export async function getTestResults(
       // Unchanged, so the paper wide view reads exactly as it always has: these
       // four count the people who actually sat it, never the roster, even when
       // a roster has added rows for the students who did not.
-      students: rows.filter((r) => r.attempts > 0).length,
-      attempts: submitted.length,
+      students: counted.filter((r) => r.attempts > 0).length,
+      attempts: submitted.filter((a: any) => countedStudentIds.has(a.student_id)).length,
       average:
         scored.length > 0
           ? Math.round(scored.reduce((s, r) => s + (r.best_percentage || 0), 0) / scored.length)
           : null,
-      passed: rows.filter((r) => r.passed).length,
+      passed: counted.filter((r) => r.passed).length,
       // Null without a roster, because there is no list to be absent from.
-      roster_total: hasRoster ? rows.length : null,
-      mandatory: hasRoster ? rows.filter((r) => r.is_mandatory === true).length : null,
-      submitted: hasRoster ? rows.filter((r) => r.status === 'submitted').length : null,
-      not_started: hasRoster ? rows.filter((r) => r.status === 'not_started').length : null,
-      missed: hasRoster ? rows.filter((r) => r.status === 'missed').length : null,
-      excused: hasRoster ? rows.filter((r) => r.status === 'excused').length : null,
+      roster_total: hasRoster ? counted.length : null,
+      mandatory: hasRoster ? counted.filter((r) => r.is_mandatory === true).length : null,
+      submitted: hasRoster ? counted.filter((r) => r.status === 'submitted').length : null,
+      not_started: hasRoster ? counted.filter((r) => r.status === 'not_started').length : null,
+      missed: hasRoster ? counted.filter((r) => r.status === 'missed').length : null,
+      excused: hasRoster ? counted.filter((r) => r.status === 'excused').length : null,
       average_first:
         firstScored.length > 0
           ? Math.round(firstScored.reduce((s, r) => s + (r.first_percentage || 0), 0) / firstScored.length)

@@ -43,6 +43,10 @@ describe('feature-flags registry', () => {
     // defensible score until somebody has written the band descriptions and
     // chosen five anchor sheets by hand.
     'staff.drawing-eval',
+    // Messages students on a schedule. The first run after a deploy would reach
+    // most of a class at once, so it waits until someone has checked on
+    // /api/admin/delivery-health that the messages actually land.
+    'staff.sketchbook-reminders',
   ]);
 
   /**

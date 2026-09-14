@@ -202,6 +202,21 @@ export function shortDate(iso: string | null | undefined, now: number): string |
   return year === istParts(now).year ? label : `${label} ${year}`;
 }
 
+/**
+ * "18 Aug 2026" in Indian time, year and all.
+ *
+ * Separate from shortDate rather than a flag on it. Dropping the year in the
+ * current year is what keeps "Seen on 3 Jul" short, and the joined date is the
+ * one place that wants the opposite: it sits beside a "2026-27" cohort chip,
+ * where a bare "23 Mar" reads as any year at all.
+ */
+export function dateWithYear(iso: string | null | undefined): string | null {
+  const time = timeOf(iso);
+  if (time === null) return null;
+  const { day, month, year } = istParts(time);
+  return `${day} ${MONTHS[month - 1]} ${year}`;
+}
+
 /** Coarse on purpose: a teacher scanning a list needs "yesterday", not "19 hours ago". */
 export function seenAgo(iso: string | null | undefined, now: number): string | null {
   const time = timeOf(iso);
@@ -218,7 +233,7 @@ export function seenAgo(iso: string | null | undefined, now: number): string | n
 }
 
 export function statusLineOf(student: RosterStudent, now: number): StatusLine {
-  const joinedOn = shortDate(student.enrolled_at, now);
+  const joinedOn = dateWithYear(student.enrolled_at);
   const key = activityOf(student, now);
   const text =
     key === 'no_microsoft'

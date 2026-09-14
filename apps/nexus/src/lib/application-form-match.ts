@@ -112,3 +112,65 @@ export function matchApplicationForms(student: MatchStudent, forms: readonly For
     return b.reasons.length - a.reasons.length;
   });
 }
+
+// ── Field by field, for the review screen ────────────────────────────────────
+
+/**
+ * Whether one field agrees, for the "does this match?" block.
+ *
+ * 'unknown' is its own answer and by far the commonest: the Microsoft record
+ * carries no phone and no father's name, which is the very reason the form
+ * never reached Nexus. Showing "differs" there would invent a disagreement out
+ * of a blank.
+ */
+export type AgreementVerdict = 'same' | 'differs' | 'unknown';
+
+export interface FormAgreement {
+  name: AgreementVerdict;
+  phone: AgreementVerdict;
+  email: AgreementVerdict;
+  fatherName: AgreementVerdict;
+}
+
+function verdictOn(mine: readonly string[], theirs: readonly string[]): AgreementVerdict {
+  if (!mine.length || !theirs.length) return 'unknown';
+  return mine.some((value) => theirs.includes(value)) ? 'same' : 'differs';
+}
+
+/**
+ * The same comparison the matcher makes, reported per field instead of as a
+ * single strength. Shares nameWords/sameWord/normalizePhone with
+ * matchApplicationForms, so a row can never contradict the chip beside it.
+ *
+ * It can say MORE than the chips do, and deliberately. The matcher only looks at
+ * the father's name once the first name has already matched, because it is
+ * deciding whether to propose the form at all; here a person is reading the
+ * evidence, so a real surname match is reported even when the form's own name
+ * field is still the apply flow's "User" placeholder. Asserted in the tests as a
+ * one-way rule: every reason the matcher gives reads as 'same' here.
+ */
+export function describeAgreement(student: MatchStudent, form: FormIdentity): FormAgreement {
+  const phone = verdictOn(
+    student.phones.map(normalizePhone).filter((value): value is string => !!value),
+    form.phones.map(normalizePhone).filter((value): value is string => !!value),
+  );
+  const email = verdictOn(addresses(student.emails), addresses(form.emails));
+
+  const [first, ...rest] = nameWords(student.name);
+  const formWords = Array.from(new Set(form.names.flatMap((name) => nameWords(name))));
+  const fatherWords = nameWords(form.fatherName);
+
+  // A first name alone is never "the same name": that is the rule the matcher
+  // enforces, and the reason a sibling cannot be linked by accident.
+  let name: AgreementVerdict = 'unknown';
+  if (first && formWords.length) {
+    name = hasWord(formWords, first) && rest.some((word) => hasWord(formWords, word)) ? 'same' : 'differs';
+  }
+
+  let fatherName: AgreementVerdict = 'unknown';
+  if (rest.length && fatherWords.length) {
+    fatherName = rest.some((word) => hasWord(fatherWords, word)) ? 'same' : 'differs';
+  }
+
+  return { name, phone, email, fatherName };
+}

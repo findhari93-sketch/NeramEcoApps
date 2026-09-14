@@ -43,6 +43,12 @@ export interface EligibilityRosterStudent {
   name: string | null;
   avatar_url: string | null;
   enrolled_at: string;
+  /**
+   * Paused in this classroom. The loaders still return dormant students so a
+   * caller can keep the attempt a paused student really made; screens then hide
+   * the rest of them and leave them out of every count (founder rule, 2026-09-13).
+   */
+  dormant?: boolean;
 }
 
 /**
@@ -174,6 +180,7 @@ function toRosterStudents(members: RosterMember[]): EligibilityRosterStudent[] {
       name: m.user?.name || 'Student',
       avatar_url: m.user?.avatar_url ?? null,
       enrolled_at: m.enrolled_at,
+      dormant: m.participation_status === 'dormant',
     }))
     .filter((s) => Boolean(s.student_id));
 }

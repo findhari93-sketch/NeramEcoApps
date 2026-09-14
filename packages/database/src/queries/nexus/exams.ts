@@ -30,7 +30,7 @@ import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { createPlacement } from './test-repository';
 import { linkExamToClasses } from './exam-eligibility';
 import type { ExamTimerMode } from './exam-timer';
-import { loadRunSittings } from './run-sittings';
+import { loadRunSittings, loadRunAccessRequests, type RunAccessRequest } from './run-sittings';
 
 // The generated Supabase types do not know these tables until
 // `pnpm supabase:gen:types` is run against a database the exam migrations
@@ -246,6 +246,10 @@ export interface ResolvedExamWindow {
  * The reopen wins over the makeup when both are live. A reopen is always the
  * later, more deliberate act: a makeup is scheduled ahead of time, while a
  * reopen is someone responding to what actually happened.
+ *
+ * TWO callers pass a reopen today: the attempt route (the door itself) and
+ * listStudentExams (the student's own card). If you add a third screen that
+ * shows an exam window, it passes one too.
  *
  * The attempt route must call this BEFORE its generic available_until check.
  * That ordering is the easiest thing in this feature to get wrong: the shared
@@ -465,11 +469,15 @@ export interface NexusStudentExamView {
   scheduled_class_id: string;
   test_id: string;
   title: string | null;
-  /** The window that actually applies to THIS student: the main window, or a
-   * live makeup grant in its place. */
+  /** The window that actually applies to THIS student: the main window, a live
+   * makeup grant, or a reopen, in that order of precedence. */
   opens_at: string;
   closes_at: string;
   is_makeup: boolean;
+  /** True when the window above came from a reopen rather than a makeup. */
+  is_reopen: boolean;
+  /** Where this student's ask stands on the exam door. 'none' when they never asked. */
+  access_state: 'none' | 'pending' | 'granted';
   duration_minutes: number | null;
   passing_pct: number | null;
   results_state: ExamResultsState;
@@ -490,8 +498,15 @@ export interface NexusStudentExamView {
 
 /**
  * One student's view of every exam their classroom has had: the window that
- * actually applies to them (makeup-aware), whether they have sat it, and
- * their published result once results_state has moved off 'unpublished'.
+ * actually applies to them (makeup AND reopen aware), whether they have sat it,
+ * and their published result once results_state has moved off 'unpublished'.
+ *
+ * The reopen half was missing until 2026-09-12. A teacher opened the 18 Aug exam
+ * for 26 students, the roster showed a live window, and every one of those
+ * students saw a disabled button reading "Closed", because this function
+ * resolved the window without the grant (NXS-0125). resolveExamWindowForStudent
+ * takes the reopen as an argument precisely so this cannot happen, and its
+ * header says so. Pass it.
  *
  * Unlike getExamResults (the teacher's cohort-wide roster), this never exposes
  * another student's row, only the count needed for "Rank 3 of 42".
@@ -522,6 +537,8 @@ export async function listStudentExams(
   // else a teacher's count. Any submitted attempt on the paper used to count, so
   // a chapter practised the week before read here as the exam done.
   const attemptByExam = new Map<string, { id: string }>();
+  // The reopen (or pending ask) this student holds on each exam door.
+  const accessByExam = new Map<string, RunAccessRequest>();
   {
     const { data: placements, error } = await supabase
       .from(PLACEMENTS)
@@ -536,14 +553,21 @@ export async function listStudentExams(
 
     const anchored = exams.filter((e) => placementByClass.has(e.scheduled_class_id));
     if (anchored.length > 0) {
-      const byRun = await loadRunSittings(
-        anchored.map((e) => placementByClass.get(e.scheduled_class_id)),
-        { studentIds: [studentId] },
-        supabase,
-      );
+      const placementIds = anchored.map((e) => placementByClass.get(e.scheduled_class_id).id);
+      const [byRun, liveAccess] = await Promise.all([
+        loadRunSittings(
+          anchored.map((e) => placementByClass.get(e.scheduled_class_id)),
+          { studentIds: [studentId] },
+          supabase,
+        ),
+        loadRunAccessRequests(placementIds, [studentId], supabase),
+      ]);
       for (const exam of anchored) {
-        const mine = byRun.get(placementByClass.get(exam.scheduled_class_id).id)?.get(studentId);
+        const placementId = placementByClass.get(exam.scheduled_class_id).id;
+        const mine = byRun.get(placementId)?.get(studentId);
         if (mine?.first) attemptByExam.set(exam.id, { id: mine.first.id });
+        const access = liveAccess.get(placementId)?.get(studentId);
+        if (access) accessByExam.set(exam.id, access);
       }
     }
 
@@ -585,7 +609,10 @@ export async function listStudentExams(
   }
 
   return exams.map((exam) => {
-    const window = resolveExamWindowForStudent(exam, makeupMap.get(exam.id) || null);
+    const access = accessByExam.get(exam.id) ?? null;
+    // Granted only. A pending ask is a question, not a door.
+    const reopen = access?.status === 'granted' ? access : null;
+    const window = resolveExamWindowForStudent(exam, makeupMap.get(exam.id) || null, reopen);
     const attempt = attemptByExam.get(exam.id) || null;
 
     let result: NexusStudentExamView['result'] = null;
@@ -613,6 +640,8 @@ export async function listStudentExams(
       opens_at: window.opens_at,
       closes_at: window.closes_at,
       is_makeup: window.is_makeup,
+      is_reopen: window.is_reopen,
+      access_state: access?.status ?? 'none',
       duration_minutes: exam.duration_minutes,
       passing_pct: exam.passing_pct,
       results_state: exam.results_state,

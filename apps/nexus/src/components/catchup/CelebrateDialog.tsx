@@ -27,16 +27,30 @@ import {
   TextField,
   Typography,
 } from '@neram/ui';
+import { timeAgo } from './shared';
 
 export interface CelebrateOutcome {
   ok: boolean;
   named?: string[];
   error?: string | null;
+  /**
+   * False when the post went out but the record of it could not be saved, so
+   * the wall will still show these students as not congratulated.
+   */
+  recorded?: boolean;
+}
+
+/** A selected student who has been congratulated before. */
+export interface CelebrateRepeat {
+  name: string;
+  lastAt: string;
 }
 
 export interface CelebrateDialogProps {
   open: boolean;
   names: string[];
+  /** Selected students who were already congratulated, named in the warning. */
+  repeats?: CelebrateRepeat[];
   busy?: boolean;
   outcome: CelebrateOutcome | null;
   onClose: () => void;
@@ -46,6 +60,7 @@ export interface CelebrateDialogProps {
 export default function CelebrateDialog({
   open,
   names,
+  repeats = [],
   busy,
   outcome,
   onClose,
@@ -56,16 +71,24 @@ export default function CelebrateDialog({
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={{ fontWeight: 800 }}>Share in Teams</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 800 }}>Congratulate in Teams</DialogTitle>
       <DialogContent>
         {outcome ? (
-          <Alert severity={outcome.ok ? 'success' : 'error'} sx={{ borderRadius: 2 }}>
-            {outcome.ok
-              ? `Posted, naming ${outcome.named?.length ?? 0} ${
-                  (outcome.named?.length ?? 0) === 1 ? 'student' : 'students'
-                }.`
-              : outcome.error || 'Could not post to Teams.'}
-          </Alert>
+          <Stack spacing={1.5}>
+            <Alert severity={outcome.ok ? 'success' : 'error'} sx={{ borderRadius: 2 }}>
+              {outcome.ok
+                ? `Posted, naming ${outcome.named?.length ?? 0} ${
+                    (outcome.named?.length ?? 0) === 1 ? 'student' : 'students'
+                  }.`
+                : outcome.error || 'Could not post to Teams.'}
+            </Alert>
+            {outcome.ok && outcome.recorded === false && (
+              <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                The post went out, but Nexus could not save that these students were congratulated.
+                Select them and use Mark as congratulated so they are not named again.
+              </Alert>
+            )}
+          </Stack>
         ) : (
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
@@ -73,6 +96,12 @@ export default function CelebrateDialog({
               tagged so they land in each student&apos;s activity feed. Nothing about anyone who is
               behind is included.
             </Typography>
+
+            {repeats.length > 0 && (
+              <Alert severity="info" sx={{ borderRadius: 2 }}>
+                {describeRepeats(repeats)}
+              </Alert>
+            )}
 
             <Box
               sx={{
@@ -128,4 +157,20 @@ export default function CelebrateDialog({
       </DialogActions>
     </Dialog>
   );
+}
+
+/**
+ * Says who is being named again, and when they were last named, so a repeat is
+ * a choice the teacher sees rather than one they stumble into.
+ */
+export function describeRepeats(repeats: CelebrateRepeat[]): string {
+  if (repeats.length === 1) {
+    const [r] = repeats;
+    const when = timeAgo(r.lastAt);
+    return `${r.name} was already congratulated${when ? ` ${when}` : ''} and will be named again.`;
+  }
+  const names = repeats.map((r) => r.name);
+  const list =
+    names.length === 2 ? `${names[0]} and ${names[1]}` : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${list} were already congratulated and will be named again.`;
 }

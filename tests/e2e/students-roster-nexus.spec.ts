@@ -55,6 +55,33 @@ test.describe('Students roster', () => {
     }
   });
 
+  test('a roster row and the City-Wise screen name the same city for a student', async ({ request }) => {
+    test.skip(!classroomId || !token, 'Nexus test-login unavailable');
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const roster = await request.get(`${NEXUS}/api/students?classroom=${classroomId}&examBatch=all`, {
+      headers,
+      timeout: 90_000,
+    });
+    expect(roster.status()).toBe(200);
+    const located = (await roster.json()).students.filter((s: any) => s.city);
+    test.skip(located.length === 0, 'No student on this roster has a city on their form');
+
+    // Both go through pickStudentPlace, so a student with several application
+    // forms cannot be filed under one city here and another one there.
+    const geo = await request.get(`${NEXUS}/api/students/city-wise`, { headers, timeout: 90_000 });
+    expect(geo.status()).toBe(200);
+    const cities = new Set((await geo.json()).cities.map((c: any) => c.city));
+    expect(cities.size).toBeGreaterThan(0);
+
+    for (const student of located.slice(0, 10)) {
+      // Title-cased on both sides, never the raw "madurai" the form was typed in.
+      expect(student.city).toBe(student.city.trim());
+      expect(student.city[0]).toBe(student.city[0].toUpperCase());
+      expect(cities, `${student.name} is in ${student.city} on the roster`).toContain(student.city);
+    }
+  });
+
   test.describe('on a phone', () => {
     test.beforeEach(async ({ page }) => {
       const ok = await injectAuthForPage(page, 'teacher');
@@ -137,6 +164,62 @@ test.describe('Students roster', () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute('aria-expanded', 'true');
       expect(await fitsWidth(page)).toBe(true);
+    });
+  });
+
+  /**
+   * The laptop band the other projects miss.
+   *
+   * nexus-chrome runs at 1280 and nexus-mobile at 393, and the bug lived between
+   * them: with the sidebar expanded, a ~1024px window leaves the cards about
+   * 700px, while a viewport media query still asked for three columns. Measuring
+   * the DOCUMENT cannot catch it either, because html, body and main all carry
+   * overflow-x: hidden, so the third card was clipped rather than scrollable and
+   * document.scrollWidth never grew. So: measure the grid against itself.
+   */
+  test.describe('on a laptop, with the sidebar taking its share', () => {
+    test.use({ viewport: { width: 1024, height: 800 } });
+
+    test.beforeEach(async ({ page }) => {
+      const ok = await injectAuthForPage(page, 'teacher');
+      test.skip(!ok, 'Nexus test-login unavailable');
+      await page.goto(`${NEXUS}/teacher/students`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+      await expect(page.getByPlaceholder(SEARCH_PLACEHOLDER)).toBeVisible({ timeout: 60_000 });
+      await expect(studentRows(page).first()).toBeVisible({ timeout: 60_000 });
+      await page.getByRole('button', { name: 'Card grid' }).click();
+      await expect(studentRows(page).first()).toBeVisible({ timeout: 60_000 });
+    });
+
+    test('every card sits inside the grid, at every width down to the breakpoint', async ({ page }) => {
+      for (const width of [1024, 980, 940, 900, 880]) {
+        await page.setViewportSize({ width, height: 800 });
+        // Let the container query settle before measuring.
+        await page.waitForTimeout(150);
+
+        const grid = studentRows(page).first().locator('xpath=..');
+        const overflow = await grid.evaluate((el) => el.scrollWidth - el.clientWidth);
+        expect(overflow, `the grid overflows its own box at ${width}px`).toBeLessThanOrEqual(1);
+
+        const escaped = await grid.evaluate((el) => {
+          const right = el.getBoundingClientRect().right;
+          return Array.from(el.children).filter((c) => c.getBoundingClientRect().right > right + 1).length;
+        });
+        expect(escaped, `cards reach past the right edge at ${width}px`).toBe(0);
+      }
+    });
+
+    test('the column count follows the container, not the window', async ({ page }) => {
+      const columnsAt = async (width: number) => {
+        await page.setViewportSize({ width, height: 800 });
+        await page.waitForTimeout(150);
+        const grid = studentRows(page).first().locator('xpath=..');
+        return grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+      };
+
+      // A 260px sidebar plus 64px of padding leaves well under 900px here, so the
+      // cards must not be asking for three columns.
+      expect(await columnsAt(1024)).toBeLessThanOrEqual(2);
+      expect(await columnsAt(1440)).toBeGreaterThanOrEqual(2);
     });
   });
 });

@@ -46,6 +46,17 @@ describe('withPayloadDefaults', () => {
     expect(data.totals.byBucket.not_started).toBe(0);
   });
 
+  it('gives rows cached before congratulations were recorded a null celebration', () => {
+    // A missing key must read as "never congratulated", and the payload-level
+    // flag as "the records were read", so the wall still pre-selects.
+    const data = withPayloadDefaults({
+      students: [{ student: { id: 's1' }, bucket: 'all_clear' } as any],
+    })!;
+
+    expect(data.students[0].celebration).toBeNull();
+    expect(data.celebrationsUnavailable).toBe(false);
+  });
+
   it('leaves a complete payload alone', () => {
     const full: CachedPayload = {
       ...EMPTY_PAYLOAD,

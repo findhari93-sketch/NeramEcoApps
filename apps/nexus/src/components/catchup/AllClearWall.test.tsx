@@ -8,10 +8,11 @@
  * so that turning it into one has to be a deliberate act with a failing test
  * attached.
  */
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import AllClearWall from './AllClearWall';
 import { EMPTY_STANDING } from '@/lib/catchup-standing';
+import type { CelebrationInfo } from '@/lib/catchup-celebration';
 import type { Row } from './types';
 
 function row(name: string, over: Partial<Row['standing']> = {}): Row {
@@ -102,10 +103,11 @@ describe('AllClearWall', () => {
 
   it('offers the Teams share only when there is a handler for it', () => {
     const { rerender } = render(<AllClearWall students={[row('Alpha')]} />);
-    expect(screen.queryByRole('button', { name: /Share in Teams/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /in Teams/i })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
 
     rerender(<AllClearWall students={[row('Alpha')]} onShare={() => {}} />);
-    expect(screen.getByRole('button', { name: /Share in Teams/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Congratulate \(1\) in Teams/i })).toBeTruthy();
   });
 
   it('hands the share the same order it displays', () => {
@@ -123,8 +125,137 @@ describe('AllClearWall', () => {
         }}
       />,
     );
-    screen.getByRole('button', { name: /Share in Teams/i }).click();
+    fireEvent.click(screen.getByRole('button', { name: /Congratulate \(2\) in Teams/i }));
     expect(handed).toEqual(['Newer', 'Older']);
+  });
+
+  describe('who has already been congratulated', () => {
+    const congratulated = (name: string, over: Partial<CelebrationInfo> = {}) => ({
+      ...row(name, { clearedTotal: 2, lastClearedAt: '2026-09-09T10:00:00+05:30' }),
+      celebration: {
+        state: 'congratulated' as const,
+        lastAt: '2026-09-10T06:00:00+00:00',
+        source: 'teams' as const,
+        count: 2,
+        ...over,
+      },
+    });
+    const fresh = (name: string) =>
+      row(name, { clearedTotal: 1, lastClearedAt: '2026-09-12T10:00:00+05:30' });
+
+    function checkbox(name: string) {
+      return screen.getByRole('checkbox', { name: `Select ${name}` }) as HTMLInputElement;
+    }
+
+    it('splits the wall, ticks only the new student, and shares only them', () => {
+      // The teacher's exact case: two named twice already, one new.
+      let handed: string[] = [];
+      render(
+        <AllClearWall
+          students={[congratulated('Humaira'), congratulated('Bavishiya'), fresh('Poheem')]}
+          onShare={(rows) => {
+            handed = rows.map((r) => r.student.name || '');
+          }}
+          onMarkCelebrated={() => {}}
+        />,
+      );
+
+      expect(screen.getByText('Not congratulated yet (1)')).toBeTruthy();
+      expect(screen.getByText('Already congratulated (2)')).toBeTruthy();
+      expect(checkbox('Poheem').checked).toBe(true);
+      expect(checkbox('Humaira').checked).toBe(false);
+      expect(checkbox('Bavishiya').checked).toBe(false);
+      expect(screen.getAllByText(/Congratulated in Teams .* \(2 times\)/).length).toBe(2);
+
+      fireEvent.click(screen.getByRole('button', { name: /Congratulate \(1\) in Teams/i }));
+      expect(handed).toEqual(['Poheem']);
+    });
+
+    it('lets a teacher deliberately add someone already congratulated', () => {
+      let handed: string[] = [];
+      render(
+        <AllClearWall
+          students={[congratulated('Humaira'), fresh('Poheem')]}
+          onShare={(rows) => {
+            handed = rows.map((r) => r.student.name || '');
+          }}
+        />,
+      );
+      fireEvent.click(checkbox('Humaira'));
+      fireEvent.click(screen.getByRole('button', { name: /Congratulate \(2\) in Teams/i }));
+      expect(handed).toEqual(['Poheem', 'Humaira']);
+    });
+
+    it('disables both actions when nothing is ticked', () => {
+      render(
+        <AllClearWall
+          students={[congratulated('Humaira')]}
+          onShare={() => {}}
+          onMarkCelebrated={() => {}}
+        />,
+      );
+      expect(screen.getByText(/Everyone here has been congratulated/)).toBeTruthy();
+      const share = screen.getByRole('button', { name: /Congratulate in Teams/i }) as HTMLButtonElement;
+      const mark = screen.getByRole('button', { name: /Mark as congratulated/i }) as HTMLButtonElement;
+      expect(share.disabled).toBe(true);
+      expect(mark.disabled).toBe(true);
+    });
+
+    it('marks the selection without posting', () => {
+      let marked: string[] = [];
+      render(
+        <AllClearWall
+          students={[fresh('Poheem'), fresh('Jeshurun')]}
+          onShare={() => {}}
+          onMarkCelebrated={(rows) => {
+            marked = rows.map((r) => r.student.name || '');
+          }}
+        />,
+      );
+      fireEvent.click(checkbox('Jeshurun'));
+      fireEvent.click(screen.getByRole('button', { name: /Mark as congratulated/i }));
+      expect(marked).toEqual(['Poheem']);
+    });
+
+    it('clears and re-selects the new group with one control', () => {
+      render(<AllClearWall students={[fresh('Poheem'), fresh('Jeshurun')]} onShare={() => {}} />);
+      fireEvent.click(screen.getByRole('button', { name: /^Clear$/ }));
+      expect(checkbox('Poheem').checked).toBe(false);
+      expect(checkbox('Jeshurun').checked).toBe(false);
+      fireEvent.click(screen.getByRole('button', { name: /^Select all$/ }));
+      expect(checkbox('Poheem').checked).toBe(true);
+    });
+
+    it('puts a student who cleared again back with the new ones, and says why', () => {
+      render(
+        <AllClearWall
+          students={[congratulated('Humaira', { state: 'cleared_again' })]}
+          onShare={() => {}}
+        />,
+      );
+      expect(screen.getByText('Not congratulated yet (1)')).toBeTruthy();
+      expect(screen.getByText('Cleared again since last congratulated')).toBeTruthy();
+      expect(checkbox('Humaira').checked).toBe(true);
+    });
+
+    it('says a mark was a mark, not a Teams post', () => {
+      render(
+        <AllClearWall
+          students={[congratulated('Humaira', { source: 'marked', count: 1 })]}
+          onShare={() => {}}
+        />,
+      );
+      expect(screen.getByText(/^Marked as congratulated/)).toBeTruthy();
+    });
+
+    it('ticks nobody when the records could not be read', () => {
+      // Otherwise a missing table would pre-select, and re-post, everyone.
+      render(
+        <AllClearWall students={[fresh('Poheem')]} onShare={() => {}} celebrationsUnavailable />,
+      );
+      expect(screen.getByText(/Could not check who has already been congratulated/)).toBeTruthy();
+      expect(checkbox('Poheem').checked).toBe(false);
+    });
   });
 
   it('collapses a big cohort behind one control rather than scrolling forever', () => {

@@ -19,7 +19,9 @@ export async function POST(request: NextRequest) {
     const user = await getRequestUser(request.headers.get('Authorization'));
     if (!isAdmin(user)) throw new ApiError('Not authorized', 403);
 
-    const catalogAppId = process.env.TEAMS_APP_CATALOG_ID;
+    // Trimmed, as in nudge-delivery.ts: `echo ... | vercel env add` on Windows adds
+    // a trailing newline, and an id with a newline in it matches no app.
+    const catalogAppId = (process.env.TEAMS_APP_CATALOG_ID || '').trim();
     if (!catalogAppId) {
       return NextResponse.json(
         { error: 'TEAMS_APP_CATALOG_ID is not configured. Upload the Teams app and set it first.' },

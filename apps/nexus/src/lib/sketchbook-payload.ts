@@ -1,9 +1,14 @@
 import {
   countSketches, firstAndLatestSketch, firstSeenBy, getFeatureOptOut, getSketchbookGoalHistory,
-  getStudentPrimaryClassroom, listLiveFeatures, listPracticeDates, listSketchbookMonth,
+  listLiveFeatures, listSketchbookMonth,
   type SketchbookFeatureFact, type SketchbookSketchRow,
 } from '@neram/database/queries/nexus';
 import { computeRhythm, daysBetween, istDate, type Rhythm } from '@/lib/sketchbook-rhythm';
+import { clampDates, proratedGoal, trackingStart } from '@/lib/sketchbook-status';
+import { loadDrawingDays, loadStudentRhythmContext, type StudentRhythmContext } from '@/lib/drawing-activity-store';
+
+/** Launch day of the sketchbook, the floor for a student with no live classroom. */
+const SKETCHBOOK_LAUNCH = '2026-09-12';
 
 export interface SketchbookPayload {
   rhythm: Rhythm;
@@ -17,31 +22,54 @@ export interface SketchbookPayload {
   featureOptOut: boolean;
 }
 
+/**
+ * The student's rhythm, computed the same way the teacher's Class rhythm screen
+ * computes it: any drawing upload is a practice day, nothing before their own
+ * tracking start counts, and a week tracking joined part way through has a
+ * smaller goal. Shared by the payload and the add-sketch response.
+ */
+export async function loadStudentRhythm(
+  studentId: string,
+  today: string,
+): Promise<{ rhythm: Rhythm; context: StudentRhythmContext | null; dates: string[]; start: string }> {
+  const context = await loadStudentRhythmContext(studentId);
+  const start = context
+    ? trackingStart({ classroomStartedOn: context.startedOn, enrolledAt: context.enrolledAt, reactivatedOn: context.reactivatedOn })
+    : SKETCHBOOK_LAUNCH;
+  const [days, history] = await Promise.all([
+    loadDrawingDays([studentId], start),
+    context ? getSketchbookGoalHistory(context.classroomId) : Promise.resolve([]),
+  ]);
+  const dates = clampDates(days[studentId] || [], start, today);
+  const rhythm = computeRhythm(dates, today, history, context?.goal ?? 3);
+  const goal = proratedGoal(rhythm.week.goal, rhythm.week.start, start);
+  if (goal !== rhythm.week.goal) {
+    rhythm.week = { ...rhythm.week, goal, met: rhythm.week.count >= goal };
+  }
+  return { rhythm, context, dates, start };
+}
+
 /** One assembly for the student's own view and the teacher's peek, so they never drift. */
 export async function buildSketchbookPayload(
   studentId: string,
   month: string,
   opts: { summaryOnly: boolean; today: string },
 ): Promise<SketchbookPayload> {
-  const [classroom, practiceDates, total, optOut] = await Promise.all([
-    getStudentPrimaryClassroom(studentId),
-    listPracticeDates(studentId),
+  const [{ rhythm, context, dates }, total, optOut] = await Promise.all([
+    loadStudentRhythm(studentId, opts.today),
     countSketches(studentId),
     getFeatureOptOut(studentId),
   ]);
-  const history = classroom ? await getSketchbookGoalHistory(classroom.id) : [];
-  const goal = classroom?.sketchbook_weekly_goal ?? 3;
-  const rhythm = computeRhythm(practiceDates, opts.today, history, goal);
 
   const base: SketchbookPayload = {
     rhythm,
     goal: rhythm.week.goal,
-    classroom: classroom ? { id: classroom.id, name: classroom.name } : null,
+    classroom: context ? { id: context.classroomId, name: context.classroomName } : null,
     totalSketches: total,
     thenAndNow: null,
     month,
     sketches: [],
-    practiceDaysThisMonth: practiceDates.filter((d) => d.startsWith(month)).length,
+    practiceDaysThisMonth: dates.filter((d) => d.startsWith(month)).length,
     featureOptOut: optOut,
   };
   if (opts.summaryOnly) return base;

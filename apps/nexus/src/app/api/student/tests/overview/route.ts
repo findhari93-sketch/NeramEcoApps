@@ -8,11 +8,13 @@ import {
   listStudentAttempts,
   listStudentExams,
   listTestFolderTree,
+  loadRunSittings,
   loadStudentExamFacts,
   NEXUS_GATED_TEST_KINDS,
 } from '@neram/database';
 import { buildExamEligibilityRoster, type EligibilityRosterRow } from '@/lib/exam-eligibility-roster';
 import { decideCatchupGate, type CatchupGateDecision } from '@/lib/catchup-test-gate';
+import { resolveStudentTestCard } from '@/lib/student-test-card-state';
 
 /**
  * GET /api/student/tests/overview?classroom=<id>
@@ -211,7 +213,54 @@ export async function GET(request: NextRequest) {
       questionCounts = counts;
     }
 
+    // Paper wide: every official attempt on the paper, through any door. Used
+    // ONLY for papers with no placement (My Tests) and for the practice footnote.
     const stats = await getStudentTestStats(studentId, allTestIds, supabase);
+
+    /**
+     * Attempts and best score PER DOOR, which is the only count a placement's
+     * attempt_limit may be compared against.
+     *
+     * One paper is routinely several runs at once: a chapter in Study Materials
+     * and a one-shot exam. Counting every attempt on the paper against the
+     * exam's limit told students who had practised the chapter that they had
+     * "No attempts left" on an exam they had never sat, and printed a practice
+     * score as their exam best (NXS-0125). The attempt route has enforced per
+     * door since 2026-08 (startOrResumeAttempt); this display was left behind.
+     *
+     * Same rule as every staff screen, from run-sittings.ts, so the student's
+     * card and the invigilation roster can no longer disagree about who sat what.
+     */
+    const doorPlacements = [...placementRows, ...classTestPlacements, ...examPlacements];
+    const doorStats = new Map<
+      string,
+      { attempts: number; best_percentage: number | null; last_submitted_at: string | null }
+    >();
+    if (doorPlacements.length > 0) {
+      const byRun = await loadRunSittings<any>(
+        doorPlacements as any,
+        { studentIds: [studentId], columns: 'percentage' },
+        supabase,
+      );
+      for (const [placementId, byStudent] of byRun) {
+        const mine = byStudent.get(studentId);
+        if (!mine) continue;
+        let attempts = 0;
+        let best: number | null = null;
+        let last: string | null = null;
+        for (const a of mine.attempts) {
+          // An in-progress attempt is not a spent one. It reaches this list only
+          // from the run's own door, and counting it would lock a student out of
+          // the sitting they are in the middle of.
+          if (a.status !== 'submitted' && a.status !== 'graded') continue;
+          attempts += 1;
+          const pct = a.percentage == null ? null : Number(a.percentage);
+          if (pct != null) best = best == null ? pct : Math.max(best, pct);
+          if (a.submitted_at && (!last || a.submitted_at > last)) last = a.submitted_at;
+        }
+        doorStats.set(placementId, { attempts, best_percentage: best, last_submitted_at: last });
+      }
+    }
     const folderNames = new Map<string, string>();
     try {
       const { tree } = await listTestFolderTree({ scope: 'staff' }, supabase);
@@ -227,13 +276,37 @@ export async function GET(request: NextRequest) {
       // Folder names are a nicety. Losing them must not cost the student the page.
     }
 
+    /**
+     * The card's resolved answer, attached to every item.
+     *
+     * ADDITIVE. Every field these shapers already returned is still returned,
+     * so anything still reading the raw dates keeps working while the client
+     * moves over.
+     *
+     * Resolved HERE and not in the browser for two reasons. The client was
+     * comparing PostgREST timestamp strings through `new Date(...)`, which
+     * parses differently across browsers, so one card could disable itself on a
+     * phone and not on a laptop. And four independent derivations of "can I do
+     * this now" could contradict each other, which is exactly what shipped: a
+     * banner promising an unlock above a button saying "Closed".
+     */
+    const nowMs = Date.parse(now);
+    const withCard = <T extends Record<string, unknown>>(item: T) => ({
+      ...item,
+      card: resolveStudentTestCard(item as never, nowMs),
+    });
+
     const shape = (testId: string, placement?: any) => {
       const t = testMap.get(testId);
       if (!t || !t.is_active || !t.is_published) return null;
       // Gated papers must not appear in a generic list: opening one here would
       // skip the unlock check that is the entire point of them.
       if ((NEXUS_GATED_TEST_KINDS as readonly string[]).includes(t.test_kind)) return null;
-      const s = stats.get(testId);
+      const paper = stats.get(testId);
+      // The door being opened, never the paper. A paper with no placement (My
+      // Tests) has no door, so the paper wide answer is the best that can be said.
+      const door = placement?.id ? doorStats.get(placement.id) : undefined;
+      const s = door ?? paper;
       const attempts = s?.attempts ?? 0;
       const from = placement?.available_from ?? null;
       const until = placement?.available_until ?? null;
@@ -246,7 +319,7 @@ export async function GET(request: NextRequest) {
       const status: 'upcoming' | 'closed' | 'done' | 'open' | 'missed' =
         from && from > now ? 'upcoming' : until && until < now ? 'closed' : attempts > 0 ? 'done' : 'open';
 
-      return {
+      return withCard({
         id: t.id,
         title: t.title,
         description: t.description,
@@ -265,6 +338,15 @@ export async function GET(request: NextRequest) {
         attempts,
         best_percentage: s?.best_percentage ?? null,
         last_submitted_at: s?.last_submitted_at ?? null,
+        /**
+         * Attempts on this PAPER through some other door, when this student has
+         * never been through THIS one. Named so it can never be mistaken for the
+         * score on this run, which is exactly the confusion it exists to end.
+         */
+        practice_elsewhere:
+          door && door.attempts === 0 && (paper?.attempts ?? 0) > 0
+            ? { attempts: paper!.attempts, best_percentage: paper!.best_percentage ?? null }
+            : null,
         status,
         // Class-test fields, null on everything else so the page never has to
         // check which kind of item it is holding.
@@ -272,7 +354,7 @@ export async function GET(request: NextRequest) {
         required: null as boolean | null,
         class_id: null as string | null,
         class_title: null as string | null,
-      };
+      });
     };
 
     /**
@@ -293,7 +375,7 @@ export async function GET(request: NextRequest) {
       const best = item.best_percentage;
       const passed = bar == null ? item.attempts > 0 : best != null && best >= bar;
 
-      return {
+      return withCard({
         ...item,
         // Not 'done' merely because they opened it. A required paper with a pass
         // mark is done when it is passed, and calling a failed attempt "done"
@@ -303,7 +385,7 @@ export async function GET(request: NextRequest) {
         required: gating.required !== false,
         class_id: p.context_id,
         class_title: cls?.title ?? null,
-      };
+      });
     };
 
     /**
@@ -342,7 +424,7 @@ export async function GET(request: NextRequest) {
               ? 'missed'
               : 'open';
 
-      return {
+      return withCard({
         ...item,
         status,
         is_exam: true as const,
@@ -357,6 +439,14 @@ export async function GET(request: NextRequest) {
         // makeup sitting, and the published result once results_state moves off
         // 'unpublished'. A null exam_result means "not out yet", not an error.
         is_makeup: ev?.is_makeup ?? false,
+        /**
+         * Whether this student is inside a window somebody opened for them, and
+         * where their own ask stands. The card needs both to say something true:
+         * a reopened student was being shown "Closed" on a window that had been
+         * replaced days earlier (NXS-0125).
+         */
+        is_reopen: ev?.is_reopen ?? false,
+        access_state: ev?.access_state ?? 'none',
         results_state: ev?.results_state ?? 'unpublished',
         exam_result: ev?.result ?? null,
         // Additive, and null on every exam with nothing linked -- same
@@ -379,7 +469,7 @@ export async function GET(request: NextRequest) {
          * this page was already loaded above for the bucket.
          */
         catchup_gate: eligibility ? nullIfOpen(decideCatchupGate(eligibility.evidence)) : null,
-      };
+      });
     };
 
     const due: any[] = [];

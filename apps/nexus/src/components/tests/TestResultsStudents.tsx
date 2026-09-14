@@ -27,19 +27,16 @@ import {
   Chip,
   Divider,
   IconButton,
-  InputAdornment,
   LinearProgress,
   Menu,
   MenuItem,
   Paper,
-  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
-import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
@@ -47,6 +44,9 @@ import ChatOutlinedIcon from '@mui/icons-material/ChatOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import StudentStatFilters, { type StatFilterTile, type StatTone } from '@/components/tests/StudentStatFilters';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import type { ExtraSort, ListAccessors } from '@/lib/student-list-view';
 import {
   RESULT_FILTER_EMPTY,
   RESULT_FILTER_LABELS,
@@ -85,6 +85,8 @@ export interface StudentResultRow {
    */
   sat_via?: 'run' | 'window' | 'teacher' | null;
   sat_via_at?: string | null;
+  /** A dormant student shown only because they really sat it. Not in any count. */
+  paused?: boolean;
 }
 
 export interface StudentResultStats {
@@ -102,7 +104,37 @@ export interface StudentResultStats {
   average_first_marks: { score: number; total: number } | null;
   average_best_marks: { score: number; total: number } | null;
   pass_mark_pct: number | null;
+  /** Paused students the server left out entirely (no sitting). */
+  paused_hidden?: number;
 }
+
+type ScoreSort = 'score_high' | 'score_low';
+
+const ACCESSORS: ListAccessors<StudentResultRow> = {
+  id: (r) => r.student_id,
+  name: (r) => r.student_name,
+};
+
+/** Unscored students always sort after scored ones, whichever direction. */
+function scoreSorts(scoreShown: 'first' | 'best'): ExtraSort<StudentResultRow, ScoreSort>[] {
+  const pct = (r: StudentResultRow) => (scoreShown === 'first' ? r.first_percentage : r.best_percentage);
+  const cmp = (dir: 1 | -1) => (a: StudentResultRow, b: StudentResultRow) => {
+    const pa = pct(a);
+    const pb = pct(b);
+    if (pa == null && pb == null) return 0;
+    if (pa == null) return 1;
+    if (pb == null) return -1;
+    return dir * (pa - pb);
+  };
+  return [
+    { key: 'score_high', label: 'Score high to low', compare: cmp(-1) },
+    { key: 'score_low', label: 'Score low to high', compare: cmp(1) },
+  ];
+}
+
+const FIRST_SORTS = scoreSorts('first');
+const BEST_SORTS = scoreSorts('best');
+const LIST_URL_KEYS = { q: 'sq', sort: 'ssort', stage: 'sstage', status: 'sstatus' };
 
 const BUCKET_LABELS: Record<string, string> = {
   mandatory_attended: 'In the class',
@@ -211,7 +243,6 @@ export default function TestResultsStudents({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  const [search, setSearch] = useState('');
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null);
 
   // Group actions only exist on a run: there is no window to open and no class
@@ -222,16 +253,38 @@ export default function TestResultsStudents({
   const averageMarks = scoreShown === 'first' ? stats?.average_first_marks : stats?.average_best_marks;
   const passMark = stats?.pass_mark_pct == null ? null : Math.round(stats.pass_mark_pct);
 
-  // Counts come off the whole run, not the search, so a tile does not change
-  // its number while somebody types a name.
+  // The shared student list: ranked search, sort, the stage ring filter, and no
+  // dormant students. The result tiles stay this screen's own filter (prefilter);
+  // a paused student who really sat it shows only under Everyone, tagged.
+  const prefilter = useMemo(
+    () => (r: StudentResultRow) => (r.paused ? filter === 'all' : matchesResultFilter(r, filter, { average, scoreShown })),
+    [filter, average, scoreShown],
+  );
+  const keepPaused = useMemo(() => (r: StudentResultRow) => r.paused === true, []);
+  const view = useStudentListView<StudentResultRow, ScoreSort>({
+    rows,
+    accessors: ACCESSORS,
+    extraSorts: scoreShown === 'first' ? FIRST_SORTS : BEST_SORTS,
+    defaultSort: 'score_high',
+    prefilter,
+    keepDormant: keepPaused,
+    urlKeys: LIST_URL_KEYS,
+    storageKey: 'nexus:test-results-students:sort',
+  });
+  const search = view.query;
+
+  // Counts come off the whole run (after the stage filter), not the search, so a
+  // tile does not change its number while somebody types a name. Paused rows are
+  // never counted.
   const counts = useMemo(
-    () => countByResultFilter(rows, { average, scoreShown }),
-    [rows, average, scoreShown],
+    () => countByResultFilter(view.staged.filter((r) => !r.paused), { average, scoreShown }),
+    [view.staged, average, scoreShown],
   );
 
   const tiles: StatFilterTile[] = useMemo(() => {
-    const notStarted = rows.filter((r) => r.status === 'not_started').length;
-    const missed = rows.filter((r) => r.status === 'missed').length;
+    const counted = view.staged.filter((r) => !r.paused);
+    const notStarted = counted.filter((r) => r.status === 'not_started').length;
+    const missed = counted.filter((r) => r.status === 'missed').length;
     const hints: Record<ResultFilter, string> = {
       all: isRunScoped ? 'set for this run' : `${stats?.attempts ?? 0} attempts, retakes included`,
       did: `of ${counts.all}`,
@@ -250,16 +303,9 @@ export default function TestResultsStudents({
       hint: hints[key],
       tone: TILE_TONES[key],
     }));
-  }, [rows, counts, isRunScoped, stats?.attempts, passMark, average]);
+  }, [view.staged, counts, isRunScoped, stats?.attempts, passMark, average]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return rows.filter(
-      (r) =>
-        matchesResultFilter(r, filter, { average, scoreShown }) &&
-        (!term || (r.student_name || '').toLowerCase().includes(term)),
-    );
-  }, [rows, filter, search, average, scoreShown]);
+  const filtered = view.shown;
 
   const groups = useMemo(
     () =>
@@ -308,23 +354,9 @@ export default function TestResultsStudents({
     <Box>
       <StudentStatFilters tiles={tiles} active={filter} onChange={onFilterChange} />
 
-      <Box sx={{ display: 'flex', gap: 1, mb: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
-        <TextField
-          size="small"
-          placeholder="Search students"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          inputProps={{ 'aria-label': 'Search students' }}
-          sx={{ flex: 1, minWidth: 180 }}
-          InputProps={{
-            sx: { minHeight: 44, fontSize: 16 },
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchOutlinedIcon sx={{ fontSize: 18 }} />
-              </InputAdornment>
-            ),
-          }}
-        />
+      <StudentListToolbar view={view} searchLabel="Search students" />
+
+      <Box sx={{ display: 'flex', gap: 1, mb: 0.75, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
         {isRunScoped && (
           <ToggleButtonGroup
             size="small"
@@ -474,9 +506,20 @@ export default function TestResultsStudents({
                       )}
                       <StudentAvatar userId={r.student_id} name={r.student_name} src={r.avatar_url} size={32} />
                       <Box sx={{ flex: 1, minWidth: 140 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                          {r.student_name || 'Unknown student'}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                            {r.student_name || 'Unknown student'}
+                          </Typography>
+                          {r.paused && (
+                            <Chip
+                              size="small"
+                              label="Paused"
+                              title="Dormant. Shown because they sat it; not counted in any number above."
+                              aria-label="Paused, not counted"
+                              sx={{ height: 22, fontWeight: 700, bgcolor: 'action.selected', color: 'text.secondary' }}
+                            />
+                          )}
+                        </Box>
                         <Typography variant="caption" color="text.secondary">
                           {sat ? (
                             <>
@@ -631,6 +674,8 @@ export default function TestResultsStudents({
           ))
         )}
       </Paper>
+
+      <PausedFootnote count={(stats?.paused_hidden ?? 0) + view.pausedHidden} />
 
       {canAct && selecting && (
         <Box

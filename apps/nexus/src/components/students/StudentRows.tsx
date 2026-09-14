@@ -113,7 +113,10 @@ export function StudentCard(props: StudentRowProps) {
       onToggleSelect={props.onToggleSelect}
       onOpen={props.onOpen}
       dormant={dormant}
-      sx={{ p: 2, pr: 1, borderRadius: 2.5, height: '100%', display: 'flex', flexDirection: 'column', gap: 1.25 }}
+      // minWidth 0 is what stops a grid track being inflated past its share by
+      // something inside the card. Without it a 1fr column grows to fit its
+      // contents and the last card in the row lands off the page.
+      sx={{ p: 2, pr: 1, borderRadius: 2.5, height: '100%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.25 }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
         <StudentStageAvatar

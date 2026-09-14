@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { sendNudge } from '@/lib/nudge-delivery';
 
 /**
  * GET /api/documents/exam-broadcasts?classroom={id}&exam_type=jee
@@ -102,25 +103,17 @@ export async function POST(request: NextRequest) {
         .eq('is_writing', true);
 
       if (registrations && registrations.length > 0) {
-        // Try to create notifications for each student
-        const notifications = registrations.map((reg: any) => ({
-          user_id: reg.student_id,
-          type: 'scorecard_released',
-          title: `${exam_type.toUpperCase()} Scorecard Released`,
-          message: message || `${exam_type.toUpperCase()} exam scorecards are now available. Please upload your scorecard.`,
-          metadata: {
-            exam_type,
-            broadcast_id: data.id,
-            classroom_id,
-          },
-          is_read: false,
-        }));
-
-        try {
-          await (supabase as any).from('user_notifications').insert(notifications);
-        } catch {
-          console.warn('Could not create notifications, user_notifications table may not exist');
-        }
+        // Through the one door. This used to insert a `type` column that does not
+        // exist; the error was never checked, so nobody was ever told.
+        const { counts } = await sendNudge({
+          studentIds: [...new Set<string>(registrations.map((reg: any) => reg.student_id))],
+          subject: `${String(exam_type).toUpperCase()} scorecard released`,
+          plain: message || `${String(exam_type).toUpperCase()} exam scorecards are now available. Please upload your scorecard.`,
+          eventType: 'scorecard_released',
+          metadata: { exam_type, broadcast_id: data.id, classroom_id },
+          source: { kind: 'scorecard_released', refId: data.id },
+        });
+        return NextResponse.json({ broadcast: data, delivery: counts }, { status: 201 });
       }
     }
 

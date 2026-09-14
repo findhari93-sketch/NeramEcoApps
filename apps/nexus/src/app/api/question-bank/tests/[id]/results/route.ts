@@ -109,7 +109,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       {
         data: {
           rows,
-          stats: results.stats,
+          stats: {
+            ...results.stats,
+            // Paused students left out entirely, so the screen can say so.
+            paused_hidden: Math.max(
+              0,
+              (opts?.pausedStudentIds?.length ?? 0) - rows.filter((r: any) => r.paused).length,
+            ),
+          },
           questions: questionsWithAi,
           runs,
           run: selected
@@ -216,6 +223,11 @@ async function buildRunOptions(
 
   return {
     ...withAccess,
+    // Paused students stay on the roster only so an attempt they really made
+    // is still found; getTestResults drops the rest and keeps them out of stats.
+    pausedStudentIds: (facts.students as Array<{ student_id: string; dormant?: boolean }>)
+      .filter((s) => s.dormant)
+      .map((s) => s.student_id),
     roster: roster.map((r) => ({
       student_id: r.student_id,
       name: r.name,

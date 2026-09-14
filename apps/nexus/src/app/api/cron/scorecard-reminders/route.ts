@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, filterTrackedStudentIds } from '@neram/database';
 import { assertCronRequest } from '@/lib/cron-auth';
+import { sendNudge } from '@/lib/nudge-delivery';
 
 /**
  * GET /api/cron/scorecard-reminders
@@ -58,26 +59,27 @@ export async function GET(request: NextRequest) {
           .eq('id', attempt.id);
         continue;
       }
-      // Try to insert notification (table may or may not exist)
-      try {
-        await supabase.from('user_notifications').insert({
-          user_id: attempt.student_id,
-          type: 'scorecard_reminder',
-          title: 'Upload Your NATA Scorecard',
-          message: `Your NATA ${attempt.phase === 'phase_1' ? 'Phase 1' : 'Phase 2'} Attempt ${attempt.attempt_number} scorecard should be available now. Please upload it.`,
-          metadata: {
-            exam_type: attempt.exam_type,
-            phase: attempt.phase,
-            attempt_number: attempt.attempt_number,
-            attempt_id: attempt.id,
-          },
-          is_read: false,
-        });
-        notificationCount++;
-      } catch {
-        // user_notifications table may not exist yet, just skip
-        console.warn('Could not create notification, table may not exist');
-      }
+      // Through the one door. This used to insert a `type` column that does not
+      // exist, the error was returned rather than thrown, and every one of these
+      // reminders was lost while still being counted as sent.
+      const { results } = await sendNudge({
+        studentIds: [attempt.student_id],
+        respectDormancy: false, // already filtered above
+        subject: 'Upload your NATA scorecard, {firstName}',
+        plain: `Your NATA ${attempt.phase === 'phase_1' ? 'Phase 1' : 'Phase 2'} Attempt ${attempt.attempt_number} scorecard should be available now. Please upload it.`,
+        eventType: 'scorecard_reminder',
+        metadata: {
+          exam_type: attempt.exam_type,
+          phase: attempt.phase,
+          attempt_number: attempt.attempt_number,
+          attempt_id: attempt.id,
+        },
+        source: { kind: 'scorecard_reminder', refId: attempt.id },
+      });
+      // Only a reminder that reached somebody counts, and only then is it marked
+      // handled; a failed one is tried again tomorrow.
+      if (!results[0]?.ok) continue;
+      notificationCount++;
 
       // Mark reminder as sent
       await supabase

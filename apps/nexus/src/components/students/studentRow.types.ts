@@ -36,6 +36,14 @@ export interface EnrolledStudent {
    */
   has_application_form?: boolean;
 
+  /**
+   * Where they live, from lead_profiles: the newest of their rows that names a
+   * city, title-cased. Kept apart so a city stays comparable; the row joins the
+   * two for display with placeLabel(). See lib/student-place.ts.
+   */
+  city?: string | null;
+  state?: string | null;
+
   batch: StudentBatch | null; // classroom section (nexus_batches)
   exam_batch: string | null; // exam-year cohort (users.academic_year)
   academic_year?: string | null; // same value, named after the column

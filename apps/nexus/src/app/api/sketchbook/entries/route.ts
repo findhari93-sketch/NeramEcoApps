@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import {
-  createDrawingSubmission, getSketchbookGoalHistory, getStudentPrimaryClassroom, listPracticeDates,
-  recordGamificationEvent, upsertPracticeDay,
+  createDrawingSubmission, getStudentPrimaryClassroom, recordGamificationEvent, upsertPracticeDay,
 } from '@neram/database/queries/nexus';
 import { getRequestUser } from '@/lib/study-materials';
 import { ApiError, errorResponse } from '@/lib/api-errors';
-import { computeRhythm, istDate } from '@/lib/sketchbook-rhythm';
+import { istDate } from '@/lib/sketchbook-rhythm';
+import { loadStudentRhythm } from '@/lib/sketchbook-payload';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const CAPTION_MAX = 80;
@@ -52,6 +52,9 @@ export async function POST(request: NextRequest) {
     }
 
     const today = istDate(submission.submitted_at || new Date());
+    // The practice-days table is now only the points ledger (one award per
+    // sketchbook day). The rhythm itself counts every drawing upload; see
+    // loadStudentRhythm.
     const { isNewDay } = await upsertPracticeDay(caller.id, today, submission.id);
 
     const classroom = await getStudentPrimaryClassroom(caller.id);
@@ -70,11 +73,7 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
     }
 
-    const [dates, history] = await Promise.all([
-      listPracticeDates(caller.id),
-      classroom ? getSketchbookGoalHistory(classroom.id) : Promise.resolve([]),
-    ]);
-    const rhythm = computeRhythm(dates, today, history, classroom?.sketchbook_weekly_goal ?? 3);
+    const { rhythm } = await loadStudentRhythm(caller.id, today);
 
     return NextResponse.json(
       { sketch: { ...submission, status: 'completed', thumbnail_url: thumbnailUrl }, rhythm, isNewDay },

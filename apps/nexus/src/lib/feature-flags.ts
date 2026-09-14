@@ -141,6 +141,11 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.assignments', label: 'Assignments', surface: 'staff', group: 'Teaching', paths: ['/teacher/assignments'], defaultEnabled: true },
   { id: 'staff.drawing-reviews', label: 'Drawing Reviews', surface: 'staff', group: 'Teaching', paths: ['/teacher/drawing-reviews'], defaultEnabled: true },
   { id: 'staff.sketchbook', label: 'Sketchbooks', surface: 'staff', group: 'Teaching', paths: ['/teacher/sketchbook'], defaultEnabled: true },
+  // Behaviour switches, not pages. OFF until delivery is verified on
+  // /api/admin/delivery-health: the first run would otherwise message most of a
+  // class at 18:00 on the day it deploys.
+  { id: 'staff.sketchbook-reminders', label: 'Automatic sketchbook reminders to students (quiet day 3, 6, 9)', surface: 'staff', group: 'Teaching', paths: [], defaultEnabled: false },
+  { id: 'staff.sketchbook-digest', label: 'Evening sketchbook digest to teachers', surface: 'staff', group: 'Teaching', paths: [], defaultEnabled: true },
   { id: 'staff.attendance', label: 'Attendance', surface: 'staff', group: 'Teaching', paths: ['/teacher/attendance'], defaultEnabled: true },
   { id: 'staff.leaderboard', label: 'Leaderboard', surface: 'staff', group: 'Teaching', paths: ['/teacher/leaderboard'], defaultEnabled: true },
   { id: 'staff.exams', label: 'Exams', surface: 'staff', group: 'Teaching', paths: ['/teacher/exams'], defaultEnabled: true },

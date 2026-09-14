@@ -212,3 +212,83 @@ export interface FormLinkResult {
   filled: { studyStage: NexusStudyStage | null; academicYear: string | null };
   held: string[];
 }
+
+// ── The full form, for the review screen ─────────────────────────────────────
+
+/**
+ * Contact detail is masked for anyone who cannot link. A proposed record may
+ * turn out to be a different person, so a teacher confirming "is this them?"
+ * gets enough to compare the last digits and no more. Staff who can link see it
+ * in full, because linking merges the two records anyway.
+ *
+ * The X form matches maskAadhaar in student-profile-fields.ts.
+ */
+export function maskPhone(value: string | null | undefined): string | null {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (digits.length < 4) return null;
+  return `XXXXX ${digits.slice(-4)}`;
+}
+
+export function maskEmail(value: string | null | undefined): string | null {
+  const raw = String(value ?? '').trim();
+  const at = raw.indexOf('@');
+  if (at < 1) return null;
+  return `${raw[0]}XXX${raw.slice(at)}`;
+}
+
+/** The student's own record, for the side-by-side comparison. */
+export interface FormDetailStudent {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+}
+
+/**
+ * What the form says. Every field here is on LEAD_PROFILE_PUBLIC_COLUMNS, so
+ * no fee, scholarship, caste or marketing value can reach this screen: those
+ * live behind coord.student.finance and are not part of deciding who someone is.
+ */
+export interface FormDetailForm {
+  applicationNumber: string | null;
+  status: string | null;
+  createdAt: string | null;
+  formCompletedAt: string | null;
+  formStepCompleted: number | null;
+  name: string | null;
+  fatherName: string | null;
+  parentPhone: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  phone: string | null;
+  email: string | null;
+  applicantCategory: string | null;
+  academicData: unknown;
+  targetExamYear: number | null;
+  schoolType: string | null;
+  learningMode: string | null;
+  interestCourse: string | null;
+  hybridLearningAccepted: boolean | null;
+  phoneVerified: boolean | null;
+  phoneVerifiedAt: string | null;
+  country: string | null;
+  state: string | null;
+  district: string | null;
+  city: string | null;
+  pincode: string | null;
+  address: string | null;
+  locationSource: string | null;
+}
+
+/** GET /api/students/application-forms/detail */
+export interface FormDetailView {
+  student: FormDetailStudent;
+  form: FormDetailForm;
+  agreement: import('./application-form-match').FormAgreement;
+  reasons: FormCandidateView['reasons'];
+  strength: FormCandidateView['strength'];
+  blocked: FormLinkBlock | null;
+  canLink: boolean;
+  /** False when the viewer sees masked contact detail, so the screen can say so. */
+  showsFullContact: boolean;
+}

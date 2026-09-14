@@ -166,6 +166,142 @@ test.describe('Nexus — catch-up standing', () => {
     expect([401, 403]).toContain(res.status());
   });
 
+  // ── Who has already been congratulated ────────────────────────────────────
+  // The post used to remember nothing, so the same students were named again
+  // and again. Marking records a congratulation without posting; it goes
+  // through the same auth and the same "clear right now" rule as the post.
+
+  test('marking and unmarking refuse an unauthenticated caller', async ({ request }) => {
+    for (const mode of ['mark', 'unmark']) {
+      const res = await request.post(`${NEXUS}/api/catchup/celebrate`, {
+        data: {
+          classroomId: '00000000-0000-0000-0000-000000000000',
+          mode,
+          studentIds: [],
+          celebrationIds: ['00000000-0000-0000-0000-000000000000'],
+        },
+      });
+      expect(res.status(), `${mode} without auth`).not.toBe(200);
+    }
+  });
+
+  test('a student cannot mark or unmark a congratulation', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'student');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    for (const mode of ['mark', 'unmark']) {
+      const res = await request.post(`${NEXUS}/api/catchup/celebrate`, {
+        headers: { Authorization: `Bearer ${auth.testToken}` },
+        data: {
+          classroomId: '00000000-0000-0000-0000-000000000000',
+          mode,
+          celebrationIds: ['00000000-0000-0000-0000-000000000000'],
+        },
+      });
+      expect([401, 403], `${mode} as a student`).toContain(res.status());
+    }
+  });
+
+  test('an unknown mode and an empty undo are rejected, not guessed at', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const headers = { Authorization: `Bearer ${auth.testToken}` };
+    const bad = await request.post(`${NEXUS}/api/catchup/celebrate`, {
+      headers,
+      data: { classroomId: '00000000-0000-0000-0000-000000000000', mode: 'broadcast' },
+    });
+    expect(bad.status()).toBe(400);
+
+    const empty = await request.post(`${NEXUS}/api/catchup/celebrate`, {
+      headers,
+      data: { classroomId: '00000000-0000-0000-0000-000000000000', mode: 'unmark', celebrationIds: [] },
+    });
+    expect(empty.status()).toBe(400);
+  });
+
+  test('every all-clear student says whether they were congratulated', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const res = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
+      Authorization: `Bearer ${auth.testToken}`,
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    // A failed read must be said out loud, never passed off as "nobody".
+    expect(typeof body.celebrationsUnavailable).toBe('boolean');
+    if (body.celebrationsUnavailable) return;
+
+    for (const s of body.students.filter((x: any) => x.bucket === 'all_clear')) {
+      expect(s).toHaveProperty('celebration');
+      if (s.celebration) {
+        expect(['congratulated', 'cleared_again']).toContain(s.celebration.state);
+        expect(['teams', 'marked']).toContain(s.celebration.source);
+        expect(s.celebration.count).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  test('marking moves a student to congratulated, and Undo moves them back', async ({
+    request,
+  }) => {
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const headers = { Authorization: `Bearer ${auth.testToken}` };
+    const read = async () =>
+      (await getWarm(request, `${NEXUS}/api/catchup/overview`, headers)).json();
+
+    const before = await read();
+    if (before.celebrationsUnavailable) {
+      test.skip(true, 'nexus_catchup_celebrations is not migrated in this environment');
+      return;
+    }
+    const target = before.students.find((s: any) => s.bucket === 'all_clear' && !s.celebration);
+    if (!target) {
+      test.skip(true, 'No all-clear student without a congratulation to mark');
+      return;
+    }
+
+    const mark = await request.post(`${NEXUS}/api/catchup/celebrate`, {
+      headers,
+      data: { classroomId: before.classroomId, mode: 'mark', studentIds: [target.student.id] },
+    });
+    expect(mark.status()).toBe(200);
+    const marked = await mark.json();
+    expect(marked.celebrationIds).toHaveLength(1);
+
+    try {
+      const after = await read();
+      const row = after.students.find((s: any) => s.student.id === target.student.id);
+      expect(row?.celebration?.state).toBe('congratulated');
+      expect(row?.celebration?.source).toBe('marked');
+    } finally {
+      // Always undone: the student is real and the next teacher to open the tab
+      // must not find them silently marked by a test.
+      const undo = await request.post(`${NEXUS}/api/catchup/celebrate`, {
+        headers,
+        data: { classroomId: before.classroomId, mode: 'unmark', celebrationIds: marked.celebrationIds },
+      });
+      expect(undo.status()).toBe(200);
+      expect((await undo.json()).removed).toBe(1);
+    }
+
+    const restored = await read();
+    const back = restored.students.find((s: any) => s.student.id === target.student.id);
+    expect(back?.celebration ?? null).toBeNull();
+  });
+
   test('the wall is refused without auth', async ({ request }) => {
     const res = await request.get(`${NEXUS}/api/catchup/wall?classroomId=abc`);
     expect(res.status()).not.toBe(200);

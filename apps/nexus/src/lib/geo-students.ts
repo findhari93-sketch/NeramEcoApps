@@ -18,6 +18,7 @@
 import { getSupabaseAdminClient } from '@neram/database';
 import type { GeographicCountryNode, GeographicStateNode, GeographicCityNode } from '@neram/database';
 import { pickClassroomEmail, type EmailDomainStatus } from '@/lib/classroom-email';
+import { pickPlaceRow, titleCasePlace } from '@/lib/student-place';
 import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
 
 const COUNTRY_NAMES: Record<string, string> = {
@@ -37,17 +38,6 @@ const COUNTRY_NAMES: Record<string, string> = {
 function getCountryDisplay(code: string): string {
   const upper = (code || 'IN').toUpperCase();
   return COUNTRY_NAMES[upper] || upper;
-}
-
-/** Capitalise each word so "tamil nadu" -> "Tamil Nadu" (matches the SQL INITCAP output). */
-function titleCase(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return trimmed
-    .split(/\s+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ');
 }
 
 /** A currently-accessible student with normalised location, enough for avatars + drill-down. */
@@ -132,7 +122,7 @@ export async function getActiveGeoStudents(): Promise<ActiveGeoStudent[]> {
   // 3) Their geography.
   const { data: profiles, error: profErr } = await supabase
     .from('lead_profiles')
-    .select('user_id, city, state, district, country')
+    .select('user_id, city, state, district, country, created_at')
     .in('user_id', ids)
     .not('city', 'is', null)
     .not('city', 'eq', '');
@@ -143,17 +133,23 @@ export async function getActiveGeoStudents(): Promise<ActiveGeoStudent[]> {
   }
 
   // One location per student. Some students have duplicate lead_profiles rows
-  // (occasionally with conflicting cities); keep the first with a valid city so
-  // a student is counted once, in one city.
-  const students: ActiveGeoStudent[] = [];
-  const seen = new Set<string>();
+  // (occasionally with conflicting cities), so pickPlaceRow keeps the newest that
+  // names a city and a student is counted once, in one city. The teacher roster
+  // picks by the same rule, so the two screens can never disagree about someone.
+  const rowsByUser = new Map<string, any[]>();
   for (const p of profiles || []) {
-    const city = titleCase(p.city);
-    if (!city) continue;
-    if (seen.has(p.user_id)) continue;
-    const u = byId.get(p.user_id);
+    const list = rowsByUser.get(p.user_id);
+    if (list) list.push(p);
+    else rowsByUser.set(p.user_id, [p]);
+  }
+
+  const students: ActiveGeoStudent[] = [];
+  for (const [userId, rows] of rowsByUser) {
+    const p = pickPlaceRow(rows);
+    if (!p) continue;
+    const city = titleCasePlace(p.city)!;
+    const u = byId.get(userId);
     if (!u) continue;
-    seen.add(p.user_id);
     const country = ((p.country || 'IN').trim().toUpperCase()) || 'IN';
     const { email: classroomEmail, status: emailStatus } = pickClassroomEmail({
       ms_teams_email: msTeamsByUser.get(u.id),
@@ -171,8 +167,8 @@ export async function getActiveGeoStudents(): Promise<ActiveGeoStudent[]> {
       awaiting_microsoft: isAwaitingMicrosoft(u.ms_oid),
       country,
       country_display: getCountryDisplay(country),
-      state: titleCase(p.state),
-      district: titleCase(p.district),
+      state: titleCasePlace(p.state),
+      district: titleCasePlace(p.district),
       city,
       enrolled_at: u.created_at ?? null,
     });

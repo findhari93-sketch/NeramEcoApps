@@ -7,6 +7,7 @@ import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
 import { findRosterDuplicates } from '@/lib/roster-duplicates';
 import { activityOf } from '@/lib/student-roster-view';
 import { isApplicationForm } from '@/lib/application-form';
+import { pickStudentPlace } from '@/lib/student-place';
 import {
   matchesSegment,
   segmentCounts,
@@ -241,9 +242,11 @@ export async function GET(request: NextRequest) {
       // Application forms on each student's OWN record. A student without one
       // usually has theirs on a second record that was never linked, which is why
       // their class and exam year are empty. See /api/students/application-forms.
+      // city and state ride along on this same query rather than a second one:
+      // lead_profiles is the only place a student's location is stored.
       supabase
         .from('lead_profiles')
-        .select('user_id, application_number, academic_data, applicant_category, father_name, created_at')
+        .select('user_id, application_number, academic_data, applicant_category, father_name, created_at, city, state')
         .in('user_id', studentIds)
         .is('deleted_at', null),
     ]);
@@ -266,6 +269,21 @@ export async function GET(request: NextRequest) {
     const usersWithForm = new Set<string>(
       (formResult.data || []).filter((row: any) => isApplicationForm(row)).map((row: any) => row.user_id),
     );
+
+    // Where each student lives. A student can hold several lead_profiles rows that
+    // disagree, so pickStudentPlace settles it the same way the City-Wise screen
+    // does: the newest row that names a city. See lib/student-place.ts.
+    const formRowsByUser = new Map<string, any[]>();
+    for (const row of formResult.data || []) {
+      const list = formRowsByUser.get(row.user_id);
+      if (list) list.push(row);
+      else formRowsByUser.set(row.user_id, [row]);
+    }
+    const placeByUser = new Map<string, { city: string; state: string | null }>();
+    for (const [userId, rows] of formRowsByUser) {
+      const place = pickStudentPlace(rows);
+      if (place) placeByUser.set(userId, place);
+    }
 
     const totalClasses = totalClassesResult.count || 0;
     const totalChecklistItems = checklistTotalResult.count || 0;
@@ -333,6 +351,10 @@ export async function GET(request: NextRequest) {
         // Filled below, once the whole roster is known.
         possible_duplicate_of: null as { id: string; name: string } | null,
         has_application_form: usersWithForm.has(userId),
+        // Title-cased city and state, kept apart so a caller can still compare a
+        // city. The roster joins them for display with placeLabel().
+        city: placeByUser.get(userId)?.city ?? null,
+        state: placeByUser.get(userId)?.state ?? null,
         nexus_access_enabled: user.nexus_access_enabled ?? false,
         // Same value under two names for one release. `exam_batch` is the older
         // name and still has consumers; `academic_year` matches the column and the

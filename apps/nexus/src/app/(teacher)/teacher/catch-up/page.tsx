@@ -22,7 +22,7 @@
  */
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Alert, Box, Skeleton, Snackbar, Tab, Tabs, Typography } from '@neram/ui';
+import { Alert, Box, Button, Skeleton, Snackbar, Tab, Tabs, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useAuthSWR } from '@/lib/nexus-swr';
@@ -56,7 +56,12 @@ function TeacherCatchUpWorkspace() {
   const authFetch = useAuthFetch();
 
   const [busy, setBusy] = useState<string | null>(null);
-  const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
+  const [snack, setSnack] = useState<{
+    msg: string;
+    sev: 'success' | 'error';
+    /** Celebration ids a "Mark as congratulated" just wrote, for its Undo. */
+    undoMark?: string[];
+  } | null>(null);
   /** Non-null while the Teams preview is open. Holds the names it is showing. */
   const [celebrating, setCelebrating] = useState<Row[] | null>(null);
   const [celebrateOutcome, setCelebrateOutcome] = useState<CelebrateOutcome | null>(null);
@@ -227,21 +232,32 @@ function TeacherCatchUpWorkspace() {
     setCelebrating(students);
   }, []);
 
+  // The classroom the payload was built for, when the switcher has none. The
+  // overview route falls back to the newest classroom, and a send that quietly
+  // returned here left the teacher pressing a button that did nothing.
+  const classroomId = activeClassroom?.id ?? data?.classroomId ?? null;
+
   const onCelebrateSend = useCallback(
     async (message: string, postToTeams: 'both' | 'channel') => {
-      if (!activeClassroom?.id) return;
+      if (!classroomId) {
+        setCelebrateOutcome({ ok: false, error: 'Pick a classroom first.' });
+        return;
+      }
       setBusy('celebrate');
       try {
         const res = await authFetch('/api/catchup/celebrate', {
           method: 'POST',
           body: JSON.stringify({
-            classroomId: activeClassroom.id,
+            classroomId,
             studentIds: (celebrating || []).map((s) => s.student.id),
             message,
             postToTeams,
           }),
         });
-        setCelebrateOutcome({ ok: true, named: res?.named || [] });
+        setCelebrateOutcome({ ok: true, named: res?.named || [], recorded: res?.recorded });
+        // Moves the students just named into "Already congratulated", so the
+        // next press does not name them again.
+        await mutate();
       } catch (err) {
         setCelebrateOutcome({
           ok: false,
@@ -251,12 +267,71 @@ function TeacherCatchUpWorkspace() {
         setBusy(null);
       }
     },
-    [authFetch, activeClassroom?.id, celebrating],
+    [authFetch, classroomId, celebrating, mutate],
+  );
+
+  /**
+   * Record a congratulation that happened outside Nexus, without posting.
+   * Offers Undo, because a mis-tap here hides a student from the next post.
+   */
+  const onMarkCelebrated = useCallback(
+    async (students: Row[]) => {
+      if (!classroomId || students.length === 0) return;
+      setBusy('celebrate');
+      try {
+        const res = await authFetch('/api/catchup/celebrate', {
+          method: 'POST',
+          body: JSON.stringify({
+            classroomId,
+            mode: 'mark',
+            studentIds: students.map((s) => s.student.id),
+          }),
+        });
+        const count = (res?.named || []).length;
+        setSnack({
+          msg:
+            count === 1
+              ? 'Marked 1 student as congratulated.'
+              : `Marked ${count} students as congratulated.`,
+          sev: 'success',
+          undoMark: res?.celebrationIds || [],
+        });
+        await mutate();
+      } catch (err) {
+        setSnack({ msg: err instanceof Error ? err.message : 'Could not save', sev: 'error' });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [authFetch, classroomId, mutate],
+  );
+
+  const onUndoMark = useCallback(
+    async (celebrationIds: string[]) => {
+      setSnack(null);
+      if (!classroomId || celebrationIds.length === 0) return;
+      setBusy('celebrate');
+      try {
+        await authFetch('/api/catchup/celebrate', {
+          method: 'POST',
+          body: JSON.stringify({ classroomId, mode: 'unmark', celebrationIds }),
+        });
+        await mutate();
+      } catch (err) {
+        setSnack({ msg: err instanceof Error ? err.message : 'Could not undo', sev: 'error' });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [authFetch, classroomId, mutate],
   );
 
   const tabProps: TabProps | null = useMemo(
-    () => (data ? { data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onReload } : null),
-    [data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onReload],
+    () =>
+      data
+        ? { data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onMarkCelebrated, onReload }
+        : null,
+    [data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onMarkCelebrated, onReload],
   );
 
   if (data === null || tabProps === null) {
@@ -372,6 +447,12 @@ function TeacherCatchUpWorkspace() {
       <CelebrateDialog
         open={!!celebrating}
         names={(celebrating || []).map((s) => s.student.name || s.student.email || 'Student')}
+        repeats={(celebrating || [])
+          .filter((s) => s.celebration?.state === 'congratulated')
+          .map((s) => ({
+            name: s.student.name || s.student.email || 'Student',
+            lastAt: s.celebration!.lastAt,
+          }))}
         busy={busy === 'celebrate'}
         outcome={celebrateOutcome}
         onClose={() => {
@@ -383,11 +464,27 @@ function TeacherCatchUpWorkspace() {
 
       <Snackbar
         open={!!snack}
-        autoHideDuration={4000}
+        // Longer when there is an Undo, so there is time to reach it.
+        autoHideDuration={snack?.undoMark?.length ? 8000 : 4000}
         onClose={() => setSnack(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert severity={snack?.sev} onClose={() => setSnack(null)}>
+        <Alert
+          severity={snack?.sev}
+          onClose={() => setSnack(null)}
+          action={
+            snack?.undoMark?.length ? (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => onUndoMark(snack.undoMark || [])}
+                sx={{ fontWeight: 700, textTransform: 'none', minHeight: 44 }}
+              >
+                Undo
+              </Button>
+            ) : undefined
+          }
+        >
           {snack?.msg}
         </Alert>
       </Snackbar>

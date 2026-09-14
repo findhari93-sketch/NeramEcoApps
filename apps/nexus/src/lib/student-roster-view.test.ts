@@ -3,6 +3,7 @@ import {
   DEFAULT_FILTERS,
   activeFilterCount,
   activityOf,
+  dateWithYear,
   matchesFilters,
   parseStoredFilters,
   parseStoredSort,
@@ -170,13 +171,35 @@ describe('seenAgo and shortDate', () => {
   });
 });
 
+describe('dateWithYear', () => {
+  it('always carries the year, unlike shortDate', () => {
+    expect(dateWithYear('2026-08-18T13:46:23Z')).toBe('18 Aug 2026');
+    expect(dateWithYear('2025-12-31T10:00:00Z')).toBe('31 Dec 2025');
+    // 20:00 UTC on 31 Aug is already 1 Sep in India.
+    expect(dateWithYear('2026-08-31T20:00:00Z')).toBe('1 Sep 2026');
+  });
+
+  it('says nothing about a missing or unreadable date', () => {
+    expect(dateWithYear(null)).toBeNull();
+    expect(dateWithYear(undefined)).toBeNull();
+    expect(dateWithYear('not a date')).toBeNull();
+  });
+
+  // The two must stay apart: seenAgo and the application sheet rely on shortDate
+  // staying short in the current year.
+  it('leaves shortDate alone', () => {
+    expect(shortDate('2026-08-18T13:46:23Z', NOW)).toBe('18 Aug');
+    expect(seenAgo('2026-07-03T06:00:00Z', NOW)).toBe('on 3 Jul');
+  });
+});
+
 describe('statusLineOf', () => {
   it('names the join date and the sign-in state', () => {
     const line = statusLineOf(
       student({ enrolled_at: '2026-08-18T13:46:23Z', first_signed_in_at: null, last_seen_at: null }),
       NOW,
     );
-    expect(line.joined).toBe('Joined 18 Aug');
+    expect(line.joined).toBe('Joined 18 Aug 2026');
     expect(line.activity).toEqual({ key: 'never_signed_in', text: 'Never signed in', tone: 'warning' });
   });
 

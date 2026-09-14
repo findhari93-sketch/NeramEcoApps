@@ -74,20 +74,50 @@ test.describe('Catch-up standing on a phone', () => {
     await page.setViewportSize(PHONE);
     await openStanding(page);
 
-    const share = page.getByRole('button', { name: /Share in Teams/i });
+    const share = page.getByRole('button', { name: /Congratulate .*in Teams/i });
     if ((await share.count()) === 0) {
       test.skip(true, 'Nobody is fully caught up in this classroom');
       return;
     }
 
+    // Tick exactly one student, so the preview can be checked against the pick.
+    const boxes = page.getByRole('checkbox', { name: /^Select / });
+    const total = await boxes.count();
+    for (let i = 0; i < total; i++) {
+      if (await boxes.nth(i).isChecked()) await boxes.nth(i).uncheck();
+    }
+    await expect(share).toBeDisabled();
+    const first = boxes.first();
+    const picked = ((await first.getAttribute('aria-label')) || '').replace(/^Select /, '');
+    await first.check();
+
+    await expect(share).toHaveText(/Congratulate \(1\) in Teams/);
     await share.click();
     // The whole point of the preview: the names are shown in full, not
     // summarised, because the thing to check is precisely the list.
-    await expect(page.getByRole('button', { name: /Post to Teams/i })).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', { name: /Post to Teams/i })).toBeVisible();
+    await expect(dialog.getByText(picked, { exact: true })).toBeVisible();
     await assertNoHorizontalOverflow(page);
 
-    await page.getByRole('button', { name: /^Cancel$/ }).click();
+    await dialog.getByRole('button', { name: /^Cancel$/ }).click();
     await expect(page.getByRole('button', { name: /Post to Teams/i })).toHaveCount(0);
+  });
+
+  test('the student cards are ticked with a thumb-sized checkbox', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await openStanding(page);
+
+    const boxes = page.getByRole('checkbox', { name: /^Select / });
+    if ((await boxes.count()) === 0) {
+      test.skip(true, 'Nobody is fully caught up in this classroom');
+      return;
+    }
+    // The input is hidden inside MUI's 44px span, so measure the span.
+    const hit = await boxes.first().locator('xpath=..').boundingBox();
+    expect(hit?.width ?? 0).toBeGreaterThanOrEqual(44);
+    expect(hit?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await assertNoHorizontalOverflow(page);
   });
 
   test('every control on the standing tab is thumb sized', async ({ page }) => {
