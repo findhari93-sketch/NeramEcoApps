@@ -17,6 +17,8 @@ import {
   type PhotoGateState,
 } from '@/lib/photo-gate';
 import { listParentChildren, getChildClassrooms } from '@/lib/parent-auth';
+import { planEntry } from '@/lib/not-started';
+import { recordNexusEntry } from '@/lib/not-started-server';
 import {
   TIMETABLE_WINDOW_KEY,
   parseWindow,
@@ -49,13 +51,15 @@ export async function GET(request: NextRequest) {
     //   can_teach                      -> canTeach
     //   photo_*                        -> photoGate
     //   nexus_first_login_at           -> the Nexus login stamp
+    //   nexus_last_login_at            -> the sign-in history throttle
+    //   nexus_entered_at               -> Not started lift (lib/not-started.ts)
     //   linked_classroom_email/_at     -> the UPN linking branch
     // Kept as one string literal on purpose: supabase-js infers the row type by
     // parsing this at the type level, and a concatenated string widens to
     // `string`, which collapses the result to GenericStringError.
     let { data: user } = await supabase
       .from('users')
-      .select('id, name, email, phone, avatar_url, user_type, is_alumni, nexus_first_login_at, linked_classroom_email, linked_classroom_at, photo_status, photo_rejection_reason, photo_ms_sync_status, staff_role, can_teach')
+      .select('id, name, email, phone, avatar_url, user_type, is_alumni, nexus_first_login_at, nexus_last_login_at, nexus_entered_at, linked_classroom_email, linked_classroom_at, photo_status, photo_rejection_reason, photo_ms_sync_status, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .maybeSingle();
 
@@ -361,6 +365,27 @@ export async function GET(request: NextRequest) {
       microsoftSynced:
         photoStatus === 'approved' && (user as any).photo_ms_sync_status === 'synced',
     };
+
+    // Sign-in history, and the first time past the photo gate lifts Not started
+    // (lib/not-started.ts). Uses the users row as read at the top of this request,
+    // before the login stamp above moved nexus_last_login_at. Awaited for the same
+    // frozen-instance reason as the stamp; costs nothing for a student who already
+    // entered and opened the app in the last 30 minutes.
+    const entry = planEntry({
+      isStudent: nexusRole === 'student',
+      impersonating: !!msUser.impersonatorUserId,
+      hasClassroom: activeEnrollments.length > 0,
+      photoGateRequired: photoGate.required,
+      enteredAt: (user as any).nexus_entered_at ?? null,
+      lastLoginAt: (user as any).nexus_last_login_at ?? null,
+    });
+    if (entry.logOutcome || entry.firstEntry) {
+      await recordNexusEntry(supabase, {
+        userId: user.id,
+        plan: entry,
+        userAgent: request.headers.get('user-agent'),
+      });
+    }
 
     return NextResponse.json({
       user: {

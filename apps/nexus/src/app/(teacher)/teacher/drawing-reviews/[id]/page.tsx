@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
-  Box, Skeleton, Typography, Paper,
+  Box, Skeleton, Typography, Paper, Alert,
   Button, useMediaQuery, useTheme, alpha,
   Breadcrumbs, Link as MuiLink,
 } from '@neram/ui';
@@ -41,9 +41,13 @@ import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 import type { Rotation } from '@/lib/image-rotation';
 import { compressImage } from '@/utils/imageCompression';
 import VoiceFeedbackRecorder from '@/components/drawings/voice/VoiceFeedbackRecorder';
+import WalkthroughStage from '@/components/drawings/voice/WalkthroughStage';
+import type { StagePlayback } from '@/components/drawings/voice/VoiceNotePlayer';
+import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 import { parseLane, useReviewQueue } from '@/hooks/useReviewQueue';
 import { useAiDraft } from '@/hooks/useAiDraft';
+import { useAutoDraft } from '@/hooks/useAutoDraft';
 import { BAND_LABEL } from '@/lib/drawing-triage';
 
 export default function DrawingReviewDetailPage() {
@@ -112,6 +116,11 @@ export default function DrawingReviewDetailPage() {
   const [studentTeamsEmail, setStudentTeamsEmail] = useState<string | null>(null);
   // Save and next arrives with who was just told and how many drawings are left.
   const [notice, setNotice] = useState('');
+  // A walkthrough playing over the big drawing. Null when the stage shows the
+  // drawing and its markup tools as usual.
+  const [stagePlayback, setStagePlayback] = useState<StagePlayback | null>(null);
+  const stageAnchorRef = useRef<HTMLDivElement | null>(null);
+  const stageWasOpenRef = useRef(false);
 
   const handleDeleteSubmission = async () => {
     setDeleting(true);
@@ -186,6 +195,16 @@ export default function DrawingReviewDetailPage() {
   }, [getToken, id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // On a phone the stage is above the rail, usually scrolled out of view by the
+  // time the teacher reaches the voice note. Bring it back when a replay opens.
+  useEffect(() => {
+    const opened = !!stagePlayback && !stageWasOpenRef.current;
+    stageWasOpenRef.current = !!stagePlayback;
+    if (!opened || !isMobile) return;
+    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    stageAnchorRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }, [stagePlayback, isMobile]);
 
   // Initialize workspaceData from submission
   useEffect(() => {
@@ -291,7 +310,12 @@ export default function DrawingReviewDetailPage() {
       const res = await fetch(`/api/drawing/submissions/${submission.id}/images`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...updates, clear_annotations: clearAnnotations }),
+        body: JSON.stringify({
+          ...updates,
+          clear_annotations: clearAnnotations,
+          // Turning a sheet Gemini already turned upright overrules it.
+          clear_auto_rotation: tab !== 'corrected' && !!(submission as any).auto_rotated_deg,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -312,7 +336,9 @@ export default function DrawingReviewDetailPage() {
 
       // Merge the fresh row in rather than refetching, so the stage swaps to the
       // upright image without a full-page loading flash.
-      setSubmission((prev) => (prev ? { ...prev, ...updated } : prev));
+      setSubmission((prev) => (prev
+        ? { ...prev, ...updated, ...(tab !== 'corrected' ? { auto_rotated_deg: null } : {}) } as typeof prev
+        : prev));
     } finally {
       rotatingRef.current = false;
     }
@@ -427,6 +453,46 @@ export default function DrawingReviewDetailPage() {
 
   // The AI draft on this sheet, if evaluation ever produced one. Null otherwise.
   const { draft: aiDraft, reload: reloadAiDraft } = useAiDraft(id, getToken);
+
+  /**
+   * A draft can change more than the rail: Gemini may have turned the photo
+   * upright and tagged the sheet. Pick up both without a full reload, and add
+   * the tags to what is on screen rather than replacing it, so the next save
+   * never wipes a tag the teacher typed meanwhile.
+   */
+  const refreshAfterDraft = useCallback(async () => {
+    reloadAiDraft();
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/drawing/submissions/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json();
+      const fresh = data.submission;
+      if (!fresh) return;
+      setSubmission((prev) => (prev && prev.id === fresh.id
+        ? { ...prev, original_image_url: fresh.original_image_url, auto_rotated_deg: fresh.auto_rotated_deg ?? null } as typeof prev
+        : prev));
+      const freshTags = ((fresh.tags as DrawingTag[] | undefined) || []).map((t) => t.label);
+      if (freshTags.length) {
+        setTagLabels((prev) => {
+          const seen = new Set(prev.map((l) => l.toLowerCase()));
+          const added = freshTags.filter((l) => !seen.has(l.toLowerCase()));
+          return added.length ? [...prev, ...added] : prev;
+        });
+      }
+    } catch {
+      // The draft itself still loaded; the image and tags catch up on the next open.
+    }
+  }, [getToken, id, reloadAiDraft]);
+
+  const autoDraft = useAutoDraft({
+    submissionId: submission ? id : null,
+    getToken,
+    active: !!submission && isEditMode && submission.status === 'submitted',
+    hasDraft: !!aiDraft,
+    onDrafted: refreshAfterDraft,
+  });
+  const [uprightNoticeHidden, setUprightNoticeHidden] = useState(false);
 
   // The queue this drawing belongs to, for J and K and the "3 / 12" chip.
   const queue = useReviewQueue(
@@ -680,6 +746,7 @@ export default function DrawingReviewDetailPage() {
         });
       }}
       onBusyChange={setVoiceBusy}
+      onStagePlayback={setStagePlayback}
     />
   ) : null;
 
@@ -700,9 +767,21 @@ export default function DrawingReviewDetailPage() {
         alignItems: 'center',
       }}
     >
-      <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>
+      <Typography variant="subtitle2" component="h2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>
         Feedback
       </Typography>
+      {/* The running verdict, so it stays in sight while the rail scrolls. */}
+      {(submission.assignment?.evaluation_type ?? 'stars') === 'marks'
+        ? workspaceData.marks != null && (
+            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mr: 1 }}>
+              {workspaceData.marks}/{submission.assignment?.max_marks ?? 5}
+            </Typography>
+          )
+        : workspaceData.rating > 0 && (
+            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mr: 1 }}>
+              {workspaceData.rating}/5 {RATING_LABELS[workspaceData.rating] || ''}
+            </Typography>
+          )}
       {!isEditMode && (
         <Button
           size="small"
@@ -741,6 +820,39 @@ export default function DrawingReviewDetailPage() {
         contextBar={assignmentContextBar}
         referenceStrip={referenceStrip}
         stage={
+          <>
+          <Box ref={stageAnchorRef} aria-hidden sx={{ position: 'absolute', top: 0, height: 0 }} />
+          {sub.auto_rotated_deg && !uprightNoticeHidden && !stagePlayback && (
+            <Alert
+              severity="info"
+              onClose={() => setUprightNoticeHidden(true)}
+              action={isEditMode ? (
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={async () => {
+                    setUprightNoticeHidden(true);
+                    const undo = ((360 - Number(sub.auto_rotated_deg)) % 360) as Rotation;
+                    try {
+                      await handleRotate(undo, 'original', regionAnnotations.length > 0);
+                    } catch (err) {
+                      setUprightNoticeHidden(false);
+                      setError(err instanceof Error ? err.message : 'Could not turn it back');
+                    }
+                  }}
+                  sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
+                >
+                  Undo
+                </Button>
+              ) : undefined}
+              sx={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 5, boxShadow: 2, py: 0, alignItems: 'center', maxWidth: 'calc(100% - 16px)' }}
+            >
+              Turned upright automatically
+            </Alert>
+          )}
+          {stagePlayback ? (
+            <WalkthroughStage playback={stagePlayback} />
+          ) : (
           <ImageToggleTabs
             originalImageUrl={submission.original_image_url}
             overlayAnnotations={(sub.ai_overlay_annotations as any) || undefined}
@@ -755,6 +867,8 @@ export default function DrawingReviewDetailPage() {
             onRotate={isEditMode ? handleRotate : undefined}
             aiMarks={aiDraft?.marks}
           />
+          )}
+          </>
         }
         panelHeader={panelHeader}
         panelBody={
@@ -775,7 +889,7 @@ export default function DrawingReviewDetailPage() {
             tagLabels={tagLabels}
             onTagLabelsChange={setTagLabels}
             aiDraft={aiDraft}
-            onDrafted={reloadAiDraft}
+            draftState={autoDraft}
           />
         }
         actionBar={

@@ -4,6 +4,9 @@ import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { sendNudge, escapeHtml, plainToHtml } from '@/lib/nudge-delivery';
 
+/** Templates whose purpose is getting a student into Nexus (Photo Review, Students page Not started). */
+const JOIN_TEMPLATES = new Set(['photo_required', 'join_nexus']);
+
 /**
  * POST /api/assignments/nudge  (staff)
  * Remind selected students about one or more assignments. The three-tier
@@ -81,6 +84,9 @@ export async function POST(request: NextRequest) {
       teamsText,
       eventType: 'assignment_nudge',
       metadata: { assignment_ids: assignmentIds },
+      // "Add your photo" and "come into Nexus" are written FOR Not started students
+      // (never entered, lib/not-started.ts); every other template still skips them.
+      reachNotStarted: template !== null && JOIN_TEMPLATES.has(template),
     });
 
     // Log one reminder row per (assignment, student) so staff see prior nudges.

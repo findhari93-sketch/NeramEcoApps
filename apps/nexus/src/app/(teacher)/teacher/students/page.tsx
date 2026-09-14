@@ -34,7 +34,10 @@ import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
 import LockResetOutlinedIcon from '@mui/icons-material/LockResetOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import AssignmentLateOutlinedIcon from '@mui/icons-material/AssignmentLateOutlined';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import PeopleSearchField from '@/components/PeopleSearchField';
+import DormantViewBar from '@/components/students/DormantViewBar';
 import RemoveStudentDialog from '@/components/RemoveStudentDialog';
 import AddStudentSheet from '@/components/students/AddStudentSheet';
 import ApplicationFormSheet from '@/components/students/ApplicationFormSheet';
@@ -84,6 +87,14 @@ import {
   type RosterSort,
 } from '@/lib/student-roster-view';
 import type { AttentionActionKey } from '@/lib/student-attention';
+import {
+  DORMANT_VIEWS,
+  dormantViewCounts,
+  joinReminderMessage,
+  matchesDormantView,
+  type DormantView,
+} from '@/lib/not-started';
+import { patchQuery, readSearch } from '@/lib/list-url-state';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { usePresence } from '@/hooks/usePresence';
 import { rankPeople, suggestPeople } from '@/lib/people-search';
@@ -115,6 +126,14 @@ interface StudentCounts {
   notSeen14d: number;
   /** No application form on their own record. Excludes dormant students. */
   noForm: number;
+  /** Dormant because they never entered Nexus (lib/not-started.ts). */
+  notStarted: number;
+  /** Dormant because a person paused them. */
+  pausedByStaff: number;
+  /** Not started for 14 days or more: staff should decide. */
+  notStartedNeedsDecision: number;
+  /** Paused by staff, but opened Nexus since. */
+  backInNexus: number;
 }
 
 /** Snackbar verb for a class and/or exam year edit, naming what actually changed. */
@@ -129,6 +148,15 @@ function describeFieldChange(payload: {
   return payload.studyStage === null ? 'Cleared class' : 'Class set';
 }
 
+/** What an empty Dormant list means, per narrowing. Good news, said plainly. */
+const DORMANT_EMPTY_TITLE: Record<DormantView, string> = {
+  all: 'Nobody is dormant',
+  not_started: 'Everyone has entered Nexus',
+  not_started_long: 'Nobody has been waiting over 2 weeks',
+  paused: 'Nobody is paused by staff',
+  back_in_nexus: 'No paused student has come back',
+};
+
 const EMPTY_COUNTS: StudentCounts = {
   total: 0,
   active: 0,
@@ -142,6 +170,10 @@ const EMPTY_COUNTS: StudentCounts = {
   neverSignedIn: 0,
   notSeen14d: 0,
   noForm: 0,
+  notStarted: 0,
+  pausedByStaff: 0,
+  notStartedNeedsDecision: 0,
+  backInNexus: 0,
 };
 
 export default function TeacherStudents() {
@@ -149,7 +181,8 @@ export default function TeacherStudents() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const router = useRouter();
   const pathname = usePathname();
-  const { activeClassroom, getToken, can, isTeacher, impersonation, startImpersonation } = useNexusAuthContext();
+  const { activeClassroom, getToken, getTeacherToken, can, isTeacher, impersonation, startImpersonation } =
+    useNexusAuthContext();
 
   // can() is fail-closed: an unknown capability, or a payload from before this
   // rollout, returns false. So a stale /api/auth/me hides the controls rather
@@ -197,6 +230,12 @@ export default function TeacherStudents() {
   // makes the priority the default daily experience instead of something a
   // teacher has to remember to filter for.
   const [segment, setSegment] = useState<StudentSegment>(DEFAULT_SEGMENT);
+  /**
+   * Inside the Dormant segment: Not started, Paused by staff, Back in Nexus. Kept
+   * in the URL (?dv=) so a link from Needs attention or a shared screen opens the
+   * same narrowing. See lib/not-started.ts.
+   */
+  const [dormantView, setDormantView] = useState<DormantView>('all');
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -247,6 +286,19 @@ export default function TeacherStudents() {
     } catch {
       /* localStorage unavailable, keep defaults */
     }
+    // A dormant narrowing in the URL wins over the remembered segment, so a shared
+    // "Back in Nexus" link opens exactly that list.
+    const dv = new URLSearchParams(readSearch()).get('dv');
+    if (dv && (DORMANT_VIEWS as readonly string[]).includes(dv)) {
+      setDormantView(dv as DormantView);
+      setSegment('dormant');
+    }
+  }, []);
+
+  const handleDormantViewChange = useCallback((next: DormantView) => {
+    setDormantView(next);
+    setSelectedIds(new Set());
+    patchQuery({ dv: next === 'all' ? null : next });
   }, []);
 
   const handleViewModeChange = useCallback((_e: React.MouseEvent<HTMLElement>, next: ViewMode | null) => {
@@ -262,6 +314,11 @@ export default function TeacherStudents() {
   const handleSegmentChange = useCallback((next: StudentSegment) => {
     setSegment(next);
     setSelectedIds(new Set());
+    // The dormant narrowing belongs to the Dormant segment only.
+    if (next !== 'dormant') {
+      setDormantView('all');
+      patchQuery({ dv: null });
+    }
     try {
       localStorage.setItem(SEGMENT_STORAGE_KEY, next);
     } catch {
@@ -397,16 +454,20 @@ export default function TeacherStudents() {
     } else {
       rows = students.filter((s) => {
         if (mismatchOnly) return s.pair_status === 'mismatch';
-        return matchesSegment(
+        const inSegment = matchesSegment(
           { stage: stageKeyOf(s.study_stage), dormant: s.participation_status === 'dormant' },
           segment,
         );
+        return inSegment && (segment !== 'dormant' || matchesDormantView(s, dormantView, now));
       });
       if (trimmedQuery) rows = rankPeople(rows, trimmedQuery);
     }
     rows = rows.filter((s) => matchesFilters(s, filters, now));
     return trimmedQuery ? rows : sortStudents(rows, sort);
-  }, [students, segment, trimmedQuery, mismatchOnly, filters, sort, now]);
+  }, [students, segment, dormantView, trimmedQuery, mismatchOnly, filters, sort, now]);
+
+  /** The Dormant segment's own counts, over the same rows the list filters. */
+  const dormantCounts = useMemo(() => dormantViewCounts(students, now), [students, now]);
 
   // Offered only when the search found nobody, so a near miss is one tap away.
   const searchSuggestions = useMemo(
@@ -424,7 +485,10 @@ export default function TeacherStudents() {
 
   const headerCaption = [
     `${counts.tracked} tracked`,
-    counts.dormant > 0 ? `${counts.dormant} dormant` : null,
+    counts.notStarted > 0 ? `${counts.notStarted} not started` : null,
+    counts.pausedByStaff > 0 ? `${counts.pausedByStaff} paused` : null,
+    // An older payload without the split still says how many are out.
+    counts.dormant > 0 && counts.notStarted + counts.pausedByStaff === 0 ? `${counts.dormant} dormant` : null,
     counts.awaitingMicrosoft > 0 ? `${counts.awaitingMicrosoft} without Microsoft` : null,
     currentBatch ? `Batch ${currentBatch}` : null,
   ]
@@ -450,6 +514,42 @@ export default function TeacherStudents() {
       }
     },
     [startImpersonation, pathname, router],
+  );
+
+  /**
+   * "Come into Nexus" to one Not started student, from the teacher's own Teams
+   * chat. The join_nexus template is what lets it past the dormant filter in
+   * sendNudge; every other template still skips Not started students.
+   */
+  const remindToJoin = useCallback(
+    async (student: EnrolledStudent) => {
+      try {
+        const token = await getTeacherToken();
+        if (!token) return;
+        const msg = joinReminderMessage(1);
+        const res = await fetch('/api/assignments/nudge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            studentIds: [student.id],
+            subject: msg.subject,
+            body: `${msg.plain}\n\n${window.location.origin}/student`,
+            template: 'join_nexus',
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Could not send the reminder');
+        const reached = (data?.results || []).some((r: { ok?: boolean }) => r.ok);
+        setSnackbar({
+          message: reached
+            ? `Reminder sent to ${student.name}.`
+            : `Could not reach ${student.name}. Their receipt on Delivery health says why.`,
+        });
+      } catch (err) {
+        setSnackbar({ message: err instanceof Error ? err.message : 'Could not send the reminder' });
+      }
+    },
+    [getTeacherToken],
   );
 
   const toggleSelect = useCallback((id: string) => {
@@ -594,6 +694,12 @@ export default function TeacherStudents() {
       if (!assignments && !studentIds.length) return;
       if (assignments && !assignments.length) return;
 
+      // Read before the refetch replaces the rows. Undo cannot restore Not started:
+      // re-marking them dormant would make a staff pause reading "Undo", which only
+      // staff could ever lift. So those changes get no Undo.
+      const targetIds = new Set(studentIds);
+      const touchedNotStarted = students.some((s) => targetIds.has(s.id) && s.dormant_source === 'auto');
+
       setSaving(true);
       try {
         const token = await getToken();
@@ -626,9 +732,13 @@ export default function TeacherStudents() {
         const what = assignments
           ? 'Filled in'
           : payload.participationStatus === 'dormant'
-            ? 'Marked dormant'
+            ? touchedNotStarted
+              ? 'Paused'
+              : 'Marked dormant'
             : payload.participationStatus === 'active'
-              ? 'Brought back'
+              ? touchedNotStarted
+                ? 'Counted in class numbers'
+                : 'Brought back'
               : describeFieldChange(payload);
         const message = skipped
           ? `${what} for ${data.updated}. ${skipped} skipped (not in this classroom).`
@@ -654,7 +764,9 @@ export default function TeacherStudents() {
               participationStatus: (first.participation_status as 'active' | 'dormant') ?? 'active',
             };
             if (revert.participationStatus === 'dormant') revert.reason = 'Undo';
-            undo = () => applyClassification(revert, returned.map((r) => r.id), true);
+            if (!touchedNotStarted) {
+              undo = () => applyClassification(revert, returned.map((r) => r.id), true);
+            }
           } else {
             const revertAssignments: Assignment[] = returned.map((r) => ({
               studentId: r.id,
@@ -680,7 +792,7 @@ export default function TeacherStudents() {
         setSaving(false);
       }
     },
-    [activeClassroom, getToken, selectedIds, exitSelectMode, fetchStudents, closeDrawer],
+    [activeClassroom, getToken, selectedIds, exitSelectMode, fetchStudents, closeDrawer, students],
   );
 
   /** Who the classify drawer is about: one row's student from its menu, or the selection. */
@@ -740,9 +852,24 @@ export default function TeacherStudents() {
           handleSegmentChange('all_active');
           handleFiltersChange({ signIn: 'any', account: 'possible_duplicate', form: 'any' });
           break;
+        case 'review_not_started':
+        case 'review_back_in_nexus':
+          setMismatchOnly(false);
+          handleFiltersChange({ ...DEFAULT_FILTERS });
+          handleSegmentChange('dormant');
+          handleDormantViewChange(key === 'review_not_started' ? 'not_started_long' : 'back_in_nexus');
+          break;
       }
     },
-    [handleFiltersChange, reviewMismatches, startFixingUnset, startFixingYears, loadSuggestions, handleSegmentChange],
+    [
+      handleFiltersChange,
+      reviewMismatches,
+      startFixingUnset,
+      startFixingYears,
+      loadSuggestions,
+      handleSegmentChange,
+      handleDormantViewChange,
+    ],
   );
 
   /** One student's actions, each shown only to someone the server would allow. */
@@ -784,25 +911,58 @@ export default function TeacherStudents() {
           dividerBefore: true,
         });
       }
+      // Not started: the usual next step is a nudge, which any teacher may send.
+      const notStarted = dormant && student.dormant_source === 'auto';
+      if (notStarted && student.ms_oid) {
+        items.push({
+          key: 'remind-join',
+          label: 'Remind now',
+          icon: <NotificationsActiveOutlinedIcon fontSize="small" />,
+          onClick: () => remindToJoin(student),
+          dividerBefore: true,
+        });
+      }
       if (canSetDormancy) {
-        items.push(
-          dormant
-            ? {
-                key: 'reactivate',
-                label: 'Bring back',
-                icon: <ReplayOutlinedIcon fontSize="small" />,
-                onClick: () => openClassifyFor('reactivate', student),
-                dividerBefore: !canSetStage,
-              }
-            : {
-                key: 'dormant',
-                label: 'Mark dormant',
-                icon: <DormantIcon fontSize="small" />,
-                onClick: () => openClassifyFor('dormant', student),
-                tone: 'warning',
-                dividerBefore: !canSetStage,
-              },
-        );
+        if (notStarted) {
+          // Two decisions a person can take over from the automatic rule: they are
+          // really away (a reason, and from then on only staff bring them back), or
+          // they are really here (Teams-only for now) and should count.
+          items.push(
+            {
+              key: 'pause',
+              label: 'Pause with a reason',
+              icon: <PauseCircleOutlineIcon fontSize="small" />,
+              onClick: () => openClassifyFor('dormant', student),
+              tone: 'warning',
+              dividerBefore: !student.ms_oid,
+            },
+            {
+              key: 'count-anyway',
+              label: 'Count them anyway',
+              icon: <ReplayOutlinedIcon fontSize="small" />,
+              onClick: () => openClassifyFor('reactivate', student),
+            },
+          );
+        } else {
+          items.push(
+            dormant
+              ? {
+                  key: 'reactivate',
+                  label: 'Bring back',
+                  icon: <ReplayOutlinedIcon fontSize="small" />,
+                  onClick: () => openClassifyFor('reactivate', student),
+                  dividerBefore: !canSetStage,
+                }
+              : {
+                  key: 'dormant',
+                  label: 'Mark dormant',
+                  icon: <DormantIcon fontSize="small" />,
+                  onClick: () => openClassifyFor('dormant', student),
+                  tone: 'warning',
+                  dividerBefore: !canSetStage,
+                },
+          );
+        }
       }
       // The one account action this student needs: a login they do not have yet,
       // or a new password for the one they do.
@@ -868,6 +1028,7 @@ export default function TeacherStudents() {
       canCreateAccounts,
       canRemoveStudents,
       openClassifyFor,
+      remindToJoin,
     ],
   );
 
@@ -879,7 +1040,7 @@ export default function TeacherStudents() {
     : filtersActive
       ? 'No students match these filters'
       : segment === 'dormant'
-        ? 'Nobody is marked dormant'
+        ? DORMANT_EMPTY_TITLE[dormantView]
         : segment === 'unset'
           ? 'Every student has a study stage'
           : `No students in ${SEGMENT_LABEL[segment]}`;
@@ -894,7 +1055,7 @@ export default function TeacherStudents() {
             {loading && !students.length ? 'Loading students' : headerCaption}
           </Typography>
           <Tooltip
-            title="Tracked students count in attendance, submissions, prep readiness and the watchlist. Dormant students are left out of all of those. A student without a Microsoft account cannot sign in to Nexus yet."
+            title="Tracked students count in attendance, submissions, prep readiness and the watchlist. Not started students (never entered Nexus) and students paused by staff are left out of all of those. Not started students join the numbers on their own once they add a photo and get in. A student without a Microsoft account cannot sign in to Nexus yet."
             arrow
             enterTouchDelay={0}
             leaveTouchDelay={5000}
@@ -966,6 +1127,12 @@ export default function TeacherStudents() {
         <Box sx={{ mb: 1 }}>
           <StudentSegmentBar value={segment} counts={segmentTotals} onChange={handleSegmentChange} />
         </Box>
+
+        {segment === 'dormant' && !trimmedQuery && !mismatchOnly && (
+          <Box sx={{ mb: 1 }}>
+            <DormantViewBar value={dormantView} counts={dormantCounts} onChange={handleDormantViewChange} />
+          </Box>
+        )}
 
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
           <StudentFilterSheet
@@ -1059,6 +1226,10 @@ export default function TeacherStudents() {
             noFormCount={filters.form === 'missing' ? 0 : counts.noForm}
             noStageCount={segment === 'unset' ? 0 : unsetTotal}
             noYearCount={counts.noYear}
+            backInNexusCount={segment === 'dormant' && dormantView === 'back_in_nexus' ? 0 : counts.backInNexus}
+            notStartedLongCount={
+              segment === 'dormant' && dormantView === 'not_started_long' ? 0 : counts.notStartedNeedsDecision
+            }
             suggestionCount={suggestionCount}
             canEdit={canSetStage}
             onAction={handleAttentionAction}

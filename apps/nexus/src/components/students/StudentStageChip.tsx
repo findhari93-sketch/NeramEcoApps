@@ -1,12 +1,16 @@
 'use client';
 
 import { Chip, Tooltip, alpha, useTheme } from '@neram/ui';
+import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import {
   DORMANT_EXPLAINER,
   DORMANT_LABEL,
+  NOT_STARTED_EXPLAINER,
+  NOT_STARTED_LABEL,
   STAGE_LABEL,
   STAGE_TOOLTIP,
   dormantColor,
+  notStartedColor,
   stageColor,
   type StageKey,
 } from '@/lib/student-stage';
@@ -83,17 +87,49 @@ export function StudentStageChip({
 export function DormantChip({
   since,
   reason,
+  source,
   density = 'card',
   onClick,
 }: {
   since?: string | null;
   reason?: string | null;
+  /** 'auto' renders Not started. Anything else is a staff pause. */
+  source?: 'auto' | 'staff' | null;
   density?: ChipDensity;
   onClick?: () => void;
 }) {
   const theme = useTheme();
   const geo = DENSITY[density];
-  const color = dormantColor(theme.palette.mode === 'dark' ? 'dark' : 'light');
+  const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
+
+  if (source === 'auto') {
+    const blue = notStartedColor(mode);
+    return (
+      <Tooltip title={NOT_STARTED_EXPLAINER} arrow enterTouchDelay={0} leaveTouchDelay={6000}>
+        <Chip
+          size="small"
+          icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: geo.iconSize, color: `${blue} !important` }} />}
+          label={NOT_STARTED_LABEL}
+          onClick={onClick}
+          aria-label={`${NOT_STARTED_LABEL}: ${NOT_STARTED_EXPLAINER}`}
+          sx={{
+            height: geo.height,
+            fontSize: geo.fontSize,
+            fontWeight: 700,
+            flexShrink: 0,
+            cursor: onClick ? 'pointer' : 'help',
+            bgcolor: alpha(blue, 0.12),
+            color: blue,
+            border: `1px dashed ${alpha(blue, 0.6)}`,
+            '& .MuiChip-label': { px: 0.75 },
+            '& .MuiChip-icon': { ml: 0.5, mr: -0.25 },
+          }}
+        />
+      </Tooltip>
+    );
+  }
+
+  const color = dormantColor(mode);
 
   // Every part of the tooltip is optional except the consequences, which are
   // rendered from the one shared constant so this chip, the classify drawer and

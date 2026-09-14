@@ -117,7 +117,9 @@ export function heardLabel(state: HeardState): string {
     case 'unheard':
       return 'Not heard yet';
     default:
-      return 'Draft';
+      // Not "Draft": the action bar's own Save draft button sits right below,
+      // and the same word for two different things read as one.
+      return 'Not sent yet';
   }
 }
 
@@ -137,7 +139,7 @@ export interface VoiceStatusFields extends HeardFields {
 
 /** One line under the teacher's copy of a note: where it is and whether it landed. */
 export function voiceStatusLine(v: VoiceStatusFields, nowMs: number): string {
-  if (!v.sent_at) return 'Saved. It goes out with Redo or Complete.';
+  if (!v.sent_at) return 'Saved. Sent with Redo or Complete.';
   const sent = `Sent ${agoText(v.sent_at, nowMs)}.`;
   const state = heardState(v);
   if (state === 'full') return `${sent} Heard fully ${agoText(v.heard_fully_at as string, nowMs)}.`;

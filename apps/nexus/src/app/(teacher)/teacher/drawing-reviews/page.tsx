@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box, Typography, Paper, Skeleton, Tabs, Tab, Chip,
@@ -55,7 +55,7 @@ const SOURCE_LABELS: Record<string, string> = {
 
 export default function DrawingReviewsPage() {
   const router = useRouter();
-  const { getToken } = useNexusAuthContext();
+  const { getToken, tokenReady } = useNexusAuthContext();
   const [submissions, setSubmissions] = useState<DrawingSubmissionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('submitted');
@@ -112,6 +112,27 @@ export default function DrawingReviewsPage() {
   }, [getToken, status, reviewedSubFilter, tagSlugs, source]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
+
+  // Draft whatever is still waiting without an AI draft, once each time the
+  // queue opens. Fired and forgotten: the queue never waits on it, and a
+  // failure just leaves those sheets for the next sweep or a hand review.
+  const sweptRef = useRef(false);
+  useEffect(() => {
+    if (!tokenReady || sweptRef.current) return;
+    sweptRef.current = true;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        await fetch('/api/drawing/evaluations/sweep', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        // Ignored on purpose, see above.
+      }
+    })();
+  }, [tokenReady, getToken]);
 
   const isCompact = viewMode === 'compact';
 

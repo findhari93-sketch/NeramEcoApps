@@ -66,6 +66,9 @@ export async function loadReferenceInputs(
       .select('id')
       .eq('submission_id', submission.id)
       .eq('source', 'ai')
+      // A running, failed or superseded row carries no scores. Taking it as
+      // "the newest draft" would drop the AI band from beside every score.
+      .in('status', ['draft', 'reviewed', 'released'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();

@@ -15675,6 +15675,7 @@ export type Database = {
           last_login_at: string | null
           nexus_first_login_at: string | null
           nexus_last_login_at: string | null
+          nexus_entered_at: string | null
           last_name: string | null
           linked_classroom_at: string | null
           linked_classroom_by: string | null
@@ -15728,6 +15729,7 @@ export type Database = {
           last_login_at?: string | null
           nexus_first_login_at?: string | null
           nexus_last_login_at?: string | null
+          nexus_entered_at?: string | null
           last_name?: string | null
           linked_classroom_at?: string | null
           linked_classroom_by?: string | null
@@ -15781,6 +15783,7 @@ export type Database = {
           last_login_at?: string | null
           nexus_first_login_at?: string | null
           nexus_last_login_at?: string | null
+          nexus_entered_at?: string | null
           last_name?: string | null
           linked_classroom_at?: string | null
           linked_classroom_by?: string | null

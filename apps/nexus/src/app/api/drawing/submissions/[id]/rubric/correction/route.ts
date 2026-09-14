@@ -112,7 +112,10 @@ async function openDraftsLike(
     .from('drawing_evaluation')
     .select('id, submission_id, created_by, brief_type_id, released_at, status')
     .in('submission_id', ids)
-    .eq('source', 'ai');
+    .eq('source', 'ai')
+    // A replaced draft keeps its criterion rows; counting it would count one
+    // sheet twice.
+    .in('status', ['draft', 'reviewed', 'released']);
   const byEval = new Map(((evals ?? []) as Array<any>).map((e) => [e.id, e]));
   if (byEval.size === 0) return [];
   const { data: rows } = await supabase

@@ -1,10 +1,23 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { Box, IconButton, Paper, Typography, useMediaQuery, useTheme } from '@neram/ui';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Box,
+  Button,
+  CircularProgress,
+  IconButton,
+  Paper,
+  Typography,
+  alpha,
+  useMediaQuery,
+  useTheme,
+} from '@neram/ui';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import { canActivateQuestion } from '@/lib/qb-activation';
 import type { NexusQBQuestion, NexusQBQuestionSource, QBQuestionSection } from '@neram/database';
 import QuestionEditForm, { type PaperFallback } from './QuestionEditForm';
 import BulkImageQuestionCard from '../BulkImageQuestionCard';
@@ -47,6 +60,8 @@ export interface PaperQuestionDetailProps {
   onPrevious: () => void;
   onNext: () => void;
   onChangeSection: (questionId: string, section: QBQuestionSection) => Promise<void>;
+  /** Show or hide the open question, through the same path as the list's selection bar. */
+  onSetActive?: (active: boolean) => Promise<void>;
   /** 'edit' shows the full question form; 'images' shows the paste assembly line. */
   mode?: 'edit' | 'images';
   imagesPane?: ImagesPaneProps;
@@ -61,12 +76,13 @@ export interface PaperQuestionDetailProps {
  */
 export default function PaperQuestionDetail({
   question, position, paper, sources, tagIds, choiceGroupSiblings, onUnlinkChoiceGroup,
-  getToken, onSaved, onClose, onPrevious, onNext, onChangeSection,
+  getToken, onSaved, onClose, onPrevious, onNext, onChangeSection, onSetActive,
   mode = 'edit', imagesPane,
 }: PaperQuestionDetailProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [activating, setActivating] = useState(false);
 
   // The direct fix for "I open Q91 and I'm scrolled to the bottom of the
   // page with the stem off the top of the screen". A pane that keeps its
@@ -143,6 +159,29 @@ export default function PaperQuestionDetail({
         </IconButton>
       </Box>
 
+      {/*
+        Outside the scroll region, so it cannot be scrolled away: a teacher who
+        opened a hidden question used to search this pane for a way to show it
+        and find nothing, because nothing here said it was hidden. Checked
+        against the saved answer, since Activate goes to the server and an
+        unsaved key in the form below would not count yet.
+      */}
+      {!question.is_active && onSetActive && (
+        <HiddenQuestionStrip
+          canActivate={canActivateQuestion(question)}
+          busy={activating}
+          onActivate={async () => {
+            setActivating(true);
+            try {
+              await onSetActive(true);
+            } finally {
+              setActivating(false);
+            }
+          }}
+          tint={alpha(theme.palette.warning.main, 0.1)}
+        />
+      )}
+
       <Box ref={scrollRef} sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: { xs: 1.5, md: 2 } }}>
         {/*
           key is load-bearing: it remounts the form when the teacher moves to
@@ -177,5 +216,64 @@ export default function PaperQuestionDetail({
         )}
       </Box>
     </Paper>
+  );
+}
+
+/**
+ * "Hidden from students", with the way back beside it.
+ *
+ * Plain text on a light tint rather than a warning Alert, whose text sits at
+ * 3.5:1 in the @neram/ui theme. Outlined rather than contained, because a
+ * disabled contained button in that theme keeps its gradient and still looks
+ * pressable.
+ */
+function HiddenQuestionStrip({
+  canActivate,
+  busy,
+  onActivate,
+  tint,
+}: {
+  canActivate: boolean;
+  busy: boolean;
+  onActivate: () => void;
+  tint: string;
+}) {
+  return (
+    <Box
+      role="status"
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 1,
+        px: 1.5,
+        py: 1,
+        bgcolor: tint,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <VisibilityOffOutlinedIcon sx={{ fontSize: 20, color: 'text.secondary' }} aria-hidden />
+      <Box sx={{ flex: 1, minWidth: 160 }}>
+        <Typography variant="body2" fontWeight={700} color="text.primary">
+          Hidden from students
+        </Typography>
+        <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0 }}>
+          {canActivate
+            ? 'Students cannot see this question until you activate it.'
+            : 'Set the correct answer and save, then activate.'}
+        </Typography>
+      </Box>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={onActivate}
+        disabled={!canActivate || busy}
+        startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />}
+        sx={{ textTransform: 'none', minHeight: 44, flexShrink: 0 }}
+      >
+        Activate
+      </Button>
+    </Box>
   );
 }

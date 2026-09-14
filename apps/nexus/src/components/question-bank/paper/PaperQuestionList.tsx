@@ -32,7 +32,7 @@ import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import LinkIcon from '@mui/icons-material/Link';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import type { NexusQBQuestion, QBQuestionSection } from '@neram/database';
@@ -257,15 +257,37 @@ export default function PaperQuestionList({
   };
 
   /**
+   * The ticked rows split by whether students can see them, in tick order.
+   *
+   * The bar offered "Deactivate" for any selection, including one where every
+   * row was already hidden, and kept Activate in the overflow. Each button now
+   * acts only on the rows it can change, so a mixed selection never sends an
+   * already-live row to Activate or an already-hidden one to Deactivate.
+   */
+  const { hiddenIds, liveIds } = useMemo(() => {
+    const byId = new Map(questions.map((q) => [q.id, q]));
+    const hidden: string[] = [];
+    const live: string[] = [];
+    selected.forEach((id) => {
+      const question = byId.get(id);
+      if (!question) return;
+      (question.is_active ? live : hidden).push(id);
+    });
+    return { hiddenIds: hidden, liveIds: live };
+  }, [questions, selected]);
+  const mixedVisibility = hiddenIds.length > 0 && liveIds.length > 0;
+
+  /**
    * No confirmation dialog, unlike the paper-wide version this replaces. The
    * teacher ticked these rows, the count is on the bar in front of them, and
-   * the opposite action sits two buttons away.
+   * the result is reversible from the same bar.
    */
   const applySetActive = async (active: boolean) => {
-    if (selected.size === 0) return;
+    const ids = active ? hiddenIds : liveIds;
+    if (ids.length === 0) return;
     setSettingActive(active ? 'activate' : 'deactivate');
     try {
-      await onSetActiveQuestions(Array.from(selected), active);
+      await onSetActiveQuestions(ids, active);
       clearSelection();
     } finally {
       setSettingActive(null);
@@ -648,25 +670,55 @@ export default function PaperQuestionList({
                   </Button>
                 </>
               )}
-              {/* The paper header used to carry "Deactivate 90" on every visit.
-                  It belongs here, scoped to rows the teacher actually ticked,
-                  next to the other things you do to a selection. */}
-              <Tooltip title="Hide the selected questions from students. Nothing is deleted." arrow>
-                <Button
-                  size="small"
-                  color="warning"
-                  startIcon={
-                    settingActive === 'deactivate'
-                      ? <CircularProgress size={16} color="inherit" />
-                      : <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />
-                  }
-                  onClick={() => applySetActive(false)}
-                  disabled={settingActive !== null}
-                  sx={{ textTransform: 'none', minHeight: 44 }}
+              {/* Only the action that would change something is shown: Activate
+                  for hidden rows, Deactivate for live ones, and both, each
+                  counted, when the selection holds some of each.
+                  describeChild keeps the visible label as the accessible name;
+                  the tooltip is extra detail, not a replacement for it. */}
+              {hiddenIds.length > 0 && (
+                <Tooltip
+                  describeChild
+                  title="Show the selected hidden questions to students again. Questions with no answer key stay hidden."
+                  arrow
                 >
-                  {settingActive === 'deactivate' ? 'Hiding...' : 'Deactivate'}
-                </Button>
-              </Tooltip>
+                  <Button
+                    size="small"
+                    color="success"
+                    startIcon={
+                      settingActive === 'activate'
+                        ? <CircularProgress size={16} color="inherit" />
+                        : <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />
+                    }
+                    onClick={() => applySetActive(true)}
+                    disabled={settingActive !== null}
+                    sx={{ textTransform: 'none', minHeight: 44 }}
+                  >
+                    {settingActive === 'activate'
+                      ? 'Activating...'
+                      : mixedVisibility ? `Activate ${hiddenIds.length}` : 'Activate'}
+                  </Button>
+                </Tooltip>
+              )}
+              {liveIds.length > 0 && (
+                <Tooltip describeChild title="Hide the selected questions from students. Nothing is deleted." arrow>
+                  <Button
+                    size="small"
+                    color="inherit"
+                    startIcon={
+                      settingActive === 'deactivate'
+                        ? <CircularProgress size={16} color="inherit" />
+                        : <VisibilityOffOutlinedIcon sx={{ fontSize: 18, color: 'warning.main' }} />
+                    }
+                    onClick={() => applySetActive(false)}
+                    disabled={settingActive !== null}
+                    sx={{ textTransform: 'none', minHeight: 44 }}
+                  >
+                    {settingActive === 'deactivate'
+                      ? 'Hiding...'
+                      : mixedVisibility ? `Deactivate ${liveIds.length}` : 'Deactivate'}
+                  </Button>
+                </Tooltip>
+              )}
               <Tooltip title="Permanently remove questions that never really belonged on this paper" arrow>
                 <Button
                   size="small"
@@ -687,18 +739,6 @@ export default function PaperQuestionList({
                 <MoreVertIcon fontSize="small" />
               </IconButton>
               <Menu anchorEl={moreAnchor} open={!!moreAnchor} onClose={() => setMoreAnchor(null)}>
-                <MenuItem
-                  onClick={() => { setMoreAnchor(null); applySetActive(true); }}
-                  disabled={settingActive !== null}
-                  sx={{ minHeight: 44 }}
-                >
-                  <ListItemIcon><PlayArrowIcon fontSize="small" color="success" /></ListItemIcon>
-                  <ListItemText
-                    primary="Activate"
-                    secondary="Only the ones that already have an answer key"
-                    secondaryTypographyProps={{ variant: 'caption' }}
-                  />
-                </MenuItem>
                 <MenuItem
                   onClick={() => { setMoreAnchor(null); applyBulkNeedsImage(true); }}
                   disabled={applyingNeedsImage !== null}

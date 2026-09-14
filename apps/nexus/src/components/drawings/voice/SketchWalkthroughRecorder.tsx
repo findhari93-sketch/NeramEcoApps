@@ -11,6 +11,13 @@
  * undo, same pinch and zoom. Nothing is sent from here. The finished recording
  * is handed back to the voice section, which saves it as the attempt's draft
  * note, and that goes out with the next Redo or Complete.
+ *
+ * The clock starts when the microphone actually starts, not when Start is
+ * pressed. Opening the microphone takes hundreds of ms, and stamping strokes
+ * against the press put every one of them that far behind the voice. Strokes
+ * are also refused from the instant Stop is pressed, because the recorder
+ * finishes encoding a moment later and anything drawn in that gap has no voice
+ * to belong to.
  */
 import { useCallback, useRef, useState } from 'react';
 import { Box, Button, Chip, Stack, Typography } from '@neram/ui';
@@ -50,8 +57,8 @@ export default function SketchWalkthroughRecorder({
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [sketchDropped, setSketchDropped] = useState(false);
   const opsRef = useRef<SketchOp[]>([]);
-  const startedAtRef = useRef(0);
-  const [startedAt, setStartedAt] = useState(0);
+  const [stopping, setStopping] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
 
   const onOp = useCallback((op: SketchOp) => {
     const ops = opsRef.current;
@@ -70,12 +77,18 @@ export default function SketchWalkthroughRecorder({
   }, []);
 
   const start = () => {
+    // A second take starts from a clean sheet: the first take's strokes are not
+    // in this recording, so they must not be on the canvas either.
+    if (opsRef.current.length > 0 || rec.recording) setResetKey((k) => k + 1);
     opsRef.current = [];
     setSketchDropped(false);
-    const at = performance.now();
-    startedAtRef.current = at;
-    setStartedAt(at);
+    setStopping(false);
     void rec.start();
+  };
+
+  const stop = () => {
+    setStopping(true);
+    rec.stop();
   };
 
   /**
@@ -104,7 +117,8 @@ export default function SketchWalkthroughRecorder({
     onFinish({ recording: rec.recording, timeline, flattened });
   };
 
-  const recording = status === 'recording' ? { startedAt, onOp } : null;
+  const clockReady = status === 'recording' && rec.clockStartedAt != null && !stopping;
+  const recording = clockReady ? { startedAt: rec.clockStartedAt as number, onOp } : null;
   const elapsed = formatClock(rec.elapsedMs / 1000);
   const cap = formatClock(rec.capMs / 1000);
 
@@ -133,7 +147,7 @@ export default function SketchWalkthroughRecorder({
             color="error"
             size="small"
             startIcon={<StopRoundedIcon />}
-            onClick={rec.stop}
+            onClick={stop}
             sx={{ textTransform: 'none', fontWeight: 700, minHeight: 44 }}
           >
             Stop
@@ -167,8 +181,10 @@ export default function SketchWalkthroughRecorder({
   );
 
   const hint =
-    status === 'idle' || status === 'requesting'
+    status === 'idle'
       ? 'Press Start recording, then talk them through the drawing as you mark it.'
+      : status === 'requesting' || (status === 'recording' && rec.clockStartedAt == null)
+        ? 'Getting the microphone ready. Start drawing when the timer runs.'
       : status === 'denied'
         ? 'Nexus cannot use your microphone. Allow it from the lock icon beside the address bar.'
         : status === 'unsupported'
@@ -188,6 +204,7 @@ export default function SketchWalkthroughRecorder({
         recording={recording}
         headerExtra={controls}
         onImageSize={setSize}
+        resetKey={resetKey}
         saveDisabled={status !== 'recorded' || !rec.recording}
         saveLabel="Save walkthrough"
       />

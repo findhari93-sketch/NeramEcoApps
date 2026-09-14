@@ -57,7 +57,7 @@ function QuietRow({ item }: { item: QuietLink }) {
           {item.label}
         </Typography>
         {item.meta && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: '65%', minWidth: 0 }}>
             {item.meta}
           </Typography>
         )}

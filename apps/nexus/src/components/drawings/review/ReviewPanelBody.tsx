@@ -9,18 +9,22 @@
  * breakpoints.
  *
  * The banners and the voice recorder arrive as nodes because the page already
- * builds them once and they close over its handlers. Phase 1 replaces the middle
- * of this stack with the staged rail (01 SCORE / 02 SAY IT / 03 SEND); keeping
- * the ordering in one file is what makes that a single edit.
+ * builds them once and they close over its handlers.
+ *
+ * There is no comment thread here any more. The written feedback and the voice
+ * note already are the teacher's words to the student, and a second box for
+ * the same thing was never used (15 comments in the life of the feature). What a
+ * student wrote is still shown, read only, in the "From the student" card, so
+ * nothing they said goes unseen.
  */
 
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Paper, Typography } from '@neram/ui';
 import AIFeedbackWorkspace, { type WorkspaceData } from '@/components/drawings/AIFeedbackWorkspace';
-import CommentSection from '@/components/drawings/CommentSection';
 import TagEditor from '@/components/drawings/TagEditor';
 import QuietLinksRow, { type QuietLink } from './QuietLinksRow';
 import type { AiDraft } from '@/lib/drawing-ai-draft';
+import type { AutoDraftState } from '@/hooks/useAutoDraft';
 
 export interface ReviewPanelBodyProps {
   submissionId: string;
@@ -45,52 +49,96 @@ export interface ReviewPanelBodyProps {
   onTagLabelsChange: (labels: string[]) => void;
 
   aiDraft?: AiDraft | null;
-  onDrafted?: () => void;
+  /** Where Gemini's draft for this sheet stands. */
+  draftState?: AutoDraftState | null;
+}
+
+interface StudentComment {
+  id: string;
+  comment_text: string;
 }
 
 export default function ReviewPanelBody({
   submissionId, submission, getToken, onWorkspaceChange, isEditMode, sketchTrigger,
   evaluationType, maxMarks, selfNote,
   supersededBanner, reReviewNotice, voiceSection, previousAttemptsPanel,
-  tagLabels, onTagLabelsChange, aiDraft = null, onDrafted,
+  tagLabels, onTagLabelsChange, aiDraft = null, draftState = null,
 }: ReviewPanelBodyProps) {
-  const quietLinks: QuietLink[] = [
-    ...(isEditMode
-      ? [{
-          key: 'tags',
-          label: 'Tags',
-          meta: tagLabels.length ? String(tagLabels.length) : undefined,
-          content: <TagEditor value={tagLabels} onChange={onTagLabelsChange} />,
-        }]
-      : []),
-    {
-      key: 'comments',
-      label: 'Comments',
-      content: <CommentSection submissionId={submissionId} getToken={getToken} canComment={true} />,
-    },
-  ];
+  const drafting = draftState?.phase === 'drafting';
+  const [studentComments, setStudentComments] = useState<StudentComment[]>([]);
+  // getToken is a fresh function every render; an effect keyed on it would
+  // refetch forever.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getTokenRef.current();
+        const res = await fetch(`/api/drawing/submissions/${submissionId}/comments`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const fromStudent = ((data.comments || []) as any[])
+          .filter((c) => c.author_role === 'student' && typeof c.comment_text === 'string' && c.comment_text.trim())
+          .map((c) => ({ id: String(c.id), comment_text: c.comment_text as string }));
+        if (!cancelled) setStudentComments(fromStudent);
+      } catch {
+        // A missing comment never blocks a review.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [submissionId]);
+
+  const tagsMeta = tagLabels.length
+    ? tagLabels.join(', ')
+    : drafting
+      ? 'Gemini adds these with its draft'
+      : 'None yet';
+
+  const quietLinks: QuietLink[] = isEditMode
+    ? [{
+        key: 'tags',
+        label: 'Tags',
+        meta: tagsMeta,
+        content: <TagEditor value={tagLabels} onChange={onTagLabelsChange} />,
+      }]
+    : [];
+
+  const hasStudentWords = !!selfNote || studentComments.length > 0;
 
   return (
     <>
       {supersededBanner}
       {reReviewNotice}
 
-      {selfNote && (
+      {hasStudentWords && (
         <Paper
           variant="outlined"
           sx={{ p: { xs: 1, md: 1.5 }, mb: { xs: 1.5, md: 2 }, bgcolor: '#f0f7ff' }}
         >
-          <Typography variant="caption" fontWeight={600} color="primary.dark">
-            Student&apos;s Note
+          <Typography variant="caption" fontWeight={700} color="primary.dark">
+            From the student
           </Typography>
-          <Typography variant="body2" sx={{ mt: 0.25, fontSize: { xs: '0.82rem', md: '0.875rem' } }}>
-            {selfNote}
-          </Typography>
+          {selfNote && (
+            <Typography variant="body2" sx={{ mt: 0.25, fontSize: { xs: '0.82rem', md: '0.875rem' } }}>
+              {selfNote}
+            </Typography>
+          )}
+          {studentComments.map((c) => (
+            <Typography
+              key={c.id}
+              variant="body2"
+              sx={{ mt: 0.5, fontSize: { xs: '0.82rem', md: '0.875rem' }, whiteSpace: 'pre-wrap' }}
+            >
+              {c.comment_text}
+            </Typography>
+          ))}
         </Paper>
       )}
 
-      {/* 01 Score and 02 Say it live together in the workspace, with the voice
-          note beside the written feedback. The action bar below is 03 Send. */}
       <AIFeedbackWorkspace
         submission={submission}
         getToken={getToken}
@@ -102,13 +150,13 @@ export default function ReviewPanelBody({
         maxMarks={maxMarks}
         voiceSlot={voiceSection}
         aiDraft={aiDraft}
-        onDrafted={onDrafted}
+        draftState={draftState}
       />
 
       {/* Kept open: on a redo round the earlier attempts are the context. */}
       {previousAttemptsPanel}
 
-      <QuietLinksRow items={quietLinks} />
+      {quietLinks.length > 0 && <QuietLinksRow items={quietLinks} />}
     </>
   );
 }

@@ -32,6 +32,7 @@ import {
   selectColumns,
 } from './student-finance';
 import { maskAadhaar } from './student-profile-fields';
+import { participationEventTitle } from './not-started';
 import type {
   ProfileChecklistItem,
   ProfileDocument,
@@ -45,6 +46,8 @@ import type {
 const CHECKLIST_ITEM_CAP = 60;
 /** The activity feed is a summary, not an audit log. */
 const TIMELINE_CAP = 40;
+/** Enough to tell "tried twice and stopped at the photo step" from "never tried". */
+const SIGN_IN_CAP = 20;
 
 export class StudentNotInClassroomError extends Error {
   constructor(message: string) {
@@ -74,7 +77,7 @@ export async function loadStudentProfileCore(
         'id, name, first_name, last_name, email, personal_email, phone, avatar_url, ' +
           'date_of_birth, gender, ms_oid, linked_classroom_email, academic_year, ' +
           'student_program, lifecycle_status, is_alumni, photo_status, ' +
-          'last_login_at, nexus_first_login_at, nexus_last_login_at',
+          'last_login_at, nexus_first_login_at, nexus_last_login_at, nexus_entered_at',
       )
       .eq('id', studentId)
       .single(),
@@ -83,7 +86,8 @@ export async function loadStudentProfileCore(
       .from('nexus_enrollments')
       .select(
         'enrolled_at, batch_id, current_standard, current_standard_source, ' +
-          'current_standard_set_at, participation_status, dormant_since, dormant_reason',
+          'current_standard_set_at, participation_status, dormant_since, dormant_reason, dormant_source, ' +
+          'dormant_by_user:users!nexus_enrollments_dormant_by_fkey(name)',
       )
       .eq('classroom_id', classroomId)
       .eq('user_id', studentId)
@@ -116,6 +120,7 @@ export async function loadStudentProfileCore(
     historyResult,
     classificationResult,
     currentBatchRow,
+    signInResult,
   ] = await Promise.all([
     // Latest non-deleted application. Filtered and ordered in SQL, never in JS.
     supabase
@@ -212,6 +217,13 @@ export async function loadStudentProfileCore(
       .limit(TIMELINE_CAP),
 
     getCurrentBatch(),
+
+    // Sign-in history (migration 20260919090000), also absent from the generated types.
+    (supabase.from('nexus_sign_in_events' as any) as any)
+      .select('occurred_at, outcome, device')
+      .eq('user_id', studentId)
+      .order('occurred_at', { ascending: false })
+      .limit(SIGN_IN_CAP),
   ]);
 
   const lead = (leadResult.data as any) ?? null;
@@ -310,7 +322,13 @@ export async function loadStudentProfileCore(
       last_login_at: user.last_login_at ?? null,
       nexus_first_login_at: user.nexus_first_login_at ?? null,
       nexus_last_login_at: user.nexus_last_login_at ?? null,
+      nexus_entered_at: user.nexus_entered_at ?? null,
     },
+    signIns: ((signInResult?.data as any[]) || []).map((s) => ({
+      at: s.occurred_at,
+      outcome: s.outcome === 'photo_step' ? 'photo_step' : 'entered',
+      device: s.device ?? null,
+    })),
     enrollment: {
       enrolled_at: enrollment.enrolled_at ?? null,
       batch_id: enrollment.batch_id ?? null,
@@ -320,6 +338,13 @@ export async function loadStudentProfileCore(
       participation_status: enrollment.participation_status ?? 'active',
       dormant_since: enrollment.dormant_since ?? null,
       dormant_reason: enrollment.dormant_reason ?? null,
+      dormant_source:
+        enrollment.participation_status === 'dormant'
+          ? enrollment.dormant_source === 'auto'
+            ? 'auto'
+            : 'staff'
+          : null,
+      dormant_by_name: enrollment.dormant_by_user?.name ?? null,
       pair_status: pairStatus(
         enrollment.current_standard ?? null,
         user.academic_year ?? null,
@@ -490,10 +515,22 @@ function buildTimeline(input: {
 
   for (const c of input.classification) {
     if (!c.created_at) continue;
+    // The route writes axis 'participation'. This used to test for
+    // 'participation_status', which never matched, so every pause read as a
+    // generic "Classification changed".
+    if (c.axis === 'participation') {
+      events.push({
+        at: c.created_at,
+        kind: 'classification',
+        title: participationEventTitle(c.from_value, c.to_value, c.reason),
+        detail: c.reason || null,
+      });
+      continue;
+    }
     events.push({
       at: c.created_at,
       kind: 'classification',
-      title: c.axis === 'participation_status' ? 'Participation changed' : 'Classification changed',
+      title: 'Classification changed',
       detail: `${c.from_value ?? 'not set'} to ${c.to_value ?? 'not set'}${
         c.reason ? `. ${c.reason}` : ''
       }`,

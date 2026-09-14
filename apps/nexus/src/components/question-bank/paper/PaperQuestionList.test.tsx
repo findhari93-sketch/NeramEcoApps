@@ -293,21 +293,72 @@ describe('PaperQuestionList', () => {
     renderList();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 3' }));
-    // Named by its tooltip: MUI puts the title on aria-label, so the visible
-    // "Deactivate" is not the accessible name.
-    fireEvent.click(screen.getByRole('button', { name: /Hide the selected questions from students/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
 
     expect(onSetActiveQuestions).toHaveBeenCalledWith(['q1', 'q3'], false);
     // Cleared afterwards, so the bar does not linger over a stale selection.
     await screen.findByText('6 questions');
   });
 
-  it('offers Activate from the selection overflow', () => {
-    renderList();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }));
-    openSelectionOverflow();
-    fireEvent.click(screen.getByRole('menuitem', { name: /Activate/ }));
-    expect(onSetActiveQuestions).toHaveBeenCalledWith(['q2'], true);
+  /**
+   * JEE Paper 2 2007, Q76 and Q77 on prod: both already hidden, both ticked,
+   * and the bar offered "Deactivate" and nothing else. The one thing a teacher
+   * can do to a hidden question was two taps deep in the overflow.
+   */
+  describe('the visibility action follows the selection', () => {
+    const withHidden = [
+      { ...MATHS[0], is_active: false, status: 'draft' },
+      { ...MATHS[1], is_active: false, status: 'draft' },
+      MATHS[2],
+      ...APT,
+    ] as unknown as NexusQBQuestion[];
+
+    it('offers Activate, and no Deactivate, when every ticked question is already hidden', async () => {
+      renderList({ questions: withHidden });
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }));
+
+      expect(screen.queryByRole('button', { name: /^Deactivate/ })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+
+      expect(onSetActiveQuestions).toHaveBeenCalledWith(['q1', 'q2'], true);
+      await screen.findByText('6 questions');
+    });
+
+    it('offers Deactivate, and no Activate, when every ticked question is live', () => {
+      renderList({ questions: withHidden });
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 3' }));
+
+      expect(screen.getByRole('button', { name: 'Deactivate' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: /^Activate/ })).toBeNull();
+    });
+
+    it('offers both on a mixed selection, each counted and each touching only its own rows', async () => {
+      renderList({ questions: withHidden });
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 3' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 4' }));
+
+      expect(screen.getByRole('button', { name: 'Activate 1' })).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Deactivate 2' }));
+      expect(onSetActiveQuestions).toHaveBeenCalledWith(['q3', 'q4'], false);
+      await screen.findByText('6 questions');
+    });
+
+    it('sends only the hidden rows of a mixed selection to Activate', () => {
+      renderList({ questions: withHidden });
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 5' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Activate 1' }));
+      expect(onSetActiveQuestions).toHaveBeenCalledWith(['q2'], true);
+    });
+
+    it('no longer hides Activate in the overflow', () => {
+      renderList({ questions: withHidden });
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
+      openSelectionOverflow();
+      expect(screen.queryByRole('menuitem', { name: /Activate/ })).toBeNull();
+    });
   });
 
   it('keeps the needs-image verdicts reachable from the selection overflow', () => {

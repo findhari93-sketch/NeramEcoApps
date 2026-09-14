@@ -2,30 +2,49 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getNexusSetting } from '@neram/database';
 
 import { verifyMsToken } from '@/lib/ms-verify';
-import { evaluateSubmission } from '@/lib/drawing-eval/evaluate';
+import { runAutoDraft, type AutoDraftState } from '@/lib/drawing-auto-draft';
 import { FEATURE_FLAGS_KEY, isFeatureEnabled, resolveFlags } from '@/lib/feature-flags';
 import { evalTables } from '@/lib/drawing-eval/db';
 
 /**
- * Ask for a draft evaluation of one drawing submission.
+ * "Draft again": replace the AI draft of one drawing submission.
  *
- * Shadow stage: this writes a drawing_evaluation row and returns it, and
- * nothing it produces reaches a student. The review screen is untouched.
+ * Drafts now arrive on their own (lib/drawing-auto-draft.ts). This is the
+ * teacher's button for a draft that came back wrong or failed: the current
+ * draft is marked superseded and a fresh one is run through the same claim,
+ * orientation, evaluation and tagging path.
  *
  * Three independent gates have to be open before a call costs anything, and
  * they are deliberately not the same gate:
  *
  *   1. teacher or admin           who may ask
  *   2. staff.drawing-eval flag    whether the surface exists at all
- *   3. nexus.drawing-eval mode    whether a press may spend, enforced inside
- *                                 generateGemini by the shared budget guard
+ *   3. nexus.drawing-eval mode    whether a press may spend, enforced by the
+ *                                 shared budget guard
  *
- * The third ships 'off', so until someone turns it on in the admin panel this
- * route answers 409 with the prompt to paste into Gemini by hand, which is the
- * workflow teachers use today.
+ * Body: { submission_id }. Answers the runAutoDraft result,
+ * { state, reason?, rotatedDeg?, tags?, evaluationId?, mode? }, plus `error`
+ * when nothing was drafted. Status 200 for drafted, busy and skipped; 409 when
+ * blocked; 422 when the draft failed, so a caller that only checks res.ok still
+ * shows the reason.
  */
 
 export const maxDuration = 300;
+
+const STATUS_FOR: Record<AutoDraftState, number> = {
+  drafted: 200,
+  busy: 200,
+  skipped: 200,
+  blocked: 409,
+  failed: 422,
+};
+
+const ERROR_FOR: Partial<Record<AutoDraftState, string>> = {
+  busy: 'A draft of this drawing is already being written.',
+  skipped: 'This drawing is not waiting for review, so it was not drafted.',
+  blocked: 'AI drafting is switched off or over its budget right now.',
+  failed: 'The draft did not come back.',
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,32 +73,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'submission_id is required' }, { status: 400 });
     }
 
-    const outcome = await evaluateSubmission({
-      supabase,
-      submissionId,
-      actorId: user.id as string,
-    });
+    const result = await runAutoDraft(supabase, submissionId, { actorId: user.id as string, force: true });
 
-    if (!outcome.ok) {
-      return NextResponse.json(
-        {
-          error: outcome.error,
-          // Present when the budget guard refused. The caller shows it as a
-          // copy-paste prompt rather than an error.
-          manual_prompt: outcome.manualPrompt ?? null,
-          evaluation_id: outcome.evaluationId ?? null,
-        },
-        { status: outcome.status },
-      );
-    }
-
-    return NextResponse.json({
-      evaluation_id: outcome.evaluationId,
-      model: outcome.model,
-      cost_usd: outcome.costUsd,
-      result: outcome.result,
-      notes: outcome.notes,
-    });
+    if (result.state === 'drafted') return NextResponse.json(result);
+    const error =
+      result.state === 'failed' && result.reason ? result.reason : ERROR_FOR[result.state] ?? 'The draft did not come back.';
+    return NextResponse.json({ ...result, error }, { status: STATUS_FOR[result.state] });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected error';
     if (message.includes('token') || message.includes('Unauthorized')) {

@@ -8,6 +8,7 @@ import { findRosterDuplicates } from '@/lib/roster-duplicates';
 import { activityOf } from '@/lib/student-roster-view';
 import { isApplicationForm } from '@/lib/application-form';
 import { pickStudentPlace } from '@/lib/student-place';
+import { backInNexus, isNotStarted, needsDecision } from '@/lib/not-started';
 import {
   matchesSegment,
   segmentCounts,
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
     // ambiguous and PostgREST rejects it.
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('id, user_id, enrolled_at, batch_id, is_active, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, is_alumni, nexus_first_login_at, nexus_last_login_at), batch:nexus_batches(id, name)')
+      .select('id, user_id, enrolled_at, batch_id, is_active, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason, dormant_source, dormant_by, join_reminders_sent, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, is_alumni, nexus_first_login_at, nexus_last_login_at), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
       .eq('role', 'student')
       .eq('is_active', true)
@@ -187,6 +188,10 @@ export async function GET(request: NextRequest) {
           neverSignedIn: 0,
           notSeen14d: 0,
           noForm: 0,
+          notStarted: 0,
+          pausedByStaff: 0,
+          notStartedNeedsDecision: 0,
+          backInNexus: 0,
         },
         batches: [],
         currentBatch: currentCode,
@@ -194,6 +199,19 @@ export async function GET(request: NextRequest) {
     }
 
     const studentIds = enrollments.map((e: any) => e.user_id);
+
+    // Not started students (never entered Nexus, lib/not-started.ts) get their last
+    // sign-in OUTCOME, because "stopped at the photo step yesterday" and "never
+    // tried" call for different follow-ups. Everyone else already has last_seen_at.
+    const notStartedIds = enrollments
+      .filter((e: any) => isNotStarted(e))
+      .map((e: any) => e.user_id);
+    // Who paused each staff-paused student, named on the card. A separate lookup on
+    // purpose: a second users embed would make the `users.is_alumni` filter above
+    // ambiguous.
+    const pausedByIds = Array.from(
+      new Set(enrollments.map((e: any) => e.dormant_by).filter((id: string | null) => !!id)),
+    ) as string[];
 
     // Fetch stats in parallel
     const [
@@ -203,6 +221,8 @@ export async function GET(request: NextRequest) {
       checklistProgressResult,
       profileEmailResult,
       formResult,
+      signInResult,
+      pausedByResult,
     ] = await Promise.all([
       // Attendance records for all students in this classroom's classes
       supabase
@@ -249,6 +269,18 @@ export async function GET(request: NextRequest) {
         .select('user_id, application_number, academic_data, applicant_category, father_name, created_at, city, state')
         .in('user_id', studentIds)
         .is('deleted_at', null),
+
+      notStartedIds.length
+        ? supabase
+            .from('nexus_sign_in_events')
+            .select('user_id, outcome, occurred_at')
+            .in('user_id', notStartedIds)
+            .order('occurred_at', { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+
+      pausedByIds.length
+        ? supabase.from('users').select('id, name').in('id', pausedByIds)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (attendanceResult.error) throw attendanceResult.error;
@@ -256,6 +288,23 @@ export async function GET(request: NextRequest) {
     if (checklistTotalResult.error) throw checklistTotalResult.error;
     if (checklistProgressResult.error) throw checklistProgressResult.error;
     if (formResult.error) throw formResult.error;
+    // Both are decoration on a card. Log and carry on rather than blank the roster.
+    if (signInResult.error) console.error('Students GET sign-in lookup failed:', signInResult.error.message);
+    if (pausedByResult.error) console.error('Students GET paused-by lookup failed:', pausedByResult.error.message);
+
+    // Newest first, so the first row seen per student is their latest sign-in.
+    const lastSignInByUser = new Map<string, { at: string; outcome: 'entered' | 'photo_step' }>();
+    for (const row of (signInResult.data || []) as any[]) {
+      if (!lastSignInByUser.has(row.user_id)) {
+        lastSignInByUser.set(row.user_id, {
+          at: row.occurred_at,
+          outcome: row.outcome === 'photo_step' ? 'photo_step' : 'entered',
+        });
+      }
+    }
+    const nameById = new Map<string, string | null>(
+      ((pausedByResult.data || []) as any[]).map((u) => [u.id, u.name ?? null]),
+    );
 
     // Map user_id -> ms_teams_email (classroom address).
     const msTeamsByUser = (profileEmailResult.data || []).reduce(
@@ -375,6 +424,17 @@ export async function GET(request: NextRequest) {
         participation_status: enrollment.participation_status ?? 'active',
         dormant_since: enrollment.dormant_since ?? null,
         dormant_reason: enrollment.dormant_reason ?? null,
+        // 'auto' = Not started (never entered Nexus), 'staff' = paused by a person.
+        dormant_source:
+          enrollment.participation_status === 'dormant'
+            ? enrollment.dormant_source === 'auto'
+              ? 'auto'
+              : 'staff'
+            : null,
+        dormant_by_name: enrollment.dormant_by ? (nameById.get(enrollment.dormant_by) ?? null) : null,
+        join_reminders_sent: Number(enrollment.join_reminders_sent) || 0,
+        // Latest sign-in outcome, Not started students only (null otherwise).
+        last_sign_in: lastSignInByUser.get(userId) ?? null,
         attendance: {
           attended: attendance.attended,
           total: totalClasses,
@@ -441,6 +501,14 @@ export async function GET(request: NextRequest) {
     // The same targetable population as the application-forms review lists.
     const noForm = targetable.filter((s: any) => !s.has_application_form).length;
 
+    // The two kinds of dormant, and the two moments staff should act on them:
+    // Not started for 14+ days (remind again, or pause with a reason), and a
+    // paused student who has opened Nexus since (bring back, or leave paused).
+    const notStartedRows = students.filter((s: any) => s.dormant_source === 'auto');
+    const pausedRows = students.filter((s: any) => s.dormant_source === 'staff');
+    const notStartedNeedsDecision = notStartedRows.filter((s: any) => needsDecision(s, nowMs)).length;
+    const backInNexusCount = pausedRows.filter((s: any) => backInNexus(s, s.last_seen_at)).length;
+
     const counts = {
       total: students.length,
       active: students.length - awaitingMicrosoft,
@@ -454,6 +522,10 @@ export async function GET(request: NextRequest) {
       neverSignedIn,
       notSeen14d,
       noForm,
+      notStarted: notStartedRows.length,
+      pausedByStaff: pausedRows.length,
+      notStartedNeedsDecision,
+      backInNexus: backInNexusCount,
     };
 
     // Server-side segment narrowing is applied LAST, after the counts, and only

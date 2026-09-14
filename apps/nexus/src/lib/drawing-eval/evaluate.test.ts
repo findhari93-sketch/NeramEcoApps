@@ -34,6 +34,7 @@ function zeroSpend() {
 import { clearBudgetCache } from '@neram/ai';
 
 import { evaluateSubmission } from './evaluate';
+import { GENERIC_PROMPT_VERSION, PROMPT_VERSION } from './schema';
 
 const STILL_LIFE_CRITERIA = [
   { key: 'composition', title: 'Composition', observable_checks: ['a'], band_descriptions: { '1': 'x' }, sort_order: 0 },
@@ -230,6 +231,8 @@ describe('once the feature is switched on', () => {
     if (!outcome.ok) throw new Error(`expected success, got ${outcome.error}`);
     expect(outcome.result.criteria).toHaveLength(5);
     expect(outcome.result.totalScore).toBe(3.4);
+    expect(outcome.mode).toBe('anchored');
+    expect(inserted.drawing_evaluation[0].prompt_version).toBe(PROMPT_VERSION);
     expect(geminiCalls()).toHaveLength(1);
   });
 
@@ -337,14 +340,20 @@ describe('once the feature is switched on', () => {
   });
 });
 
-describe('setup gaps are reported, never guessed around', () => {
+describe('without a complete anchored brief, drafts in generic mode instead of refusing', () => {
   beforeEach(() => {
     aiControls.value = { modes: { 'nexus.drawing-eval': 'auto' } };
     clearBudgetCache();
   });
 
-  async function run(overrides: TableData) {
-    stubFetch(JSON.stringify(goodResponse));
+  /** The shared four only: what an unbriefed assignment drawing is scored on. */
+  const SHARED_FOUR_RESPONSE = {
+    ...goodResponse,
+    criteria: (goodResponse as any).criteria.filter((c: any) => c.criterionKey !== 'depth_perspective'),
+  };
+
+  async function run(overrides: TableData, response: unknown = goodResponse) {
+    stubFetch(JSON.stringify(response));
     const base = {
       drawing_submissions: {
         id: 'sub-1',
@@ -355,7 +364,7 @@ describe('setup gaps are reported, never guessed around', () => {
       },
       drawing_questions: { category: '3d_composition', sub_type: 'still_life', question_text: 'Draw.' },
       drawing_brief_type: {
-        id: 'brief-1', key: 'k', category: '3d_composition', sub_type: 'still_life',
+        id: 'brief-1', key: '3d_composition.still_life', category: '3d_composition', sub_type: 'still_life',
         title: 'Still life', description: null, is_active: true,
       },
       drawing_criterion: STILL_LIFE_CRITERIA,
@@ -368,43 +377,120 @@ describe('setup gaps are reported, never guessed around', () => {
     });
   }
 
-  it('refuses a brief type that is not active yet, naming the missing wording', async () => {
+  function modelRequest() {
+    const call = (globalThis.fetch as any).mock.calls.find((c: any[]) => String(c[0]).includes(MODEL_PATH));
+    return JSON.parse(call[1].body);
+  }
+
+  it('drafts a brief type that is not active yet without reference sheets', async () => {
     const outcome = await run({
       drawing_brief_type: {
-        id: 'brief-1', key: 'k', category: '3d_composition', sub_type: 'still_life',
+        id: 'brief-1', key: '3d_composition.still_life', category: '3d_composition', sub_type: 'still_life',
         title: 'Still life', description: null, is_active: false,
       },
     });
-    if (outcome.ok) throw new Error('expected refusal');
-    expect(outcome.status).toBe(409);
-    expect(outcome.error).toMatch(/band descriptions/i);
-    expect(geminiCalls()).toHaveLength(0);
+    if (!outcome.ok) throw new Error(`expected a generic draft, got ${outcome.error}`);
+    expect(outcome.mode).toBe('generic');
+    expect(inserted.drawing_evaluation[0].prompt_version).toBe(GENERIC_PROMPT_VERSION);
+    // Only the student sheet: no anchors are sent, so none are downloaded.
+    expect(modelRequest().contents[0].parts.filter((p: any) => p.inline_data)).toHaveLength(1);
+    expect(fetched.filter((u) => u.includes('anchor-'))).toHaveLength(0);
   });
 
-  it('refuses rather than comparing against an incomplete anchor scale', async () => {
+  it('drafts without comparing against an incomplete anchor scale', async () => {
     const outcome = await run({ drawing_anchor_sheet: FIVE_ANCHORS.slice(0, 4) });
-    if (outcome.ok) throw new Error('expected refusal');
-    expect(outcome.error).toMatch(/band 5/i);
-    expect(geminiCalls()).toHaveLength(0);
+    if (!outcome.ok) throw new Error(`expected a generic draft, got ${outcome.error}`);
+    expect(outcome.mode).toBe('generic');
+    expect(modelRequest().contents[0].parts.filter((p: any) => p.inline_data)).toHaveLength(1);
   });
 
-  it('refuses a submission with no brief type instead of picking one', async () => {
-    const outcome = await run({ drawing_questions: null, drawing_brief_type: null });
-    if (outcome.ok) throw new Error('expected refusal');
-    expect(outcome.error).toMatch(/not linked to a brief type/i);
-    expect(geminiCalls()).toHaveLength(0);
+  it('stores no closest anchor band on a generic draft', async () => {
+    await run({ drawing_anchor_sheet: [] });
+    for (const row of inserted.drawing_evaluation_criterion) expect(row.closest_anchor_band).toBeNull();
   });
 
-  it('refuses a brief type that has no criteria', async () => {
+  it('drafts a sheet with no brief type on the shared four criteria the rubric panel shows', async () => {
+    const outcome = await run({ drawing_questions: null, drawing_brief_type: null }, SHARED_FOUR_RESPONSE);
+    if (!outcome.ok) throw new Error(`expected a generic draft, got ${outcome.error}`);
+    expect(outcome.result.criteria.map((c) => c.criterionKey).sort()).toEqual(
+      ['composition', 'line_quality', 'proportion', 'tonal_quality'],
+    );
+    expect(inserted.drawing_evaluation[0].brief_type_id).toBeNull();
+  });
+
+  it('rejects a fifth criterion the rubric panel would not show for an unbriefed sheet', async () => {
+    const outcome = await run({ drawing_questions: null, drawing_brief_type: null }, goodResponse);
+    if (outcome.ok) throw new Error('expected the invented criterion to be refused');
+    expect(outcome.error).toMatch(/Unknown criterion "depth_perspective"/);
+  });
+
+  it('falls back to the seeded observable checks when the database has none', async () => {
     const outcome = await run({ drawing_criterion: [] });
-    if (outcome.ok) throw new Error('expected refusal');
-    expect(outcome.error).toMatch(/no criteria/i);
-    expect(geminiCalls()).toHaveLength(0);
+    if (!outcome.ok) throw new Error(`expected a generic draft, got ${outcome.error}`);
+    const text = modelRequest().contents[0].parts[0].text as string;
+    expect(text).toContain('Receding edges converge consistently towards a coherent vanishing point.');
+  });
+
+  it('asks for tags from the supplied list only, and keeps only those', async () => {
+    stubFetch(JSON.stringify({ ...goodResponse, tags: ['Still Life', 'Made up tag'] }));
+    const outcome = await evaluateSubmission({
+      supabase: fullyConfigured(),
+      submissionId: 'sub-1',
+      actorId: 'user-1',
+      tagLabels: ['Still Life', 'Portrait'],
+    });
+    if (!outcome.ok) throw new Error(outcome.error);
+    expect(outcome.result.tags).toEqual(['Still Life']);
+    expect(inserted.drawing_evaluation[0].raw_response.tags).toEqual(['Still Life']);
+    expect(modelRequest().generationConfig.responseSchema.properties.tags.items.enum).toEqual(['Still Life', 'Portrait']);
   });
 
   it('reports a missing submission as 404', async () => {
     const outcome = await run({ drawing_submissions: null });
     if (outcome.ok) throw new Error('expected refusal');
     expect(outcome.status).toBe(404);
+    expect(outcome.kind).toBe('not_found');
+  });
+});
+
+describe('writing onto a claimed row', () => {
+  beforeEach(() => {
+    aiControls.value = { modes: { 'nexus.drawing-eval': 'auto' } };
+    clearBudgetCache();
+  });
+
+  it('updates the claim to draft instead of inserting a second evaluation', async () => {
+    stubFetch(JSON.stringify(goodResponse));
+    const updates: any[] = [];
+    const base = fullyConfigured();
+    const supabase = {
+      from: (table: string) => {
+        const chain = base.from(table);
+        chain.update = (values: any) => {
+          updates.push({ table, values });
+          const guarded: any = {
+            eq: () => guarded,
+            select: async () => ({ data: [{ id: 'claim-1' }], error: null }),
+            then: (resolve: any) => resolve({ data: null, error: null }),
+          };
+          return guarded;
+        };
+        return chain;
+      },
+    };
+
+    const outcome = await evaluateSubmission({
+      supabase,
+      submissionId: 'sub-1',
+      actorId: 'user-1',
+      claimedEvaluationId: 'claim-1',
+    });
+
+    if (!outcome.ok) throw new Error(outcome.error);
+    expect(outcome.evaluationId).toBe('claim-1');
+    expect(inserted.drawing_evaluation).toBeUndefined();
+    expect(updates).toHaveLength(1);
+    expect(updates[0].values.status).toBe('draft');
+    expect(inserted.drawing_evaluation_criterion.every((r: any) => r.evaluation_id === 'claim-1')).toBe(true);
   });
 });

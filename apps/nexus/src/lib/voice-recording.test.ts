@@ -133,7 +133,7 @@ describe('heardLabel', () => {
     expect(heardLabel('full')).toBe('Heard');
     expect(heardLabel('partial')).toBe('Partly heard');
     expect(heardLabel('unheard')).toBe('Not heard yet');
-    expect(heardLabel('unsent')).toBe('Draft');
+    expect(heardLabel('unsent')).toBe('Not sent yet');
   });
 });
 
@@ -148,7 +148,7 @@ describe('voiceStatusLine', () => {
   };
 
   it('tells the teacher a draft goes out with the review', () => {
-    expect(voiceStatusLine({ ...sent, sent_at: null }, NOW)).toBe('Saved. It goes out with Redo or Complete.');
+    expect(voiceStatusLine({ ...sent, sent_at: null }, NOW)).toBe('Saved. Sent with Redo or Complete.');
   });
 
   it('says a sent note has not been heard yet', () => {

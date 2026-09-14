@@ -73,6 +73,9 @@ export default function ProfileHeaderCard({
 
   const stage = stageKeyOf(enrollment.study_stage);
   const dormant = enrollment.participation_status === 'dormant';
+  // Never entered Nexus: lifted automatically on entry, so the staff action is to
+  // count them now (a Teams-only student), not to "bring back" someone who left.
+  const notStarted = dormant && enrollment.dormant_source === 'auto';
 
   // One account action, whichever this student needs: a login they do not have
   // yet, or a new password for the one they do.
@@ -108,6 +111,7 @@ export default function ProfileHeaderCard({
         <DormantChip
           since={enrollment.dormant_since}
           reason={enrollment.dormant_reason}
+          source={enrollment.dormant_source}
           density="detailed"
         />
       )}
@@ -178,7 +182,7 @@ export default function ProfileHeaderCard({
               onClick={onToggleDormancy}
               sx={{ minHeight: 48, fontWeight: 700 }}
             >
-              {dormant ? 'Bring back' : 'Mark dormant'}
+              {notStarted ? 'Count them anyway' : dormant ? 'Bring back' : 'Mark dormant'}
             </Button>
           )}
           {accountAction && (
@@ -269,7 +273,7 @@ export default function ProfileHeaderCard({
               onToggleDormancy();
             }}
           >
-            {dormant ? 'Bring back' : 'Mark dormant'}
+            {notStarted ? 'Count them anyway' : dormant ? 'Bring back' : 'Mark dormant'}
           </MenuItem>
         )}
         {accountAction && (

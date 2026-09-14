@@ -19,7 +19,31 @@
 
 import { clampRect, isNormRect, type NormRect } from '@/lib/annotation-geometry';
 
-export const PROMPT_VERSION = 'drawing-eval-v1';
+/**
+ * Bumped whenever the prompt or the response contract changes, so shadow
+ * agreement never mixes answers to two different questions.
+ *
+ * v2: overallComment became 3 to 4 sentences to the student, tags were added,
+ * and closestAnchorBand became optional. Generic drafts (no reference sheets)
+ * carry their own version string so their agreement is measured separately
+ * from anchored ones: they answer a harder question with less help.
+ */
+export const PROMPT_VERSION = 'drawing-eval-v2';
+export const GENERIC_PROMPT_VERSION = 'drawing-eval-v2-generic';
+
+/**
+ * anchored: placed against five graded reference sheets for an active brief.
+ * generic:  graded against the observable checks alone, on whatever criteria
+ *           the rubric panel shows for this sheet.
+ */
+export type EvalMode = 'anchored' | 'generic';
+
+export function promptVersionFor(mode: EvalMode): string {
+  return mode === 'generic' ? GENERIC_PROMPT_VERSION : PROMPT_VERSION;
+}
+
+/** Most tags a draft may put on a sheet. */
+export const MAX_DRAFT_TAGS = 3;
 
 export type Marker = 'problem' | 'good' | 'guide' | 'note';
 export type Confidence = 'high' | 'medium' | 'low';
@@ -40,7 +64,8 @@ export interface CriterionResult {
   band: Band;
   /** Must cite something visible in the sheet, not a generic statement. */
   reasoning: string;
-  closestAnchorBand: Band;
+  /** Null in generic mode, where there are no reference sheets to be closest to. */
+  closestAnchorBand: Band | null;
   confidence: Confidence;
   annotations: EvalAnnotation[];
 }
@@ -51,6 +76,8 @@ export interface EvaluationResult {
   totalScore: number;
   overallComment: string;
   flags: string[];
+  /** Labels from the supplied tag list only, in its spelling, at most three. */
+  tags: string[];
 }
 
 export type ParseOutcome =
@@ -66,46 +93,57 @@ const CONFIDENCES: Confidence[] = ['high', 'medium', 'low'];
  * Worth constraining rather than trusting prose: the failure this prevents is
  * a model that returns four numbers in a different order, which validates as
  * a rectangle and silently marks the wrong part of the drawing.
+ *
+ * Built per call because the tag enum comes from the drawing_tags table. Gemini
+ * rejects an empty enum, so with no tags the property is left out altogether.
  */
-export const RESPONSE_SCHEMA = {
-  type: 'object',
-  properties: {
-    criteria: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          criterionKey: { type: 'string' },
-          band: { type: 'integer' },
-          reasoning: { type: 'string' },
-          closestAnchorBand: { type: 'integer' },
-          confidence: { type: 'string', enum: CONFIDENCES },
-          annotations: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                geometry: {
-                  type: 'array',
-                  items: { type: 'number' },
-                  description:
-                    'Exactly four numbers [x, y, width, height], each a fraction of the STUDENT SHEET between 0 and 1, origin top-left.',
+export function buildEvaluationSchema(tagLabels: readonly string[] = []) {
+  const labels = Array.from(new Set(tagLabels.map((l) => l.trim()).filter(Boolean)));
+  return {
+    type: 'object',
+    properties: {
+      criteria: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            criterionKey: { type: 'string' },
+            band: { type: 'integer' },
+            reasoning: { type: 'string' },
+            // Optional: only an anchored draft has a reference sheet to name.
+            closestAnchorBand: { type: 'integer' },
+            confidence: { type: 'string', enum: CONFIDENCES },
+            annotations: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  geometry: {
+                    type: 'array',
+                    items: { type: 'number' },
+                    description:
+                      'Exactly four numbers [x, y, width, height], each a fraction of the STUDENT SHEET between 0 and 1, origin top-left.',
+                  },
+                  marker: { type: 'string', enum: MARKERS },
+                  comment: { type: 'string' },
                 },
-                marker: { type: 'string', enum: MARKERS },
-                comment: { type: 'string' },
+                required: ['geometry', 'marker', 'comment'],
               },
-              required: ['geometry', 'marker', 'comment'],
             },
           },
+          required: ['criterionKey', 'band', 'reasoning', 'confidence', 'annotations'],
         },
-        required: ['criterionKey', 'band', 'reasoning', 'closestAnchorBand', 'confidence', 'annotations'],
       },
+      overallComment: { type: 'string' },
+      flags: { type: 'array', items: { type: 'string' } },
+      ...(labels.length > 0 ? { tags: { type: 'array', items: { type: 'string', enum: labels } } } : {}),
     },
-    overallComment: { type: 'string' },
-    flags: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['criteria', 'overallComment'],
-} as const;
+    required: ['criteria', 'overallComment'],
+  };
+}
+
+/** The schema with no tag list, for callers and tests that only need the shape. */
+export const RESPONSE_SCHEMA = buildEvaluationSchema([]);
 
 function asBand(value: unknown): Band | null {
   const n = typeof value === 'number' ? value : Number(value);
@@ -116,6 +154,46 @@ function asBand(value: unknown): Band | null {
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * Text a student will read, with dashes used as punctuation turned into commas.
+ *
+ * The prompt already says never to use them, and the model does anyway often
+ * enough to matter: a dash in feedback reads as machine written, which is the
+ * one impression a teacher sending it cannot afford. Hyphens inside words
+ * (well-lit, two-point) are left alone.
+ */
+export function withoutDashes(text: string): string {
+  return text
+    // U+2014 em dash, U+2013 en dash, and a run of two or more hyphens.
+    .replace(/\s*(?:\u2014|\u2013|-{2,})\s*/g, ', ')
+    .replace(/\s+-\s+/g, ', ')
+    .replace(/,\s*([.,;:!?])/g, '$1')
+    .replace(/^,\s*/, '')
+    .replace(/,\s*$/, '.')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+/** The model's tags, kept only when they are on the supplied list, in the list's spelling. */
+function pickTags(value: unknown, tagLabels: readonly string[]): string[] {
+  if (!Array.isArray(value) || tagLabels.length === 0) return [];
+  const canonical = new Map(tagLabels.map((l) => [l.trim().toLowerCase(), l.trim()]));
+  const out: string[] = [];
+  for (const raw of value) {
+    const label = canonical.get(asString(raw).toLowerCase());
+    if (label && !out.includes(label)) out.push(label);
+    if (out.length >= MAX_DRAFT_TAGS) break;
+  }
+  return out;
+}
+
+export interface ParseOptions {
+  /** Generic drafts have no reference sheet, so closestAnchorBand is stored as null. */
+  mode?: EvalMode;
+  /** The tags the model was offered. Anything else it returns is dropped. */
+  tagLabels?: readonly string[];
 }
 
 /**
@@ -188,7 +266,12 @@ function collectCoordinates(criteria: unknown[]): number[] {
  * band filed under an invented key would silently never be shown and never be
  * corrected, which quietly poisons the training signal.
  */
-export function parseEvaluation(raw: string, expectedKeys: string[]): ParseOutcome {
+export function parseEvaluation(
+  raw: string,
+  expectedKeys: string[],
+  options: ParseOptions = {},
+): ParseOutcome {
+  const mode: EvalMode = options.mode ?? 'anchored';
   const errors: string[] = [];
   const notes: string[] = [];
 
@@ -199,7 +282,7 @@ export function parseEvaluation(raw: string, expectedKeys: string[]): ParseOutco
     return { ok: false, errors: ['Response was not valid JSON.'] };
   }
 
-  const root = parsed as { criteria?: unknown; overallComment?: unknown; flags?: unknown };
+  const root = parsed as { criteria?: unknown; overallComment?: unknown; flags?: unknown; tags?: unknown };
   if (!Array.isArray(root?.criteria) || root.criteria.length === 0) {
     return { ok: false, errors: ['Response contained no criteria.'] };
   }
@@ -236,7 +319,7 @@ export function parseEvaluation(raw: string, expectedKeys: string[]): ParseOutco
       continue;
     }
 
-    const reasoning = asString(c.reasoning);
+    const reasoning = withoutDashes(asString(c.reasoning));
     if (!reasoning) {
       errors.push(`Criterion "${criterionKey}" gave no reasoning.`);
       continue;
@@ -262,7 +345,7 @@ export function parseEvaluation(raw: string, expectedKeys: string[]): ParseOutco
         geometry,
         marker: MARKERS.includes(ann.marker as Marker) ? (ann.marker as Marker) : 'note',
         criterionKey,
-        comment: asString(ann.comment),
+        comment: withoutDashes(asString(ann.comment)),
       });
     }
 
@@ -270,7 +353,7 @@ export function parseEvaluation(raw: string, expectedKeys: string[]): ParseOutco
       criterionKey,
       band,
       reasoning,
-      closestAnchorBand: asBand(c.closestAnchorBand) ?? band,
+      closestAnchorBand: mode === 'generic' ? null : asBand(c.closestAnchorBand) ?? band,
       confidence,
       annotations,
     });
@@ -306,8 +389,9 @@ export function parseEvaluation(raw: string, expectedKeys: string[]): ParseOutco
     value: {
       criteria,
       totalScore,
-      overallComment: asString(root.overallComment),
+      overallComment: withoutDashes(asString(root.overallComment)),
       flags: Array.isArray(root.flags) ? root.flags.map(asString).filter(Boolean) : [],
+      tags: pickTags(root.tags, options.tagLabels ?? []),
     },
   };
 }

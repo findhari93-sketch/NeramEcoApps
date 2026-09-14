@@ -140,9 +140,27 @@ export const DORMANT_EXPLAINER =
   'Removed from attendance %, submission rates, prep readiness, the watchlist, ' +
   'checklist progress, leaderboards and every automatic reminder.';
 
+/**
+ * Not started: dormant because the student has never entered Nexus (no photo).
+ * Set and lifted automatically, see lib/not-started.ts.
+ */
+export const NOT_STARTED_LABEL = 'Not started';
+export const NOT_STARTED_COLOR = '#0369A1';
+export const NOT_STARTED_COLOR_DARK = '#7DD3FC';
+export const NOT_STARTED_EXPLAINER =
+  'Has not entered Nexus yet. They join the class numbers automatically the first time they add a photo and get in. ' +
+  'Until then they are left out of every metric and reminder, except the reminders to come in.';
+
+export function notStartedColor(mode: 'light' | 'dark' = 'light'): string {
+  return mode === 'dark' ? NOT_STARTED_COLOR_DARK : NOT_STARTED_COLOR;
+}
+
 /** One-tap reason presets for the drawer. Free text is still allowed. */
 export const DORMANT_REASON_PRESETS: readonly string[] = [
   'Stopped attending',
+  'Joining later',
+  'Refund requested',
+  'Never joined',
   'Paused for board exams',
   'Family reason',
 ];

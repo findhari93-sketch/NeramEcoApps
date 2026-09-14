@@ -14,6 +14,7 @@ const draft: AiDraft = {
     line_quality: { ai_band: 2, confidence: 'low', reasoning: null },
   },
   marks: [],
+  tags: [],
 };
 
 describe('prefillBands', () => {

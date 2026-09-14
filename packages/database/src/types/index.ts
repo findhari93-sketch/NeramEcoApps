@@ -172,6 +172,9 @@ export interface User extends Timestamps {
   // 20260712). Distinct from the cross-app last_login_at above.
   nexus_first_login_at: string | null;
   nexus_last_login_at: string | null;
+  // First time the student got PAST the photo gate (migration 20260919090000).
+  // NULL means Not started. nexus_first_login_at is stamped even when the gate stopped them.
+  nexus_entered_at: string | null;
   metadata: Record<string, unknown> | null;
 
   // Lifecycle focus (reversible archive) + academic-year cohort + exam status
@@ -5447,6 +5450,22 @@ export type NexusStudyStage = '10th' | '11th' | '12th' | 'gap_year';
 export type NexusParticipationStatus = 'active' | 'dormant';
 
 /**
+ * Who made an enrolment dormant (migration 20260919090000). 'auto' is Not started:
+ * the student has never entered Nexus, set on enrolment and lifted by /api/auth/me
+ * on first entry. 'staff' is paused by a person with a reason. NULL when active.
+ */
+export type NexusDormantSource = 'staff' | 'auto';
+
+/** One student Nexus sign-in (migration 20260919090000). */
+export interface NexusSignInEvent {
+  id: string;
+  user_id: string;
+  occurred_at: string;
+  outcome: 'entered' | 'photo_step';
+  device: 'Phone' | 'Tablet' | 'Laptop' | null;
+}
+
+/**
  * How a study stage got its value. See migrations 20260802090000 and
  * 20260911120000 ('application' is copied off the student's application form).
  */
@@ -5477,6 +5496,9 @@ export interface NexusEnrollment {
   dormant_since: string | null;
   dormant_reason: string | null;
   dormant_by: string | null;
+  dormant_source: NexusDormantSource | null;
+  /** Automatic "come into Nexus" reminders sent while Not started (max 3). */
+  join_reminders_sent: number;
 }
 
 /** One axis changed on one enrolment. Append-only. Migration 20260802090000. */
@@ -5485,11 +5507,12 @@ export interface NexusEnrollmentClassificationEvent {
   enrollment_id: string;
   classroom_id: string;
   student_id: string;
-  axis: 'study_stage' | 'participation';
+  axis: 'study_stage' | 'participation' | 'academic_year';
   from_value: string | null;
   to_value: string | null;
   reason: string | null;
-  performed_by: string;
+  /** NULL when a system rule wrote it (Not started marked or lifted). */
+  performed_by: string | null;
   created_at: string;
 }
 

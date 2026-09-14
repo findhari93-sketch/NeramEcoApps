@@ -13,6 +13,11 @@
  *    track ends and the note stops with what was said instead of vanishing.
  *  - The microphone is released on stop, cancel and unmount, so the browser's
  *    recording indicator never stays lit after the teacher is done.
+ *  - `clockStartedAt` is the moment audio actually began, on the
+ *    performance.now() clock. Opening the microphone takes hundreds of ms (and
+ *    seconds on a first permission prompt), so anything timed against the press
+ *    of Start instead runs that far behind the voice. A sketch walkthrough used
+ *    exactly that, and every stroke replayed late.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -46,6 +51,7 @@ export function useVoiceRecorder(capMs: number = RECORDING_CAP_MS) {
   const [level, setLevel] = useState(0);
   const [recording, setRecording] = useState<FinishedRecording | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clockStartedAt, setClockStartedAt] = useState<number | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -76,6 +82,7 @@ export function useVoiceRecorder(capMs: number = RECORDING_CAP_MS) {
     urlRef.current = null;
     setRecording(null);
     setElapsedMs(0);
+    setClockStartedAt(null);
     setStatus('idle');
   }, []);
 
@@ -149,7 +156,7 @@ export function useVoiceRecorder(capMs: number = RECORDING_CAP_MS) {
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
     };
     rec.onstop = () => {
-      const durationMs = Math.min(Date.now() - startedAtRef.current, capMs);
+      const durationMs = Math.min(performance.now() - startedAtRef.current, capMs);
       release();
       recorderRef.current = null;
       if (cancelledRef.current) {
@@ -192,14 +199,33 @@ export function useVoiceRecorder(capMs: number = RECORDING_CAP_MS) {
       sample = null;
     }
 
+    // The recorder's own start event is the closest the page can get to the
+    // first captured sample. Set before start() so it cannot be missed; the
+    // value taken just after start() stands until it arrives.
+    let clockSet = false;
+    rec.onstart = () => {
+      if (clockSet) return;
+      clockSet = true;
+      const at = performance.now();
+      startedAtRef.current = at;
+      setClockStartedAt(at);
+    };
+
     // A one-second timeslice, so a crash mid-note still leaves what was captured.
     rec.start(1000);
-    startedAtRef.current = Date.now();
+    startedAtRef.current = performance.now();
+    // A browser that never fires start must not leave a walkthrough unable to
+    // record strokes: fall back to the value taken after start().
+    setTimeout(() => {
+      if (clockSet || recorderRef.current !== rec) return;
+      clockSet = true;
+      setClockStartedAt(startedAtRef.current);
+    }, 500);
     setElapsedMs(0);
     setStatus('recording');
 
     timerRef.current = setInterval(() => {
-      const elapsed = Date.now() - startedAtRef.current;
+      const elapsed = performance.now() - startedAtRef.current;
       setElapsedMs(Math.min(elapsed, capMs));
       if (sample) setLevel(sample());
       if (elapsed >= capMs) stop();
@@ -225,5 +251,5 @@ export function useVoiceRecorder(capMs: number = RECORDING_CAP_MS) {
     [],
   );
 
-  return { status, elapsedMs, level, recording, error, capMs, start, stop, cancel, discard };
+  return { status, elapsedMs, level, recording, error, capMs, clockStartedAt, start, stop, cancel, discard };
 }

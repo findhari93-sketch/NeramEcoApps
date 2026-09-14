@@ -26,7 +26,12 @@
  */
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
-import type { NexusParticipationStatus, NexusStudyStage, NexusStudyStageSource } from '../../types';
+import type {
+  NexusDormantSource,
+  NexusParticipationStatus,
+  NexusStudyStage,
+  NexusStudyStageSource,
+} from '../../types';
 
 /**
  * The `users` columns every caller gets. Extra ones are appended via
@@ -94,6 +99,8 @@ export interface RosterMember<TUser extends RosterMemberUser = RosterMemberUser>
   participation_status: NexusParticipationStatus;
   dormant_since: string | null;
   dormant_reason: string | null;
+  /** 'auto' = Not started (never entered Nexus), 'staff' = paused by a person. Null when active. */
+  dormant_source: NexusDormantSource | null;
   user: TUser;
 }
 
@@ -140,16 +147,25 @@ export function isTracked(row: {
  * "Globally dormant" means: has at least one active student enrolment, and NONE
  * of them is participating. A student dormant in an archived classroom but
  * active in the current one is still reachable.
+ *
+ * `reachNotStarted` counts a Not started enrolment (dormant_source 'auto') as
+ * reachable. Only the messages whose whole point is getting a student INTO Nexus
+ * pass it (join reminders, the Photo Review "add your photo" remind). A student
+ * paused by staff is never reachable this way.
  */
 export function pickTrackedIds(
-  rows: { user_id: string; participation_status?: string | null }[],
+  rows: { user_id: string; participation_status?: string | null; dormant_source?: string | null }[],
   requestedIds: string[],
+  options: { reachNotStarted?: boolean } = {},
 ): { kept: string[]; dropped: string[] } {
   const anyActive = new Set<string>();
   const known = new Set<string>();
   for (const row of rows || []) {
     known.add(row.user_id);
-    if (row.participation_status !== 'dormant') anyActive.add(row.user_id);
+    const reachable =
+      row.participation_status !== 'dormant' ||
+      (options.reachNotStarted === true && row.dormant_source === 'auto');
+    if (reachable) anyActive.add(row.user_id);
   }
   const kept: string[] = [];
   const dropped: string[] = [];
@@ -194,7 +210,7 @@ export async function loadClassroomRoster<TUser extends RosterMemberUser = Roste
   const userSelect = userColumns ? `${BASE_USER_COLUMNS}, ${userColumns}` : BASE_USER_COLUMNS;
   const columns =
     'id, user_id, enrolled_at, batch_id, is_active, current_standard, ' +
-    'current_standard_source, participation_status, dormant_since, dormant_reason, ' +
+    'current_standard_source, participation_status, dormant_since, dormant_reason, dormant_source, ' +
     `user:${USER_FK}${includeAlumni ? '' : '!inner'}(${userSelect})`;
 
   let query = supabase.from('nexus_enrollments').select(columns).eq('role', 'student');
@@ -229,6 +245,7 @@ export async function loadClassroomRoster<TUser extends RosterMemberUser = Roste
       participation_status: (row.participation_status ?? 'active') as NexusParticipationStatus,
       dormant_since: row.dormant_since ?? null,
       dormant_reason: row.dormant_reason ?? null,
+      dormant_source: row.dormant_source ?? null,
       user: row.user,
     };
     members.push(member);
@@ -259,6 +276,7 @@ export async function loadClassroomRoster<TUser extends RosterMemberUser = Roste
 export async function filterTrackedStudentIds(
   userIds: string[],
   client?: TypedSupabaseClient,
+  options: { reachNotStarted?: boolean } = {},
 ): Promise<{ kept: string[]; dropped: string[] }> {
   const unique = Array.from(new Set(userIds || []));
   if (!unique.length) return { kept: [], dropped: [] };
@@ -266,7 +284,7 @@ export async function filterTrackedStudentIds(
   const supabase = (client || getSupabaseAdminClient()) as any;
   const { data, error } = await supabase
     .from('nexus_enrollments')
-    .select('user_id, participation_status')
+    .select('user_id, participation_status, dormant_source')
     .eq('role', 'student')
     .eq('is_active', true)
     .in('user_id', unique);
@@ -279,5 +297,5 @@ export async function filterTrackedStudentIds(
     return { kept: userIds, dropped: [] };
   }
 
-  return pickTrackedIds((data || []) as any[], userIds);
+  return pickTrackedIds((data || []) as any[], userIds, options);
 }

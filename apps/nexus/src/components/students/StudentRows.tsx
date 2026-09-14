@@ -6,6 +6,7 @@ import StudentRowShell from './StudentRowShell';
 import StudentRowChips from './StudentRowChips';
 import StudentStageAvatar from './StudentStageAvatar';
 import StudentStatusLine from './StudentStatusLine';
+import DormantDetailLine from './DormantDetailLine';
 import { Meter } from './StudentStatMeters';
 import { nameMatchRanges } from '@/lib/people-search';
 import { stageKeyOf } from '@/lib/student-stage';
@@ -74,6 +75,7 @@ export function CompactRow(props: StudentRowProps) {
             participationStatus={student.participation_status}
             dormantSince={student.dormant_since}
             dormantReason={student.dormant_reason}
+            dormantSource={student.dormant_source}
             examBatch={student.exam_batch}
             pairStatus={student.pair_status}
             currentBatch={props.currentBatch}
@@ -93,6 +95,7 @@ export function CompactRow(props: StudentRowProps) {
           </Typography>
         )}
         <StudentStatusLine student={student} now={now} attendance={attendance} />
+        <DormantDetailLine student={student} now={now} />
       </Box>
       {!selectMode && actions}
     </StudentRowShell>
@@ -144,6 +147,7 @@ export function StudentCard(props: StudentRowProps) {
               participationStatus={student.participation_status}
               dormantSince={student.dormant_since}
               dormantReason={student.dormant_reason}
+              dormantSource={student.dormant_source}
               examBatch={student.exam_batch}
               pairStatus={student.pair_status}
               currentBatch={props.currentBatch}
@@ -153,6 +157,7 @@ export function StudentCard(props: StudentRowProps) {
             />
           </Box>
           <StudentStatusLine student={student} now={now} />
+          <DormantDetailLine student={student} now={now} />
         </Box>
         {!selectMode && actions}
       </Box>
@@ -204,6 +209,7 @@ export function DetailedRow(props: StudentRowProps) {
               participationStatus={student.participation_status}
               dormantSince={student.dormant_since}
               dormantReason={student.dormant_reason}
+              dormantSource={student.dormant_source}
               examBatch={student.exam_batch}
               pairStatus={student.pair_status}
               currentBatch={props.currentBatch}
@@ -218,6 +224,7 @@ export function DetailedRow(props: StudentRowProps) {
             </Typography>
           )}
           <StudentStatusLine student={student} now={now} />
+          <DormantDetailLine student={student} now={now} />
         </Box>
         {!selectMode && actions}
       </Box>

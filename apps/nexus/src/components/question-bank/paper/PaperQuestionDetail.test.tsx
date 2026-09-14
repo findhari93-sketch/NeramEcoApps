@@ -71,4 +71,38 @@ describe('PaperQuestionDetail', () => {
     fireEvent.click(screen.getByRole('button', { name: /Source & Format/i }));
     expect((screen.getByLabelText('Year') as HTMLInputElement).value).toBe('2026');
   });
+
+  /**
+   * A teacher who opened a hidden question looked all over this pane for a way
+   * to show it again and found nothing: the pane never said the question was
+   * hidden at all.
+   */
+  describe('a question hidden from students', () => {
+    const hidden = { ...question, is_active: false, status: 'draft' } as unknown as NexusQBQuestion;
+
+    it('says so, and activates it from the pane', async () => {
+      const onSetActive = vi.fn().mockResolvedValue(undefined);
+      render(<PaperQuestionDetail {...base} question={hidden} position={{ index: 76, total: 90 }}
+        onSetActive={onSetActive} onPrevious={() => {}} onNext={() => {}} />);
+
+      expect(screen.getByText('Hidden from students')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+      expect(onSetActive).toHaveBeenCalledWith(true);
+    });
+
+    it('explains what is missing instead of offering an Activate that would do nothing', () => {
+      const keyless = { ...hidden, correct_answer: null } as unknown as NexusQBQuestion;
+      render(<PaperQuestionDetail {...base} question={keyless} position={{ index: 76, total: 90 }}
+        onSetActive={vi.fn()} onPrevious={() => {}} onNext={() => {}} />);
+
+      expect(screen.getByText(/Set the correct answer and save/)).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Activate' })).toHaveProperty('disabled', true);
+    });
+
+    it('shows nothing extra on a live question', () => {
+      render(<PaperQuestionDetail {...base} question={question} position={{ index: 4, total: 92 }}
+        onSetActive={vi.fn()} onPrevious={() => {}} onNext={() => {}} />);
+      expect(screen.queryByText('Hidden from students')).toBeNull();
+    });
+  });
 });

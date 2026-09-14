@@ -56,7 +56,7 @@ test.describe('Drawing review on a phone', () => {
     const ok = await injectAuthForPage(page, 'teacher');
     test.skip(!ok, 'Teacher auth injection failed');
     await page.goto(`${APP_URLS.nexus}/teacher/drawing-reviews/${submissionId}?assignment=${assignmentId}`, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('SCORE', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
   };
 
   const status = async (page: Page) => {
@@ -134,7 +134,7 @@ test.describe('Drawing review on a phone', () => {
   test('a voice note records over the sheet', async ({ page }) => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
-    const record = page.getByRole('button', { name: 'Record voice note' });
+    const record = page.getByRole('button', { name: 'Record', exact: true });
     await record.scrollIntoViewIfNeeded();
     await expect(record).toBeVisible();
     expect((await record.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -143,7 +143,7 @@ test.describe('Drawing review on a phone', () => {
     await expect(stop).toBeEnabled({ timeout: 15_000 });
     await page.waitForTimeout(2_000);
     await stop.click();
-    await expect(page.getByText('Saved. It goes out with Redo or Complete.')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Saved. Sent with Redo or Complete.')).toBeVisible({ timeout: 30_000 });
   });
 
   test('Redo and Complete sit on screen as 44px targets, and both go through', async ({ page }) => {

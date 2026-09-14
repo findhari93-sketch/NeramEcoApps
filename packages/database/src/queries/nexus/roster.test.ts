@@ -100,4 +100,31 @@ describe('pickTrackedIds', () => {
       dropped: [],
     });
   });
+
+  describe('Not started (dormant_source auto)', () => {
+    const notStarted = { user_id: 'new-1', participation_status: 'dormant', dormant_source: 'auto' };
+    const paused = { user_id: 'paused-1', participation_status: 'dormant', dormant_source: 'staff' };
+
+    it('drops a Not started student from ordinary messages', () => {
+      expect(pickTrackedIds([notStarted], ['new-1']).dropped).toEqual(['new-1']);
+    });
+
+    it('reaches a Not started student when the message is about getting them in', () => {
+      expect(pickTrackedIds([notStarted], ['new-1'], { reachNotStarted: true }).kept).toEqual(['new-1']);
+    });
+
+    // A join reminder must never chase someone a person paused (a refund case).
+    it('still drops a student paused by staff with reachNotStarted', () => {
+      const { kept, dropped } = pickTrackedIds([paused], ['paused-1'], { reachNotStarted: true });
+      expect(kept).toEqual([]);
+      expect(dropped).toEqual(['paused-1']);
+    });
+
+    it('still passes a parent id through with reachNotStarted', () => {
+      const { kept } = pickTrackedIds([notStarted, paused], ['parent-1', 'new-1', 'paused-1'], {
+        reachNotStarted: true,
+      });
+      expect(kept).toEqual(['parent-1', 'new-1']);
+    });
+  });
 });

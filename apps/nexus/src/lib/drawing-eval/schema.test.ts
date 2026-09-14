@@ -2,7 +2,16 @@ import { describe, it, expect } from 'vitest';
 
 import goodResponse from './__fixtures__/still-life-good.json';
 import percentResponse from './__fixtures__/percent-coordinates.json';
-import { detectScale, parseEvaluation, RESPONSE_SCHEMA } from './schema';
+import {
+  buildEvaluationSchema,
+  detectScale,
+  GENERIC_PROMPT_VERSION,
+  parseEvaluation,
+  PROMPT_VERSION,
+  promptVersionFor,
+  RESPONSE_SCHEMA,
+  withoutDashes,
+} from './schema';
 
 const STILL_LIFE_KEYS = [
   'composition',
@@ -255,12 +264,102 @@ describe('parseEvaluation, on salvageable imperfections', () => {
   });
 });
 
+describe('parseEvaluation, in generic mode', () => {
+  it('stores no closest anchor band, since there are no reference sheets', () => {
+    const outcome = parseEvaluation(replay(goodResponse), STILL_LIFE_KEYS, { mode: 'generic' });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.value.criteria.every((c) => c.closestAnchorBand === null)).toBe(true);
+  });
+
+  it('accepts a response that leaves closestAnchorBand out entirely', () => {
+    const without = {
+      ...goodResponse,
+      criteria: (goodResponse as any).criteria.map(({ closestAnchorBand: _drop, ...rest }: any) => rest),
+    };
+    expect(parseEvaluation(replay(without), STILL_LIFE_KEYS, { mode: 'generic' }).ok).toBe(true);
+  });
+});
+
+describe('parseEvaluation, tags', () => {
+  const offered = ['Still Life', 'Perspective', 'Portrait', 'Scenery'];
+
+  it('keeps only tags from the offered list, in its spelling, without repeats', () => {
+    const outcome = parseEvaluation(
+      replay({ ...goodResponse, tags: ['still life', 'Invented', 'Still Life', 'Perspective'] }),
+      STILL_LIFE_KEYS,
+      { tagLabels: offered },
+    );
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.value.tags).toEqual(['Still Life', 'Perspective']);
+  });
+
+  it('keeps at most three', () => {
+    const outcome = parseEvaluation(replay({ ...goodResponse, tags: offered }), STILL_LIFE_KEYS, { tagLabels: offered });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.value.tags).toHaveLength(3);
+  });
+
+  it('returns no tags when none were offered or none came back', () => {
+    const a = parseEvaluation(replay({ ...goodResponse, tags: ['Still Life'] }), STILL_LIFE_KEYS);
+    const b = parseEvaluation(replay(goodResponse), STILL_LIFE_KEYS, { tagLabels: offered });
+    if (!a.ok || !b.ok) throw new Error('expected ok');
+    expect(a.value.tags).toEqual([]);
+    expect(b.value.tags).toEqual([]);
+  });
+});
+
+describe('withoutDashes', () => {
+  const EM = String.fromCharCode(0x2014);
+  const EN = String.fromCharCode(0x2013);
+
+  it('turns an em dash, an en dash and a double hyphen used as punctuation into commas', () => {
+    expect(withoutDashes(`The jug works${EM}the bowl does not.`)).toBe('The jug works, the bowl does not.');
+    expect(withoutDashes(`The jug works ${EN} the bowl does not.`)).toBe('The jug works, the bowl does not.');
+    expect(withoutDashes('The jug works -- the bowl does not.')).toBe('The jug works, the bowl does not.');
+    expect(withoutDashes('The jug works - the bowl does not.')).toBe('The jug works, the bowl does not.');
+  });
+
+  it('leaves hyphens inside words alone', () => {
+    expect(withoutDashes('A well-lit, two-point perspective.')).toBe('A well-lit, two-point perspective.');
+  });
+
+  it('never leaves a comma before a full stop', () => {
+    expect(withoutDashes(`Try again ${EM}.`)).toBe('Try again.');
+  });
+
+  it('cleans the overall comment and reasoning on the way in', () => {
+    const outcome = parseEvaluation(
+      replay({ ...goodResponse, overallComment: `Strong line${EM}fix the ellipse.` }),
+      STILL_LIFE_KEYS,
+    );
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.value.overallComment).toBe('Strong line, fix the ellipse.');
+  });
+});
+
 describe('RESPONSE_SCHEMA', () => {
   it('constrains the model to the criterion fields the parser requires', () => {
     const item = (RESPONSE_SCHEMA as any).properties.criteria.items;
     expect(item.required).toContain('criterionKey');
     expect(item.required).toContain('band');
-    expect(item.required).toContain('closestAnchorBand');
+  });
+
+  it('leaves closestAnchorBand optional, because a generic draft has no reference sheet', () => {
+    const item = (RESPONSE_SCHEMA as any).properties.criteria.items;
+    expect(item.properties.closestAnchorBand).toBeDefined();
+    expect(item.required).not.toContain('closestAnchorBand');
+  });
+
+  it('builds the tag enum from the labels passed in, and leaves tags out when there are none', () => {
+    const withTags = buildEvaluationSchema(['Still Life', 'Portrait', 'Still Life', ' ']) as any;
+    expect(withTags.properties.tags.items.enum).toEqual(['Still Life', 'Portrait']);
+    expect((buildEvaluationSchema([]) as any).properties.tags).toBeUndefined();
+  });
+
+  it('gives generic drafts their own prompt version, so agreement can separate them', () => {
+    expect(promptVersionFor('generic')).toBe(GENERIC_PROMPT_VERSION);
+    expect(promptVersionFor('anchored')).toBe(PROMPT_VERSION);
+    expect(GENERIC_PROMPT_VERSION).not.toBe(PROMPT_VERSION);
   });
 
   it('spells out the coordinate convention in the geometry description', () => {

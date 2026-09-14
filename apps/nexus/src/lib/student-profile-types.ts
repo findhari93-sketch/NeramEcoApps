@@ -43,6 +43,8 @@ export interface ProfileStudent {
   last_login_at: string | null;
   nexus_first_login_at: string | null;
   nexus_last_login_at: string | null;
+  /** First time past the photo gate. Null means Not started. */
+  nexus_entered_at: string | null;
 }
 
 export interface ProfileEnrollment {
@@ -55,6 +57,10 @@ export interface ProfileEnrollment {
   participation_status: 'active' | 'dormant';
   dormant_since: string | null;
   dormant_reason: string | null;
+  /** 'auto' = Not started (never entered Nexus), 'staff' = paused by a person. Null when active. */
+  dormant_source: 'auto' | 'staff' | null;
+  /** Who paused them. Null for Not started, which no person decided. */
+  dormant_by_name: string | null;
   /** Whether the study stage and the exam year agree. From pairStatus(). */
   pair_status: string | null;
 }
@@ -182,9 +188,18 @@ export interface ProfileTimelineEvent {
   detail: string | null;
 }
 
+/** One Nexus sign-in, newest first (nexus_sign_in_events). */
+export interface ProfileSignIn {
+  at: string;
+  outcome: 'entered' | 'photo_step';
+  device: 'Phone' | 'Tablet' | 'Laptop' | null;
+}
+
 export interface StudentProfileCore {
   student: ProfileStudent;
   enrollment: ProfileEnrollment;
+  /** Last SIGN_IN_CAP sign-ins. Recorded from migration 20260919090000 onwards. */
+  signIns: ProfileSignIn[];
   record: ProfileStudentRecord | null;
   classroom: { id: string; name: string | null };
   application: ProfileApplication | null;

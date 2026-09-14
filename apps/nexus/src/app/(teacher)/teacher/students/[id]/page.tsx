@@ -45,6 +45,7 @@ import ProfileSkeleton from '@/components/students/profile/ProfileSkeleton';
 import SectionNav, { type NavItem } from '@/components/students/profile/SectionNav';
 import IdentitySection from '@/components/students/profile/IdentitySection';
 import ClassroomSection from '@/components/students/profile/ClassroomSection';
+import SignInHistorySection from '@/components/students/profile/SignInHistorySection';
 import ApplicationSection from '@/components/students/profile/ApplicationSection';
 import GuardianSection from '@/components/students/profile/GuardianSection';
 import DocumentsSection from '@/components/students/profile/DocumentsSection';
@@ -286,6 +287,7 @@ export default function StudentProfilePage() {
   const navItems: NavItem[] = [
     { id: 'profile-identity', label: 'Identity and contact' },
     { id: 'profile-classroom', label: 'Class and progress' },
+    { id: 'profile-sign-ins', label: 'Sign-in history' },
     { id: 'profile-attendance', label: 'Attendance' },
     { id: 'profile-work', label: 'Assignments and tests' },
     { id: 'profile-sketchbook', label: 'Sketchbook' },
@@ -344,6 +346,8 @@ export default function StudentProfilePage() {
         topics={core.topics}
         currentBatch={core.currentBatch}
       />
+
+      <SignInHistorySection student={core.student} signIns={core.signIns ?? []} />
 
       <AttendanceSection
         performance={performance}

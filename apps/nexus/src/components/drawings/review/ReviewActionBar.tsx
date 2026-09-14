@@ -3,7 +3,7 @@
 /**
  * The bar that closes a drawing review, in its two states.
  *
- * Grading: Draft, Redo, Complete, and the gallery opt-in.
+ * Grading: Save draft, Redo, Complete, and the gallery opt-in.
  * Locked: a finished or superseded round, with an explicit way back into grading
  * so the teacher is never left on a screen with nothing to press.
  *
@@ -128,8 +128,43 @@ export default function ReviewActionBar({
         // While a note is being recorded on a phone, the recorder's own Stop bar
         // takes this spot. Redo and Complete wait for the note regardless.
         display: voiceBusy ? { xs: 'none', md: 'flex' } : 'flex',
+        // From 900px the gallery switch takes a thin row of its own above the
+        // buttons: in a 360px rail four controls on one line cut Complete off.
+        flexWrap: { md: 'wrap' },
+        rowGap: { md: 0.25 },
+        pt: { md: 0.25 },
       }}
     >
+      {/* Gallery visibility: off unless the teacher opts this drawing in. */}
+      <Box
+        component="label"
+        sx={{
+          order: { xs: 10, md: -1 },
+          width: { md: '100%' },
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 0.5,
+          cursor: 'pointer',
+          minHeight: { md: 32 },
+        }}
+      >
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: { xs: 'none', md: 'block' }, fontWeight: 600 }}
+        >
+          Show in gallery
+        </Typography>
+        <Switch
+          checked={showInGallery}
+          onChange={(e) => onShowInGalleryChange(e.target.checked)}
+          size="small"
+          title="Show in gallery"
+          inputProps={{ 'aria-label': 'Show in gallery' }}
+        />
+      </Box>
+
       {/* Draft: icon-only where the bar is tight, icon and text where it is not. */}
       <IconButton
         onClick={onSaveDraft}
@@ -157,11 +192,11 @@ export default function ReviewActionBar({
         color={draftSaved ? 'success' : 'inherit'}
         sx={{
           textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
-          minHeight: 48, minWidth: 0,
+          minHeight: 48, minWidth: 0, whiteSpace: 'nowrap',
           display: { xs: 'none', md: 'inline-flex' },
         }}
       >
-        {draftSaving ? '...' : draftSaved ? 'Saved!' : 'Draft'}
+        {draftSaving ? 'Saving' : draftSaved ? 'Saved' : 'Save draft'}
       </Button>
 
       <Button
@@ -173,7 +208,7 @@ export default function ReviewActionBar({
         startIcon={<ReplayIcon />}
         sx={{
           textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
-          minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 },
+          minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',
           ...hideStartIconOnPhone,
         }}
       >
@@ -189,7 +224,7 @@ export default function ReviewActionBar({
         startIcon={<CheckCircleOutlineIcon />}
         sx={{
           textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
-          minHeight: 48, flex: 1, px: { xs: 1.5, md: 2 },
+          minHeight: 48, flex: 1, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',
           ...hideStartIconOnPhone,
         }}
       >
@@ -198,21 +233,6 @@ export default function ReviewActionBar({
         {saving && pendingAction === 'complete' ? '...' : completeLabel({ hasDraft: !!hasAiDraft, alreadyReviewed })}
       </Button>
 
-      {/* Gallery visibility: off unless the teacher opts this drawing in. */}
-      <Switch
-        checked={showInGallery}
-        onChange={(e) => onShowInGalleryChange(e.target.checked)}
-        size="small"
-        title="Show in Gallery"
-        inputProps={{ 'aria-label': 'Show in Gallery' }}
-      />
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ fontSize: '0.65rem', lineHeight: 1.2, ml: -0.5, display: { xs: 'none', md: 'block' } }}
-      >
-        Gallery
-      </Typography>
     </Box>
   );
 }

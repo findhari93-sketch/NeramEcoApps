@@ -62,6 +62,12 @@ interface SketchOverCanvasProps {
   saveLabel?: string;
   /** The drawing's own pixel size once it loads. Recorded points are fractions of it. */
   onImageSize?: (size: { w: number; h: number }) => void;
+  /**
+   * Change it to wipe the canvas and its undo history without recording a
+   * Clear. A walkthrough's "Record again" needs this: strokes from the first
+   * take would otherwise stay on screen yet never appear in the new replay.
+   */
+  resetKey?: number;
 }
 
 type Tool = 'pen' | 'highlighter' | 'eraser' | 'text';
@@ -220,6 +226,7 @@ export default function SketchOverCanvas({
   saveDisabled = false,
   saveLabel = 'Save',
   onImageSize,
+  resetKey = 0,
 }: SketchOverCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -289,8 +296,28 @@ export default function SketchOverCanvas({
   const canvasResRef = useRef(canvasRes);
   canvasResRef.current = canvasRes;
 
-  /** Milliseconds since the voice recording started. */
-  const stamp = () => (recordingRef.current ? performance.now() - recordingRef.current.startedAt : 0);
+  /**
+   * Milliseconds since the voice recording started, for an event when one is
+   * given. Event timestamps share performance.now()'s origin in every current
+   * browser, and a coalesced pointer event carries the moment the pen was
+   * actually there, not the moment the batch was handled. An implausible value
+   * (an old engine using the epoch) falls back to now.
+   */
+  const stamp = (eventTime?: number) => {
+    const rec = recordingRef.current;
+    if (!rec) return 0;
+    const now = performance.now();
+    const at = eventTime && Math.abs(now - eventTime) < 5000 ? eventTime : now;
+    return Math.max(0, at - rec.startedAt);
+  };
+
+  useEffect(() => {
+    if (!resetKey) return;
+    draftRef.current = null;
+    setItems([]);
+    setUndoStack([]);
+    setRedoStack([]);
+  }, [resetKey]);
 
   const emit = useCallback((op: SketchOp) => {
     recordingRef.current?.onOp(op);
@@ -642,7 +669,7 @@ export default function SketchOverCanvas({
         points: [point],
         color,
         width: lineWidth / scale,
-        times: [stamp()],
+        times: [stamp(e.nativeEvent.timeStamp)],
         pressures: [readPressure(realPressure, e.pressure, undefined, point, 0)],
         highlight: tool === 'highlighter',
         realPressure,
@@ -677,7 +704,7 @@ export default function SketchOverCanvas({
         const now = performance.now();
         const prev = draft.points[draft.points.length - 1];
         draft.points.push(point);
-        draft.times.push(stamp());
+        draft.times.push(stamp(ev.timeStamp));
         draft.pressures.push(
           readPressure(draft.realPressure, ev.pressure, prev, point, now - draft.lastAt),
         );

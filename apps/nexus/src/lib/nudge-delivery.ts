@@ -158,6 +158,14 @@ export interface SendNudgeInput {
    */
   respectDormancy?: boolean;
 
+  /**
+   * Let Not started students (never entered Nexus, dormant_source 'auto') through
+   * the dormant filter. Only for messages whose purpose is getting them in: the
+   * join reminders and the Photo Review "add your photo" remind. Students paused
+   * by staff are still dropped.
+   */
+  reachNotStarted?: boolean;
+
   /** 'staff' for messages to teachers (digests): no dormant filter. Defaults to 'student'. */
   audience?: 'student' | 'staff';
 
@@ -262,7 +270,7 @@ export async function sendNudge(
   const staff = input.audience === 'staff';
   const respectDormancy = !staff && input.respectDormancy !== false;
   const { kept: studentIds, dropped } = respectDormancy
-    ? await filterTrackedStudentIds(requestedIds)
+    ? await filterTrackedStudentIds(requestedIds, undefined, { reachNotStarted: input.reachNotStarted === true })
     : { kept: requestedIds, dropped: [] as string[] };
 
   if (dropped.length) {

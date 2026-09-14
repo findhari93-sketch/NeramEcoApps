@@ -5,8 +5,10 @@
  *  - the score sits ABOVE the image upload slots, which used to push it below
  *    the fold behind two empty boxes;
  *  - empty upload slots start folded;
- *  - the voice note sits with the written feedback, as one "say it" stage;
- *  - tags and comments are one-line rows that open in place;
+ *  - the voice note sits with the written feedback to the student;
+ *  - tags are a one-line row that opens in place, and there is no comment
+ *    thread (the feedback already is the teacher's words to the student);
+ *  - on a laptop the page itself never scrolls: only the rail does;
  *  - Enter completes from the page, but never from inside the feedback box.
  *
  * J and K need two pending drawings on one assignment, which needs two student
@@ -53,7 +55,7 @@ test.describe('Drawing review rail', () => {
     await page.goto(`${APP_URLS.nexus}/teacher/drawing-reviews/${submissionId}?assignment=${assignmentId}`, {
       waitUntil: 'domcontentloaded',
     });
-    await expect(page.getByText('SCORE', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
   };
 
   test('setup: a submission to review', async ({ request }) => {
@@ -97,7 +99,7 @@ test.describe('Drawing review rail', () => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
 
-    const score = await page.getByText('SCORE', { exact: true }).boundingBox();
+    const score = await page.getByRole('heading', { name: 'Scores', exact: true }).boundingBox();
     const images = await page.getByText('Review Images', { exact: true }).boundingBox();
     expect(score && images, 'both the score and the image section render').toBeTruthy();
     expect(score!.y).toBeLessThan(images!.y);
@@ -106,30 +108,64 @@ test.describe('Drawing review rail', () => {
     await expect(page.getByText('Tap to paste or upload').first()).toBeHidden();
   });
 
-  test('saying it is one stage: the voice note sits under the written feedback', async ({ page }) => {
+  test('the voice note sits under the written feedback', async ({ page }) => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
 
-    const sayIt = await page.getByText('SAY IT', { exact: true }).boundingBox();
-    const feedback = await page.getByPlaceholder(/Paste feedback from Gemini/).boundingBox();
-    const record = await page.getByRole('button', { name: 'Record voice note' }).boundingBox();
+    const sayIt = await page.getByRole('heading', { name: 'Feedback to student', exact: true }).boundingBox();
+    const feedback = await page.getByRole('textbox', { name: 'Feedback to student' }).boundingBox();
+    const record = await page.getByRole('button', { name: 'Record', exact: true }).boundingBox();
     expect(sayIt && feedback && record).toBeTruthy();
     expect(sayIt!.y).toBeLessThan(feedback!.y);
     expect(feedback!.y).toBeLessThan(record!.y);
   });
 
-  test('comments and tags are one line each and open in place', async ({ page }) => {
+  test('tags are one line that opens in place, and there is no comment thread', async ({ page }) => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
 
-    const comments = page.getByRole('button', { name: /^Comments/ });
-    await expect(comments).toHaveAttribute('aria-expanded', 'false');
-    await comments.click();
-    await expect(comments).toHaveAttribute('aria-expanded', 'true');
-
     const tags = page.getByRole('button', { name: /^Tags/ });
     await expect(tags).toHaveAttribute('aria-expanded', 'false');
+    await tags.click();
+    await expect(tags).toHaveAttribute('aria-expanded', 'true');
+
+    await expect(page.getByRole('button', { name: /^Comments/ })).toHaveCount(0);
   });
+
+  for (const size of [{ width: 1280, height: 800 }, { width: 1920, height: 1080 }]) {
+    test(`laptop ${size.width}: only the rail scrolls, the page holds still`, async ({ page }, testInfo) => {
+      test.skip(!submissionId, 'Setup did not complete');
+      await page.setViewportSize(size);
+      await openReview(page);
+
+      const pageScrolls = () =>
+        page.evaluate(() => {
+          const main = document.querySelector('main');
+          const doc = document.scrollingElement as HTMLElement;
+          return {
+            doc: doc.scrollHeight - doc.clientHeight,
+            main: main ? main.scrollHeight - main.clientHeight : 0,
+          };
+        });
+      // Kept for the visual review of the rail.
+      await page.screenshot({ path: testInfo.outputPath(`rail-${size.width}.png`) });
+      const before = await pageScrolls();
+      expect(before.doc, 'the document is no taller than the screen').toBeLessThanOrEqual(1);
+      expect(before.main, 'main is no taller than its box').toBeLessThanOrEqual(1);
+
+      // Scroll the rail to the bottom: the header and the action bar stay put.
+      const complete = page.getByRole('button', { name: 'Complete', exact: true });
+      const barBefore = await complete.boundingBox();
+      await page.getByRole('heading', { name: 'Feedback to student', exact: true }).hover();
+      await page.mouse.wheel(0, 4000);
+      await page.waitForTimeout(300);
+      const barAfter = await complete.boundingBox();
+      expect(barAfter!.y).toBeCloseTo(barBefore!.y, 0);
+      expect(barAfter!.y + barAfter!.height).toBeLessThanOrEqual(size.height);
+      const after = await pageScrolls();
+      expect(after.doc).toBeLessThanOrEqual(1);
+    });
+  }
 
   test('the header shows where this drawing sits in the queue', async ({ page }) => {
     test.skip(!submissionId, 'Setup did not complete');
@@ -141,7 +177,7 @@ test.describe('Drawing review rail', () => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
 
-    const box = page.getByPlaceholder(/Paste feedback from Gemini/);
+    const box = page.getByRole('textbox', { name: 'Feedback to student' });
     await box.click();
     await page.keyboard.type('first line');
     await page.keyboard.press('Enter');
@@ -157,15 +193,25 @@ test.describe('Drawing review rail', () => {
     expect((await res.json()).submission.status).toBe('submitted');
   });
 
-  test('mobile: the folded rows are thumb-sized and nothing overflows', async ({ page }) => {
+  test('mobile: the folded rows and voice buttons are thumb-sized and nothing overflows', async ({ page }, testInfo) => {
     test.skip(!submissionId, 'Setup did not complete');
     await page.setViewportSize({ width: 375, height: 812 });
     await openReview(page);
 
-    const comments = page.getByRole('button', { name: /^Comments/ });
-    await comments.scrollIntoViewIfNeeded();
-    const box = await comments.boundingBox();
+    const tags = page.getByRole('button', { name: /^Tags/ });
+    await tags.scrollIntoViewIfNeeded();
+    const box = await tags.boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(44);
+
+    await page.getByRole('heading', { name: 'Feedback to student', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath('rail-375-feedback.png') });
+
+    for (const name of ['Record', 'Sketch and talk']) {
+      const button = page.getByRole('button', { name, exact: true });
+      await button.scrollIntoViewIfNeeded();
+      const b = await button.boundingBox();
+      expect(b!.height, `${name} is at least 44px tall`).toBeGreaterThanOrEqual(44);
+    }
 
     const overflows = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,

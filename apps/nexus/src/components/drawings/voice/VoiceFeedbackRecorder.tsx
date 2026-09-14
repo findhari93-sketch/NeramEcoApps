@@ -18,8 +18,10 @@ import {
   Box,
   Button,
   Chip,
+  IconButton,
   LinearProgress,
   Stack,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -42,17 +44,29 @@ import {
   voiceStatusLine,
 } from '@/lib/voice-recording';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
-import VoiceNotePlayer from './VoiceNotePlayer';
+import VoiceNotePlayer, { type StagePlayback } from './VoiceNotePlayer';
 
 // '1px', never 1: a bare number in sx means 100%, which is how an invisible
 // announcer ends up as wide as the page and pushes a phone layout sideways.
+// top and left pin it inside its container, so it can never sit below the
+// fold and stretch the page (the rail's scroll body is its positioned parent).
 const SCREEN_READER_ONLY = {
   position: 'absolute',
+  top: 0,
+  left: 0,
   width: '1px',
   height: '1px',
   overflow: 'hidden',
   clip: 'rect(0 0 0 0)',
   whiteSpace: 'nowrap',
+} as const;
+
+/** 44px tall for a thumb, but only as wide as the words. */
+const compactButtonSx = {
+  minHeight: 44,
+  textTransform: 'none',
+  fontWeight: 600,
+  fontSize: '0.875rem',
 } as const;
 
 export interface VoiceFeedbackRecorderProps {
@@ -65,6 +79,8 @@ export interface VoiceFeedbackRecorderProps {
   getToken: () => Promise<string | null>;
   onChange: (voice: VoiceFeedbackView | null) => void;
   onBusyChange?: (busy: boolean) => void;
+  /** Replay a walkthrough over the big drawing on the review stage. */
+  onStagePlayback?: (playback: StagePlayback | null) => void;
 }
 
 export default function VoiceFeedbackRecorder({
@@ -75,6 +91,7 @@ export default function VoiceFeedbackRecorder({
   getToken,
   onChange,
   onBusyChange,
+  onStagePlayback,
 }: VoiceFeedbackRecorderProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -366,9 +383,10 @@ export default function VoiceFeedbackRecorder({
             url={voice.url}
             mime={voice.audio_mime}
             durationMs={voice.duration_ms}
-            title="Your voice note"
+            title={voice.sketch ? 'Your walkthrough' : 'Your voice note'}
             sketch={voice.sketch}
             imageUrl={voice.base_image_url}
+            onStagePlayback={onStagePlayback}
           />
           <Typography variant="caption" color="text.secondary">
             {voiceStatusLine(voice, Date.now())}
@@ -393,69 +411,67 @@ export default function VoiceFeedbackRecorder({
                 </Button>
               </Stack>
             ) : (
-              // Wraps rather than shrinks: at 375px three cramped buttons are
-              // worse than two rows of readable ones.
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Button
-                  variant="outlined"
-                  startIcon={<ReplayIcon />}
-                  onClick={startRecording}
-                  sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600, flex: '1 1 140px' }}
-                >
+              // Quiet text buttons at their natural width: these are second
+              // chances, not the main action, and full-width outlined buttons
+              // made them the loudest thing in the rail.
+              <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Button size="small" startIcon={<ReplayIcon />} onClick={startRecording} sx={compactButtonSx}>
                   Record again
                 </Button>
                 {imageUrl && (
                   <Button
-                    variant="outlined"
+                    size="small"
                     startIcon={<DrawOutlinedIcon />}
                     onClick={() => setWalkthroughOpen(true)}
-                    sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600, flex: '1 1 180px' }}
+                    sx={compactButtonSx}
                   >
-                    Talk while you sketch
+                    Sketch and talk
                   </Button>
                 )}
-                <Button
-                  color="inherit"
-                  startIcon={<DeleteOutlineIcon />}
-                  onClick={() => setConfirmDelete(true)}
-                  sx={{ minHeight: 48, textTransform: 'none' }}
-                >
-                  Delete
-                </Button>
+                <Box sx={{ flex: 1 }} />
+                <Tooltip title="Delete voice note">
+                  <IconButton
+                    onClick={() => setConfirmDelete(true)}
+                    aria-label="Delete voice note"
+                    sx={{ width: 44, height: 44, color: 'text.secondary' }}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </Stack>
             ))}
           {!readOnly && voice.sent_at && !confirmDelete && (
             <Typography variant="caption" color="text.secondary">
-              Recording again replaces this note. The new one goes out with your next Redo or Complete.
+              Recording again replaces this note. The new one is sent with your next Redo or Complete.
             </Typography>
           )}
         </Stack>
       ) : (
         <Stack spacing={0.75}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button
               variant="outlined"
+              size="small"
               startIcon={<MicNoneRoundedIcon />}
               onClick={startRecording}
-              fullWidth
-              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+              sx={{ ...compactButtonSx, px: 1.5 }}
             >
-              Record voice note
+              Record
             </Button>
             {imageUrl && (
               <Button
                 variant="outlined"
+                size="small"
                 startIcon={<DrawOutlinedIcon />}
                 onClick={() => setWalkthroughOpen(true)}
-                fullWidth
-                sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+                sx={{ ...compactButtonSx, px: 1.5 }}
               >
-                Talk while you sketch
+                Sketch and talk
               </Button>
             )}
           </Stack>
           <Typography variant="caption" color="text.secondary">
-            Talk them through the drawing, up to 3 minutes. It goes out with Redo or Complete.
+            Up to 3 minutes. Sent with Redo or Complete.
           </Typography>
         </Stack>
       )}

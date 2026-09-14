@@ -28,6 +28,8 @@ export interface StudentRowChipsProps {
   participationStatus?: string | null;
   dormantSince?: string | null;
   dormantReason?: string | null;
+  /** 'auto' shows Not started instead of Dormant. */
+  dormantSource?: 'auto' | 'staff' | null;
   examBatch?: string | null;
   /** Per-student pair_status from the API. 'mismatch' turns the year chip amber. */
   pairStatus?: string | null;
@@ -46,6 +48,7 @@ export default function StudentRowChips({
   participationStatus,
   dormantSince,
   dormantReason,
+  dormantSource,
   examBatch,
   pairStatus,
   currentBatch,
@@ -62,7 +65,7 @@ export default function StudentRowChips({
   return (
     <>
       {dormant && (
-        <DormantChip since={dormantSince} reason={dormantReason} density={density} />
+        <DormantChip since={dormantSince} reason={dormantReason} source={dormantSource} density={density} />
       )}
       <StudentStageChip stage={stage} density={density} />
       <ExamYearChip

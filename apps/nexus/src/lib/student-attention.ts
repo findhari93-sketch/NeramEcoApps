@@ -13,6 +13,8 @@ export type AttentionKey =
   | 'duplicates'
   | 'mismatch'
   | 'never_signed_in'
+  | 'back_in_nexus'
+  | 'not_started_long'
   | 'no_form'
   | 'no_stage'
   | 'no_year';
@@ -21,6 +23,8 @@ export type AttentionActionKey =
   | 'review_duplicates'
   | 'review_mismatches'
   | 'show_never_signed_in'
+  | 'review_back_in_nexus'
+  | 'review_not_started'
   | 'review_forms'
   | 'prefill'
   | 'fix_stages'
@@ -49,6 +53,10 @@ export interface AttentionInput {
   noStageCount: number;
   noYearCount: number;
   suggestionCount: number;
+  /** Paused by staff, but opened Nexus since. Staff decide: bring back or leave paused. */
+  backInNexusCount?: number;
+  /** Not started (never entered Nexus) for 14 days or more. See lib/not-started.ts. */
+  notStartedLongCount?: number;
 }
 
 function studentHas(count: number): string {
@@ -79,6 +87,26 @@ export function buildAttentionRows(input: AttentionInput): AttentionRow[] {
       key: 'never_signed_in',
       message: `${input.neverSignedInCount} ${studentHas(input.neverSignedInCount)} never signed in to Nexus.`,
       actions: [{ key: 'show_never_signed_in', label: 'Show them' }],
+    });
+  }
+
+  // Both open a list only; bringing someone back or pausing them is gated in the
+  // row menu, so every teacher can see who is waiting on a decision.
+  const back = input.backInNexusCount ?? 0;
+  if (back > 0) {
+    rows.push({
+      key: 'back_in_nexus',
+      message: `${back} paused ${back === 1 ? 'student is' : 'students are'} back in Nexus. Bring them back, or leave them paused.`,
+      actions: [{ key: 'review_back_in_nexus', label: 'Review' }],
+    });
+  }
+
+  const long = input.notStartedLongCount ?? 0;
+  if (long > 0) {
+    rows.push({
+      key: 'not_started_long',
+      message: `${long} ${long === 1 ? 'student joined' : 'students joined'} over 2 weeks ago and ${long === 1 ? 'has' : 'have'} not entered Nexus. Remind them again, or pause them with a reason.`,
+      actions: [{ key: 'review_not_started', label: 'Review them', primary: true }],
     });
   }
 

@@ -14,11 +14,11 @@ import SketchOverCanvas from './SketchOverCanvas';
 import ResourceLinkSearch from './ResourceLinkSearch';
 import type { DrawingSubmission, TutorResource, GalleryReactionType } from '@neram/database/types';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
-import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import { compressImage } from '@/utils/imageCompression';
 import type { DrawingMark } from '@/lib/drawing-marks';
 import RubricScorePanel from './review/RubricScorePanel';
 import { feedbackPrefill, type AiDraft } from '@/lib/drawing-ai-draft';
+import type { AutoDraftState } from '@/hooks/useAutoDraft';
 import ReactionPicker from '@/components/assignments/ReactionPicker';
 
 export interface WorkspaceData {
@@ -55,27 +55,29 @@ interface AIFeedbackWorkspaceProps {
   voiceSlot?: React.ReactNode;
   /** The AI draft on this sheet, when one exists. */
   aiDraft?: AiDraft | null;
-  onDrafted?: () => void;
+  /** Where Gemini's draft for this sheet stands. */
+  draftState?: AutoDraftState | null;
 }
 
-/** The step markers on the rail: 01 Score, 02 Say it. The action bar is 03. */
-function StageLabel({ step, label }: { step: string; label: string }) {
+/**
+ * A section heading on the rail, in plain words. It used to be numbered steps
+ * in capitals ("01 SCORE", "02 SAY IT"), which read as a wizard the teacher had
+ * to walk through rather than a sheet to confirm.
+ */
+function StageLabel({ label }: { label: string }) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mb: 0.75 }}>
-      <Typography component="span" variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
-        {step}
-      </Typography>
-      <Typography component="span" variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.04em' }}>
-        {label}
-      </Typography>
-    </Box>
+    <Typography variant="subtitle2" component="h3" sx={{ fontWeight: 700, mb: 0.75 }}>
+      {label}
+    </Typography>
   );
 }
 
 export default function AIFeedbackWorkspace({
   submission, getToken, onChange, defaultCollapsed = false, readOnly = false,
-  sketchTrigger = 0, evaluationType = 'stars', maxMarks = 5, voiceSlot, aiDraft = null, onDrafted,
+  sketchTrigger = 0, evaluationType = 'stars', maxMarks = 5, voiceSlot, aiDraft = null,
+  draftState = null,
 }: AIFeedbackWorkspaceProps) {
+  const drafting = draftState?.phase === 'drafting';
   const isMarks = evaluationType === 'marks';
   // Workspace state
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(submission.reviewed_image_url);
@@ -109,7 +111,6 @@ export default function AIFeedbackWorkspace({
   const [imagesExpanded, setImagesExpanded] = useState(
     () => !defaultCollapsed && !!(submission.reviewed_image_url || (submission as any).corrected_image_url),
   );
-  const [feedbackExpanded, setFeedbackExpanded] = useState(true);
   const [pasteTarget, setPasteTarget] = useState<'overlay' | 'corrected' | null>(null);
 
   const theme = useTheme();
@@ -398,31 +399,13 @@ export default function AIFeedbackWorkspace({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
 
-      {/* The verdict, first. 01 Score, then 02 Say it (written feedback and the
-          voice note together), then the action bar is 03 Send. */}
-      <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-        <Box
-          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 0.75 : 1, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
-          onClick={() => setFeedbackExpanded(!feedbackExpanded)}
-        >
-          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>
-            {isMarks ? 'Feedback & Marks' : 'Feedback & Rating'}
-          </Typography>
-          {isMarks
-            ? marks.trim() !== '' && (
-                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mr: 1 }}>
-                  {marks}/{maxMarks}
-                </Typography>
-              )
-            : rating > 0 && (
-                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mr: 1 }}>
-                  {rating}/5 {RATING_LABELS[rating] || ''}
-                </Typography>
-              )}
-          {feedbackExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-        </Box>
-        <Collapse in={feedbackExpanded}>
-          <Box sx={{ p: isMobile ? 1.5 : 2 }}>
+      {/* The verdict, first: scores, then the feedback to the student (written
+          and voice together), then the action bar sends it. No collapsible
+          header of its own: the rail's "Feedback" heading already names it, and
+          the running total sits beside that heading. */}
+      <Box>
+        <Box>
+          <Box>
             {readOnly ? (
               <Box>
                 {isMarks
@@ -481,7 +464,7 @@ export default function AIFeedbackWorkspace({
                 <Box sx={{ mb: 2 }}>
                   {isMarks ? (
                     <>
-                      <StageLabel step="01" label="MARKS" />
+                      <StageLabel label="Marks" />
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <TextField
                           value={marks}
@@ -503,7 +486,7 @@ export default function AIFeedbackWorkspace({
                       submissionId={submission.id}
                       getToken={getToken}
                       aiDraft={aiDraft}
-                      onDrafted={onDrafted}
+                      draftState={draftState}
                       onOverallChange={(stars) => {
                         setRating(stars ?? 0);
                         notify({ rating: stars ?? 0 });
@@ -512,17 +495,23 @@ export default function AIFeedbackWorkspace({
                   )}
                 </Box>
 
-                <StageLabel step="02" label="SAY IT" />
+                <StageLabel label="Feedback to student" />
                 {feedbackFromDraft && (
                   <Typography variant="caption" color="primary.dark" data-testid="feedback-from-draft" sx={{ display: 'block', mb: 0.5 }}>
-                    Drafted. Edit it, or record over it.
+                    Drafted by Gemini. Read it through before you send.
                   </Typography>
                 )}
                 {/* Written feedback */}
                 <TextField
-                  placeholder="Paste feedback from Gemini or write your own..."
+                  placeholder={
+                    drafting && !tutorFeedback
+                      ? 'Gemini is writing a draft...'
+                      : 'What should they keep, fix and try next?'
+                  }
+                  inputProps={{ 'aria-label': 'Feedback to student' }}
                   multiline
-                  rows={4}
+                  minRows={4}
+                  maxRows={12}
                   fullWidth
                   value={tutorFeedback}
                   onChange={(e) => {
@@ -557,8 +546,8 @@ export default function AIFeedbackWorkspace({
               </Box>
             )}
           </Box>
-        </Collapse>
-      </Paper>
+        </Box>
+      </Box>
 
       {/* Reference and overlay images. After the score, and folded away when
           empty: two blank upload slots used to sit above the verdict, so the

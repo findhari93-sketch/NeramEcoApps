@@ -10,21 +10,34 @@
 
 import type { AiDraft, AiDraftCriterion, Confidence, ScorePair } from './drawing-ai-draft';
 
-/** Statuses an AI evaluation can hold while still being a draft worth showing. */
-const DRAFT_STATUSES = ['draft', 'reviewed'];
+/**
+ * Statuses an AI evaluation can hold while still being a draft worth showing.
+ *
+ * Deliberately an allow list. 'running' is a claim with no scores yet,
+ * 'superseded' is a draft someone replaced, and 'needs_manual' is a failure:
+ * none of them may ever reach the review screen as a draft.
+ */
+export const DRAFT_STATUSES = ['draft', 'reviewed'];
+
+/** The tags a draft chose, as stored beside the model's answer. */
+export function draftTagsFrom(rawResponse: unknown): string[] {
+  const tags = (rawResponse as { tags?: unknown } | null)?.tags;
+  if (!Array.isArray(tags)) return [];
+  return tags.filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
+}
 
 export async function loadAiDraft(supabase: any, submissionId: string): Promise<AiDraft | null> {
   try {
     const { data: evaluation } = await supabase
       .from('drawing_evaluation')
-      .select('id, created_at, overall_comment, status')
+      .select('id, created_at, overall_comment, status, raw_response')
       .eq('submission_id', submissionId)
       .eq('source', 'ai')
       .in('status', DRAFT_STATUSES)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (!evaluation?.id) return null;
+    if (!evaluation?.id || !DRAFT_STATUSES.includes(evaluation.status)) return null;
 
     const [{ data: rows }, { data: marks }] = await Promise.all([
       supabase
@@ -66,6 +79,7 @@ export async function loadAiDraft(supabase: any, submissionId: string): Promise<
       overall_comment: evaluation.overall_comment ?? null,
       criteria,
       marks: draftMarks,
+      tags: draftTagsFrom(evaluation.raw_response),
     };
   } catch {
     return null;

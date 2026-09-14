@@ -47,6 +47,8 @@ describe('feature-flags registry', () => {
     // most of a class at once, so it waits until someone has checked on
     // /api/admin/delivery-health that the messages actually land.
     'staff.sketchbook-reminders',
+    // Same: messages every Not started student the evening it deploys.
+    'staff.join-reminders',
   ]);
 
   /**

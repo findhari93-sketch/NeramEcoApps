@@ -219,7 +219,7 @@ export async function PATCH(request: NextRequest) {
     const { data: existing, error: readError } = await supabase
       .from('nexus_enrollments')
       .select(
-        'id, user_id, current_standard, current_standard_source, participation_status, dormant_since, dormant_reason',
+        'id, user_id, current_standard, current_standard_source, participation_status, dormant_since, dormant_reason, dormant_source',
       )
       .eq('classroom_id', classroomId)
       .eq('role', 'student')
@@ -284,6 +284,10 @@ export async function PATCH(request: NextRequest) {
             patch.dormant_since = now;
             patch.dormant_by = staff.id;
             patch.dormant_reason = reason;
+            // Anything a person decides is a staff pause, including "Pause with a
+            // reason" on a Not started student: from here only staff bring them back,
+            // and entering Nexus no longer lifts them (lib/not-started.ts).
+            patch.dormant_source = 'staff';
           } else {
             // Returning is a fresh start. A stale dormant_since would corrupt
             // "how long were they away" the next time they pause; the history
@@ -291,6 +295,7 @@ export async function PATCH(request: NextRequest) {
             patch.dormant_since = null;
             patch.dormant_by = null;
             patch.dormant_reason = null;
+            patch.dormant_source = null;
           }
         }
         group = { patch, ids: [] };
@@ -398,7 +403,11 @@ export async function PATCH(request: NextRequest) {
         });
       }
 
-      const wasParticipation = row.participation_status ?? 'active';
+      // A Not started student is already 'dormant', so "Pause with a reason" does
+      // not change the status column. It is still a decision somebody made, so the
+      // audit reads it as not_started -> dormant rather than recording nothing.
+      const wasNotStarted = row.participation_status === 'dormant' && row.dormant_source === 'auto';
+      const wasParticipation = wasNotStarted ? 'not_started' : (row.participation_status ?? 'active');
       if (hasParticipation && wasParticipation !== participationStatus) {
         events.push({
           enrollment_id: row.id,
@@ -452,6 +461,11 @@ export async function PATCH(request: NextRequest) {
             ? reason
             : null
           : (row?.dormant_reason ?? null),
+        dormant_source: hasParticipation
+          ? participationStatus === 'dormant'
+            ? 'staff'
+            : null
+          : (row?.dormant_source ?? null),
         // What Undo sends back. Only the fields this request actually touched, so
         // undoing a stage change cannot accidentally reactivate someone or move
         // their exam year.

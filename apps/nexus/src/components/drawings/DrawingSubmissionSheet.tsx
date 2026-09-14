@@ -232,6 +232,23 @@ export default function DrawingSubmissionSheet({
       }
       setProgress(100);
 
+      // Start the AI draft (turn the photo upright, score it, tag it) so it is
+      // ready before a teacher opens the sheet. Fired and forgotten: keepalive
+      // lets it outlive this sheet closing, and the student never waits on it
+      // or hears about a failure. Sketchbook pages are never reviewed, so they
+      // are never drafted.
+      if (sourceType !== 'sketchbook') {
+        const created = await submitRes.json().catch(() => null);
+        const submissionId: unknown = created?.submission?.id ?? created?.data?.submissionId;
+        if (typeof submissionId === 'string' && submissionId) {
+          fetch(`/api/drawing/submissions/${submissionId}/auto-draft`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            keepalive: true,
+          }).catch(() => {});
+        }
+      }
+
       clearSelection();
       setSelfNote('');
       onSubmitted();

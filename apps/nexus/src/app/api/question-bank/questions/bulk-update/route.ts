@@ -6,9 +6,11 @@ import {
   addQuestionTags,
   addQuestionTagPairs,
   hardDeleteQBQuestions,
+  refreshPaperStats,
 } from '@neram/database';
 
 import { describeError } from '@/lib/api-errors';
+import { splitForActivation } from '@/lib/qb-activation';
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -140,21 +142,38 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (action === 'activate') {
-      // Set status='active' and is_active=true for questions that have answers
-      const { data, error } = await supabase
+      // Eligibility is read from the answer itself (see canActivateQuestion),
+      // not from `status`, which drifts: a draft row carrying a key used to be
+      // skipped silently and blamed on a missing key.
+      const { data: rows, error: readError } = await supabase
         .from('nexus_qb_questions')
-        .update({
-          status: 'active',
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        } as any)
-        .in('id', question_ids)
-        .in('status' as any, ['answer_keyed', 'complete', 'active'])
-        .select('id');
-      if (error) throw error;
+        .select('id, question_format, correct_answer, original_paper_id')
+        .in('id', question_ids);
+      if (readError) throw readError;
+
+      const { ready, blocked } = splitForActivation((rows || []) as any[]);
+      let updated = 0;
+      if (ready.length > 0) {
+        const { data, error } = await supabase
+          .from('nexus_qb_questions')
+          .update({
+            status: 'active',
+            is_active: true,
+            updated_at: new Date().toISOString(),
+          } as any)
+          .in('id', ready.map((r) => r.id))
+          .select('id');
+        if (error) throw error;
+        updated = data?.length || 0;
+
+        // A draft promoted to active moves the paper's answer-keyed count,
+        // which the papers list reads from the paper row, not the questions.
+        const paperIds = [...new Set(ready.map((r) => r.original_paper_id).filter(Boolean))] as string[];
+        await Promise.all(paperIds.map((paperId) => refreshPaperStats(paperId, supabase)));
+      }
 
       return NextResponse.json({
-        data: { updated: data?.length || 0 },
+        data: { updated, blocked: blocked.map((r) => r.id) },
       });
     } else {
       // Deactivate: set is_active=false (keep status as-is)

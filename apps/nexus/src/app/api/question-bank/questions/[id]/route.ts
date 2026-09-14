@@ -9,12 +9,22 @@ import {
   hardDeleteQBQuestions,
   getQuestionTagIds,
   setQuestionTags,
+  refreshPaperStats,
 } from '@neram/database';
 import { getLinkedDrawingQuestionId } from '@neram/database/queries/nexus';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { getQuestionOrigin } from '@/lib/test-import-store';
 
 import { describeError } from '@/lib/api-errors';
+import { canActivateQuestion, statusAfterAnswerSave } from '@/lib/qb-activation';
+
+/** Only the activation fields this request actually sends, so absent ones do not blank the stored values. */
+function pickActivationFields(body: Record<string, unknown>) {
+  const picked: Record<string, unknown> = {};
+  if ('question_format' in body) picked.question_format = body.question_format;
+  if ('correct_answer' in body) picked.correct_answer = body.correct_answer;
+  return picked;
+}
 
 export async function GET(
   request: NextRequest,
@@ -89,22 +99,43 @@ export async function PATCH(
     const tagIds: string[] | null = Array.isArray(body.tag_ids) ? body.tag_ids : null;
     delete body.tag_ids;
 
-    // When activating (is_active=true), also promote status to 'active'
-    // if the question has an answer key (answer_keyed or complete)
-    if (body.is_active === true) {
+    const touchesKey = 'correct_answer' in body;
+    let statusBefore: string | null = null;
+    if (body.is_active === true || touchesKey) {
       const { data: existing } = await supabase
         .from('nexus_qb_questions')
-        .select('*')
+        .select('status, question_format, correct_answer')
         .eq('id', id)
         .single();
+      statusBefore = (existing as { status?: string | null } | null)?.status ?? null;
 
-      if (existing && ['answer_keyed', 'complete'].includes((existing as any).status)) {
+      // A key saved here has to move the status along, or the row stays
+      // 'draft' with an answer (how Q76 and Q77 drifted); see statusAfterAnswerSave.
+      if (existing && touchesKey && !('status' in body)) {
+        const next = statusAfterAnswerSave(existing as any, pickActivationFields(body));
+        if (next) body.status = next;
+      }
+
+      // When activating (is_active=true), also promote status to 'active' if the
+      // question has an answer key. Read from the answer (this save's, else the
+      // stored one), not from `status`, which drifts; see canActivateQuestion.
+      if (
+        existing &&
+        body.is_active === true &&
+        canActivateQuestion({ ...(existing as any), ...pickActivationFields(body) })
+      ) {
         body.status = 'active';
       }
     }
 
     const data = await updateQBQuestion(id, body);
     if (tagIds) await setQuestionTags(id, tagIds, caller.id);
+
+    // The papers list reads its keyed and complete counts from the paper row.
+    const paperId = (data as { original_paper_id?: string | null }).original_paper_id;
+    if (body.status && body.status !== statusBefore && paperId) {
+      await refreshPaperStats(paperId, supabase);
+    }
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {

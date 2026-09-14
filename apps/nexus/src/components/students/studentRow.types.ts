@@ -54,6 +54,14 @@ export interface EnrolledStudent {
   participation_status: 'active' | 'dormant';
   dormant_since: string | null;
   dormant_reason: string | null;
+  /** 'auto' = Not started (never entered Nexus), 'staff' = paused by a person. See lib/not-started.ts. */
+  dormant_source?: 'auto' | 'staff' | null;
+  /** Who paused them. Null for Not started, which nobody decided. */
+  dormant_by_name?: string | null;
+  /** Automatic join reminders already sent while Not started. */
+  join_reminders_sent?: number;
+  /** Latest sign-in outcome, Not started students only. */
+  last_sign_in?: { at: string; outcome: 'entered' | 'photo_step' } | null;
 
   /**
    * Whether the class and the exam year agree, computed server-side from the

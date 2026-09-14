@@ -62,12 +62,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { email, role, reset, staffRole: requestedStaffRole, canTeach: requestedCanTeach } = body as {
+    const { email, role, reset, staffRole: requestedStaffRole, canTeach: requestedCanTeach, notStarted } = body as {
       email?: string;
       role?: 'teacher' | 'student' | 'parent';
       reset?: boolean;
       staffRole?: StaffRole;
       canTeach?: boolean;
+      /** Create the account as a student who has never entered Nexus. */
+      notStarted?: boolean;
     };
 
     if (!email) {
@@ -118,6 +120,11 @@ export async function POST(request: NextRequest) {
           email_verified: true,
           phone_verified: false,
           preferred_language: 'en',
+          // Test accounts stand in for students who are already in class. Without
+          // this the enrolment trigger (20260919090000) makes every one Not started,
+          // and they drop out of the rosters the specs assert on. A spec that wants a
+          // Not started student passes notStarted: true.
+          nexus_entered_at: notStarted ? null : new Date().toISOString(),
         })
         .select()
         .single();

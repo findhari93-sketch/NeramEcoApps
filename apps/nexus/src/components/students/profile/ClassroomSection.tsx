@@ -79,18 +79,28 @@ export default function ClassroomSection({
         />
         <Field
           label="Participation"
-          value={enrollment.participation_status === 'dormant' ? 'Dormant' : 'Active'}
+          value={
+            enrollment.participation_status !== 'dormant'
+              ? 'Active'
+              : enrollment.dormant_source === 'auto'
+                ? 'Not started (automatic)'
+                : 'Paused by staff'
+          }
           hint={
-            enrollment.participation_status === 'dormant'
-              ? [
-                  enrollment.dormant_since
-                    ? `Since ${formatDateIN(enrollment.dormant_since)}`
-                    : null,
-                  enrollment.dormant_reason,
-                ]
-                  .filter(Boolean)
-                  .join('. ') || null
-              : null
+            enrollment.participation_status !== 'dormant'
+              ? null
+              : enrollment.dormant_source === 'auto'
+                ? 'Has not entered Nexus yet. They join the class numbers the first time they add a photo and get in.'
+                : [
+                    enrollment.dormant_since
+                      ? `Since ${formatDateIN(enrollment.dormant_since)}${
+                          enrollment.dormant_by_name ? `, set by ${enrollment.dormant_by_name}` : ''
+                        }`
+                      : null,
+                    enrollment.dormant_reason ? `Reason: ${enrollment.dormant_reason}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join('. ') || null
           }
         />
         <Field label="Current exam batch" value={currentBatch} />

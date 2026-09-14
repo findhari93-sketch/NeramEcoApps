@@ -10,6 +10,7 @@ import {
 import { isSubmissionOnTime } from '@/lib/assignment-clock';
 import { resolveSubmitMode, lockedReason } from '@/lib/assignment-submit-window';
 import { parseQuality } from '@/lib/image-quality';
+import { supersedeAiDrafts } from '@/lib/drawing-eval/claim-state';
 
 /**
  * Keep the phone's photo measurement for triage. Best effort: an environment
@@ -82,6 +83,9 @@ export async function POST(request: NextRequest) {
           // both the drawing_submitted event and the on-time bonus were already
           // awarded when it first arrived.
           await storeQuality(supabase, replaced.id, image_quality);
+          // Any AI draft, finished or in progress, described the old photo.
+          // Retire it; the phone fires a fresh auto-draft for the new one.
+          await supersedeAiDrafts(supabase, replaced.id, { statuses: ['running', 'draft'], clearRotation: true });
           return NextResponse.json(
             { submission: replaced, attemptNumber: replaced.attempt_number ?? 1, replaced: true },
             { status: 200 },

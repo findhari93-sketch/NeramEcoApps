@@ -142,7 +142,7 @@ test.describe('Drawing rubric', () => {
 
     // The panel loads its criteria over the network, and a cold /api route in
     // dev compiles on first hit, so give the first sight of it real room.
-    await expect(page.getByText('SCORE', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
     // The old five-star widget is gone from the grading surface.
     await expect(page.locator('.MuiRating-root')).toHaveCount(0);
 
@@ -173,7 +173,7 @@ test.describe('Drawing rubric', () => {
   test('the scores are still there after a reload', async ({ page, request }) => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
-    await expect(page.getByText('SCORE', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
 
     await expect(bandButton(page, 'Composition', 4)).toHaveAttribute('aria-pressed', 'true');
     await expect(bandButton(page, 'Proportion and scale', 2)).toHaveAttribute('aria-pressed', 'true');
@@ -192,7 +192,7 @@ test.describe('Drawing rubric', () => {
   test('pressing the same band again clears it', async ({ page }) => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
-    await expect(page.getByText('SCORE', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
 
     const four = bandButton(page, 'Composition', 4);
     await expect(four).toHaveAttribute('aria-pressed', 'true');
@@ -209,7 +209,7 @@ test.describe('Drawing rubric', () => {
     test.skip(!submissionId, 'Setup did not complete');
     await page.setViewportSize({ width: 375, height: 812 });
     await openReview(page);
-    await expect(page.getByText('SCORE', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
 
     const three = bandButton(page, 'Line quality', 3);
     await expect(three).toBeVisible();

@@ -11,6 +11,12 @@
  * top of the page's own. Its list page and its `overview` sibling are ordinary
  * scrolling pages and stay capped, hence the negative lookahead.
  *
+ * The drawing review (one submission) is the third: a stage beside a feedback
+ * rail that scrolls on its own. It used to cancel the padding with negative
+ * margins and a guessed 64px bar height, which left the document 8px taller
+ * than the screen and a dead band beside the 1200px cap on wide monitors. The
+ * grading `profile` page beside it is an ordinary page and stays capped.
+ *
  * Every other route keeps the Container untouched, which is why this is a route
  * test rather than a layout change.
  *
@@ -19,7 +25,7 @@
  * the chrome heights these routes leave behind.
  */
 const FULL_BLEED =
-  /^\/(teacher|student|parent)\/timetable\/?$|^\/teacher\/question-bank\/papers\/(?!overview\/?$)[^/]+\/?$/;
+  /^\/(teacher|student|parent)\/timetable\/?$|^\/teacher\/question-bank\/papers\/(?!overview\/?$)[^/]+\/?$|^\/teacher\/drawing-reviews\/(?!profile\/?$)[^/]+\/?$/;
 
 export function isFullBleedRoute(pathname: string | null | undefined): boolean {
   return !!pathname && FULL_BLEED.test(pathname);

@@ -22,7 +22,9 @@ export async function GET(request: NextRequest) {
       const { count } = await auth.supabase
         .from('drawing_evaluation')
         .select('id', { count: 'exact', head: true })
-        .eq('source', 'ai');
+        .eq('source', 'ai')
+        // Claims in progress, failures and replaced drafts are not drafts.
+        .in('status', ['draft', 'reviewed', 'released']);
       drafts = count ?? 0;
     } catch {
       drafts = 0;

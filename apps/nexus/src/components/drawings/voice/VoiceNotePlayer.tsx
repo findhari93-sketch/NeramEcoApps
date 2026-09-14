@@ -14,23 +14,28 @@
  * `onProgress` is how a student's listening reaches the teacher as "Heard". It
  * fires once a play session passes two seconds (so an accidental tap is not a
  * listen), on pause, when the note ends, and when the page is left mid-note.
+ *
+ * A walkthrough's strokes follow a smoothed audio clock (lib/playback-clock),
+ * because `currentTime` moves in steps and a stroke read straight off it lands
+ * in two or three jumps behind the voice. With `onStagePlayback` the strokes
+ * replay over the big drawing on the review stage instead of a thumbnail here.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Button, IconButton, Slider, Stack, Typography, alpha } from '@neram/ui';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import PauseRoundedIcon from '@mui/icons-material/PauseRounded';
 import GraphicEqRoundedIcon from '@mui/icons-material/GraphicEqRounded';
+import DrawOutlinedIcon from '@mui/icons-material/DrawOutlined';
 import { formatClock, formatSpoken } from '@/components/video/format';
-import { buildStrokeOutline, smoothCentreline } from '@/lib/sketch-stroke';
-import { validateTimeline, visibleAt, type SketchTimeline } from '@/lib/sketch-timeline';
-
-const FONT_FAMILY = "'Segoe UI', system-ui, -apple-system, sans-serif";
+import { validateTimeline, type SketchTimeline } from '@/lib/sketch-timeline';
+import { advanceClock, type ClockState } from '@/lib/playback-clock';
+import { paintSketchFrame } from './paintSketchFrame';
 
 /**
  * Backing-store scale for the replay canvas, capped at 2: a three-times phone
  * would otherwise paint nine times the pixels for a handful of pen strokes.
  */
-const CANVAS_SCALE = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+export const CANVAS_SCALE = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
 
 const SPEEDS = [1, 1.5, 2] as const;
 const STARTED_AFTER_SECONDS = 2;
@@ -39,6 +44,18 @@ export interface VoiceProgressReport {
   positionMs: number;
   ended: boolean;
   started: boolean;
+}
+
+/** What the review stage needs to replay a walkthrough over the big drawing. */
+export interface StagePlayback {
+  timeline: SketchTimeline;
+  imageUrl: string;
+  /** The smoothed position of the voice, in ms. Safe to call every frame. */
+  getNowMs: () => number;
+  playing: boolean;
+  togglePlay: () => void;
+  /** Pause the voice and hand the stage back to the drawing. */
+  close: () => void;
 }
 
 export interface VoiceNotePlayerProps {
@@ -52,6 +69,12 @@ export interface VoiceNotePlayerProps {
   sketch?: unknown;
   /** The drawing the sketch was recorded over. */
   imageUrl?: string | null;
+  /**
+   * Replay the strokes somewhere else (the review stage) rather than in a
+   * thumbnail inside the player. Called with a handle when playback starts or
+   * the position moves, and with null when the player goes away.
+   */
+  onStagePlayback?: (playback: StagePlayback | null) => void;
 }
 
 export default function VoiceNotePlayer({
@@ -63,6 +86,7 @@ export default function VoiceNotePlayer({
   onProgress,
   sketch,
   imageUrl,
+  onStagePlayback,
 }: VoiceNotePlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -73,6 +97,8 @@ export default function VoiceNotePlayer({
   const sessionStartedRef = useRef(false);
   const onProgressRef = useRef(onProgress);
   onProgressRef.current = onProgress;
+  const onStageRef = useRef(onStagePlayback);
+  onStageRef.current = onStagePlayback;
 
   const duration = Math.max(durationMs / 1000, 0.1);
 
@@ -80,30 +106,36 @@ export default function VoiceNotePlayer({
   // their voice. Validated here because it arrives as stored JSON and ends up in
   // a rendering loop.
   const timeline = useMemo<SketchTimeline | null>(() => (sketch ? validateTimeline(sketch) : null), [sketch]);
-  const showsSketch = !!timeline && !!imageUrl;
+  const hasSketch = !!timeline && !!imageUrl;
+  const onStage = hasSketch && !!onStagePlayback;
+  const showsInlineSketch = hasSketch && !onStagePlayback;
   const stageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
-  const [reducedMotion, setReducedMotion] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const apply = () => setReducedMotion(mq.matches);
-    apply();
-    mq.addEventListener('change', apply);
-    return () => mq.removeEventListener('change', apply);
-  }, []);
+  const clockRef = useRef<ClockState | null>(null);
+  const getNowMs = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return 0;
+    clockRef.current = advanceClock(clockRef.current, {
+      audioMs: audio.currentTime * 1000,
+      now: performance.now(),
+      rate: audio.playbackRate,
+      playing: !audio.paused && !audio.ended,
+      durationMs,
+    });
+    return clockRef.current.outMs;
+  }, [durationMs]);
 
   useEffect(() => {
     const el = stageRef.current;
-    if (!showsSketch || !el || typeof ResizeObserver === 'undefined') return;
+    if (!showsInlineSketch || !el || typeof ResizeObserver === 'undefined') return;
     const measure = () => setStage({ w: el.clientWidth, h: el.clientHeight });
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [showsSketch]);
+  }, [showsInlineSketch]);
 
   const paint = useCallback(
     (ms: number) => {
@@ -111,88 +143,34 @@ export default function VoiceNotePlayer({
       if (!canvas || !timeline) return;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      const { width, height } = canvas;
-      ctx.clearRect(0, 0, width, height);
-
-      for (const item of visibleAt(timeline, ms)) {
-        if (item.kind === 'stroke') {
-          // Reduced motion: the stroke arrives whole at the moment it was begun,
-          // rather than drawing itself across the screen.
-          const whole = reducedMotion
-            ? timeline.ops.find((op) => op.k === 'stroke' && op.id === item.id)
-            : null;
-          const source =
-            whole && whole.k === 'stroke' ? whole.p.map(([, x, y]) => ({ x, y })) : item.points || [];
-          // A whole stroke shown at once keeps its own pressures; a stroke being
-          // revealed point by point gets the ones visibleAt handed back.
-          const pressures =
-            whole && whole.k === 'stroke'
-              ? (whole.p.every((point) => point.length === 4)
-                  ? whole.p.map((point) => point[3] as number)
-                  : undefined)
-              : item.pressures;
-          const points = source.map((point) => ({ x: point.x * width, y: point.y * height }));
-          if (!points.length) continue;
-
-          // Filled outline, the same renderer the teacher drew against, so a
-          // tapered stroke replays as the stroke they actually made. A timeline
-          // recorded before pressure existed has none, and comes back at a
-          // constant width exactly as it always did.
-          const lineWidth = Math.max(1, (item.width || 0) * width);
-          const smoothed = smoothCentreline(points, pressures);
-          const outline = buildStrokeOutline(smoothed.points, smoothed.pressures, lineWidth);
-          if (!outline.length) continue;
-          ctx.fillStyle = item.color;
-          ctx.beginPath();
-          ctx.moveTo(outline[0].x, outline[0].y);
-          for (let i = 1; i < outline.length; i++) ctx.lineTo(outline[i].x, outline[i].y);
-          ctx.closePath();
-          ctx.fill();
-        } else {
-          const fontPx = Math.max(10, (item.fontSize || 0) * height);
-          const x = (item.x || 0) * width;
-          const y = (item.y || 0) * height;
-          if (item.leader) {
-            ctx.strokeStyle = item.color;
-            ctx.lineWidth = Math.max(2, fontPx / 10);
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(x, y + fontPx / 2);
-            ctx.lineTo(item.leader.x * width, item.leader.y * height);
-            ctx.stroke();
-          }
-          ctx.font = `600 ${fontPx}px ${FONT_FAMILY}`;
-          ctx.textBaseline = 'top';
-          ctx.fillStyle = item.color;
-          (item.text || '').split('\n').forEach((line, i) => ctx.fillText(line, x, y + i * fontPx * 1.25));
-        }
-      }
+      paintSketchFrame(ctx, timeline, ms, canvas.width, canvas.height);
     },
-    [timeline, reducedMotion],
+    [timeline],
   );
 
-  // While it plays, follow the audio clock frame by frame.
+  // While it plays, follow the smoothed audio clock frame by frame.
   useEffect(() => {
-    if (!showsSketch) return;
+    if (!showsInlineSketch) return;
     let raf = 0;
     const tick = () => {
+      paint(getNowMs());
       const audio = audioRef.current;
-      paint((audio?.currentTime ?? 0) * 1000);
       if (audio && !audio.paused) raf = requestAnimationFrame(tick);
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [showsSketch, playing, paint, stage]);
+  }, [showsInlineSketch, playing, paint, stage, getNowMs]);
 
   // Paused, including after a scrub: paint that moment once.
   useEffect(() => {
-    if (showsSketch && !playing) paint(current * 1000);
-  }, [showsSketch, playing, current, paint, stage]);
+    if (showsInlineSketch && !playing) paint(current * 1000);
+  }, [showsInlineSketch, playing, current, paint, stage]);
 
   useEffect(() => {
     setPlaying(false);
     setCurrent(0);
     setLoadError(false);
+    clockRef.current = null;
     sessionStartedRef.current = false;
     if (!mime || typeof document === 'undefined') {
       setCannotPlay(false);
@@ -218,7 +196,7 @@ export default function VoiceNotePlayer({
     return () => window.removeEventListener('pagehide', onHide);
   }, [report]);
 
-  const toggle = async () => {
+  const toggle = useCallback(async () => {
     const a = audioRef.current;
     if (!a) return;
     if (a.paused) {
@@ -231,7 +209,27 @@ export default function VoiceNotePlayer({
     } else {
       a.pause();
     }
-  };
+  }, [speedIndex]);
+
+  // Stage replay. The stage opens the first time the note plays or is scrubbed,
+  // and stays open (paused or not) until the teacher closes it.
+  const [stageOpen, setStageOpen] = useState(false);
+  const closeStage = useCallback(() => {
+    audioRef.current?.pause();
+    setStageOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!onStage || !timeline || !imageUrl) return;
+    onStageRef.current?.(
+      stageOpen
+        ? { timeline, imageUrl, getNowMs, playing, togglePlay: () => void toggle(), close: closeStage }
+        : null,
+    );
+  }, [onStage, stageOpen, timeline, imageUrl, getNowMs, playing, toggle, closeStage]);
+
+  // Hand the stage back when this note goes away (deleted, re-recorded, left).
+  useEffect(() => () => onStageRef.current?.(null), []);
 
   const cycleSpeed = () => {
     const next = (speedIndex + 1) % SPEEDS.length;
@@ -273,7 +271,10 @@ export default function VoiceNotePlayer({
         // Notes are small, and a MediaRecorder file without cues only seeks
         // reliably once it has loaded, so load it all up front.
         preload="auto"
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true);
+          if (onStage) setStageOpen(true);
+        }}
         onPause={() => {
           setPlaying(false);
           if (sessionStartedRef.current && !audioRef.current?.ended) report(false, false);
@@ -294,7 +295,7 @@ export default function VoiceNotePlayer({
         }}
         onError={() => setLoadError(true)}
       />
-      {showsSketch && (
+      {showsInlineSketch && (
         <Box
           ref={stageRef}
           sx={{
@@ -322,13 +323,13 @@ export default function VoiceNotePlayer({
           />
         </Box>
       )}
-      <Stack direction="row" alignItems="center" spacing={1.25}>
+      <Stack direction="row" alignItems="center" spacing={1}>
         <IconButton
           onClick={toggle}
           aria-label={playing ? 'Pause voice note' : 'Play voice note'}
           sx={{
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             flexShrink: 0,
             bgcolor: 'primary.main',
             color: 'primary.contrastText',
@@ -344,7 +345,11 @@ export default function VoiceNotePlayer({
         </IconButton>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Stack direction="row" alignItems="center" spacing={0.75}>
-            <GraphicEqRoundedIcon sx={{ fontSize: 16, color: 'primary.main' }} aria-hidden />
+            {onStage ? (
+              <DrawOutlinedIcon sx={{ fontSize: 16, color: 'primary.main' }} aria-hidden />
+            ) : (
+              <GraphicEqRoundedIcon sx={{ fontSize: 16, color: 'primary.main' }} aria-hidden />
+            )}
             <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
               {title}
             </Typography>
@@ -359,18 +364,19 @@ export default function VoiceNotePlayer({
               const seconds = v as number;
               setCurrent(seconds);
               if (audioRef.current) audioRef.current.currentTime = seconds;
+              if (onStage) setStageOpen(true);
             }}
             aria-label="Voice note position"
             getAriaValueText={(v) => formatSpoken(v)}
-            sx={{ py: 1.25, '& .MuiSlider-thumb': { width: 14, height: 14 } }}
+            sx={{ py: 1, '& .MuiSlider-thumb': { width: 14, height: 14 } }}
           />
           <Stack direction="row" justifyContent="space-between" spacing={1}>
             <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
               {formatClock(current)} / {formatClock(duration)}
             </Typography>
-            {caption && (
+            {(caption || onStage) && (
               <Typography variant="caption" color="text.secondary" noWrap>
-                {caption}
+                {caption || 'Plays on the drawing'}
               </Typography>
             )}
           </Stack>
@@ -379,7 +385,7 @@ export default function VoiceNotePlayer({
           onClick={cycleSpeed}
           size="small"
           aria-label={`Playback speed ${SPEEDS[speedIndex]} times`}
-          sx={{ minWidth: 48, minHeight: 48, fontWeight: 700, textTransform: 'none', flexShrink: 0 }}
+          sx={{ minWidth: 44, minHeight: 44, fontWeight: 700, textTransform: 'none', flexShrink: 0 }}
         >
           {SPEEDS[speedIndex]}x
         </Button>

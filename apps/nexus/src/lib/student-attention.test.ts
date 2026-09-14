@@ -75,6 +75,29 @@ describe('buildAttentionRows', () => {
     ]);
   });
 
+  it('puts the two dormant decisions after sign-ins and before data housekeeping', () => {
+    const rows = buildAttentionRows({
+      ...none,
+      neverSignedInCount: 1,
+      noFormCount: 1,
+      backInNexusCount: 1,
+      notStartedLongCount: 2,
+    });
+    expect(rows.map((r) => r.key)).toEqual(['never_signed_in', 'back_in_nexus', 'not_started_long', 'no_form']);
+  });
+
+  it('words the dormant decisions for one and for many', () => {
+    expect(buildAttentionRows({ ...none, backInNexusCount: 1 })[0].message).toBe(
+      '1 paused student is back in Nexus. Bring them back, or leave them paused.',
+    );
+    expect(buildAttentionRows({ ...none, notStartedLongCount: 2 })[0].message).toBe(
+      '2 students joined over 2 weeks ago and have not entered Nexus. Remind them again, or pause them with a reason.',
+    );
+    expect(buildAttentionRows({ ...none, notStartedLongCount: 1 })[0].message).toBe(
+      '1 student joined over 2 weeks ago and has not entered Nexus. Remind them again, or pause them with a reason.',
+    );
+  });
+
   it('never uses a dash as punctuation in its copy', () => {
     const rows = buildAttentionRows({
       duplicateCount: 2,
@@ -84,6 +107,8 @@ describe('buildAttentionRows', () => {
       noStageCount: 2,
       noYearCount: 2,
       suggestionCount: 2,
+      backInNexusCount: 2,
+      notStartedLongCount: 2,
     });
     for (const row of rows) {
       expect(row.message).not.toMatch(/—|--/);

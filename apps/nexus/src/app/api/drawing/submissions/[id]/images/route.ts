@@ -71,6 +71,14 @@ export async function PATCH(
       updates.ai_overlay_annotations = null;
     }
 
+    // A teacher turning a sheet that Gemini had already turned upright has
+    // overruled it, so the "turned upright automatically" notice must not come
+    // back. Sent only when the column is known to be set, which also means it
+    // exists in this environment.
+    if (body.clear_auto_rotation === true) {
+      updates.auto_rotated_deg = null;
+    }
+
     const { data: updated, error } = await (supabase.from('drawing_submissions' as any) as any)
       .update(updates)
       .eq('id', id)

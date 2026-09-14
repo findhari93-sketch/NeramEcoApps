@@ -146,7 +146,7 @@ describe('PaperWorkspace activate/deactivate from the selection', () => {
 
     render(<PaperWorkspace {...base} />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }));
-    fireEvent.click(screen.getByRole('button', { name: /Hide the selected questions from students/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const [url, init] = fetchMock.mock.calls[0];
@@ -154,19 +154,43 @@ describe('PaperWorkspace activate/deactivate from the selection', () => {
     expect(JSON.parse(init.body)).toEqual({ action: 'deactivate', question_ids: ['q2'] });
   });
 
-  it('says how many activated when some had no answer key', async () => {
+  const hidden = questions.map((q) => ({ ...q, is_active: false, status: 'draft' })) as NexusQBQuestion[];
+
+  it('names the questions held back for want of a key, and flips only the rest', async () => {
+    const onOptimisticPatch = vi.fn();
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { updated: 1 } }) }),
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { updated: 1, blocked: ['q2'] } }) }),
     );
 
-    render(<PaperWorkspace {...base} />);
+    render(<PaperWorkspace {...base} questions={hidden} onOptimisticPatch={onOptimisticPatch} />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }));
-    fireEvent.click(screen.getByLabelText('More actions for the selected questions'));
-    fireEvent.click(screen.getByRole('menuitem', { name: /Activate/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
 
-    await screen.findByText('1 of 2 activated, the rest have no answer key yet');
+    await screen.findByText('1 of 2 activated. 1 still needs an answer key.');
+    expect(onOptimisticPatch).toHaveBeenCalledWith('q1', { is_active: true, status: 'active' });
+    expect(onOptimisticPatch).not.toHaveBeenCalledWith('q2', expect.anything());
+  });
+
+  /**
+   * The pane's own Activate, for a teacher who opened the hidden question and
+   * looked for the switch there. It must take the same route as the bar.
+   */
+  it('activates the open question from its pane through the same endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { updated: 1, blocked: [] } }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<PaperWorkspace {...base} questions={hidden} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open question 3' }));
+    expect(screen.getByText('Hidden from students')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/question-bank/questions/bulk-update');
+    expect(JSON.parse(init.body)).toEqual({ action: 'activate', question_ids: ['q3'] });
+    await screen.findByText('1 question activated');
   });
 });
 

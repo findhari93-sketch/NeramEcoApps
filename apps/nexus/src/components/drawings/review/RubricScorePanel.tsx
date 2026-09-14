@@ -33,6 +33,7 @@ import { REASONS, shouldAsk, type ReasonCode, type Reference } from '@/lib/drawi
 import { rulesForCriterion, type GradingRule } from '@/lib/drawing-grading-rules';
 import { prefillBands, rowMode, type AiDraft } from '@/lib/drawing-ai-draft';
 import DraftThisButton from '@/components/drawings/learning/DraftThisButton';
+import type { AutoDraftState } from '@/hooks/useAutoDraft';
 import {
   criteriaForBrief,
   isFullyScored,
@@ -69,8 +70,8 @@ export interface RubricScorePanelProps {
   onOverallChange?: (stars: Band | null, overall: number | null) => void;
   /** The AI draft on this sheet, when one exists. */
   aiDraft?: AiDraft | null;
-  /** Called after Draft this returns a draft, so the screen can load it. */
-  onDrafted?: () => void;
+  /** Where Gemini's draft for this sheet stands. */
+  draftState?: AutoDraftState | null;
 }
 
 export default function RubricScorePanel({
@@ -79,7 +80,7 @@ export default function RubricScorePanel({
   readOnly = false,
   onOverallChange,
   aiDraft = null,
-  onDrafted,
+  draftState = null,
 }: RubricScorePanelProps) {
   const theme = useTheme();
   const [criteria, setCriteria] = useState<RubricCriterion[]>(() => criteriaForBrief(null));
@@ -307,21 +308,26 @@ export default function RubricScorePanel({
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 1 }}>
-        <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
-          01
+        <Typography variant="subtitle2" component="h3" sx={{ fontWeight: 700 }}>
+          Scores
         </Typography>
-        <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: '0.04em' }}>
-          SCORE
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-          {readOnly ? `${done} of ${criteria.length} scored` : 'keys 1 to 5'}
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            flex: 1,
+            // The keyboard hint means nothing on a touch screen.
+            ...(readOnly ? {} : { visibility: 'hidden', '@media (pointer: fine)': { visibility: 'visible' } }),
+          }}
+        >
+          {readOnly ? `${done} of ${criteria.length} scored` : 'Press 1 to 5'}
         </Typography>
         {aiDraft && (
           <Chip
             size="small"
-            label="AI DRAFT"
+            label="Gemini draft"
             data-testid="ai-draft-chip"
-            sx={{ height: 20, fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.04em', bgcolor: alpha(theme.palette.primary.main, 0.12), color: 'primary.dark' }}
+            sx={{ height: 22, fontSize: '0.68rem', fontWeight: 700, bgcolor: alpha(theme.palette.primary.main, 0.12), color: 'primary.dark' }}
           />
         )}
         {/* role=status so the total is announced as it changes, rather than a
@@ -341,9 +347,7 @@ export default function RubricScorePanel({
         </Typography>
       </Box>
 
-      {!readOnly && !aiDraft && onDrafted && (
-        <DraftThisButton submissionId={submissionId} getToken={getToken} onDrafted={onDrafted} />
-      )}
+      {!readOnly && draftState && <DraftThisButton state={draftState} />}
 
       {unavailable && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>

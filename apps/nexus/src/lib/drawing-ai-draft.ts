@@ -8,8 +8,8 @@
  * says 3, unsure. Your call." Prefilling an unsure score would let a teacher
  * approve a guess without ever deciding it.
  *
- * Nothing here calls a model. Drafts exist only once someone has switched
- * evaluation on and pressed Draft this; until then every function answers as
+ * Nothing here calls a model. Drafts are written by lib/drawing-auto-draft.ts
+ * once evaluation is switched on; until one lands every function answers as
  * if there were no draft, which is the honest state.
  */
 
@@ -42,6 +42,12 @@ export interface AiDraft {
   overall_comment: string | null;
   criteria: Record<string, AiDraftCriterion>;
   marks: AiDraftMark[];
+  /**
+   * Tag labels the draft chose, from the seeded drawing tags. Already added to
+   * the sheet when the draft landed; kept here so the screen can say which tags
+   * came from the draft. Empty for a draft written before tags existed.
+   */
+  tags: string[];
 }
 
 const isBand = (n: unknown): n is Band => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 5;

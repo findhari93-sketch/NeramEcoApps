@@ -161,7 +161,7 @@ test.describe('Drawing voice feedback', () => {
 
     await openReview(page, submissionId!);
 
-    const record = page.getByRole('button', { name: 'Record voice note' });
+    const record = page.getByRole('button', { name: 'Record', exact: true });
     await expect(record).toBeVisible();
     await record.click();
 
@@ -170,7 +170,7 @@ test.describe('Drawing voice feedback', () => {
     await page.waitForTimeout(2_000);
     await stop.click();
 
-    await expect(page.getByText('Saved. It goes out with Redo or Complete.')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Saved. Sent with Redo or Complete.')).toBeVisible({ timeout: 30_000 });
     // Redo and Complete are usable again once the note is safely stored.
     await expect(page.getByRole('button', { name: 'Redo', exact: true })).toBeEnabled();
   });
@@ -188,7 +188,7 @@ test.describe('Drawing voice feedback', () => {
     page.on('pageerror', (err) => console.log(`[pageerror] ${err.message.slice(0, 300)}`));
 
     await openReview(page, submissionId!);
-    await page.getByRole('button', { name: 'Talk while you sketch' }).click();
+    await page.getByRole('button', { name: 'Sketch and talk' }).click();
     await page.getByRole('button', { name: 'Start recording' }).click();
 
     const stop = page.getByRole('button', { name: 'Stop', exact: true });

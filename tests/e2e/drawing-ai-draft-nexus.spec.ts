@@ -3,8 +3,8 @@
  *
  * The draft is SEEDED straight into the evaluation tables in the exact shape
  * lib/drawing-eval/evaluate.ts writes, so everything downstream of a real
- * draft is exercised while nothing is spent. No test here presses Draft this;
- * the one that looks at it asserts it is disabled.
+ * draft is exercised while nothing is spent. No test here presses Draft again,
+ * and a running claim is seeded rather than started.
  *
  * Guards:
  *  - a confident criterion arrives scored and read-only, an unsure one only as
@@ -16,7 +16,8 @@
  *    and asks why;
  *  - approving drafts unread is refused until the shadow comparison allows it,
  *    and the comparison says honestly how far there is to go;
- *  - with no draft, Draft this is disabled with a reason.
+ *  - with no draft, the rail says in words where the draft stands (drafting,
+ *    switched off, budget spent, could not), and a running claim reads as drafting.
  *
  * Owns its fixture: one drawing assignment, one submission, one seeded draft.
  */
@@ -69,7 +70,7 @@ test.describe('Drawing AI draft', () => {
     const ok = await injectAuthForPage(page, 'teacher');
     test.skip(!ok, 'Teacher auth injection failed');
     await page.goto(`${APP_URLS.nexus}/teacher/drawing-reviews/${submissionId}?assignment=${assignmentId}`, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('SCORE', { exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
   };
 
   test('setup: a submission with a seeded draft', async ({ request }) => {
@@ -145,7 +146,7 @@ test.describe('Drawing AI draft', () => {
     await expect(page.getByTestId('ai-suggested')).toHaveCount(2);
     await expect(page.getByTestId('ai-suggested').first()).toContainText('Draft says 3, unsure. Your call.');
 
-    await expect(page.getByPlaceholder(/Paste feedback from Gemini/)).toHaveValue(DRAFT_COMMENT);
+    await expect(page.getByRole('textbox', { name: 'Feedback to student' })).toHaveValue(DRAFT_COMMENT);
     await expect(page.getByTestId('feedback-from-draft')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
 
@@ -185,14 +186,35 @@ test.describe('Drawing AI draft', () => {
     expect((await approve.json()).error).toMatch(/of 50 so far/);
   });
 
-  test('with no draft, Draft this is disabled and says why', async ({ page }) => {
+  test('with no draft, the rail says where the draft stands, never a grey button', async ({ page }) => {
     test.skip(!draftId, 'Setup did not complete');
     await admin!.from('drawing_evaluation').delete().eq('id', draftId);
     await openReview(page);
-    const button = page.getByTestId('draft-this').getByRole('button', { name: 'Draft this' });
-    await expect(button).toBeVisible({ timeout: 30_000 });
-    await expect(button).toBeDisabled();
-    await expect(page.getByTestId('draft-this')).toContainText(/Drafts need|switched off|not available/);
-    await expect(page.getByTestId('ai-draft-chip')).toHaveCount(0);
+    // Whatever this environment's switches are, the line speaks in plain words:
+    // drafting, switched off, budget spent, or could not. Nothing is disabled.
+    const status = page.getByTestId('draft-this');
+    await expect(status).toBeVisible({ timeout: 30_000 });
+    await expect(status).toContainText(/Gemini is drafting|switched off|budget is used up|could not draft/);
+    await expect(page.getByRole('button', { name: 'Draft this' })).toHaveCount(0);
+  });
+
+  test('a sheet Gemini is already drafting shows the drafting line', async ({ page }) => {
+    test.skip(!draftId, 'Setup did not complete');
+    // A running claim, in the shape runAutoDraft writes. No model is called:
+    // the screen only waits on it.
+    const { data: claim, error } = await admin!
+      .from('drawing_evaluation')
+      .insert({ submission_id: submissionId, source: 'ai', status: 'running', provider: 'gemini', prompt_version: 'e2e-fixture' } as any)
+      .select('id')
+      .single();
+    test.skip(!!error, `This environment has no running status yet: ${error?.message}`);
+    try {
+      await openReview(page);
+      const status = page.getByTestId('draft-this');
+      // Only while the feature is on does the screen wait on a claim.
+      await expect(status).toContainText(/Gemini is drafting|switched off|budget is used up/, { timeout: 30_000 });
+    } finally {
+      await admin!.from('drawing_evaluation').delete().eq('id', (claim as any).id);
+    }
   });
 });

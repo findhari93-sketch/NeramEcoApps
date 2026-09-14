@@ -7,7 +7,12 @@
  * and without a network, which is most of what can go wrong here.
  */
 
+import { briefKeyForSubmission } from '@/lib/drawing-brief-resolve';
+import { criteriaForBrief } from '@/lib/drawing-rubric';
+
+import { genericChecksFor } from './generic-checks';
 import type { PromptAnchor, PromptCriterion } from './prompt';
+import type { EvalMode } from './schema';
 
 /** Anchors expected per brief type, one per band. */
 export const REQUIRED_ANCHOR_BANDS = [1, 2, 3, 4, 5] as const;
@@ -26,15 +31,19 @@ export interface BriefTypeRow {
 }
 
 export interface ResolvedContext {
-  briefType: BriefTypeRow;
+  mode: EvalMode;
+  /** Why this draft is generic, in words. Null when anchored. */
+  genericReason: string | null;
+  /** Null for a sheet no brief type resolves for, the usual assignment drawing. */
+  briefType: BriefTypeRow | null;
+  briefKey: string | null;
+  briefTitle: string;
+  briefDescription: string | null;
   criteria: PromptCriterion[];
+  /** Five, ascending, in anchored mode. Empty in generic mode. */
   anchors: PromptAnchor[];
   questionText: string | null;
 }
-
-export type ContextOutcome =
-  | { ok: true; context: ResolvedContext }
-  | { ok: false; reason: string };
 
 /**
  * Which brief type a submission belongs to.
@@ -48,9 +57,10 @@ export type ContextOutcome =
  * carries sub_type 'assignment', a marker rather than a brief, so for the
  * assignment drawings that make up most of the queue the tag is the only
  * answer. It is set by a teacher, never inferred. A submission that resolves to nothing
- * is simply not evaluable. It is skipped, never guessed: evaluating a still
- * life against geometric-composition anchors would produce a confident,
- * plausible and completely wrong result.
+ * is never given a guessed brief: evaluating a still life against
+ * geometric-composition anchors would produce a confident, plausible and
+ * completely wrong result. It is drafted in generic mode instead, on the
+ * shared criteria, with no anchors (see resolveDraftPlan below).
  */
 export async function resolveBriefType(
   supabase: any,
@@ -221,33 +231,180 @@ export async function loadAnchors(
   return { anchors };
 }
 
-/** Assemble the full context, or say precisely why it cannot be assembled. */
-export async function buildContext(
+export interface SubmissionRef {
+  id: string;
+  question_id?: string | null;
+  exam_qb_question_id?: string | null;
+  assignment_id?: string | null;
+}
+
+/**
+ * What a draft of this sheet would be graded on, without downloading anything.
+ *
+ * The criterion KEYS always come from lib/drawing-rubric.ts, through the same
+ * brief resolution the rubric route uses, so a draft never scores a criterion
+ * the rubric panel does not show, and never skips one it does. The database
+ * only adds wording to those keys: the brief's own observable checks when it
+ * has them, and its band descriptions when the brief is anchored.
+ *
+ * `mode` here is what the rows allow. buildContext can still fall back to
+ * generic when an anchor image fails to download.
+ */
+export interface DraftPlan {
+  mode: EvalMode;
+  /** Why this is not anchored, in words. Null when it is. */
+  genericReason: string | null;
+  briefType: BriefTypeRow | null;
+  briefKey: string | null;
+  briefTitle: string;
+  briefDescription: string | null;
+  criteria: PromptCriterion[];
+  questionText: string | null;
+  anchorRows: Array<{ band: number; image_url: string; comment: string | null }>;
+}
+
+async function loadAnchorRows(
   supabase: any,
-  submission: {
-    id: string;
-    question_id?: string | null;
-    exam_qb_question_id?: string | null;
-    assignment_id?: string | null;
-  },
-): Promise<ContextOutcome> {
-  const { briefType, questionText, reason } = await resolveBriefType(supabase, submission);
-  if (!briefType) return { ok: false, reason: reason || 'Brief type could not be resolved.' };
+  briefTypeId: string,
+): Promise<Array<{ band: number; image_url: string; comment: string | null }>> {
+  const { data } = await supabase
+    .from('drawing_anchor_sheet')
+    .select('band, image_url, comment')
+    .eq('brief_type_id', briefTypeId)
+    .eq('is_active', true)
+    .order('band', { ascending: true });
+  return Array.isArray(data) ? data : [];
+}
 
-  if (!briefType.is_active) {
+/** The assignment's own title and instructions, the best description a generic draft has. */
+async function loadAssignmentText(
+  supabase: any,
+  assignmentId: string | null | undefined,
+): Promise<{ title: string | null; instructions: string | null }> {
+  if (!assignmentId) return { title: null, instructions: null };
+  try {
+    const { data } = await supabase
+      .from('nexus_class_assignments')
+      .select('title, instructions')
+      .eq('id', assignmentId)
+      .maybeSingle();
     return {
-      ok: false,
-      reason: `The "${briefType.title}" brief type is not active yet. Its band descriptions still need to be written.`,
+      title: typeof data?.title === 'string' && data.title.trim() ? data.title.trim() : null,
+      instructions: typeof data?.instructions === 'string' && data.instructions.trim() ? data.instructions.trim() : null,
     };
+  } catch {
+    return { title: null, instructions: null };
+  }
+}
+
+export async function resolveDraftPlan(supabase: any, submission: SubmissionRef): Promise<DraftPlan> {
+  const [{ briefType, questionText }, briefKey, assignment] = await Promise.all([
+    resolveBriefType(supabase, submission),
+    briefKeyForSubmission(supabase, submission),
+    loadAssignmentText(supabase, submission.assignment_id),
+  ]);
+
+  const rubric = criteriaForBrief(briefKey);
+  const dbCriteria = briefType ? await loadCriteria(supabase, briefType.id) : [];
+  const dbByKey = new Map(dbCriteria.map((c) => [c.key, c]));
+
+  let genericReason: string | null = null;
+  let anchorRows: DraftPlan['anchorRows'] = [];
+
+  if (!briefType) {
+    genericReason = 'This sheet is not linked to a brief type, so it is drafted on the shared criteria without reference sheets.';
+  } else if (briefKey !== briefType.key) {
+    genericReason = `The brief resolved two different ways (${briefKey ?? 'none'} and ${briefType.key}), so it is drafted without reference sheets.`;
+  } else if (!briefType.is_active) {
+    genericReason = `The "${briefType.title}" brief type is not active yet, so it is drafted without reference sheets.`;
+  } else if (rubric.some((c) => !dbByKey.has(c.key))) {
+    genericReason = `"${briefType.title}" is missing wording for some rubric criteria, so it is drafted without reference sheets.`;
+  } else {
+    anchorRows = await loadAnchorRows(supabase, briefType.id);
+    const bands = new Set(anchorRows.map((r) => r.band));
+    const missing = REQUIRED_ANCHOR_BANDS.filter((b) => !bands.has(b));
+    if (missing.length > 0) {
+      genericReason = `Reference sheets are missing for band ${missing.join(', ')}, so it is drafted without them.`;
+      anchorRows = [];
+    }
   }
 
-  const criteria = await loadCriteria(supabase, briefType.id);
-  if (criteria.length === 0) {
-    return { ok: false, reason: `No criteria are defined for "${briefType.title}".` };
+  const mode: EvalMode = genericReason ? 'generic' : 'anchored';
+
+  const criteria: PromptCriterion[] = rubric.map((c) => {
+    const db = dbByKey.get(c.key);
+    const checks = db && db.observableChecks.length > 0 ? db.observableChecks : genericChecksFor(c.key);
+    return {
+      key: c.key,
+      title: c.title,
+      observableChecks: checks.length > 0 ? checks : [c.hint],
+      // Band wording is the teacher's, and only trusted once the brief is
+      // active. Generic mode grades on its own fixed scale instead.
+      bandDescriptions: mode === 'anchored' && db ? db.bandDescriptions : {},
+    };
+  });
+
+  const briefTitle =
+    briefType?.title ||
+    assignment.title ||
+    (submission.exam_qb_question_id ? 'Exam drawing' : 'Drawing sheet');
+  const briefDescription = briefType?.description || assignment.instructions || null;
+
+  return {
+    mode,
+    genericReason,
+    briefType,
+    briefKey,
+    briefTitle,
+    briefDescription,
+    criteria,
+    questionText,
+    anchorRows,
+  };
+}
+
+/**
+ * Assemble the full context for one draft.
+ *
+ * Never refuses. Before automatic drafting this answered "not evaluable" for
+ * any sheet without an active, fully anchored brief, which was every sheet.
+ * Now such a sheet is drafted in generic mode, and anchored mode is used only
+ * when all five reference images actually download: comparing against four
+ * would move the scale without anyone noticing, so a failed image drops the
+ * comparison entirely rather than using what arrived.
+ */
+export async function buildContext(supabase: any, submission: SubmissionRef): Promise<ResolvedContext> {
+  const plan = await resolveDraftPlan(supabase, submission);
+
+  let mode = plan.mode;
+  let genericReason = plan.genericReason;
+  const anchors: PromptAnchor[] = [];
+
+  if (mode === 'anchored') {
+    for (const row of plan.anchorRows) {
+      const part = await fetchImagePart(row.image_url);
+      if (!part) {
+        mode = 'generic';
+        genericReason = `The band ${row.band} reference image could not be loaded, so this was drafted without reference sheets.`;
+        anchors.length = 0;
+        break;
+      }
+      anchors.push({ band: row.band, comment: row.comment, ...part });
+    }
   }
 
-  const { anchors, reason: anchorReason } = await loadAnchors(supabase, briefType.id);
-  if (anchors.length === 0) return { ok: false, reason: anchorReason || 'No anchors available.' };
+  const criteria =
+    mode === plan.mode ? plan.criteria : plan.criteria.map((c) => ({ ...c, bandDescriptions: {} }));
 
-  return { ok: true, context: { briefType, criteria, anchors, questionText } };
+  return {
+    mode,
+    genericReason,
+    briefType: plan.briefType,
+    briefKey: plan.briefKey,
+    briefTitle: plan.briefTitle,
+    briefDescription: plan.briefDescription,
+    criteria,
+    anchors,
+    questionText: plan.questionText,
+  };
 }

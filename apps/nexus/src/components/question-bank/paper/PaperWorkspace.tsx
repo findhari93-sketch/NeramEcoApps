@@ -13,6 +13,7 @@ import PaperQuestionDetail from './PaperQuestionDetail';
 import type { PaperFallback } from './QuestionEditForm';
 import { useBulkImageFlow, type SlotType } from '@/hooks/useBulkImageFlow';
 import type { ImageState } from '@/lib/bulk-upload-schema';
+import { activationMessage } from '@/lib/qb-activation';
 
 export type { PaperQuestionMode, NeedsFilter, PaperSectionFilter };
 
@@ -365,21 +366,24 @@ export default function PaperWorkspace({
           return;
         }
         const updated = json.data?.updated ?? 0;
-        // activate only takes questions that already have an answer key, so
-        // "3 selected" and "1 activated" is a normal and important difference.
+        // Activate holds back questions with no answer key and names them, so
+        // "3 selected" and "2 activated" says why rather than guessing.
+        const blocked: string[] = Array.isArray(json.data?.blocked) ? json.data.blocked : [];
         setImageToast(
-          active
-            ? updated === questionIds.length
-              ? `${updated} question${updated === 1 ? '' : 's'} activated`
-              : `${updated} of ${questionIds.length} activated, the rest have no answer key yet`
-            : `${updated} question${updated === 1 ? '' : 's'} hidden from students`,
+          activationMessage({ active, requested: questionIds.length, updated, blocked: blocked.length }),
         );
+        // Flip the rows now, so the list's hidden marker, the bar and the pane
+        // all agree before the refetch lands.
+        const blockedIds = new Set(blocked);
+        questionIds
+          .filter((id) => !blockedIds.has(id))
+          .forEach((id) => onOptimisticPatch(id, active ? { is_active: true, status: 'active' } : { is_active: false }));
         onSaved();
       } catch {
         setImageToast('Could not change that, try again');
       }
     },
-    [getToken, onSaved],
+    [getToken, onSaved, onOptimisticPatch],
   );
 
   /** "Attempt any one of these", from a run selected in the list. */
@@ -467,6 +471,7 @@ export default function PaperWorkspace({
             onPrevious={() => step(-1)}
             onNext={() => step(1)}
             onChangeSection={changeOne}
+            onSetActive={activeQuestion ? (active) => setActiveQuestions([activeQuestion.id], active) : undefined}
             mode={mode}
             imagesPane={
               activeQuestion
