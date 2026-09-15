@@ -7,6 +7,7 @@ import { errorResponse } from '@/lib/api-errors';
 export const maxDuration = 60;
 
 const BATCH = 10;
+const BUDGET_MS = 45_000;
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
 /**
@@ -22,8 +23,10 @@ export async function POST(request: NextRequest) {
     assertInspirationStaff(caller);
 
     const { items, remaining } = await listItemsNeedingImages(BATCH);
+    const started = Date.now();
     let processed = 0;
     for (const item of items) {
+      if (Date.now() - started > BUDGET_MS) break;
       try {
         await prepareItemImage(item);
       } catch (err) {

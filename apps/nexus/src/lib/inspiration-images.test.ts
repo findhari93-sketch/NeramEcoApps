@@ -60,6 +60,7 @@ describe('prepareItemImage', () => {
       image_aspect: 0.667,
       thumbnail_url: 'https://cdn.example/inspiration-thumbs/item-1.jpg',
     });
+    expect((fetch as any).mock.calls[0][1]?.signal).toBeDefined();
   });
 
   it('only fills what is missing', async () => {
@@ -74,5 +75,25 @@ describe('prepareItemImage', () => {
       prepareItemImage({ id: 'item-3', image_url: 'https://example.com/gone.png', thumbnail_url: null, image_aspect: null }),
     ).rejects.toThrow('Image fetch failed (404)');
     expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-3', { image_aspect: 0.75, thumbnail_url: 'https://example.com/gone.png' });
+  });
+
+  it('refuses an image larger than 15 MB and parks it', async () => {
+    const png = await sharp({ create: { width: 800, height: 1200, channels: 3, background: '#ffffff' } }).png().toBuffer();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(png, { status: 200, headers: { 'content-length': String(16 * 1024 * 1024) } })));
+    await expect(
+      prepareItemImage({ id: 'item-4', image_url: 'https://example.com/huge.png', thumbnail_url: null, image_aspect: null }),
+    ).rejects.toThrow('Image too large');
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-4', { image_aspect: 0.75, thumbnail_url: 'https://example.com/huge.png' });
+  });
+
+  it('gives up on an image that never arrives and parks it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    }));
+    await expect(
+      prepareItemImage({ id: 'item-5', image_url: 'https://example.com/slow.png', thumbnail_url: null, image_aspect: null }),
+    ).rejects.toThrow('The operation was aborted due to timeout');
+    expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-5', { image_aspect: 0.75, thumbnail_url: 'https://example.com/slow.png' });
   });
 });

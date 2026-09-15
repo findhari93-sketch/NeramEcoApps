@@ -10,6 +10,8 @@ import { setItemImageMeta, type ItemImageWork } from '@neram/database/queries/ne
 const BUCKET = 'drawing-references';
 const THUMB_WIDTH = 400;
 const FALLBACK_ASPECT = 0.75;
+const FETCH_TIMEOUT_MS = 10_000;
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
 export function orientedAspect(meta: { width?: number; height?: number; orientation?: number }): number | null {
   if (!meta.width || !meta.height) return null;
@@ -22,9 +24,16 @@ export function orientedAspect(meta: { width?: number; height?: number; orientat
 
 export async function prepareItemImage(item: ItemImageWork): Promise<void> {
   try {
-    const res = await fetch(item.image_url);
+    const res = await fetch(item.image_url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`Image fetch failed (${res.status})`);
+    const contentLength = Number(res.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+      throw new Error('Image too large');
+    }
     const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.byteLength > MAX_IMAGE_BYTES) {
+      throw new Error('Image too large');
+    }
 
     const patch: { thumbnail_url?: string; image_aspect?: number } = {};
     if (item.image_aspect == null) {
