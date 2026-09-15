@@ -35,13 +35,19 @@ export default function InspirationSearchBar({ value, onChange }: InspirationSea
   }, [value]);
 
   return (
-    <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.default', py: 1 }}>
+    // Focus is tracked on the wrapper, not the input, so tabbing from the field onto a
+    // recent-search chip (still inside this box) does not collapse the list mid-tab.
+    <Box
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+      }}
+      sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.default', py: 1 }}
+    >
       <TextField
         inputRef={inputRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setTimeout(() => setFocused(false), 150)}
         placeholder="Search drawings, like 3D bag and hat"
         fullWidth
         size="small"

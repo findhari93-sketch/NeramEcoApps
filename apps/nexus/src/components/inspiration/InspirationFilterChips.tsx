@@ -13,6 +13,7 @@ import {
   Menu,
   MenuItem,
   Typography,
+  useMediaQuery,
 } from '@neram/ui';
 import TuneIcon from '@mui/icons-material/Tune';
 import SortIcon from '@mui/icons-material/Sort';
@@ -50,6 +51,7 @@ const chipSx = { height: 44, flexShrink: 0, fontWeight: 600 } as const;
 export default function InspirationFilterChips({ state, facets, onChange, scope, onScopeChange }: InspirationFilterChipsProps) {
   const [typesOpen, setTypesOpen] = useState(false);
   const [sortAnchor, setSortAnchor] = useState<HTMLElement | null>(null);
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 
   const of = (facet: InspirationFacet['facet']) => facets.filter((f) => f.facet === facet);
   const allTypes = chipsFor(of('type'), state.types);
@@ -115,7 +117,12 @@ export default function InspirationFilterChips({ state, facets, onChange, scope,
         />
       </Box>
 
-      <Menu anchorEl={sortAnchor} open={Boolean(sortAnchor)} onClose={() => setSortAnchor(null)}>
+      <Menu
+        anchorEl={sortAnchor}
+        open={Boolean(sortAnchor)}
+        onClose={() => setSortAnchor(null)}
+        transitionDuration={reduceMotion ? 0 : undefined}
+      >
         {SORTS.map((s) => (
           <MenuItem
             key={s}
@@ -135,6 +142,7 @@ export default function InspirationFilterChips({ state, facets, onChange, scope,
         anchor="bottom"
         open={typesOpen}
         onClose={() => setTypesOpen(false)}
+        transitionDuration={reduceMotion ? 0 : undefined}
         PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '80dvh' } }}
       >
         <Box sx={{ px: 2, pt: 2 }}>
