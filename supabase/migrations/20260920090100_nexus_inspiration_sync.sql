@@ -11,7 +11,8 @@
 -- Rule (mirrored in apps/nexus/src/lib/inspiration-rules.ts):
 --   reference eligible  reviewed_at set, status completed/reviewed/redo
 --   original eligible   reviewed_at set, status completed/reviewed, score >= 0.8
---   score               tutor_rating / 5, else tutor_marks / assignment max_marks
+--   score               a 'marks' assignment: tutor_marks / max_marks; else
+--                       tutor_rating / 5; else tutor_marks / max_marks
 --   exam drawings       never become items
 -- ============================================
 
@@ -62,6 +63,7 @@ DECLARE
   v_qb_id        uuid;
   v_max_marks    numeric;
   v_assign_title text;
+  v_evaluation_type text;
   v_brief        text;
   v_types        text[];
   v_labels       text[];
@@ -70,6 +72,7 @@ DECLARE
   v_score_num    numeric;
   v_reviewed     boolean;
   v_aspect       real;
+  v_thumb        text;
 BEGIN
   SELECT * INTO s FROM drawing_submissions WHERE id = p_submission_id;
   IF NOT FOUND THEN
@@ -82,8 +85,8 @@ BEGIN
     RETURN;
   END IF;
 
-  SELECT ca.max_marks, ca.title, ca.drawing_question_id
-    INTO v_max_marks, v_assign_title, v_q_id
+  SELECT ca.max_marks, ca.title, ca.drawing_question_id, ca.evaluation_type
+    INTO v_max_marks, v_assign_title, v_q_id, v_evaluation_type
     FROM nexus_class_assignments ca
    WHERE ca.id = s.assignment_id;
 
@@ -94,7 +97,10 @@ BEGIN
 
   v_brief := coalesce(nullif(btrim(v_q_text), ''), nullif(btrim(v_assign_title), ''), nullif(btrim(s.self_note), ''));
 
+  -- A marks assignment scores by marks even when a rating was also left; a
+  -- stars assignment (or free practice) falls back to stars, then to marks.
   v_score_num := CASE
+    WHEN v_evaluation_type = 'marks' AND s.tutor_marks IS NOT NULL AND v_max_marks > 0 THEN s.tutor_marks / v_max_marks
     WHEN s.tutor_rating IS NOT NULL THEN s.tutor_rating / 5.0
     WHEN s.tutor_marks IS NOT NULL AND v_max_marks > 0 THEN s.tutor_marks / v_max_marks
   END;
@@ -171,13 +177,21 @@ BEGIN
     v_aspect := NULL;
   END IF;
 
+  -- A 90 or 270 degree turn swaps width and height, and image_quality.aspect
+  -- is never recomputed after a rotation, so a stale aspect must not survive.
+  -- The thumbnail is a pre-rotation crop for any turn, so drop it too.
+  IF coalesce(s.auto_rotated_deg, 0) IN (90, 270, -90) THEN
+    v_aspect := NULL;
+  END IF;
+  v_thumb := CASE WHEN coalesce(s.auto_rotated_deg, 0) <> 0 THEN NULL ELSE s.thumbnail_url END;
+
   INSERT INTO nexus_inspiration_items AS i (
     source_kind, source_submission_id, source_drawing_question_id, source_qb_question_id,
     image_url, thumbnail_url, image_aspect, brief, category, type_slugs, tag_labels,
     exam_types, paper_years, author_id, score_pct, source_created_at, auto_eligible)
   VALUES (
     'submission_original', s.id, v_q_id, v_qb_id,
-    s.original_image_url, s.thumbnail_url, v_aspect, v_brief, v_q_category, v_types, v_labels,
+    s.original_image_url, v_thumb, v_aspect, v_brief, v_q_category, v_types, v_labels,
     v_exams, v_years, s.student_id, v_score_num::real, coalesce(s.submitted_at, now()),
     v_reviewed AND s.status IN ('completed', 'reviewed') AND coalesce(v_score_num, 0) >= 0.8)
   ON CONFLICT (source_kind, source_submission_id) WHERE source_submission_id IS NOT NULL
@@ -252,7 +266,8 @@ $fn$;
 DROP TRIGGER IF EXISTS trg_nexus_inspiration_submission ON drawing_submissions;
 CREATE TRIGGER trg_nexus_inspiration_submission
   AFTER INSERT OR UPDATE OF status, reviewed_at, tutor_rating, tutor_marks, corrected_image_url,
-    original_image_url, thumbnail_url, question_id, assignment_id, image_quality, self_note, source_type
+    original_image_url, thumbnail_url, question_id, assignment_id, image_quality, self_note, source_type,
+    auto_rotated_deg
   ON drawing_submissions
   FOR EACH ROW EXECUTE FUNCTION nexus_inspiration_on_submission();
 
@@ -298,6 +313,31 @@ DROP TRIGGER IF EXISTS trg_nexus_inspiration_question ON drawing_questions;
 CREATE TRIGGER trg_nexus_inspiration_question
   AFTER UPDATE OF question_text, category, sub_type, year, qb_question_id ON drawing_questions
   FOR EACH ROW EXECUTE FUNCTION nexus_inspiration_on_question();
+
+-- An assignment carries max_marks, title and evaluation_type into every one of
+-- its submissions' items, so an edit to the assignment must re-sync them too.
+CREATE OR REPLACE FUNCTION nexus_inspiration_on_assignment()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT ds.id FROM drawing_submissions ds WHERE ds.assignment_id = NEW.id
+  LOOP
+    PERFORM nexus_inspiration_sync_submission(r.id);
+  END LOOP;
+  RETURN NULL;
+END;
+$fn$;
+
+DROP TRIGGER IF EXISTS trg_nexus_inspiration_assignment ON nexus_class_assignments;
+CREATE TRIGGER trg_nexus_inspiration_assignment
+  AFTER UPDATE OF max_marks, title, drawing_question_id, evaluation_type ON nexus_class_assignments
+  FOR EACH ROW EXECUTE FUNCTION nexus_inspiration_on_assignment();
 
 -- Repair: re-derive every item. Also the backfill below.
 CREATE OR REPLACE FUNCTION nexus_inspiration_resync_all()
