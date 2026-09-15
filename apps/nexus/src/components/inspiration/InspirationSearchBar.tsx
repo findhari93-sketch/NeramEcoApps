@@ -74,7 +74,10 @@ export default function InspirationSearchBar({ value, onChange }: InspirationSea
           ) : null,
         }}
         sx={{
-          '& .MuiInputBase-input': { fontSize: 16 },
+          // The placeholder is longer than a 375px field, so without this it
+          // clips mid-word with no ellipsis. text-overflow only takes effect
+          // combined with overflow/whiteSpace, which the input already sets.
+          '& .MuiInputBase-input': { fontSize: 16, textOverflow: 'ellipsis' },
           '& .MuiOutlinedInput-root': {
             minHeight: 48,
             borderRadius: 3,
