@@ -1,6 +1,7 @@
 import type { ExemplarInput, InspirationItemPatch, InspirationSourceKind } from '@neram/database/queries/nexus';
 import { ApiError } from '@/lib/api-errors';
 import { INSPIRATION_TYPE_LABELS } from '@/lib/inspiration-types';
+import { isProjectStorageUrl } from '@/lib/inspiration-storage-url';
 
 const CURATIONS = new Set(['auto', 'shown', 'hidden']);
 const EXAMS = new Set(['NATA', 'JEE_PAPER_2']);
@@ -83,7 +84,9 @@ export function parseItemPatch(
 export function parseExemplarInput(body: unknown): ExemplarInput {
   const b = asObject(body);
   const imageUrl = typeof b.image_url === 'string' ? b.image_url.trim() : '';
-  if (!/^https:\/\/\S+$/.test(imageUrl) || imageUrl.length > 1000) {
+  // Only an image uploaded to this project's storage: the server fetches it for
+  // a thumbnail and every student sees it.
+  if (!/^https:\/\/\S+$/.test(imageUrl) || imageUrl.length > 1000 || !isProjectStorageUrl(imageUrl)) {
     throw new ApiError('Upload the drawing first.', 400);
   }
   const title = optionalText(b.title, TITLE_MAX, 'Title') ?? null;

@@ -44,15 +44,35 @@ describe('parseItemPatch', () => {
 });
 
 describe('parseExemplarInput', () => {
-  const ok = { image_url: 'https://example.com/a.jpg', title: 'Bag and hat', brief: '', type_slugs: ['3d_composition'], exam_types: ['NATA'], paper_years: [2025] };
+  const IMAGE = 'https://db.neramclasses.com/storage/v1/object/public/drawing-references/x.png';
+  const ok = { image_url: IMAGE, title: 'Bag and hat', brief: '', type_slugs: ['3d_composition'], exam_types: ['NATA'], paper_years: [2025] };
 
   it('accepts a complete exemplar', () => {
-    expect(parseExemplarInput(ok)).toEqual({ image_url: 'https://example.com/a.jpg', title: 'Bag and hat', brief: null, type_slugs: ['3d_composition'], exam_types: ['NATA'], paper_years: [2025] });
+    expect(parseExemplarInput(ok)).toEqual({ image_url: IMAGE, title: 'Bag and hat', brief: null, type_slugs: ['3d_composition'], exam_types: ['NATA'], paper_years: [2025] });
   });
 
   it('needs an https image, a type, and a title or a brief', () => {
-    expect(statusOf(() => parseExemplarInput({ ...ok, image_url: 'http://example.com/a.jpg' }))).toBe(400);
+    expect(statusOf(() => parseExemplarInput({ ...ok, image_url: IMAGE.replace('https:', 'http:') }))).toBe(400);
     expect(statusOf(() => parseExemplarInput({ ...ok, type_slugs: [] }))).toBe(400);
     expect(statusOf(() => parseExemplarInput({ ...ok, title: '', brief: '' }))).toBe(400);
+  });
+
+  it('refuses an image that is not in project storage', () => {
+    for (const image_url of [
+      'https://example.com/a.jpg',
+      'https://placehold.co/600x800.png',
+      'https://db.neramclasses.com.evil.io/storage/v1/object/public/drawing-references/x.png',
+      'https://user:pw@db.neramclasses.com/storage/v1/object/public/drawing-references/x.png',
+      'https://db.neramclasses.com/rest/v1/users',
+    ]) {
+      let message = '';
+      try {
+        parseExemplarInput({ ...ok, image_url });
+      } catch (err) {
+        message = (err as Error).message;
+      }
+      expect(statusOf(() => parseExemplarInput({ ...ok, image_url }))).toBe(400);
+      expect(message).toBe('Upload the drawing first.');
+    }
   });
 });

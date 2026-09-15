@@ -21,6 +21,9 @@ vi.mock('@neram/database/queries/nexus', () => ({
 
 import { orientedAspect, prepareItemImage } from './inspiration-images';
 
+/** A public object in project storage, the only kind prepareItemImage fetches. */
+const img = (name: string) => `https://db.neramclasses.com/storage/v1/object/public/drawing-references/${name}`;
+
 describe('orientedAspect', () => {
   it('divides width by height, rounded to three places', () => {
     expect(orientedAspect({ width: 300, height: 600 })).toBe(0.5);
@@ -51,7 +54,7 @@ describe('prepareItemImage', () => {
   });
 
   it('stores the shape and a 400px JPEG thumbnail', async () => {
-    await prepareItemImage({ id: 'item-1', image_url: 'https://example.com/a.png', thumbnail_url: null, image_aspect: null });
+    await prepareItemImage({ id: 'item-1', image_url: img('a.png'), thumbnail_url: null, image_aspect: null });
     const [path, body, options] = mocks.upload.mock.calls[0];
     expect(path).toBe('inspiration-thumbs/item-1.jpg');
     expect(options).toMatchObject({ contentType: 'image/jpeg', upsert: true });
@@ -60,11 +63,15 @@ describe('prepareItemImage', () => {
       image_aspect: 0.667,
       thumbnail_url: 'https://cdn.example/inspiration-thumbs/item-1.jpg',
     });
-    expect((fetch as any).mock.calls[0][1]?.signal).toBeDefined();
+    const [fetchedUrl, init] = (fetch as any).mock.calls[0];
+    expect(fetchedUrl).toBe(img('a.png'));
+    expect(init?.signal).toBeDefined();
+    // A redirect could lead the server out of project storage.
+    expect(init?.redirect).toBe('error');
   });
 
   it('only fills what is missing', async () => {
-    await prepareItemImage({ id: 'item-2', image_url: 'https://example.com/a.png', thumbnail_url: 'https://example.com/t.jpg', image_aspect: null });
+    await prepareItemImage({ id: 'item-2', image_url: img('a.png'), thumbnail_url: img('t.jpg'), image_aspect: null });
     expect(mocks.upload).not.toHaveBeenCalled();
     expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-2', { image_aspect: 0.667 });
   });
@@ -72,19 +79,19 @@ describe('prepareItemImage', () => {
   it('parks an image it cannot read, so the next batch moves on', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('gone', { status: 404 })));
     await expect(
-      prepareItemImage({ id: 'item-3', image_url: 'https://example.com/gone.png', thumbnail_url: null, image_aspect: null }),
+      prepareItemImage({ id: 'item-3', image_url: img('gone.png'), thumbnail_url: null, image_aspect: null }),
     ).rejects.toThrow('Image fetch failed (404)');
-    expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-3', { image_aspect: 0.75, thumbnail_url: 'https://example.com/gone.png' });
+    expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-3', { image_aspect: 0.75, thumbnail_url: img('gone.png') });
   });
 
   it('refuses an image larger than 15 MB and parks it', async () => {
     const png = await sharp({ create: { width: 800, height: 1200, channels: 3, background: '#ffffff' } }).png().toBuffer();
     vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(png), { status: 200, headers: { 'content-length': String(16 * 1024 * 1024) } })));
     await expect(
-      prepareItemImage({ id: 'item-4', image_url: 'https://example.com/huge.png', thumbnail_url: null, image_aspect: null }),
+      prepareItemImage({ id: 'item-4', image_url: img('huge.png'), thumbnail_url: null, image_aspect: null }),
     ).rejects.toThrow('Image too large');
     expect(mocks.upload).not.toHaveBeenCalled();
-    expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-4', { image_aspect: 0.75, thumbnail_url: 'https://example.com/huge.png' });
+    expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-4', { image_aspect: 0.75, thumbnail_url: img('huge.png') });
   });
 
   it('gives up on an image that never arrives and parks it', async () => {
@@ -92,8 +99,22 @@ describe('prepareItemImage', () => {
       throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
     }));
     await expect(
-      prepareItemImage({ id: 'item-5', image_url: 'https://example.com/slow.png', thumbnail_url: null, image_aspect: null }),
+      prepareItemImage({ id: 'item-5', image_url: img('slow.png'), thumbnail_url: null, image_aspect: null }),
     ).rejects.toThrow('The operation was aborted due to timeout');
-    expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-5', { image_aspect: 0.75, thumbnail_url: 'https://example.com/slow.png' });
+    expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-5', { image_aspect: 0.75, thumbnail_url: img('slow.png') });
+  });
+
+  it.each([
+    ['another host', 'https://example.com/a.png'],
+    ['plain http', 'http://db.neramclasses.com/storage/v1/object/public/drawing-references/a.png'],
+    ['a lookalike host', 'https://db.neramclasses.com.evil.io/storage/v1/object/public/drawing-references/a.png'],
+    ['a non-storage path', 'https://db.neramclasses.com/rest/v1/users'],
+  ])('parks %s without fetching it', async (_label, url) => {
+    await expect(prepareItemImage({ id: 'item-6', image_url: url, thumbnail_url: null, image_aspect: null })).rejects.toThrow(
+      'Image not in project storage',
+    );
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-6', { image_aspect: 0.75, thumbnail_url: url });
   });
 });

@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { getSupabaseAdminClient } from '@neram/database';
 import { setItemImageMeta, type ItemImageWork } from '@neram/database/queries/nexus';
+import { isProjectStorageUrl } from '@/lib/inspiration-storage-url';
 
 /**
  * A grid of full-size drawing photos is slow on a phone, and a tile that learns
@@ -22,9 +23,16 @@ export function orientedAspect(meta: { width?: number; height?: number; orientat
   return Math.round(aspect * 1000) / 1000;
 }
 
+function thumbPath(itemId: string): string {
+  return `inspiration-thumbs/${itemId}.jpg`;
+}
+
 export async function prepareItemImage(item: ItemImageWork): Promise<void> {
   try {
-    const res = await fetch(item.image_url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    // Never fetch an address outside this project's storage, and never follow
+    // a redirect out of it.
+    if (!isProjectStorageUrl(item.image_url)) throw new Error('Image not in project storage');
+    const res = await fetch(item.image_url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'error' });
     if (!res.ok) throw new Error(`Image fetch failed (${res.status})`);
     const contentLength = Number(res.headers.get('content-length'));
     if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
@@ -45,7 +53,7 @@ export async function prepareItemImage(item: ItemImageWork): Promise<void> {
         .resize({ width: THUMB_WIDTH, withoutEnlargement: true })
         .jpeg({ quality: 78, mozjpeg: true })
         .toBuffer();
-      const path = `inspiration-thumbs/${item.id}.jpg`;
+      const path = thumbPath(item.id);
       const storage = getSupabaseAdminClient().storage.from(BUCKET);
       const { error } = await storage.upload(path, thumb, { contentType: 'image/jpeg', upsert: true });
       if (error) throw error;
