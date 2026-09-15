@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   getInspirationItem: vi.fn(),
   getSimilarInspiration: vi.fn(),
   updateInspirationItem: vi.fn(),
-  hideInspirationByAuthor: vi.fn(),
+  setDrawingSharingOptOut: vi.fn(),
   deleteExemplar: vi.fn(),
 }));
 
@@ -30,7 +30,7 @@ vi.mock('@neram/database/queries/nexus', () => ({
   getInspirationItem: (...a: unknown[]) => mocks.getInspirationItem(...a),
   getSimilarInspiration: (...a: unknown[]) => mocks.getSimilarInspiration(...a),
   updateInspirationItem: (...a: unknown[]) => mocks.updateInspirationItem(...a),
-  hideInspirationByAuthor: (...a: unknown[]) => mocks.hideInspirationByAuthor(...a),
+  setDrawingSharingOptOut: (...a: unknown[]) => mocks.setDrawingSharingOptOut(...a),
   deleteExemplar: (...a: unknown[]) => mocks.deleteExemplar(...a),
 }));
 
@@ -98,7 +98,39 @@ describe('/api/inspiration/items/[id]', () => {
     const res = await PATCH(patch({ curation: 'shown', hide_all_by_author: true }), ctx);
     expect(res.status).toBe(400);
     expect(mocks.updateInspirationItem).not.toHaveBeenCalled();
-    expect(mocks.hideInspirationByAuthor).not.toHaveBeenCalled();
+    expect(mocks.setDrawingSharingOptOut).not.toHaveBeenCalled();
+  });
+
+  it("hide-all turns the author's sharing off instead of hiding every item", async () => {
+    mocks.resolveCaller.mockResolvedValue(teacher);
+    mocks.getInspirationItem.mockResolvedValue({ item: makeRow({ author_id: 'student-9' }), pair: null });
+    mocks.setDrawingSharingOptOut.mockResolvedValue(true);
+    const res = await PATCH(patch({ hide_all_by_author: true }), ctx);
+    expect(res.status).toBe(200);
+    expect(mocks.setDrawingSharingOptOut).toHaveBeenCalledWith('student-9', true);
+    // References stay: nothing is curated hidden, item by item.
+    expect(mocks.updateInspirationItem).not.toHaveBeenCalled();
+    expect((await res.json()).item.staff).toBeDefined();
+  });
+
+  it('hide-all with other changes opts the author out first, then applies the patch', async () => {
+    mocks.resolveCaller.mockResolvedValue(teacher);
+    mocks.getInspirationItem.mockResolvedValue({ item: makeRow({ author_id: 'student-9' }), pair: null });
+    mocks.setDrawingSharingOptOut.mockResolvedValue(true);
+    const res = await PATCH(patch({ is_featured: false, hide_all_by_author: true }), ctx);
+    expect(res.status).toBe(200);
+    expect(mocks.setDrawingSharingOptOut).toHaveBeenCalledWith('student-9', true);
+    expect(mocks.updateInspirationItem).toHaveBeenCalledWith(ID, { is_featured: false }, 't1');
+  });
+
+  it("refuses hide-all when the author is not a student, and changes nothing", async () => {
+    mocks.resolveCaller.mockResolvedValue(teacher);
+    mocks.getInspirationItem.mockResolvedValue({ item: makeRow({ author_id: 'teacher-2' }), pair: null });
+    mocks.setDrawingSharingOptOut.mockResolvedValue(false);
+    const res = await PATCH(patch({ curation: 'hidden', hide_all_by_author: true }), ctx);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Only a student's drawings can be hidden this way.");
+    expect(mocks.updateInspirationItem).not.toHaveBeenCalled();
   });
 
   it('deletes only exemplars', async () => {

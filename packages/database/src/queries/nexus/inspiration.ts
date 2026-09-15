@@ -229,17 +229,26 @@ export async function updateInspirationItem(
   if (error) throw error;
 }
 
-/** Hides a student's originals AND the references made from their drawings. */
-export async function hideInspirationByAuthor(
-  authorId: string,
-  actorId: string,
+/**
+ * Turns a student's drawing sharing off (or back on). This is the opt-out
+ * itself, read by nexus_inspiration_base: their originals leave the student
+ * shelf and the references made from their work stay, credited "Neram
+ * reference". Only a student's row is changed; resolves false when the user is
+ * not a student (or does not exist), so the caller can refuse.
+ */
+export async function setDrawingSharingOptOut(
+  userId: string,
+  optOut: boolean,
   client?: TypedSupabaseClient,
-): Promise<void> {
-  const { error } = await db(client)
-    .from('nexus_inspiration_items')
-    .update({ curation: 'hidden', curated_by: actorId, curated_at: new Date().toISOString() })
-    .eq('author_id', authorId);
+): Promise<boolean> {
+  const { data, error } = await db(client)
+    .from('users')
+    .update({ share_drawings_opt_out: optOut })
+    .eq('id', userId)
+    .eq('user_type', 'student')
+    .select('id');
   if (error) throw error;
+  return (data || []).length > 0;
 }
 
 export async function createExemplar(

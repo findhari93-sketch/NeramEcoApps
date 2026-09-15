@@ -3,7 +3,7 @@ import {
   deleteExemplar,
   getInspirationItem,
   getSimilarInspiration,
-  hideInspirationByAuthor,
+  setDrawingSharingOptOut,
   updateInspirationItem,
 } from '@neram/database/queries/nexus';
 import { assertInspirationStaff, parseItemId, resolveInspirationCaller } from '@/lib/inspiration-access';
@@ -38,7 +38,13 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   }
 }
 
-/** PATCH (staff): show, hide, feature, retitle, or hide everything by one student. */
+/**
+ * PATCH (staff): show, hide, feature, retitle, or stop showing one student's
+ * drawings. hide_all_by_author is the teacher's stand-in for the student's own
+ * opt-out (alumni cannot sign in to set it): it turns sharing off for the
+ * author, so their originals are hidden and references made from their work
+ * stay, credited "Neram reference".
+ */
 export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const caller = await resolveInspirationCaller(request.headers.get('Authorization'));
@@ -49,12 +55,15 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (!item) throw new ApiError('Drawing not found', 404);
 
     const { patch, hideAllByAuthor } = parseItemPatch(await request.json().catch(() => ({})), item.source_kind);
-    // Validate everything before writing anything.
-    if (hideAllByAuthor && !item.author_id) {
-      throw new ApiError('This drawing is not linked to a student.', 400);
+    // Validate everything before writing anything. The opt-out write is also
+    // the student check (it only matches a student's row), so it goes first
+    // and a refusal leaves the item untouched.
+    if (hideAllByAuthor) {
+      if (!item.author_id) throw new ApiError('This drawing is not linked to a student.', 400);
+      const optedOut = await setDrawingSharingOptOut(item.author_id, true);
+      if (!optedOut) throw new ApiError("Only a student's drawings can be hidden this way.", 400);
     }
     if (Object.keys(patch).length > 0) await updateInspirationItem(id, patch, caller.user.id);
-    if (hideAllByAuthor && item.author_id) await hideInspirationByAuthor(item.author_id, caller.user.id);
 
     const { item: fresh } = await getInspirationItem(id, caller.user.id, 'all');
     return NextResponse.json({ item: fresh ? presentRow(fresh, { staff: true }) : null }, { headers: NO_STORE });

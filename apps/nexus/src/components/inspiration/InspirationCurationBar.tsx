@@ -36,7 +36,11 @@ export interface InspirationCurationBarProps {
 
 const actionSx = { minHeight: 44 } as const;
 
-/** Teacher controls on a drawing. Every change is reversible except deleting an exemplar. */
+/**
+ * Teacher controls on a drawing. Every change is reversible here except deleting
+ * an exemplar. "Hide all from this student" turns the student's drawing sharing
+ * off (the same switch as their own opt-out); only an admin turns it back on.
+ */
 export default function InspirationCurationBar({ card, base, onChanged }: InspirationCurationBarProps) {
   const { getToken } = useNexusAuthContext();
   const router = useRouter();
@@ -171,13 +175,13 @@ export default function InspirationCurationBar({ card, base, onChanged }: Inspir
         transitionDuration={reduceMotion ? 0 : undefined}
       >
         <DialogTitle id="inspiration-confirm-title">
-          {confirm === 'delete' ? 'Delete this exemplar?' : 'Hide every drawing by this student?'}
+          {confirm === 'delete' ? 'Delete this exemplar?' : "Stop showing this student's drawings?"}
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2">
             {confirm === 'delete'
               ? 'Students stop seeing it, and anyone who saved it loses it. This cannot be undone.'
-              : 'Their drawings and the references made from them are hidden from students. You can show any of them again later.'}
+              : 'Their own drawings are hidden from students. References made from their work stay, credited Neram reference. An admin can turn sharing back on.'}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -204,7 +208,7 @@ export default function InspirationCurationBar({ card, base, onChanged }: Inspir
                   })
             }
           >
-            {confirm === 'delete' ? 'Delete' : 'Hide all'}
+            {confirm === 'delete' ? 'Delete' : 'Stop showing'}
           </Button>
         </DialogActions>
       </Dialog>

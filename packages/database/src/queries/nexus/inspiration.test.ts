@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getInspirationItem,
   searchInspiration,
+  setDrawingSharingOptOut,
   setInspirationSave,
   toSearchArgs,
   type InspirationRow,
@@ -106,5 +107,29 @@ describe('setInspirationSave', () => {
     const { client, calls } = fakeClient({ data: null, error: null });
     await setInspirationSave('item', 'user', false, client);
     expect(calls.map(([name]) => name)).toEqual(['from', 'delete', 'eq', 'eq']);
+  });
+});
+
+describe('setDrawingSharingOptOut', () => {
+  it("writes the user's opt-out, only on a student row", async () => {
+    const { client, calls } = fakeClient({ data: [{ id: 'u1' }], error: null });
+    expect(await setDrawingSharingOptOut('u1', true, client)).toBe(true);
+    expect(calls).toEqual([
+      ['from', ['users']],
+      ['update', [{ share_drawings_opt_out: true }]],
+      ['eq', ['id', 'u1']],
+      ['eq', ['user_type', 'student']],
+      ['select', ['id']],
+    ]);
+  });
+
+  it('answers false when no student row matched', async () => {
+    const { client } = fakeClient({ data: [], error: null });
+    expect(await setDrawingSharingOptOut('teacher-1', true, client)).toBe(false);
+  });
+
+  it('throws the database error', async () => {
+    const { client } = fakeClient({ data: null, error: new Error('boom') });
+    await expect(setDrawingSharingOptOut('u1', false, client)).rejects.toThrow('boom');
   });
 });
