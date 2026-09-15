@@ -1,18 +1,28 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import path from 'path';
 import { APP_URLS, STUDENT_ACCOUNT, TEACHER_ACCOUNT, injectAuthForPage } from '../utils/credentials';
-import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
+import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../utils/mobile-helpers';
 
 /**
  * Inspiration on a phone.
  *
  * API half (serial): a teacher adds an exemplar; a student finds it by search,
  * sees no teacher fields, saves it and finds it in Saved; a student cannot edit;
- * the teacher hides it and the student can no longer open it. The exemplar is
- * deleted in afterAll. Test tokens run with every feature on (see
+ * the teacher hides it and the student can no longer open it (checked from both
+ * sides: the student's own hidden-scope search and the teacher's). The exemplar
+ * is deleted in afterAll. Test tokens run with every feature on (see
  * inspiration-access.ts), so the flag does not gate this half.
  *
  * UI half: the search home and a drawing page fit 375px with thumb-sized
- * targets, and Back from a drawing returns to the results.
+ * targets, and Back from a drawing returns to the results. Its own beforeAll
+ * uploads a real image and creates a second, dedicated exemplar (title starts
+ * "Qwzx"), because the tile-visibility assertion here must FAIL on a missing
+ * tile rather than self-skip: staging has almost no visible drawings, so this
+ * half cannot depend on whatever the API half's exemplar happens to look like
+ * at the moment the UI runs. That fixture is deleted in this describe's own
+ * afterAll. The Reference/Student's-drawing image toggle is out of scope here
+ * (controller ruling: deferred).
  */
 
 const NEXUS = APP_URLS.nexus;
@@ -73,6 +83,9 @@ test.describe('Inspiration API', () => {
     expect(save.status()).toBe(200);
     const saved = await (await request.get(`${NEXUS}/api/inspiration/search?saved=1`, { headers: auth(studentToken) })).json();
     expect(saved.items.map((i: { id: string }) => i.id)).toContain(exemplarId);
+    // Saved is still a student-facing list: no teacher-only field leaks into it.
+    expect(JSON.stringify(saved.items)).not.toMatch(/score_pct|curation|authorId|tutor_/);
+    for (const item of saved.items) expect(item.staff).toBeUndefined();
   });
 
   test('a student cannot change Inspiration or ask for hidden drawings', async ({ request }) => {
@@ -88,13 +101,32 @@ test.describe('Inspiration API', () => {
     const hide = await request.patch(`${NEXUS}/api/inspiration/items/${exemplarId}`, { headers: auth(teacherToken), data: { curation: 'hidden' } });
     expect(hide.status()).toBe(200);
     expect((await hide.json()).item.staff.hiddenReason).toBe('Hidden by a teacher');
+
+    // The student is held to the visible scope no matter what the query string
+    // asks for, so a hidden-scope search (even by its own unique title) must
+    // not surface it.
+    const studentHidden = await (
+      await request.get(`${NEXUS}/api/inspiration/search?scope=hidden&q=${encodeURIComponent(UNIQUE)}`, { headers: auth(studentToken) })
+    ).json();
+    expect(studentHidden.items.find((i: { id: string }) => i.id === exemplarId)).toBeUndefined();
+
+    // The teacher's own hidden-scope search is the one place it should still
+    // show up, correctly flagged as no longer visible.
+    const teacherHidden = await (
+      await request.get(`${NEXUS}/api/inspiration/search?scope=hidden&q=${encodeURIComponent(UNIQUE)}`, { headers: auth(teacherToken) })
+    ).json();
+    const teacherHit = teacherHidden.items.find((i: { id: string }) => i.id === exemplarId);
+    expect(teacherHit).toBeTruthy();
+    expect(teacherHit.staff.visible).toBe(false);
+
     const open = await request.get(`${NEXUS}/api/inspiration/items/${exemplarId}`, { headers: auth(studentToken), failOnStatusCode: false });
     expect(open.status()).toBe(404);
   });
 
   test.afterAll(async ({ request }) => {
     if (exemplarId && teacherToken) {
-      await request.delete(`${NEXUS}/api/inspiration/items/${exemplarId}`, { headers: auth(teacherToken), failOnStatusCode: false });
+      const res = await request.delete(`${NEXUS}/api/inspiration/items/${exemplarId}`, { headers: auth(teacherToken), failOnStatusCode: false });
+      expect([200, 404]).toContain(res.status());
     }
   });
 });
@@ -106,10 +138,67 @@ test.describe('Inspiration on a phone', () => {
   test.describe.configure({ mode: 'default' });
   test.use({ viewport: { width: 375, height: 812 } });
 
-  async function open(page: Page, path: string): Promise<'ok' | 'off' | 'down'> {
+  const PHONE_FIXTURE_TITLE = `Qwzx phone fixture ${Date.now()}`;
+  let phoneTeacherToken = '';
+  let phoneFixtureId = '';
+  let phoneReady = true;
+
+  test.beforeAll(async ({ request }) => {
+    const t = await request.post(`${NEXUS}/api/auth/test-login`, { data: { email: TEACHER_ACCOUNT.email, role: 'teacher' } });
+    if (t.status() !== 200) {
+      phoneReady = false;
+      return;
+    }
+    phoneTeacherToken = (await t.json()).testToken;
+
+    const imagePath = path.resolve(__dirname, '../../apps/nexus/public/icons/icon-512x512.png');
+    const upload = await request.post(`${NEXUS}/api/drawing/upload`, {
+      headers: auth(phoneTeacherToken),
+      multipart: {
+        file: { name: 'inspiration-e2e.png', mimeType: 'image/png', buffer: readFileSync(imagePath) },
+        bucket: 'drawing-references',
+      },
+    });
+    if (!upload.ok()) {
+      phoneReady = false;
+      console.log(`[inspiration phone fixture] upload ${upload.status()}: ${await upload.text()}`);
+      return;
+    }
+    const { url } = await upload.json();
+
+    const create = await request.post(`${NEXUS}/api/inspiration/exemplars`, {
+      headers: auth(phoneTeacherToken),
+      data: {
+        image_url: url,
+        title: PHONE_FIXTURE_TITLE,
+        brief: 'A travel bag and a hat for the phone test',
+        type_slugs: ['3d_composition'],
+        exam_types: ['NATA'],
+        paper_years: [2025],
+      },
+    });
+    if (!create.ok()) {
+      phoneReady = false;
+      console.log(`[inspiration phone fixture] create ${create.status()}: ${await create.text()}`);
+      return;
+    }
+    phoneFixtureId = (await create.json()).id;
+  });
+
+  test.afterAll(async ({ request }) => {
+    if (phoneFixtureId && phoneTeacherToken) {
+      const res = await request.delete(`${NEXUS}/api/inspiration/items/${phoneFixtureId}`, {
+        headers: auth(phoneTeacherToken),
+        failOnStatusCode: false,
+      });
+      expect([200, 404]).toContain(res.status());
+    }
+  });
+
+  async function open(page: Page, route: string): Promise<'ok' | 'off' | 'down'> {
     const ok = await injectAuthForPage(page, 'student');
     if (!ok) return 'down';
-    await page.goto(`${NEXUS}${path}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${NEXUS}${route}`, { waitUntil: 'domcontentloaded' });
     const shell = page.locator('button[aria-label="Open profile menu"]');
     try {
       await shell.waitFor({ timeout: 90_000 });
@@ -134,33 +223,63 @@ test.describe('Inspiration on a phone', () => {
     expect(await search.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
     await assertNoHorizontalOverflow(page);
 
-    const saved = await page.getByRole('link', { name: 'Saved' }).boundingBox();
-    expect(saved && saved.height >= 44).toBe(true);
+    await assertTouchTargetSize(page, 'a[href$="/student/inspiration/saved"]');
   });
 
   test('a drawing opens, fits, and Back returns to the same results', async ({ page }) => {
     test.setTimeout(120_000);
-    const state = await open(page, '/student/inspiration?sort=newest');
+    test.skip(!phoneReady, 'could not create the phone fixture exemplar');
+
+    const q = encodeURIComponent(PHONE_FIXTURE_TITLE);
+    const state = await open(page, `/student/inspiration?q=${q}`);
     test.skip(state !== 'ok', 'Nexus not running or flag off');
 
     // isVisible({ timeout }) does not wait, it only polls once and returns.
     // Anchor on a render-confirming element first (the search box mounting
     // proves the client bundle for this route has hydrated), then give the
-    // grid's own fetch a moment to settle before deciding a tile is missing.
+    // grid's own fetch a moment to settle.
     await expect(page.getByRole('textbox', { name: 'Search Inspiration' })).toBeVisible({ timeout: 90_000 });
     await page.waitForLoadState('networkidle').catch(() => {});
 
+    // This search is scoped to our own fixture's unique title, so unlike the
+    // old sort=newest probe, a missing tile here is a real failure, not an
+    // acceptable "staging has no visible drawings" skip.
     const tile = page.getByTestId('inspiration-tile').first();
-    test.skip(!(await tile.isVisible({ timeout: 20_000 }).catch(() => false)), 'no visible drawings in this environment');
-    const heart = await tile.getByRole('button').boundingBox();
-    expect(heart && heart.height >= 44 && heart.width >= 44).toBe(true);
+    await expect(tile).toBeVisible({ timeout: 60_000 });
+
+    const typeChip = page.getByRole('button', { name: /^3D Composition/ });
+    await expect(typeChip).toBeVisible();
+    await typeChip.click();
+    await expect(page).toHaveURL(/type=3d_composition/);
+    await typeChip.click();
+    await expect(page).not.toHaveURL(/type=/);
+
+    await assertTouchTargetSize(page, '[data-testid="inspiration-tile"] button');
 
     await tile.getByRole('link').click();
-    await expect(page).toHaveURL(/\/student\/inspiration\/[0-9a-f-]{36}/);
-    await expect(page.getByRole('button', { name: /^(Save|Saved)$/ })).toBeVisible();
+    // A dynamic /student/inspiration/[itemId] route can take 26 to 36s to
+    // compile on first hit (see the repo's documented cold-route trap); the
+    // default 5s expect timeout is too tight for that first navigation.
+    await expect(page).toHaveURL(new RegExp(`/student/inspiration/${phoneFixtureId}`), { timeout: 90_000 });
+
+    // exact: true, because the item page's own "More like this" section can
+    // render other tiles whose heart button is named "Save <that title>" (or,
+    // once saved, "Remove <that title> from saved", which contains "saved" too)
+    // — a plain substring match on 'Save'/'Saved' hits those as well as the
+    // page's own Save/Saved action button, a strict-mode violation.
+    const saveButton = page.getByRole('button', { name: /^(Save|Saved)$/ });
+    await expect(saveButton).toBeVisible();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Saved', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
+
     await assertNoHorizontalOverflow(page);
 
     await page.getByRole('link', { name: 'Back to Inspiration' }).click();
-    await expect(page).toHaveURL(/\/student\/inspiration\?sort=newest$/);
+    // Back returns to the URL saved when the tile was opened (history.replaceState),
+    // which still carries q and, since the type chip was untoggled before the
+    // tile was opened, no type=.
+    await expect(page).toHaveURL(/\/student\/inspiration\?q=/);
   });
 });
