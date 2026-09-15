@@ -43,7 +43,7 @@ describe('prepareItemImage', () => {
     mocks.upload.mockResolvedValue({ error: null });
     mocks.setItemImageMeta.mockResolvedValue(undefined);
     const png = await sharp({ create: { width: 800, height: 1200, channels: 3, background: '#ffffff' } }).png().toBuffer();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(png, { status: 200 })));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(png), { status: 200 })));
   });
 
   afterEach(() => {
@@ -79,7 +79,7 @@ describe('prepareItemImage', () => {
 
   it('refuses an image larger than 15 MB and parks it', async () => {
     const png = await sharp({ create: { width: 800, height: 1200, channels: 3, background: '#ffffff' } }).png().toBuffer();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(png, { status: 200, headers: { 'content-length': String(16 * 1024 * 1024) } })));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(png), { status: 200, headers: { 'content-length': String(16 * 1024 * 1024) } })));
     await expect(
       prepareItemImage({ id: 'item-4', image_url: 'https://example.com/huge.png', thumbnail_url: null, image_aspect: null }),
     ).rejects.toThrow('Image too large');
