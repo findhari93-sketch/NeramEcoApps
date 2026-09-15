@@ -33,6 +33,9 @@ describe('parseItemPatch', () => {
     });
     expect(statusOf(() => parseItemPatch({ type_slugs: ['not_a_type'] }, 'exemplar'))).toBe(400);
     expect(statusOf(() => parseItemPatch({ paper_years: [1990] }, 'exemplar'))).toBe(400);
+    expect(statusOf(() => parseItemPatch({ type_slugs: ['constructor'] }, 'exemplar'))).toBe(400);
+    expect(statusOf(() => parseItemPatch({ type_slugs: ['__proto__'] }, 'exemplar'))).toBe(400);
+    expect(statusOf(() => parseItemPatch({ type_slugs: ['toString'] }, 'exemplar'))).toBe(400);
   });
 
   it('allows hide-all on its own', () => {

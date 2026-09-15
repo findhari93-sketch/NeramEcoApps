@@ -21,7 +21,7 @@ function optionalText(value: unknown, max: number, field: string): string | null
 }
 
 function typeSlugs(value: unknown): string[] {
-  if (!Array.isArray(value) || value.some((v) => typeof v !== 'string' || !(v in INSPIRATION_TYPE_LABELS))) {
+  if (!Array.isArray(value) || value.some((v) => typeof v !== 'string' || !Object.prototype.hasOwnProperty.call(INSPIRATION_TYPE_LABELS, v))) {
     throw new ApiError('Pick drawing types from the list.', 400);
   }
   const unique = [...new Set(value as string[])];
