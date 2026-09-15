@@ -192,7 +192,8 @@ BEGIN
   -- Typos. word_similarity scores the query against its best matching stretch
   -- of the document, which is what makes a one-word typo clear 0.4. First
   -- page only: the inner ORDER BY + LIMIT picks the page, and the outer
-  -- count(*) OVER () then equals exactly the rows returned.
+  -- count(*) OVER () then equals exactly the rows returned. The outer
+  -- ORDER BY repeats the inner one, so the order never rests on the window.
   IF p_offset > 0 THEN
     RETURN;
   END IF;
@@ -213,7 +214,8 @@ BEGIN
                WHERE v_norm <> '' AND word_similarity(v_norm, b.search_text_norm) >= 0.4) x
        ORDER BY x.rnk DESC, x.source_created_at DESC, x.id
        LIMIT p_limit
-    ) y;
+    ) y
+   ORDER BY y.rnk DESC, y.source_created_at DESC, y.id;
 END;
 $fn$;
 

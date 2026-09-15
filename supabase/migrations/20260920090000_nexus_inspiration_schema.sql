@@ -116,9 +116,14 @@ BEGIN
 END;
 $fn$;
 
+-- Only the columns the search text is built from (and the updated_at those
+-- edits stamp). A save, a curation flip or a thumbnail write leaves the
+-- search vector alone instead of rebuilding it.
 DROP TRIGGER IF EXISTS trg_nexus_inspiration_refresh_search ON nexus_inspiration_items;
 CREATE TRIGGER trg_nexus_inspiration_refresh_search
-  BEFORE INSERT OR UPDATE ON nexus_inspiration_items
+  BEFORE INSERT OR UPDATE OF title_override, brief, brief_override, category, type_slugs, tag_labels,
+    exam_types, paper_years, source_kind
+  ON nexus_inspiration_items
   FOR EACH ROW EXECUTE FUNCTION nexus_inspiration_refresh_search();
 
 CREATE TABLE IF NOT EXISTS nexus_inspiration_saves (

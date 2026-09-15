@@ -14,6 +14,15 @@
 --   score               a 'marks' assignment: tutor_marks / max_marks; else
 --                       tutor_rating / 5; else tutor_marks / max_marks
 --   exam drawings       never become items
+--
+-- Not copied from the submission, on purpose:
+--   self_note           a student's private reflection; the brief is the
+--                       question text, else the assignment title, else NULL
+--   thumbnail, aspect   the submission's may predate a rotation; an item
+--                       starts with NULL and keeps its own only while
+--                       image_url is unchanged (maintenance measures it)
+--   is_featured         alumni_featured seeds it on INSERT only, so a
+--                       re-sync never undoes a teacher's un-feature
 -- ============================================
 
 -- Drawing tags and question sub-types use their own spellings. Map them onto
@@ -71,8 +80,6 @@ DECLARE
   v_years        smallint[];
   v_score_num    numeric;
   v_reviewed     boolean;
-  v_aspect       real;
-  v_thumb        text;
 BEGIN
   SELECT * INTO s FROM drawing_submissions WHERE id = p_submission_id;
   IF NOT FOUND THEN
@@ -95,7 +102,8 @@ BEGIN
     FROM drawing_questions dq
    WHERE dq.id = coalesce(s.question_id, v_q_id);
 
-  v_brief := coalesce(nullif(btrim(v_q_text), ''), nullif(btrim(v_assign_title), ''), nullif(btrim(s.self_note), ''));
+  -- Never self_note: that is the student's private reflection.
+  v_brief := coalesce(nullif(btrim(v_q_text), ''), nullif(btrim(v_assign_title), ''));
 
   -- A marks assignment scores by marks even when a rating was also left; a
   -- stars assignment (or free practice) falls back to stars, then to marks.
@@ -171,35 +179,28 @@ BEGIN
     ORDER BY l.label);
 
   v_reviewed := s.reviewed_at IS NOT NULL;
-  v_aspect := CASE WHEN (s.image_quality ->> 'aspect') ~ '^[0-9]*\.?[0-9]+$'
-                   THEN (s.image_quality ->> 'aspect')::real END;
-  IF v_aspect IS NOT NULL AND (v_aspect < 0.1 OR v_aspect > 10) THEN
-    v_aspect := NULL;
-  END IF;
 
-  -- A 90 or 270 degree turn swaps width and height, and image_quality.aspect
-  -- is never recomputed after a rotation, so a stale aspect must not survive.
-  -- The thumbnail is a pre-rotation crop for any turn, so drop it too.
-  IF coalesce(s.auto_rotated_deg, 0) IN (90, 270, -90) THEN
-    v_aspect := NULL;
-  END IF;
-  v_thumb := CASE WHEN coalesce(s.auto_rotated_deg, 0) <> 0 THEN NULL ELSE s.thumbnail_url END;
-
+  -- The submission's thumbnail_url and image_quality.aspect are never
+  -- recomputed after a rotation (auto or manual), so neither is trusted here.
+  -- The item starts with NULL, and the maintenance batch measures the image
+  -- it actually shows. A new image_url throws the item's own values away.
+  -- is_featured is seeded from the Hall of Fame on INSERT only.
   INSERT INTO nexus_inspiration_items AS i (
     source_kind, source_submission_id, source_drawing_question_id, source_qb_question_id,
     image_url, thumbnail_url, image_aspect, brief, category, type_slugs, tag_labels,
-    exam_types, paper_years, author_id, score_pct, source_created_at, auto_eligible)
+    exam_types, paper_years, author_id, score_pct, source_created_at, auto_eligible, is_featured)
   VALUES (
     'submission_original', s.id, v_q_id, v_qb_id,
-    s.original_image_url, v_thumb, v_aspect, v_brief, v_q_category, v_types, v_labels,
+    s.original_image_url, NULL, NULL, v_brief, v_q_category, v_types, v_labels,
     v_exams, v_years, s.student_id, v_score_num::real, coalesce(s.submitted_at, now()),
-    v_reviewed AND s.status IN ('completed', 'reviewed') AND coalesce(v_score_num, 0) >= 0.8)
+    v_reviewed AND s.status IN ('completed', 'reviewed') AND coalesce(v_score_num, 0) >= 0.8,
+    coalesce(s.alumni_featured, false))
   ON CONFLICT (source_kind, source_submission_id) WHERE source_submission_id IS NOT NULL
   DO UPDATE SET
     source_drawing_question_id = EXCLUDED.source_drawing_question_id,
     source_qb_question_id      = EXCLUDED.source_qb_question_id,
-    thumbnail_url = CASE WHEN i.image_url = EXCLUDED.image_url THEN coalesce(EXCLUDED.thumbnail_url, i.thumbnail_url) ELSE EXCLUDED.thumbnail_url END,
-    image_aspect  = CASE WHEN i.image_url = EXCLUDED.image_url THEN coalesce(EXCLUDED.image_aspect, i.image_aspect) ELSE EXCLUDED.image_aspect END,
+    thumbnail_url = CASE WHEN i.image_url = EXCLUDED.image_url THEN i.thumbnail_url ELSE NULL END,
+    image_aspect  = CASE WHEN i.image_url = EXCLUDED.image_url THEN i.image_aspect ELSE NULL END,
     image_url         = EXCLUDED.image_url,
     brief             = EXCLUDED.brief,
     category          = EXCLUDED.category,
@@ -216,12 +217,13 @@ BEGIN
     INSERT INTO nexus_inspiration_items AS i (
       source_kind, source_submission_id, source_drawing_question_id, source_qb_question_id,
       image_url, thumbnail_url, image_aspect, brief, category, type_slugs, tag_labels,
-      exam_types, paper_years, author_id, score_pct, source_created_at, auto_eligible)
+      exam_types, paper_years, author_id, score_pct, source_created_at, auto_eligible, is_featured)
     VALUES (
       'submission_reference', s.id, v_q_id, v_qb_id,
       s.corrected_image_url, NULL, NULL, v_brief, v_q_category, v_types, v_labels,
       v_exams, v_years, s.student_id, NULL, coalesce(s.reviewed_at, s.submitted_at, now()),
-      v_reviewed AND s.status IN ('completed', 'reviewed', 'redo'))
+      v_reviewed AND s.status IN ('completed', 'reviewed', 'redo'),
+      coalesce(s.alumni_featured, false))
     ON CONFLICT (source_kind, source_submission_id) WHERE source_submission_id IS NOT NULL
     DO UPDATE SET
       source_drawing_question_id = EXCLUDED.source_drawing_question_id,
@@ -263,11 +265,12 @@ BEGIN
 END;
 $fn$;
 
+-- Only the columns the sync reads. self_note, thumbnail_url, image_quality and
+-- auto_rotated_deg feed no item column (a rotation writes original_image_url).
 DROP TRIGGER IF EXISTS trg_nexus_inspiration_submission ON drawing_submissions;
 CREATE TRIGGER trg_nexus_inspiration_submission
   AFTER INSERT OR UPDATE OF status, reviewed_at, tutor_rating, tutor_marks, corrected_image_url,
-    original_image_url, thumbnail_url, question_id, assignment_id, image_quality, self_note, source_type,
-    auto_rotated_deg
+    original_image_url, question_id, assignment_id, source_type
   ON drawing_submissions
   FOR EACH ROW EXECUTE FUNCTION nexus_inspiration_on_submission();
 
@@ -365,11 +368,6 @@ GRANT EXECUTE ON FUNCTION nexus_inspiration_resync_all() TO service_role;
 
 -- Backfill. The old is_gallery_visible flag is deliberately ignored: it was set
 -- by a default, not by a teacher, and the new rule is the 4 star threshold.
+-- Alumni work curators pinned in the Hall of Fame arrives featured (INSERT
+-- only), so re-running this file never re-features what a teacher un-featured.
 SELECT nexus_inspiration_resync_all();
-
--- Curators already pinned some alumni work in the Hall of Fame.
-UPDATE nexus_inspiration_items i
-   SET is_featured = true
-  FROM drawing_submissions s
- WHERE s.id = i.source_submission_id
-   AND s.alumni_featured;
