@@ -98,7 +98,8 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
   const { data, error, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite<SearchPage>(
     getKey,
     (url: string) => fetchWithToken<SearchPage>(url, getToken),
-    { revalidateFirstPage: false },
+    // A new search or filter changes page 0's key, so SWR starts again from one page.
+    { revalidateFirstPage: false, persistSize: false },
   );
 
   const cards = useMemo(() => (data ?? []).flatMap((page) => page.items), [data]);
@@ -170,6 +171,25 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
   const filtered = hasActiveFilters(state) || scope === 'hidden';
   const empty = ready && !error && !isLoading && cards.length === 0;
 
+  // The one line a screen reader hears: the result count/fuzzy note when there are
+  // cards, the empty-state title when there are none, or nothing while still loading.
+  const resultLine =
+    first && cards.length > 0 && !savedOnly
+      ? first.matchKind === 'fuzzy'
+        ? `Nothing matched "${state.q}" exactly. Here is what is close.`
+        : first.matchKind === 'any'
+          ? `No drawing has every word of "${state.q}". These match some of them.`
+          : `${first.total} ${first.total === 1 ? 'drawing' : 'drawings'}`
+      : null;
+  const emptyTitle = savedOnly
+    ? 'Nothing saved yet'
+    : filtered
+      ? state.q
+        ? `Nothing found for "${state.q}"`
+        : 'Nothing matches these filters'
+      : 'No drawings yet';
+  const statusMessage = resultLine ?? (empty ? emptyTitle : '');
+
   return (
     <Box sx={{ pb: 10 }}>
       <PageHeader
@@ -210,15 +230,30 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
           </>
         )}
 
-        {first && cards.length > 0 && !savedOnly && (
-          <Typography variant="body2" color="text.secondary" aria-live="polite" sx={{ mb: 1.5 }}>
-            {first.matchKind === 'fuzzy'
-              ? `Nothing matched "${state.q}" exactly. Here is what is close.`
-              : first.matchKind === 'any'
-                ? `No drawing has every word of "${state.q}". These match some of them.`
-                : `${first.total} ${first.total === 1 ? 'drawing' : 'drawings'}`}
-          </Typography>
-        )}
+        <Typography
+          component="p"
+          role="status"
+          aria-live="polite"
+          variant="body2"
+          color="text.secondary"
+          sx={
+            resultLine
+              ? { mb: 1.5 }
+              : {
+                  position: 'absolute',
+                  width: '1px',
+                  height: '1px',
+                  padding: 0,
+                  margin: '-1px',
+                  overflow: 'hidden',
+                  clip: 'rect(0 0 0 0)',
+                  whiteSpace: 'nowrap',
+                  border: 0,
+                }
+          }
+        >
+          {statusMessage}
+        </Typography>
 
         {error && (
           <Alert
