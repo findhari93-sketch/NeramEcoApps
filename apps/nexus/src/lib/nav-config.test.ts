@@ -260,3 +260,19 @@ describe('groupNavItems', () => {
     expect(groupNavItems([])).toEqual([]);
   });
 });
+
+describe('nav-config: Inspiration', () => {
+  it('is reachable on a phone from both student zones', () => {
+    for (const zone of ZONES) {
+      const mobile = [...paths(zone.bottomNavItems), ...paths(zoneOverflow(zone))];
+      expect(mobile, `${zone.id} zone`).toContain('/student/inspiration');
+    }
+  });
+
+  it('sits with student work in the Teaching panel, reachable on a phone', () => {
+    const teaching = PANELS.find((p) => p.id === 'teaching')!;
+    const item = teaching.sidebarItems.find((i) => i.path === '/teacher/inspiration');
+    expect(item?.group).toBe('Student work');
+    expect([...paths(panelBottomNav(teaching)), ...paths(panelOverflow(teaching))]).toContain('/teacher/inspiration');
+  });
+});
