@@ -7,6 +7,7 @@ import {
   updateInspirationItem,
 } from '@neram/database/queries/nexus';
 import { assertInspirationStaff, parseItemId, resolveInspirationCaller } from '@/lib/inspiration-access';
+import { removeItemThumbnail } from '@/lib/inspiration-images';
 import { parseItemPatch } from '@/lib/inspiration-patch';
 import { presentRow } from '@/lib/inspiration-present';
 import { ApiError, errorResponse } from '@/lib/api-errors';
@@ -79,7 +80,13 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
     assertInspirationStaff(caller);
     const id = parseItemId(params.id);
     const deleted = await deleteExemplar(id);
-    if (!deleted) throw new ApiError('Only exemplars added by a teacher can be deleted.', 400);
+    if (!deleted) {
+      // Nothing was deleted: either it is already gone, or it is a student's drawing.
+      const { item } = await getInspirationItem(id, caller.user.id, 'all');
+      if (!item) throw new ApiError('Drawing not found', 404);
+      throw new ApiError('Only exemplars added by a teacher can be deleted.', 400);
+    }
+    await removeItemThumbnail(id);
     return NextResponse.json({ deleted: true }, { headers: NO_STORE });
   } catch (err) {
     return errorResponse(err, 'Could not delete this exemplar');

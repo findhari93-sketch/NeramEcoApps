@@ -70,3 +70,16 @@ export async function prepareItemImage(item: ItemImageWork): Promise<void> {
     throw err;
   }
 }
+
+/**
+ * Best effort: drops the thumbnail prepareItemImage stored for a deleted item.
+ * A failure only leaves an orphan object behind, so it logs and never throws.
+ */
+export async function removeItemThumbnail(itemId: string): Promise<void> {
+  try {
+    const { error } = await getSupabaseAdminClient().storage.from(BUCKET).remove([thumbPath(itemId)]);
+    if (error) throw error;
+  } catch (err) {
+    console.warn(`[inspiration] could not remove the thumbnail for ${itemId}:`, err instanceof Error ? err.message : err);
+  }
+}

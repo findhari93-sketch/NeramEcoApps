@@ -26,6 +26,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { InspirationCard } from '@/lib/inspiration-present';
+import { HIDDEN_REASON_LABEL } from '@/lib/inspiration-rules';
 import { deleteExemplarItem, patchItem } from './inspiration-api';
 
 export interface InspirationCurationBarProps {
@@ -66,6 +67,10 @@ export default function InspirationCurationBar({ card, base, onChanged }: Inspir
     }
   };
 
+  // Showing an opted-out student's own drawing would override their choice.
+  const authorOptedOut = staff.hiddenReason === HIDDEN_REASON_LABEL.opted_out;
+  const optOutHelpId = `inspiration-opt-out-help-${card.id}`;
+
   const status = staff.visible
     ? staff.curation === 'shown'
       ? 'Shown to students (a teacher added it)'
@@ -87,7 +92,15 @@ export default function InspirationCurationBar({ card, base, onChanged }: Inspir
             Hide from students
           </Button>
         ) : (
-          <Button variant="contained" startIcon={<VisibilityOutlinedIcon />} disabled={busy} onClick={() => run(() => patchItem(getToken, card.id, { curation: 'shown' }))} sx={actionSx}>
+          <Button
+            // Outlined when refused: a disabled contained primary still reads as pressable in the shared theme.
+            variant={authorOptedOut ? 'outlined' : 'contained'}
+            startIcon={<VisibilityOutlinedIcon />}
+            disabled={busy || authorOptedOut}
+            aria-describedby={authorOptedOut ? optOutHelpId : undefined}
+            onClick={() => run(() => patchItem(getToken, card.id, { curation: 'shown' }))}
+            sx={actionSx}
+          >
             Show to students
           </Button>
         )}
@@ -128,6 +141,13 @@ export default function InspirationCurationBar({ card, base, onChanged }: Inspir
           </Button>
         )}
       </Box>
+
+      {!staff.visible && authorOptedOut && (
+        // Visible text, not a tooltip: a disabled button cannot take focus or hover.
+        <Typography id={optOutHelpId} variant="body2" color="text.secondary">
+          This student chose not to share their drawings.
+        </Typography>
+      )}
 
       {error && <Alert severity="error">{error}</Alert>}
 

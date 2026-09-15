@@ -3,13 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 
 /** Real sharp on a generated image; storage, the database and fetch are mocked. */
-const mocks = vi.hoisted(() => ({ upload: vi.fn(), setItemImageMeta: vi.fn() }));
+const mocks = vi.hoisted(() => ({ upload: vi.fn(), remove: vi.fn(), bucket: vi.fn(), setItemImageMeta: vi.fn() }));
 
 vi.mock('@neram/database', () => ({
   getSupabaseAdminClient: () => ({
     storage: {
-      from: () => ({
+      from: (bucket: string) => ({
+        _bucket: mocks.bucket(bucket),
         upload: (...a: unknown[]) => mocks.upload(...a),
+        remove: (...a: unknown[]) => mocks.remove(...a),
         getPublicUrl: (path: string) => ({ data: { publicUrl: `https://cdn.example/${path}` } }),
       }),
     },
@@ -19,7 +21,7 @@ vi.mock('@neram/database/queries/nexus', () => ({
   setItemImageMeta: (...a: unknown[]) => mocks.setItemImageMeta(...a),
 }));
 
-import { orientedAspect, prepareItemImage } from './inspiration-images';
+import { orientedAspect, prepareItemImage, removeItemThumbnail } from './inspiration-images';
 
 /** A public object in project storage, the only kind prepareItemImage fetches. */
 const img = (name: string) => `https://db.neramclasses.com/storage/v1/object/public/drawing-references/${name}`;
@@ -116,5 +118,29 @@ describe('prepareItemImage', () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(mocks.upload).not.toHaveBeenCalled();
     expect(mocks.setItemImageMeta).toHaveBeenCalledWith('item-6', { image_aspect: 0.75, thumbnail_url: url });
+  });
+});
+
+describe('removeItemThumbnail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("removes the item's stored thumbnail from drawing-references", async () => {
+    mocks.remove.mockResolvedValue({ data: [], error: null });
+    await removeItemThumbnail('item-7');
+    expect(mocks.bucket).toHaveBeenCalledWith('drawing-references');
+    expect(mocks.remove).toHaveBeenCalledWith(['inspiration-thumbs/item-7.jpg']);
+  });
+
+  it('logs a warning and never throws when storage refuses', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.remove.mockResolvedValue({ data: null, error: new Error('storage down') });
+    await expect(removeItemThumbnail('item-8')).resolves.toBeUndefined();
+    mocks.remove.mockRejectedValue(new Error('network'));
+    await expect(removeItemThumbnail('item-8')).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(String(warn.mock.calls[0][1])).toContain('storage down');
+    warn.mockRestore();
   });
 });

@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   updateInspirationItem: vi.fn(),
   setDrawingSharingOptOut: vi.fn(),
   deleteExemplar: vi.fn(),
+  removeItemThumbnail: vi.fn(),
+}));
+
+vi.mock('@/lib/inspiration-images', () => ({
+  removeItemThumbnail: (...a: unknown[]) => mocks.removeItemThumbnail(...a),
 }));
 
 vi.mock('@/lib/inspiration-access', async () => {
@@ -133,10 +138,40 @@ describe('/api/inspiration/items/[id]', () => {
     expect(mocks.updateInspirationItem).not.toHaveBeenCalled();
   });
 
-  it('deletes only exemplars', async () => {
+  it("deletes only exemplars: a student's drawing that exists is a 400", async () => {
     mocks.resolveCaller.mockResolvedValue(teacher);
     mocks.deleteExemplar.mockResolvedValue(false);
     const res = await DELETE(get(), ctx);
     expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('Only exemplars added by a teacher can be deleted.');
+    expect(mocks.getInspirationItem).toHaveBeenCalledWith(ID, 't1', 'all');
+    expect(mocks.removeItemThumbnail).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 when there is no such drawing to delete', async () => {
+    mocks.resolveCaller.mockResolvedValue(teacher);
+    mocks.deleteExemplar.mockResolvedValue(false);
+    mocks.getInspirationItem.mockResolvedValue({ item: null, pair: null });
+    const res = await DELETE(get(), ctx);
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe('Drawing not found');
+    expect(mocks.removeItemThumbnail).not.toHaveBeenCalled();
+  });
+
+  it('deletes an exemplar and its stored thumbnail', async () => {
+    mocks.resolveCaller.mockResolvedValue(teacher);
+    mocks.deleteExemplar.mockResolvedValue(true);
+    const res = await DELETE(get(), ctx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: true });
+    expect(mocks.deleteExemplar).toHaveBeenCalledWith(ID);
+    expect(mocks.removeItemThumbnail).toHaveBeenCalledWith(ID);
+  });
+
+  it('refuses a delete from a student', async () => {
+    mocks.resolveCaller.mockResolvedValue(student);
+    const res = await DELETE(get(), ctx);
+    expect(res.status).toBe(403);
+    expect(mocks.deleteExemplar).not.toHaveBeenCalled();
   });
 });
