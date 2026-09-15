@@ -92,6 +92,10 @@ export const FEATURES: FeatureDef[] = [
   // Peer-visible: classmates see featured sketches on the Sketchbook home. A
   // behaviour switch, not a page, and enforced server side in /api/sketchbook/featured.
   { id: 'student.sketchbook-featured-shelf', label: 'Show featured sketches to classmates', surface: 'student', group: 'Practice', paths: [], defaultEnabled: false },
+  // Peer-visible drawing library: teacher references, and student work rated 4
+  // stars and above, credited by name unless the student opted out. Enforced
+  // server side in /api/inspiration/*, which answers 404 while this is off.
+  { id: 'student.inspiration', label: 'Inspiration', surface: 'student', group: 'Practice', paths: ['/student/inspiration'], defaultEnabled: false },
   { id: 'student.exam-recall', label: 'Recall', surface: 'student', group: 'Practice', paths: ['/student/exam-recall'], defaultEnabled: false },
 
   { id: 'student.documents', label: 'Documents', surface: 'student', group: 'Manage', paths: ['/student/documents'], defaultEnabled: false },
@@ -141,6 +145,7 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.assignments', label: 'Assignments', surface: 'staff', group: 'Teaching', paths: ['/teacher/assignments'], defaultEnabled: true },
   { id: 'staff.drawing-reviews', label: 'Drawing Reviews', surface: 'staff', group: 'Teaching', paths: ['/teacher/drawing-reviews'], defaultEnabled: true },
   { id: 'staff.sketchbook', label: 'Sketchbooks', surface: 'staff', group: 'Teaching', paths: ['/teacher/sketchbook'], defaultEnabled: true },
+  { id: 'staff.inspiration', label: 'Inspiration', surface: 'staff', group: 'Teaching', paths: ['/teacher/inspiration'], defaultEnabled: true },
   // Behaviour switches, not pages. OFF until delivery is verified on
   // /api/admin/delivery-health: the first run would otherwise message most of a
   // class at 18:00 on the day it deploys.
