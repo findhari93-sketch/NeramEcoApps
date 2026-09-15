@@ -51,7 +51,7 @@ AS $fn$
          CASE WHEN r.opted_out THEN NULL ELSE r.u_name END,
          CASE WHEN r.opted_out THEN NULL ELSE r.u_first END,
          CASE WHEN r.opted_out THEN NULL ELSE r.u_last END,
-         r.u_alumni,
+         CASE WHEN r.opted_out THEN false ELSE r.u_alumni END,
          CASE WHEN r.opted_out THEN NULL ELSE r.u_year END,
          r.opted_out,
          EXISTS (SELECT 1 FROM nexus_inspiration_saves sv WHERE sv.item_id = r.id AND sv.user_id = p_viewer_id)
@@ -106,7 +106,6 @@ DECLARE
   v_label text;
   v_tsq   tsquery;
   v_any   tsquery;
-  v_hits  bigint := 0;
 BEGIN
   IF v_q = '' THEN
     RETURN QUERY
@@ -122,7 +121,7 @@ BEGIN
      ORDER BY
        CASE WHEN p_sort = 'saved' THEN b.save_count END DESC NULLS LAST,
        CASE WHEN p_sort = 'relevant' THEN b.is_featured END DESC NULLS LAST,
-       b.source_created_at DESC
+       b.source_created_at DESC, b.id
      LIMIT p_limit OFFSET p_offset;
     RETURN;
   END IF;
@@ -132,35 +131,11 @@ BEGIN
     v_tsq := v_tsq || phraseto_tsquery('simple', v_label);
   END LOOP;
 
-  RETURN QUERY
-  SELECT x.id, x.source_kind, x.source_submission_id, x.source_drawing_question_id,
-         x.image_url, x.thumbnail_url, x.image_aspect, x.title_override, x.brief,
-         x.category, x.type_slugs, x.tag_labels, x.exam_types, x.paper_years,
-         x.is_featured, x.is_visible, x.curation, x.auto_eligible, x.score_pct,
-         x.save_count, x.source_created_at,
-         x.author_id, x.author_name, x.author_first_name, x.author_last_name,
-         x.author_is_alumni, x.author_academic_year, x.author_opted_out, x.is_saved,
-         x.rnk, 'text'::text, count(*) OVER ()
-    FROM (SELECT b.*, ts_rank_cd(b.search_vector, v_tsq)::real AS rnk
-            FROM nexus_inspiration_base(p_types, p_exam, p_by, p_year, p_scope, p_viewer_id, p_saved_only) b
-           WHERE b.search_vector @@ v_tsq) x
-   ORDER BY
-     CASE WHEN p_sort = 'saved' THEN x.save_count END DESC NULLS LAST,
-     CASE WHEN p_sort = 'relevant' THEN x.rnk END DESC NULLS LAST,
-     CASE WHEN p_sort = 'relevant' THEN x.is_featured END DESC NULLS LAST,
-     x.source_created_at DESC
-   LIMIT p_limit OFFSET p_offset;
-
-  GET DIAGNOSTICS v_hits = ROW_COUNT;
-  IF v_hits > 0 OR p_offset > 0 THEN
-    RETURN;
-  END IF;
-
-  -- Nothing has every word. "3D bag hat" should still find the bag drawings.
-  v_any := nullif(replace(plainto_tsquery('simple', v_q)::text, ' & ', ' | '), '')::tsquery;
-  IF v_any IS NOT NULL THEN
-    v_any := v_any || coalesce(nullif(replace(plainto_tsquery('english', v_q)::text, ' & ', ' | '), '')::tsquery, v_any);
-
+  -- Choose the stage by existence, not by this page's row count: a later page
+  -- of a real text match must not be mistaken for "nothing matched".
+  PERFORM 1 FROM nexus_inspiration_base(p_types, p_exam, p_by, p_year, p_scope, p_viewer_id, p_saved_only) b
+   WHERE b.search_vector @@ v_tsq LIMIT 1;
+  IF FOUND THEN
     RETURN QUERY
     SELECT x.id, x.source_kind, x.source_submission_id, x.source_drawing_question_id,
            x.image_url, x.thumbnail_url, x.image_aspect, x.title_override, x.brief,
@@ -169,35 +144,76 @@ BEGIN
            x.save_count, x.source_created_at,
            x.author_id, x.author_name, x.author_first_name, x.author_last_name,
            x.author_is_alumni, x.author_academic_year, x.author_opted_out, x.is_saved,
-           x.rnk, 'any'::text, count(*) OVER ()
-      FROM (SELECT b.*, ts_rank_cd(b.search_vector, v_any)::real AS rnk
+           x.rnk, 'text'::text, count(*) OVER ()
+      FROM (SELECT b.*, ts_rank_cd(b.search_vector, v_tsq)::real AS rnk
               FROM nexus_inspiration_base(p_types, p_exam, p_by, p_year, p_scope, p_viewer_id, p_saved_only) b
-             WHERE b.search_vector @@ v_any) x
-     ORDER BY x.rnk DESC, x.is_featured DESC, x.source_created_at DESC
-     LIMIT p_limit;
+             WHERE b.search_vector @@ v_tsq) x
+     ORDER BY
+       CASE WHEN p_sort = 'saved' THEN x.save_count END DESC NULLS LAST,
+       CASE WHEN p_sort = 'relevant' THEN x.rnk END DESC NULLS LAST,
+       CASE WHEN p_sort = 'relevant' THEN x.is_featured END DESC NULLS LAST,
+       x.source_created_at DESC, x.id
+     LIMIT p_limit OFFSET p_offset;
+    RETURN;
+  END IF;
 
-    GET DIAGNOSTICS v_hits = ROW_COUNT;
-    IF v_hits > 0 THEN
+  -- Nothing has every word. "3D bag hat" should still find the bag drawings.
+  -- Same existence check and the same ORDER BY as the text stage, so paging
+  -- and p_sort behave identically once a query has fallen back to "any".
+  v_any := nullif(replace(plainto_tsquery('simple', v_q)::text, ' & ', ' | '), '')::tsquery;
+  IF v_any IS NOT NULL THEN
+    v_any := v_any || coalesce(nullif(replace(plainto_tsquery('english', v_q)::text, ' & ', ' | '), '')::tsquery, v_any);
+
+    PERFORM 1 FROM nexus_inspiration_base(p_types, p_exam, p_by, p_year, p_scope, p_viewer_id, p_saved_only) b
+     WHERE b.search_vector @@ v_any LIMIT 1;
+    IF FOUND THEN
+      RETURN QUERY
+      SELECT x.id, x.source_kind, x.source_submission_id, x.source_drawing_question_id,
+             x.image_url, x.thumbnail_url, x.image_aspect, x.title_override, x.brief,
+             x.category, x.type_slugs, x.tag_labels, x.exam_types, x.paper_years,
+             x.is_featured, x.is_visible, x.curation, x.auto_eligible, x.score_pct,
+             x.save_count, x.source_created_at,
+             x.author_id, x.author_name, x.author_first_name, x.author_last_name,
+             x.author_is_alumni, x.author_academic_year, x.author_opted_out, x.is_saved,
+             x.rnk, 'any'::text, count(*) OVER ()
+        FROM (SELECT b.*, ts_rank_cd(b.search_vector, v_any)::real AS rnk
+                FROM nexus_inspiration_base(p_types, p_exam, p_by, p_year, p_scope, p_viewer_id, p_saved_only) b
+               WHERE b.search_vector @@ v_any) x
+       ORDER BY
+         CASE WHEN p_sort = 'saved' THEN x.save_count END DESC NULLS LAST,
+         CASE WHEN p_sort = 'relevant' THEN x.rnk END DESC NULLS LAST,
+         CASE WHEN p_sort = 'relevant' THEN x.is_featured END DESC NULLS LAST,
+         x.source_created_at DESC, x.id
+       LIMIT p_limit OFFSET p_offset;
       RETURN;
     END IF;
   END IF;
 
   -- Typos. word_similarity scores the query against its best matching stretch
-  -- of the document, which is what makes a one-word typo clear 0.4.
+  -- of the document, which is what makes a one-word typo clear 0.4. First
+  -- page only: the inner ORDER BY + LIMIT picks the page, and the outer
+  -- count(*) OVER () then equals exactly the rows returned.
+  IF p_offset > 0 THEN
+    RETURN;
+  END IF;
+
   RETURN QUERY
-  SELECT x.id, x.source_kind, x.source_submission_id, x.source_drawing_question_id,
-         x.image_url, x.thumbnail_url, x.image_aspect, x.title_override, x.brief,
-         x.category, x.type_slugs, x.tag_labels, x.exam_types, x.paper_years,
-         x.is_featured, x.is_visible, x.curation, x.auto_eligible, x.score_pct,
-         x.save_count, x.source_created_at,
-         x.author_id, x.author_name, x.author_first_name, x.author_last_name,
-         x.author_is_alumni, x.author_academic_year, x.author_opted_out, x.is_saved,
-         x.rnk, 'fuzzy'::text, count(*) OVER ()
-    FROM (SELECT b.*, word_similarity(v_norm, b.search_text_norm)::real AS rnk
-            FROM nexus_inspiration_base(p_types, p_exam, p_by, p_year, p_scope, p_viewer_id, p_saved_only) b
-           WHERE v_norm <> '' AND word_similarity(v_norm, b.search_text_norm) >= 0.4) x
-   ORDER BY x.rnk DESC, x.source_created_at DESC
-   LIMIT p_limit;
+  SELECT y.id, y.source_kind, y.source_submission_id, y.source_drawing_question_id,
+         y.image_url, y.thumbnail_url, y.image_aspect, y.title_override, y.brief,
+         y.category, y.type_slugs, y.tag_labels, y.exam_types, y.paper_years,
+         y.is_featured, y.is_visible, y.curation, y.auto_eligible, y.score_pct,
+         y.save_count, y.source_created_at,
+         y.author_id, y.author_name, y.author_first_name, y.author_last_name,
+         y.author_is_alumni, y.author_academic_year, y.author_opted_out, y.is_saved,
+         y.rnk, 'fuzzy'::text, count(*) OVER ()
+    FROM (
+      SELECT x.*
+        FROM (SELECT b.*, word_similarity(v_norm, b.search_text_norm)::real AS rnk
+                FROM nexus_inspiration_base(p_types, p_exam, p_by, p_year, p_scope, p_viewer_id, p_saved_only) b
+               WHERE v_norm <> '' AND word_similarity(v_norm, b.search_text_norm) >= 0.4) x
+       ORDER BY x.rnk DESC, x.source_created_at DESC, x.id
+       LIMIT p_limit
+    ) y;
 END;
 $fn$;
 
@@ -268,9 +284,12 @@ LANGUAGE sql
 STABLE
 AS $fn$
   WITH me AS (
+    -- A hidden or opted-out seed must not leak its type_slugs into a similar
+    -- list: this only yields a row when the seed itself is visible.
     SELECT i.id, i.source_submission_id, i.source_drawing_question_id, i.type_slugs
       FROM nexus_inspiration_items i
      WHERE i.id = p_item_id
+       AND EXISTS (SELECT 1 FROM nexus_inspiration_base(NULL, NULL, NULL, NULL, 'visible', p_viewer_id, false) v WHERE v.id = p_item_id)
   ),
   scored AS (
     SELECT b.*,
@@ -292,7 +311,7 @@ AS $fn$
          s.rnk, 'similar'::text, count(*) OVER ()
     FROM scored s
    WHERE s.rnk > 0
-   ORDER BY s.rnk DESC, s.is_featured DESC, s.source_created_at DESC
+   ORDER BY s.rnk DESC, s.is_featured DESC, s.source_created_at DESC, s.id
    LIMIT p_limit
 $fn$;
 
@@ -329,7 +348,12 @@ AS $fn$
     FROM nexus_inspiration_base(NULL, NULL, NULL, NULL, p_scope, p_viewer_id, false) b
    WHERE b.id = p_item_id
       OR (b.source_submission_id IS NOT NULL
-          AND b.source_submission_id = (SELECT i.source_submission_id FROM nexus_inspiration_items i WHERE i.id = p_item_id))
+          AND b.source_submission_id = (SELECT i.source_submission_id FROM nexus_inspiration_items i WHERE i.id = p_item_id)
+          -- The pair must not surface unless the requested item itself
+          -- passes this same scope: otherwise a refused item's visible
+          -- sibling would leak it (and, via opt-out, tie a reference back
+          -- to the student who opted out).
+          AND EXISTS (SELECT 1 FROM nexus_inspiration_base(NULL, NULL, NULL, NULL, p_scope, p_viewer_id, false) me WHERE me.id = p_item_id))
 $fn$;
 
 REVOKE ALL ON FUNCTION nexus_inspiration_base(text[], text, text, smallint, text, uuid, boolean) FROM PUBLIC, anon, authenticated;
