@@ -45,7 +45,10 @@ export default function InspirationItemView({ mode, itemId }: { mode: Inspiratio
   const { data, error, isLoading, mutate } = useAuthSWR<ItemResponse>(`/api/inspiration/items/${itemId}`);
 
   useEffect(() => setBackHref(backHrefFor(mode)), [mode]);
-  useEffect(() => setView(null), [itemId]);
+  useEffect(() => {
+    setView(null);
+    setZoom(false);
+  }, [itemId]);
 
   const item = data?.item ?? null;
   const pair = data?.pair ?? null;
@@ -206,7 +209,7 @@ export default function InspirationItemView({ mode, itemId }: { mode: Inspiratio
                   {item.saved ? 'Saved' : 'Save'}
                 </Button>
                 {mode === 'staff' && item.staff && (
-                  <InspirationCurationBar card={item} base={base} onChanged={() => void mutate()} />
+                  <InspirationCurationBar key={item.id} card={item} base={base} onChanged={() => void mutate()} />
                 )}
               </>
             )}

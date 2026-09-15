@@ -49,12 +49,12 @@ export default function InspirationCurationBar({ card, base, onChanged }: Inspir
   const [title, setTitle] = useState(staff.titleOverride ?? '');
   const [brief, setBrief] = useState(card.brief ?? '');
 
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async (action: () => Promise<unknown>, { refresh = true }: { refresh?: boolean } = {}) => {
     setBusy(true);
     setError(null);
     try {
       await action();
-      onChanged();
+      if (refresh) onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the change');
     } finally {
@@ -95,7 +95,17 @@ export default function InspirationCurationBar({ card, base, onChanged }: Inspir
         <Button variant="outlined" color="inherit" startIcon={card.featured ? <StarIcon /> : <StarOutlineIcon />} disabled={busy} onClick={() => run(() => patchItem(getToken, card.id, { is_featured: !card.featured }))} sx={actionSx}>
           {card.featured ? 'Unfeature' : 'Feature'}
         </Button>
-        <Button variant="outlined" color="inherit" startIcon={<EditOutlinedIcon />} onClick={() => setEditing(true)} sx={actionSx}>
+        <Button
+          variant="outlined"
+          color="inherit"
+          startIcon={<EditOutlinedIcon />}
+          onClick={() => {
+            setTitle(staff.titleOverride ?? '');
+            setBrief(card.brief ?? '');
+            setEditing(true);
+          }}
+          sx={actionSx}
+        >
           Edit title and brief
         </Button>
         {staff.submissionId && (
@@ -175,16 +185,19 @@ export default function InspirationCurationBar({ card, base, onChanged }: Inspir
             Cancel
           </Button>
           <Button
-            color="error"
+            color={confirm === 'delete' ? 'error' : 'primary'}
             variant="contained"
             disabled={busy}
             sx={actionSx}
             onClick={() =>
               confirm === 'delete'
-                ? run(async () => {
-                    await deleteExemplarItem(getToken, card.id);
-                    router.push(base);
-                  })
+                ? run(
+                    async () => {
+                      await deleteExemplarItem(getToken, card.id);
+                      router.push(base);
+                    },
+                    { refresh: false },
+                  )
                 : run(async () => {
                     await patchItem(getToken, card.id, { hide_all_by_author: true });
                     setConfirm(null);
