@@ -4,6 +4,7 @@ import type { InspirationCuration, InspirationSourceKind } from '@neram/database
  * Which drawings students may see without a teacher deciding. The database
  * applies this in nexus_inspiration_sync_submission; this copy exists so the
  * rule is unit tested and so screens can explain it. Change both together.
+ * Score: on a marks assignment the marks decide; otherwise stars out of five, then marks.
  */
 export const ORIGINAL_SCORE_THRESHOLD = 0.8;
 
@@ -51,7 +52,7 @@ export const HIDDEN_REASON_LABEL: Record<Exclude<HiddenReason, null>, string> = 
   hidden_by_teacher: 'Hidden by a teacher',
   opted_out: 'Student chose not to share',
   not_rated: 'Not rated yet',
-  below_threshold: 'Below 4 stars',
+  below_threshold: 'Below 4 stars or 80%',
   review_not_finished: 'Review not finished',
 };
 

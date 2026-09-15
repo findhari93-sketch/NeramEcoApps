@@ -36,6 +36,6 @@ describe('presentRow', () => {
 
   it('tells a teacher why a drawing is not on the shelf', () => {
     const card = presentRow(makeRow({ is_visible: false, auto_eligible: false, score_pct: 0.6 }), { staff: true });
-    expect(card.staff).toMatchObject({ visible: false, curation: 'auto', hiddenReason: 'Below 4 stars' });
+    expect(card.staff).toMatchObject({ visible: false, curation: 'auto', hiddenReason: 'Below 4 stars or 80%' });
   });
 });

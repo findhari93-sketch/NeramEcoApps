@@ -30,7 +30,7 @@ describe('scorePct', () => {
     expect(scorePct(reviewed({ evaluation_type: 'stars', tutor_rating: 3, tutor_marks: 8, max_marks: 10 }))).toBe(0.6);
   });
 
-  it('includes a marks assignment result in originalEligible calculation', () => {
+  it('reads marks first on a marks assignment', () => {
     expect(scorePct(reviewed({ evaluation_type: 'marks', tutor_rating: 5, tutor_marks: 5, max_marks: 10 }))).toBe(0.5);
   });
 });
