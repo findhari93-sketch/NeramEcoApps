@@ -63,6 +63,7 @@ export * from './assignment-questions';
 export * from './drawing-checklist';
 export * from './drawing-gallery';
 export * from './sketchbook';
+export * from './inspiration';
 export * from './drawing-references';
 export * from './study-materials';
 export * from './study-annotations';

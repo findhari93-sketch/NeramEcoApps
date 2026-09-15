@@ -1,0 +1,40 @@
+import type { InspirationRow } from '@neram/database/queries/nexus';
+
+/** A realistic visible row for unit tests. Override only what a test is about. */
+export function makeRow(over: Partial<InspirationRow> = {}): InspirationRow {
+  return {
+    id: '11111111-1111-4111-8111-111111111111',
+    source_kind: 'submission_original',
+    source_submission_id: '22222222-2222-4222-8222-222222222222',
+    source_drawing_question_id: null,
+    image_url: 'https://example.com/original.jpg',
+    thumbnail_url: null,
+    image_aspect: 0.75,
+    title_override: null,
+    brief: 'Make a 3D composition using a travel bag, a hat, a walking stick and a water bottle',
+    category: '3d_composition',
+    type_slugs: ['3d_composition'],
+    tag_labels: [],
+    exam_types: ['NATA'],
+    paper_years: [2025],
+    is_featured: false,
+    is_visible: true,
+    curation: 'auto',
+    auto_eligible: true,
+    score_pct: 0.8,
+    save_count: 0,
+    source_created_at: '2026-09-01T10:00:00Z',
+    author_id: '33333333-3333-4333-8333-333333333333',
+    author_name: 'Harshitaa Thiyagu',
+    author_first_name: 'Harshitaa',
+    author_last_name: 'Thiyagu',
+    author_is_alumni: false,
+    author_academic_year: '2025-26',
+    author_opted_out: false,
+    is_saved: false,
+    rank: 0,
+    match_kind: 'text',
+    total_count: 1,
+    ...over,
+  };
+}

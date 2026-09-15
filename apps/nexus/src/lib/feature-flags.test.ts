@@ -283,3 +283,16 @@ describe('staff.photo-ms-push', () => {
     expect(resolveFlags({ 'staff.photo-ms-push': false })['staff.photo-ms-push']).toBe(false);
   });
 });
+
+describe('inspiration flags', () => {
+  it('ships the student library dark and keeps the teacher page on', () => {
+    expect(resolveFlags({})['student.inspiration']).toBe(false);
+    expect(resolveFlags({})['staff.inspiration']).toBe(true);
+  });
+
+  it('owns the Inspiration routes, including item pages', () => {
+    expect(featureForPath('/student/inspiration')?.id).toBe('student.inspiration');
+    expect(featureForPath('/student/inspiration/11111111-1111-4111-8111-111111111111')?.id).toBe('student.inspiration');
+    expect(featureForPath('/teacher/inspiration/saved')?.id).toBe('staff.inspiration');
+  });
+});
