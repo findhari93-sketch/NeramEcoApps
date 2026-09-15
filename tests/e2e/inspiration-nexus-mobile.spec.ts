@@ -1,13 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import path from 'path';
 import { APP_URLS, STUDENT_ACCOUNT, TEACHER_ACCOUNT, injectAuthForPage } from '../utils/credentials';
+import { createInspirationExemplar, deleteInspirationExemplar } from '../utils/inspiration-fixtures';
 import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../utils/mobile-helpers';
 
 /**
  * Inspiration on a phone.
  *
- * API half (serial): a teacher adds an exemplar; a student finds it by search,
+ * API half (serial): an exemplar image outside project storage is refused; a
+ * teacher uploads a real image and adds an exemplar; a student finds it by search,
  * sees no teacher fields, saves it and finds it in Saved; a student cannot edit;
  * the teacher hides it and the student can no longer open it (checked from both
  * sides: the student's own hidden-scope search and the teacher's). The exemplar
@@ -53,19 +53,27 @@ test.describe('Inspiration API', () => {
 
   test('a teacher adds an exemplar and a student finds it by search', async ({ request }) => {
     test.skip(!ready || !teacherToken, 'inspiration migrations not applied to this database');
-    const create = await request.post(`${NEXUS}/api/inspiration/exemplars`, {
+
+    // An image outside project storage is refused before anything is written.
+    const outside = await request.post(`${NEXUS}/api/inspiration/exemplars`, {
       headers: auth(teacherToken),
+      failOnStatusCode: false,
       data: {
         image_url: 'https://placehold.co/600x800.png',
         title: UNIQUE,
-        brief: 'A travel bag and a hat, drawn for the end to end run',
+        brief: 'Should never be created',
         type_slugs: ['3d_composition'],
-        exam_types: ['NATA'],
-        paper_years: [2025],
       },
     });
-    expect(create.status()).toBe(201);
-    exemplarId = (await create.json()).id;
+    expect(outside.status()).toBe(400);
+    expect((await outside.json()).error).toBe('Upload the drawing first.');
+
+    const fixture = await createInspirationExemplar(request, teacherToken, {
+      title: UNIQUE,
+      brief: 'A travel bag and a hat, drawn for the end to end run',
+    });
+    if ('error' in fixture) throw new Error(`could not create the exemplar: ${fixture.error}`);
+    exemplarId = fixture.id;
 
     const found = await request.get(`${NEXUS}/api/inspiration/search?q=${encodeURIComponent(UNIQUE)}`, { headers: auth(studentToken) });
     expect(found.status()).toBe(200);
@@ -125,8 +133,7 @@ test.describe('Inspiration API', () => {
 
   test.afterAll(async ({ request }) => {
     if (exemplarId && teacherToken) {
-      const res = await request.delete(`${NEXUS}/api/inspiration/items/${exemplarId}`, { headers: auth(teacherToken), failOnStatusCode: false });
-      expect([200, 404]).toContain(res.status());
+      expect([200, 404]).toContain(await deleteInspirationExemplar(request, teacherToken, exemplarId));
     }
   });
 });
@@ -151,47 +158,21 @@ test.describe('Inspiration on a phone', () => {
     }
     phoneTeacherToken = (await t.json()).testToken;
 
-    const imagePath = path.resolve(__dirname, '../../apps/nexus/public/icons/icon-512x512.png');
-    const upload = await request.post(`${NEXUS}/api/drawing/upload`, {
-      headers: auth(phoneTeacherToken),
-      multipart: {
-        file: { name: 'inspiration-e2e.png', mimeType: 'image/png', buffer: readFileSync(imagePath) },
-        bucket: 'drawing-references',
-      },
+    const fixture = await createInspirationExemplar(request, phoneTeacherToken, {
+      title: PHONE_FIXTURE_TITLE,
+      brief: 'A travel bag and a hat for the phone test',
     });
-    if (!upload.ok()) {
+    if ('error' in fixture) {
       phoneReady = false;
-      console.log(`[inspiration phone fixture] upload ${upload.status()}: ${await upload.text()}`);
+      console.log(`[inspiration phone fixture] ${fixture.error}`);
       return;
     }
-    const { url } = await upload.json();
-
-    const create = await request.post(`${NEXUS}/api/inspiration/exemplars`, {
-      headers: auth(phoneTeacherToken),
-      data: {
-        image_url: url,
-        title: PHONE_FIXTURE_TITLE,
-        brief: 'A travel bag and a hat for the phone test',
-        type_slugs: ['3d_composition'],
-        exam_types: ['NATA'],
-        paper_years: [2025],
-      },
-    });
-    if (!create.ok()) {
-      phoneReady = false;
-      console.log(`[inspiration phone fixture] create ${create.status()}: ${await create.text()}`);
-      return;
-    }
-    phoneFixtureId = (await create.json()).id;
+    phoneFixtureId = fixture.id;
   });
 
   test.afterAll(async ({ request }) => {
     if (phoneFixtureId && phoneTeacherToken) {
-      const res = await request.delete(`${NEXUS}/api/inspiration/items/${phoneFixtureId}`, {
-        headers: auth(phoneTeacherToken),
-        failOnStatusCode: false,
-      });
-      expect([200, 404]).toContain(res.status());
+      expect([200, 404]).toContain(await deleteInspirationExemplar(request, phoneTeacherToken, phoneFixtureId));
     }
   });
 
@@ -279,7 +260,9 @@ test.describe('Inspiration on a phone', () => {
     await page.getByRole('link', { name: 'Back to Inspiration' }).click();
     // Back returns to the URL saved when the tile was opened (history.replaceState),
     // which still carries q and, since the type chip was untoggled before the
-    // tile was opened, no type=.
-    await expect(page).toHaveURL(/\/student\/inspiration\?q=/);
+    // tile was opened, no type=. The dev server serves both projects' copies of
+    // this test at once, so the RSC round trip for Back can outlast the default
+    // 5s even on a warm route (seen: the results had painted, the URL lagged).
+    await expect(page).toHaveURL(/\/student\/inspiration\?q=/, { timeout: 30_000 });
   });
 });
