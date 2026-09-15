@@ -17,6 +17,12 @@
  * than the screen and a dead band beside the 1200px cap on wide monitors. The
  * grading `profile` page beside it is an ordinary page and stays capped.
  *
+ * One student assignment is the fourth: a drawing assignment opens as the same
+ * stage-and-rail workspace. The URL cannot tell a drawing assignment from a
+ * document one, so the page puts the padding back itself for every other view
+ * of it (loading, errors, documents, and drawings with the workspace switched
+ * off). The Assignments list stays capped.
+ *
  * Every other route keeps the Container untouched, which is why this is a route
  * test rather than a layout change.
  *
@@ -25,7 +31,7 @@
  * the chrome heights these routes leave behind.
  */
 const FULL_BLEED =
-  /^\/(teacher|student|parent)\/timetable\/?$|^\/teacher\/question-bank\/papers\/(?!overview\/?$)[^/]+\/?$|^\/teacher\/drawing-reviews\/(?!profile\/?$)[^/]+\/?$/;
+  /^\/(teacher|student|parent)\/timetable\/?$|^\/teacher\/question-bank\/papers\/(?!overview\/?$)[^/]+\/?$|^\/teacher\/drawing-reviews\/(?!profile\/?$)[^/]+\/?$|^\/student\/assignments\/[^/]+\/?$/;
 
 export function isFullBleedRoute(pathname: string | null | undefined): boolean {
   return !!pathname && FULL_BLEED.test(pathname);

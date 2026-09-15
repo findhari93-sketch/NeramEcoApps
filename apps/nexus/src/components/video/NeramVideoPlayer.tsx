@@ -8,6 +8,7 @@ import YouTubeSurface from './transports/YouTubeSurface';
 import ControlBar from './controls/ControlBar';
 import CenterOverlay from './controls/CenterOverlay';
 import CheckpointNotice from './controls/CheckpointNotice';
+import StreamStoppedNotice from './controls/StreamStoppedNotice';
 import Nudge from './controls/Nudge';
 import TitleBar from './controls/TitleBar';
 import type { SeekMark } from './controls/SeekBar';
@@ -73,6 +74,22 @@ const SEEK_TOLERANCE_SECONDS = 2;
 /** Filtered by `gate.maxRate`, so an owed checkpoint leaves only 1x. */
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 
+/**
+ * Renewals in a row that may pass without the picture moving. It bounds a
+ * genuinely dead recording, not a long class: real playback refills it.
+ */
+const MAX_STREAM_RECOVERIES = 4;
+/** Played this far past the point a renewal resumed at, the new stream works. */
+const RECOVERY_PROGRESS_SECONDS = 3;
+/**
+ * A stream this old may have outlived its grant (ten minutes), so a long stall
+ * on it is treated as expiry even without an error event. A younger stream that
+ * stalls is just a slow connection, and reloading would throw its buffer away.
+ */
+const STALE_STREAM_MS = 9 * 60_000;
+const STALL_RECOVERY_MS = 20_000;
+const STREAM_STOPPED_MESSAGE = 'The recording stopped loading.';
+
 export interface NeramVideoPlayerProps {
   source: VideoSource;
   gate: VideoGate;
@@ -87,15 +104,26 @@ export interface NeramVideoPlayerProps {
   /**
    * A caption track, served through the same grant as the bytes. HTML5 only:
    * YouTube's captions live inside its iframe and are not enumerable.
+   *
+   * Pass `src` as a function of the stream URL when the track rides the
+   * stream's grant, so it follows the stream when the player renews it. A
+   * fixed string would keep pointing at the grant that just expired.
    */
-  captions?: { src: string; label: string; lang: string } | null;
+  captions?: {
+    src: string | ((streamSrc: string) => string | null);
+    label: string;
+    lang: string;
+  } | null;
+  /**
+   * Never told about the 0:00 a stream reports while it is being renewed: that
+   * is the reload, not the student, and a progress heartbeat would save it.
+   */
   onTimeUpdate?: (seconds: number, duration: number) => void;
   /** Playback reached the end of the checkpoint the student owes. */
   onCheckpointReached?: () => void;
   onLoadedMetadata?: (duration: number) => void;
   /** A skip was refused. Counted server-side as a watch-honesty signal. */
   onBlockedSeek?: () => void;
-  onError?: () => void;
   allowFullscreen?: boolean;
   /**
    * Off by default, and it must stay off wherever the video is gated or
@@ -146,7 +174,6 @@ export default function NeramVideoPlayer({
   onCheckpointReached,
   onLoadedMetadata,
   onBlockedSeek,
-  onError,
   allowFullscreen = false,
   allowPictureInPicture = false,
   onFullscreenChange,
@@ -168,6 +195,40 @@ export default function NeramVideoPlayer({
   const [tracks, setTracks] = useState<ReadonlyArray<TextTrackDescriptor>>([]);
   const [activeTrack, setActiveTrack] = useState<string | null>(null);
 
+  /**
+   * Stream renewal. The caller hands over a src and a way to get a new one; the
+   * player decides when that is needed and keeps the student's place across it.
+   *
+   * `renewed` is keyed by the src it replaced, so a caller that supplies a
+   * different video gets that video, not a renewal of the previous one.
+   */
+  const callerSrc = source.kind === 'html5' ? source.src : null;
+  const callerSrcRef = useRef(callerSrc);
+  callerSrcRef.current = callerSrc;
+  const renewRef = useRef(source.kind === 'html5' ? source.renew : null);
+  renewRef.current = source.kind === 'html5' ? source.renew : null;
+  const [renewed, setRenewed] = useState<{ from: string; src: string } | null>(null);
+  const liveSrc = callerSrc && renewed?.from === callerSrc ? renewed.src : callerSrc;
+  const liveSrcRef = useRef(liveSrc);
+  liveSrcRef.current = liveSrc;
+  /** Bumped to rebuild the <video> for a URL that does not expire but failed anyway. */
+  const [reloadKey, setReloadKey] = useState(0);
+  const [streamFailure, setStreamFailure] = useState<string | null>(null);
+  /** The last position genuinely reached, which is what a renewal resumes. */
+  const lastGoodTimeRef = useRef<number | null>(null);
+  /**
+   * Set from the moment a stream fails until its replacement has loaded and been
+   * sent back to the right second. While it is set, ticks are the reload's, not
+   * the student's.
+   */
+  const pendingResumeRef = useRef<{ at: number; play: boolean } | null>(null);
+  const recoveredAtRef = useRef<number | null>(null);
+  const recoveriesRef = useRef(0);
+  const renewingRef = useRef(false);
+  const wantsPlayRef = useRef(false);
+  const streamStartedAtRef = useRef(Date.now());
+  const stalledSinceRef = useRef<number | null>(null);
+
   // A PiP window escapes the watermark and the control bar, so the decision is
   // not left to the caller alone: a gated or watermarked video refuses it here.
   const pipPermitted =
@@ -185,8 +246,8 @@ export default function NeramVideoPlayer({
   // latest gate without re-registering on every render.
   const gateRef = useRef(gate);
   gateRef.current = gate;
-  const cbRef = useRef({ onTimeUpdate, onCheckpointReached, onLoadedMetadata, onBlockedSeek, onError, onFullscreenChange });
-  cbRef.current = { onTimeUpdate, onCheckpointReached, onLoadedMetadata, onBlockedSeek, onError, onFullscreenChange };
+  const cbRef = useRef({ onTimeUpdate, onCheckpointReached, onLoadedMetadata, onBlockedSeek, onFullscreenChange });
+  cbRef.current = { onTimeUpdate, onCheckpointReached, onLoadedMetadata, onBlockedSeek, onFullscreenChange };
   const resumeRef = useRef(resumeAt);
   resumeRef.current = resumeAt;
   // One-shot: set only when onLoadedMetadata issues the silent mount-time
@@ -231,9 +292,74 @@ export default function NeramVideoPlayer({
       }
       transport.seek(target);
       setCurrent(target);
+      // Mid-renewal, the stream reloading underneath would otherwise put them
+      // back where it failed rather than where they just asked to go.
+      if (pendingResumeRef.current) pendingResumeRef.current.at = target;
     },
     [transportRef, duration],
   );
+
+  /**
+   * Get the stream going again from where it stopped.
+   *
+   * Reached from a media error, from a long stall on a stream old enough to have
+   * expired, and from Try again. The place to resume is captured once, at the
+   * first failure, from the last position genuinely reached, never from the live
+   * playhead: a stream that has just been swapped in reads 0:00 while it loads,
+   * and reading it there is what used to rewind a student to the start.
+   */
+  const recoverStream = useCallback(() => {
+    const from = callerSrcRef.current;
+    if (!from || renewingRef.current) return;
+
+    if (!pendingResumeRef.current) {
+      const transport = transportRef.current;
+      pendingResumeRef.current = {
+        at: lastGoodTimeRef.current ?? resumeRef.current,
+        play: wantsPlayRef.current || (transport ? !transport.isPaused() : false),
+      };
+    }
+
+    if (recoveriesRef.current >= MAX_STREAM_RECOVERIES) {
+      setBuffering(false);
+      setStreamFailure(STREAM_STOPPED_MESSAGE);
+      return;
+    }
+    recoveriesRef.current += 1;
+    setStreamFailure(null);
+    stalledSinceRef.current = null;
+
+    const renew = renewRef.current;
+    if (!renew) {
+      setReloadKey((k) => k + 1);
+      return;
+    }
+
+    renewingRef.current = true;
+    setBuffering(true);
+    renew()
+      .then((src) => {
+        if (callerSrcRef.current !== from) return;
+        if (!src) throw new Error(STREAM_STOPPED_MESSAGE);
+        // Handed back the URL already playing: rebuild the element, or the
+        // browser has nothing to reload.
+        if (src === liveSrcRef.current) setReloadKey((k) => k + 1);
+        setRenewed({ from, src });
+      })
+      .catch((err) => {
+        if (callerSrcRef.current !== from) return;
+        setBuffering(false);
+        setStreamFailure(err instanceof Error && err.message ? err.message : STREAM_STOPPED_MESSAGE);
+      })
+      .finally(() => {
+        renewingRef.current = false;
+      });
+  }, [transportRef]);
+
+  const retryStream = useCallback(() => {
+    recoveriesRef.current = 0;
+    recoverStream();
+  }, [recoverStream]);
 
   /**
    * Snap a seek back to the ceiling. Shared by the `seeked` listener (the <video>
@@ -267,6 +393,16 @@ export default function NeramVideoPlayer({
   const events: VideoSurfaceEvents = useMemo(
     () => ({
       onTick: (seconds, dur) => {
+        // A stream being renewed reports 0:00 while it reloads. That is not
+        // where the student is, and passing it on would let a heartbeat save it
+        // and the gate treat it as a position.
+        if (pendingResumeRef.current) return;
+        lastGoodTimeRef.current = seconds;
+        if (recoveredAtRef.current !== null && seconds >= recoveredAtRef.current + RECOVERY_PROGRESS_SECONDS) {
+          recoveriesRef.current = 0;
+          recoveredAtRef.current = null;
+        }
+        if (stalledSinceRef.current !== null && seconds > 0) stalledSinceRef.current = null;
         setCurrent(seconds);
         if (dur > 0) setDuration(dur);
         cbRef.current.onTimeUpdate?.(seconds, dur);
@@ -301,21 +437,38 @@ export default function NeramVideoPlayer({
       onSeeked: (seconds) => {
         clampIfBeyond(seconds);
       },
-      onPlayingChange: setPlaying,
+      onPlayingChange: (isPlaying) => {
+        // The pause a reload fires is the browser's, not a choice to stop.
+        if (!pendingResumeRef.current) wantsPlayRef.current = isPlaying;
+        setPlaying(isPlaying);
+      },
       onLoadedMetadata: (dur) => {
         setDuration(dur);
         cbRef.current.onLoadedMetadata?.(dur);
         volumeRef.current.applyToTransport();
         readTracks();
+        // A renewed stream goes back to where the old one stopped; a first load
+        // goes to the caller's resume point.
+        const pending = pendingResumeRef.current;
         // Clamped to the boundary, not trusted as stored. The old inline player
         // banked whatever position the student dragged the native scrubber to,
         // so restoring it verbatim would hand the skip straight back.
         const unlocked = gateRef.current.unlockedUntil;
         const ceiling = unlocked > 0 ? Math.min(unlocked, dur) : dur;
-        const target = Math.min(resumeRef.current, ceiling);
+        const target = Math.min(pending ? pending.at : resumeRef.current, ceiling);
         if (target > 0 && target < dur - 1) {
           suppressNextCheckpointRef.current = true;
           transportRef.current?.seek(target);
+        }
+        if (pending) {
+          pendingResumeRef.current = null;
+          recoveredAtRef.current = target;
+          lastGoodTimeRef.current = target;
+          streamStartedAtRef.current = Date.now();
+          if (pending.play) {
+            wantsPlayRef.current = true;
+            transportRef.current?.play();
+          }
         }
       },
       // A checkpoint whose end runs past the file is never reached by the tick
@@ -331,15 +484,52 @@ export default function NeramVideoPlayer({
           setSpeed(rate);
         }
       },
-      onError: () => cbRef.current.onError?.(),
-      onWaiting: () => setBuffering(true),
-      onPlayable: () => setBuffering(false),
+      // Only the <video> surface reports these. A proxied grant lasts ten
+      // minutes, so on a long class this is the expected path, not a fault.
+      onError: recoverStream,
+      onWaiting: () => {
+        if (stalledSinceRef.current === null) stalledSinceRef.current = Date.now();
+        setBuffering(true);
+      },
+      onPlayable: () => {
+        stalledSinceRef.current = null;
+        setBuffering(false);
+      },
       onVolumeChange: (value, muted) => volumeRef.current.syncFromSurface(value, muted),
       onPipChange: setPipActive,
       onTextTracksChange: readTracks,
     }),
-    [clampIfBeyond, transportRef, readTracks],
+    [clampIfBeyond, transportRef, readTracks, recoverStream],
   );
+
+  // A stall on a stream old enough to have expired is treated as expiry. Some
+  // browsers answer a refused byte range by waiting rather than by erroring,
+  // which left the picture frozen with nothing to recover it. One check every
+  // few seconds, only while an HTML5 stream is mounted.
+  useEffect(() => {
+    if (source.kind !== 'html5' || streamFailure) return;
+    const id = setInterval(() => {
+      const since = stalledSinceRef.current;
+      if (since === null || renewingRef.current) return;
+      if (!wantsPlayRef.current) return;
+      const now = Date.now();
+      if (now - since < STALL_RECOVERY_MS) return;
+      if (now - streamStartedAtRef.current < STALE_STREAM_MS) return;
+      recoverStream();
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [source.kind, streamFailure, recoverStream]);
+
+  // A different video from the caller starts clean: no inherited failures, and
+  // no resume point carried over from the one before.
+  useEffect(() => {
+    streamStartedAtRef.current = Date.now();
+    lastGoodTimeRef.current = null;
+    pendingResumeRef.current = null;
+    recoveredAtRef.current = null;
+    recoveriesRef.current = 0;
+    setStreamFailure(null);
+  }, [callerSrc]);
 
   // Pull the rate down the moment the ceiling drops, without waiting for the
   // student to touch anything.
@@ -546,6 +736,13 @@ export default function NeramVideoPlayer({
    */
   const fromOverlay = (e: React.SyntheticEvent) => isInsideVideoOverlayDialog(e.target);
 
+  const liveCaptions = useMemo(() => {
+    if (!captions || !liveSrc) return null;
+    if (typeof captions.src === 'string') return captions as { src: string; label: string; lang: string };
+    const src = captions.src(liveSrc);
+    return src ? { src, label: captions.label, lang: captions.lang } : null;
+  }, [captions, liveSrc]);
+
   return (
     <Box
       ref={containerRef}
@@ -595,17 +792,18 @@ export default function NeramVideoPlayer({
           : null),
       }}
     >
-      {source.kind === 'html5' ? (
+      {source.kind === 'html5' && liveSrc ? (
         <Html5Surface
-          src={source.src}
+          key={reloadKey}
+          src={liveSrc}
           events={events}
           transportRef={transportRef}
           videoRef={videoRef}
           onClick={togglePlay}
           allowPictureInPicture={pipPermitted}
-          captions={captions}
+          captions={liveCaptions}
         />
-      ) : (
+      ) : source.kind === 'youtube' ? (
         <YouTubeSurface
           youtubeId={source.youtubeId}
           events={events}
@@ -613,9 +811,11 @@ export default function NeramVideoPlayer({
           rawPlayerRef={youtubePlayerRef}
           onClick={togglePlay}
         />
-      )}
+      ) : null}
 
       {watermark && <Watermark name={watermark.name} code={watermark.code} />}
+
+      {streamFailure && <StreamStoppedNotice message={streamFailure} onRetry={retryStream} />}
 
       {title && fullscreen.isFullscreen && chrome.visible && <TitleBar title={title} />}
 

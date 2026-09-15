@@ -162,6 +162,14 @@ test.describe('Replacing an unmarked submission', () => {
     await injectAuthForPage(page, 'student');
     await page.goto(`${APP_URLS.nexus}/student/assignments/${assignmentId}`);
 
+    // A fresh context is a first visit, so the welcome tour opens, and while a MUI
+    // dialog is open the rest of the app is aria-hidden to getByRole.
+    await page.getByText(/until your teacher marks it/i).waitFor({ state: 'attached', timeout: 90_000 });
+    const skipTour = page.getByRole('dialog').getByRole('button', { name: 'Skip' });
+    if (await skipTour.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false)) {
+      await skipTour.click();
+    }
+
     await expect(page.getByRole('button', { name: /replace your file/i })).toBeVisible({
       timeout: 30_000,
     });

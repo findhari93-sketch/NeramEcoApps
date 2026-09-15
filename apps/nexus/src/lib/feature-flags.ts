@@ -52,6 +52,14 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.timetable', label: 'Timetable', surface: 'student', group: 'Live Class', paths: ['/student/timetable'], defaultEnabled: false },
   { id: 'student.course-plan', label: 'Course Plan', surface: 'student', group: 'Live Class', paths: ['/student/course-plan'], defaultEnabled: false },
   { id: 'student.assignments', label: 'Assignments', surface: 'student', group: 'Live Class', paths: ['/student/assignments'], defaultEnabled: false },
+  /**
+   * Not a page (`paths: []`). A drawing assignment opens as a workspace: the
+   * drawing fixed on one side, the teacher's voice note, notes and scores
+   * scrolling beside it, earlier attempts switched in place. Off, the same URL
+   * keeps the single-column page. The server no longer sends an unreleased
+   * review either way; this only changes the layout.
+   */
+  { id: 'student.assignment-workspace', label: 'Drawing assignment workspace', surface: 'student', group: 'Live Class', paths: [], defaultEnabled: false },
   { id: 'student.catchup', label: 'Catch-up', surface: 'student', group: 'Live Class', paths: ['/student/catch-up'], defaultEnabled: true },
   /**
    * Not a page (`paths: []`). Shows classmates who have nothing left to catch up

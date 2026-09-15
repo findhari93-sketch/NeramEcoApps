@@ -5,14 +5,17 @@ import { Box, Typography, CircularProgress, Button } from '@neram/ui';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
 import { computeGate, type VideoGateMode } from '@/lib/video-gate';
 import type { VideoTransport } from '@/components/video/types';
+import { renewFromEmbed } from '@/components/video/renew-from-embed';
 import { useAuthFetch } from '@/components/curriculum/shared';
 
 /**
  * Gated player for a class recording, inline on the recap page.
  *
- * This component's job is the plumbing: mint a streaming grant, renew it
- * silently when it expires mid-class, and fall back to the YouTube backup when
- * the Teams copy has aged out. The gating itself belongs to NeramVideoPlayer,
+ * This component's job is the plumbing: mint a streaming grant, tell the player
+ * how to renew it, and fall back to the YouTube backup when the Teams copy has
+ * aged out. Renewing mid-class used to be done here, and it rewound students to
+ * 0:00 whenever the stream it had just swapped in failed as well (NXS-0123); the
+ * player does it now, for every screen at once. The gating belongs to NeramVideoPlayer,
  * the same component Focus Mode and the Foundation chapters use, and the rules
  * it enforces come from lib/video-gate.ts.
  *
@@ -34,13 +37,6 @@ import { useAuthFetch } from '@/components/curriculum/shared';
  * Sharing one gating model is the fix. A bounded scrub track cannot express the
  * skip in the first place, so there is nothing to undo afterwards.
  */
-
-/**
- * Grant renewals are routine on a long class, so this has to allow several.
- * It bounds genuine failure, not expiry: the counter resets as soon as playback
- * actually advances.
- */
-const MAX_RETRIES = 4;
 
 export interface RecapPlayerSection {
   id: string;
@@ -88,7 +84,6 @@ export default function RecapPlayer({
   mode = 'gated',
 }: RecapPlayerProps) {
   const authFetch = useAuthFetch();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   // Whichever surface is live. The checkpoint list drives playback through this,
   // so it has to work on the YouTube path too.
   const transportRef = useRef<VideoTransport | null>(null);
@@ -100,9 +95,6 @@ export default function RecapPlayer({
   const [furthest, setFurthest] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const retryCountRef = useRef(0);
-  const wasPlayingRef = useRef(false);
 
   const onSectionEndRef = useRef(onSectionEnd);
   onSectionEndRef.current = onSectionEnd;
@@ -168,19 +160,30 @@ export default function RecapPlayer({
    *
    * Derived from the stream URL rather than fetched separately, because the two
    * are authorised by the same signed token and minting a second one would just
-   * be a second chance to get out of step. When the grant is re-minted mid-class
-   * this changes with it, and the <track> reloads against the fresh token.
+   * be a second chance to get out of step. A function of the URL, so when the
+   * player renews the grant mid-class the <track> follows it to the fresh token.
    *
    * A recording with no stored transcript answers 404 and the browser reports no
    * usable track, so the captions entry simply never appears in the menu. That is
    * the desired behaviour: there is nothing to offer.
    */
-  const captions = useMemo(() => {
-    if (!streamUrl) return null;
-    const vt = streamUrl.split('vt=')[1];
-    if (!vt) return null;
-    return { src: `/api/media/captions?vt=${vt}`, label: 'English', lang: 'en' };
-  }, [streamUrl]);
+  const captions = useMemo(
+    () => ({
+      src: (src: string) => {
+        const vt = src.split('vt=')[1];
+        return vt ? `/api/media/captions?vt=${vt}` : null;
+      },
+      label: 'English',
+      lang: 'en',
+    }),
+    [],
+  );
+
+  /** Stable, so the player's renewal is not re-created on every render. */
+  const renew = useMemo(
+    () => renewFromEmbed(authFetch, `/api/student/class-recaps/${recapId}/video-embed`),
+    [authFetch, recapId],
+  );
 
   // Read inside the __recapPlayer handle, which is registered once per source.
   const gateRef = useRef(gate);
@@ -193,8 +196,7 @@ export default function RecapPlayer({
       // authFetch fetches a fresh Microsoft token on every call and turns a
       // 401 into a friendly "session expired" message plus a rate-limited
       // re-auth, instead of a raw upstream error rendered straight into the
-      // player. That matters here because this same call is what "Try again"
-      // and the auto-retry-on-video-error path both re-run.
+      // player. Renewal goes through the same door (see `renew`).
       const data = await authFetch(`/api/student/class-recaps/${recapId}/video-embed`);
       setWatermark(data.watermark || { name: 'Neram student', code: 'NX-000000' });
       if (data.video_source === 'youtube' || data.mode === 'youtube') {
@@ -204,14 +206,10 @@ export default function RecapPlayer({
         setStreamUrl(data.streamUrl || data.src);
         setYoutubeId(null);
       }
-      // Only seed the resume point on the first load. A re-mint mid-class sets
-      // it from the live playhead instead (see handleVideoError), and taking
-      // the server's stale value there would jump the student backwards.
+      // Only seed the resume point on the first load. "Try again" after a
+      // failed first load comes back through here, and the server's value is
+      // the same one it gave before.
       setResumeAt((prev) => (prev > 0 ? prev : Number(data.resume_at) || 0));
-      // Deliberately NOT resetting the retry counter here. A successful mint
-      // says nothing about whether the video then plays, and resetting on the
-      // fetch turns "fails instantly, every time" into an endless refetch loop.
-      // It resets on real playback progress instead, in the tick handler.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load recording');
     } finally {
@@ -253,11 +251,6 @@ export default function RecapPlayer({
   }, [streamUrl, youtubeId]);
 
   const handleTick = useCallback((seconds: number, dur: number) => {
-    // Playback is genuinely progressing, so whatever went wrong before is behind
-    // us and the retry budget is refilled. Anchored here rather than on a
-    // successful fetch so a video that mints fine but never plays still gives up
-    // instead of refetching forever.
-    if (seconds > 0) retryCountRef.current = 0;
     setFurthest((f) => (seconds > f ? seconds : f));
     onTimeUpdateRef.current?.(seconds, dur);
   }, []);
@@ -284,34 +277,6 @@ export default function RecapPlayer({
     if (idx >= 0) onSectionEndRef.current(idx);
   }, []);
 
-  /**
-   * A streaming grant lasts ten minutes, so a class longer than that WILL fail
-   * mid-playback: the browser asks for the next byte range with an expired token
-   * and gets a 401. That is expected, not exceptional, so recover silently.
-   * Remember where they were, mint a fresh grant, and seek back on reload, which
-   * makes an expiry invisible apart from a moment of buffering.
-   */
-  const handleVideoError = useCallback(() => {
-    if (retryCountRef.current >= MAX_RETRIES) {
-      setError('The recording failed to load. Please refresh the page.');
-      return;
-    }
-    retryCountRef.current++;
-    const video = videoRef.current;
-    setResumeAt(video?.currentTime ?? 0);
-    wasPlayingRef.current = !(video?.paused ?? true);
-    fetchStreamUrl();
-  }, [fetchStreamUrl]);
-
-  /** Resume playing after a silent re-mint, but never on the first load. */
-  const handleLoadedMetadata = useCallback((d: number) => {
-    setDuration(d);
-    if (wasPlayingRef.current) {
-      wasPlayingRef.current = false;
-      setTimeout(() => videoRef.current?.play().catch(() => {}), 120);
-    }
-  }, []);
-
   if (loading && !streamUrl && !youtubeId) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', bgcolor: '#000' }}>
@@ -321,9 +286,7 @@ export default function RecapPlayer({
   }
 
   if (youtubeId) {
-    // No onError re-mint here: there is no grant to renew, and handleVideoError
-    // reads a <video> ref this path does not have, so it would reset the resume
-    // point to zero and rewind the student.
+    // Nothing to renew on this path: a YouTube id does not expire.
     return (
       <NeramVideoPlayer
         source={{ kind: 'youtube', youtubeId }}
@@ -349,10 +312,7 @@ export default function RecapPlayer({
         <Button
           size="small"
           variant="outlined"
-          onClick={() => {
-            retryCountRef.current = 0;
-            fetchStreamUrl();
-          }}
+          onClick={() => fetchStreamUrl()}
           sx={{ minHeight: 40, textTransform: 'none', color: '#fff', borderColor: 'rgba(255,255,255,0.5)' }}
         >
           Try again
@@ -363,9 +323,8 @@ export default function RecapPlayer({
 
   return (
     <NeramVideoPlayer
-      source={{ kind: 'html5', src: streamUrl }}
+      source={{ kind: 'html5', src: streamUrl, renew }}
       gate={gate}
-      videoRef={videoRef}
       transportRef={transportRef}
       watermark={watermark}
       title={title}
@@ -374,8 +333,7 @@ export default function RecapPlayer({
       resumeAt={resumeAt}
       onTimeUpdate={handleTick}
       onCheckpointReached={handleBoundary}
-      onLoadedMetadata={handleLoadedMetadata}
-      onError={handleVideoError}
+      onLoadedMetadata={setDuration}
       allowFullscreen
       onFullscreenChange={onFullscreenChange}
     />

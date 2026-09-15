@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -29,7 +29,10 @@ import { OPEN_GATE } from '@/lib/video-gate';
  * watch, wherever the file happens to live.
  *
  * SharePoint refuses to be iframed, so this points the shared player at a
- * short-lived pre-authenticated URL. Those URLs expire, hence the retry.
+ * short-lived URL: a ten minute grant for students, a Graph download URL for
+ * staff. Both expire inside a class, so the player is handed `renew` and keeps
+ * the place across it. This dialog used to renew by rebuilding the player,
+ * which put the student back at 0:00, paused, every ten minutes (NXS-0123).
  *
  * Ungated: this is a teacher, or a student reviewing a class they have no debt
  * on, so there are no checkpoints to earn. That is now a fact the stream route
@@ -41,8 +44,6 @@ import { OPEN_GATE } from '@/lib/video-gate';
  * Download and Picture in picture entries that a plain <video controls> was
  * handing out with the file.
  */
-
-const MAX_RETRIES = 2;
 
 interface RecordingPlayerDialogProps {
   open: boolean;
@@ -85,53 +86,69 @@ export default function RecordingPlayerDialog({
    * the rule.
    */
   const [catchupUrl, setCatchupUrl] = useState<string | null>(null);
-  const retryCountRef = useRef(0);
+
+  /** One request for a stream URL, with a token fetched now rather than held. */
+  const requestStream = useCallback(async (): Promise<
+    { streamUrl: string } | { error: string; catchupUrl: string | null }
+  > => {
+    const token = await getToken();
+    if (!token) return { error: 'Your session expired. Sign in again to watch this recording.', catchupUrl: null };
+    const res = await fetch(`/api/timetable/${classId}/recording-stream`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.streamUrl) return { streamUrl: data.streamUrl };
+    return {
+      error: data.error || 'Could not load this recording.',
+      catchupUrl: typeof data.catchup_url === 'string' ? data.catchup_url : null,
+    };
+  }, [classId, getToken]);
 
   const fetchStreamUrl = useCallback(async () => {
     setLoading(true);
     setError(null);
     setCatchupUrl(null);
     try {
-      const token = await getToken();
-      if (!token) {
-        setError('Your session expired. Sign in again to watch this recording.');
-        return;
-      }
-      const res = await fetch(`/api/timetable/${classId}/recording-stream`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.streamUrl) {
-        setStreamUrl(data.streamUrl);
-        retryCountRef.current = 0;
+      const result = await requestStream();
+      if ('streamUrl' in result) {
+        setStreamUrl(result.streamUrl);
       } else {
-        setError(data.error || 'Could not load this recording.');
-        if (typeof data.catchup_url === 'string') setCatchupUrl(data.catchup_url);
+        setError(result.error);
+        setCatchupUrl(result.catchupUrl);
       }
     } catch {
       setError('Network error, could not load the recording.');
     } finally {
       setLoading(false);
     }
-  }, [classId, getToken]);
+  }, [requestStream]);
 
   useEffect(() => {
     if (!open) return;
-    retryCountRef.current = 0;
     setStreamUrl(null);
     fetchStreamUrl();
   }, [open, fetchStreamUrl]);
 
-  // A pre-authenticated URL that expired mid-session looks like a decode error.
-  // Fetch a fresh one before telling the user anything is wrong.
-  const handleVideoError = useCallback(() => {
-    if (retryCountRef.current < MAX_RETRIES) {
-      retryCountRef.current++;
-      fetchStreamUrl();
-    } else {
-      setError('The recording stopped loading. Close this and try again.');
-    }
-  }, [fetchStreamUrl]);
+  /**
+   * Handed to the player, which calls it when the URL runs out mid-watch.
+   *
+   * One refusal is not worth a Try again: a guided recap can be published while
+   * a student is partway through this ungated copy (pressing Watch here queues
+   * one), and from then on the route sends them to catch-up. Asking again gets
+   * the same answer, so the dialog switches to its "Do catch-up" state instead.
+   */
+  const renew = useMemo(
+    () => async () => {
+      const result = await requestStream();
+      if ('streamUrl' in result) return result.streamUrl;
+      if (result.catchupUrl) {
+        setError(result.error);
+        setCatchupUrl(result.catchupUrl);
+      }
+      throw new Error(result.error);
+    },
+    [requestStream],
+  );
 
   return (
     <Dialog
@@ -194,7 +211,11 @@ export default function RecordingPlayerDialog({
                   variant="contained"
                   onClick={() => {
                     onClose();
-                    router.push(catchupUrl);
+                    // Already on that catch-up page, which loaded before the
+                    // guided recap existed: a push would change nothing on
+                    // screen, so reload it to show the recap.
+                    if (window.location.pathname === catchupUrl) window.location.reload();
+                    else router.push(catchupUrl);
                   }}
                   sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
                 >
@@ -215,14 +236,13 @@ export default function RecordingPlayerDialog({
           {!loading && !error && streamUrl && (
             <Box sx={{ position: 'absolute', inset: 0 }}>
               <NeramVideoPlayer
-                source={{ kind: 'html5', src: streamUrl }}
+                source={{ kind: 'html5', src: streamUrl, renew }}
                 gate={OPEN_GATE}
                 allowFullscreen
                 // Safe here and only here: no checkpoints to escape and no
                 // watermark to leave behind. The player refuses this anyway if
                 // either of those stops being true.
                 allowPictureInPicture
-                onError={handleVideoError}
               />
             </Box>
           )}

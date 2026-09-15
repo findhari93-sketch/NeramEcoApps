@@ -1,6 +1,6 @@
-import { render, act, screen, fireEvent } from '@testing-library/react';
+import { render, act, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
-import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeAll, beforeEach, type Mock } from 'vitest';
 import NeramVideoPlayer from './NeramVideoPlayer';
 import type { VideoGate } from '@/lib/video-gate';
 
@@ -117,7 +117,7 @@ function setup(
   const gate = gateFor(opts);
   const utils = render(
     <NeramVideoPlayer
-      source={{ kind: 'html5', src: 'blob:stream' }}
+      source={{ kind: 'html5', src: 'blob:stream', renew: null }}
       gate={gate}
       videoRef={ref}
       watermark={WATERMARK}
@@ -170,7 +170,7 @@ describe('NeramVideoPlayer: the scrub track cannot express a skip', () => {
     fire(video, 'loadedmetadata');
     rerender(
       <NeramVideoPlayer
-        source={{ kind: 'html5', src: 'blob:stream' }}
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
         gate={gateFor({ unlocked: 300 })}
         videoRef={ref}
         watermark={WATERMARK}
@@ -235,7 +235,7 @@ describe('NeramVideoPlayer: the scrub track cannot express a skip', () => {
     });
     rerender(
       <NeramVideoPlayer
-        source={{ kind: 'html5', src: 'blob:stream' }}
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
         gate={gateFor({ unlocked: 300 })}
         videoRef={ref}
         watermark={WATERMARK}
@@ -262,7 +262,7 @@ describe('NeramVideoPlayer: the scrub track cannot express a skip', () => {
     const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
     render(
       <NeramVideoPlayer
-        source={{ kind: 'html5', src: 'blob:stream' }}
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
         gate={gateFor({ unlocked: 120 })}
         videoRef={ref}
         watermark={WATERMARK}
@@ -437,7 +437,7 @@ describe('NeramVideoPlayer: fullscreen host', () => {
     const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
     render(
       <NeramVideoPlayer
-        source={{ kind: 'html5', src: 'blob:stream' }}
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
         gate={gateFor({ unlocked: 120 })}
         videoRef={ref}
         watermark={WATERMARK}
@@ -455,7 +455,7 @@ describe('NeramVideoPlayer: fullscreen host', () => {
     const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
     const { unmount } = render(
       <NeramVideoPlayer
-        source={{ kind: 'html5', src: 'blob:stream' }}
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
         gate={gateFor({ unlocked: 120 })}
         videoRef={ref}
         watermark={WATERMARK}
@@ -485,7 +485,7 @@ describe('NeramVideoPlayer: fullscreen host', () => {
     try {
       const { container } = render(
         <NeramVideoPlayer
-          source={{ kind: 'html5', src: 'blob:stream' }}
+          source={{ kind: 'html5', src: 'blob:stream', renew: null }}
           gate={gateFor({ unlocked: 120 })}
           videoRef={ref}
           watermark={WATERMARK}
@@ -533,7 +533,7 @@ describe('NeramVideoPlayer: the pause at a checkpoint is explained', () => {
     const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
     const { rerender } = render(
       <NeramVideoPlayer
-        source={{ kind: 'html5', src: 'blob:stream' }}
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
         gate={gateFor({ unlocked: 120 })}
         videoRef={ref}
         watermark={WATERMARK}
@@ -551,7 +551,7 @@ describe('NeramVideoPlayer: the pause at a checkpoint is explained', () => {
 
     rerender(
       <NeramVideoPlayer
-        source={{ kind: 'html5', src: 'blob:stream' }}
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
         gate={gateFor({ unlocked: 300 })}
         videoRef={ref}
         watermark={WATERMARK}
@@ -564,7 +564,7 @@ describe('NeramVideoPlayer: the pause at a checkpoint is explained', () => {
     const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
     render(
       <NeramVideoPlayer
-        source={{ kind: 'html5', src: 'blob:stream' }}
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
         gate={gateFor({ unlocked: 0, passed: true })}
         videoRef={ref}
       />,
@@ -588,6 +588,244 @@ describe('NeramVideoPlayer: buffering', () => {
     expect(screen.getByRole('status', { name: /buffering/i })).toBeTruthy();
     fire(video, 'playing');
     expect(screen.queryByRole('status', { name: /buffering/i })).toBeNull();
+  });
+});
+
+describe('NeramVideoPlayer: an expiring stream is renewed without losing the place', () => {
+  /**
+   * NXS-0119, NXS-0123 and NXS-0124, which were one bug.
+   *
+   * A recording plays from a URL carrying a signed grant that lasts ten
+   * minutes, and the proxy serves it in 4MB pieces, so every watch longer than
+   * that outlives its URL: the next piece is refused and the <video> errors.
+   * Recovering was left to each screen, and they drifted. Focus Mode and the
+   * study-track page never renewed, so the picture froze. The recording dialog
+   * and the Foundation player renewed by rebuilding the player, which started
+   * again at 0:00, paused. The recap player kept its place only when the error
+   * came from the old stream: an error on the stream it had just swapped in read
+   * the playhead mid-reload, which is 0:00, and rewound the student.
+   *
+   * The player owns it now, and `renew` is a required field of every html5
+   * source, so a screen cannot forget.
+   */
+  function setupRenewable(
+    opts: {
+      renew?: Mock<[], Promise<string>>;
+      captions?: { src: (streamSrc: string) => string | null; label: string; lang: string };
+    } = {},
+  ) {
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    const renew = opts.renew ?? vi.fn<[], Promise<string>>().mockResolvedValue('blob:fresh');
+    const onTimeUpdate = vi.fn();
+    const utils = render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:first', renew }}
+        gate={gateFor({ unlocked: 0, passed: true })}
+        videoRef={ref}
+        captions={opts.captions}
+        onTimeUpdate={onTimeUpdate}
+      />,
+    );
+    const video = ref.current!;
+    const ctl = instrument(video, 600);
+    return { ...utils, video, ctl, renew, onTimeUpdate };
+  }
+
+  /** Loaded, playing, and `at` seconds in. */
+  function watchUntil(video: HTMLVideoElement, ctl: ReturnType<typeof instrument>, at: number) {
+    fire(video, 'loadedmetadata');
+    video.play();
+    fire(video, 'play');
+    ctl.seekTo(at);
+    fire(video, 'timeupdate');
+  }
+
+  /** What a browser does to a <video> whose src was just replaced. */
+  function browserReloads(video: HTMLVideoElement, ctl: ReturnType<typeof instrument>) {
+    video.pause();
+    fire(video, 'pause');
+    ctl.seekTo(0);
+    fire(video, 'timeupdate');
+  }
+
+  it('swaps in a fresh stream and carries on from the same second, still playing', async () => {
+    const { video, ctl, renew } = setupRenewable();
+    watchUntil(video, ctl, 300);
+
+    fire(video, 'error');
+    await waitFor(() => expect(video.getAttribute('src')).toBe('blob:fresh'));
+    expect(renew).toHaveBeenCalledTimes(1);
+
+    browserReloads(video, ctl);
+    fire(video, 'loadedmetadata');
+    expect(ctl.now()).toBe(300);
+    expect(ctl.isPaused()).toBe(false);
+  });
+
+  it('never reports the reload’s 0:00 upward, so the saved position is not wiped', async () => {
+    const { video, ctl, onTimeUpdate } = setupRenewable();
+    watchUntil(video, ctl, 300);
+    onTimeUpdate.mockClear();
+
+    fire(video, 'error');
+    await waitFor(() => expect(video.getAttribute('src')).toBe('blob:fresh'));
+    browserReloads(video, ctl);
+    expect(onTimeUpdate).not.toHaveBeenCalled();
+
+    fire(video, 'loadedmetadata');
+    fire(video, 'timeupdate');
+    expect(onTimeUpdate).toHaveBeenLastCalledWith(300, 600);
+  });
+
+  it('resumes the right second even when the fresh stream fails before it loads', async () => {
+    const renew = vi.fn<[], Promise<string>>().mockResolvedValueOnce('blob:second').mockResolvedValueOnce('blob:third');
+    const { video, ctl } = setupRenewable({ renew });
+    watchUntil(video, ctl, 300);
+
+    fire(video, 'error');
+    await waitFor(() => expect(video.getAttribute('src')).toBe('blob:second'));
+    browserReloads(video, ctl);
+
+    // The swapped-in stream errors while its playhead reads 0:00.
+    fire(video, 'error');
+    await waitFor(() => expect(video.getAttribute('src')).toBe('blob:third'));
+    browserReloads(video, ctl);
+    fire(video, 'loadedmetadata');
+
+    expect(renew).toHaveBeenCalledTimes(2);
+    expect(ctl.now()).toBe(300);
+  });
+
+  it('keeps renewing through a long class, because real playback refills the budget', async () => {
+    let n = 0;
+    const renew = vi.fn<[], Promise<string>>(async () => `blob:grant-${++n}`);
+    const { video, ctl } = setupRenewable({ renew });
+    watchUntil(video, ctl, 60);
+
+    // Ten renewals is a 100 minute class.
+    for (let i = 1; i <= 10; i++) {
+      fire(video, 'error');
+      await waitFor(() => expect(video.getAttribute('src')).toBe(`blob:grant-${i}`));
+      browserReloads(video, ctl);
+      fire(video, 'loadedmetadata');
+      ctl.seekTo(60 + i * 600);
+      fire(video, 'timeupdate');
+    }
+
+    expect(renew).toHaveBeenCalledTimes(10);
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
+  });
+
+  it('stops after repeated failures with no progress, and Try again keeps the place', async () => {
+    let n = 0;
+    const renew = vi.fn<[], Promise<string>>(async () => `blob:grant-${++n}`);
+    const { video, ctl } = setupRenewable({ renew });
+    watchUntil(video, ctl, 300);
+
+    for (let i = 1; i <= 4; i++) {
+      fire(video, 'error');
+      await waitFor(() => expect(video.getAttribute('src')).toBe(`blob:grant-${i}`));
+      browserReloads(video, ctl);
+    }
+    fire(video, 'error');
+
+    const retry = await screen.findByRole('button', { name: /try again/i });
+    expect(screen.getByRole('alert').textContent).toMatch(/stopped loading/i);
+    expect(renew).toHaveBeenCalledTimes(4);
+
+    fireEvent.click(retry);
+    await waitFor(() => expect(video.getAttribute('src')).toBe('blob:grant-5'));
+    expect(screen.queryByRole('alert')).toBeNull();
+    browserReloads(video, ctl);
+    fire(video, 'loadedmetadata');
+    expect(ctl.now()).toBe(300);
+  });
+
+  it('says why when a renewal is refused, and Try again asks again', async () => {
+    const renew = vi
+      .fn<[], Promise<string>>()
+      .mockRejectedValueOnce(new Error('Your session expired. Please sign in again.'))
+      .mockResolvedValueOnce('blob:fresh');
+    const { video, ctl } = setupRenewable({ renew });
+    watchUntil(video, ctl, 300);
+
+    fire(video, 'error');
+    await screen.findByText('Your session expired. Please sign in again.');
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    await waitFor(() => expect(video.getAttribute('src')).toBe('blob:fresh'));
+    expect(renew).toHaveBeenCalledTimes(2);
+  });
+
+  it('renews a stream that has stalled long after it was issued, even with no error', () => {
+    // Not every browser reports a refused piece as an error. Some just wait.
+    vi.useFakeTimers();
+    try {
+      const { video, ctl, renew } = setupRenewable();
+      watchUntil(video, ctl, 300);
+      act(() => {
+        vi.advanceTimersByTime(11 * 60_000);
+      });
+      expect(renew).not.toHaveBeenCalled();
+
+      fire(video, 'waiting');
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(renew).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves a young stream that is merely slow alone', () => {
+    // A weak connection stalls often, and a reload throws the buffer away.
+    vi.useFakeTimers();
+    try {
+      const { video, ctl, renew } = setupRenewable();
+      watchUntil(video, ctl, 300);
+      fire(video, 'waiting');
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(renew).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('points the captions at the fresh grant too', async () => {
+    const captions = { src: (s: string) => `/api/media/captions?of=${s}`, label: 'English', lang: 'en' };
+    const { video, ctl, container } = setupRenewable({ captions });
+    expect(container.querySelector('track')?.getAttribute('src')).toBe('/api/media/captions?of=blob:first');
+    watchUntil(video, ctl, 300);
+
+    fire(video, 'error');
+    await waitFor(() =>
+      expect(container.querySelector('track')?.getAttribute('src')).toBe('/api/media/captions?of=blob:fresh'),
+    );
+  });
+
+  it('reloads a URL that does not expire in place, keeping the place', () => {
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:static', renew: null }}
+        gate={gateFor({ unlocked: 0, passed: true })}
+        videoRef={ref}
+      />,
+    );
+    const first = ref.current!;
+    const ctl = instrument(first, 600);
+    watchUntil(first, ctl, 300);
+
+    fire(first, 'error');
+    const second = ref.current!;
+    expect(second).not.toBe(first);
+    expect(second.getAttribute('src')).toBe('blob:static');
+    const ctl2 = instrument(second, 600);
+    fire(second, 'loadedmetadata');
+    expect(ctl2.now()).toBe(300);
   });
 });
 

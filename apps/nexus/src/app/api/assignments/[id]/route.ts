@@ -16,7 +16,6 @@ import {
   getAssignmentReminderSummary,
   recordGamificationEvent,
   resolveAssignmentRecording,
-  getStudentAssignmentDrawing,
   getAssignmentDrawingHistory,
   updateDrawingQuestion,
   deleteDrawingQuestion,
@@ -47,6 +46,8 @@ import { classStartIso } from '@/lib/prework';
 import { resolveSubmitMode, lockedReason } from '@/lib/assignment-submit-window';
 import { composeDrawingBriefText } from '@/lib/drawing-brief-text';
 import { getVoiceFeedbackForSubmissions, signVoiceFeedback } from '@/lib/drawing-voice-feedback';
+import { heldIdsFrom, isReleasedForStudent, sanitizeDrawingForStudent } from '@/lib/student-drawing-payload';
+import { loadManualEvaluations, loadStudentRubric } from '@/lib/student-drawing-payload-server';
 
 /**
  * What the student may do with this assignment right now, resolved server-side
@@ -215,27 +216,39 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // Drawing-type assignments keep their submission in the Drawing channel
     // (drawing_submissions), so the student view renders the annotated review.
     if ((detail as any).assignment_type === 'drawing') {
-      const [drawing, attempts] = await Promise.all([
-        getStudentAssignmentDrawing(user.id, params.id),
-        getAssignmentDrawingHistory(params.id, user.id),
+      // Oldest first, so the newest attempt is the last one.
+      const attempts = (await getAssignmentDrawingHistory(params.id, user.id)) as any[];
+      const latestRaw = attempts.length ? attempts[attempts.length - 1] : null;
+      const attemptIds = attempts.map((a) => a.id as string);
+
+      const admin = getSupabaseAdminClient() as any;
+      const [voiceRows, evaluations] = await Promise.all([
+        // A draft note stays the teacher's until Redo or Complete sends it.
+        getVoiceFeedbackForSubmissions(attemptIds, { sentOnly: true }).catch(() => []),
+        loadManualEvaluations(admin, attemptIds),
       ]);
-      // Voice notes the teacher sent on any attempt, playable for an hour. A draft
-      // stays the teacher's until Redo or Complete sends it.
-      const attemptIds = Array.from(
-        new Set([...(attempts as any[]).map((a) => a.id), (drawing as any)?.id].filter(Boolean)),
-      ) as string[];
-      const voices = await signVoiceFeedback(
-        await getVoiceFeedbackForSubmissions(attemptIds, { sentOnly: true }).catch(() => []),
-      );
+
+      // Only what the teacher handed back. A draft save or a held review writes
+      // the review onto the row long before the student is meant to see it.
+      const heldIds = heldIdsFrom(evaluations);
+      const releasedIds = new Set(attempts.filter((a) => isReleasedForStudent(a, heldIds)).map((a) => a.id as string));
+      const [voices, rubric] = await Promise.all([
+        signVoiceFeedback(voiceRows.filter((v) => releasedIds.has(v.submission_id))),
+        loadStudentRubric(admin, latestRaw, evaluations, releasedIds),
+      ]);
+      const sanitized = attempts.map((a) => sanitizeDrawingForStudent(a, heldIds));
+
       return NextResponse.json({
         assignment: detail,
-        drawing_submission: drawing,
-        drawing_attempts: attempts,
+        drawing_submission: sanitized.length ? sanitized[sanitized.length - 1] : null,
+        drawing_attempts: sanitized,
         voice_by_submission: Object.fromEntries(voices.map((v) => [v.submission_id, v])),
+        rubric,
         enrolled_at: (enrollment as any)?.enrolled_at ?? null,
         recording,
         role: 'student',
-        ...submitWindow(detail, enrollment, drawing as any),
+        // The window reads the stored status and review time, not the gated view.
+        ...submitWindow(detail, enrollment, latestRaw),
       });
     }
 

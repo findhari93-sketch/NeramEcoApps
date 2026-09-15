@@ -18,9 +18,19 @@
  * The route is full bleed (lib/full-bleed-routes), so there is no page padding
  * to cancel. The height is measured, not a guessed bar height: a guess of 64px
  * against a 56px bar was one of the two reasons the whole document scrolled.
+ *
+ * `phoneLayout="split"` is the student workspace's phone layout. There the
+ * drawing must stay in view while the student reads and listens, and a CSS
+ * sticky stage cannot do that: the student layout's `<main>` is an overflow
+ * container that never scrolls (the document does), so a sticky child binds to
+ * it and never sticks. Split mode fills the screen on phones too, gives the stage
+ * a fixed height and scrolls only the panel, with the action bar as the panel's
+ * last row. Short landscape phones get the side-by-side row instead, since a
+ * stacked stage would leave the panel almost no height. The default, 'flow', is
+ * the teacher screen exactly as it was.
  */
 
-import { useRef, type ReactNode } from 'react';
+import { useRef, type ReactNode, type Ref } from 'react';
 import { Box, useMediaQuery, useTheme } from '@neram/ui';
 import { useViewportShellHeight } from '@/hooks/useViewportShellHeight';
 
@@ -28,7 +38,7 @@ import { useViewportShellHeight } from '@/hooks/useViewportShellHeight';
 const PHONE_BAR_RESERVE = 120;
 
 /** Thin, only-on-hover scrollbar for the feedback column. */
-const quietScrollbarSx = {
+export const quietScrollbarSx = {
   scrollbarWidth: 'thin',
   scrollbarColor: 'transparent transparent',
   '&:hover': { scrollbarColor: 'rgba(0,0,0,0.15) transparent' },
@@ -44,24 +54,111 @@ const quietScrollbarSx = {
 export interface ReviewShellProps {
   header: ReactNode;
   /** Breadcrumb trail back to the assignment, or to the shared queue. */
-  contextBar: ReactNode;
+  contextBar?: ReactNode;
   /** The reference images the teacher set on the brief, when there are any. */
-  referenceStrip: ReactNode;
+  referenceStrip?: ReactNode;
   /** The drawing itself, with its tabs and markup layer. */
   stage: ReactNode;
   /** The "Feedback" title row with its Edit escape hatch. */
-  panelHeader: ReactNode;
+  panelHeader?: ReactNode;
   panelBody: ReactNode;
-  actionBar: ReactNode;
+  actionBar?: ReactNode;
+  /** Phones only. 'flow' (the teacher screen) or 'split' (see the note above). */
+  phoneLayout?: 'flow' | 'split';
+  /** Split mode: the stage's height on a phone. */
+  phoneStageHeight?: string;
+  /** Landmark names for the two halves, for screen readers. */
+  stageLabel?: string;
+  railLabel?: string;
+  /** The scrolling panel body, so a caller can reset or reveal within it. */
+  railBodyRef?: Ref<HTMLDivElement>;
 }
 
 export default function ReviewShell({
   header, contextBar, referenceStrip, stage, panelHeader, panelBody, actionBar,
+  phoneLayout = 'flow', phoneStageHeight = 'clamp(200px, 40svh, 380px)', stageLabel, railLabel, railBodyRef,
 }: ReviewShellProps) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+  const isShortLandscape = useMediaQuery('(max-height: 520px) and (orientation: landscape)');
   const rootRef = useRef<HTMLDivElement>(null);
-  const heightSx = useViewportShellHeight(rootRef, isDesktop);
+  const split = phoneLayout === 'split';
+  const heightSx = useViewportShellHeight(rootRef, split || isDesktop);
+
+  if (split) {
+    const row = isDesktop || isShortLandscape;
+    return (
+      <Box
+        ref={rootRef}
+        sx={{ display: 'flex', flexDirection: row ? 'row' : 'column', ...heightSx, overflow: 'hidden' }}
+      >
+        <Box
+          role="region"
+          aria-label={stageLabel}
+          sx={{
+            flex: row ? 1 : '0 0 auto',
+            minWidth: 0,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          {header}
+          {contextBar}
+          {referenceStrip}
+          <Box
+            sx={{
+              ...(row ? { flex: 1, minHeight: 0 } : { height: phoneStageHeight, flexShrink: 0 }),
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+              p: { xs: 0.5, md: 1.5 },
+              bgcolor: { xs: '#1a1a1a', md: '#e8e8e8' },
+            }}
+          >
+            {stage}
+          </Box>
+        </Box>
+
+        <Box
+          component="aside"
+          aria-label={railLabel}
+          sx={{
+            width: row ? 'clamp(340px, 30vw, 460px)' : '100%',
+            flex: row ? '0 0 auto' : 1,
+            minWidth: 0,
+            minHeight: 0,
+            borderLeft: row ? '1px solid' : 'none',
+            borderTop: row ? 'none' : '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          {panelHeader}
+          <Box
+            ref={railBodyRef}
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              position: 'relative',
+              WebkitOverflowScrolling: 'touch',
+              overscrollBehavior: 'contain',
+              p: { xs: 2, md: 2.5 },
+              ...quietScrollbarSx,
+            }}
+          >
+            {panelBody}
+          </Box>
+          {actionBar}
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box

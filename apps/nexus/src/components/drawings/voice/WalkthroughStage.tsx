@@ -22,7 +22,14 @@ import { containBox, isReady } from '@/lib/annotation-geometry';
 import { paintSketchFrame } from './paintSketchFrame';
 import { CANVAS_SCALE, type StagePlayback } from './VoiceNotePlayer';
 
-export default function WalkthroughStage({ playback }: { playback: StagePlayback }) {
+export default function WalkthroughStage({
+  playback,
+  imageAlt = 'The drawing with your marks replaying as you talk',
+}: {
+  playback: StagePlayback;
+  /** The default is worded for the teacher who recorded it. */
+  imageAlt?: string;
+}) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
@@ -92,7 +99,7 @@ export default function WalkthroughStage({ playback }: { playback: StagePlayback
         <Box
           component="img"
           src={playback.imageUrl}
-          alt="The drawing with your marks replaying as you talk"
+          alt={imageAlt}
           onLoad={(e: React.SyntheticEvent<HTMLImageElement>) =>
             setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
           }

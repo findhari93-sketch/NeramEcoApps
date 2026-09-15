@@ -72,9 +72,32 @@ export interface TextTrackDescriptor {
   lang: string;
 }
 
+/**
+ * Asks the server for a new `src` for the same video, with a fresh Microsoft
+ * token. Throw with a message fit to show the student when it cannot.
+ */
+export type RenewVideoSrc = () => Promise<string>;
+
 export type VideoSource =
   /** Bytes streamed through our own proxy. No shareable Microsoft URL. */
-  | { kind: 'html5'; src: string }
+  | {
+      kind: 'html5';
+      src: string;
+      /**
+       * How to get a working `src` once this one stops working. Required, and
+       * null only for a URL that never expires.
+       *
+       * Every proxied recording carries a grant that lasts ten minutes, so any
+       * watch longer than that WILL outlive its URL. The player renews on the
+       * error, keeps the second and the play state, and never tells the caller
+       * the reload's 0:00. It is required rather than optional because leaving
+       * it to each screen is exactly what failed: Focus Mode and the study-track
+       * page never renewed and froze, the recording dialog and the Foundation
+       * player restarted at 0:00, and the recap player rewound when the fresh
+       * stream failed too (NXS-0119, NXS-0123, NXS-0124).
+       */
+      renew: RenewVideoSrc | null;
+    }
   /**
    * The YouTube backup copy. A degraded fallback, not a security boundary: the
    * video id is in the DOM because YouTube's bytes cannot be proxied.

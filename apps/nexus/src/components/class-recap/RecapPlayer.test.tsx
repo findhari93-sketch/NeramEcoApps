@@ -20,10 +20,13 @@ vi.mock('@/components/curriculum/shared', () => ({
   useAuthFetch: () => authFetchMock,
 }));
 
+let lastSource: { kind: string; src?: string; renew?: (() => Promise<string>) | null } | null = null;
+
 vi.mock('@/components/video/NeramVideoPlayer', () => ({
-  default: ({ source }: { source: { kind: string; src?: string } }) => (
-    <div data-testid="video-player">{source.kind === 'html5' ? source.src : 'youtube'}</div>
-  ),
+  default: ({ source }: { source: { kind: string; src?: string; renew?: (() => Promise<string>) | null } }) => {
+    lastSource = source;
+    return <div data-testid="video-player">{source.kind === 'html5' ? source.src : 'youtube'}</div>;
+  },
 }));
 
 const SECTIONS = [{ id: 's1', end_timestamp_seconds: 60, passed: false }];
@@ -83,5 +86,31 @@ describe('RecapPlayer', () => {
 
     const player = await screen.findByTestId('video-player');
     expect(player.textContent).toBe('https://example.com/stream');
+  });
+
+  it('hands the player a renewal that mints a fresh grant through authFetch (NXS-0123)', async () => {
+    // The grant lasts ten minutes. The player calls this when it runs out, and
+    // it must go through the fresh-token path every time, not a captured token.
+    authFetchMock
+      .mockResolvedValueOnce(SUCCESS_RESPONSE)
+      .mockResolvedValueOnce({ ...SUCCESS_RESPONSE, streamUrl: '/api/media/recording?vt=fresh', src: '/api/media/recording?vt=fresh' });
+
+    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} />);
+    await screen.findByTestId('video-player');
+
+    expect(typeof lastSource?.renew).toBe('function');
+    await expect(lastSource!.renew!()).resolves.toBe('/api/media/recording?vt=fresh');
+    expect(authFetchMock).toHaveBeenLastCalledWith('/api/student/class-recaps/recap-1/video-embed');
+  });
+
+  it('a renewal answered with no stream says to reload instead of failing silently', async () => {
+    authFetchMock
+      .mockResolvedValueOnce(SUCCESS_RESPONSE)
+      .mockResolvedValueOnce({ mode: 'youtube', video_source: 'youtube', youtube_id: 'abc' });
+
+    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} />);
+    await screen.findByTestId('video-player');
+
+    await expect(lastSource!.renew!()).rejects.toThrow(/reload the page/i);
   });
 });

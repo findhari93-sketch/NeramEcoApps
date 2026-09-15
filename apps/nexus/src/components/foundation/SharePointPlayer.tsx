@@ -24,15 +24,22 @@ import { computeGate } from '@/lib/video-gate';
  * own `duration - 10` tail rule against the shared `TAIL_EPSILON_SECONDS` of 0.5.
  *
  * All of that is now `computeGate` plus `NeramVideoPlayer`. What remains here is
- * what is genuinely this component's job: fetching the stream URL, retrying an
- * expired one, and translating between the gate's checkpoint ids and the section
- * indexes the surrounding Foundation UI speaks in.
+ * what is genuinely this component's job: fetching the stream URL, telling the
+ * player how to renew it, and translating between the gate's checkpoint ids and
+ * the section indexes the surrounding Foundation UI speaks in.
+ *
+ * It used to take a Microsoft token captured once by its parent and send it in
+ * the query string, and renewed an expired stream by rebuilding the player. So
+ * every ten minutes the chapter restarted at 0:00, and once that captured token
+ * expired, renewal failed outright: the NXS-0119 pattern the recap player had
+ * already been fixed for. It asks for a token at the moment of each request now.
  */
 
 interface SharePointPlayerProps {
   videoUrl: string;
   chapterId: string;
-  token?: string | null;
+  /** Called for every request, so a renewal an hour in carries a live token. */
+  getToken: () => Promise<string | null>;
   sections?: NexusFoundationSectionWithQuiz[];
   onSectionEnd?: (sectionIndex: number) => void;
   onTimeUpdate?: (seconds: number) => void;
@@ -69,25 +76,25 @@ export function toEmbedUrl(url: string): string {
   }
 }
 
-const MAX_RETRIES = 2;
-
 export default function SharePointPlayer({
   videoUrl,
   chapterId,
-  token,
+  getToken,
   sections,
   onSectionEnd,
   onTimeUpdate,
   onFullscreenChange,
 }: SharePointPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const transportRef = useRef<VideoTransport | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
   const [furthest, setFurthest] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const retryCountRef = useRef(0);
+  // Read at call time, so a parent passing a new function identity does not
+  // re-fetch the stream and restart the video.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
   const onSectionEndRef = useRef(onSectionEnd);
   onSectionEndRef.current = onSectionEnd;
@@ -131,29 +138,35 @@ export default function SharePointPlayer({
     [usableSections],
   );
 
+  /** One request for a stream URL. Throws a message fit to show the student. */
+  const requestStreamUrl = useCallback(async (): Promise<string> => {
+    const token = await getTokenRef.current();
+    if (!token) throw new Error('Your session expired. Please sign in again.');
+    let res: Response;
+    try {
+      res = await fetch(`/api/foundation/chapters/${chapterId}/video-embed`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      throw new Error('Network error, could not load video');
+    }
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Your session expired. Please sign in again.');
+    if (!res.ok || !data.streamUrl) throw new Error(data.error || 'Failed to load video');
+    return data.streamUrl as string;
+  }, [chapterId]);
+
   const fetchStreamUrl = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/foundation/chapters/${chapterId}/video-embed${token ? `?token=${encodeURIComponent(token)}` : ''}`,
-        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
-      );
-
-      if (res.ok) {
-        const data = await res.json();
-        setStreamUrl(data.streamUrl);
-        retryCountRef.current = 0;
-      } else {
-        const errData = await res.json().catch(() => ({ error: 'Failed to load video' }));
-        setError(errData.error || 'Failed to load video');
-      }
-    } catch {
-      setError('Network error, could not load video');
+      setStreamUrl(await requestStreamUrl());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load video');
     } finally {
       setLoading(false);
     }
-  }, [chapterId, token]);
+  }, [requestStreamUrl]);
 
   useEffect(() => {
     fetchStreamUrl();
@@ -211,15 +224,6 @@ export default function SharePointPlayer({
     if (index >= 0) onSectionEndRef.current?.(index);
   }, [usableSections]);
 
-  const handleVideoError = useCallback(() => {
-    if (retryCountRef.current < MAX_RETRIES) {
-      retryCountRef.current++;
-      fetchStreamUrl();
-    } else {
-      setError('Video failed to load. The stream URL may have expired.');
-    }
-  }, [fetchStreamUrl]);
-
   if (loading) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', bgcolor: '#000' }}>
@@ -249,15 +253,13 @@ export default function SharePointPlayer({
   return (
     <Box sx={{ position: 'relative', width: '100%', height: '100%', bgcolor: '#000' }}>
       <NeramVideoPlayer
-        source={{ kind: 'html5', src: streamUrl }}
+        source={{ kind: 'html5', src: streamUrl, renew: requestStreamUrl }}
         gate={gate}
-        videoRef={videoRef}
         transportRef={transportRef}
         marks={marks}
         onTimeUpdate={handleTick}
         onCheckpointReached={handleBoundary}
         onLoadedMetadata={setDuration}
-        onError={handleVideoError}
         allowFullscreen
         onFullscreenChange={onFullscreenChange}
       />

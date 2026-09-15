@@ -569,7 +569,7 @@ export default function FoundationLearningContent({
           <SharePointPlayer
             videoUrl={chapter.sharepoint_video_url}
             chapterId={chapterId}
-            token={msToken}
+            getToken={getToken}
             sections={sections}
             onSectionEnd={handleSectionEnd}
             onTimeUpdate={handleTimeUpdate}

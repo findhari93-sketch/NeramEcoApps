@@ -200,6 +200,33 @@ export default function StudentItemLearningPage() {
     return () => { cancelled = true; };
   }, [data?.sharepoint_video_url, data?.youtube_video_id, getToken]);
 
+  /**
+   * A fresh Graph download URL for a SharePoint video, with a token fetched now.
+   * These URLs last about an hour, so a long watch outlives them; the player
+   * calls this when one runs out and keeps the place.
+   */
+  const renewSharePointStream = useCallback(
+    (sharepointUrl: string) => async () => {
+      const token = await getToken();
+      if (!token) throw new Error('Your session expired. Please sign in again.');
+      const res = await fetch(`/api/sharepoint/stream?url=${encodeURIComponent(sharepointUrl)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.streamUrl) throw new Error(json.error || 'The video stopped loading.');
+      return json.streamUrl as string;
+    },
+    [getToken],
+  );
+  const spRenew = useMemo(
+    () => (data?.sharepoint_video_url ? renewSharePointStream(data.sharepoint_video_url) : null),
+    [data?.sharepoint_video_url, renewSharePointStream],
+  );
+  const solutionRenew = useMemo(
+    () => (data?.solution_sharepoint_video_url ? renewSharePointStream(data.solution_sharepoint_video_url) : null),
+    [data?.solution_sharepoint_video_url, renewSharePointStream],
+  );
+
   // ─── Solution SharePoint Stream URL ──────────────────────────────────
   useEffect(() => {
     if (data?.solution_video_source !== 'sharepoint' || !data?.solution_sharepoint_video_url) return;
@@ -883,7 +910,7 @@ export default function StudentItemLearningPage() {
                   // is the same element, and any seek those writes produce is
                   // caught by the player's snap-back.
                   <NeramVideoPlayer
-                    source={{ kind: 'html5', src: spStreamUrl }}
+                    source={{ kind: 'html5', src: spStreamUrl, renew: spRenew }}
                     gate={spGate}
                     videoRef={spVideoRef}
                     marks={spMarks}
@@ -1124,7 +1151,7 @@ export default function StudentItemLearningPage() {
                   >
                     <Box sx={{ position: 'absolute', inset: 0 }}>
                       <NeramVideoPlayer
-                        source={{ kind: 'html5', src: solutionStreamUrl }}
+                        source={{ kind: 'html5', src: solutionStreamUrl, renew: solutionRenew }}
                         gate={OPEN_GATE}
                         title="Solution video"
                         allowFullscreen

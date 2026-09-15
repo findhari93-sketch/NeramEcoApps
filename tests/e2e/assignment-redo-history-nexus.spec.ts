@@ -8,7 +8,8 @@
  *    attempt_count (>= 2).
  *  - Teacher review: GET /api/drawing/submissions/[id] returns every prior attempt.
  *  - Student: GET /api/assignments/[id] returns drawing_attempts, and the detail
- *    page shows "Your previous attempts".
+ *    page reaches the earlier attempt (the workspace's attempt switcher, or
+ *    "Your previous attempts" with the workspace switched off).
  *  - Teacher review page shows "Submission history".
  *
  * Skips gracefully when test auth is unavailable or the student has no drawing
@@ -181,13 +182,30 @@ test.describe('Assignment redo history', () => {
     await assertNoHorizontalOverflow(page);
   });
 
-  test('student detail page shows "Your previous attempts"', async ({ page }) => {
+  // The drawing workspace (student.assignment-workspace, on in E2E test mode)
+  // switches attempts in place instead of listing them under the page; the
+  // single-column page with the flag off still lists "Your previous attempts".
+  test('student detail page reaches the earlier attempt', async ({ page }) => {
     test.skip(!assignmentId, 'Setup did not complete');
     const ok = await injectAuthForPage(page, 'student');
     test.skip(!ok, 'Student auth injection failed');
 
     await page.goto(`${APP_URLS.nexus}/student/assignments/${assignmentId}`, { waitUntil: 'domcontentloaded' });
-    await expectTextOrSkipOnLogin(page, 'Your previous attempts');
+    const switcher = page.getByRole('group', { name: 'Attempts' }).or(page.getByRole('button', { name: /Showing attempt \d+ of \d+/ }));
+    const list = page.getByText('Your previous attempts');
+    await Promise.race([
+      switcher.first().waitFor({ state: 'visible', timeout: 45000 }).catch(() => {}),
+      list.waitFor({ state: 'visible', timeout: 45000 }).catch(() => {}),
+      page.waitForURL(/login\.microsoftonline\.com/, { timeout: 45000 }).catch(() => {}),
+    ]);
+    test.skip(/login\.microsoftonline\.com|\/login(\?|$)/.test(page.url()), 'Harness could not inject browser auth for this route');
+    // A fresh context is a first visit, so the welcome tour opens, and while a MUI
+    // dialog is open the rest of the app is aria-hidden to getByRole.
+    const skipTour = page.getByRole('dialog').getByRole('button', { name: 'Skip' });
+    if (await skipTour.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false)) {
+      await skipTour.click();
+    }
+    await expect(switcher.first().or(list)).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 });

@@ -23,6 +23,7 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import { renewFromEmbed } from '@/components/video/renew-from-embed';
 import { computeGate, type VideoGateMode } from '@/lib/video-gate';
 import { focusChannelName } from '@/components/class-recap/openFocusWindow';
 import { useWatchHeartbeat } from '@/components/class-recap/useWatchHeartbeat';
@@ -117,6 +118,16 @@ export default function FocusRecapPage() {
   useEffect(() => {
     if (!authLoading && recapId) load();
   }, [authLoading, recapId, load]);
+
+  /**
+   * The grant in `src` lasts ten minutes. This page used to mint it once and
+   * never again, so every Focus Mode watch froze about ten minutes in, which on
+   * a phone is the only way a gated recap is watched (NXS-0124).
+   */
+  const renew = useMemo(
+    () => renewFromEmbed(authFetch, `/api/student/class-recaps/${recapId}/video-embed`),
+    [authFetch, recapId],
+  );
 
   /**
    * How far playback is allowed to reach. Everything after that is earned, not
@@ -381,7 +392,7 @@ export default function FocusRecapPage() {
       ) : (
         <>
           <NeramVideoPlayer
-            source={{ kind: 'html5', src: src! }}
+            source={{ kind: 'html5', src: src!, renew }}
             gate={gate}
             videoRef={videoRef}
             watermark={watermark}

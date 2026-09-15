@@ -11,6 +11,8 @@ import {
   removeVoiceFilesForSubmission,
   signVoiceFeedback,
 } from '@/lib/drawing-voice-feedback';
+import { heldIdsFrom, isReleasedForStudent, withholdUnreleasedReview } from '@/lib/student-drawing-payload';
+import { loadManualEvaluations } from '@/lib/student-drawing-payload-server';
 
 /** The public drawing buckets a submission's images can live in. */
 const DRAWING_IMAGE_BUCKETS = new Set(['drawing-uploads', 'drawing-reviewed', 'drawing-references']);
@@ -52,7 +54,7 @@ export async function GET(
     }
 
     const submissionIds = Array.from(new Set([id, ...attempts.map((a) => a.id)]));
-    const [tags, voiceRows, profile] = await Promise.all([
+    const [tags, voiceRows, profile, evaluations] = await Promise.all([
       // The review screen fills its tag editor from these. Without them it opened
       // empty and every save sent an empty list, which deleted the tags.
       getSubmissionTags(id).catch(() => []),
@@ -64,14 +66,27 @@ export async function GET(
       isStaffViewer && studentId
         ? supabase.from('student_profiles').select('ms_teams_email').eq('user_id', studentId).maybeSingle()
         : Promise.resolve({ data: null }),
+      // Only the student view needs to know what is still held.
+      isStaffViewer ? Promise.resolve([]) : loadManualEvaluations(supabase, submissionIds),
     ]);
 
-    const voices = await signVoiceFeedback(voiceRows);
+    // The owner sees a review only once it is handed back: a draft save or a held
+    // review writes it onto the row while the status still says submitted.
+    const heldIds = heldIdsFrom(evaluations);
+    const visibleVoiceRows = isStaffViewer
+      ? voiceRows
+      : voiceRows.filter((v) => {
+          const row = v.submission_id === id ? submission : attempts.find((a) => a.id === v.submission_id);
+          return !!row && isReleasedForStudent(row as any, heldIds);
+        });
+    const voices = await signVoiceFeedback(visibleVoiceRows);
     const voiceBySubmission = Object.fromEntries(voices.map((v) => [v.submission_id, v]));
 
     return NextResponse.json({
-      submission: { ...submission, tags },
-      attempts,
+      submission: isStaffViewer
+        ? { ...submission, tags }
+        : { ...withholdUnreleasedReview(submission as any, heldIds), tags },
+      attempts: isStaffViewer ? attempts : attempts.map((a) => withholdUnreleasedReview(a, heldIds)),
       voice_feedback: voiceBySubmission[id] ?? null,
       voice_by_submission: voiceBySubmission,
       // Staff only: lets the review screen open the Teams chat with this student.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import {
   Box, ToggleButton, ToggleButtonGroup, Chip, Typography, IconButton,
   Tooltip, Badge, Menu, MenuItem, ListItemIcon, ListItemText, Snackbar,
@@ -63,9 +63,32 @@ interface ImageToggleTabsProps {
    * never read as the teacher's own red boxes.
    */
   aiMarks?: Array<{ id: string; x: number; y: number; width: number; height: number; comment: string | null; confident: boolean }>;
+  /**
+   * How read-only regions are labelled. 'chips' (default) floats each comment on
+   * its box. 'numbers' puts a numbered pin there instead and leaves the words to
+   * a list beside the drawing, which is what a phone-sized stage can carry.
+   */
+  regionLabels?: 'chips' | 'numbers';
+  /** Numbers mode: the region the student picked, drawn solid with the rest faded. */
+  activeRegionId?: string | null;
+  /** Numbers mode: makes each pin a button. */
+  onRegionSelect?: (id: string) => void;
+  /** Tab names. The student workspace avoids "Reference", which the brief already uses. */
+  tabLabels?: Partial<Record<DisplayTab, string>>;
+  /** Leave out tabs with nothing behind them, and the whole group when only one is left. */
+  hideUnavailableTabs?: boolean;
+  /** 44px tabs, for surfaces used mostly by thumb. */
+  touchTargets?: boolean;
+  hideCopy?: boolean;
+  /** Controls placed at the right of the tab row, before the copy button. */
+  toolbarEnd?: ReactNode;
+  imageAlt?: string;
+  correctedCaption?: string;
+  /** Told which image is showing, so a caller can act on that image (open it full screen). */
+  onDisplayImageChange?: (url: string) => void;
 }
 
-type DisplayTab = 'original' | 'overlay' | 'corrected';
+export type DisplayTab = 'original' | 'overlay' | 'corrected';
 
 // Maps rough area names to approximate percentage positions on the image (backwards compat)
 const AREA_POSITIONS: Record<string, { top: string; left: string }> = {
@@ -116,6 +139,17 @@ export default function ImageToggleTabs({
   studentView = false,
   onRotate,
   aiMarks = [],
+  regionLabels = 'chips',
+  activeRegionId = null,
+  onRegionSelect,
+  tabLabels,
+  hideUnavailableTabs = false,
+  touchTargets = false,
+  hideCopy = false,
+  toolbarEnd,
+  imageAlt = 'Drawing',
+  correctedCaption = 'Teacher Reference',
+  onDisplayImageChange,
 }: ImageToggleTabsProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -284,46 +318,74 @@ export default function ImageToggleTabs({
   const annotationBox = centeredBox(fitBox.rw, fitBox.rh, fitBox.cw, fitBox.ch);
   const canPlaceAnnotations = isReady(annotationBox);
 
+  // Picking a note from the list brings its pin into view, and pins only live on
+  // the student's own drawing.
+  useEffect(() => {
+    if (activeRegionId) setTab('original');
+  }, [activeRegionId]);
+
+  const onDisplayImageChangeRef = useRef(onDisplayImageChange);
+  onDisplayImageChangeRef.current = onDisplayImageChange;
+  useEffect(() => {
+    onDisplayImageChangeRef.current?.(displayImageUrl);
+  }, [displayImageUrl]);
+
+  const showTabGroup = !hideUnavailableTabs || hasOverlay || hasCorrected;
+  const showCopy = !hideCopy && !imgError;
+  const showToolbar = showTabGroup || showCopy || !!toolbarEnd;
+  const numbered = regionLabels === 'numbers';
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height, width: '100%' }}>
       {/* Toggle row + copy button */}
-      <Box sx={{ display: 'flex', alignItems: 'center', pb: 1, flexShrink: 0, px: 1 }}>
+      {showToolbar && (
+      <Box sx={{ display: 'flex', alignItems: 'center', pb: 1, flexShrink: 0, px: 1, gap: touchTargets ? 1 : 0 }}>
         <Box sx={{ flex: 1 }} />
+        {showTabGroup && (
         <ToggleButtonGroup
           value={activeTab}
           exclusive
           onChange={(_, v) => { if (v) { setTab(v); setImgError(false); } }}
           size="small"
+          aria-label="Which image to show"
           sx={{
             bgcolor: 'rgba(255,255,255,0.92)',
             borderRadius: 1,
             boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+            maxWidth: '100%',
             '& .MuiToggleButton-root': {
-              py: 0.4, px: 1.5,
+              py: touchTargets ? 0.75 : 0.4,
+              px: touchTargets ? 1.25 : 1.5,
+              minHeight: touchTargets ? 44 : undefined,
               textTransform: 'none',
-              fontSize: '0.75rem',
+              fontSize: touchTargets ? '0.8125rem' : '0.75rem',
               fontWeight: 600,
+              whiteSpace: 'nowrap',
             },
           }}
         >
-          <ToggleButton value="original">My Drawing</ToggleButton>
+          <ToggleButton value="original">{tabLabels?.original ?? 'My Drawing'}</ToggleButton>
+          {(!hideUnavailableTabs || hasOverlay) && (
           <ToggleButton value="overlay" disabled={!hasOverlay}>
             <Badge variant="dot" color="primary" invisible={!hasOverlay}
               sx={{ '& .MuiBadge-dot': { top: -2, right: -4 } }}>
-              Overlay
+              {tabLabels?.overlay ?? 'Overlay'}
             </Badge>
           </ToggleButton>
+          )}
           {hasCorrected && (
             <ToggleButton value="corrected">
               <Badge variant="dot" color="success"
                 sx={{ '& .MuiBadge-dot': { top: -2, right: -4 } }}>
-                Reference
+                {tabLabels?.corrected ?? 'Reference'}
               </Badge>
             </ToggleButton>
           )}
         </ToggleButtonGroup>
-        <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-          {!imgError && (
+        )}
+        <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1 }}>
+          {toolbarEnd}
+          {showCopy && (
             <Tooltip title={studentView ? 'Copy image' : 'Copy options'} placement="left">
               <IconButton
                 onClick={studentView ? handleCopyImage : (e) => setCopyMenuAnchor(e.currentTarget)}
@@ -341,6 +403,7 @@ export default function ImageToggleTabs({
           )}
         </Box>
       </Box>
+      )}
 
       {/* Image area */}
       <Box ref={stageRef} sx={{
@@ -362,7 +425,7 @@ export default function ImageToggleTabs({
             component="img"
             ref={imgRef}
             src={displayImageUrl}
-            alt="Drawing"
+            alt={imageAlt}
             onError={() => setImgError(true)}
             onLoad={measureFit}
             // Exposes the pending turn to tests, which cannot read an sx-driven
@@ -394,17 +457,62 @@ export default function ImageToggleTabs({
         {/* Show region annotations as read-only (no edit popover) when not in annotate mode but annotations exist */}
         {activeTab === 'original' && !annotateMode && rotation === 0 && canPlaceAnnotations && regionAnnotations.length > 0 && (
           <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}>
-            {regionAnnotations.map((ann) => (
+            {regionAnnotations.map((ann, i) => {
+              const active = numbered && activeRegionId === ann.id;
+              const faded = numbered && !!activeRegionId && !active;
+              return (
               <Box
                 key={ann.id}
+                data-region-id={ann.id}
+                data-active={active ? 'true' : undefined}
                 style={{ position: 'absolute', ...toStyle(ann, annotationBox) }}
                 sx={{
-                  border: '2px dashed rgba(220, 40, 40, 0.6)',
-                  bgcolor: 'rgba(220, 40, 40, 0.06)',
+                  border: active ? '3px solid rgba(198, 40, 40, 0.95)' : '2px dashed rgba(220, 40, 40, 0.6)',
+                  bgcolor: active ? 'rgba(220, 40, 40, 0.12)' : 'rgba(220, 40, 40, 0.06)',
                   borderRadius: '4px',
+                  opacity: faded ? 0.45 : 1,
+                  transition: prefersReducedMotion ? 'none' : 'opacity 0.18s ease, border-color 0.18s ease',
                 }}
               >
-                {ann.comment && (
+                {numbered ? (
+                  <Box
+                    component={onRegionSelect ? 'button' : 'span'}
+                    type={onRegionSelect ? 'button' : undefined}
+                    onClick={onRegionSelect ? () => onRegionSelect(ann.id) : undefined}
+                    aria-label={`Note ${i + 1}${ann.comment ? `: ${ann.comment}` : ''}`}
+                    aria-pressed={onRegionSelect ? active : undefined}
+                    sx={{
+                      position: 'absolute',
+                      top: -13,
+                      left: -13,
+                      width: 26,
+                      height: 26,
+                      borderRadius: '50%',
+                      border: '2px solid #fff',
+                      bgcolor: active ? '#b71c1c' : '#c62828',
+                      color: '#fff',
+                      font: 'inherit',
+                      fontSize: '0.8125rem',
+                      fontWeight: 800,
+                      lineHeight: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                      p: 0,
+                      pointerEvents: onRegionSelect ? 'auto' : 'none',
+                      cursor: onRegionSelect ? 'pointer' : 'default',
+                      transform: active ? 'scale(1.12)' : 'none',
+                      transition: prefersReducedMotion ? 'none' : 'transform 0.18s ease',
+                      // The pin is drawn small so it does not hide the drawing; the
+                      // tap area around it is a full 44px.
+                      '&::after': { content: '""', position: 'absolute', inset: -9 },
+                      '&:focus-visible': { outline: '3px solid #fff', outlineOffset: 2 },
+                    }}
+                  >
+                    {i + 1}
+                  </Box>
+                ) : ann.comment && (
                   <Chip
                     label={ann.comment}
                     size="small"
@@ -417,7 +525,8 @@ export default function ImageToggleTabs({
                   />
                 )}
               </Box>
-            ))}
+              );
+            })}
           </Box>
         )}
 
@@ -612,7 +721,7 @@ export default function ImageToggleTabs({
           }}>
             <Box sx={{ bgcolor: 'rgba(0,0,0,0.55)', borderRadius: 1, px: 1.5, py: 0.4 }}>
               <Typography variant="caption" sx={{ color: '#fff', fontWeight: 600 }}>
-                Teacher Reference
+                {correctedCaption}
               </Typography>
             </Box>
           </Box>

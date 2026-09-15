@@ -5,68 +5,45 @@
  * teacher attached, and, for late joiners, the class recording to watch first
  * plus a "Day N since you joined" clock. Submit or resubmit here; reviewed work
  * shows marks and feedback. Reuses the shared submit sheet + file viewer.
+ *
+ * A drawing assignment opens as a workspace (components/assignments/workspace)
+ * when `student.assignment-workspace` is on: the drawing fixed, the feedback
+ * beside it. The route is full bleed for that, so every other view of it puts
+ * the page padding back through LegacyPagePadding.
  */
-import { useCallback, useEffect, useState } from 'react';
-import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
-import { OPEN_GATE } from '@/lib/video-gate';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  Box, Typography, Stack, Chip, Button, Skeleton, Divider, IconButton, alpha, Snackbar, Alert,
+  Box, Typography, Stack, Chip, Button, Skeleton, Divider, alpha, Snackbar, Alert,
   Breadcrumbs, Link as MuiLink,
 } from '@neram/ui';
 import NextLink from 'next/link';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
-import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
-import LinkIcon from '@mui/icons-material/Link';
-import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
-import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
-import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { computeAssignmentClock } from '@/lib/assignment-clock';
-import { extractYouTubeId } from '@/lib/youtube';
+import { dueLabel } from '@/lib/assignment-due-label';
 import SubmissionFiles from '@/components/assignments/SubmissionFiles';
-import AssignmentBrief from '@/components/assignments/AssignmentBrief';
+import AssignmentBriefBody from '@/components/assignments/AssignmentBriefBody';
 import AssignmentQuestions, { type PaperView } from '@/components/assignments/AssignmentQuestions';
 import AssignmentSubmitSheet from '@/components/assignments/AssignmentSubmitSheet';
 import DrawingAssignmentPanel, { type DrawingSubmissionView } from '@/components/assignments/DrawingAssignmentPanel';
 import GradeDisplay from '@/components/assignments/GradeDisplay';
 import ReactionAppreciation from '@/components/assignments/ReactionAppreciation';
 import SubmissionHistoryTimeline from '@/components/assignments/SubmissionHistoryTimeline';
+import StudentDrawingWorkspace from '@/components/assignments/workspace/StudentDrawingWorkspace';
+import type {
+  AssignmentRecording, StudentAssignmentDetail, StudentDrawingAttempt, StudentRubric,
+} from '@/components/assignments/workspace/types';
 import { documentSubmissionToViews, drawingAttemptsToViews } from '@/lib/submission-history';
 import { captureScreenshot } from '@/lib/capture-screenshot';
 import type { SubmitMode } from '@/lib/assignment-submit-window';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
-import type { DrawingSubmission, GalleryReactionType, NexusAssignmentSubmissionHistoryEntry } from '@neram/database/types';
+import type { GalleryReactionType, NexusAssignmentSubmissionHistoryEntry } from '@neram/database/types';
 
-interface Attachment {
-  id: string;
-  study_file_id: string;
-  file: { id: string; title: string; file_name: string; file_type: string | null } | null;
-}
-interface Detail {
-  id: string;
-  title: string;
-  class_date: string;
-  instructions: string | null;
-  assignment_type: 'drawing' | 'document';
-  submission_format: 'pdf' | 'image' | 'pdf_or_image';
-  evaluation_type: 'marks' | 'stars';
-  max_marks: number;
-  due_at: string | null;
-  catchup_window_days: number;
-  /** When true, worked solutions must be uploaded before the questions open. */
-  requires_pdf?: boolean;
-  content_image_url: string | null;
-  reference_images?: string[] | null;
-  content_video_url: string | null;
-  links: { label: string; url: string }[];
-  attachments: Attachment[];
-}
 interface MySubmission {
   id?: string;
   files: { path: string; name: string; mime: string; url?: string | null }[];
@@ -80,11 +57,16 @@ interface MySubmission {
   history?: NexusAssignmentSubmissionHistoryEntry[];
 }
 
+/** The padding `<main>` gives an ordinary page, which this full-bleed route has to add back. */
+function LegacyPagePadding({ children }: { children: ReactNode }) {
+  return <Box sx={{ pt: { xs: 2, md: 3 }, px: { xs: 2, sm: 3, md: 4 }, pb: { xs: 2, md: 3 } }}>{children}</Box>;
+}
+
 export default function StudentAssignmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const authFetch = useAuthFetch();
-  const { loading: authLoading, getToken } = useNexusAuthContext();
+  const { loading: authLoading, getToken, isFeatureEnabled } = useNexusAuthContext();
 
   // Go back to wherever the student came from (the timetable, the assignments
   // list, a notification), rather than always dumping them on the list. If they
@@ -97,7 +79,7 @@ export default function StudentAssignmentDetailPage() {
     }
   }, [router]);
 
-  const [detail, setDetail] = useState<Detail | null>(null);
+  const [detail, setDetail] = useState<StudentAssignmentDetail | null>(null);
   const [submission, setSubmission] = useState<MySubmission | null>(null);
   // Resolved server-side by resolveSubmitMode so the page cannot disagree with
   // the API about who may hand work in.
@@ -108,16 +90,14 @@ export default function StudentAssignmentDetailPage() {
   const [myAnswers, setMyAnswers] = useState<Record<string, string> | null>(null);
   const [myResult, setMyResult] = useState<{ score: number; total_marks: number; percentage: number } | null>(null);
   const [answersBusy, setAnswersBusy] = useState(false);
-  const [drawingSubmission, setDrawingSubmission] = useState<DrawingSubmissionView | null>(null);
-  const [drawingAttempts, setDrawingAttempts] = useState<DrawingSubmission[]>([]);
+  const [drawingSubmission, setDrawingSubmission] = useState<StudentDrawingAttempt | null>(null);
+  // Oldest first, and already stripped of any review the teacher has not sent.
+  const [drawingAttempts, setDrawingAttempts] = useState<StudentDrawingAttempt[]>([]);
   // The teacher's voice notes, keyed by the attempt (submission id) each belongs to.
   const [voiceBySubmission, setVoiceBySubmission] = useState<Record<string, VoiceFeedbackView>>({});
+  const [rubric, setRubric] = useState<StudentRubric | null>(null);
   const [enrolledAt, setEnrolledAt] = useState<string | null>(null);
-  const [recording, setRecording] = useState<{
-    url: string | null;
-    source: string | null;
-    class_title?: string | null;
-  }>({ url: null, source: null });
+  const [recording, setRecording] = useState<AssignmentRecording>({ url: null, source: null });
   const [error, setError] = useState('');
   const [submitOpen, setSubmitOpen] = useState(false);
   const [attachmentError, setAttachmentError] = useState(false);
@@ -128,11 +108,12 @@ export default function StudentAssignmentDetailPage() {
     setError('');
     try {
       const res = await authFetch(`/api/assignments/${id}`);
-      setDetail(res.assignment as Detail);
+      setDetail(res.assignment as StudentAssignmentDetail);
       setSubmission((res.submission as MySubmission) ?? null);
-      setDrawingSubmission((res.drawing_submission as DrawingSubmissionView) ?? null);
-      setDrawingAttempts((res.drawing_attempts as DrawingSubmission[]) ?? []);
+      setDrawingSubmission((res.drawing_submission as StudentDrawingAttempt) ?? null);
+      setDrawingAttempts((res.drawing_attempts as StudentDrawingAttempt[]) ?? []);
       setVoiceBySubmission((res.voice_by_submission as Record<string, VoiceFeedbackView>) ?? {});
+      setRubric((res.rubric as StudentRubric) ?? null);
       setEnrolledAt(res.enrolled_at ?? null);
       setRecording(res.recording ?? { url: null, source: null });
       setSubmitMode((res.submit_mode as SubmitMode) ?? 'first');
@@ -199,6 +180,7 @@ export default function StudentAssignmentDetailPage() {
   );
 
   const isDrawing = detail?.assignment_type === 'drawing';
+  const useWorkspace = isDrawing && isFeatureEnabled('student.assignment-workspace');
   // 'replace' counts as being able to submit: it is the same door, it just means
   // something different on the other side. Only 'locked' closes it.
   const canSubmit = submitMode !== 'locked';
@@ -207,23 +189,14 @@ export default function StudentAssignmentDetailPage() {
   // themselves as waiting rather than simply refusing on submit.
   const awaitingPdf =
     hasQuestions && (detail?.requires_pdf ?? true) && !(submission?.files || []).length;
-  const youtubeId = recording.url && recording.source === 'youtube' ? extractYouTubeId(recording.url) : null;
-  // Reference / expected-output images: prefer the multi-image set, fall back to the
-  // single legacy content image so older assignments still render.
-  const refImages = detail
-    ? detail.reference_images?.length
-      ? detail.reference_images
-      : detail.content_image_url
-        ? [detail.content_image_url]
-        : []
-    : [];
+  const due = dueLabel(clock, canSubmit);
 
   // Prior attempts (everything before the current one) so a student sent back for
   // a redo can revisit their earlier work and the feedback that came with it.
-  const priorAttemptViews = !detail
+  const priorAttemptViews = !detail || useWorkspace
     ? []
     : isDrawing
-      ? drawingAttemptsToViews(drawingAttempts, {
+      ? drawingAttemptsToViews(drawingAttempts as any, {
           evaluationType: detail.evaluation_type,
           maxMarks: detail.max_marks,
         }).slice(0, -1)
@@ -234,21 +207,94 @@ export default function StudentAssignmentDetailPage() {
           }).slice(0, -1)
         : [];
 
+  const attachmentSnackbar = (
+    <>
+      {/* A reference material failed to open: offer a one-tap report instead of
+          dumping a raw error page in a new tab. */}
+      <Snackbar
+        open={attachmentError}
+        autoHideDuration={8000}
+        onClose={() => setAttachmentError(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="error"
+          onClose={() => setAttachmentError(false)}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              startIcon={<BugReportOutlinedIcon sx={{ fontSize: '1rem !important' }} />}
+              onClick={() => {
+                setAttachmentError(false);
+                setReportOpen(true);
+              }}
+              sx={{ textTransform: 'none' }}
+            >
+              Report
+            </Button>
+          }
+        >
+          This file couldn&apos;t be opened.
+        </Alert>
+      </Snackbar>
+
+      <ReportIssueDialog
+        open={reportOpen}
+        onClose={() => {
+          setReportOpen(false);
+          setReportShot(null);
+        }}
+        getToken={getToken}
+        initialScreenshotFile={reportShot}
+        prefill={{
+          category: 'bug',
+          title: 'Reference material would not open',
+        }}
+      />
+    </>
+  );
+
   if (error) {
     return (
-      <Box sx={{ p: 3, maxWidth: 480, mx: 'auto', textAlign: 'center', mt: 6 }}>
-        <Typography sx={{ fontWeight: 700 }}>Could not load this assignment</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          {error}
-        </Typography>
-        <Button variant="outlined" onClick={load} sx={{ mt: 2, minHeight: 44 }}>
-          Try again
-        </Button>
-      </Box>
+      <LegacyPagePadding>
+        <Box sx={{ p: 3, maxWidth: 480, mx: 'auto', textAlign: 'center', mt: 6 }}>
+          <Typography sx={{ fontWeight: 700 }}>Could not load this assignment</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {error}
+          </Typography>
+          <Button variant="outlined" onClick={load} sx={{ mt: 2, minHeight: 44 }}>
+            Try again
+          </Button>
+        </Box>
+      </LegacyPagePadding>
+    );
+  }
+
+  if (detail && useWorkspace) {
+    return (
+      <>
+        <StudentDrawingWorkspace
+          detail={detail}
+          attempts={drawingAttempts}
+          voiceBySubmission={voiceBySubmission}
+          rubric={rubric}
+          submitMode={submitMode}
+          lockedReason={lockedWhy}
+          clock={clock}
+          recording={recording}
+          getToken={getToken}
+          onChanged={load}
+          onOpenAttachment={openAttachment}
+          onBack={goBack}
+        />
+        {attachmentSnackbar}
+      </>
     );
   }
 
   return (
+    <LegacyPagePadding>
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 640, mx: 'auto' }}>
       <Button startIcon={<ArrowBackIcon />} onClick={goBack} sx={{ mb: 1, minHeight: 44, color: 'text.secondary', fontWeight: 600 }}>
         Back
@@ -291,21 +337,11 @@ export default function StudentAssignmentDetailPage() {
             </Typography>
             {submission?.status === 'reviewed' && submission.marks != null ? (
               <GradeDisplay evaluationType={detail.evaluation_type} value={submission.marks} maxMarks={detail.max_marks} size="small" showStarLabel />
-            ) : clock && canSubmit && clock.personal_due ? (
+            ) : due ? (
               <Chip
                 size="small"
-                label={
-                  clock.is_late_joiner
-                    ? clock.status === 'overdue'
-                      ? `${Math.abs(clock.days_remaining ?? 0)}d overdue`
-                      : `Day ${clock.days_elapsed} · ${clock.days_remaining}d left`
-                    : clock.status === 'overdue'
-                      ? 'Overdue'
-                      : clock.days_remaining === 0
-                        ? 'Due today'
-                        : `${clock.days_remaining}d left`
-                }
-                sx={{ fontWeight: 700, bgcolor: alpha(clock.status === 'overdue' ? '#C62828' : '#1565C0', 0.12), color: clock.status === 'overdue' ? '#C62828' : '#1565C0' }}
+                label={due.label}
+                sx={{ fontWeight: 700, bgcolor: alpha(due.overdue ? '#C62828' : '#1565C0', 0.12), color: due.overdue ? '#C62828' : '#1565C0' }}
               />
             ) : null}
           </Stack>
@@ -324,159 +360,14 @@ export default function StudentAssignmentDetailPage() {
           )}
 
           <Stack spacing={2}>
-            {/* Class recording */}
-            {recording.url && (
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 700, mb: recording.class_title ? 0.25 : 1 }}>
-                  Class recording
-                </Typography>
-                {/* Which lesson, not just "a recording". Worth saying now that
-                    this resolves from the linked class automatically: the
-                    student can tell what they are about to watch. */}
-                {recording.class_title && (
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    From {recording.class_title}
-                  </Typography>
-                )}
-                {youtubeId ? (
-                  <Box sx={{ position: 'relative', pt: '56.25%', borderRadius: 2, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
-                    <Box sx={{ position: 'absolute', inset: 0 }}>
-                      {/* Was a plain youtube.com/embed, not even the nocookie
-                          host, on a student-facing screen. Nothing to gate on a
-                          reference recording attached to an assignment, but it
-                          gets the same chrome and the same no-cookie host as
-                          every other video the student meets. */}
-                      <NeramVideoPlayer
-                        source={{ kind: 'youtube', youtubeId }}
-                        gate={OPEN_GATE}
-                        title="Class recording"
-                        allowFullscreen
-                      />
-                    </Box>
-                  </Box>
-                ) : (
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    startIcon={<PlayCircleOutlineIcon />}
-                    endIcon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
-                    onClick={() => window.open(recording.url!, '_blank', 'noopener')}
-                    sx={{ minHeight: 48, textTransform: 'none' }}
-                  >
-                    Watch the class recording
-                  </Button>
-                )}
-              </Box>
-            )}
-
-            {/* Reference / expected-output images */}
-            {refImages.length > 0 && (
-              <Box>
-                {refImages.length > 1 && (
-                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
-                    Reference ({refImages.length})
-                  </Typography>
-                )}
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gridTemplateColumns:
-                      refImages.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(140px, 1fr))',
-                    gap: 1,
-                  }}
-                >
-                  {refImages.map((src, i) => (
-                    <Box
-                      key={`${src}-${i}`}
-                      component="img"
-                      src={src}
-                      alt={refImages.length > 1 ? `Reference ${i + 1}` : ''}
-                      onClick={() => window.open(src, '_blank', 'noopener')}
-                      sx={{
-                        width: '100%',
-                        ...(refImages.length === 1 ? {} : { aspectRatio: '1 / 1', objectFit: 'cover' }),
-                        borderRadius: 2,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        cursor: 'pointer',
-                      }}
-                    />
-                  ))}
-                </Box>
-              </Box>
-            )}
-
-            {/* The brief: question cards, marks and maths, not a wall of text. */}
-            <AssignmentBrief
-              instructions={detail.instructions}
-              expectedOutcome={(detail as any).expected_outcome}
-              focusPoints={(detail as any).focus_points}
-            />
-
-
-            {/* Explainer video + links */}
-            {(detail.content_video_url || detail.links.length > 0) && (
-              <Stack spacing={1}>
-                {detail.content_video_url && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<OndemandVideoOutlinedIcon />}
-                    endIcon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
-                    onClick={() => window.open(detail.content_video_url!, '_blank', 'noopener')}
-                    sx={{ justifyContent: 'flex-start', minHeight: 48, textTransform: 'none' }}
-                  >
-                    Watch explainer video
-                  </Button>
-                )}
-                {detail.links.map((l, i) => (
-                  <Button
-                    key={i}
-                    variant="outlined"
-                    startIcon={<LinkIcon />}
-                    endIcon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
-                    onClick={() => window.open(l.url, '_blank', 'noopener')}
-                    sx={{ justifyContent: 'flex-start', minHeight: 48, textTransform: 'none' }}
-                  >
-                    <Box sx={{ flex: 1, textAlign: 'left', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.label}</Box>
-                  </Button>
-                ))}
-              </Stack>
-            )}
-
-            {/* Reference materials */}
-            {detail.attachments.length > 0 && (
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
-                  Reference materials
-                </Typography>
-                <Stack spacing={1}>
-                  {detail.attachments.map((a) => {
-                    const isPdf = a.file?.file_type === 'application/pdf';
-                    return (
-                      <Button
-                        key={a.id}
-                        variant="outlined"
-                        onClick={() => openAttachment(a.study_file_id)}
-                        startIcon={isPdf ? <PictureAsPdfOutlinedIcon /> : <ImageOutlinedIcon />}
-                        endIcon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
-                        sx={{ justifyContent: 'flex-start', minHeight: 48, textTransform: 'none' }}
-                      >
-                        <Box sx={{ flex: 1, textAlign: 'left', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {a.file?.title || a.file?.file_name || 'File'}
-                        </Box>
-                      </Button>
-                    );
-                  })}
-                </Stack>
-              </Box>
-            )}
+            <AssignmentBriefBody detail={detail} recording={recording} onOpenAttachment={openAttachment} />
 
             <Divider />
 
             {isDrawing ? (
               <DrawingAssignmentPanel
                 assignmentId={detail.id}
-                submission={drawingSubmission}
+                submission={drawingSubmission as unknown as DrawingSubmissionView | null}
                 voice={drawingSubmission ? voiceBySubmission[drawingSubmission.id] ?? null : null}
                 evaluationType={detail.evaluation_type}
                 maxMarks={detail.max_marks}
@@ -622,49 +513,8 @@ export default function StudentAssignmentDetailPage() {
         </>
       )}
 
-      {/* A reference material failed to open — offer a one-tap report instead of
-          dumping a raw error page in a new tab. */}
-      <Snackbar
-        open={attachmentError}
-        autoHideDuration={8000}
-        onClose={() => setAttachmentError(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity="error"
-          onClose={() => setAttachmentError(false)}
-          action={
-            <Button
-              color="inherit"
-              size="small"
-              startIcon={<BugReportOutlinedIcon sx={{ fontSize: '1rem !important' }} />}
-              onClick={() => {
-                setAttachmentError(false);
-                setReportOpen(true);
-              }}
-              sx={{ textTransform: 'none' }}
-            >
-              Report
-            </Button>
-          }
-        >
-          This file couldn&apos;t be opened.
-        </Alert>
-      </Snackbar>
-
-      <ReportIssueDialog
-        open={reportOpen}
-        onClose={() => {
-          setReportOpen(false);
-          setReportShot(null);
-        }}
-        getToken={getToken}
-        initialScreenshotFile={reportShot}
-        prefill={{
-          category: 'bug',
-          title: 'Reference material would not open',
-        }}
-      />
+      {attachmentSnackbar}
     </Box>
+    </LegacyPagePadding>
   );
 }

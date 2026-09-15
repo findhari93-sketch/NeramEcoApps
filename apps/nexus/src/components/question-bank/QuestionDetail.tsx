@@ -525,7 +525,9 @@ export default function QuestionDetail({
                   >
                     <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', maxHeight: 480 }}>
                       <NeramVideoPlayer
-                        source={{ kind: 'html5', src: getSharePointDownloadUrl(question.solution_video_url) }}
+                        // A fixed link, not a grant: nothing to renew, so a
+                        // failure reloads the same URL in place.
+                        source={{ kind: 'html5', src: getSharePointDownloadUrl(question.solution_video_url), renew: null }}
                         gate={OPEN_GATE}
                         title="Solution video"
                         allowFullscreen
@@ -545,7 +547,7 @@ export default function QuestionDetail({
                   >
                     <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', maxHeight: 480 }}>
                       <NeramVideoPlayer
-                        source={{ kind: 'html5', src: question.solution_video_url }}
+                        source={{ kind: 'html5', src: question.solution_video_url, renew: null }}
                         gate={OPEN_GATE}
                         title="Solution video"
                         allowFullscreen

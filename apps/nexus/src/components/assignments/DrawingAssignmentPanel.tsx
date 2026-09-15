@@ -18,6 +18,7 @@ import VoiceNotePlayer from '@/components/drawings/voice/VoiceNotePlayer';
 import { useVoiceListenReporter } from '@/components/drawings/voice/useVoiceListenReporter';
 import type { SubmitMode } from '@/lib/assignment-submit-window';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
+import { STATUS_META } from '@/lib/drawing-student-status';
 import GradeDisplay from './GradeDisplay';
 import ReactionAppreciation from './ReactionAppreciation';
 
@@ -39,13 +40,6 @@ export interface DrawingSubmissionView {
   submitted_at: string;
 }
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  submitted: { label: 'Submitted, awaiting review', color: '#1565C0' },
-  under_review: { label: 'Under review', color: '#1565C0' },
-  redo: { label: 'Redo requested', color: '#B54700' },
-  completed: { label: 'Reviewed', color: '#2E7D32' },
-  reviewed: { label: 'Reviewed', color: '#2E7D32' },
-};
 
 export default function DrawingAssignmentPanel({
   assignmentId,
@@ -135,7 +129,10 @@ export default function DrawingAssignmentPanel({
             </ToggleButtonGroup>
           )}
 
-          {shownImage && (
+          {/* A walkthrough note draws the student's drawing itself to replay the
+              teacher's strokes on. Showing it here as well put the same drawing
+              on screen twice, one under the other. */}
+          {shownImage && !(view === 'mine' && voice?.sketch && voice.base_image_url) && (
             <Box
               component="img"
               src={shownImage}

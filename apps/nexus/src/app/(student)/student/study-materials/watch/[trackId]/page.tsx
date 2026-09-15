@@ -25,6 +25,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
 import useVideoProgress from '@/components/video/useVideoProgress';
+import { renewFromEmbed } from '@/components/video/renew-from-embed';
 import { computeGate } from '@/lib/video-gate';
 import QuizModal from '@/components/foundation/QuizModal';
 import type { VideoSource } from '@/components/video/types';
@@ -117,15 +118,20 @@ export default function StudyTrackWatchPage() {
       setSiblings(data.siblings || []);
       setMode(data.mode);
 
-      const embed = await authFetch(
-        `/api/student/study-videos/tracks/${trackId}/video-embed`,
-      );
+      const embedUrl = `/api/student/study-videos/tracks/${trackId}/video-embed`;
+      const embed = await authFetch(embedUrl);
       setWatermark(embed.watermark || null);
       setResumeAt(Number(embed.resume_at) || 0);
       setSource(
         embed.mode === 'youtube'
           ? { kind: 'youtube', youtubeId: embed.youtube_id }
-          : { kind: 'html5', src: embed.streamUrl || embed.src },
+          : {
+              kind: 'html5',
+              src: embed.streamUrl || embed.src,
+              // The grant lasts ten minutes. Without this the chapter froze
+              // about ten minutes in and only a reload brought it back.
+              renew: renewFromEmbed(authFetch, embedUrl),
+            },
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open this recording');

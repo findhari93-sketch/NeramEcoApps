@@ -308,6 +308,87 @@ describe('ImageToggleTabs rotation', () => {
   });
 });
 
+describe('ImageToggleTabs numbered pins (student workspace)', () => {
+  it('draws a numbered pin per region, and hands back the one tapped', () => {
+    const restore = stubLayout();
+    try {
+      const onRegionSelect = vi.fn();
+      render(
+        <ImageToggleTabs
+          originalImageUrl={ORIGINAL_URL}
+          studentView
+          regionAnnotations={REGIONS}
+          regionLabels="numbers"
+          onRegionSelect={onRegionSelect}
+        />
+      );
+      const pin = screen.getByRole('button', { name: 'Note 2: Shading' });
+      expect(pin.textContent).toBe('2');
+      // The words live in the list beside the drawing, not on it.
+      expect(screen.queryByText('Proportion')).toBeNull();
+      fireEvent.click(pin);
+      expect(onRegionSelect).toHaveBeenCalledWith('r2');
+    } finally {
+      restore();
+    }
+  });
+
+  it('marks the picked region and returns to the drawing tab to show it', () => {
+    const restore = stubLayout();
+    try {
+      const { container, rerender } = render(
+        <ImageToggleTabs
+          originalImageUrl={ORIGINAL_URL}
+          correctedImageUrl={CORRECTED_URL}
+          studentView
+          regionAnnotations={REGIONS}
+          regionLabels="numbers"
+          onRegionSelect={vi.fn()}
+          tabLabels={{ corrected: 'Corrected' }}
+        />
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Corrected' }));
+      expect((screen.getByRole('img', { name: /Drawing/i }) as HTMLImageElement).src).toBe(CORRECTED_URL);
+
+      rerender(
+        <ImageToggleTabs
+          originalImageUrl={ORIGINAL_URL}
+          correctedImageUrl={CORRECTED_URL}
+          studentView
+          regionAnnotations={REGIONS}
+          regionLabels="numbers"
+          onRegionSelect={vi.fn()}
+          activeRegionId="r1"
+          tabLabels={{ corrected: 'Corrected' }}
+        />
+      );
+      expect((screen.getByRole('img', { name: /Drawing/i }) as HTMLImageElement).src).toBe(ORIGINAL_URL);
+      expect(container.querySelector('[data-region-id="r1"]')?.getAttribute('data-active')).toBe('true');
+      expect(screen.getByRole('button', { name: /Note 1/ }).getAttribute('aria-pressed')).toBe('true');
+    } finally {
+      restore();
+    }
+  });
+
+  it('leaves out tabs with nothing behind them, and the group when one is left', () => {
+    render(<ImageToggleTabs originalImageUrl={ORIGINAL_URL} studentView hideUnavailableTabs hideCopy />);
+    expect(screen.queryByRole('button', { name: /Overlay/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /My Drawing/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /copy/i })).toBeNull();
+  });
+
+  it('keeps chips for the teacher by default', () => {
+    const restore = stubLayout();
+    try {
+      render(<ImageToggleTabs originalImageUrl={ORIGINAL_URL} regionAnnotations={REGIONS} />);
+      expect(screen.getByText('Proportion')).toBeDefined();
+      expect(screen.queryByRole('button', { name: /Note 1/ })).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+});
+
 describe('ImageToggleTabs annotation placement', () => {
   it('positions a region against the drawing, letterbox included', () => {
     const restore = stubLayout();
