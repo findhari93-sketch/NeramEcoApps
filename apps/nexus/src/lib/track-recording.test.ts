@@ -80,7 +80,12 @@ describe('describeTrackRecording', () => {
       drive_type: 'documentLibrary',
       problem: null,
     });
-    expect(d.backfill).toEqual({ recording_file_name: 'Ch1 History Tamil.mp4', video_duration_seconds: 3758 });
+    expect(d.backfill).toEqual({
+      recording_file_name: 'Ch1 History Tamil.mp4',
+      video_duration_seconds: 3758,
+      recording_drive_id: 'b!library',
+      recording_item_id: '01LIB',
+    });
     expect(d.item).toBe(LIBRARY);
   });
 
@@ -89,7 +94,49 @@ describe('describeTrackRecording', () => {
       row({ recording_file_name: 'Renamed.mp4', video_duration_seconds: 3700 }),
       { resolve: async () => LIBRARY },
     );
+    expect(d.backfill).toEqual({ recording_drive_id: 'b!library', recording_item_id: '01LIB' });
+  });
+
+  it('writes nothing back for a row whose ids and address already match the file', async () => {
+    const resolve = vi.fn(async () => LIBRARY);
+    const d = await describeTrackRecording(
+      row({
+        recording_url: LIBRARY.webUrl,
+        recording_drive_id: 'b!library',
+        recording_item_id: '01LIB',
+        recording_file_name: 'Ch1 History Tamil.mp4',
+        video_duration_seconds: 3758,
+      }),
+      { resolve },
+    );
     expect(d.backfill).toEqual({});
+    expect(d.recording?.problem).toBeNull();
+    expect(resolve).toHaveBeenCalledWith({ driveId: 'b!library', itemId: '01LIB' });
+  });
+
+  it('keeps playing a video whose folder was moved, and stores its new address', async () => {
+    // The prod English chapters on 2026-09-17: the stored path went dead when
+    // nexus/class-videos was tidied into "English Class".
+    const OLD_PATH =
+      'https://nerasmclasses.sharepoint.com/sites/NeramStorage/Shared%20Documents/nexus/class-videos/Old%20Folder/Ch1%20History%20Tamil.mp4';
+    const d = await describeTrackRecording(
+      row({
+        recording_url: OLD_PATH,
+        recording_drive_id: 'b!library',
+        recording_item_id: '01LIB',
+        recording_file_name: 'Ch1 History Tamil.mp4',
+        video_duration_seconds: 3758,
+      }),
+      {
+        resolve: async (ref) => {
+          if (typeof ref === 'string') throw new VideoItemError('NOT_FOUND');
+          return LIBRARY;
+        },
+      },
+    );
+    expect(d.recording?.problem).toBeNull();
+    expect(d.recording?.web_url).toBe(LIBRARY.webUrl);
+    expect(d.backfill).toEqual({ recording_url: LIBRARY.webUrl });
   });
 
   it('flags a recording kept in OneDrive, which is exactly the prod Tamil track', async () => {

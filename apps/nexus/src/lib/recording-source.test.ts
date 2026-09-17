@@ -1,5 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
-import { fetchSlice } from './recording-source';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+
+vi.mock('./graph-app-token', () => ({
+  getAppOnlyToken: vi.fn(async () => 'test-token'),
+}));
+
+import { fetchSlice, resolveRecordingSourceByIds } from './recording-source';
 
 /**
  * Reading the mp4 in slices.
@@ -58,5 +63,67 @@ describe('fetchSlice', () => {
   it('gives up rather than spinning when the server returns nothing', async () => {
     const f = vi.fn(async () => partial(0));
     await expect(fetchSlice('https://dl', 0, 1024, f as any)).rejects.toThrow('RANGE_FETCH_EMPTY');
+  });
+});
+
+describe('resolveRecordingSourceByIds', () => {
+  /**
+   * A recording found by its SharePoint ids, which survive the folder above it
+   * being moved. Probed app-only on 2026-09-17: /drives/{d}/items/{i} carries the
+   * download URL when nothing is $select-ed, /content 302s to it, and that URL
+   * answers a Range with 206.
+   */
+  const realFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  function graph(handler: (url: string) => Response) {
+    const calls: string[] = [];
+    global.fetch = vi.fn(async (input: unknown) => {
+      calls.push(String(input));
+      return handler(String(input));
+    }) as unknown as typeof fetch;
+    return calls;
+  }
+
+  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+
+  it('reads size, name and the download URL from the file itself', async () => {
+    const calls = graph(() =>
+      json(200, {
+        id: '01HISTORY',
+        name: 'History.mp4',
+        size: 170153218,
+        '@microsoft.graph.downloadUrl': 'https://dl/history',
+      }),
+    );
+    await expect(resolveRecordingSourceByIds('b!library', '01HISTORY')).resolves.toEqual({
+      downloadUrl: 'https://dl/history',
+      size: 170153218,
+      itemId: '01HISTORY',
+      name: 'History.mp4',
+    });
+    expect(calls).toEqual(['https://graph.microsoft.com/v1.0/drives/b!library/items/01HISTORY']);
+  });
+
+  it('follows /content when the download URL is not on the item', async () => {
+    graph((url) =>
+      url.endsWith('/content')
+        ? new Response(null, { status: 302, headers: { Location: 'https://dl/redirected' } })
+        : json(200, { id: '01HISTORY', name: 'History.mp4', size: 10 }),
+    );
+    const source = await resolveRecordingSourceByIds('b!library', '01HISTORY');
+    expect(source.downloadUrl).toBe('https://dl/redirected');
+  });
+
+  it('refuses a file with no size rather than guessing the byte ranges', async () => {
+    graph(() => json(200, { id: '01HISTORY', name: 'History.mp4', '@microsoft.graph.downloadUrl': 'https://dl/x' }));
+    await expect(resolveRecordingSourceByIds('b!library', '01HISTORY')).rejects.toThrow('RECORDING_SIZE_UNKNOWN');
+  });
+
+  it('fails when SharePoint cannot find the file by its ids', async () => {
+    graph(() => json(404, { error: { code: 'itemNotFound' } }));
+    await expect(resolveRecordingSourceByIds('b!library', '01GONE')).rejects.toThrow('RECORDING_ITEM_404');
   });
 });

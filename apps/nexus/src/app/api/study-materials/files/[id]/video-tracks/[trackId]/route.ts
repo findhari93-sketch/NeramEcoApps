@@ -8,11 +8,12 @@ import { evictMedia } from '@/lib/recording-source-cache';
 import { describeTrackRecording, videoRefFromBody } from '@/lib/track-recording';
 import {
   classifyRecordingLink,
+  findRecordingItem,
   forgetVideoItem,
   recordingPolicyProblem,
   resolveVideoItem,
-  resolveVideoItemCached,
   sameRecording,
+  storedRecordingRef,
   videoItemMessage,
   VideoItemError,
   type RecordingFingerprint,
@@ -66,6 +67,20 @@ async function loadTrack(trackId: string, fileId: string) {
 function fileNameOf(track: unknown): string | null {
   return (track as { recording_file_name?: string | null }).recording_file_name ?? null;
 }
+
+/** The address and, when known, the file's ids. The ids are not on the type either. */
+function recordingOf(track: unknown) {
+  return storedRecordingRef(
+    track as { recording_url?: string | null; recording_drive_id?: string | null; recording_item_id?: string | null },
+  );
+}
+
+/**
+ * Columns a release of the code can write before its migration reaches every
+ * environment. Migrations here have silently no-opped before, and losing one of
+ * these costs a display name or a lookup shortcut, both with a fallback.
+ */
+const OPTIONAL_COLUMNS = ['recording_file_name', 'recording_drive_id', 'recording_item_id'];
 
 export async function PATCH(
   request: NextRequest,
@@ -122,20 +137,25 @@ export async function PATCH(
 
       const nextUrl = item?.webUrl || normalizeRecordingUrl(typeof ref === 'string' ? ref : '');
       patch.recording_url = nextUrl;
-      // Written even when null: the old name described the old file.
+      // Written even when null: the old name described the old file, and the old
+      // ids would keep finding the old video.
       patch.recording_file_name = item?.name ?? null;
+      patch.recording_drive_id = item?.driveId || null;
+      patch.recording_item_id = item?.itemId || null;
       patch.video_source = 'sharepoint';
       if (item?.durationSeconds) patch.video_duration_seconds = item.durationSeconds;
 
-      // What we know about the recording already attached. The old file may be
-      // gone after a move, in which case the row's own name and length stand in.
+      // What we know about the recording already attached. Found by its ids when
+      // the row has them, so a file whose folder was moved still counts as the
+      // same video. A file that has gone leaves the row's own name and length.
       const previous: RecordingFingerprint = {
         name: fileNameOf(track),
         durationSeconds: track.video_duration_seconds,
       };
-      if (track.recording_url) {
+      const stored = recordingOf(track);
+      if (stored) {
         try {
-          const old = await resolveVideoItemCached(track.recording_url);
+          const { item: old } = await findRecordingItem(stored);
           previous.driveId = old.driveId;
           previous.itemId = old.itemId;
           previous.name = old.name;
@@ -167,7 +187,10 @@ export async function PATCH(
         clearedCheckpoints = true;
       }
 
-      if (track.recording_url) forgetVideoItem(track.recording_url);
+      if (stored) {
+        forgetVideoItem(stored.url);
+        if (stored.driveId && stored.itemId) forgetVideoItem({ driveId: stored.driveId, itemId: stored.itemId });
+      }
     }
 
     /* ── Re-file under another language ──────────────────────────────────── */
@@ -267,11 +290,15 @@ export async function PATCH(
         const url = (patch.recording_url as string | undefined) ?? track.recording_url;
         const source = (patch.video_source as string | undefined) ?? track.video_source;
         if (url && source !== 'youtube') {
+          const replaced = 'recording_url' in patch;
+          const stored = recordingOf(track);
           const { recording } = await describeTrackRecording({
             video_source: 'sharepoint',
             recording_url: url,
             recording_file_name: (patch.recording_file_name as string | null | undefined) ?? fileNameOf(track),
             video_duration_seconds: track.video_duration_seconds,
+            recording_drive_id: replaced ? (patch.recording_drive_id as string | null) : stored?.driveId,
+            recording_item_id: replaced ? (patch.recording_item_id as string | null) : stored?.itemId,
           });
           const problem = recording?.problem;
           if (problem && problem !== 'UNRESOLVED') {
@@ -299,16 +326,15 @@ export async function PATCH(
     let { data, error } = await save();
 
     /**
-     * The schema is a release behind the code: migrations here have silently
-     * no-opped before, so recording_file_name can be absent while this code is
-     * live. Dropping it costs a display name that has a fallback.
+     * The schema can be a release behind the code (OPTIONAL_COLUMNS). Drop only
+     * the column PostgREST names, one at a time.
      */
-    if (
-      (error as { code?: string })?.code === 'PGRST204' &&
-      (error as { message?: string })?.message?.includes('recording_file_name')
-    ) {
-      console.warn('[video-tracks] recording_file_name column missing, saving without it');
-      delete patch.recording_file_name;
+    while ((error as { code?: string })?.code === 'PGRST204') {
+      const message = (error as { message?: string })?.message || '';
+      const missing = OPTIONAL_COLUMNS.find((column) => column in patch && message.includes(column));
+      if (!missing) break;
+      console.warn(`[video-tracks] ${missing} column missing, saving without it`);
+      delete patch[missing];
       ({ data, error } = await save());
     }
     if (error) throw error;

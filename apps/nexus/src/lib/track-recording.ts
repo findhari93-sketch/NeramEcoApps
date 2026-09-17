@@ -10,6 +10,7 @@
 import type { RecordingProblem, ResolvedRecording } from './recording-flow';
 import { describeRecordingUrl } from './chapter-recordings';
 import {
+  findRecordingItem,
   recordingPolicyProblem,
   resolveVideoItemCached,
   VideoItemError,
@@ -26,12 +27,25 @@ export interface TrackRecordingRow {
   recording_url: string | null;
   recording_file_name: string | null;
   video_duration_seconds: number | null;
+  /** Absent on a row read before the id columns existed. */
+  recording_drive_id?: string | null;
+  recording_item_id?: string | null;
 }
 
 export interface TrackRecordingDescription {
   recording: ResolvedRecording | null;
-  /** Columns the row was missing that the lookup can fill. The caller writes them. */
-  backfill: { recording_file_name?: string; video_duration_seconds?: number };
+  /**
+   * Columns the row was missing, or holds wrongly, that the lookup can fill: a
+   * name, a length, the file's ids, or its new address after a move. The caller
+   * writes them.
+   */
+  backfill: {
+    recording_file_name?: string;
+    video_duration_seconds?: number;
+    recording_url?: string;
+    recording_drive_id?: string;
+    recording_item_id?: string;
+  };
   /** The SharePoint file, when it was found. */
   item: ResolvedVideoItem | null;
 }
@@ -93,9 +107,19 @@ export async function describeTrackRecording(
 
   const resolve = opts.resolve ?? resolveVideoItemCached;
   try {
-    const item = await withTimeout(resolve(url), opts.timeoutMs ?? DESCRIBE_TIMEOUT_MS);
+    // By the file's ids when the row has them, so a moved folder does not break
+    // the recording (lib/sharepoint-video.ts findRecordingItem).
+    const { item, heal } = await withTimeout(
+      findRecordingItem({ url, driveId: row.recording_drive_id, itemId: row.recording_item_id }, resolve),
+      opts.timeoutMs ?? DESCRIBE_TIMEOUT_MS,
+    );
 
     const backfill: TrackRecordingDescription['backfill'] = {};
+    if (heal.url) backfill.recording_url = heal.url;
+    if (heal.driveId && heal.itemId) {
+      backfill.recording_drive_id = heal.driveId;
+      backfill.recording_item_id = heal.itemId;
+    }
     if (!row.recording_file_name && item.name) backfill.recording_file_name = item.name;
     if (!row.video_duration_seconds && item.durationSeconds) {
       backfill.video_duration_seconds = item.durationSeconds;

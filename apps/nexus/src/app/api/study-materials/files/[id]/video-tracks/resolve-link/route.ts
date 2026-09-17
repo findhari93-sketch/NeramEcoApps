@@ -3,9 +3,11 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { videoRefFromBody } from '@/lib/track-recording';
 import {
+  findRecordingItem,
   recordingPolicyProblem,
   resolveVideoItemCached,
   sameRecording,
+  storedRecordingRef,
   videoItemDto,
   videoItemMessage,
   VideoItemError,
@@ -83,27 +85,30 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const supabase = getSupabaseAdminClient() as any;
       const { data: existing } = await supabase
         .from('nexus_class_recaps')
-        .select('id, recording_url, recording_file_name, video_duration_seconds')
+        // '*' so an environment the recording id columns have not reached still answers.
+        .select('*')
         .eq('study_file_id', params.id)
         .eq('language', language)
         .neq('status', 'archived')
         .maybeSingle();
 
-      if (existing?.recording_url) {
+      const stored = existing ? storedRecordingRef(existing) : null;
+      if (existing && stored) {
         const previous: RecordingFingerprint = {
           name: existing.recording_file_name,
           durationSeconds: existing.video_duration_seconds,
         };
         try {
-          const old = await resolveVideoItemCached(existing.recording_url);
+          // By its ids when the row has them, so a moved file reads as `same`.
+          const { item: old } = await findRecordingItem(stored);
           previous.driveId = old.driveId;
           previous.itemId = old.itemId;
           previous.name = old.name;
           previous.sizeBytes = old.sizeBytes;
           previous.durationSeconds = old.durationSeconds ?? previous.durationSeconds;
         } catch {
-          // The old file may be gone after a move. The row's own name and
-          // length stand in, which is enough for a "likely".
+          // The old file may be gone, or moved before its ids were stored. The
+          // row's own name and length stand in, which is enough for a "likely".
         }
 
         const { count } = await supabase

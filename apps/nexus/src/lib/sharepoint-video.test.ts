@@ -11,12 +11,16 @@ import {
   recordingPolicyProblem,
   sameRecording,
   graphStatusToCode,
+  graphErrorToCode,
   resolveVideoItem,
   resolveVideoItemCached,
+  findRecordingItem,
   clearVideoItemCache,
   getDriveItemThumbnailUrl,
   VideoItemError,
   videoItemMessage,
+  type ResolvedVideoItem,
+  type VideoItemRef,
 } from './sharepoint-video';
 
 /**
@@ -246,6 +250,35 @@ describe('graphStatusToCode', () => {
   });
 });
 
+describe('graphErrorToCode', () => {
+  /** What Graph answered on 2026-09-17 for a path whose folder had been moved. */
+  const DEAD_PATH = {
+    error: {
+      code: 'accessDenied',
+      message: 'The system cannot find the file specified. (Exception from HRESULT: 0x80070002)',
+    },
+  };
+
+  it('reads a 403 that says the file cannot be found as a missing file, not a permission problem', () => {
+    expect(graphErrorToCode(403, DEAD_PATH)).toBe('NOT_FOUND');
+    expect(
+      graphErrorToCode(403, { error: { code: 'accessDenied', message: 'Exception from HRESULT: 0x80070002' } }),
+    ).toBe('NOT_FOUND');
+  });
+
+  it('keeps a real refusal as NO_ACCESS', () => {
+    expect(graphErrorToCode(403, { error: { code: 'accessDenied', message: 'Access denied' } })).toBe('NO_ACCESS');
+    expect(graphErrorToCode(403, null)).toBe('NO_ACCESS');
+    expect(graphErrorToCode(401, DEAD_PATH)).toBe('NO_ACCESS');
+  });
+
+  it('falls back to the status for everything else', () => {
+    expect(graphErrorToCode(404, null)).toBe('NOT_FOUND');
+    expect(graphErrorToCode(400, null)).toBe('LINK_NOT_RECOGNISED');
+    expect(graphErrorToCode(503, DEAD_PATH)).toBe('GRAPH_UNAVAILABLE');
+  });
+});
+
 describe('resolveVideoItem', () => {
   it('looks a list form link up through the shares endpoint and returns the real file', async () => {
     mockFetch(async () => jsonRes(200, ONEDRIVE_ITEM));
@@ -278,11 +311,118 @@ describe('resolveVideoItem', () => {
     expect(err.code).toBe('NOT_FOUND');
   });
 
+  it('says the file is gone when a moved folder leaves the stored path dead', async () => {
+    mockFetch(async () =>
+      jsonRes(403, {
+        error: {
+          code: 'accessDenied',
+          message: 'The system cannot find the file specified. (Exception from HRESULT: 0x80070002)',
+        },
+      }),
+    );
+    const err = await resolveVideoItem(LIBRARY_ITEM.webUrl).catch((e) => e);
+    expect(err).toBeInstanceOf(VideoItemError);
+    expect(err.code).toBe('NOT_FOUND');
+  });
+
   it('treats a network failure as SharePoint being unavailable, not as a bad link', async () => {
     mockFetch(async () => {
       throw new Error('socket hang up');
     });
     await expect(resolveVideoItem(LIBRARY_DISPFORM)).rejects.toMatchObject({ code: 'GRAPH_UNAVAILABLE' });
+  });
+});
+
+describe('findRecordingItem', () => {
+  const OLD_PATH =
+    'https://nerasmclasses.sharepoint.com/sites/NeramStorage/Shared%20Documents/nexus/class-videos/English%202026%20Hari%20Book/History.mp4';
+  const NEW_PATH =
+    'https://nerasmclasses.sharepoint.com/sites/NeramStorage/Shared%20Documents/nexus/class-videos/English%20Class/English%202026%20Hari%20Book/History.mp4';
+
+  const video = (over: Partial<ResolvedVideoItem>): ResolvedVideoItem => ({
+    ...toResolvedVideoItem(LIBRARY_ITEM),
+    ...over,
+  });
+  const HISTORY = video({ driveId: 'b!library', itemId: '01HISTORY', name: 'History.mp4', webUrl: NEW_PATH });
+  const OTHER = video({ driveId: 'b!library', itemId: '01OTHER', name: 'Other.mp4', webUrl: OLD_PATH });
+
+  /** A Graph that knows files by ids and by address, and fails the rest. */
+  function graph(
+    byIds: Record<string, ResolvedVideoItem | VideoItemError>,
+    byUrl: Record<string, ResolvedVideoItem | VideoItemError>,
+  ) {
+    return vi.fn(async (ref: VideoItemRef) => {
+      const hit = typeof ref === 'string' ? byUrl[ref] : byIds[`${ref.driveId}/${ref.itemId}`];
+      if (!hit) throw new VideoItemError('NOT_FOUND');
+      if (hit instanceof VideoItemError) throw hit;
+      return hit;
+    });
+  }
+
+  it('looks a row with no ids up by its address, and hands back the ids to store', async () => {
+    const resolve = graph({}, { [NEW_PATH]: HISTORY });
+    const found = await findRecordingItem({ url: NEW_PATH }, resolve);
+    expect(found.item).toBe(HISTORY);
+    expect(found.heal).toEqual({ driveId: 'b!library', itemId: '01HISTORY' });
+  });
+
+  it('asks Graph once when the ids and the address agree', async () => {
+    const resolve = graph({ 'b!library/01HISTORY': HISTORY }, {});
+    const found = await findRecordingItem({ url: NEW_PATH, driveId: 'b!library', itemId: '01HISTORY' }, resolve);
+    expect(found).toEqual({ item: HISTORY, heal: {} });
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it('finds a moved file by its ids and hands back its new address', async () => {
+    // Exactly the prod English chapters on 2026-09-17: the old path is dead.
+    const resolve = graph({ 'b!library/01HISTORY': HISTORY }, {});
+    const found = await findRecordingItem({ url: OLD_PATH, driveId: 'b!library', itemId: '01HISTORY' }, resolve);
+    expect(found).toEqual({ item: HISTORY, heal: { url: NEW_PATH } });
+  });
+
+  it('trusts the address over ids it contradicts, since a replace may have left the ids behind', async () => {
+    // Nexus before the id columns replaced recording_url and never touched the ids.
+    const resolve = graph({ 'b!library/01HISTORY': HISTORY }, { [OLD_PATH]: OTHER });
+    const found = await findRecordingItem({ url: OLD_PATH, driveId: 'b!library', itemId: '01HISTORY' }, resolve);
+    expect(found).toEqual({ item: OTHER, heal: { driveId: 'b!library', itemId: '01OTHER' } });
+  });
+
+  it('stores the real address when the row holds another link to the same file', async () => {
+    const resolve = graph({ 'b!library/01HISTORY': HISTORY }, { [LIBRARY_DISPFORM]: HISTORY });
+    const found = await findRecordingItem(
+      { url: LIBRARY_DISPFORM, driveId: 'b!library', itemId: '01HISTORY' },
+      resolve,
+    );
+    expect(found).toEqual({ item: HISTORY, heal: { url: NEW_PATH } });
+  });
+
+  it('falls back to the address when the ids no longer find anything', async () => {
+    const resolve = graph({}, { [NEW_PATH]: HISTORY });
+    const found = await findRecordingItem({ url: NEW_PATH, driveId: 'b!library', itemId: '01GONE' }, resolve);
+    expect(found).toEqual({ item: HISTORY, heal: { driveId: 'b!library', itemId: '01HISTORY' } });
+  });
+
+  it('reports a file neither the ids nor the address can find as gone', async () => {
+    const resolve = graph({}, {});
+    await expect(
+      findRecordingItem({ url: OLD_PATH, driveId: 'b!library', itemId: '01GONE' }, resolve),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('does not rewrite the address when SharePoint only failed to answer about it', async () => {
+    const resolve = graph(
+      { 'b!library/01HISTORY': HISTORY },
+      { [OLD_PATH]: new VideoItemError('GRAPH_UNAVAILABLE') },
+    );
+    const found = await findRecordingItem({ url: OLD_PATH, driveId: 'b!library', itemId: '01HISTORY' }, resolve);
+    expect(found).toEqual({ item: HISTORY, heal: {} });
+  });
+
+  it('calls it unchecked, not gone, when SharePoint is down for the ids', async () => {
+    const resolve = graph({ 'b!library/01HISTORY': new VideoItemError('GRAPH_UNAVAILABLE') }, {});
+    await expect(
+      findRecordingItem({ url: OLD_PATH, driveId: 'b!library', itemId: '01HISTORY' }, resolve),
+    ).rejects.toMatchObject({ code: 'GRAPH_UNAVAILABLE' });
   });
 });
 

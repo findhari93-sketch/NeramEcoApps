@@ -330,6 +330,23 @@ export function graphStatusToCode(status: number): VideoItemErrorCode {
   return 'GRAPH_UNAVAILABLE';
 }
 
+/**
+ * The status is not always the truth. A path whose folder was moved answers 403
+ * accessDenied with "The system cannot find the file specified (0x80070002)",
+ * not 404: probed 2026-09-17, after nexus/class-videos was tidied into "English
+ * Class" and "Tamil Class". Read as NO_ACCESS, that told teachers to move a file
+ * that was already in the library.
+ */
+const FILE_NOT_FOUND = /0x80070002|cannot find the file/i;
+
+export function graphErrorToCode(status: number, body: unknown): VideoItemErrorCode {
+  if (status === 403) {
+    const message = (body as { error?: { message?: unknown } } | null)?.error?.message;
+    if (typeof message === 'string' && FILE_NOT_FOUND.test(message)) return 'NOT_FOUND';
+  }
+  return graphStatusToCode(status);
+}
+
 export type VideoItemRef = string | { driveId: string; itemId: string };
 
 export async function resolveVideoItem(input: VideoItemRef): Promise<ResolvedVideoItem> {
@@ -352,7 +369,10 @@ export async function resolveVideoItem(input: VideoItemRef): Promise<ResolvedVid
   } catch {
     throw new VideoItemError('GRAPH_UNAVAILABLE');
   }
-  if (!res.ok) throw new VideoItemError(graphStatusToCode(res.status));
+  if (!res.ok) {
+    const error = await res.json().catch(() => null);
+    throw new VideoItemError(graphErrorToCode(res.status, error));
+  }
 
   const body = await res.json().catch(() => null);
   if (!body?.id) throw new VideoItemError('GRAPH_UNAVAILABLE');
@@ -391,6 +411,100 @@ export async function resolveVideoItemCached(input: VideoItemRef): Promise<Resol
 /** Forget one lookup, e.g. after the file behind a link was replaced. */
 export function forgetVideoItem(input: VideoItemRef): void {
   cache.delete(cacheKey(input));
+}
+
+/* ── A stored recording ─────────────────────────────────────────────────────── */
+
+/** What a row keeps about its recording: the address, and the file's ids when known. */
+export interface StoredRecordingRef {
+  url: string;
+  driveId?: string | null;
+  itemId?: string | null;
+}
+
+/** Columns the caller should write so the row matches the file SharePoint found. */
+export interface RecordingHeal {
+  url?: string;
+  driveId?: string;
+  itemId?: string;
+}
+
+/** A row's recording reference, from any row carrying the recording columns. */
+export function storedRecordingRef(row: {
+  recording_url?: string | null;
+  recording_drive_id?: string | null;
+  recording_item_id?: string | null;
+}): StoredRecordingRef | null {
+  if (!row.recording_url) return null;
+  return { url: row.recording_url, driveId: row.recording_drive_id ?? null, itemId: row.recording_item_id ?? null };
+}
+
+const idsOf = (item: ResolvedVideoItem): RecordingHeal =>
+  item.driveId && item.itemId ? { driveId: item.driveId, itemId: item.itemId } : {};
+
+/** A lookup that failed because SharePoint was busy says nothing about the file. */
+const unanswered = (err: unknown) => !(err instanceof VideoItemError) || err.code === 'GRAPH_UNAVAILABLE';
+
+/**
+ * Find the file a stored recording means, and say what to write back.
+ *
+ * WHY IDS FIRST. A path address dies when anyone moves or renames the folder
+ * above it. On 2026-09-15 nexus/class-videos was tidied into "English Class" and
+ * "Tamil Class", and three published chapters stopped playing. A driveItem id
+ * does not change when the file moves inside its library.
+ *
+ * WHY THE ADDRESS STILL GETS A SAY. Nexus from before the id columns replaces
+ * recording_url without touching the ids, so ids can describe the video that was
+ * replaced. When the ids find a file whose address is not the stored one, the
+ * stored address is asked too: if it finds another file, the ids are stale and
+ * the address wins; if it finds nothing, the file moved and the new address is
+ * written back.
+ *
+ * Costs one Graph call when the row is consistent, two only when it is not.
+ */
+export async function findRecordingItem(
+  ref: StoredRecordingRef,
+  resolve: (input: VideoItemRef) => Promise<ResolvedVideoItem> = resolveVideoItemCached,
+): Promise<{ item: ResolvedVideoItem; heal: RecordingHeal }> {
+  if (!ref.driveId || !ref.itemId) {
+    const item = await resolve(ref.url);
+    return { item, heal: idsOf(item) };
+  }
+
+  let byIds: ResolvedVideoItem | null = null;
+  let idsError: unknown = null;
+  try {
+    byIds = await resolve({ driveId: ref.driveId, itemId: ref.itemId });
+  } catch (err) {
+    idsError = err;
+  }
+  if (byIds && (!byIds.webUrl || byIds.webUrl === ref.url)) return { item: byIds, heal: {} };
+
+  let byUrl: ResolvedVideoItem | null = null;
+  let urlError: unknown = null;
+  try {
+    byUrl = await resolve(ref.url);
+  } catch (err) {
+    urlError = err;
+  }
+
+  if (byIds && byUrl) {
+    const sameFile = byUrl.driveId === byIds.driveId && byUrl.itemId === byIds.itemId;
+    // The same file reached through another link shape: keep its real address.
+    if (sameFile) return { item: byIds, heal: byIds.webUrl ? { url: byIds.webUrl } : {} };
+    return { item: byUrl, heal: idsOf(byUrl) };
+  }
+  if (byIds) {
+    // The address found nothing, so the file moved. Unless SharePoint simply did
+    // not answer about the address, in which case nothing is rewritten.
+    return { item: byIds, heal: unanswered(urlError) || !byIds.webUrl ? {} : { url: byIds.webUrl } };
+  }
+  if (byUrl) {
+    // Only an id lookup that was answered proves the ids wrong.
+    return { item: byUrl, heal: unanswered(idsError) ? {} : idsOf(byUrl) };
+  }
+
+  throw unanswered(idsError) ? idsError : urlError;
 }
 
 /** Test seam: drop everything. */

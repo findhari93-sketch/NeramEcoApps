@@ -17,7 +17,8 @@
  */
 
 import { getSupabaseAdminClient } from '@neram/database';
-import { resolveRecordingSource } from './recording-source';
+import { resolveRecordingSource, resolveRecordingSourceByIds, type RecordingSource } from './recording-source';
+import { findRecordingItem, type StoredRecordingRef } from './sharepoint-video';
 import type { VideoScope } from './video-token';
 
 /** Comfortably inside the "well under an hour" the Graph URL is good for. */
@@ -49,14 +50,47 @@ const SOURCE_COLUMN: Record<VideoScope, { table: string; column: string }> = {
   foundation: { table: 'nexus_foundation_chapters', column: 'sharepoint_video_url' },
 };
 
-async function readSourceUrl(scope: VideoScope, refId: string): Promise<string> {
+/**
+ * The stored address, plus the file's SharePoint ids where the scope keeps them.
+ * Only recaps do (nexus_class_recaps.recording_drive_id/recording_item_id). They
+ * are read with '*' so an environment the id migration has not reached still
+ * plays by address rather than failing the lookup.
+ */
+async function readSource(scope: VideoScope, refId: string): Promise<StoredRecordingRef> {
   const { table, column } = SOURCE_COLUMN[scope];
   const supabase = getSupabaseAdminClient() as any;
-  const { data, error } = await supabase.from(table).select(column).eq('id', refId).maybeSingle();
+  const { data, error } = await supabase
+    .from(table)
+    .select(scope === 'recap' ? '*' : column)
+    .eq('id', refId)
+    .maybeSingle();
   if (error) throw new Error(`MEDIA_LOOKUP_FAILED: ${error.message}`);
   const url = data?.[column];
   if (!url) throw new Error('MEDIA_NOT_FOUND');
-  return url as string;
+  return {
+    url: url as string,
+    driveId: scope === 'recap' ? data?.recording_drive_id ?? null : null,
+    itemId: scope === 'recap' ? data?.recording_item_id ?? null : null,
+  };
+}
+
+/**
+ * By the file's ids when the row has them, so a recording keeps playing after
+ * the SharePoint folder above it is moved. findRecordingItem checks the ids
+ * against the address, since ids left behind by a replace would play the old
+ * video. Anything that goes wrong on that path falls back to the address, which
+ * is how every recording was played before the ids existed.
+ */
+async function resolveSource(source: StoredRecordingRef): Promise<RecordingSource> {
+  if (source.driveId && source.itemId) {
+    try {
+      const { item } = await findRecordingItem(source);
+      return await resolveRecordingSourceByIds(item.driveId, item.itemId);
+    } catch {
+      /* the address below */
+    }
+  }
+  return resolveRecordingSource(source.url);
 }
 
 /** Drop the oldest entries once the map grows past its cap. */
@@ -80,8 +114,7 @@ export async function resolveMedia(scope: VideoScope, refId: string): Promise<Re
     return media;
   }
 
-  const sourceUrl = await readSourceUrl(scope, refId);
-  const source = await resolveRecordingSource(sourceUrl);
+  const source = await resolveSource(await readSource(scope, refId));
 
   const media: ResolvedMedia = {
     downloadUrl: source.downloadUrl,

@@ -18,6 +18,7 @@
  * run re-resolves it, which costs one cheap Graph call.
  */
 
+import { getAppOnlyToken } from './graph-app-token';
 import {
   getSharePointStreamUrl,
   resolveShareUrlToItem,
@@ -57,6 +58,40 @@ export async function resolveRecordingSource(recordingUrl: string): Promise<Reco
   }
 
   return { downloadUrl, size, itemId: item?.id ?? null, name: item?.name ?? null };
+}
+
+const GRAPH = 'https://graph.microsoft.com/v1.0';
+
+/**
+ * The same, for a recording found by its SharePoint ids rather than its address.
+ *
+ * An address goes dead when the folder above the file is moved; the ids do not
+ * (lib/sharepoint-video.ts findRecordingItem). The item is requested WITHOUT
+ * `$select`, because Graph strips `@microsoft.graph.downloadUrl` whenever
+ * `$select` is used, and /content 302s to the same URL when the annotation is
+ * missing anyway. Probed app-only on 2026-09-17: both carry the URL, and it
+ * answers a Range with 206.
+ */
+export async function resolveRecordingSourceByIds(driveId: string, itemId: string): Promise<RecordingSource> {
+  const token = await getAppOnlyToken();
+  const itemUrl = `${GRAPH}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}`;
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const res = await fetch(itemUrl, { headers });
+  if (!res.ok) throw new Error(`RECORDING_ITEM_${res.status}`);
+  const item = await res.json();
+
+  const size = typeof item?.size === 'number' ? item.size : null;
+  if (!size || size <= 0) throw new Error('RECORDING_SIZE_UNKNOWN');
+
+  let downloadUrl: string | null = item['@microsoft.graph.downloadUrl'] || null;
+  if (!downloadUrl) {
+    const content = await fetch(`${itemUrl}/content`, { headers, redirect: 'manual' });
+    downloadUrl = content.status === 302 ? content.headers.get('Location') : null;
+  }
+  if (!downloadUrl) throw new Error('Could not resolve SharePoint item to a streaming URL');
+
+  return { downloadUrl, size, itemId: item?.id ?? itemId, name: item?.name ?? null };
 }
 
 /**

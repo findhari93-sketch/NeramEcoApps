@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRecapById } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
-import { getDriveItemThumbnailUrl, resolveVideoItemCached } from '@/lib/sharepoint-video';
+import { findRecordingItem, getDriveItemThumbnailUrl, storedRecordingRef } from '@/lib/sharepoint-video';
 
 /**
  * GET /api/study-materials/files/[id]/video-tracks/[trackId]/thumbnail?size=large   (staff)
@@ -33,9 +33,11 @@ export async function GET(
     const size = (SIZES.has(requested) ? requested : 'large') as 'small' | 'medium' | 'large';
 
     let url: string | null = null;
-    if (track.recording_url && track.video_source !== 'youtube') {
+    // The id columns are not on the recap type; the row carries them.
+    const stored = storedRecordingRef(track as Parameters<typeof storedRecordingRef>[0]);
+    if (stored && track.video_source !== 'youtube') {
       try {
-        const item = await resolveVideoItemCached(track.recording_url);
+        const { item } = await findRecordingItem(stored);
         url = await getDriveItemThumbnailUrl(item.driveId, item.itemId, size);
       } catch {
         url = null;

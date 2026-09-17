@@ -78,15 +78,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       getLibraryVideoFolderUrl(),
     ]);
 
-    // Fill in a name or length the row was missing, once. Best effort: a failed
-    // write only means the next load looks the file up again.
+    // Fill in a name, length or file ids the row was missing, and the new address
+    // of a video whose folder was moved. Best effort: a failed write only means
+    // the next load looks the file up again. Only while the row still holds the
+    // address this lookup started from, so a video replaced in the meantime is
+    // never written over with the old one's details.
     await Promise.all(
       descriptions.map((d, i) =>
-        Object.keys(d.backfill).length
+        Object.keys(d.backfill).length && tracks[i].recording_url
           ? supabase
               .from('nexus_class_recaps')
               .update(d.backfill)
               .eq('id', tracks[i].id)
+              .eq('recording_url', tracks[i].recording_url)
               .then(undefined, () => undefined)
           : undefined,
       ),
@@ -104,6 +108,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         const transcript = transcripts.get(t.id);
         return {
           ...t,
+          recording_url: d.backfill.recording_url ?? t.recording_url,
           recording_file_name: t.recording_file_name ?? d.backfill.recording_file_name ?? null,
           video_duration_seconds: t.video_duration_seconds ?? d.backfill.video_duration_seconds ?? null,
           recording: d.recording,
@@ -202,14 +207,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       createdBy: user.id,
     });
 
-    // The length SharePoint measured. Nothing else writes it for a chapter track,
-    // and the checkpoint editor needs it to warn about a checkpoint past the end.
-    if (item?.durationSeconds) {
-      await supabase
+    // The length SharePoint measured, which the checkpoint editor needs to warn
+    // about a checkpoint past the end, and the file's ids, which keep the video
+    // reachable when its folder is moved. Nothing else writes either for a
+    // chapter track. Written even when null: a restored track's old ids described
+    // its old video.
+    const facts: Record<string, unknown> = {
+      recording_drive_id: item?.driveId || null,
+      recording_item_id: item?.itemId || null,
+    };
+    if (item?.durationSeconds) facts.video_duration_seconds = item.durationSeconds;
+    const writeFacts = (values: Record<string, unknown>) =>
+      supabase
         .from('nexus_class_recaps')
-        .update({ video_duration_seconds: item.durationSeconds })
+        .update(values)
         .eq('id', result.track.id)
-        .then(undefined, () => undefined);
+        .then((res: { error: unknown }) => res.error, (err: unknown) => err);
+    // An environment the id migration has not reached still gets the length.
+    if ((await writeFacts(facts)) && item?.durationSeconds) {
+      await writeFacts({ video_duration_seconds: item.durationSeconds });
     }
 
     // A restored track whose video changed had its checkpoints cleared by the
