@@ -3,7 +3,9 @@
 /**
  * The bar that closes a drawing review, in its two states.
  *
- * Grading: Save draft, Redo, Complete, and the gallery opt-in.
+ * Owed work (assignments, tests): Save draft, Redo, Complete. Practice: Next and
+ * Send review, marking optional. Both carry the Show in Inspiration switch when
+ * the drawing has an item.
  * Locked: a finished or superseded round, with an explicit way back into grading
  * so the teacher is never left on a screen with nothing to press.
  *
@@ -13,8 +15,10 @@
  * branch feeding two copies of the tree, and is now breakpoints on one.
  */
 
+import type { ReactNode } from 'react';
 import { completeLabel } from '@/lib/drawing-ai-draft';
-import { Box, Button, IconButton, Switch, Typography } from '@neram/ui';
+import { Box, Button, IconButton, Typography } from '@neram/ui';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
@@ -75,8 +79,14 @@ export interface ReviewActionBarProps {
   /** A note is being recorded or saved; the bar waits for it. */
   voiceBusy: boolean;
 
-  showInGallery: boolean;
-  onShowInGalleryChange: (next: boolean) => void;
+  /** Owed work must be marked; practice only may be. */
+  mode: 'owed' | 'practice';
+  /** A sketch and a test drawing have no redo round. */
+  canRedo: boolean;
+  /** Practice: move on without saving. Null hides Next. */
+  onNext: (() => void) | null;
+  /** The Show in Inspiration switch, when this drawing has an Inspiration item. */
+  inspirationSlot?: ReactNode;
 }
 
 export default function ReviewActionBar({
@@ -84,7 +94,7 @@ export default function ReviewActionBar({
   onEvaluate, onOpenLatest,
   onSaveDraft, draftSaving, draftSaved,
   onRedo, onComplete, saving, pendingAction, hasAiDraft,
-  voiceBusy, showInGallery, onShowInGalleryChange,
+  voiceBusy, mode, canRedo, onNext, inspirationSlot,
 }: ReviewActionBarProps) {
   if (!isEditMode) {
     return (
@@ -106,6 +116,17 @@ export default function ReviewActionBar({
             sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0, px: 1.5 }}
           >
             Latest
+          </Button>
+        )}
+        {mode === 'practice' && onNext && (
+          <Button
+            variant="outlined"
+            size="small"
+            endIcon={<ArrowForwardIcon />}
+            onClick={onNext}
+            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0, px: 1.5, ...hideStartIconOnPhone }}
+          >
+            Next
           </Button>
         )}
         <Button
@@ -135,85 +156,82 @@ export default function ReviewActionBar({
         pt: { md: 0.25 },
       }}
     >
-      {/* Gallery visibility: off unless the teacher opts this drawing in. */}
-      <Box
-        component="label"
-        sx={{
-          order: { xs: 10, md: -1 },
-          width: { md: '100%' },
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: 0.5,
-          cursor: 'pointer',
-          minHeight: { md: 32 },
-        }}
-      >
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: { xs: 'none', md: 'block' }, fontWeight: 600 }}
-        >
-          Show in gallery
-        </Typography>
-        <Switch
-          checked={showInGallery}
-          onChange={(e) => onShowInGalleryChange(e.target.checked)}
+      {inspirationSlot && (
+        <Box sx={{ order: { xs: 10, md: -1 }, width: { md: '100%' }, display: 'flex', justifyContent: 'flex-end', minHeight: { md: 32 } }}>
+          {inspirationSlot}
+        </Box>
+      )}
+
+      {mode === 'owed' && (
+        <>
+          {/* Draft: icon-only where the bar is tight, icon and text where it is not. */}
+          <IconButton
+            onClick={onSaveDraft}
+            disabled={draftSaving || saving}
+            color={draftSaved ? 'success' : 'default'}
+            size="small"
+            title={draftSaving ? 'Saving...' : draftSaved ? 'Draft saved!' : 'Save draft'}
+            sx={{
+              border: '1px solid',
+              borderColor: draftSaved ? 'success.main' : 'divider',
+              borderRadius: 1.5,
+              width: 48,
+              height: 48,
+              display: { xs: 'inline-flex', md: 'none' },
+            }}
+          >
+            {draftSaved ? <CheckCircleOutlineIcon fontSize="small" /> : <SaveOutlinedIcon fontSize="small" />}
+          </IconButton>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={onSaveDraft}
+            disabled={draftSaving || saving}
+            startIcon={draftSaved ? <CheckCircleOutlineIcon /> : <SaveOutlinedIcon />}
+            color={draftSaved ? 'success' : 'inherit'}
+            sx={{
+              textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
+              minHeight: 48, minWidth: 0, whiteSpace: 'nowrap',
+              display: { xs: 'none', md: 'inline-flex' },
+            }}
+          >
+            {draftSaving ? 'Saving' : draftSaved ? 'Saved' : 'Save draft'}
+          </Button>
+        </>
+      )}
+
+      {canRedo && (
+        <Button
+          variant="outlined"
+          color="warning"
           size="small"
-          title="Show in gallery"
-          inputProps={{ 'aria-label': 'Show in gallery' }}
-        />
-      </Box>
+          onClick={onRedo}
+          disabled={saving || draftSaving || voiceBusy}
+          startIcon={<ReplayIcon />}
+          sx={{
+            textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
+            minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',
+            ...hideStartIconOnPhone,
+          }}
+        >
+          {saving && pendingAction === 'redo' ? '...' : 'Redo'}
+        </Button>
+      )}
 
-      {/* Draft: icon-only where the bar is tight, icon and text where it is not. */}
-      <IconButton
-        onClick={onSaveDraft}
-        disabled={draftSaving || saving}
-        color={draftSaved ? 'success' : 'default'}
-        size="small"
-        title={draftSaving ? 'Saving...' : draftSaved ? 'Draft saved!' : 'Save draft'}
-        sx={{
-          border: '1px solid',
-          borderColor: draftSaved ? 'success.main' : 'divider',
-          borderRadius: 1.5,
-          width: 48,
-          height: 48,
-          display: { xs: 'inline-flex', md: 'none' },
-        }}
-      >
-        {draftSaved ? <CheckCircleOutlineIcon fontSize="small" /> : <SaveOutlinedIcon fontSize="small" />}
-      </IconButton>
-      <Button
-        variant="outlined"
-        size="small"
-        onClick={onSaveDraft}
-        disabled={draftSaving || saving}
-        startIcon={draftSaved ? <CheckCircleOutlineIcon /> : <SaveOutlinedIcon />}
-        color={draftSaved ? 'success' : 'inherit'}
-        sx={{
-          textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
-          minHeight: 48, minWidth: 0, whiteSpace: 'nowrap',
-          display: { xs: 'none', md: 'inline-flex' },
-        }}
-      >
-        {draftSaving ? 'Saving' : draftSaved ? 'Saved' : 'Save draft'}
-      </Button>
-
-      <Button
-        variant="outlined"
-        color="warning"
-        size="small"
-        onClick={onRedo}
-        disabled={saving || draftSaving || voiceBusy}
-        startIcon={<ReplayIcon />}
-        sx={{
-          textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
-          minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',
-          ...hideStartIconOnPhone,
-        }}
-      >
-        {saving && pendingAction === 'redo' ? '...' : 'Redo'}
-      </Button>
+      {mode === 'practice' && onNext && (
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={onNext}
+          disabled={saving}
+          sx={{
+            textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
+            minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',
+          }}
+        >
+          Next
+        </Button>
+      )}
 
       <Button
         variant="contained"
@@ -230,7 +248,11 @@ export default function ReviewActionBar({
       >
         {/* 'Save' only where it is honest: updating an already-finished review.
             A redo round is still open, and this button completes it. */}
-        {saving && pendingAction === 'complete' ? '...' : completeLabel({ hasDraft: !!hasAiDraft, alreadyReviewed })}
+        {saving && pendingAction === 'complete'
+          ? '...'
+          : mode === 'practice'
+            ? (alreadyReviewed ? 'Update review' : 'Send review')
+            : completeLabel({ hasDraft: !!hasAiDraft, alreadyReviewed })}
       </Button>
 
     </Box>

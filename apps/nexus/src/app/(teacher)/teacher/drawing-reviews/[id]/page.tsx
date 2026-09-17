@@ -987,8 +987,9 @@ export default function DrawingReviewDetailPage() {
             saving={saving}
             pendingAction={action}
             voiceBusy={voiceBusy}
-            showInGallery={showInGallery}
-            onShowInGalleryChange={setShowInGallery}
+            mode="owed"
+            canRedo
+            onNext={null}
           />
         }
       />
