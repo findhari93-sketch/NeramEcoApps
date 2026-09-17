@@ -11,6 +11,7 @@ import { useParams } from 'next/navigation';
 import { Alert, Box, Button, Chip, CircularProgress, Stack, Typography } from '@neram/ui';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { downloadCsv } from '@/lib/csv-export';
 import { answerTypeLabel } from '@/lib/pad/client/format';
@@ -238,7 +239,7 @@ export default function AnswerPadReportPage() {
         {students.length === 0 ? (
           <Typography color="text.secondary">There is nobody on the class list for this class.</Typography>
         ) : (
-          <TableFrame caption="Each student's participation and score" minWidth={680}>
+          <TableFrame caption="Each student's participation and score" minWidth={720}>
             <thead>
               <tr>
                 <th scope="col">Student</th>
@@ -266,9 +267,12 @@ export default function AnswerPadReportPage() {
               {students.map((student) => (
                 <tr key={student.student_id}>
                   <th scope="row" className="wrap">
-                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                      <span>{student.name ?? 'Unnamed student'}</span>
-                      {!student.on_roster && <Chip size="small" variant="outlined" label="Not on class list" />}
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <StudentAvatar userId={student.student_id} name={student.name ?? ''} size={32} sx={{ flexShrink: 0 }} />
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ minWidth: 0 }}>
+                        <span>{student.name ?? 'Unnamed student'}</span>
+                        {!student.on_roster && <Chip size="small" variant="outlined" label="Not on class list" />}
+                      </Stack>
                     </Stack>
                   </th>
                   <td className="num">{scorePercent(student) || 'No score'}</td>
