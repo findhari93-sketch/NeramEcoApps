@@ -38,6 +38,13 @@ vi.mock('./impersonation-token', () => ({
   verifyImpersonationToken: () => null,
 }));
 
+// Token validation itself is covered in teams-sso.test.ts; here only the branch.
+const teamsSso = vi.hoisted(() => ({ verify: vi.fn() }));
+vi.mock('./teams-sso', () => ({
+  isTeamsSsoToken: (t: string) => t.startsWith('sso.'),
+  verifyTeamsSsoToken: (t: string) => teamsSso.verify(t),
+}));
+
 import { verifyMsToken, __clearGraphIdentityCache } from './ms-verify';
 
 const GRAPH_PROFILE = {
@@ -171,5 +178,59 @@ describe('verifyMsToken identity cache', () => {
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('InvalidAuthenticationToken'));
 
     consoleSpy.mockRestore();
+  });
+});
+
+describe('verifyMsToken Teams SSO branch', () => {
+  const identity = { oid: 'teams-oid', tid: 'tenant-1', email: 'student@neramclasses.com', name: 'A Student' };
+
+  afterEach(() => {
+    teamsSso.verify.mockReset();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('resolves a Teams SSO token locally, without calling Graph', async () => {
+    const fetchSpy = mockGraphOk();
+    vi.stubGlobal('fetch', fetchSpy);
+    teamsSso.verify.mockResolvedValue(identity);
+
+    await expect(verifyMsToken('Bearer sso.token')).resolves.toEqual({
+      oid: 'teams-oid',
+      email: 'student@neramclasses.com',
+      name: 'A Student',
+      displayName: 'A Student',
+    });
+    expect(teamsSso.verify).toHaveBeenCalledWith('sso.token');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('answers a rejected Teams SSO token as an invalid Microsoft token and never falls back to Graph', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchSpy = mockGraphOk();
+    vi.stubGlobal('fetch', fetchSpy);
+    teamsSso.verify.mockRejectedValue(new Error('Token audience mismatch'));
+
+    await expect(verifyMsToken('Bearer sso.forged')).rejects.toThrow(/^Invalid Microsoft token: 401$/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Token audience mismatch'));
+  });
+
+  it('verifies a Teams SSO token on every request instead of caching the identity', async () => {
+    vi.stubGlobal('fetch', mockGraphOk());
+    teamsSso.verify.mockResolvedValue(identity);
+
+    await verifyMsToken('Bearer sso.token');
+    await verifyMsToken('Bearer sso.token');
+    expect(teamsSso.verify).toHaveBeenCalledTimes(2);
+  });
+
+  it('still sends every other token to Graph', async () => {
+    const fetchSpy = mockGraphOk();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await verifyMsToken('Bearer graph-token');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(teamsSso.verify).not.toHaveBeenCalled();
   });
 });

@@ -29,6 +29,7 @@ import {
 } from '@/lib/staff-capabilities';
 import { readCachedAuth, writeCachedAuth, clearCachedAuth } from '@/lib/auth-cache';
 import { clearPersistentCache } from '@/lib/swr-cache';
+import { isTeamsPadPath } from '@/lib/pad/embedded';
 
 // Types for Nexus auth context
 interface NexusUser {
@@ -306,6 +307,14 @@ export function useNexusAuth(): NexusAuthState {
    * lets the app draw its real shell instead of a spinner while the network catches up.
    */
   const [booted] = useState<Record<string, any> | null>(() => readBootPayload());
+
+  /**
+   * The Answer Pad's Teams pages (/pad/teams, /pad/stage) sign in with the Teams
+   * SSO token, so the MSAL-driven load below never runs there. MSAL answers an
+   * expired session with a full-page redirect, and the Microsoft sign-in page
+   * refuses to render inside the Teams frame. See lib/pad/embedded.ts.
+   */
+  const [teamsPad] = useState(() => typeof window !== 'undefined' && isTeamsPadPath(window.location.pathname));
 
   const [user, setUser] = useState<NexusUser | null>(booted?.user ?? null);
   const [nexusRole, setNexusRole] = useState<NexusRole | null>(booted?.nexusRole ?? null);
@@ -616,6 +625,11 @@ export function useNexusAuth(): NexusAuthState {
   // Fetch DB user after MS auth succeeds. Also runs while impersonating (even
   // under the test-mode bypass) so identity swaps to the student via /me.
   useEffect(() => {
+    if (teamsPad) {
+      setDbLoading(false);
+      return;
+    }
+
     // Skip MSAL auth fetch if test token bypass is active and not impersonating
     if (testMode && !impersonationToken && !parentToken) return;
 
@@ -661,7 +675,7 @@ export function useNexusAuth(): NexusAuthState {
     // `booted` is frozen for the life of the hook, so it adds no re-runs. `user` is
     // deliberately NOT a dependency: this effect sets it, and depending on it would
     // make every successful load schedule the next one.
-  }, [msUser, msLoading, impersonationToken, parentToken, testMode, loadNexusUser, booted]);
+  }, [teamsPad, msUser, msLoading, impersonationToken, parentToken, testMode, loadNexusUser, booted]);
 
   /**
    * Manual re-fetch. The photo blocker calls this after a successful upload so

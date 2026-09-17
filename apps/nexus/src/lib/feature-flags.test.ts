@@ -49,6 +49,10 @@ describe('feature-flags registry', () => {
     'staff.sketchbook-reminders',
     // Same: messages every Not started student the evening it deploys.
     'staff.join-reminders',
+    // Not a meter but a classroom: a live session reaches every enrolled
+    // student's pad at the first ASK. It ships dark until the Teams app, the bot
+    // and the manual test run are signed off, then goes on for one pilot class.
+    'staff.answer-pad',
   ]);
 
   /**
@@ -258,6 +262,27 @@ describe('staff.photo-review', () => {
   it('defaults to ON so staff can clear the queue before the gate goes live', () => {
     expect(FEATURES.find((f) => f.id === 'staff.photo-review')?.defaultEnabled).toBe(true);
     expect(featureForPath('/teacher/photo-review')?.id).toBe('staff.photo-review');
+  });
+});
+
+describe('Answer Pad flags', () => {
+  const ids = ['staff.answer-pad', 'student.answer-pad'];
+
+  it('ship dark on both surfaces, stay switchable, and are never core', () => {
+    for (const id of ids) {
+      const flag = FEATURES.find((f) => f.id === id);
+      expect(flag, `${id} is not registered`).toBeDefined();
+      expect(flag!.defaultEnabled).toBe(false);
+      expect(flag!.core).toBeFalsy();
+      expect(resolveFlags({})[id]).toBe(false);
+      expect(resolveFlags({ [id]: true })[id]).toBe(true);
+    }
+  });
+
+  it('gates the teacher report pages by path and no page outside them', () => {
+    expect(featureForPath('/teacher/answer-pad/sessions/abc')?.id).toBe('staff.answer-pad');
+    expect(featureForPath('/pad')).toBeUndefined();
+    expect(featureForPath('/pad/teams')).toBeUndefined();
   });
 });
 

@@ -12,6 +12,7 @@
     "clean:build": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\""
   },
   "dependencies": {
+    "@microsoft/teams-js": "^2.56.0",
     "@mui/icons-material": "^5.15.0",
     "@neram/ai": "workspace:*",
     "@neram/auth": "workspace:*",

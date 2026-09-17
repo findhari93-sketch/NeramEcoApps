@@ -70,6 +70,14 @@ export default {
         }
       }
 
+      // WebSocket upgrades (Supabase Realtime) must pass through untouched.
+      // Rebuilding the response below keeps the body but drops the upgraded
+      // socket, so every Realtime subscription through the proxy times out.
+      // Returning the upstream fetch as-is hands the socket to the client.
+      if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
+        return fetch(new Request(targetUrl.toString(), request));
+      }
+
       // Build the proxy request
       const proxyRequest = new Request(targetUrl.toString(), {
         method: request.method,

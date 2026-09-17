@@ -55,6 +55,8 @@
     "test:e2e:smoke": "playwright test --project=smoke",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
+    "pad:simulate": "node scripts/answer-pad/simulate-class.mjs",
+    "pad:load": "node scripts/answer-pad/load-class.mjs",
     "db:generate": "pnpm --filter @neram/database generate",
     "db:push": "pnpm --filter @neram/database push",
     "db:studio": "pnpm --filter @neram/database studio",
@@ -97,6 +99,7 @@
     "dns:status": "C:/PROGRA~1/Git/bin/bash.exe scripts/dns-migration/migrate.sh status"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.2.17",
     "@neram/database": "workspace:*",
     "@playwright/test": "^1.51.0",
     "@supabase/supabase-js": "^2.39.0",
