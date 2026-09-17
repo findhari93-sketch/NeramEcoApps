@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
   "manifestVersion": "1.16",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "id": "df4f6b2d-ea18-46d1-8934-f508ac248e6c",
   "packageName": "com.neramclasses.assistant",
   "developer": {
@@ -15,8 +15,8 @@
     "full": "Neram Classes Assistant"
   },
   "description": {
-    "short": "Reminders and updates from Neram Classes.",
-    "full": "Neram Assistant delivers your assignment and study reminders to your Teams activity feed and links you straight to your work in Nexus, without cluttering your chats."
+    "short": "Reminders, updates and the Answer Pad for live classes.",
+    "full": "Neram Assistant delivers your assignment and study reminders to your Teams activity feed and links you straight to your work in Nexus. In class meetings it adds the Answer Pad: your teacher asks a question, you answer from the meeting side panel, and you see how you did when the answer is revealed."
   },
   "icons": {
     "color": "color.png",
@@ -32,10 +32,37 @@
       "scopes": ["personal"]
     }
   ],
+  "configurableTabs": [
+    {
+      "configurationUrl": "https://nexus.neramclasses.com/pad/teams/config",
+      "canUpdateConfiguration": false,
+      "scopes": ["team", "groupChat"],
+      "context": ["meetingSidePanel", "meetingStage", "meetingChatTab", "meetingDetailsTab"]
+    }
+  ],
+  "bots": [
+    {
+      "botId": "aa039c70-50d2-4c91-bd0e-5675df5e50ff",
+      "scopes": ["team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
   "permissions": ["identity"],
   "validDomains": ["nexus.neramclasses.com"],
   "webApplicationInfo": {
     "id": "aa039c70-50d2-4c91-bd0e-5675df5e50ff",
     "resource": "api://nexus.neramclasses.com/aa039c70-50d2-4c91-bd0e-5675df5e50ff"
+  },
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        { "name": "OnlineMeetingParticipant.Read.Chat", "type": "Application" },
+        { "name": "OnlineMeetingNotification.Send.Chat", "type": "Application" },
+        { "name": "ChannelMeetingParticipant.Read.Group", "type": "Application" },
+        { "name": "ChannelMeetingNotification.Send.Group", "type": "Application" },
+        { "name": "MeetingStage.Write.Chat", "type": "Delegated" }
+      ]
+    }
   }
 }

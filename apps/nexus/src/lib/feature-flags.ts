@@ -67,6 +67,13 @@ export const FEATURES: FeatureDef[] = [
    * for one classroom first.
    */
   { id: 'student.catchup-wall', label: 'Show classmates who are all caught up', surface: 'student', group: 'Live Class', paths: [], defaultEnabled: false },
+  /**
+   * The Answer Pad student pad: the Teams meeting side panel and the /pad
+   * room-code page. Both live outside /student, so `paths` stays empty and every
+   * /api/pad route enforces this server side instead, answering 404 while it is
+   * off so nothing about a live session reaches a student early.
+   */
+  { id: 'student.answer-pad', label: 'Answer Pad', surface: 'student', group: 'Live Class', paths: [], defaultEnabled: false },
 
   { id: 'student.library', label: 'Library', surface: 'student', group: 'Learn', paths: ['/student/library'], defaultEnabled: false },
   /**
@@ -243,6 +250,18 @@ export const FEATURES: FeatureDef[] = [
    * a hidden button is a UI courtesy and never the boundary.
    */
   { id: 'staff.drawing-eval', label: 'AI drawing evaluation', surface: 'staff', group: 'Teaching', paths: ['/teacher/admin/drawing-anchors'], defaultEnabled: false },
+
+  /**
+   * The Answer Pad teacher console in the Teams meeting side panel, and its
+   * session reports under /teacher/answer-pad.
+   *
+   * Defaults OFF, breaking the staff convention on purpose. A live session puts
+   * a prompt on every enrolled student's pad the moment a teacher presses ASK,
+   * so this ships dark and is switched on for the pilot class once the Teams
+   * app, the bot and the manual test run are signed off. The /api/pad routes
+   * re-check it server side; a hidden console is never the boundary.
+   */
+  { id: 'staff.answer-pad', label: 'Answer Pad (live answers in Teams)', surface: 'staff', group: 'Teaching', paths: ['/teacher/answer-pad'], defaultEnabled: false },
 
   // ── Parent ────────────────────────────────────────────────────────────────
   // Not a page: `paths: []` can never match in featureForPath, so this is a pure

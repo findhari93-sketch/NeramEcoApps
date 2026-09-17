@@ -9,6 +9,7 @@ import {
   type StaffCalendarRow,
 } from '@/lib/class-attendees';
 import { resolveClassAttendees } from '@/lib/class-calendar';
+import { addPadWithinBudget } from '@/lib/pad/auto-add';
 
 /**
  * POST /api/timetable/teams-meeting
@@ -334,6 +335,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (updateError) throw updateError;
+
+    // Put the Answer Pad button in the new meeting's top bar. Best-effort and
+    // time-boxed, so it can never fail or hold up scheduling. A brand-new
+    // meeting's chat often refuses until somebody joins, so `chat_not_ready` is
+    // normal here; the pad-meeting-tabs sweep adds the pad near class time.
+    if (joinUrl) {
+      extras.answerPad = (await addPadWithinBudget({ classroom_id, teams_meeting_join_url: joinUrl })).outcome;
+    }
 
     return NextResponse.json({
       class: updated,

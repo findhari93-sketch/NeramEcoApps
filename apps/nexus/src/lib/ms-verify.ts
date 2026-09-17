@@ -26,6 +26,7 @@ import {
   verifyImpersonationToken,
 } from '@/lib/impersonation-token';
 import { isParentToken, verifyParentToken } from '@/lib/parent-token';
+import { isTeamsSsoToken, verifyTeamsSsoToken } from '@/lib/teams-sso';
 import { TtlCache } from '@/lib/ttl-cache';
 
 /**
@@ -233,6 +234,28 @@ export async function verifyMsToken(
       name: user.name || 'Test User',
       displayName: user.name || 'Test User',
     };
+  }
+
+  // Teams tab single sign-on (the Answer Pad side panel). The token is issued to
+  // this app rather than to Graph, so Graph cannot check it; teams-sso.ts
+  // validates it locally. Only a token whose audience is this app takes this
+  // path, so every other token behaves exactly as before. Not cached: the check
+  // is a local signature verification, and a cached identity could outlive a
+  // token that expires inside the TTL.
+  if (isTeamsSsoToken(token)) {
+    try {
+      const identity = await verifyTeamsSsoToken(token);
+      return {
+        oid: identity.oid,
+        email: identity.email,
+        name: identity.name || identity.email,
+        displayName: identity.name || identity.email,
+      };
+    } catch (err) {
+      // Logged, not returned, for the same reason as the Graph failure below.
+      console.error(`[ms-verify] Teams SSO token rejected: ${err instanceof Error ? err.message : String(err)}`);
+      throw new Error('Invalid Microsoft token: 401');
+    }
   }
 
   // Real Microsoft users land here, so this is the hot path for the whole app.
