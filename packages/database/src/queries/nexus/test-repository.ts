@@ -5,7 +5,7 @@ import { countRowsByKey } from '../../utils/paged-rows';
 import { resolveExamTimer } from './exam-timer';
 import { storeContentSummary, type NexusTestSourceFilters } from './test-provenance';
 import { recordCatchupTestAttempt } from './catchup-journey';
-import { gradeQBAnswerStrict, normaliseQuestionFormat } from './question-bank';
+import { gradeQBAnswerStrict, normaliseQuestionFormat, stripDrawingPartSolutions } from './question-bank';
 import { sectionOrderFor } from './paper-marking';
 import {
   applyTestOptionMap,
@@ -907,7 +907,7 @@ export async function getComposedTestQuestions(
       // They were missing from this select while the review UI rendered them,
       // so every attempt in the product showed a blank explanation.
       .select(
-        'id, question_text, question_image_url, question_format, options, correct_answer, answer_tolerance, explanation_brief, explanation_detailed',
+        'id, question_text, question_image_url, question_format, options, correct_answer, answer_tolerance, explanation_brief, explanation_detailed, drawing_parts',
       )
       .in('id', qbIds);
     for (const q of data || []) qbMap.set(q.id, q);
@@ -942,6 +942,9 @@ export async function getComposedTestQuestions(
       section: tq.section ?? null,
       section_order: tq.section_order ?? null,
       sort_order: tq.sort_order ?? 0,
+      // Text and marks only. A test never shows a solution before submit, so the
+      // per-part solution image and video are dropped where the row is read.
+      drawing_parts: stripDrawingPartSolutions(src?.drawing_parts),
     };
     if (withAnswers) {
       out.correct_answer = src?.correct_answer ?? null;

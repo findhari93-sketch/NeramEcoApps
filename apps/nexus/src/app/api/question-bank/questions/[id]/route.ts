@@ -17,6 +17,7 @@ import { getQuestionOrigin } from '@/lib/test-import-store';
 
 import { describeError } from '@/lib/api-errors';
 import { canActivateQuestion, statusAfterAnswerSave } from '@/lib/qb-activation';
+import { applyDrawingPartsToWrite } from '@/lib/drawing-parts';
 
 /** Only the activation fields this request actually sends, so absent ones do not blank the stored values. */
 function pickActivationFields(body: Record<string, unknown>) {
@@ -98,6 +99,26 @@ export async function PATCH(
     // semantics is correct here: the edit form shows the full tag set.
     const tagIds: string[] | null = Array.isArray(body.tag_ids) ? body.tag_ids : null;
     delete body.tag_ids;
+
+    // Parts rebuild question_text, marks and the question-level solution from
+    // one place, so no editor can store a text that disagrees with its parts.
+    if (body.drawing_parts) {
+      let storedFormat: string | null = null;
+      if (!('question_format' in body)) {
+        const { data: row } = await supabase
+          .from('nexus_qb_questions')
+          .select('question_format')
+          .eq('id', id)
+          .single();
+        storedFormat = (row as { question_format?: string | null } | null)?.question_format ?? null;
+      }
+      const applied = applyDrawingPartsToWrite(body, storedFormat);
+      if (!applied.ok) return NextResponse.json({ error: applied.error }, { status: 400 });
+    } else if (body.question_format && body.question_format !== 'DRAWING_PROMPT') {
+      // Parts belong to drawings only (a CHECK says so). A question turned into
+      // an MCQ sheds them rather than failing the save.
+      body.drawing_parts = null;
+    }
 
     const touchesKey = 'correct_answer' in body;
     let statusBefore: string | null = null;

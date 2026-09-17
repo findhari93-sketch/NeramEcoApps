@@ -47,6 +47,7 @@ import DifficultyChip from './DifficultyChip';
 import CategoryChips from './CategoryChips';
 import MCQOptions from './MCQOptions';
 import MathText from '@/components/common/MathText';
+import { readDrawingParts } from '@/lib/drawing-parts';
 
 // ---- Video embed helpers (copied from SolutionSection.tsx) ----
 
@@ -341,8 +342,9 @@ export default function QuestionDetail({
         </>
       )}
 
-      {/* Question text */}
-      {question.question_text && (
+      {/* Question text. A drawing split into parts shows its parts in the
+          practice panel below instead, so the text is not printed twice. */}
+      {question.question_text && !(question.question_format === 'DRAWING_PROMPT' && readDrawingParts(question.drawing_parts)) && (
         <MathText
           text={lang === 'hi' && question.question_text_hi ? question.question_text_hi : question.question_text}
           variant="body1"
@@ -370,7 +372,7 @@ export default function QuestionDetail({
 
       {/* Drawing Prompt: show drawing-specific info + Practice CTA */}
       {question.question_format === 'DRAWING_PROMPT' && (
-        <DrawingPracticePanel question={question} />
+        <DrawingPracticePanel question={question} language={lang} />
       )}
 
       {/* Feedback animation overlay */}

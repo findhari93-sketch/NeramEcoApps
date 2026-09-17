@@ -32,6 +32,7 @@ import type {
   NexusQBQuestionOption,
   QBDifficulty,
   QBDrawingFocusPoint,
+  QBDrawingParts,
   QBExamRelevance,
   QBExamType,
   QBQuestionFormat,
@@ -229,6 +230,8 @@ export interface QBPaperQuestionInput {
   colour_constraint?: string | null;
   objects_to_include?: Array<{ name: string; count?: number }> | null;
   drawing_focus_points?: QBDrawingFocusPoint[] | null;
+  /** Already validated, with question_text rebuilt from it, by the parser. */
+  drawing_parts?: QBDrawingParts | null;
   is_active?: boolean;
 }
 
@@ -472,6 +475,7 @@ export async function applyPaperJSON(
     set('colour_constraint', q.colour_constraint);
     set('objects_to_include', q.objects_to_include);
     set('drawing_focus_points', q.drawing_focus_points);
+    set('drawing_parts', q.drawing_parts);
     set('is_active', q.is_active);
 
     // section_order is derived, never taken from the file. Letting the two

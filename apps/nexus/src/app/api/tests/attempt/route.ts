@@ -28,6 +28,7 @@ import {
 } from '@/lib/catchup-test-gate';
 import { attemptSeed, seededShuffle } from '@/lib/seeded-shuffle';
 import { describeLiveRun, findLiveRunForStudent } from '@/lib/live-run';
+import { stripPartSolutions } from '@/lib/drawing-parts';
 
 /**
  * The student take engine.
@@ -377,6 +378,9 @@ export async function GET(request: NextRequest) {
         question_image_url: q.question_image_url,
         question_type: q.question_format,
         options: q.options,
+        // Already stripped of solutions where it was read; stripped again here
+        // because this is the door to the student.
+        drawing_parts: stripPartSolutions(q.drawing_parts),
       },
     }));
     // A pool has already been ordered by its draw, so reshuffling would undo it.

@@ -1,6 +1,7 @@
 // @ts-nocheck — drawing tables not yet in generated Supabase types; regenerate with pnpm supabase:gen:types
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import type {
+  QBDrawingParts,
   DrawingQuestion,
   DrawingQuestionEnriched,
   DrawingAttemptStatus,
@@ -124,11 +125,16 @@ export async function enrichDrawingQuestions(
     .filter((id): id is string => id !== null);
 
   // Batch-fetch QB data for linked questions
-  let qbMap: Record<string, { repeat_group_id: string | null; solution_image_url: string | null; solution_video_url: string | null }> = {};
+  let qbMap: Record<string, {
+    repeat_group_id: string | null;
+    solution_image_url: string | null;
+    solution_video_url: string | null;
+    drawing_parts: QBDrawingParts | null;
+  }> = {};
   if (qbIds.length > 0) {
     const { data: qbData } = await supabase
       .from('nexus_qb_questions' as any)
-      .select('id, repeat_group_id, solution_image_url, solution_video_url')
+      .select('id, repeat_group_id, solution_image_url, solution_video_url, drawing_parts')
       .in('id', qbIds);
 
     for (const qb of (qbData || []) as any[]) {
@@ -136,6 +142,7 @@ export async function enrichDrawingQuestions(
         repeat_group_id: qb.repeat_group_id,
         solution_image_url: qb.solution_image_url,
         solution_video_url: qb.solution_video_url,
+        drawing_parts: qb.drawing_parts ?? null,
       };
     }
   }
@@ -228,6 +235,7 @@ export async function enrichDrawingQuestions(
       repeat_years: repeatYears,
       solution_image_url: qb?.solution_image_url || null,
       solution_video_url: qb?.solution_video_url || null,
+      drawing_parts: qb?.drawing_parts ?? null,
       attempt_status: attemptMap[q.id] || 'not_attempted',
     };
   });
@@ -521,11 +529,21 @@ export async function getDrawingSubmissionById(
     const { data: qb } = await supabase
       .from('nexus_qb_questions' as any)
       .select(
-        'id, question_text, categories, drawing_marks, design_principle_tested, colour_constraint, objects_to_include, drawing_focus_points',
+        'id, question_text, categories, drawing_marks, design_principle_tested, colour_constraint, objects_to_include, drawing_focus_points, drawing_parts',
       )
       .eq('id', (submission as any).exam_qb_question_id)
       .maybeSingle();
     submission.qb_question = (qb as any) ?? null;
+    submission.qb_drawing_parts = (qb as any)?.drawing_parts ?? null;
+  } else if ((submission.question as any)?.qb_question_id) {
+    // A practice drawing mirrors a bank question. Its parts, and each part's
+    // solution, live on the bank row.
+    const { data: qb } = await supabase
+      .from('nexus_qb_questions' as any)
+      .select('drawing_parts')
+      .eq('id', (submission.question as any).qb_question_id)
+      .maybeSingle();
+    submission.qb_drawing_parts = (qb as any)?.drawing_parts ?? null;
   }
 
   return submission;

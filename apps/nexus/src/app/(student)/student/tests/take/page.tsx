@@ -34,6 +34,8 @@ import { useTestErrorReporter } from '@/hooks/useTestErrorReporter';
 import { useTestProctoring, type ProctoringViolationKind } from '@/hooks/useTestProctoring';
 import { useSearchParams, useRouter } from 'next/navigation';
 import MathText from '@/components/common/MathText';
+import DrawingPartsView from '@/components/question-bank/DrawingPartsView';
+import type { QBDrawingParts } from '@neram/database';
 import AnswerInput from '@/components/tests/AnswerInput';
 import GradedReviewList, { type GradedReviewItem } from '@/components/tests/GradedReviewList';
 import OptionBody, { type TestOption } from '@/components/tests/OptionBody';
@@ -66,6 +68,8 @@ interface Question {
     question_image_url: string | null;
     question_type: string;
     options: Option[];
+    /** A drawing split into parts, without solutions. */
+    drawing_parts?: QBDrawingParts | null;
   };
 }
 
@@ -1383,13 +1387,19 @@ export default function TakeTestPage() {
                   )}
                 </Box>
 
-                {/* Question text */}
+                {/* Question text. A drawing split into parts says how to answer
+                    ("Attempt any one of 2") and lists its options, never their
+                    solutions: the payload carries none. */}
                 <Box sx={{ mb: 2 }}>
-                  <MathText
-                    text={currentQuestion.question.question_text}
-                    variant="body1"
-                    sx={{ lineHeight: 1.6, fontSize: { xs: '0.95rem', md: '1rem' } }}
-                  />
+                  {currentQuestion.question.drawing_parts ? (
+                    <DrawingPartsView parts={currentQuestion.question.drawing_parts} showSolutions={false} />
+                  ) : (
+                    <MathText
+                      text={currentQuestion.question.question_text}
+                      variant="body1"
+                      sx={{ lineHeight: 1.6, fontSize: { xs: '0.95rem', md: '1rem' } }}
+                    />
+                  )}
                 </Box>
 
                 {/* Question image */}

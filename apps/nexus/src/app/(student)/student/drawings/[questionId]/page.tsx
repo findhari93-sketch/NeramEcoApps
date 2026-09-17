@@ -21,6 +21,8 @@ import DifficultyChip from '@/components/drawings/DifficultyChip';
 import ReferenceImageToggle from '@/components/drawings/ReferenceImageToggle';
 import DrawingSubmissionSheet from '@/components/drawings/DrawingSubmissionSheet';
 import ThreadTimeline from '@/components/drawings/ThreadTimeline';
+import DrawingPartsView from '@/components/question-bank/DrawingPartsView';
+import { readDrawingParts } from '@/lib/drawing-parts';
 import type { DrawingQuestionEnriched, DrawingThreadView } from '@neram/database/types';
 
 export default function QuestionDetailPage() {
@@ -100,6 +102,8 @@ export default function QuestionDetailPage() {
     );
   }
 
+  const parts = readDrawingParts(question.drawing_parts);
+
   // Whether to show the submit CTA
   const showSubmitCTA = !thread || thread.thread_status.status === 'redo';
   const isRedo = thread?.thread_status.status === 'redo';
@@ -162,13 +166,26 @@ export default function QuestionDetailPage() {
 
       {/* Content area */}
       <Box sx={{ px: isMobile ? 1.5 : 0 }}>
-        <Typography
-          variant={isMobile ? 'subtitle1' : 'h6'}
-          fontWeight={600}
-          sx={{ mb: isMobile ? 1 : 2, lineHeight: 1.35, fontSize: isMobile ? '0.95rem' : undefined }}
-        >
-          {question.question_text}
-        </Typography>
+        {/* A question split into parts says how to answer and shows each
+            part, with its own solution once the student has submitted (the
+            same rule as the reference solution below). */}
+        {parts ? (
+          <Box sx={{ mb: isMobile ? 1.5 : 2 }}>
+            <DrawingPartsView
+              parts={parts}
+              questionNumber={question.question_number}
+              showSolutions={Boolean(thread)}
+            />
+          </Box>
+        ) : (
+          <Typography
+            variant={isMobile ? 'subtitle1' : 'h6'}
+            fontWeight={600}
+            sx={{ mb: isMobile ? 1 : 2, lineHeight: 1.35, fontSize: isMobile ? '0.95rem' : undefined }}
+          >
+            {question.question_text}
+          </Typography>
+        )}
 
         {question.objects.length > 0 && (
           <Box sx={{ mb: isMobile ? 1 : 2 }}>
@@ -207,7 +224,7 @@ export default function QuestionDetailPage() {
         )}
 
         {/* Teacher's Reference Solution (visible after first submission) */}
-        {thread && (question.solution_image_url || question.solution_video_url) && (
+        {thread && !parts && (question.solution_image_url || question.solution_video_url) && (
           <Accordion
             variant="outlined"
             sx={{ mb: isMobile ? 1.5 : 3, '&:before': { display: 'none' } }}
@@ -245,7 +262,7 @@ export default function QuestionDetailPage() {
             </AccordionDetails>
           </Accordion>
         )}
-        {thread && !question.solution_image_url && !question.solution_video_url && (
+        {thread && !parts && !question.solution_image_url && !question.solution_video_url && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: isMobile ? 1 : 2, fontSize: '0.72rem' }}>
             Reference solution coming soon
           </Typography>

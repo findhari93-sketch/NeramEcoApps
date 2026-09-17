@@ -34,7 +34,6 @@ function openSelectionOverflow() {
 describe('PaperQuestionList', () => {
   let onChangeSections: ReturnType<typeof vi.fn<[string[], QBQuestionSection], Promise<void>>>;
   let onBulkSetNeedsImage: ReturnType<typeof vi.fn<[string[], boolean], Promise<void>>>;
-  let onLinkChoiceGroup: ReturnType<typeof vi.fn<[string[]], Promise<void>>>;
   let onSetActiveQuestions: ReturnType<typeof vi.fn<[string[], boolean], Promise<void>>>;
   let onDeleteQuestions: ReturnType<
     typeof vi.fn<[string[]], Promise<{ deleted: number; refused: { question_id: string; blockers: string[] }[] }>>
@@ -43,7 +42,6 @@ describe('PaperQuestionList', () => {
   beforeEach(() => {
     onChangeSections = vi.fn<[string[], QBQuestionSection], Promise<void>>().mockResolvedValue(undefined);
     onBulkSetNeedsImage = vi.fn<[string[], boolean], Promise<void>>().mockResolvedValue(undefined);
-    onLinkChoiceGroup = vi.fn<[string[]], Promise<void>>().mockResolvedValue(undefined);
     onSetActiveQuestions = vi.fn<[string[], boolean], Promise<void>>().mockResolvedValue(undefined);
     onDeleteQuestions = vi
       .fn<[string[]], Promise<{ deleted: number; refused: { question_id: string; blockers: string[] }[] }>>()
@@ -65,7 +63,6 @@ describe('PaperQuestionList', () => {
     sectionFilter: null,
     onSectionFilterChange: vi.fn(),
     onBulkSetNeedsImage,
-    onLinkChoiceGroup,
     onDeleteQuestions,
     onSetActiveQuestions,
     imageStats: IMAGE_STATS,

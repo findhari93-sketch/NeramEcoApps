@@ -10,6 +10,7 @@ import { QB_SECTION_ORDER } from '../../types';
 import { fetchAllRows as fetchAllRowsPaged } from '../../utils/paged-rows';
 import type {
   QBQuestionSection,
+  QBDrawingParts,
   NexusQBPaperSectionRow,
   QBQuestionFormat,
   QBDifficulty,
@@ -410,7 +411,7 @@ export const QB_LIST_COLUMNS =
   'id, question_text, question_text_hi, question_image_url, question_format, ' +
   'options, categories, difficulty, topic_id, display_order, created_at, ' +
   'section, section_order, marks_correct, marks_negative, confidence_tier, ' +
-  'origin, repeat_group_id, needs_image, choice_group_id, choice_group_pick';
+  'origin, repeat_group_id, needs_image, choice_group_id, choice_group_pick, drawing_parts';
 
 /**
  * Drop the correct answer out of an option list.
@@ -420,6 +421,31 @@ export const QB_LIST_COLUMNS =
  * inside a column the cards genuinely need. The detail and attempt endpoints
  * return the answer deliberately and must not use this.
  */
+/**
+ * A drawing question's parts without their per-part solution image and video.
+ *
+ * The same leak stripOptionAnswers closes for MCQs: drawing_parts is JSONB, so
+ * narrowing the column list cannot keep a part's solution out of a browse
+ * response or a test. Anything that is not a parts object reads as null.
+ */
+export function stripDrawingPartSolutions(value: unknown): QBDrawingParts | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Partial<QBDrawingParts>;
+  if ((v.mode !== 'all' && v.mode !== 'any_one') || !Array.isArray(v.items)) return null;
+  return {
+    mode: v.mode,
+    stem: v.stem ?? null,
+    stem_hi: v.stem_hi ?? null,
+    items: v.items.map((p) => ({
+      id: p.id,
+      label: p.label,
+      text: p.text,
+      text_hi: p.text_hi ?? null,
+      marks: p.marks ?? null,
+    })),
+  };
+}
+
 export function stripOptionAnswers<T>(options: T): T {
   if (!Array.isArray(options)) return options;
   return options.map((opt: any) =>
@@ -772,6 +798,7 @@ export async function getQBQuestions(
   const result: NexusQBQuestionListItem[] = questions.map(q => ({
     ...q,
     options: stripOptionAnswers(q.options),
+    drawing_parts: stripDrawingPartSolutions(q.drawing_parts),
     sources: sourcesMap.get(q.id) || [],
     topic: q.topic_id ? topicMap.get(q.topic_id) || null : null,
     attempt_summary: attemptMap.get(q.id) || null,

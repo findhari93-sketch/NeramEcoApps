@@ -318,6 +318,87 @@ describe('choice groups', () => {
   });
 });
 
+describe('drawing parts', () => {
+  const parted = question({
+    id: 'q-drawing',
+    question_format: 'DRAWING_PROMPT',
+    question_text:
+      '(A) Draw from memory a balloon seller.\n\nOR\n\n(B) Draw village women around a handpump.',
+    question_image_url: null,
+    options: null,
+    correct_answer: null,
+    section: 'drawing',
+    section_order: 4,
+    categories: ['drawing'],
+    solution_image_url: 'https://cdn/b.png',
+    solution_video_url: null,
+    drawing_parts: {
+      mode: 'any_one',
+      stem: null,
+      stem_hi: null,
+      items: [
+        { id: 'a', label: 'A', text: 'Draw from memory a balloon seller.', text_hi: null, marks: null, solution_image_url: null, solution_video_url: null },
+        { id: 'b', label: 'B', text: 'Draw village women around a handpump.', text_hi: null, marks: null, solution_image_url: 'https://cdn/b.png', solution_video_url: null },
+      ],
+    },
+  });
+  const input = () =>
+    exportInput({ questions: [parted], questionNumbers: { 'q-drawing': 82 }, tagsByQuestion: {} });
+
+  it('exports parts under drawing, with each solution beside its part', () => {
+    const doc = toPaperJSON(input());
+    const q = doc.sections[0].questions[0];
+    expect(q.drawing?.parts?.mode).toBe('any_one');
+    expect(q.drawing?.parts?.items.map((p) => p.label)).toEqual(['A', 'B']);
+    expect(q.drawing?.parts?.items[1].solution_image).toBe('https://cdn/b.png');
+    expect(q.drawing?.parts?.items[0]).not.toHaveProperty('solution_image');
+  });
+
+  it('round-trips with no phantom edits', () => {
+    const current = parsePaperJSON(toPaperJSON(input())).questions;
+    const again = parsePaperJSON(toPaperJSON(input())).questions;
+    const diff = diffPaperQuestions(current, again);
+    expect(diff.updated).toEqual([]);
+    expect(diff.unchanged).toEqual([82]);
+    expect(current[0].drawing_parts?.items[1].solution_image_url).toBe('https://cdn/b.png');
+  });
+
+  it('rebuilds question_text from edited parts on import', () => {
+    const doc = toPaperJSON(input());
+    const q = doc.sections[0].questions[0];
+    q.question_text = 'stale text';
+    q.drawing!.parts!.mode = 'all';
+    q.drawing!.parts!.items[0].marks = 20;
+    q.drawing!.parts!.items[1].marks = 20;
+    const back = parsePaperJSON(doc).questions[0];
+    expect(back.question_text).toBe(
+      '(A) Draw from memory a balloon seller. [20 marks]\n\n(B) Draw village women around a handpump. [20 marks]',
+    );
+    expect(back.drawing_marks).toBe(40);
+  });
+
+  it('null parts clear them; invalid parts are skipped with a warning', () => {
+    const cleared = toPaperJSON(input());
+    cleared.sections[0].questions[0].drawing!.parts = null;
+    expect(parsePaperJSON(cleared).questions[0].drawing_parts).toBeNull();
+
+    const broken = toPaperJSON(input());
+    broken.sections[0].questions[0].drawing!.parts!.items = [{ text: 'only one' }];
+    const parsed = parsePaperJSON(broken);
+    expect(parsed.questions[0]).not.toHaveProperty('drawing_parts');
+    expect(parsed.warnings.some((w) => w.startsWith('Q82: parts ignored'))).toBe(true);
+  });
+
+  it('never exports or reads parts on an MCQ', () => {
+    const doc = toPaperJSON(exportInput());
+    const mcq = doc.sections.flatMap((s) => s.questions).find((q) => q.question_format === 'MCQ')!;
+    expect(mcq.drawing).toBeUndefined();
+    (mcq as any).drawing = { parts: parted.drawing_parts };
+    const back = parsePaperJSON(doc).questions.find((q) => q.question_number === mcq.question_number)!;
+    expect(back).not.toHaveProperty('drawing_parts');
+  });
+});
+
 describe('v1 files still import', () => {
   const v1 = {
     schema_version: '1.0',

@@ -49,6 +49,8 @@ import { parseLane, useReviewQueue } from '@/hooks/useReviewQueue';
 import { useAiDraft } from '@/hooks/useAiDraft';
 import { useAutoDraft } from '@/hooks/useAutoDraft';
 import { BAND_LABEL } from '@/lib/drawing-triage';
+import { PartBadge } from '@/components/question-bank/DrawingPartsView';
+import { drawingPartsSummary, readDrawingParts } from '@/lib/drawing-parts';
 
 export default function DrawingReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -646,6 +648,71 @@ export default function DrawingReviewDetailPage() {
   const referenceImages: string[] = ((submission.question as any)?.reference_images || [])
     .map((r: any) => (typeof r === 'string' ? r : r?.url))
     .filter((u: any): u is string => typeof u === 'string' && u.length > 0);
+  // A bank question split into parts ("1(a) ... 1(b)" or "X OR Y"): how the
+  // student was told to answer, each part, and that part's solution, so the
+  // teacher marks against the option the student actually drew.
+  const qbParts = readDrawingParts(submission.qb_drawing_parts);
+  const partsStrip = qbParts ? (
+    <Box
+      sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', flexShrink: 0 }}
+    >
+      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>
+        {drawingPartsSummary(qbParts)}
+      </Typography>
+      <Box component="ul" sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 0.5, m: 0, p: 0, listStyle: 'none' }}>
+        {qbParts.items.map((part) => (
+          <Box
+            component="li"
+            key={part.id}
+            sx={{
+              display: 'flex',
+              gap: 0.75,
+              alignItems: 'flex-start',
+              width: 260,
+              flexShrink: 0,
+              p: 0.75,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
+          >
+            <PartBadge>{part.label}</PartBadge>
+            <Typography
+              variant="caption"
+              title={part.text}
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}
+            >
+              {part.text}
+            </Typography>
+            {part.solution_image_url && (
+              <Box
+                component="button"
+                type="button"
+                aria-label={`Open the solution for ${part.label}`}
+                onClick={() => window.open(part.solution_image_url!, '_blank', 'noopener')}
+                sx={{ p: 0, border: 0, bgcolor: 'transparent', cursor: 'pointer', flexShrink: 0, borderRadius: 1 }}
+              >
+                <Box
+                  component="img"
+                  src={part.solution_image_url}
+                  alt={`Solution for ${part.label}`}
+                  sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1, display: 'block', border: '1px solid', borderColor: 'divider' }}
+                />
+              </Box>
+            )}
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  ) : null;
+
   const referenceStrip = referenceImages.length > 0 ? (
     <Box sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', flexShrink: 0 }}>
       <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>
@@ -818,7 +885,14 @@ export default function DrawingReviewDetailPage() {
           />
         }
         contextBar={assignmentContextBar}
-        referenceStrip={referenceStrip}
+        referenceStrip={
+          partsStrip || referenceStrip ? (
+            <>
+              {partsStrip}
+              {referenceStrip}
+            </>
+          ) : null
+        }
         stage={
           <>
           <Box ref={stageAnchorRef} aria-hidden sx={{ position: 'absolute', top: 0, height: 0 }} />

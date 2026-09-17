@@ -6799,6 +6799,42 @@ export interface NexusQBQuestion {
   choice_group_id: string | null;
   /** How many of the choice group must be attempted. Meaningless when choice_group_id is null. */
   choice_group_pick: number | null;
+  /**
+   * The parts of one drawing question, e.g. 2014 Q81 "1(a) ... 1(b) ..." or
+   * Q82 "Draw X OR draw Y". Null for a question that is a single task. Optional
+   * because selects that predate the column do not carry it.
+   *
+   * question_text still holds the whole printed question, rebuilt from these
+   * parts on every save (apps/nexus/src/lib/drawing-parts.ts), so a screen that
+   * knows nothing about parts still shows the full question.
+   */
+  drawing_parts?: QBDrawingParts | null;
+}
+
+/** 'all': every part is answered (1(a) and 1(b)). 'any_one': the student picks one. */
+export type QBDrawingPartsMode = 'all' | 'any_one';
+
+/** One part of a drawing question, with its own solution. */
+export interface QBDrawingPart {
+  /** Stable key, 'a' to 'd'. */
+  id: string;
+  /** What students see after the question number, 'A' to 'D', so "81A". */
+  label: string;
+  text: string;
+  text_hi?: string | null;
+  /** Read in 'all' mode only. In 'any_one' every option is worth the question. */
+  marks?: number | null;
+  solution_image_url?: string | null;
+  solution_video_url?: string | null;
+}
+
+export interface QBDrawingParts {
+  mode: QBDrawingPartsMode;
+  /** A shared instruction printed before the parts, e.g. "Attempt any ONE of the following:". */
+  stem?: string | null;
+  stem_hi?: string | null;
+  /** Two to four parts. */
+  items: QBDrawingPart[];
 }
 
 /**
@@ -7278,6 +7314,11 @@ export interface NexusComposedQuestion {
   section: string | null;
   section_order: number | null;
   sort_order: number;
+  /**
+   * The parts of a drawing question, WITHOUT their solutions: a test never
+   * shows a solution before the student submits. Null for everything else.
+   */
+  drawing_parts?: QBDrawingParts | null;
 }
 
 /**
@@ -7715,6 +7756,7 @@ export interface NexusQBQuestionUpdate {
   drawing_reference_image_url?: string | null;
   choice_group_id?: string | null;
   choice_group_pick?: number | null;
+  drawing_parts?: QBDrawingParts | null;
 }
 
 export interface NexusQBQuestionSourceInsert {
@@ -9392,6 +9434,12 @@ export interface DrawingQuestionEnriched extends DrawingQuestion {
   solution_image_url: string | null;
   /** Teacher reference solution video from QB */
   solution_video_url: string | null;
+  /**
+   * The QB question's parts, each with its own solution, when it is split
+   * ("1(a) ... 1(b)" or "X OR Y"). Shown under the same unlock rule as
+   * solution_image_url.
+   */
+  drawing_parts?: QBDrawingParts | null;
   /** Current student's attempt status for this question */
   attempt_status: DrawingAttemptStatus;
 }
@@ -9482,6 +9530,12 @@ export interface DrawingSubmissionWithDetails extends DrawingSubmission {
     objects_to_include: Array<{ name: string; count?: number }> | null;
     drawing_focus_points: QBDrawingFocusPoint[] | null;
   } | null;
+  /**
+   * The bank question's parts with their solutions, when it is split
+   * ("1(a) ... 1(b)" or "X OR Y"), so the teacher marks against the right one.
+   * Read for both an exam drawing and a mirrored practice drawing.
+   */
+  qb_drawing_parts?: QBDrawingParts | null;
   student: {
     id: string;
     name: string;

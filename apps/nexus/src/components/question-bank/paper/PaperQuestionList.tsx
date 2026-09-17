@@ -14,7 +14,6 @@ import {
   DialogTitle,
   IconButton,
   LinearProgress,
-  ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
@@ -33,7 +32,6 @@ import SaveIcon from '@mui/icons-material/Save';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
-import LinkIcon from '@mui/icons-material/Link';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import type { NexusQBQuestion, QBQuestionSection } from '@neram/database';
 import { QB_SECTION_ORDER, qbSectionLabel, QB_SECTIONS } from '@neram/database';
@@ -103,8 +101,6 @@ export interface PaperQuestionListProps {
   onSaveAllImages: () => void;
   savingImages: boolean;
   saveImageProgress: { done: number; total: number };
-  /** Link two or more selected questions as either/or alternatives. */
-  onLinkChoiceGroup: (questionIds: string[]) => Promise<void>;
   /** Permanent delete, guarded server-side. Refused rows are reported back, not silently skipped. */
   onDeleteQuestions: (questionIds: string[]) => Promise<{ deleted: number; refused: DeleteRefusal[] }>;
   /** Hide or re-show just the ticked questions. Replaces the header's paper-wide Deactivate. */
@@ -145,7 +141,6 @@ export default function PaperQuestionList({
   onSaveAllImages,
   savingImages,
   saveImageProgress,
-  onLinkChoiceGroup,
   onDeleteQuestions,
   onSetActiveQuestions,
 }: PaperQuestionListProps) {
@@ -154,7 +149,6 @@ export default function PaperQuestionList({
   const [bulkSection, setBulkSection] = useState<QBQuestionSection | ''>('');
   const [applyingSection, setApplyingSection] = useState(false);
   const [applyingNeedsImage, setApplyingNeedsImage] = useState<'needed' | 'not-needed' | null>(null);
-  const [linking, setLinking] = useState(false);
   const [settingActive, setSettingActive] = useState<'activate' | 'deactivate' | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -242,17 +236,6 @@ export default function PaperQuestionList({
       await onBulkSetNeedsImage(Array.from(selected), value);
     } finally {
       setApplyingNeedsImage(null);
-    }
-  };
-
-  const applyLinkChoiceGroup = async () => {
-    if (selected.size < 2) return;
-    setLinking(true);
-    try {
-      await onLinkChoiceGroup(Array.from(selected));
-      clearSelection();
-    } finally {
-      setLinking(false);
     }
   };
 
@@ -753,20 +736,9 @@ export default function PaperQuestionList({
                 >
                   <ListItemText>No figure needed</ListItemText>
                 </MenuItem>
-                {mode === 'edit' && selected.size >= 2 && (
-                  <MenuItem
-                    onClick={() => { setMoreAnchor(null); applyLinkChoiceGroup(); }}
-                    disabled={linking}
-                    sx={{ minHeight: 44 }}
-                  >
-                    <ListItemIcon><LinkIcon fontSize="small" /></ListItemIcon>
-                    <ListItemText
-                      primary="Link as either/or"
-                      secondary="Attempt any one of these on the paper"
-                      secondaryTypographyProps={{ variant: 'caption' }}
-                    />
-                  </MenuItem>
-                )}
+                {/* "Link as either/or" lived here, linking whole questions. The
+                    papers put the OR inside one question number, so either/or
+                    is now a question's parts (DrawingPartsEditor). */}
               </Menu>
               <Button onClick={clearSelection} disabled={applyingSection} sx={{ textTransform: 'none', minHeight: 44 }}>
                 Clear

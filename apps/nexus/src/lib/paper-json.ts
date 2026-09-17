@@ -36,6 +36,7 @@ import {
   type QBQuestionFormat,
   type QBQuestionSection,
   type QBDrawingFocusPoint,
+  type QBDrawingParts,
   type QBShift,
   type MarksSource,
   type QBPaperQuestionInput,
@@ -48,6 +49,7 @@ import {
   reconcileSection,
   resolveCorrectAnswer,
 } from './bulk-upload-schema';
+import { applyDrawingPartsToWrite, normalizeDrawingParts } from './drawing-parts';
 
 export const SCHEMA_NAME = 'nexus-paper';
 export const SCHEMA_VERSION = 2;
@@ -135,6 +137,12 @@ export interface PaperJSONQuestion {
     marks?: number | null;
     /** Gated: students see these only after they upload. */
     focus_points?: QBDrawingFocusPoint[] | null;
+    /**
+     * "1(a) ... 1(b) ..." or "Draw X OR draw Y" as parts, each with its own
+     * solution. null clears them. On import, question_text is rebuilt from the
+     * parts, so a file cannot store a text that disagrees with its parts.
+     */
+    parts?: PaperJSONDrawingParts | null;
   };
 
   needs_image?: boolean | null;
@@ -149,6 +157,25 @@ export interface PaperJSONQuestion {
 
   status?: string | null;
   is_active?: boolean;
+}
+
+export interface PaperJSONDrawingPart {
+  /** 'A', 'B'... Informational: parts are relabelled by position on import. */
+  label?: string;
+  text: string;
+  text_hi?: string | null;
+  /** Only meaningful when mode is 'all'. */
+  marks?: number | null;
+  solution_image?: string | null;
+  solution_video_url?: string | null;
+}
+
+export interface PaperJSONDrawingParts {
+  /** 'all': answer every part. 'any_one': attempt any one. */
+  mode: 'all' | 'any_one';
+  stem?: string | null;
+  stem_hi?: string | null;
+  items: PaperJSONDrawingPart[];
 }
 
 export interface PaperJSONSection {
@@ -219,6 +246,26 @@ function optionOut(opt: NexusQBQuestionOption): PaperJSONOption {
   }) as PaperJSONOption;
 }
 
+function partsOut(parts: QBDrawingParts): PaperJSONDrawingParts {
+  return {
+    mode: parts.mode,
+    ...compact({ stem: parts.stem, stem_hi: parts.stem_hi }),
+    items: parts.items.map(
+      (p) =>
+        ({
+          label: p.label,
+          text: p.text,
+          ...compact({
+            text_hi: p.text_hi,
+            marks: p.marks,
+            solution_image: p.solution_image_url,
+            solution_video_url: p.solution_video_url,
+          }),
+        }) as PaperJSONDrawingPart,
+    ),
+  };
+}
+
 function questionOut(
   q: NexusQBQuestion,
   questionNumber: number,
@@ -249,6 +296,7 @@ function questionOut(
         design_principle: q.design_principle_tested,
         marks: q.drawing_marks,
         focus_points: q.drawing_focus_points,
+        parts: q.drawing_parts ? partsOut(q.drawing_parts) : null,
       })
     : undefined;
 
@@ -465,6 +513,8 @@ function readQuestion(raw: Record<string, unknown>, sectionKey: QBQuestionSectio
   const section = reconcileSection(sectionKey, format);
   const isDrawing = format === 'DRAWING_PROMPT';
 
+  const parts = readParts(drawing.parts);
+
   const rawOptions = Array.isArray(raw.options) ? (raw.options as Record<string, unknown>[]) : [];
   // Positional ids, because that is what the bank stores and what
   // gradeQBAnswerStrict compares against. The file's label is only a hint for
@@ -585,6 +635,7 @@ function readQuestion(raw: Record<string, unknown>, sectionKey: QBQuestionSectio
       isDrawing && has([drawing, 'focus_points']),
       normalizeFocusPoints(drawing.focus_points),
     ),
+    drawing_parts: when(isDrawing && has([drawing, 'parts']) && parts.ok, parts.ok ? parts.parts : null),
   };
 
   // Strip the keys `when` returned undefined for, so "not mentioned" survives
@@ -593,7 +644,37 @@ function readQuestion(raw: Record<string, unknown>, sectionKey: QBQuestionSectio
     if (parsed[key] === undefined) delete parsed[key];
   }
 
-  return { parsed, problem: resolved.problem };
+  // Parts are the truth for the text, the marks and the question-level
+  // solution, through the same writer the editor's save uses.
+  if (parsed.drawing_parts) {
+    applyDrawingPartsToWrite(parsed as unknown as Record<string, unknown>, format);
+  }
+
+  const partsProblem =
+    isDrawing && drawing.parts !== undefined && !parts.ok ? `parts ignored, ${parts.error}` : undefined;
+  return { parsed, problem: resolved.problem ?? partsProblem };
+}
+
+/** A file's parts block, in the stored shape. null (or absent) clears. */
+function readParts(
+  raw: unknown,
+): { ok: true; parts: QBDrawingParts | null } | { ok: false; error: string } {
+  if (raw === null || raw === undefined) return { ok: true, parts: null };
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, error: 'parts must be an object.' };
+  }
+  const r = raw as Record<string, unknown>;
+  const items = Array.isArray(r.items)
+    ? (r.items as Record<string, unknown>[]).map((item) => ({
+        text: item?.text,
+        text_hi: item?.text_hi,
+        marks: item?.marks,
+        solution_image_url: item?.solution_image ?? item?.solution_image_url,
+        solution_video_url: item?.solution_video_url,
+      }))
+    : r.items;
+  const result = normalizeDrawingParts({ ...r, items });
+  return result.ok ? { ok: true, parts: result.parts } : result;
 }
 
 /**

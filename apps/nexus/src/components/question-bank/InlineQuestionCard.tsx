@@ -10,6 +10,7 @@ import CategoryChips from './CategoryChips';
 import AttemptIndicator from './AttemptIndicator';
 import QuestionDetail from './QuestionDetail';
 import MathText from '@/components/common/MathText';
+import { drawingPartsChipLabel, drawingPartsSummary, readDrawingParts } from '@/lib/drawing-parts';
 
 interface InlineQuestionCardProps {
   question: NexusQBQuestionListItem;
@@ -49,6 +50,7 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
   onCategoryClick,
 }, ref) {
   const theme = useTheme();
+  const parts = question.question_format === 'DRAWING_PROMPT' ? readDrawingParts(question.drawing_parts) : null;
 
   return (
     <Paper
@@ -171,6 +173,15 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
                   label="Drawing"
                   size="small"
                   sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: 'secondary.50', color: 'secondary.dark', '& .MuiChip-label': { px: 0.5 } }}
+                />
+              )}
+              {parts && (
+                <Chip
+                  label={drawingPartsChipLabel(parts)}
+                  title={drawingPartsSummary(parts)}
+                  size="small"
+                  variant="outlined"
+                  sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, '& .MuiChip-label': { px: 0.5 } }}
                 />
               )}
               <Box sx={{ flexGrow: 1 }} />

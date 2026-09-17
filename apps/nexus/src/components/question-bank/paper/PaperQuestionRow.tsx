@@ -12,6 +12,9 @@ import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
 import { questionImageSlots, questionMissingSolutionImage } from '@/lib/qb-image-needs';
 import MathText from '@/components/common/MathText';
+import AltRouteIcon from '@mui/icons-material/AltRoute';
+import ChecklistIcon from '@mui/icons-material/Checklist';
+import { drawingPartsChipLabel, drawingPartsSummary, readDrawingParts } from '@/lib/drawing-parts';
 
 export interface PaperQuestionRowProps {
   question: NexusQBQuestion;
@@ -59,6 +62,7 @@ export default function PaperQuestionRow({
 }: PaperQuestionRowProps) {
   const qNum = question.display_order ?? position ?? 0;
   const isDrawing = question.question_format === 'DRAWING_PROMPT';
+  const parts = isDrawing ? readDrawingParts(question.drawing_parts) : null;
   const answer = question.correct_answer;
   const statusColor = QB_QUESTION_STATUS_COLORS[question.status] || '#9e9e9e';
   const statusLabel = QB_QUESTION_STATUS_LABELS[question.status] || question.status;
@@ -152,6 +156,39 @@ export default function PaperQuestionRow({
             textOverflow: 'ellipsis',
           }}
         />
+
+        {parts && (
+          <Tooltip title={drawingPartsSummary(parts)} arrow>
+            <Box
+              component="span"
+              aria-label={drawingPartsSummary(parts)}
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.25,
+                flexShrink: 0,
+                px: 0.75,
+                height: 22,
+                borderRadius: 1,
+                border: '1px solid',
+                borderColor: 'divider',
+                color: 'text.secondary',
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {parts.mode === 'any_one' ? (
+                <AltRouteIcon sx={{ fontSize: 14 }} aria-hidden />
+              ) : (
+                <ChecklistIcon sx={{ fontSize: 14 }} aria-hidden />
+              )}
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                {drawingPartsChipLabel(parts)}
+              </Box>
+            </Box>
+          </Tooltip>
+        )}
 
         <Box sx={{ flexShrink: 0, width: 28, textAlign: 'center' }}>
           {isDrawing ? (

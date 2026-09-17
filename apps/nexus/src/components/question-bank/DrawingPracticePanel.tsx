@@ -28,6 +28,8 @@ import ReplayIcon from '@mui/icons-material/Replay';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
 import DrawingSubmissionSheet from '@/components/drawings/DrawingSubmissionSheet';
+import DrawingPartsView from './DrawingPartsView';
+import { readDrawingParts } from '@/lib/drawing-parts';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionDetail, QBDrawingState } from '@neram/database';
 
@@ -53,9 +55,16 @@ import type { NexusQBQuestionDetail, QBDrawingState } from '@neram/database';
 interface Props {
   question: NexusQBQuestionDetail;
   classroomId?: string | null;
+  /** The reader's language, for a question split into parts. */
+  language?: 'en' | 'hi';
 }
 
-export default function DrawingPracticePanel({ question, classroomId }: Props) {
+/**
+ * A question split into parts ("1(a) ... 1(b)" or "X OR Y") renders its parts
+ * here, each with its own solution behind the same gate, in place of the one
+ * solution image. The caller skips its plain question text for such a question.
+ */
+export default function DrawingPracticePanel({ question, classroomId, language = 'en' }: Props) {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
 
@@ -105,6 +114,7 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
     }
   }, [question.id, classroomId, getToken, load]);
 
+  const parts = readDrawingParts(question.drawing_parts);
   const unlocked = state?.unlocked === true;
   const submission = state?.submission ?? null;
   const awaitingReview = submission?.status === 'submitted' || submission?.status === 'under_review';
@@ -112,6 +122,17 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
 
   return (
     <Box sx={{ mb: 3 }}>
+      {parts && (
+        <Box sx={{ mb: 2 }}>
+          <DrawingPartsView
+            parts={parts}
+            questionNumber={question.display_order}
+            language={language}
+            showSolutions={unlocked}
+          />
+        </Box>
+      )}
+
       {question.drawing_marks ? (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
           Worth {question.drawing_marks} marks
@@ -184,8 +205,9 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
             >
               <LockOutlinedIcon sx={{ color: 'text.disabled', mb: 0.5 }} />
               <Typography variant="body2" color="text.secondary">
-                Draw it first. The solution image opens up once you upload your attempt, or you can
-                switch it on below.
+                {parts
+                  ? 'Draw it first. The solutions open up once you upload your attempt, or you can switch them on below.'
+                  : 'Draw it first. The solution image opens up once you upload your attempt, or you can switch it on below.'}
               </Typography>
             </Box>
           ) : (
@@ -199,7 +221,8 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
                 />
               )}
 
-              {question.solution_image_url && (
+              {/* Parts show their own solutions in the view above. */}
+              {!parts && question.solution_image_url && (
                 <Box sx={{ mb: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                     <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ fontSize: '0.7rem' }}>
@@ -289,7 +312,7 @@ export default function DrawingPracticePanel({ question, classroomId }: Props) {
               }
               label={
                 <Typography variant="body2" color="text.secondary">
-                  Show the solution image
+                  {parts ? 'Show the solutions' : 'Show the solution image'}
                 </Typography>
               }
             />

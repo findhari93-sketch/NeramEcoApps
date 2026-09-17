@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { QB_LIST_COLUMNS, stripOptionAnswers } from './question-bank';
+import { QB_LIST_COLUMNS, stripDrawingPartSolutions, stripOptionAnswers } from './question-bank';
 import { sectionProgress } from './qb-papers';
 import { QB_SECTION_ORDER, type NexusQBPaperSectionRow } from '../../types';
 
@@ -84,6 +84,34 @@ describe('stripOptionAnswers', () => {
     expect(stripOptionAnswers(undefined)).toBeUndefined();
     // A drawing question carries no options at all.
     expect(stripOptionAnswers([])).toEqual([]);
+  });
+});
+
+describe('stripDrawingPartSolutions', () => {
+  const parts = {
+    mode: 'any_one' as const,
+    stem: null,
+    stem_hi: null,
+    items: [
+      { id: 'a', label: 'A', text: 'Draw a balloon seller.', solution_image_url: 'https://cdn/a.png', solution_video_url: 'https://v/a' },
+      { id: 'b', label: 'B', text: 'Draw village women.', solution_image_url: 'https://cdn/b.png' },
+    ],
+  };
+
+  it('keeps what a student may read and drops every part solution', () => {
+    const stripped = stripDrawingPartSolutions(parts)!;
+    expect(stripped.items.map((p) => p.text)).toEqual(['Draw a balloon seller.', 'Draw village women.']);
+    expect(JSON.stringify(stripped)).not.toContain('https://');
+  });
+
+  it('reads anything that is not a parts object as null', () => {
+    expect(stripDrawingPartSolutions(null)).toBeNull();
+    expect(stripDrawingPartSolutions({ mode: 'all' })).toBeNull();
+    expect(stripDrawingPartSolutions('parts')).toBeNull();
+  });
+
+  it('ships drawing_parts in the list columns, where it is stripped', () => {
+    expect(QB_LIST_COLUMNS.split(',').map((c) => c.trim())).toContain('drawing_parts');
   });
 });
 

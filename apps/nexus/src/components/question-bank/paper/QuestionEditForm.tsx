@@ -19,6 +19,7 @@ import {
   CircularProgress,
   MenuItem,
   Select,
+  Alert,
   alpha,
   useTheme,
 } from '@neram/ui';
@@ -49,6 +50,15 @@ import ImageUploadZone from '../ImageUploadZone';
 import DrawingQuestionPanel from '../DrawingQuestionPanel';
 import TagCategoryDialog from '../TagCategoryDialog';
 import DeleteQuestionDialog from '../DeleteQuestionDialog';
+import DrawingPartsEditor, {
+  SplitIntoPartsPrompt,
+  formToParts,
+  mergePartsText,
+  partsFormProblem,
+  partsFormTotalMarks,
+  partsToForm,
+  type DrawingPartsForm,
+} from './DrawingPartsEditor';
 import MathField from '@/components/common/MathField';
 // The keyword guess has one home, in lib/qb-image-needs.ts. A second copy
 // here would drift the moment either changed.
@@ -119,6 +129,8 @@ interface FormData {
   // DRAWING_PROMPT, so switching a question's format cannot smear drawing
   // metadata onto an MCQ.
   drawing_marks: string;
+  /** Null for a single-task question. See DrawingPartsEditor. */
+  drawing_parts: DrawingPartsForm | null;
 }
 
 function createDefaultOption(idx: number): NexusQBQuestionOption {
@@ -168,6 +180,7 @@ function getInitialFormData(
       ? { url: question.solution_image_url, uploaded: true }
       : undefined,
     drawing_marks: question.drawing_marks != null ? String(question.drawing_marks) : '',
+    drawing_parts: question.question_format === 'DRAWING_PROMPT' ? partsToForm(question.drawing_parts) : null,
   };
 }
 
@@ -215,6 +228,12 @@ function buildSubmitPayload(form: FormData) {
 
   if (form.question_format === 'DRAWING_PROMPT') {
     questionData.drawing_marks = form.drawing_marks ? Number(form.drawing_marks) : null;
+    // With parts, the server rebuilds question_text, the marks total and the
+    // question-level solution from them, so what this form holds for those
+    // is only a fallback.
+    questionData.drawing_parts = form.drawing_parts ? formToParts(form.drawing_parts) : null;
+  } else {
+    questionData.drawing_parts = null;
   }
 
   return questionData;
@@ -254,6 +273,7 @@ export default function QuestionEditForm({
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
   const [sectionSaving, setSectionSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   /**
    * Hindi is empty on almost every paper, so it costs a field per option and one
    * for the stem to show it by default. Seeded from the question so a paper that
@@ -369,6 +389,16 @@ export default function QuestionEditForm({
   }, []);
 
   const handleSave = async () => {
+    // Caught here, beside the part that needs it, rather than as a 400 after
+    // the round trip.
+    if (form.question_format === 'DRAWING_PROMPT' && form.drawing_parts) {
+      const problem = partsFormProblem(form.drawing_parts);
+      if (problem) {
+        setSaveError(problem);
+        return;
+      }
+    }
+    setSaveError(null);
     setSaving(true);
     try {
       const token = await getToken();
@@ -393,10 +423,52 @@ export default function QuestionEditForm({
       onSaved();
     } catch (err) {
       console.error('Save failed:', err);
+      setSaveError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
   };
+
+  const splitIntoParts = useCallback((parts: DrawingPartsForm, questionMarks: number | null) => {
+    setForm((prev) => {
+      const items = [...parts.items];
+      // A whole-question solution from before the split belongs to one of the
+      // parts. The first is the likeliest home, and the teacher can move it.
+      if (prev.solution_image && !items.some((p) => p.solution_image)) {
+        items[0] = { ...items[0], solution_image: prev.solution_image };
+      }
+      if (prev.solution_video_url && !items.some((p) => p.solution_video_url)) {
+        items[0] = { ...items[0], solution_video_url: prev.solution_video_url };
+      }
+      return {
+        ...prev,
+        drawing_parts: { ...parts, items },
+        drawing_marks: prev.drawing_marks || (questionMarks != null ? String(questionMarks) : ''),
+      };
+    });
+    setDirty(true);
+  }, []);
+
+  const mergeParts = useCallback(() => {
+    setForm((prev) => {
+      if (!prev.drawing_parts) return prev;
+      const merged = mergePartsText(prev.drawing_parts);
+      const firstImage = prev.drawing_parts.items.find((p) => p.solution_image)?.solution_image;
+      const firstVideo = prev.drawing_parts.items.find((p) => p.solution_video_url.trim())?.solution_video_url;
+      return {
+        ...prev,
+        question_text: merged.text,
+        question_text_hi: merged.text_hi ?? prev.question_text_hi,
+        solution_image: firstImage,
+        solution_video_url: firstVideo ?? '',
+        drawing_parts: null,
+      };
+    });
+    setSaveError(null);
+    setDirty(true);
+  }, []);
+
+  const partsTotal = form.drawing_parts ? partsFormTotalMarks(form.drawing_parts) : null;
 
   const handleCancel = () => {
     setForm(getInitialFormData(question, sources, paper));
@@ -522,15 +594,57 @@ export default function QuestionEditForm({
       )}
 
       <Box sx={{ p: { xs: 1.5, md: 2 } }}>
+        {saveError && (
+          <Alert severity="error" onClose={() => setSaveError(null)} sx={{ mb: 1.5 }}>
+            {saveError}
+          </Alert>
+        )}
         {/* Section 1: Content (always visible) */}
         <Box sx={{ mb: 2 }}>
-          <MathField
-            label="Question text"
-            value={form.question_text}
-            onChange={(next) => updateField('question_text', next)}
-            minRows={2}
-          />
-          {showHindi ? (
+          {/* A drawing split into parts edits each part's text in place of the
+              one question text, which the server rebuilds from them. */}
+          {form.question_format === 'DRAWING_PROMPT' && form.drawing_parts ? (
+            <DrawingPartsEditor
+              value={form.drawing_parts}
+              onChange={(next) => {
+                setForm((prev) => ({ ...prev, drawing_parts: next }));
+                setDirty(true);
+              }}
+              onMerge={mergeParts}
+              questionNumber={question.display_order}
+              showHindi={showHindi}
+              getToken={getToken}
+              categories={form.categories}
+              questionMarks={form.drawing_marks ? Number(form.drawing_marks) : null}
+            />
+          ) : (
+            <>
+              <MathField
+                label="Question text"
+                value={form.question_text}
+                onChange={(next) => updateField('question_text', next)}
+                minRows={2}
+              />
+              {form.question_format === 'DRAWING_PROMPT' && (
+                <SplitIntoPartsPrompt
+                  text={form.question_text}
+                  textHi={form.question_text_hi}
+                  onSplit={splitIntoParts}
+                />
+              )}
+            </>
+          )}
+          {form.question_format === 'DRAWING_PROMPT' && form.drawing_parts ? (
+            !showHindi && (
+              <Button
+                size="small"
+                onClick={() => setShowHindi(true)}
+                sx={{ textTransform: 'none', minHeight: 36 }}
+              >
+                Add Hindi
+              </Button>
+            )
+          ) : showHindi ? (
             <TextField
               label="Question text (Hindi)"
               value={form.question_text_hi}
@@ -812,6 +926,8 @@ export default function QuestionEditForm({
                 getToken={getToken}
                 questionText={form.question_text}
                 categories={form.categories}
+                hasParts={Boolean(form.drawing_parts)}
+                derivedMarks={partsTotal}
               />
             </AccordionDetails>
           </Accordion>

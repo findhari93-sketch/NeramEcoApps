@@ -1,42 +1,16 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
-import {
-  Box,
-  Stack,
-  Typography,
-  TextField,
-  Button,
-  Chip,
-  MenuItem,
-  Snackbar,
-  Alert,
-} from '@neram/ui';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import ImageUploadZone from './ImageUploadZone';
-import {
-  buildSolutionPrompt,
-  getMediumFromCategory,
-  MEDIUM_LABELS,
-  LEVEL_LABELS,
-  type DrawingMedium,
-  type SkillLevel,
-} from '@/lib/drawing-prompt-templates';
+import { Stack, TextField, Typography } from '@neram/ui';
+import DrawingSolutionFields from './DrawingSolutionFields';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 
 /**
  * Everything that makes a drawing question answerable and markable.
  *
- * The Copy prompt button is the whole AI story here. In-app AI evaluation of
- * drawings was deliberately switched off (/api/drawing/ai-feedback is a 410
- * stub) in favour of a teacher pasting a generated prompt into Gemini by hand,
- * and authoring a model solution follows the same road. Nothing in this file
- * calls a model, so nothing in it costs anything.
- *
- * The prompt is built from the CURRENT FORM STATE, not the saved row, so a
- * teacher can reword the question, press Copy, and get the reworded prompt
- * without first saving a draft they might throw away.
+ * The solution itself (image, video, Copy prompt) lives in
+ * DrawingSolutionFields. A single-task question renders it here once. A
+ * question split into parts renders it once per part, beside that part's text
+ * in DrawingPartsEditor, so this panel keeps only the question's marks.
  *
  * Colour rule, design principle, objects to include and focus points used to
  * live here too. Nobody was filling them in, so they are gone from
@@ -66,10 +40,15 @@ interface Props {
   questionText: string;
   /** Drives the default medium. Pass the question's categories. */
   categories?: string[] | null;
+  /** The question is split into parts, and each part carries its own solution. */
+  hasParts?: boolean;
+  /**
+   * The marks the parts add up to, when every part of an "answer all parts"
+   * question has marks. The save sets drawing_marks to this, so the field shows
+   * it rather than inviting a number the server would overwrite.
+   */
+  derivedMarks?: number | null;
 }
-
-const MEDIA: DrawingMedium[] = ['graphite_pencil', 'charcoal_pencil', 'color_pencil'];
-const LEVELS: SkillLevel[] = ['beginner', 'medium', 'expert'];
 
 export default function DrawingQuestionPanel({
   value,
@@ -77,151 +56,40 @@ export default function DrawingQuestionPanel({
   getToken,
   questionText,
   categories,
+  hasParts = false,
+  derivedMarks = null,
 }: Props) {
-  const defaultMedium = useMemo(
-    () => getMediumFromCategory((categories || []).find((c) => c !== 'drawing') || ''),
-    [categories],
-  );
-  const [medium, setMedium] = useState<DrawingMedium>(defaultMedium);
-  const [level, setLevel] = useState<SkillLevel>('expert');
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
-
-  const prompt = useMemo(
-    () =>
-      buildSolutionPrompt(
-        {
-          question_text: questionText,
-          drawing_marks: value.drawing_marks ? Number(value.drawing_marks) : null,
-          category: (categories || []).find((c) => c !== 'drawing') || null,
-        },
-        level,
-        medium,
-      ),
-    [questionText, value.drawing_marks, level, medium, categories],
-  );
-
-  const copyPrompt = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(prompt);
-      setCopied(true);
-    } catch {
-      // Clipboard needs a secure context and permission. Say so rather than
-      // leaving the teacher pressing a button that appears to do nothing.
-      setCopyFailed(true);
-    }
-  }, [prompt]);
-
   return (
     <Stack spacing={2.5}>
-      <Box>
-        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-          Solution image
+      {hasParts ? (
+        <Typography variant="body2" color="text.secondary">
+          Each part has its own solution image and Copy prompt, under its text above.
         </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Hidden during a test until the student submits. In practice they can choose to reveal it
-          before they draw.
-        </Typography>
-        <ImageUploadZone
-          image={value.solution_image}
-          onChange={(img) => onChange({ solution_image: img })}
+      ) : (
+        <DrawingSolutionFields
+          value={value}
+          onChange={onChange}
           getToken={getToken}
-          subfolder="drawing-solutions"
-          height={160}
-          label="Drop the solution image, paste, or click to upload"
+          promptText={questionText}
+          marks={value.drawing_marks ? Number(value.drawing_marks) : null}
+          categories={categories}
         />
-      </Box>
-
-      <TextField
-        label="Solution video URL"
-        value={value.solution_video_url}
-        onChange={(e) => onChange({ solution_video_url: e.target.value })}
-        fullWidth
-        size="small"
-        placeholder="https://..."
-      />
+      )}
 
       <TextField
         label="Marks in the exam"
-        value={value.drawing_marks}
+        value={derivedMarks != null ? String(derivedMarks) : value.drawing_marks}
         onChange={(e) => onChange({ drawing_marks: e.target.value.replace(/[^0-9]/g, '') })}
         size="small"
         inputMode="numeric"
-        helperText="Leave blank if the paper does not say"
+        disabled={derivedMarks != null}
+        helperText={
+          derivedMarks != null
+            ? 'The total of the part marks'
+            : 'Leave blank if the paper does not say'
+        }
         sx={{ width: { xs: '100%', sm: 200 } }}
       />
-
-      <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-          Make the solution image with an external tool
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-          Copy this prompt, paste it into Gemini with no image attached, then upload what it gives
-          you into Solution image above.
-        </Typography>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1.5 }}>
-          <TextField
-            select
-            label="Medium"
-            value={medium}
-            onChange={(e) => setMedium(e.target.value as DrawingMedium)}
-            size="small"
-            sx={{ minWidth: 180 }}
-          >
-            {MEDIA.map((m) => (
-              <MenuItem key={m} value={m}>
-                {MEDIUM_LABELS[m]}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            label="Level"
-            value={level}
-            onChange={(e) => setLevel(e.target.value as SkillLevel)}
-            size="small"
-            sx={{ minWidth: 160 }}
-          >
-            {LEVELS.map((l) => (
-              <MenuItem key={l} value={l}>
-                {LEVEL_LABELS[l]}
-              </MenuItem>
-            ))}
-          </TextField>
-        </Stack>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <Button
-            variant="contained"
-            startIcon={<ContentCopyIcon />}
-            onClick={copyPrompt}
-            sx={{ minHeight: 44 }}
-          >
-            Copy prompt
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<OpenInNewIcon />}
-            href="https://gemini.google.com/app"
-            target="_blank"
-            rel="noopener noreferrer"
-            sx={{ minHeight: 44 }}
-          >
-            Open Gemini
-          </Button>
-        </Stack>
-      </Box>
-
-      <Snackbar
-        open={copied}
-        autoHideDuration={3000}
-        onClose={() => setCopied(false)}
-        message="Prompt copied. Paste it into Gemini, then upload the image it gives you."
-      />
-      <Snackbar open={copyFailed} autoHideDuration={5000} onClose={() => setCopyFailed(false)}>
-        <Alert severity="warning" onClose={() => setCopyFailed(false)}>
-          Could not reach the clipboard. Select the prompt text manually, or try over https.
-        </Alert>
-      </Snackbar>
     </Stack>
   );
 }

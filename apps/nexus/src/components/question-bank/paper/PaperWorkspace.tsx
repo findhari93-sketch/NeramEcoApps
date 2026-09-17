@@ -386,21 +386,6 @@ export default function PaperWorkspace({
     [getToken, onSaved, onOptimisticPatch],
   );
 
-  /** "Attempt any one of these", from a run selected in the list. */
-  const linkChoiceGroup = useCallback(
-    async (questionIds: string[]) => {
-      const token = await getToken();
-      if (!token) return;
-      await fetch('/api/question-bank/questions/bulk-update', {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'link_choice_group', question_ids: questionIds }),
-      });
-      onSaved();
-    },
-    [getToken, onSaved],
-  );
-
   return (
     <Box
       sx={{
@@ -445,7 +430,6 @@ export default function PaperWorkspace({
           sectionFilter={sectionFilter}
           onSectionFilterChange={onSectionFilterChange}
           onBulkSetNeedsImage={bulkSetNeedsImage}
-          onLinkChoiceGroup={linkChoiceGroup}
           onDeleteQuestions={deleteQuestions}
           onSetActiveQuestions={setActiveQuestions}
           imageStats={imageStats}
