@@ -6,7 +6,7 @@ import {
   recordGamificationEvent,
   setSubmissionTags,
   recomputeExamAttemptScore,
-  getDrawingReviewQueue,
+  recordFlip,
 } from '@neram/database/queries/nexus';
 import type { GalleryReactionType } from '@neram/database/types';
 import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
@@ -19,6 +19,8 @@ import { pickNextPending } from '@/lib/review-next';
 import { evalTables } from '@/lib/drawing-eval/db';
 import { heldSubmissionIds, holdReview, releaseModeFor } from '@/lib/drawing-hold';
 import { syncRegionMarks } from '@/lib/drawing-region-sync';
+import { canRedo, reviewKindOf, wasReviewedBefore } from '@/lib/drawing-source';
+import { buildPracticeReviewMessage, shouldNotifyPractice } from '@/lib/practice-review-message';
 
 // One student, but a Teams chat post (chat create, card, maybe a plain retry)
 // runs inside this request, and the default budget is tight for that.
@@ -71,7 +73,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
     }
     const sub = currentSub as any;
-    const wasAlreadyReviewed = ['reviewed', 'redo', 'completed'].includes(sub?.status || '');
+    const kind = reviewKindOf(sub);
+    // A sketch is stored 'completed' at upload, so status alone would read every
+    // first review of a sketch as a re-review.
+    const wasAlreadyReviewed = wasReviewedBefore(sub);
 
     const body = await request.json();
     const {
@@ -88,6 +93,12 @@ export async function PATCH(
       tag_labels,
     } = body;
     const reviewAction = action || 'complete'; // backward compat
+    if (reviewAction === 'redo' && !canRedo(sub)) {
+      return NextResponse.json(
+        { error: kind === 'test' ? 'A test drawing is marked, not sent back for a redo.' : 'A sketch has no redo round. Save the review instead.' },
+        { status: 400 },
+      );
+    }
     const reaction = parseReaction(rawReaction);
     const tutorMarks =
       tutor_marks !== null && tutor_marks !== undefined && tutor_marks !== '' && Number.isFinite(Number(tutor_marks))
@@ -345,22 +356,62 @@ export async function PATCH(
       }
     }
 
-    // Notify student if this is a re-review (the older practice-drawing list reads this)
-    if (wasAlreadyReviewed) {
-      void Promise.resolve(
-        supabase
-          .from('drawing_notifications' as any)
-          .insert({
-            student_id: submission.student_id,
-            submission_id: id,
-            message: 'Your teacher has reviewed your drawing again. Check the updated feedback.',
-          })
-      ).catch(() => {}); // non-critical, fire and forget
+    // Practice (a sketch, question bank, free practice, homework): the same one
+    // door, the teacher's own Teams chat first, a link to the drawing in the
+    // student's sketchbook. Marking practice is optional, so only a first
+    // review, a redo, or a changed verdict is worth a message.
+    if (
+      kind === 'practice' &&
+      shouldNotifyPractice({
+        action: reviewAction,
+        previouslyReviewed: wasAlreadyReviewed,
+        previousStatus: sub?.status ?? '',
+        previousRating: sub?.tutor_rating ?? null,
+        rating: tutor_rating || null,
+        previousFeedback: sub?.tutor_feedback ?? null,
+        feedback: tutor_feedback || null,
+      })
+    ) {
+      try {
+        const link = `${shareBaseUrl(request.nextUrl.origin)}/student/sketchbook/${id}`;
+        const message = buildPracticeReviewMessage({
+          action: reviewAction,
+          teacherName: (user as any).name ?? null,
+          sourceType: sub?.source_type ?? null,
+          rating: tutor_rating || null,
+        });
+        const { results } = await sendNudge({
+          teacher: { authHeader, userId: user.id },
+          studentIds: [submission.student_id],
+          subject: message.subject,
+          plain: message.plain,
+          html: plainToHtmlWithLink(message.plain, link, message.buttonLabel),
+          eventType: 'practice_reviewed',
+          metadata: { submission_id: id, action: reviewAction, source: sub?.source_type ?? null },
+          respectDormancy: false,
+        });
+        const r = results[0];
+        delivery = r ? { chat: r.chat, teams: r.teams, inapp: r.inapp, reasons: r.reasons ?? null } : null;
+      } catch (err) {
+        console.error('[Drawing review] student was not told about the practice review:', err);
+      }
+    }
+
+    // Reviewing practice is also looking at it: it leaves the flip-through.
+    if (kind === 'practice') {
+      try {
+        await recordFlip(user.id, id, 'seen');
+      } catch (err) {
+        console.error('[Drawing review] seen was not recorded:', err);
+      }
     }
 
     // Save and next: the drawing waiting longest in the same place the teacher
     // came from. A redo row is waiting on the student, not the teacher, so only
     // attempts that are actually submitted count.
+    //
+    // Practice and test drawings: the screen walks its own list (lib/review-context),
+    // never the whole school's queue.
     let next: { nextId: string | null; remaining: number } = { nextId: null, remaining: 0 };
     try {
       if (sub?.assignment_id) {
@@ -369,12 +420,6 @@ export async function PATCH(
           rows
             .filter((r) => r.drawing && ['submitted', 'under_review'].includes(r.drawing.status))
             .map((r) => ({ id: r.drawing!.id, submitted_at: r.drawing!.submitted_at })),
-          id,
-        );
-      } else {
-        const queue = await getDrawingReviewQueue({ status: 'submitted', limit: 25 });
-        next = pickNextPending(
-          (queue as any[]).map((s) => ({ id: s.id, submitted_at: s.submitted_at })),
           id,
         );
       }
@@ -386,6 +431,7 @@ export async function PATCH(
       submission,
       voice_sent: !!voice,
       delivery,
+      notified: delivery !== null,
       next_submission_id: next.nextId,
       remaining: next.remaining,
     });

@@ -4,6 +4,10 @@ import {
   getDrawingSubmissionById,
   getAssignmentDrawingHistory,
   getSubmissionTags,
+  getExamDrawingMaxMarks,
+  getInspirationItem,
+  getInspirationItemsForSubmission,
+  listLiveFeatures,
 } from '@neram/database/queries/nexus';
 import { getSupabaseAdminClient } from '@neram/database';
 import {
@@ -13,6 +17,8 @@ import {
 } from '@/lib/drawing-voice-feedback';
 import { heldIdsFrom, isReleasedForStudent, withholdUnreleasedReview } from '@/lib/student-drawing-payload';
 import { loadManualEvaluations } from '@/lib/student-drawing-payload-server';
+import { reviewKindOf } from '@/lib/drawing-source';
+import { displayTitle } from '@/lib/inspiration-present';
 
 /** The public drawing buckets a submission's images can live in. */
 const DRAWING_IMAGE_BUCKETS = new Set(['drawing-uploads', 'drawing-reviewed', 'drawing-references']);
@@ -82,6 +88,25 @@ export async function GET(
     const voices = await signVoiceFeedback(visibleVoiceRows);
     const voiceBySubmission = Object.fromEntries(voices.map((v) => [v.submission_id, v]));
 
+    // What the one review screen needs beyond the row: the Show in Inspiration
+    // switch, the Inspiration drawing this was practised from, whether it is
+    // featured in a class, and a test drawing's marks ceiling. exam_attempt_id
+    // and exam_qb_question_id are read off the select('*') row, never named in a
+    // select, because staging has neither column.
+    const row = submission as any;
+    const kind = reviewKindOf(row);
+    const itemId = (row.inspiration_item_id as string | null) ?? null;
+    const [inspiration, practisedFrom, featured, examMaxMarks] = await Promise.all([
+      isStaffViewer && kind !== 'test' ? getInspirationItemsForSubmission(id).catch(() => null) : Promise.resolve(null),
+      itemId && viewer
+        ? getInspirationItem(itemId, viewer.id, isStaffViewer ? 'all' : 'visible').then((r) => r.item).catch(() => null)
+        : Promise.resolve(null),
+      isStaffViewer && kind === 'practice' ? listLiveFeatures([id]).then((f) => f[id] ?? []).catch(() => []) : Promise.resolve([]),
+      isStaffViewer && kind === 'test' && row.exam_attempt_id && row.exam_qb_question_id
+        ? getExamDrawingMaxMarks(row.exam_attempt_id, row.exam_qb_question_id).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
     return NextResponse.json({
       submission: isStaffViewer
         ? { ...submission, tags }
@@ -93,6 +118,12 @@ export async function GET(
       student_teams_email: isStaffViewer
         ? (profile as any)?.data?.ms_teams_email || (submission as any).student?.email || null
         : null,
+      inspiration: isStaffViewer ? inspiration : null,
+      practised_from: practisedFrom
+        ? { item_id: practisedFrom.id, title: displayTitle(practisedFrom), image_url: practisedFrom.thumbnail_url || practisedFrom.image_url }
+        : null,
+      featured,
+      exam_max_marks: examMaxMarks,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load submission';
