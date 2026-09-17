@@ -66,6 +66,15 @@ function attemptError(message: string): NextResponse | null {
       );
     case 'PLACEMENT_TEST_MISMATCH':
       return NextResponse.json({ error: 'That test does not belong here' }, { status: 400 });
+    // A refusal, not a crash. Unmapped, it went out as a 500 with the bare code.
+    case 'EXAM_CLOSED':
+      return NextResponse.json(
+        {
+          error: 'This exam closed before your paper was submitted. You can ask your teacher for another sitting.',
+          code: 'EXAM_CLOSED',
+        },
+        { status: 403 },
+      );
     default:
       return null;
   }

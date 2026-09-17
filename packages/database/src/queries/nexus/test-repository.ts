@@ -7,6 +7,7 @@ import { storeContentSummary, type NexusTestSourceFilters } from './test-provena
 import { recordCatchupTestAttempt } from './catchup-journey';
 import { gradeQBAnswerStrict, normaliseQuestionFormat, stripDrawingPartSolutions } from './question-bank';
 import { sectionOrderFor } from './paper-marking';
+import { getLiveAccessRequest } from './test-access';
 import {
   applyTestOptionMap,
   buildTestOptionMaps,
@@ -1793,6 +1794,35 @@ async function dispatchPlacementSideEffect(
   }
 }
 
+/**
+ * When this student's exam door shuts: their reopen, else their make-up, else
+ * the exam's own close. Delegates to resolveExamWindowForStudent, the one
+ * function that decides an exam window, with the same inputs the attempt route
+ * gives it, so the way in and the way out cannot disagree again.
+ */
+async function examClosesAtForStudent(
+  placement: NexusTestPlacement,
+  studentId: string,
+  supabase: TypedSupabaseClient,
+): Promise<string> {
+  const fallback = String(placement.available_until);
+  const examId = (placement.gating as { exam_id?: string } | null)?.exam_id;
+  if (!examId) return fallback;
+
+  // Imported lazily: exams.ts imports createPlacement from this module, so a
+  // top-level import here would close the cycle.
+  const { getExam, getExamMakeup, resolveExamWindowForStudent } = await import('./exams');
+  const [exam, makeup, grant] = await Promise.all([
+    getExam(examId, supabase),
+    getExamMakeup(examId, studentId, supabase),
+    getLiveAccessRequest(placement.id, studentId, supabase).catch(() => null),
+  ]);
+  if (!exam) return fallback;
+
+  const liveGrant = grant?.status === 'granted' ? grant : null;
+  return resolveExamWindowForStudent(exam, makeup, liveGrant).closes_at;
+}
+
 /** Whether an in-progress attempt has run past its clock and should be retired. */
 function attemptIsStale(
   attempt: { started_at: string | null },
@@ -2169,9 +2199,16 @@ export async function submitAttempt(
    * close because the request was in flight is a paper the student finished in
    * time. Anything beyond it is refused and left for the sweep to auto-submit
    * with whatever was saved.
+   *
+   * The close is the STUDENT'S close, resolved exactly as the attempt route's
+   * door resolves it. Reading only the placement's available_until let a
+   * reopened or make-up student in and then refused their Submit: on the 18 Aug
+   * exam, four students reopened on 11 Sep answered every question and none of
+   * the papers was marked.
    */
   if (!input.allowAfterClose && placement?.context_type === 'exam' && placement.available_until) {
-    const closedAt = new Date(placement.available_until).getTime();
+    const closesAt = await examClosesAtForStudent(placement, attempt.student_id, supabase);
+    const closedAt = new Date(closesAt).getTime();
     if (Number.isFinite(closedAt) && Date.now() > closedAt + EXAM_SUBMIT_GRACE_MS) {
       throw new Error('EXAM_CLOSED');
     }
