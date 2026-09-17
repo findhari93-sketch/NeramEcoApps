@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import {
-  getFeatureOptOut, getLiveFeature, getSketchbookSketch, hasAnyLiveFeature, insertFeature,
+  getFeatureOptOut, getLiveFeature, getPracticeDrawing, hasAnyLiveFeature, insertFeature,
   listUserClassroomIds, markUnfeatured, recordFlip,
 } from '@neram/database/queries/nexus';
 import { assertCapability, getRequestUser } from '@/lib/study-materials';
@@ -47,8 +47,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!classroomId) throw new ApiError('Missing classroom_id', 400);
     const caption = typeof body?.caption === 'string' ? body.caption.trim().slice(0, CAPTION_MAX) : '';
 
-    const sketch = await getSketchbookSketch(params.id);
-    if (!sketch) throw new ApiError('Sketch not found', 404);
+    // Practice drawings of any kind (sketch, question bank, free practice), never owed work.
+    const sketch = await getPracticeDrawing(params.id);
+    if (!sketch) throw new ApiError('Drawing not found', 404);
     await assertStaffSeesStudent(caller, sketch.student_id);
     const [mine, theirs] = await Promise.all([staffClassroomIds(caller), listUserClassroomIds(sketch.student_id, 'student')]);
     if (!mine.includes(classroomId) || !theirs.includes(classroomId)) {
@@ -139,8 +140,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     assertCapability(caller, 'moderate.gallery');
     const classroomId = request.nextUrl.searchParams.get('classroom');
     if (!classroomId) throw new ApiError('Missing classroom', 400);
-    const sketch = await getSketchbookSketch(params.id);
-    if (!sketch) throw new ApiError('Sketch not found', 404);
+    const sketch = await getPracticeDrawing(params.id);
+    if (!sketch) throw new ApiError('Drawing not found', 404);
     await assertStaffSeesStudent(caller, sketch.student_id);
     const live = await getLiveFeature(sketch.id, classroomId);
     if (!live) throw new ApiError('Not featured in this classroom.', 404);

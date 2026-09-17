@@ -20,11 +20,22 @@ export function addSketchBody(uploadedUrl: string, caption: string | null, thumb
   return { original_image_url: uploadedUrl, thumbnail_url: thumbnailUrl, caption };
 }
 
+/** Body for a sketch practised from an Inspiration drawing. */
+export function practiseBody(itemId: string) {
+  return (uploadedUrl: string, caption: string | null, thumbnailUrl: string | null) => ({
+    ...addSketchBody(uploadedUrl, caption, thumbnailUrl),
+    inspiration_item_id: itemId,
+  });
+}
+
 export const deleteSketch = (getToken: GetToken, id: string) =>
   call<void>(getToken, `/api/sketchbook/entries/${id}`, { method: 'DELETE' });
 
 export const setOptOut = (getToken: GetToken, featureOptOut: boolean) =>
   call<{ feature_opt_out: boolean }>(getToken, '/api/sketchbook/preferences', { method: 'PATCH', body: JSON.stringify({ feature_opt_out: featureOptOut }) });
+
+export const setShareOptOut = (getToken: GetToken, optOut: boolean) =>
+  call<{ share_drawings_opt_out: boolean }>(getToken, '/api/sketchbook/preferences', { method: 'PATCH', body: JSON.stringify({ share_drawings_opt_out: optOut }) });
 
 export const reactToSketch = (getToken: GetToken, id: string, reaction: SketchbookReaction | null, comment?: string) =>
   call<{ reaction: SketchbookReaction | null }>(getToken, `/api/sketchbook/entries/${id}/react`, { method: 'POST', body: JSON.stringify({ reaction, comment }) });

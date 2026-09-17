@@ -7,6 +7,7 @@ const sketch = (id: string, day: string, thumb: string | null = null) => ({
   reaction: null, submitted_at: `${day}T10:00:00.000Z`, is_gallery_visible: false, seenBy: null, featured: [],
   source_type: 'sketchbook', status: 'submitted', assignment_id: null, question_id: null, reviewed_at: null,
   tutor_rating: null, tutor_marks: null, inspiration_item_id: null, assignment: null,
+  kind: 'practice' as const, review: { state: 'none' as const, rating: null, marks: null },
 });
 
 describe('SketchGrid', () => {

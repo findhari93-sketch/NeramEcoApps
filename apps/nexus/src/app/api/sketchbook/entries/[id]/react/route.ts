@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { addDrawingSubmissionComment, getSketchbookSketch, recordFlip, setSketchbookReaction } from '@neram/database/queries/nexus';
+import { addDrawingSubmissionComment, getPracticeDrawing, recordFlip, setSketchbookReaction } from '@neram/database/queries/nexus';
 import type { SketchbookReaction } from '@neram/database/types';
 import { getRequestUser } from '@/lib/study-materials';
 import { ApiError, errorResponse } from '@/lib/api-errors';
@@ -27,8 +27,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (reaction === undefined) throw new ApiError('reaction must be heart, fire, wow or null', 400);
     const comment = typeof body?.comment === 'string' ? body.comment.trim().slice(0, COMMENT_MAX) : '';
 
-    const sketch = await getSketchbookSketch(params.id);
-    if (!sketch) throw new ApiError('Sketch not found', 404);
+    // Practice drawings of any kind (sketch, question bank, free practice), never owed work.
+    const sketch = await getPracticeDrawing(params.id);
+    if (!sketch) throw new ApiError('Drawing not found', 404);
     await assertStaffSeesStudent(caller, sketch.student_id);
 
     await setSketchbookReaction(sketch.id, reaction);
