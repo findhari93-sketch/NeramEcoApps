@@ -15,6 +15,7 @@ import {
 import { buildExamEligibilityRoster, type EligibilityRosterRow } from '@/lib/exam-eligibility-roster';
 import { decideCatchupGate, type CatchupGateDecision } from '@/lib/catchup-test-gate';
 import { resolveStudentTestCard } from '@/lib/student-test-card-state';
+import { willRankInSecondSitting } from '@/lib/exam-second-sitting';
 
 /**
  * GET /api/student/tests/overview?classroom=<id>
@@ -446,9 +447,20 @@ export async function GET(request: NextRequest) {
          * replaced days earlier (NXS-0125).
          */
         is_reopen: ev?.is_reopen ?? false,
+        // Said BEFORE they sit, while the door is still shut. A personal window
+        // that begins after exam day closed will rank them in the second
+        // sitting, whichever door opened it: a make-up counts exactly as a
+        // reopen does, because the ranking reads started_at and not the grant.
+        ranks_in_second_sitting: willRankInSecondSitting({
+          is_reopen: ev?.is_reopen,
+          is_makeup: ev?.is_makeup,
+          opens_at: ev?.opens_at,
+          exam_closes_at: ev?.exam_closes_at,
+        }),
         access_state: ev?.access_state ?? 'none',
         results_state: ev?.results_state ?? 'unpublished',
         exam_result: ev?.result ?? null,
+        result_sitting: ev?.result?.sitting ?? null,
         // Additive, and null on every exam with nothing linked -- same
         // "opt-in, absent changes nothing" contract as is_makeup/results_state.
         // exam_id (not to be confused with class_id above, the exam's OWN

@@ -97,6 +97,20 @@ export interface StudentTestFacts {
   is_makeup?: boolean;
   is_reopen?: boolean;
   access_state?: 'none' | 'pending' | 'granted';
+  /**
+   * True when sitting this now puts the student in the exam's second rank list.
+   *
+   * Stated on the card BEFORE they sit. Learning afterwards that you were
+   * ranked in a separate list, having been given no chance to weigh it, is the
+   * kind of surprise a student is right to resent.
+   *
+   * True for a make-up window as well as for a teacher's reopen. What decides
+   * the sitting is WHEN the window opens, never which door it was, so a
+   * make-up scheduled after the shared close is a second sitting too.
+   */
+  ranks_in_second_sitting?: boolean;
+  /** Which sitting their published result was ranked in. Null until results are out. */
+  result_sitting?: 'main' | 'second' | null;
   results_state?: 'unpublished' | 'provisional' | 'final';
   exam_result?: {
     rank: number | null;
@@ -141,6 +155,35 @@ function ms(iso: string | null | undefined): number | null {
 }
 
 const pct = (n: number | null | undefined): string => (n == null ? '' : `${Math.round(n)}%`);
+
+/**
+ * The clause naming a finished result's sitting, appended to a "You sat this..."
+ * sentence. ONE function so the two `done` returns that report a completed
+ * sitting cannot drift apart, which is exactly the failure this task exists to
+ * prevent: a future wording change applied at one call site and missed at the
+ * other.
+ */
+const resultSittingNote = (t: StudentTestFacts): string =>
+  t.result_sitting === 'second' ? ' You were ranked in the second sitting.' : '';
+
+/**
+ * The clause warning a student, BEFORE they sit, that this door puts them in
+ * the second sitting.
+ *
+ * ONE function for the same reason as resultSittingNote, and it earns it: the
+ * warning first shipped inside the `reopened` branch alone, so a student
+ * holding a make-up window scheduled after exam day flowed through the make-up
+ * branches and was told nothing, while their paper was ranked `second` all the
+ * same. Every branch that can render a personal window calls this.
+ *
+ * Empty unless ranks_in_second_sitting is true, which the server only sets for
+ * a window that opens after the exam's shared close, so appending it to the
+ * shared-window branches costs nothing and cannot say anything false.
+ */
+const preSittingNote = (t: StudentTestFacts): string =>
+  t.ranks_in_second_sitting
+    ? ' You will be ranked with the second sitting, because exam day has passed.'
+    : '';
 
 export function resolveStudentTestCard(t: StudentTestFacts, now: number): StudentTestCard {
   const attempts = t.attempts ?? 0;
@@ -190,20 +233,29 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
    *    student a human had just let in, which is this bug in reverse. */
   if (t.is_reopen && (closes == null || closes > now) && (opens == null || opens <= now)) {
     if (sat && attemptsLeft === 0) {
-      return card('done', `You sat this on ${on(t.last_submitted_at)}.`, { kind: 'review', label: 'See your answers' }, 'positive');
+      return card('done', `You sat this on ${on(t.last_submitted_at)}.${resultSittingNote(t)}`, { kind: 'review', label: 'See your answers' }, 'positive');
     }
     return card(
       'reopened',
-      `Your teacher opened this for you.${untilPhrase}`,
+      `Your teacher opened this for you.${untilPhrase}${preSittingNote(t)}`,
       { kind: sat ? 'retry' : 'start', label: sat ? 'Try again' : 'Start the test' },
       'attention',
     );
   }
 
-  /* 2. Not open yet. Nothing to press, so no button. */
+  /* 2. Not open yet. Nothing to press, so no button.
+   *
+   *    A make-up scheduled after exam day says so here, days before the door
+   *    opens, which is the earliest a student can be told and the only point
+   *    at which the warning can still change what they do about it. */
   if (opens != null && opens > now) {
     const makeup = t.is_makeup ? 'Your make-up sitting opens' : 'Opens';
-    return card('upcoming', `${makeup} ${at(t.available_from)}.`, { kind: 'none' }, 'neutral');
+    return card(
+      'upcoming',
+      `${makeup} ${at(t.available_from)}.${preSittingNote(t)}`,
+      { kind: 'none' },
+      'neutral',
+    );
   }
 
   /* 3. Catch-up is in the way, and they have not sat it.
@@ -246,10 +298,14 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
     }
     const when = t.last_submitted_at ? ` on ${on(t.last_submitted_at)}` : '';
     if (t.is_exam) {
+      // The sitting is named on EVERY finished return, not only the final one.
+      // Which list you were ranked in is a fact about the paper you sat, true
+      // from the moment you submitted it, and a student who saw it named only
+      // once their drawings came back would reasonably read it as a change.
       if (r?.is_provisional) {
         return card(
           'done',
-          `You sat this${when}. Some drawings are still being marked, so this can change.`,
+          `You sat this${when}.${resultSittingNote(t)} Some drawings are still being marked, so this can change.`,
           { kind: 'review', label: 'See your answers' },
           'neutral',
         );
@@ -257,12 +313,12 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
       if (!r && t.results_state === 'unpublished') {
         return card(
           'done',
-          `You sat this${when}. Your result is not out yet.`,
+          `You sat this${when}.${resultSittingNote(t)} Your result is not out yet.`,
           { kind: 'review', label: 'See your answers' },
           'neutral',
         );
       }
-      return card('done', `You sat this${when}.`, { kind: 'review', label: 'See your answers' }, 'positive');
+      return card('done', `You sat this${when}.${resultSittingNote(t)}`, { kind: 'review', label: 'See your answers' }, 'positive');
     }
     // Not an exam, so it can be retaken if the door and the limit both allow.
     const shut = closes != null && closes < now;
@@ -313,7 +369,12 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
       );
     }
     const makeup = t.is_makeup ? 'Your make-up sitting is open.' : 'Open now.';
-    return card('open', `${makeup}${untilPhrase}`, { kind: 'start', label: 'Start the test' }, closes != null ? 'urgent' : 'neutral');
+    return card(
+      'open',
+      `${makeup}${untilPhrase}${preSittingNote(t)}`,
+      { kind: 'start', label: 'Start the test' },
+      closes != null ? 'urgent' : 'neutral',
+    );
   }
 
   /* 8. Shut, and they asked. */

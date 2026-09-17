@@ -481,12 +481,24 @@ export interface NexusStudentExamView {
   duration_minutes: number | null;
   passing_pct: number | null;
   results_state: ExamResultsState;
+  /**
+   * The exam's OWN close, not this student's. `closes_at` above is already
+   * resolved through the make-up and the reopen, so it cannot say whether a
+   * personal window begins after exam day ended.
+   */
+  exam_closes_at: string;
   attempted: boolean;
   attempt_id: string | null;
   /** Null until results_state moves off 'unpublished'. */
   result: {
     rank: number | null;
-    /** Count of non-absent candidates, for rendering "Rank 3 of 42". */
+    /** Which of the exam's two rank lists this result was ranked in. */
+    sitting: 'main' | 'second';
+    /**
+     * Ranked candidates IN THE SAME SITTING, for rendering "Rank 3 of 16".
+     * A rank never travels without the denominator it was won against.
+     * See isRankedResultRow for what counts.
+     */
     total_ranked: number;
     score: number | null;
     total_marks: number | null;
@@ -597,7 +609,9 @@ export async function listStudentExams(
   if (publishedExamIds.length > 0) {
     const { data, error } = await supabase
       .from(RESULTS)
-      .select('exam_id, student_id, rank, score, total_marks, percentage, is_provisional, absent')
+      // attempt_id is here for isRankedResultRow, not to be shown: a row with
+      // no attempt is not a result and must not swell anybody's denominator.
+      .select('exam_id, student_id, attempt_id, rank, sitting, score, total_marks, percentage, is_provisional, absent')
       .in('exam_id', publishedExamIds);
     if (error) throw error;
     for (const raw of (data || []) as any[]) {
@@ -620,9 +634,13 @@ export async function listStudentExams(
       const rows = resultsByExam.get(exam.id) || [];
       const mine = rows.find((r) => r.student_id === studentId) || null;
       if (mine) {
+        const sitting = (mine.sitting ?? 'main') as 'main' | 'second';
         result = {
           rank: mine.rank,
-          total_ranked: rows.filter((r) => !r.absent).length,
+          sitting,
+          total_ranked: rows.filter(
+            (r) => isRankedResultRow(r) && (r.sitting ?? 'main') === sitting,
+          ).length,
           score: mine.score,
           total_marks: mine.total_marks,
           percentage: mine.percentage,
@@ -645,6 +663,7 @@ export async function listStudentExams(
       duration_minutes: exam.duration_minutes,
       passing_pct: exam.passing_pct,
       results_state: exam.results_state,
+      exam_closes_at: exam.closes_at,
       attempted: Boolean(attempt),
       attempt_id: attempt?.id ?? null,
       result,
@@ -1076,6 +1095,8 @@ export interface ExamResultRow {
   student_id: string;
   attempt_id: string | null;
   rank: number | null;
+  /** Which of the exam's two rank lists this row belongs to. */
+  sitting: 'main' | 'second';
   score: number | null;
   total_marks: number | null;
   percentage: number | null;
@@ -1086,6 +1107,55 @@ export interface ExamResultRow {
   published_at: string;
 }
 
+/**
+ * Does this snapshot row count towards a sitting's rank denominator?
+ *
+ * ONE function, because three surfaces have to agree on the answer and twice
+ * now they have not. The student's card rendered "Rank 3 of 44" on an exam
+ * where the private message they had just been sent said "3rd of 16" and the
+ * teacher's sheet said 16, because the card's filter read `!absent` alone and
+ * counted rows belonging to students who had not sat the paper at all.
+ *
+ * `absent` is not enough on its own. A row can be non-absent and still hold no
+ * paper: that is a student whose personal window is open and who has simply not
+ * sat it yet. The attempt is the thing that makes a row a result.
+ *
+ * Import this rather than writing the predicate again.
+ */
+export function isRankedResultRow(row: {
+  absent: boolean;
+  attempt_id?: string | null;
+}): boolean {
+  return !row.absent && Boolean(row.attempt_id);
+}
+
+/**
+ * The result snapshot, written on every publish.
+ *
+ * `notified_at` is deliberately NOT in the payload, so ON CONFLICT DO UPDATE
+ * leaves it alone and a republish cannot message a student twice. The other
+ * half of that bargain is the caller's: a row must only be written for a
+ * student who HAS a paper (or who is genuinely absent). Write a row for a
+ * student whose window is still open and the first publish stamps them
+ * notified, so when they finally sit weeks later their result reaches nobody.
+ *
+ * THE ONE CASE WHERE THE STAMP MUST GO, and it is the journey the product
+ * itself signposts. An absent student correctly gets a row and is correctly
+ * told "you were marked absent... speak to your teacher: they can open a second
+ * window for you". They do, they sit the paper, and the republish turns that
+ * paperless row into a real second-sitting result. Their stamp is day one's,
+ * about a different thing entirely, so notify found nobody pending, returned
+ * { notified: 0 }, and the teacher was shown a success message while the one
+ * student who followed the instruction heard nothing.
+ *
+ * So a row that held no paper and is now a result loses its stamp, scoped
+ * exactly to that transition: the UPDATE runs BEFORE the upsert (afterwards the
+ * stored attempt_id is no longer null) and filters on the STORED attempt_id, so
+ * an exam-day student who was correctly told on the day keeps theirs and is
+ * never messaged twice. This stays here beside the omission it repairs, because
+ * the two rules are one rule and splitting them across a caller is how the
+ * first half survived three reviews on its own.
+ */
 export async function saveExamResults(
   examId: string,
   rows: Array<Omit<ExamResultRow, 'exam_id' | 'published_at' | 'notified_at'>>,
@@ -1093,6 +1163,17 @@ export async function saveExamResults(
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
   if (rows.length === 0) return;
+
+  const nowHaveAPaper = rows.filter((r) => r.attempt_id).map((r) => r.student_id);
+  if (nowHaveAPaper.length > 0) {
+    const { error: clearError } = await supabase
+      .from(RESULTS)
+      .update({ notified_at: null })
+      .eq('exam_id', examId)
+      .in('student_id', nowHaveAPaper)
+      .is('attempt_id', null);
+    if (clearError) throw clearError;
+  }
 
   const { error } = await supabase.from(RESULTS).upsert(
     rows.map((r) => ({ ...r, exam_id: examId, published_at: new Date().toISOString() })),

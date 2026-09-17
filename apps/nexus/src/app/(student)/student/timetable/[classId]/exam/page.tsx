@@ -45,6 +45,8 @@ interface ExamView {
   my_score: { score: number; total_marks: number; percentage: number; provisional: boolean } | null;
   my_result: {
     rank: number | null;
+    /** Which of the exam's two rank lists total_sat counts. */
+    sitting?: 'main' | 'second';
     score: number;
     total_marks: number;
     percentage: number;

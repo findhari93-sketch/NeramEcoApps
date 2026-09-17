@@ -22,7 +22,7 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ExamInvigilationRoster from '@/components/scheduled-exams/ExamInvigilationRoster';
-import PublishExamResultsDialog from '@/components/scheduled-exams/PublishExamResultsDialog';
+import ExamResultsSheet from '@/components/scheduled-exams/ExamResultsSheet';
 
 /**
  * One exam, from the teacher's side.
@@ -243,8 +243,8 @@ export default function TeacherExamPage() {
 
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
         {hasClosed && (
-          <Button variant="contained" onClick={() => setPublishOpen(true)} sx={{ minHeight: 48 }}>
-            {exam.results_state === 'unpublished' ? 'Publish results' : 'Publish again'}
+          <Button variant="contained" onClick={() => setPublishOpen(true)} sx={{ minHeight: 48 }} data-testid="open-exam-results">
+            Results
           </Button>
         )}
         {isLive && (
@@ -294,7 +294,7 @@ export default function TeacherExamPage() {
         />
       )}
 
-      <PublishExamResultsDialog
+      <ExamResultsSheet
         open={publishOpen}
         onClose={() => setPublishOpen(false)}
         examId={exam.id}

@@ -47,6 +47,10 @@ export interface ExamPostInput {
  * Sections are toggleable so a teacher can drop the podium (a class that had a
  * hard day) or the section averages (a paper with one section) from the preview
  * before sending.
+ *
+ * Built from the MAIN SITTING only. The average and the podium a channel is
+ * told on results day have to stay true afterwards, so a later sitting never
+ * reaches this card.
  */
 export function buildExamResultSections(input: ExamPostInput): ShareSection[] {
   const { results, examTitle } = input;
@@ -141,6 +145,11 @@ export function buildExamResultSections(input: ExamPostInput): ShareSection[] {
  * top three. Plain text, because sendNudge fans out to a Teams activity ping,
  * an in-app row and an email, and the lowest common denominator has to read
  * well in all three.
+ *
+ * A second-sitting student is told their rank inside their own sitting and is
+ * never told where they would have placed on exam day. That comparison turns
+ * into "I would have come second" and undoes the reason for separating the
+ * lists at all.
  */
 export function buildStudentResultMessage(input: {
   examTitle: string;
@@ -148,10 +157,20 @@ export function buildStudentResultMessage(input: {
   totalSat: number;
   provisional: boolean;
   passingPct: number | null;
+  /** Which sitting they were in. Null when they have no paper. */
+  sitting: 'main' | 'second' | null;
 }): { subject: string; plain: string } {
   const { row, examTitle } = input;
 
-  if (row.absent || !row.attempt_id) {
+  if (!row.attempt_id) {
+    // Two different situations, and conflating them is why this split exists:
+    // a student whose window is still open has not missed anything yet.
+    if (!row.absent) {
+      return {
+        subject: `${examTitle}: results are out`,
+        plain: `Results for ${examTitle} are out. Your window is still open, so your result is not in this list yet. Sit the paper and you will be ranked with the second sitting.`,
+      };
+    }
     return {
       subject: `${examTitle}: you were marked absent`,
       plain: `Results for ${examTitle} are out. You were marked absent because no attempt was recorded. If that is wrong, speak to your teacher: they can open a second window for you.`,
@@ -160,9 +179,14 @@ export function buildStudentResultMessage(input: {
 
   const lines: string[] = [
     `Results for ${examTitle} are out.`,
+    ...(input.sitting === 'second'
+      ? ['', 'You sat this in the second sitting, after your catch-up.']
+      : []),
     '',
     `Your score: ${marks(row.score, row.total_marks)} (${pct(row.percentage)})`,
-    `Your rank: ${ordinal(row.rank)} of ${input.totalSat}`,
+    input.sitting === 'second'
+      ? `Your rank: ${ordinal(row.rank)} of ${input.totalSat} in the second sitting`
+      : `Your rank: ${ordinal(row.rank)} of ${input.totalSat}`,
   ];
 
   if (input.passingPct != null) {

@@ -53,6 +53,11 @@ export interface ExamBadgeInput {
   examsSat: number;
   /** Their best percentage across PREVIOUS scheduled exams. Null if this is their first. */
   previousBestPct: number | null;
+  /**
+   * Which sitting they were in. Only the main sitting can win a placing: a
+   * student who sat weeks later had weeks longer to prepare.
+   */
+  sitting: 'main' | 'second';
 }
 
 /**
@@ -61,6 +66,10 @@ export interface ExamBadgeInput {
  * Returns ids, not rows: awardBadge is idempotent through
  * UNIQUE(student_id, badge_id), so re-publishing an exam simply re-offers the
  * same ids and nothing is duplicated.
+ *
+ * A second-sitting student earns points, Regular and Personal Best, and never
+ * Topper or Podium. Refusing them everything would say their work was worth
+ * nothing; giving them a placing would let extra preparation time buy one.
  */
 export function examBadgesFor(input: ExamBadgeInput): string[] {
   const earned: string[] = [];
@@ -68,7 +77,9 @@ export function examBadgesFor(input: ExamBadgeInput): string[] {
   // Absent students earn nothing at all, including regular: they did not sit it.
   if (input.rank == null) return earned;
 
-  const podiumCounts = input.candidates >= EXAM_PODIUM_MIN_CANDIDATES;
+  // Only exam day carries a placing. `candidates` is the main sitting's size,
+  // so the minimum still measures the pool the rank was actually won in.
+  const podiumCounts = input.sitting === 'main' && input.candidates >= EXAM_PODIUM_MIN_CANDIDATES;
 
   if (podiumCounts && input.rank === 1) earned.push(EXAM_BADGE_IDS.topper);
   if (podiumCounts && input.rank <= 3) earned.push(EXAM_BADGE_IDS.podium);
