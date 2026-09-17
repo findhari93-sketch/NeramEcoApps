@@ -124,7 +124,7 @@ export default function ReviewActionBar({
             size="small"
             endIcon={<ArrowForwardIcon />}
             onClick={onNext}
-            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0, px: 1.5, ...hideStartIconOnPhone }}
+            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 48, minWidth: 0, px: 1.5 }}
           >
             Next
           </Button>
@@ -223,7 +223,7 @@ export default function ReviewActionBar({
           variant="outlined"
           size="small"
           onClick={onNext}
-          disabled={saving}
+          disabled={saving || draftSaving || voiceBusy}
           sx={{
             textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
             minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',

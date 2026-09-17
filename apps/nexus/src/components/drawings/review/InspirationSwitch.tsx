@@ -10,7 +10,8 @@
  */
 
 import { useState } from 'react';
-import { Box, Button, Switch, Typography } from '@neram/ui';
+import { Box, Button, IconButton, Switch, Typography } from '@neram/ui';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 import type { SubmissionInspirationState } from '@neram/database/queries/nexus';
 import { patchItem } from '@/components/inspiration/inspiration-api';
 
@@ -42,6 +43,9 @@ export default function InspirationSwitch({ state, getToken, onChange }: Inspira
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5, flexWrap: 'wrap', minWidth: 0 }}>
+      <Typography component="span" variant="caption" color="text.secondary" sx={{ display: { xs: 'inline', md: 'none' }, fontWeight: 600 }}>
+        Inspiration
+      </Typography>
       <Typography component="span" variant="caption" color="text.secondary" sx={{ display: { xs: 'none', md: 'inline' }, fontWeight: 600 }}>
         Show in Inspiration
       </Typography>
@@ -56,15 +60,26 @@ export default function InspirationSwitch({ state, getToken, onChange }: Inspira
         {manual ? 'Set by you.' : 'Automatic at 4 stars and above.'}
       </Typography>
       {manual && (
-        <Button
-          size="small"
-          variant="text"
-          disabled={busy}
-          onClick={() => void set('auto')}
-          sx={{ minHeight: 44, textTransform: 'none', display: { xs: 'none', md: 'inline-flex' } }}
-        >
-          Use automatic
-        </Button>
+        <>
+          <IconButton
+            size="small"
+            disabled={busy}
+            onClick={() => void set('auto')}
+            aria-label="Use the automatic Inspiration rule"
+            sx={{ width: 44, height: 44, display: { xs: 'inline-flex', md: 'none' } }}
+          >
+            <AutorenewIcon fontSize="small" />
+          </IconButton>
+          <Button
+            size="small"
+            variant="text"
+            disabled={busy}
+            onClick={() => void set('auto')}
+            sx={{ minHeight: 44, textTransform: 'none', display: { xs: 'none', md: 'inline-flex' } }}
+          >
+            Use automatic
+          </Button>
+        </>
       )}
       {error && (
         <Typography role="alert" variant="caption" color="error" sx={{ width: '100%', textAlign: 'right' }}>

@@ -55,6 +55,12 @@ describe('ReviewActionBar', () => {
     expect(screen.getByRole('button', { name: 'Evaluate' })).toBeTruthy();
   });
 
+  it('keeps the locked owed bar Next-free', () => {
+    render(<ReviewActionBar {...props({ isEditMode: false, statusLabel: 'Completed' })} />);
+    expect(screen.getByRole('button', { name: 'Evaluate' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+  });
+
   it('renders the Inspiration slot where the gallery switch was', () => {
     render(<ReviewActionBar {...props({ inspirationSlot: <span>slot here</span> })} />);
     expect(screen.getByText('slot here')).toBeTruthy();
