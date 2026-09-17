@@ -1,6 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createFakeDb } from './testing/fake-supabase';
-import { DRAWING_SUBMISSION_STATUSES, QUEUED_STATUS } from './exam-drawings';
+import { DRAWING_SUBMISSION_STATUSES, QUEUED_STATUS, getExamDrawingMaxMarks } from './exam-drawings';
+
+/** A client whose query builder records every call and resolves to `result`. */
+function fakeClient(result: { data: unknown; error: unknown; count?: number }) {
+  const calls: Array<[string, unknown[]]> = [];
+  const chain: any = new Proxy(
+    {},
+    {
+      get: (_t, prop: string) => {
+        if (prop === 'then') return (resolve: (v: unknown) => void) => resolve(result);
+        return (...args: unknown[]) => {
+          calls.push([prop, args]);
+          return chain;
+        };
+      },
+    },
+  );
+  const client: any = { from: (...args: unknown[]) => { calls.push(['from', args]); return chain; } };
+  return { client, calls };
+}
 
 /**
  * The bug this pins, in full.
@@ -145,5 +164,17 @@ describe('queueExamDrawings: the status the database will accept', () => {
       expect(row.source_type).toBe('exam');
       expect(row.exam_attempt_id).toBe(ATTEMPT);
     }
+  });
+});
+
+describe('getExamDrawingMaxMarks', () => {
+  it('reads the marks the test gives this question', async () => {
+    const { client } = fakeClient({ data: { test_id: 't1', marks: 25 }, error: null });
+    expect(await getExamDrawingMaxMarks('attempt', 'q1', client)).toBe(25);
+  });
+
+  it('answers null when the attempt is gone', async () => {
+    const { client } = fakeClient({ data: null, error: null });
+    expect(await getExamDrawingMaxMarks('attempt', 'q1', client)).toBeNull();
   });
 });

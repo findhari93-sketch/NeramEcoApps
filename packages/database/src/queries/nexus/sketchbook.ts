@@ -8,6 +8,12 @@ import type { SketchbookReaction, NexusSketchbookFeature } from '../../types';
  * that is apps/nexus/src/lib/sketchbook-rhythm.ts.
  */
 
+/** Practice kinds: marking is optional and nothing is pending. Mirrors apps/nexus/src/lib/drawing-source.ts. */
+export const PRACTICE_SOURCE_TYPES = ['sketchbook', 'question_bank', 'free_practice', 'homework'] as const;
+
+/** Who is reading. A student never sees their own test papers here: those marks are embargoed until results are published. */
+export type SketchbookViewer = 'student' | 'staff';
+
 export interface SketchbookSketchRow {
   id: string;
   student_id: string;
@@ -17,6 +23,15 @@ export interface SketchbookSketchRow {
   reaction: SketchbookReaction | null;
   submitted_at: string;
   is_gallery_visible: boolean;
+  source_type: string;
+  status: string;
+  assignment_id: string | null;
+  question_id: string | null;
+  reviewed_at: string | null;
+  tutor_rating: number | null;
+  tutor_marks: number | null;
+  inspiration_item_id: string | null;
+  assignment: { id: string; title: string | null; evaluation_type: string | null; max_marks: number | null } | null;
 }
 
 export interface SketchbookInboxRow extends SketchbookSketchRow {
@@ -29,8 +44,12 @@ export interface SketchbookFeatureFact {
   featured_at: string;
 }
 
+// Never name exam_attempt_id here: staging has no such column, and a named
+// missing column makes PostgREST answer an error instead of rows.
 const SKETCH_COLUMNS =
-  'id, student_id, original_image_url, thumbnail_url, self_note, reaction, submitted_at, is_gallery_visible';
+  'id, student_id, original_image_url, thumbnail_url, self_note, reaction, submitted_at, is_gallery_visible, ' +
+  'source_type, status, assignment_id, question_id, reviewed_at, tutor_rating, tutor_marks, inspiration_item_id, ' +
+  'assignment:nexus_class_assignments!drawing_submissions_assignment_id_fkey(id, title, evaluation_type, max_marks)';
 
 /** IST bounds for a YYYY-MM month, as ISO strings PostgREST compares correctly. */
 export function monthRangeIst(month: string): { from: string; to: string } {
@@ -47,29 +66,35 @@ export function monthRangeIst(month: string): { from: string; to: string } {
 export async function listSketchbookMonth(
   studentId: string,
   month: string,
+  viewer: SketchbookViewer = 'student',
   client?: TypedSupabaseClient,
 ): Promise<SketchbookSketchRow[]> {
   const supabase = client || getSupabaseAdminClient();
   const { from, to } = monthRangeIst(month);
-  const { data, error } = await supabase
+  let query = supabase
     .from('drawing_submissions')
     .select(SKETCH_COLUMNS)
     .eq('student_id', studentId)
-    .eq('source_type', 'sketchbook')
     .gte('submitted_at', from)
-    .lt('submitted_at', to)
-    .order('submitted_at', { ascending: false });
+    .lt('submitted_at', to);
+  if (viewer === 'student') query = query.neq('source_type', 'exam');
+  const { data, error } = await query.order('submitted_at', { ascending: false });
   if (error) throw error;
   return data || [];
 }
 
-export async function countSketches(studentId: string, client?: TypedSupabaseClient): Promise<number> {
+export async function countSketches(
+  studentId: string,
+  viewer: SketchbookViewer = 'student',
+  client?: TypedSupabaseClient,
+): Promise<number> {
   const supabase = client || getSupabaseAdminClient();
-  const { count, error } = await supabase
+  let query = supabase
     .from('drawing_submissions')
     .select('id', { count: 'exact', head: true })
-    .eq('student_id', studentId)
-    .eq('source_type', 'sketchbook');
+    .eq('student_id', studentId);
+  if (viewer === 'student') query = query.neq('source_type', 'exam');
+  const { count, error } = await query;
   if (error) throw error;
   return count ?? 0;
 }
@@ -79,8 +104,9 @@ export async function firstAndLatestSketch(
   client?: TypedSupabaseClient,
 ): Promise<{ first: SketchbookSketchRow; latest: SketchbookSketchRow } | null> {
   const supabase = client || getSupabaseAdminClient();
+  // "Then and now" compares the student's own drawings, never a test paper.
   const base = () =>
-    supabase.from('drawing_submissions').select(SKETCH_COLUMNS).eq('student_id', studentId).eq('source_type', 'sketchbook');
+    supabase.from('drawing_submissions').select(SKETCH_COLUMNS).eq('student_id', studentId).neq('source_type', 'exam');
   const [{ data: first }, { data: latest }] = await Promise.all([
     base().order('submitted_at', { ascending: true }).limit(1).maybeSingle(),
     base().order('submitted_at', { ascending: false }).limit(1).maybeSingle(),
@@ -99,6 +125,38 @@ export async function getSketchbookSketch(
     .select(SKETCH_COLUMNS)
     .eq('id', id)
     .eq('source_type', 'sketchbook')
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** One drawing of any kind, to open it inside its sketchbook month. */
+export async function getSketchbookDrawing(
+  id: string,
+  client?: TypedSupabaseClient,
+): Promise<SketchbookSketchRow | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase.from('drawing_submissions').select(SKETCH_COLUMNS).eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * One practice drawing: a sketch, question bank, free practice or homework, and
+ * never an assignment or a test. The flip, react and feature routes use it, so a
+ * wrong id can never react to or feature owed work.
+ */
+export async function getPracticeDrawing(
+  id: string,
+  client?: TypedSupabaseClient,
+): Promise<SketchbookSketchRow | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('drawing_submissions')
+    .select(SKETCH_COLUMNS)
+    .eq('id', id)
+    .in('source_type', [...PRACTICE_SOURCE_TYPES])
+    .is('assignment_id', null)
     .maybeSingle();
   if (error) throw error;
   return data;
@@ -296,7 +354,11 @@ export async function listUnflipped(
   const { data: candidates, error: candidatesError } = await supabase
     .from('drawing_submissions')
     .select(`${SKETCH_COLUMNS}, student:users(id, name, avatar_url, ms_oid)`)
-    .eq('source_type', 'sketchbook')
+    // Practice nobody has reviewed yet. Assignment and test drawings are owed
+    // work with their own homes and badges, and a reviewed drawing is not news.
+    .in('source_type', [...PRACTICE_SOURCE_TYPES])
+    .is('assignment_id', null)
+    .is('reviewed_at', null)
     .in('student_id', studentIds)
     .order('submitted_at', { ascending: false })
     .limit(candidateLimit);
@@ -482,13 +544,14 @@ export async function setSketchbookReaction(
   client?: TypedSupabaseClient,
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
-  // Scoped to source_type = 'sketchbook' so a wrong id can never overwrite the
-  // shared `reaction` column on an assignment or exam drawing_submissions row.
+  // Scoped to practice so a wrong id can never overwrite the shared `reaction`
+  // column on an assignment or test drawing, which the review screen owns.
   const { error } = await supabase
     .from('drawing_submissions')
     .update({ reaction })
     .eq('id', submissionId)
-    .eq('source_type', 'sketchbook');
+    .in('source_type', [...PRACTICE_SOURCE_TYPES])
+    .is('assignment_id', null);
   if (error) throw error;
 }
 

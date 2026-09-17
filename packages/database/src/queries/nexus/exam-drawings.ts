@@ -275,3 +275,26 @@ export async function recomputeExamScores(
   }
   return { finalised, pending };
 }
+
+/**
+ * The marks one test gives one drawing question, so the review screen can offer
+ * a marks box out of the right number. Without it a test drawing was scored in
+ * stars, tutor_marks stayed empty, and the attempt never finalised.
+ */
+export async function getExamDrawingMaxMarks(
+  attemptId: string,
+  qbQuestionId: string,
+  client?: TypedSupabaseClient,
+): Promise<number | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: attempt } = await supabase.from(ATTEMPTS).select('test_id').eq('id', attemptId).maybeSingle();
+  if (!attempt) return null;
+  const { data: question } = await supabase
+    .from('nexus_test_questions' as any)
+    .select('marks')
+    .eq('test_id', (attempt as any).test_id)
+    .eq('qb_question_id', qbQuestionId)
+    .maybeSingle();
+  const marks = Number((question as any)?.marks);
+  return Number.isFinite(marks) && marks > 0 ? marks : null;
+}

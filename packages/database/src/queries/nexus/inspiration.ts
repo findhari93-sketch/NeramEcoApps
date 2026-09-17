@@ -311,3 +311,76 @@ export async function setItemImageMeta(
   const { error } = await db(client).from('nexus_inspiration_items').update(meta).eq('id', itemId);
   if (error) throw error;
 }
+
+export interface SubmissionInspirationState {
+  item_id: string;
+  curation: 'auto' | 'shown' | 'hidden';
+  visible: boolean;
+  auto_eligible: boolean;
+}
+
+/** The Inspiration items made from one submission, for the review screen's switch. */
+export async function getInspirationItemsForSubmission(
+  submissionId: string,
+  client?: TypedSupabaseClient,
+): Promise<{ original: SubmissionInspirationState | null; reference: SubmissionInspirationState | null }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await (supabase as any)
+    .from('nexus_inspiration_items')
+    .select('id, source_kind, curation, is_visible, auto_eligible')
+    .eq('source_submission_id', submissionId);
+  if (error) throw error;
+  const out: { original: SubmissionInspirationState | null; reference: SubmissionInspirationState | null } = { original: null, reference: null };
+  for (const row of (data ?? []) as Array<{ id: string; source_kind: string; curation: SubmissionInspirationState['curation']; is_visible: boolean; auto_eligible: boolean }>) {
+    const state = { item_id: row.id, curation: row.curation, visible: !!row.is_visible, auto_eligible: !!row.auto_eligible };
+    if (row.source_kind === 'submission_original') out.original = state;
+    if (row.source_kind === 'submission_reference') out.reference = state;
+  }
+  return out;
+}
+
+export interface InspirationAttemptRow {
+  submission_id: string | null;
+  original_item_id: string | null;
+  image_url: string;
+  thumbnail_url: string | null;
+  author_first_name: string | null;
+  author_last_name: string | null;
+  author_name: string | null;
+  author_is_alumni: boolean;
+  author_academic_year: string | null;
+  submitted_at: string;
+  status: string | null;
+  tutor_rating: number | null;
+  tutor_marks: number | null;
+  reviewed_at: string | null;
+  practised_from: boolean;
+}
+
+/** "Drawn from this". Who sees what is decided in nexus_inspiration_attempts, not here. */
+export async function listInspirationAttempts(
+  itemId: string,
+  viewerId: string,
+  staff: boolean,
+  limit = 24,
+  client?: TypedSupabaseClient,
+): Promise<{ students: number; shown: number; rows: InspirationAttemptRow[] }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await (supabase as any).rpc('nexus_inspiration_attempts', {
+    p_item_id: itemId,
+    p_viewer_id: viewerId,
+    p_staff: staff,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  if (!data) return { students: 0, shown: 0, rows: [] };
+  const body = data as { students: number | string; shown: number | string; rows: InspirationAttemptRow[] | null };
+  return { students: Number(body.students) || 0, shown: Number(body.shown) || 0, rows: body.rows ?? [] };
+}
+
+export async function getDrawingSharingOptOut(userId: string, client?: TypedSupabaseClient): Promise<boolean> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await (supabase as any).from('users').select('share_drawings_opt_out').eq('id', userId).maybeSingle();
+  if (error) throw error;
+  return !!data?.share_drawings_opt_out;
+}

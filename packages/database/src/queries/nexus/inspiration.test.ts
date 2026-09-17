@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getDrawingSharingOptOut,
   getInspirationItem,
+  getInspirationItemsForSubmission,
+  listInspirationAttempts,
   searchInspiration,
   setDrawingSharingOptOut,
   setInspirationSave,
@@ -131,5 +134,52 @@ describe('setDrawingSharingOptOut', () => {
   it('throws the database error', async () => {
     const { client } = fakeClient({ data: null, error: new Error('boom') });
     await expect(setDrawingSharingOptOut('u1', false, client)).rejects.toThrow('boom');
+  });
+});
+
+describe('getInspirationItemsForSubmission', () => {
+  it('splits the original and the reference', async () => {
+    const { client } = fakeClient({
+      data: [
+        { id: 'o', source_kind: 'submission_original', curation: 'auto', is_visible: true, auto_eligible: true },
+        { id: 'r', source_kind: 'submission_reference', curation: 'hidden', is_visible: false, auto_eligible: true },
+      ],
+      error: null,
+    });
+    expect(await getInspirationItemsForSubmission('sub', client)).toEqual({
+      original: { item_id: 'o', curation: 'auto', visible: true, auto_eligible: true },
+      reference: { item_id: 'r', curation: 'hidden', visible: false, auto_eligible: true },
+    });
+  });
+
+  it('answers nulls when the sync has not made items yet', async () => {
+    const { client } = fakeClient({ data: [], error: null });
+    expect(await getInspirationItemsForSubmission('sub', client)).toEqual({ original: null, reference: null });
+  });
+});
+
+describe('listInspirationAttempts', () => {
+  it('reads counts and rows from the function', async () => {
+    const { client, calls } = fakeClient({
+      data: { students: '14', shown: '5', rows: [{ submission_id: null, original_item_id: 'i', practised_from: true }] },
+      error: null,
+    });
+    const out = await listInspirationAttempts('item', 'viewer', false, 24, client);
+    expect(out.students).toBe(14);
+    expect(out.shown).toBe(5);
+    expect(out.rows).toHaveLength(1);
+    expect(calls[0]).toEqual(['rpc', ['nexus_inspiration_attempts', { p_item_id: 'item', p_viewer_id: 'viewer', p_staff: false, p_limit: 24 }]]);
+  });
+
+  it('answers empty when the item is missing or not visible', async () => {
+    const { client } = fakeClient({ data: null, error: null });
+    expect(await listInspirationAttempts('item', 'viewer', false, 24, client)).toEqual({ students: 0, shown: 0, rows: [] });
+  });
+});
+
+describe('getDrawingSharingOptOut', () => {
+  it('reads the flag', async () => {
+    const { client } = fakeClient({ data: { share_drawings_opt_out: true }, error: null });
+    expect(await getDrawingSharingOptOut('u', client)).toBe(true);
   });
 });

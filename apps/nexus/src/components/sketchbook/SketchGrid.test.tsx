@@ -5,6 +5,8 @@ import SketchGrid from './SketchGrid';
 const sketch = (id: string, day: string, thumb: string | null = null) => ({
   id, student_id: 's', original_image_url: `https://x/${id}.jpg`, thumbnail_url: thumb, self_note: null,
   reaction: null, submitted_at: `${day}T10:00:00.000Z`, is_gallery_visible: false, seenBy: null, featured: [],
+  source_type: 'sketchbook', status: 'submitted', assignment_id: null, question_id: null, reviewed_at: null,
+  tutor_rating: null, tutor_marks: null, inspiration_item_id: null, assignment: null,
 });
 
 describe('SketchGrid', () => {
