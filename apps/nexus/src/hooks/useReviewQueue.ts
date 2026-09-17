@@ -1,30 +1,19 @@
 'use client';
 
 /**
- * Where this drawing sits among its assignment's pending reviews.
+ * Where this drawing sits in the place the teacher came from.
  *
- * Reviewing a class is a queue job, and every student used to cost a round trip
- * back to the roster. This gives the review screen its own position ("3 of 12")
- * and the ids either side, so J and K can move through the queue without
- * leaving the screen.
- *
- * Same order as Save and next (lib/review-next.ts): oldest submission first, so
- * moving with J and finishing with Complete walk the same line.
- *
- * A LANE narrows the queue to one triage band ("Looks routine", say), opened
- * from the band cards on the assignment. Held reviews are already out of every
- * lane, so completing one in a held assignment never loops back to it.
+ * An assignment's pending reviews (oldest first, the same order as Save and
+ * next in lib/review-next.ts), one triage lane of it, a student's sketchbook
+ * month, the flip-through inbox, or an exam's unmarked drawings. Which one is
+ * decided in lib/review-context.ts; this hook only fetches it.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import type { TriageBand } from '@/lib/drawing-triage';
+import { parseLane, pickQueueIds, queueSourceFor, type ReviewContext } from '@/lib/review-context';
 
-const LANES: TriageBand[] = ['routine', 'needs_look', 'flagged'];
-
-/** A lane from the address bar, or null for the whole queue. */
-export function parseLane(value: string | null | undefined): TriageBand | null {
-  return value && (LANES as string[]).includes(value) ? (value as TriageBand) : null;
-}
+export { parseLane };
 
 interface RosterRow {
   drawing?: { id: string; status: string; submitted_at: string } | null;
@@ -32,13 +21,13 @@ interface RosterRow {
 
 export interface ReviewQueue {
   total: number;
-  /** 1-based, or null when this drawing is not itself waiting for review. */
+  /** 1-based, or null when this drawing is not itself in the list. */
   position: number | null;
   prevId: string | null;
   nextId: string | null;
   /**
    * Where to go once this drawing is done: the next one, or when this was the
-   * last, the earliest one still waiting. Null when nothing else is.
+   * last, the earliest one still in the list. Null when nothing else is.
    */
   afterId: string | null;
 }
@@ -48,8 +37,8 @@ const EMPTY: ReviewQueue = { total: 0, position: null, prevId: null, nextId: nul
 export function queueFor(ids: string[], currentId: string): ReviewQueue {
   const index = ids.indexOf(currentId);
   if (index === -1) {
-    // Viewing something already reviewed: offer the start of the queue rather
-    // than nothing, so J still leads somewhere useful.
+    // Viewing something already done: offer the start of the list rather than
+    // nothing, so J still leads somewhere useful.
     return { total: ids.length, position: null, prevId: null, nextId: ids[0] ?? null, afterId: ids[0] ?? null };
   }
   const nextId = index < ids.length - 1 ? ids[index + 1] : null;
@@ -62,55 +51,61 @@ export function queueFor(ids: string[], currentId: string): ReviewQueue {
   };
 }
 
+async function assignmentIds(assignmentId: string, lane: TriageBand | null, token: string | null): Promise<string[] | null> {
+  const headers = { Authorization: `Bearer ${token}` };
+  if (lane) {
+    const res = await fetch(`/api/drawing/assignments/${assignmentId}/triage`, { headers });
+    if (!res.ok) return null;
+    const body = await res.json();
+    // Already in triage order, which within a band is oldest first.
+    return ((body.items ?? []) as Array<{ submission_id: string; band: TriageBand }>)
+      .filter((item) => item.band === lane)
+      .map((item) => item.submission_id);
+  }
+  const res = await fetch(`/api/assignments/${assignmentId}`, { headers });
+  if (!res.ok) return null;
+  const body = await res.json();
+  return ((body.drawing_roster ?? []) as RosterRow[])
+    .map((r) => r.drawing)
+    .filter((d): d is NonNullable<RosterRow['drawing']> => !!d && ['submitted', 'under_review'].includes(d.status))
+    .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at))
+    .map((d) => d.id);
+}
+
 export function useReviewQueue(
-  assignmentId: string | null,
+  ctx: ReviewContext,
+  fallbackAssignmentId: string | null,
   currentId: string,
   getToken: () => Promise<string | null>,
-  lane: TriageBand | null = null,
 ): ReviewQueue {
   const [ids, setIds] = useState<string[]>([]);
   // getToken is a fresh function every render; see RubricScorePanel.
   const tokenRef = useRef(getToken);
   tokenRef.current = getToken;
+  const source = queueSourceFor(ctx, fallbackAssignmentId);
+  const sourceKey = source ? JSON.stringify(source) : '';
 
   useEffect(() => {
-    if (!assignmentId) { setIds([]); return; }
+    if (!source) { setIds([]); return; }
     let cancelled = false;
     (async () => {
       try {
         const token = await tokenRef.current();
-        if (lane) {
-          const res = await fetch(`/api/drawing/assignments/${assignmentId}/triage`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!res.ok) return;
-          const body = await res.json();
-          // Already in triage order, which within a band is oldest first.
-          const inLane = ((body.items ?? []) as Array<{ submission_id: string; band: TriageBand }>)
-            .filter((item) => item.band === lane)
-            .map((item) => item.submission_id);
-          if (!cancelled) setIds(inLane);
-          return;
+        let next: string[] | null;
+        if (source.kind === 'assignment') {
+          next = await assignmentIds(source.assignmentId, source.lane, token);
+        } else {
+          const res = await fetch(source.url, { headers: { Authorization: `Bearer ${token}` } });
+          next = res.ok ? pickQueueIds(source.pick, await res.json()) : null;
         }
-        const res = await fetch(`/api/assignments/${assignmentId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const body = await res.json();
-        const rows = (body.drawing_roster ?? []) as RosterRow[];
-        const pending = rows
-          .map((r) => r.drawing)
-          .filter((d): d is NonNullable<RosterRow['drawing']> =>
-            !!d && ['submitted', 'under_review'].includes(d.status))
-          .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at))
-          .map((d) => d.id);
-        if (!cancelled) setIds(pending);
+        if (!cancelled && next) setIds(next);
       } catch {
         // No queue, no J and K. The screen works exactly as it did.
       }
     })();
     return () => { cancelled = true; };
-  }, [assignmentId, currentId, lane]);
+    // sourceKey stands for source, which is rebuilt every render.
+  }, [sourceKey, currentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return assignmentId ? queueFor(ids, currentId) : EMPTY;
+  return source ? queueFor(ids, currentId) : EMPTY;
 }

@@ -46,6 +46,7 @@ import type { StagePlayback } from '@/components/drawings/voice/VoiceNotePlayer'
 import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 import { parseLane, useReviewQueue } from '@/hooks/useReviewQueue';
+import { parseReviewContext } from '@/lib/review-context';
 import { useAiDraft } from '@/hooks/useAiDraft';
 import { useAutoDraft } from '@/hooks/useAutoDraft';
 import { BAND_LABEL } from '@/lib/drawing-triage';
@@ -497,11 +498,12 @@ export default function DrawingReviewDetailPage() {
   const [uprightNoticeHidden, setUprightNoticeHidden] = useState(false);
 
   // The queue this drawing belongs to, for J and K and the "3 / 12" chip.
+  const reviewCtx = useMemo(() => parseReviewContext(searchParams), [searchParams]);
   const queue = useReviewQueue(
-    fromAssignmentId ?? ((submission as any)?.assignment_id as string | null) ?? null,
+    reviewCtx,
+    ((submission as any)?.assignment_id as string | null) ?? null,
     id,
     getToken,
-    lane,
   );
 
   // Handlers change identity every render; the key listener reads the latest.
