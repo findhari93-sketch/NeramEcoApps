@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   setDrawingSharingOptOut: vi.fn(),
   deleteExemplar: vi.fn(),
   removeItemThumbnail: vi.fn(),
+  listInspirationAttempts: vi.fn(),
 }));
 
 vi.mock('@/lib/inspiration-images', () => ({
@@ -37,6 +38,7 @@ vi.mock('@neram/database/queries/nexus', () => ({
   updateInspirationItem: (...a: unknown[]) => mocks.updateInspirationItem(...a),
   setDrawingSharingOptOut: (...a: unknown[]) => mocks.setDrawingSharingOptOut(...a),
   deleteExemplar: (...a: unknown[]) => mocks.deleteExemplar(...a),
+  listInspirationAttempts: (...a: unknown[]) => mocks.listInspirationAttempts(...a),
 }));
 
 import { DELETE, GET, PATCH } from './route';
@@ -58,6 +60,7 @@ describe('/api/inspiration/items/[id]', () => {
     vi.clearAllMocks();
     mocks.getSimilarInspiration.mockResolvedValue([]);
     mocks.getInspirationItem.mockResolvedValue({ item: makeRow(), pair: makeRow({ id: 'pair', source_kind: 'submission_reference' }) });
+    mocks.listInspirationAttempts.mockResolvedValue({ students: 0, shown: 0, rows: [] });
   });
 
   it('asks for the visible scope for a student and answers 404 when the item is hidden', async () => {
@@ -74,6 +77,20 @@ describe('/api/inspiration/items/[id]', () => {
     expect(mocks.getInspirationItem).toHaveBeenCalledWith(ID, 't1', 'all');
     expect(body.item.staff).toBeDefined();
     expect(body.pair.badge).toBe('reference');
+  });
+
+  it('sends a student attempts without submission ids', async () => {
+    mocks.resolveCaller.mockResolvedValue(student);
+    mocks.listInspirationAttempts.mockResolvedValue({
+      students: 4,
+      shown: 1,
+      rows: [{ submission_id: 'should-not-leak', original_item_id: 'o1', image_url: 'https://x/o.jpg', thumbnail_url: null, author_first_name: 'A', author_last_name: 'B', author_name: 'A B', author_is_alumni: false, author_academic_year: null, submitted_at: '2026-09-10T10:00:00Z', status: null, tutor_rating: null, tutor_marks: null, reviewed_at: null, practised_from: false }],
+    });
+    const res = await GET(get(), ctx);
+    const body = await res.json();
+    expect(mocks.listInspirationAttempts).toHaveBeenCalledWith(ID, 's1', false, 24);
+    expect(body.attempts.students).toBe(4);
+    expect(body.attempts.cards[0].submissionId).toBeNull();
   });
 
   it('refuses edits from a student', async () => {

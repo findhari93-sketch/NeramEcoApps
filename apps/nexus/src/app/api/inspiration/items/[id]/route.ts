@@ -3,11 +3,13 @@ import {
   deleteExemplar,
   getInspirationItem,
   getSimilarInspiration,
+  listInspirationAttempts,
   setDrawingSharingOptOut,
   updateInspirationItem,
 } from '@neram/database/queries/nexus';
 import { assertInspirationStaff, parseItemId, resolveInspirationCaller } from '@/lib/inspiration-access';
 import { removeItemThumbnail } from '@/lib/inspiration-images';
+import { presentAttempts } from '@/lib/inspiration-attempts';
 import { parseItemPatch } from '@/lib/inspiration-patch';
 import { presentRow } from '@/lib/inspiration-present';
 import { ApiError, errorResponse } from '@/lib/api-errors';
@@ -15,14 +17,16 @@ import { ApiError, errorResponse } from '@/lib/api-errors';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 type Ctx = { params: { id: string } };
 
-/** GET: one drawing, the other image of the same submission, and more like it. */
+/** GET: one drawing, the other image of the same submission, attempts drawn from it, and more like it. */
 export async function GET(request: NextRequest, { params }: Ctx) {
   try {
     const caller = await resolveInspirationCaller(request.headers.get('Authorization'));
     const id = parseItemId(params.id);
-    const [{ item, pair }, similar] = await Promise.all([
+    const [{ item, pair }, similar, attempts] = await Promise.all([
       getInspirationItem(id, caller.user.id, caller.staff ? 'all' : 'visible'),
       getSimilarInspiration(id, caller.user.id, 12),
+      // Never fails the page: a missing attempts list is an empty section.
+      listInspirationAttempts(id, caller.user.id, caller.staff, 24).catch(() => ({ students: 0, shown: 0, rows: [] })),
     ]);
     if (!item) throw new ApiError('Drawing not found', 404);
     const opts = { staff: caller.staff };
@@ -31,6 +35,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
         item: presentRow(item, opts),
         pair: pair ? presentRow(pair, opts) : null,
         similar: similar.map((row) => presentRow(row, opts)),
+        attempts: presentAttempts(attempts, caller.staff),
       },
       { headers: NO_STORE },
     );

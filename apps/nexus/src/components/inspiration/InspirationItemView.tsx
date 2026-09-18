@@ -9,19 +9,24 @@ import {
   EmptyState,
   ImageViewerDialog,
   Skeleton,
+  Snackbar,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from '@neram/ui';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ZoomInOutlinedIcon from '@mui/icons-material/ZoomInOutlined';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import PageHeader from '@/components/PageHeader';
+import AddSketchSheet from '@/components/sketchbook/AddSketchSheet';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import { EXAM_LABELS, typeLabel } from '@/lib/inspiration-types';
 import type { InspirationCard } from '@/lib/inspiration-present';
+import type { AttemptsView } from '@/lib/inspiration-attempts';
+import InspirationAttempts from './InspirationAttempts';
 import InspirationCurationBar from './InspirationCurationBar';
 import InspirationMasonry from './InspirationMasonry';
 import InspirationTile from './InspirationTile';
@@ -32,6 +37,7 @@ interface ItemResponse {
   item: InspirationCard;
   pair: InspirationCard | null;
   similar: InspirationCard[];
+  attempts: AttemptsView;
 }
 
 const chipSx = { height: 44 } as const;
@@ -42,6 +48,8 @@ export default function InspirationItemView({ mode, itemId }: { mode: Inspiratio
   const [backHref, setBackHref] = useState(base);
   const [view, setView] = useState<'reference' | 'original' | null>(null);
   const [zoom, setZoom] = useState(false);
+  const [practising, setPractising] = useState(false);
+  const [added, setAdded] = useState(false);
   const { data, error, isLoading, mutate } = useAuthSWR<ItemResponse>(`/api/inspiration/items/${itemId}`);
 
   useEffect(() => setBackHref(backHrefFor(mode)), [mode]);
@@ -199,8 +207,18 @@ export default function InspirationItemView({ mode, itemId }: { mode: Inspiratio
                     <Chip key={tag} component={Link} href={`${base}?q=${encodeURIComponent(tag)}`} clickable variant="outlined" label={tag} sx={chipSx} />
                   ))}
                 </Box>
+                {mode === 'student' && (
+                  <Button
+                    variant="contained"
+                    startIcon={<BrushOutlinedIcon />}
+                    onClick={() => setPractising(true)}
+                    sx={{ minHeight: 48, alignSelf: 'flex-start' }}
+                  >
+                    Practise this
+                  </Button>
+                )}
                 <Button
-                  variant={item.saved ? 'contained' : 'outlined'}
+                  variant={mode === 'student' ? 'outlined' : item.saved ? 'contained' : 'outlined'}
                   startIcon={item.saved ? <FavoriteIcon /> : <FavoriteBorderIcon />}
                   aria-pressed={item.saved}
                   onClick={() => toggleSave(item)}
@@ -215,6 +233,8 @@ export default function InspirationItemView({ mode, itemId }: { mode: Inspiratio
             )}
           </Box>
         </Box>
+
+        {data && <InspirationAttempts mode={mode} itemId={itemId} view={data.attempts} />}
 
         {data && data.similar.length > 0 && (
           <Box component="section" aria-labelledby="inspiration-more-like-this" sx={{ mt: 5 }}>
@@ -232,6 +252,29 @@ export default function InspirationItemView({ mode, itemId }: { mode: Inspiratio
       {shown && (
         <ImageViewerDialog open={zoom} onClose={() => setZoom(false)} src={shown.imageUrl} alt={shown.alt} name={item?.title} />
       )}
+      {mode === 'student' && item && (
+        <AddSketchSheet
+          open={practising}
+          onClose={() => setPractising(false)}
+          onAdded={() => {
+            setPractising(false);
+            setAdded(true);
+            void mutate();
+          }}
+          practise={{ itemId: item.id, imageUrl: (reference ?? item).imageUrl, title: item.title }}
+        />
+      )}
+      <Snackbar
+        open={added}
+        autoHideDuration={5000}
+        onClose={() => setAdded(false)}
+        message="Added to your Sketchbook"
+        action={
+          <Button component={Link} href="/student/sketchbook" color="inherit" sx={{ minHeight: 44 }}>
+            Open
+          </Button>
+        }
+      />
     </Box>
   );
 }
