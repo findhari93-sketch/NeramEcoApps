@@ -16,7 +16,6 @@ import { useStudentListView } from '@/components/students/list/useStudentListVie
 import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
 import { stageKeyOf } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
-import { matchTier, MatchTier } from '@/lib/people-search';
 import { RADIUS } from '@/components/timetable/timetable-theme';
 import { GROUP_LABEL, describePresence, type RegisterGroup } from '@/lib/attendance-register';
 import type { Insights, StudentInsight } from '@/components/timetable/attendance/types';
@@ -91,21 +90,12 @@ export default function ClassRegisterList({
     const map: Record<RegisterGroup, StudentInsight[]> = {
       whole: [], partly: [], reason: [], no_reason: [], joined_later: [],
     };
-    const q = view.query.trim();
-    for (const s of view.shown) {
-      // The shared search tolerates a typo so a one-name lookup never comes back
-      // empty, which is right for a picker. Here the search box narrows a whole
-      // roster, so a fuzzy-only hit (matched on a different word than the one
-      // typed) reads as a bug, not a feature: typing "Student C" must not also
-      // surface "Student A". Every stronger tier still counts as a real match.
-      if (q && matchTier(s, q) === MatchTier.FUZZY) continue;
-      map[s.group].push(s);
-    }
+    for (const s of view.shown) map[s.group].push(s);
     // Shortest time in the room first: the people who were barely there head the
     // list a teacher reads.
     map.partly.sort((a, b) => a.minutesIn - b.minutesIn);
     return map;
-  }, [view.shown, view.query]);
+  }, [view.shown]);
 
   /**
    * The tiles count the whole class, never the search results. "Missed, no
@@ -200,21 +190,17 @@ export default function ClassRegisterList({
                   })
                 : `${missedLine(s)} ${catchupLine(s)}`;
 
-              return (
-                <Box
-                  key={s.id}
-                  id={`student-${s.id}`}
-                  onClick={() => present && setExpanded(expanded === s.id ? null : s.id)}
-                  sx={{
-                    p: 1.5,
-                    borderRadius: RADIUS.card,
-                    border: '1px solid',
-                    borderColor: highlightStudentId === s.id ? 'primary.main' : 'divider',
-                    bgcolor: 'background.paper',
-                    cursor: present ? 'pointer' : 'default',
-                    minHeight: 64,
-                  }}
-                >
+              const rowSx = {
+                p: 1.5,
+                borderRadius: RADIUS.card,
+                border: '1px solid',
+                borderColor: highlightStudentId === s.id ? 'primary.main' : 'divider',
+                bgcolor: 'background.paper',
+                minHeight: 64,
+              } as const;
+
+              const rowContent = (
+                <>
                   <Box
                     sx={{
                       display: 'flex',
@@ -263,7 +249,7 @@ export default function ClassRegisterList({
                   )}
 
                   {present && (
-                    <Collapse in={expanded === s.id}>
+                    <Collapse in={expanded === s.id} id={`student-${s.id}-detail`}>
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                         {s.segments.length
                           ? s.segments.map((seg) => `in ${formatClock(seg.start)} to ${formatClock(seg.end)}`).join(', ')
@@ -271,6 +257,44 @@ export default function ClassRegisterList({
                       </Typography>
                     </Collapse>
                   )}
+                </>
+              );
+
+              // Only a present row expands, so only it gets button semantics: a
+              // real <button> is keyboard reachable and Enter/Space activate it
+              // the way any native control does, with no hand-rolled key
+              // handling to keep in sync with the click handler. A missed row has
+              // nothing to expand, so it stays a plain, non-interactive card.
+              return present ? (
+                <Box
+                  key={s.id}
+                  id={`student-${s.id}`}
+                  component="button"
+                  type="button"
+                  onClick={() => setExpanded(expanded === s.id ? null : s.id)}
+                  aria-expanded={expanded === s.id}
+                  aria-controls={`student-${s.id}-detail`}
+                  sx={{
+                    ...rowSx,
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    font: 'inherit',
+                    color: 'inherit',
+                    appearance: 'none',
+                    cursor: 'pointer',
+                    '&:focus-visible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: 2,
+                    },
+                  }}
+                >
+                  {rowContent}
+                </Box>
+              ) : (
+                <Box key={s.id} id={`student-${s.id}`} sx={{ ...rowSx, cursor: 'default' }}>
+                  {rowContent}
                 </Box>
               );
             })}

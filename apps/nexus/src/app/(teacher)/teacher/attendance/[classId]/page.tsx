@@ -30,7 +30,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import ClassAttendanceDialog from '@/components/timetable/attendance/ClassAttendanceDialog';
 import ClassRegisterList from '@/components/attendance/ClassRegisterList';
-import { formatClassDate, formatClock, formatWallClock } from '@/components/attendance/attendance-format';
+import { formatClassDate, formatClock, formatWallClock, istRange } from '@/components/attendance/attendance-format';
 import type { Insights } from '@/components/timetable/attendance/types';
 import type { RegisterResponse } from '@/app/api/attendance/register/route';
 
@@ -44,6 +44,13 @@ function ClassRegisterPageContent() {
   const highlight = searchParams.get('student');
   const backHref = `/teacher/attendance?view=${view}&range=${range}`;
 
+  // The same window the teacher was just looking at, not the register API's own
+  // default. Without this, a class between 31 and 90 days old reached from the
+  // 90-day view falls outside the (always 30-day) neighbour list, index comes
+  // back -1, and prev/next silently go dead.
+  const rangeDays = Number(range) || 30;
+  const { from, to } = useMemo(() => istRange(rangeDays), [rangeDays]);
+
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
 
@@ -53,10 +60,12 @@ function ClassRegisterPageContent() {
       : null,
   );
 
-  // The same key the register page uses, so arriving from it costs nothing and
-  // a cold open (a shared link) fetches it once.
+  // The same key the register page uses for this range, so arriving from it
+  // costs nothing and a cold open (a shared link) fetches it once.
   const { data: register } = useAuthSWR<RegisterResponse>(
-    activeClassroom ? `/api/attendance/register?classroom_id=${activeClassroom.id}` : null,
+    activeClassroom
+      ? `/api/attendance/register?classroom_id=${activeClassroom.id}&from=${from}&to=${to}`
+      : null,
   );
 
   const neighbours = useMemo(() => {
@@ -149,7 +158,10 @@ function ClassRegisterPageContent() {
         </MenuItem>
       </Menu>
 
-      {neighbours.total > 1 && (
+      {/* index < 0 means this class fell outside the fetched range (should not
+          happen now that the fetch uses the same range as the back link, but a
+          wrong count is worse than no caption, so this stays defensive). */}
+      {neighbours.total > 1 && neighbours.index >= 0 && (
         <Stack direction="row" alignItems="center" spacing={1} sx={{ my: 1.5 }}>
           <IconButton
             component={neighbours.prev ? Link : 'button'}
