@@ -26,7 +26,14 @@ const ACCESSORS: ListAccessors<RegisterStudent> = {
   joinedAt: (s) => s.enrolled_at,
 };
 
-const NAME_COL = { xs: 132, sm: 180 };
+/**
+ * A plain px, not an MUI breakpoint object: this app reserves a 248px sidebar,
+ * so the window's own breakpoints measure more room than the content actually
+ * has. The name column is also pinned inside the grid's own horizontal scroll
+ * container regardless of viewport, so it does not need to shrink at all: 160px
+ * fits a 26px avatar plus a comfortably readable name at 375px.
+ */
+const NAME_COL = 160;
 const CELL_W = 48;
 
 const TONE_COLOR: Record<RegisterGroup, string> = {
@@ -36,6 +43,19 @@ const TONE_COLOR: Record<RegisterGroup, string> = {
   no_reason: 'error.main',
   joined_later: 'text.disabled',
 };
+
+/**
+ * "Tue" and "15 Sep" from formatClassDate's unsplit "Tue 15 Sep": split once
+ * on the first space rather than pick a fixed array index, so the month token
+ * can never again vanish by landing at the wrong index if the format changes.
+ */
+function splitClassDate(ymd: string): { weekday: string; dayMonth: string } {
+  const full = formatClassDate(ymd);
+  const spaceAt = full.indexOf(' ');
+  return spaceAt === -1
+    ? { weekday: full, dayMonth: '' }
+    : { weekday: full.slice(0, spaceAt), dayMonth: full.slice(spaceAt + 1) };
+}
 
 /** "partly there, 45 min, left 25 min early" */
 function describeCell(cell: RegisterCell | undefined): string {
@@ -104,42 +124,51 @@ export default function RegisterGrid({
                 Student
               </Typography>
             </Box>
-            {data.classes.map((cls) => (
-              <Box
-                key={cls.id}
-                role="columnheader"
-                sx={{
-                  display: 'table-cell',
-                  borderBottom: `1px solid ${theme.palette.divider}`,
-                  p: 0.5,
-                  width: CELL_W,
-                  minWidth: CELL_W,
-                  textAlign: 'center',
-                }}
-              >
+            {data.classes.map((cls) => {
+              const full = formatClassDate(cls.scheduled_date);
+              const { weekday, dayMonth } = splitClassDate(cls.scheduled_date);
+              return (
                 <Box
-                  component={Link}
-                  href={classHref(cls.id)}
+                  key={cls.id}
+                  role="columnheader"
                   sx={{
-                    display: 'block',
-                    py: 0.75,
-                    color: 'text.secondary',
-                    textDecoration: 'none',
-                    borderRadius: 1,
-                    minHeight: 44,
-                    '&:hover': { color: 'text.primary' },
-                    '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+                    display: 'table-cell',
+                    borderBottom: `1px solid ${theme.palette.divider}`,
+                    p: 0.5,
+                    width: CELL_W,
+                    minWidth: CELL_W,
+                    textAlign: 'center',
                   }}
                 >
-                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, lineHeight: 1.2 }}>
-                    {formatClassDate(cls.scheduled_date).split(' ')[1]}
-                  </Typography>
-                  <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.2 }}>
-                    {formatClassDate(cls.scheduled_date).split(' ')[0]}
-                  </Typography>
+                  <Box
+                    component={Link}
+                    href={classHref(cls.id)}
+                    aria-label={full}
+                    sx={{
+                      display: 'block',
+                      py: 0.75,
+                      color: 'text.secondary',
+                      textDecoration: 'none',
+                      borderRadius: 1,
+                      minHeight: 44,
+                      '&:hover': { color: 'text.primary' },
+                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      noWrap
+                      sx={{ display: 'block', fontWeight: 700, lineHeight: 1.2 }}
+                    >
+                      {dayMonth}
+                    </Typography>
+                    <Typography variant="caption" noWrap sx={{ display: 'block', lineHeight: 1.2 }}>
+                      {weekday}
+                    </Typography>
+                  </Box>
                 </Box>
-              </Box>
-            ))}
+              );
+            })}
             <Box
               role="columnheader"
               sx={{

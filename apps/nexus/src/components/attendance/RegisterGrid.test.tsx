@@ -50,6 +50,23 @@ describe('RegisterGrid', () => {
     expect(cell.getAttribute('href')).toBe('/teacher/attendance/class-1?student=s2');
   });
 
+  it('shows the month in the class column header, not just the day', () => {
+    render(<RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />);
+    // A header of just "15" and "Tue" (the old bug) would fail this: the month
+    // must be visible, because the range spans up to 90 days and two classes on
+    // the 15th of different months would otherwise be indistinguishable.
+    const grid = within(screen.getByRole('table'));
+    expect(grid.getByText('15 Sep')).toBeTruthy();
+  });
+
+  it('gives the class column header a spoken name carrying the full date', () => {
+    render(<RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />);
+    // The old header had no aria-label at all, so its accessible name came from
+    // visible text in DOM order ("15" then "Tue"), never "Tue 15 Sep".
+    const header = screen.getByRole('link', { name: 'Tue 15 Sep' });
+    expect(header.getAttribute('href')).toBe('/teacher/attendance/class-1');
+  });
+
   it('shows each attendance percentage', () => {
     render(<RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />);
     expect(screen.getAllByText('100%').length).toBe(2);
