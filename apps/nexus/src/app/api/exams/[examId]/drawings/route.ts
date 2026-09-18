@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, { params }: { params: { examId: 
     const rows = await listExamDrawings(params.examId);
     const ids = [...new Set(rows.map((r) => r.student_id))];
     const { data: people } = ids.length
-      ? await (getSupabaseAdminClient() as any).from('users').select('id, name, avatar_url').in('id', ids)
+      ? await getSupabaseAdminClient().from('users').select('id, name, avatar_url').in('id', ids)
       : { data: [] };
     const byId = new Map(
       ((people ?? []) as Array<{ id: string; name: string | null; avatar_url: string | null }>).map((p) => [p.id, p]),

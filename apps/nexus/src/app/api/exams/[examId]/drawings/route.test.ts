@@ -38,4 +38,16 @@ describe('GET /api/exams/[examId]/drawings', () => {
     expect(body.drawings.map((d: { submission_id: string }) => d.submission_id)).toEqual(['d2', 'd1']);
     expect(body.drawings[0].student_name).toBe('Bala');
   });
+
+  it('falls back to a plain label when the student row is missing', async () => {
+    m.access.mockResolvedValue({ ok: true, caller: {}, exam: { id: 'e1' } });
+    m.list.mockResolvedValue([
+      { submission_id: 'd3', student_id: 's3', question_id: 'q', image_url: 'https://x/3.jpg', awarded: null, max_marks: 10, status: 'submitted' },
+    ]);
+    m.people = [];
+    const res = await GET(req(), ctx);
+    const body = await res.json();
+    expect(body.drawings[0].student_name).toBe('Student');
+    expect(body.drawings[0].avatar_url).toBeNull();
+  });
 });

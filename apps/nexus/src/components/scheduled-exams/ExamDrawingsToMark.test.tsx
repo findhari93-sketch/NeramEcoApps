@@ -31,7 +31,16 @@ describe('ExamDrawingsToMark', () => {
   it('does not fetch while the sheet is closed', () => {
     swr.mockReturnValue({ data: undefined, isLoading: false });
     render(<ExamDrawingsToMark examId="e1" classId={null} open={false} />);
-    expect(swr).toHaveBeenLastCalledWith(null);
+    expect(swr.mock.lastCall?.[0]).toBeNull();
+  });
+
+  // The global SWR default dedupes a key for 15 seconds, which would show a
+  // teacher who just marked a drawing and pressed Back the pre-mark list and
+  // count for up to 15 seconds. This guard must never be silently dropped.
+  it('always revalidates on reopen rather than trusting the global dedupe window', () => {
+    swr.mockReturnValue({ data: { drawings: [] }, isLoading: false });
+    render(<ExamDrawingsToMark examId="e1" classId={null} open />);
+    expect(swr.mock.lastCall?.[1]).toMatchObject({ dedupingInterval: 0 });
   });
 });
 

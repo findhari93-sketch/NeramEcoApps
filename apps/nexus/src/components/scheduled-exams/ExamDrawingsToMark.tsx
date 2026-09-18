@@ -33,7 +33,15 @@ export function examDrawingHref(submissionId: string, examId: string, classId: s
 }
 
 export default function ExamDrawingsToMark({ examId, classId, open }: { examId: string; classId: string | null; open: boolean }) {
-  const { data, isLoading } = useAuthSWR<{ drawings: ExamDrawingRow[] }>(open ? `/api/exams/${examId}/drawings` : null);
+  // The global SWR default dedupes a key for 15 seconds (see providers.tsx), which is
+  // right for most sections but wrong here: a teacher who marks a drawing and presses
+  // Back returns to this exact list within seconds, and a stale "Not marked" row would
+  // be actively misleading rather than merely out of date. Overridden locally, not in
+  // the global default, because every other section still wants that dedupe window.
+  const { data, isLoading } = useAuthSWR<{ drawings: ExamDrawingRow[] }>(
+    open ? `/api/exams/${examId}/drawings` : null,
+    { dedupingInterval: 0, revalidateOnMount: true },
+  );
   if (isLoading) return <Skeleton variant="rounded" height={72} sx={{ borderRadius: 2, mb: 2 }} />;
   const rows = data?.drawings ?? [];
   if (rows.length === 0) return null;
@@ -49,7 +57,7 @@ export default function ExamDrawingsToMark({ examId, classId, open }: { examId: 
           ? 'Results stay Provisional until every drawing has marks.'
           : 'Every drawing has marks, so these results can be final.'}
       </Typography>
-      <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
         {rows.map((r) => (
           <Box component="li" key={r.submission_id}>
             <Box
