@@ -10,7 +10,6 @@ import {
 } from '@neram/database';
 import { loadClassFactsForStudents } from '@/lib/catchup-facts';
 import { turnaround } from '@/lib/catchup-turnaround';
-import { LATE_THRESHOLD_MINUTES } from '@/lib/class-absences';
 import { tallyReasons } from '@/lib/rsvp-reasons';
 import { ATTENDANCE_FAILURE_MESSAGES, type AttendanceSyncFailure } from '@/lib/attendance-sync';
 import {
@@ -20,6 +19,12 @@ import {
   scheduledMinutes as spanMinutes,
   tallyBuckets,
 } from '@/lib/attendance-quality';
+import {
+  attendanceFlags,
+  presenceOf,
+  registerGroupOf,
+  sessionWindow,
+} from '@/lib/attendance-register';
 
 /**
  * GET /api/timetable/class-insights?class_id={id}&classroom_id={id}  (teacher)
@@ -109,11 +114,11 @@ export async function GET(request: NextRequest) {
           .eq('scheduled_class_id', classId),
       ]);
 
-    const startMs = new Date(`${cls.scheduled_date}T${cls.start_time}+05:30`).getTime();
-    const endMs = new Date(`${cls.scheduled_date}T${cls.end_time}+05:30`).getTime();
-    const graceMs = LATE_THRESHOLD_MINUTES * 60 * 1000;
+    // How long the class was booked for, and how long it actually ran. The
+    // second is what every flag below is measured against.
+    const held = sessionWindow(cls, attendance || []);
     const lengthMinutes = spanMinutes(cls.start_time, cls.end_time);
-    const barelyCutoff = barelyAttendedCutoff(lengthMinutes);
+    const barelyCutoff = barelyAttendedCutoff(held.minutes);
 
     const attById = new Map<string, any>((attendance || []).map((a: any) => [a.student_id, a]));
     const optById = new Map<string, any>((optOuts || []).map((o: any) => [o.student_id, o]));
@@ -174,9 +179,8 @@ export async function GET(request: NextRequest) {
       const opt = optById.get(r.user_id);
       const abs = absenceById.get(r.user_id) ?? null;
       const attended = !!a?.attended;
-      const joinedMs = a?.joined_at ? new Date(a.joined_at).getTime() : null;
-      const leftMs = a?.left_at ? new Date(a.left_at).getTime() : null;
-      const segments = Array.isArray(a?.attendance_intervals) ? a.attendance_intervals.length : (attended ? 1 : 0);
+      const presence = presenceOf(a || {}, held);
+      const flags = attendanceFlags(presence);
       const durationMinutes = a?.duration_minutes ?? null;
       const row = {
         id: r.user_id,
@@ -199,18 +203,18 @@ export async function GET(request: NextRequest) {
         joined_at: a?.joined_at || null,
         left_at: a?.left_at || null,
         duration_minutes: durationMinutes,
-        joinedLate: attended && joinedMs != null && Number.isFinite(joinedMs) && joinedMs - startMs > graceMs,
-        // Left more than the grace window before the scheduled end.
-        leftEarly: attended && leftMs != null && Number.isFinite(leftMs) && Number.isFinite(endMs) && endMs - leftMs > graceMs,
-        // More than one join/leave segment means they dropped and rejoined.
-        droppedMidClass: segments > 1,
-        // Flagged, never reclassified. They stay `attended` so the register
-        // never argues with what Teams reported; the flag just floats them to
-        // the top of the list a teacher reads.
-        barelyAttended:
-          attended && durationMinutes != null && Number.isFinite(durationMinutes)
-            ? durationMinutes < barelyCutoff
-            : false,
+        joinedLate: attended && flags.joinedLate,
+        leftEarly: attended && flags.leftEarly,
+        droppedMidClass: attended && flags.droppedMidClass,
+        barelyAttended: attended && flags.barelyAttended,
+        minutesIn: attended ? presence.minutesIn : 0,
+        lateByMin: presence.lateByMin,
+        leftEarlyByMin: presence.leftEarlyByMin,
+        outMin: presence.outMin,
+        segments: presence.segments.map((s) => ({
+          start: new Date(s.startMs).toISOString(),
+          end: new Date(s.endMs).toISOString(),
+        })),
         absence: abs
           ? {
               id: abs.id,
@@ -227,7 +231,17 @@ export async function GET(request: NextRequest) {
           : null,
         catchup: catchupFor(r.user_id, abs),
       };
-      return { ...row, bucket: bucketFor(row) };
+      return {
+        ...row,
+        bucket: bucketFor(row),
+        group: registerGroupOf({
+          attended,
+          presence,
+          joinedAfterClass: row.joinedAfterClass,
+          rsvp: row.rsvp,
+          absence: row.absence,
+        }),
+      };
     });
 
     const rosterSize = students.length;
@@ -263,6 +277,9 @@ export async function GET(request: NextRequest) {
             ? ATTENDANCE_FAILURE_MESSAGES[cls.attendance_sync_status as AttendanceSyncFailure] ?? null
             : null,
         has_meeting: !!cls.teams_meeting_id,
+        // The id itself, not just whether one exists: the class screen mounts
+        // ClassAttendanceDialog, whose Sync button needs the real meeting id.
+        teams_meeting_id: cls.teams_meeting_id ?? null,
       },
       summary: {
         rosterSize,
@@ -278,6 +295,15 @@ export async function GET(request: NextRequest) {
         // 90" rather than a bare number, and so it can explain the flag.
         scheduledMinutes: lengthMinutes,
         barelyAttendedCutoff: barelyCutoff,
+        // When the class really ran, so the screen can say "held 7:00 to 8:10 PM
+        // (booked to 8:30)" instead of measuring everyone against a time the
+        // teacher never taught to.
+        held: {
+          start: new Date(held.startMs).toISOString(),
+          end: new Date(held.endMs).toISOString(),
+          source: held.source,
+          minutes: held.minutes,
+        },
         // The follow-up picture. missedNoReason is the number this whole panel
         // exists to make visible: away, silent, and nothing done about it.
         missedNoReason: stateTally.missed_no_reason,

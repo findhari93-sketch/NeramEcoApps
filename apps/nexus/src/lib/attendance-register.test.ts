@@ -240,3 +240,19 @@ describe('describePresence', () => {
     ).toBe('Marked present by hand, no times.');
   });
 });
+
+describe('the class-insights regression', () => {
+  it('does not flag a whole class of students who left when the meeting ended', () => {
+    // 15 Sep: booked to 8:30 PM, the room emptied at 8:10. Every one of these
+    // students was flagged "left early" before the window was measured.
+    const leaves = ['20:03', '20:10', '20:10', '20:10', '20:13'];
+    const rows = leaves.map((t) => ({
+      attended: true,
+      attendance_intervals: [interval('19:03', t)],
+      left_at: ist(t),
+    }));
+    const window = sessionWindow(CLASS, rows);
+    const flagged = rows.filter((r) => attendanceFlags(presenceOf(r, window)).leftEarly);
+    expect(flagged.length).toBe(0);
+  });
+});

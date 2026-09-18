@@ -144,6 +144,13 @@ export interface StudentInsight {
   catchup?: StudentCatchup | null;
   /** Which of the five states this student is in. Computed server-side. */
   bucket: AttendanceBucket;
+  /** Minutes inside the class itself, ignoring time before it started. */
+  minutesIn: number;
+  lateByMin: number;
+  leftEarlyByMin: number;
+  outMin: number;
+  segments: Array<{ start: string; end: string }>;
+  group: 'whole' | 'partly' | 'joined_later' | 'reason' | 'no_reason';
 }
 
 /** Everything about one class's attendance, from /api/timetable/class-insights. */
@@ -158,6 +165,7 @@ export interface Insights {
     attendance_sync_status?: string | null;
     attendance_sync_message?: string | null;
     has_meeting: boolean;
+    teams_meeting_id: string | null;
   };
   summary: {
     rosterSize: number;
@@ -171,6 +179,7 @@ export interface Insights {
     barelyAttendedCount: number;
     scheduledMinutes: number;
     barelyAttendedCutoff: number;
+    held: { start: string; end: string; source: 'observed' | 'booked'; minutes: number };
     missedNoReason: number;
     missedWithReason: number;
     caughtUp: number;
