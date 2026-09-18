@@ -16,6 +16,10 @@ const state = vi.hoisted(() => ({
   rsvps: [] as Record<string, unknown>[],
   members: [] as Record<string, unknown>[],
   writes: [] as string[],
+  // Every `.order(col)` call any query builder made, by table. Not the same
+  // fixture as `writes`: this records reads, so a regression that drops the
+  // ordering fix (rather than adding an illegal write) still gets caught.
+  orderCalls: [] as Array<{ table: string; cols: string[] }>,
 }));
 
 // PostgREST's own default row cap, simulated so a fixture that forgets to
@@ -34,10 +38,21 @@ function builder(table: string) {
     return [];
   };
   let rangeArgs: [number, number] | null = null;
+  const orderCols: string[] = [];
   const chain = () => b;
-  for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'not', 'order', 'limit']) {
+  for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'not', 'limit']) {
     b[method] = chain;
   }
+  // Recorded, not just chained through: this is what the ordering regression
+  // test below inspects. A static in-memory array cannot honestly reproduce
+  // a row shifting across a page boundary mid-sync (there is no second
+  // writer, no MVCC, nothing to reorder), so this mock does not attempt
+  // that. What it can pin is that the fix's actual mechanism, an explicit
+  // `.order()` on every paginated read, stays wired up.
+  b.order = (col: string) => {
+    orderCols.push(col);
+    return b;
+  };
   // Records the page this call asked for, so `.then` below can slice like a
   // real `.range()` would. A query that never calls `.range()` at all reads
   // as page 0 of the server's own 1,000-row cap, exactly like production.
@@ -54,6 +69,7 @@ function builder(table: string) {
   b.maybeSingle = () => Promise.resolve({ data: rows()[0] ?? null, error: null });
   b.single = () => Promise.resolve({ data: rows()[0] ?? null, error: null });
   b.then = (onFulfilled: (v: unknown) => unknown) => {
+    if (orderCols.length) state.orderCalls.push({ table, cols: [...orderCols] });
     const all = rows() as unknown[];
     const [from, to] = rangeArgs ?? [0, SERVER_ROW_CAP - 1];
     return Promise.resolve({ data: all.slice(from, to + 1), error: null }).then(onFulfilled);
@@ -87,6 +103,7 @@ const call = () =>
 beforeEach(() => {
   state.capability = true;
   state.writes = [];
+  state.orderCalls = [];
   state.classes = [
     {
       id: 'class-1',
@@ -138,6 +155,34 @@ describe('GET /api/attendance/register', () => {
   it('never writes to the database', async () => {
     await call();
     expect(state.writes).toEqual([]);
+  });
+
+  it('orders every paginated read by its table\'s own unique pair, so a row cannot shift across a page boundary', async () => {
+    // `.range()` alone promises nothing about which row lands on which page:
+    // Postgres gives no row order at all without an explicit ORDER BY, so a
+    // sync upsert landing between one page read and the next could move a
+    // row from an unfetched page to an already-fetched one (or the reverse),
+    // and pagination would never see it either way. The fix is that every
+    // paginated read here orders by its table's UNIQUE(scheduled_class_id,
+    // student_id) constraint, which is total (no two rows can tie on both
+    // columns), not merely "stable-ish".
+    //
+    // This mock's static in-memory array cannot honestly reproduce that
+    // hazard: there is no second writer and nothing to reorder mid-read, so
+    // a simulated "row moved" scenario here would only prove the mock's own
+    // sort is stable, not anything about the real fix. What this test pins
+    // instead is that the fix's actual mechanism stays wired up: a
+    // regression that quietly dropped one of these `.order()` calls would
+    // still pass every other test in this file, because the mock's
+    // insertion order already happens to match.
+    await call();
+    for (const table of ['nexus_attendance', 'nexus_class_absences', 'nexus_class_rsvp']) {
+      const calls = state.orderCalls.filter((o) => o.table === table);
+      expect(calls.length).toBeGreaterThan(0);
+      for (const c of calls) {
+        expect(c.cols).toEqual(['scheduled_class_id', 'student_id']);
+      }
+    }
   });
 
   it('refuses a caller without the attendance capability', async () => {
@@ -329,5 +374,28 @@ describe('GET /api/attendance/register', () => {
     // would have dropped.
     expect(cells['bulk-1000'].g).toBe('whole');
     expect(cells['bulk-1199'].g).toBe('whole');
+  });
+
+  it('errors rather than silently truncating when a read never ends within the page guard', async () => {
+    // fetchAllPages used to stop quietly at MAX_PAGES and hand back whatever
+    // it had read so far, which is the same class of falsehood as an
+    // unbounded `.in()`: rows past the cutoff would render as students who
+    // did not attend instead of surfacing that the read did not finish. An
+    // exact multiple of the page size (20,000, the guard's own limit) is the
+    // fixture that exercises it without needing an unrealistically huge array.
+    const huge = Array.from({ length: 20000 }, (_, i) => ({
+      scheduled_class_id: 'class-1',
+      student_id: `overflow-${i}`,
+      attended: true,
+      joined_at: '2026-09-15T13:32:00Z',
+      left_at: '2026-09-15T14:40:00Z',
+      attendance_intervals: [{ joinDateTime: '2026-09-15T13:32:00Z', leaveDateTime: '2026-09-15T14:40:00Z' }],
+    }));
+    state.attendance = huge;
+
+    const res = await call();
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/did not end/i);
   });
 });

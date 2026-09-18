@@ -86,10 +86,22 @@ function ymdDaysAgo(ymd: string, days: number): string {
  * door. Paging the read, rather than detecting the cap and failing the whole
  * register, is what keeps the screen working at any size instead of going
  * blank the day a classroom crosses 1,000 rows.
+ *
+ * `.range()` alone is not enough: Postgres makes no ordering promise without
+ * an explicit `ORDER BY`, so without one a row can legally be returned on a
+ * different page (or no page) than the one its offset implies, especially if
+ * a sync upsert lands mid-pagination. Every call to `fetchAllPages` below
+ * orders by its table's own unique pair, so the order is total and a row
+ * cannot shift across a page boundary between reads.
  */
 const PAGE_SIZE = 1000;
 // 20 pages is 20,000 rows: a guard against an infinite loop if a query ever
-// stopped shrinking, not a limit this range is expected to reach.
+// stopped shrinking, not a limit this range is expected to reach. Hitting it
+// throws (below) rather than returning a quietly short result: an attendance
+// read that stops early renders every row past the cutoff as a student who
+// did not attend, the same falsehood Finding 1 closed for an unmeasured
+// class. An error the teacher sees is the honest outcome, not a register
+// that looks complete and is not.
 const MAX_PAGES = 20;
 
 async function fetchAllPages(
@@ -102,10 +114,16 @@ async function fetchAllPages(
     if (error) throw error;
     const rows = data || [];
     out.push(...rows);
-    if (rows.length < PAGE_SIZE) break;
+    if (rows.length < PAGE_SIZE) return out;
     offset += PAGE_SIZE;
   }
-  return out;
+  // A dataset that lands on exactly 20,000 rows, no more, would also reach
+  // here (the last page read full and nothing tells us there is no 20,001st
+  // row without one more request), so this can in principle false-alarm at
+  // that exact boundary. An error asking someone to look is still the
+  // honest choice over the alternative, a register that silently renders as
+  // complete when it is not.
+  throw new Error(`Attendance read did not end after ${MAX_PAGES} pages, refusing to render a possibly truncated register`);
 }
 
 /**
@@ -162,6 +180,16 @@ export async function GET(request: NextRequest) {
     const [{ members, counts: rosterCounts }, attendance, absences, optOuts] =
       await Promise.all([
         loadClassroomRoster(classroomId, { client: supabase }),
+        // Each `.order()` pair is the table's own `UNIQUE(scheduled_class_id,
+        // student_id)` constraint (nexus_attendance, nexus_class_absences and
+        // nexus_class_rsvp all carry it, see their migrations), so the order
+        // is total, not merely stable: no two rows can tie on both columns,
+        // which is what keeps a row from being able to shift across a page
+        // boundary between one page's read and the next's. Without an
+        // explicit ORDER BY, Postgres makes no promise about row order at
+        // all, so a sync upsert landing mid-pagination could otherwise move a
+        // row from an unfetched page to an already-fetched one, or the
+        // reverse, and it would never be read either way.
         classIds.length
           ? fetchAllPages((pageFrom, pageTo) =>
               supabase
@@ -170,6 +198,8 @@ export async function GET(request: NextRequest) {
                   'scheduled_class_id, student_id, attended, joined_at, left_at, duration_minutes, attendance_intervals',
                 )
                 .in('scheduled_class_id', classIds)
+                .order('scheduled_class_id')
+                .order('student_id')
                 .range(pageFrom, pageTo),
             )
           : Promise.resolve([]),
@@ -181,6 +211,8 @@ export async function GET(request: NextRequest) {
                   'scheduled_class_id, student_id, kind, reason_code, reason_note, excused_at, caught_up_at',
                 )
                 .in('scheduled_class_id', classIds)
+                .order('scheduled_class_id')
+                .order('student_id')
                 .range(pageFrom, pageTo),
             )
           : Promise.resolve([]),
@@ -191,6 +223,8 @@ export async function GET(request: NextRequest) {
                 .select('scheduled_class_id, student_id')
                 .eq('response', 'not_attending')
                 .in('scheduled_class_id', classIds)
+                .order('scheduled_class_id')
+                .order('student_id')
                 .range(pageFrom, pageTo),
             )
           : Promise.resolve([]),
