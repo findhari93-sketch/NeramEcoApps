@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { Box } from '@neram/ui';
+import { NeramThemeProvider, nexusLightTheme } from '@neram/ui';
 import RegisterGrid from './RegisterGrid';
 import type { RegisterResponse } from '@/app/api/attendance/register/route';
 
@@ -17,23 +17,67 @@ const DATA: RegisterResponse = {
       held: { start: '2026-09-15T13:30:00.000Z', end: '2026-09-15T14:40:00.000Z', source: 'observed', minutes: 70 },
       measured: true,
       sync_status: 'ok',
-      counts: { whole: 1, partly: 1, reason: 0, noReason: 1, joinedLater: 0 },
+      counts: { whole: 1, partly: 1, reason: 1, noReason: 1, joinedLater: 0 },
     },
   ],
   students: [
     { id: 's1', name: 'Student A', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 1, counted: 1, rate: 100 },
     { id: 's2', name: 'Student B', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 1, counted: 1, rate: 100 },
     { id: 's3', name: 'Student C', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 0, counted: 1, rate: 0 },
+    { id: 's4', name: 'Student D', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 0, counted: 1, rate: 50 },
   ],
   cells: {
     'class-1': {
       s1: { g: 'whole', min: 70 },
       s2: { g: 'partly', min: 45, early: 25 },
       s3: { g: 'no_reason' },
+      s4: { g: 'reason' },
     },
   },
   paused_hidden: 2,
 };
+
+/**
+ * Small, self-contained WCAG 2 contrast helpers. These read real computed
+ * styles off a real render, so a future change that swaps in a tone which only
+ * looks safe would fail this again, the way a check against a token's name
+ * never could.
+ */
+function parseRgb(value: string): { r: number; g: number; b: number; a: number } {
+  const m = value.match(/rgba?\(([^)]+)\)/);
+  if (!m) throw new Error(`Not an rgb() colour: "${value}"`);
+  const parts = m[1].split(',').map((n) => parseFloat(n.trim()));
+  return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+}
+
+/** A semi-transparent colour composited over an opaque one, channel by channel. */
+function flatten(
+  fg: { r: number; g: number; b: number; a: number },
+  bg: { r: number; g: number; b: number },
+): { r: number; g: number; b: number } {
+  return {
+    r: fg.a * fg.r + (1 - fg.a) * bg.r,
+    g: fg.a * fg.g + (1 - fg.a) * bg.g,
+    b: fg.a * fg.b + (1 - fg.a) * bg.b,
+  };
+}
+
+function relativeLuminance({ r, g, b }: { r: number; g: number; b: number }): number {
+  const lin = (c: number) => {
+    const n = c / 255;
+    return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** WCAG 2 contrast ratio between two opaque colours, always >= 1. */
+function contrastRatio(a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }): number {
+  const [l1, l2] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (l1 + 0.05) / (l2 + 0.05);
+}
+
+/** The four groups whose cell carries a tone. `joined_later` is out of scope, see Finding 6. */
+const TONE_LETTERS = ['F', 'P', 'R', 'X'] as const;
 
 describe('RegisterGrid', () => {
   it('marks each student with a letter, not colour alone', () => {
@@ -79,21 +123,59 @@ describe('RegisterGrid', () => {
     expect(screen.getByText(/2 paused/i)).toBeTruthy();
   });
 
-  it('colours the "partly there" letter with the readable dark warning tone, not the low-contrast main one', () => {
-    render(<RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />);
+  it('keeps every group letter at 4.5:1 or better against its own tinted background, on the real Neram theme', () => {
+    // The real app theme, not the MUI default a bare render falls back to:
+    // round 1's test proved a token swap without proving the actual shipped
+    // colour cleared 4.5:1, which is exactly how it missed that `warning.dark`
+    // is only about 3.79:1 with this app's real tokens. This one uses
+    // `nexusLightTheme` itself and does the WCAG maths off what actually
+    // renders, so it cannot be satisfied by a plausible-looking token alone.
+    render(
+      <NeramThemeProvider theme={nexusLightTheme}>
+        <RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />
+      </NeramThemeProvider>,
+    );
+
     const grid = within(screen.getByRole('table'));
-    const partlyColor = getComputedStyle(grid.getByText('P')).color;
+    // The grid's own explicit paper surface, read off its wrapper rather than
+    // assumed, so a future change to `background.paper` moves this test's
+    // backdrop the same way it would move the real page.
+    const paperEl = screen.getByRole('table').parentElement as HTMLElement;
+    const paper = parseRgb(getComputedStyle(paperEl).backgroundColor);
 
-    // Two bare reference boxes, painted with the theme's own tones, so this
-    // test proves the letter matches `warning.dark` (and not `warning.main`)
-    // without hardcoding either colour's hex value.
-    const dark = render(<Box sx={{ color: 'warning.dark' }}>ref</Box>);
-    const darkColor = getComputedStyle(dark.container.firstElementChild as HTMLElement).color;
-    const main = render(<Box sx={{ color: 'warning.main' }}>ref</Box>);
-    const mainColor = getComputedStyle(main.container.firstElementChild as HTMLElement).color;
+    const ratios: Record<string, number> = {};
+    for (const letter of TONE_LETTERS) {
+      const cell = grid.getByText(letter);
+      const styles = getComputedStyle(cell);
+      const ink = parseRgb(styles.color);
+      const cellBg = flatten(parseRgb(styles.backgroundColor), paper);
+      ratios[letter] = contrastRatio(ink, cellBg);
+    }
 
-    expect(partlyColor).toBe(darkColor);
-    expect(partlyColor).not.toBe(mainColor);
+    for (const letter of TONE_LETTERS) {
+      expect(ratios[letter]).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps the legend swatches visually identical to the cells they explain', () => {
+    render(
+      <NeramThemeProvider theme={nexusLightTheme}>
+        <RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />
+      </NeramThemeProvider>,
+    );
+
+    const grid = within(screen.getByRole('table'));
+    for (const letter of TONE_LETTERS) {
+      const cell = grid.getByText(letter);
+      // With one class column, every other occurrence of the same bare letter
+      // is the legend's own swatch for that group.
+      const legendSwatch = screen.getAllByText(letter).find((el) => el !== cell);
+      expect(legendSwatch).toBeTruthy();
+      const cellStyles = getComputedStyle(cell);
+      const legendStyles = getComputedStyle(legendSwatch as HTMLElement);
+      expect(legendStyles.color).toBe(cellStyles.color);
+      expect(legendStyles.backgroundColor).toBe(cellStyles.backgroundColor);
+    }
   });
 
   it('says the classroom is empty instead of a header row over nothing', () => {

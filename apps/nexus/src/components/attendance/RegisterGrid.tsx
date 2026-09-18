@@ -10,7 +10,7 @@
  * name column pinned, so the page itself never does.
  */
 import Link from 'next/link';
-import { Box, Typography, useTheme } from '@neram/ui';
+import { Box, Typography, alpha, useTheme, type Theme } from '@neram/ui';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
 import { useStudentListView } from '@/components/students/list/useStudentListView';
@@ -38,19 +38,49 @@ const NAME_COL = 160;
 const CELL_W = 48;
 
 /**
- * The letter's colour for each group. `warning.main` reads at about 3.1:1 on
- * white, below the 4.5:1 body text needs, so "partly there" (the letter a
- * teacher scans hardest for) uses the darker warning tone instead, the same
- * swap `tagSx` already makes for its warning tint. Success, info and error
- * were checked too and clear 4.5:1 at `.main` already, so only this one moves.
+ * Round 1 tried making the letter itself carry the group, in colour:
+ * `warning.main` measured about 3.1:1 on white, so it moved to `warning.dark`,
+ * which still only reaches about 3.79:1 with this app's actual warning tokens,
+ * short of the 4.5:1 body text needs. No tone in this palette is guaranteed to
+ * clear that bar as literal text, so the letter stops carrying colour at all.
+ *
+ * The letter (F, P, R, X) is already the real signal, colour was always
+ * reinforcement, so ink is now one fixed, high-contrast `text.primary` for
+ * every real group, and the group lives in the cell's background instead: a
+ * light tint of its tone, via `alpha()`. `joined_later` keeps the existing
+ * `text.disabled` treatment and no tint, unchanged, same as the "no data" `?`
+ * cell: that pairing is a separate, already-flagged theme-wide gap, not
+ * something this pass is re-opening.
  */
-const TONE_COLOR: Record<RegisterGroup, string> = {
-  whole: 'success.main',
-  partly: 'warning.dark',
-  reason: 'info.main',
-  no_reason: 'error.main',
+const LETTER_COLOR: Record<RegisterGroup, string> = {
+  whole: 'text.primary',
+  partly: 'text.primary',
+  reason: 'text.primary',
+  no_reason: 'text.primary',
   joined_later: 'text.disabled',
 };
+
+/** Which theme tone tints a group's cell background. `null` paints no tint. */
+const TONE_KEY: Record<RegisterGroup, 'success' | 'warning' | 'info' | 'error' | null> = {
+  whole: 'success',
+  partly: 'warning',
+  reason: 'info',
+  no_reason: 'error',
+  joined_later: null,
+};
+
+/**
+ * A light background tint for a group's cell, or `undefined` for `joined_later`
+ * (and for "no data", which never calls this at all). 0.16 alpha was checked
+ * against every one of the four tones over this theme's `background.paper`:
+ * with `text.primary` ink on top, the tightest of the four (info) still comes
+ * in around 12.6:1, comfortably clear of the 4.5:1 floor with room to spare
+ * even if the underlying tone or surface colour drifts a little.
+ */
+function toneBg(theme: Theme, group: RegisterGroup): string | undefined {
+  const key = TONE_KEY[group];
+  return key ? alpha(theme.palette[key].main, 0.16) : undefined;
+}
 
 /**
  * "Tue" and "15 Sep" from formatClassDate's unsplit "Tue 15 Sep": split once
@@ -272,7 +302,8 @@ export default function RegisterGrid({
                           borderRadius: 1,
                           textDecoration: 'none',
                           fontWeight: 800,
-                          color: cell ? TONE_COLOR[cell.g] : 'text.disabled',
+                          color: cell ? LETTER_COLOR[cell.g] : 'text.disabled',
+                          bgcolor: cell ? toneBg(theme, cell.g) : undefined,
                           '&:hover': { bgcolor: 'action.hover' },
                           '&:active': { bgcolor: 'action.selected' },
                           '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
@@ -306,8 +337,29 @@ export default function RegisterGrid({
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
         {(['whole', 'partly', 'reason', 'no_reason', 'joined_later'] as RegisterGroup[]).map((g) => (
-          <Typography key={g} variant="caption" color="text.secondary">
-            <Box component="span" sx={{ fontWeight: 800, color: TONE_COLOR[g], mr: 0.5 }}>
+          <Typography
+            key={g}
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'inline-flex', alignItems: 'center' }}
+          >
+            {/* Same ink, same tint as the cells above, so the legend is read
+                as one system with the grid rather than a second, drifting copy. */}
+            <Box
+              component="span"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 20,
+                height: 20,
+                borderRadius: 1,
+                fontWeight: 800,
+                color: LETTER_COLOR[g],
+                bgcolor: toneBg(theme, g),
+                mr: 0.75,
+              }}
+            >
               {GROUP_LETTER[g]}
             </Box>
             {GROUP_LABEL[g]}
