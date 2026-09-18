@@ -257,7 +257,11 @@ test.describe('Catch-up loop', () => {
       data: { classroom_id: classroomId, studentIds: [studentId] },
     });
     expect(send.ok()).toBe(true);
-    expect((await send.json()).ok).toBe(true);
+    // counts.total is tally()'s count of NudgeResult rows, one per recipient
+    // sendNudge actually processed (lib/nudge-delivery.ts). One student was
+    // sent, so this pins the recipient count the way the old route's
+    // `sent === 1` did; `ok: true` alone would pass even if nobody was reached.
+    expect((await send.json()).counts.total).toBe(1);
 
     const after = await request.get(
       `${NEXUS}/api/timetable/class-insights?class_id=${classId}&classroom_id=${classroomId}`,
