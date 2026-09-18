@@ -16,6 +16,7 @@ import StudentListToolbar, { PausedFootnote } from '@/components/students/list/S
 import { useStudentListView } from '@/components/students/list/useStudentListView';
 import { stageKeyOf } from '@/lib/student-stage';
 import type { ListAccessors } from '@/lib/student-list-view';
+import { RADIUS } from '@/components/timetable/timetable-theme';
 import { GROUP_LABEL, GROUP_LETTER, type RegisterGroup } from '@/lib/attendance-register';
 import type { RegisterCell, RegisterResponse, RegisterStudent } from '@/app/api/attendance/register/route';
 import { formatClassDate } from './attendance-format';
@@ -36,9 +37,16 @@ const ACCESSORS: ListAccessors<RegisterStudent> = {
 const NAME_COL = 160;
 const CELL_W = 48;
 
+/**
+ * The letter's colour for each group. `warning.main` reads at about 3.1:1 on
+ * white, below the 4.5:1 body text needs, so "partly there" (the letter a
+ * teacher scans hardest for) uses the darker warning tone instead, the same
+ * swap `tagSx` already makes for its warning tint. Success, info and error
+ * were checked too and clear 4.5:1 at `.main` already, so only this one moves.
+ */
 const TONE_COLOR: Record<RegisterGroup, string> = {
   whole: 'success.main',
-  partly: 'warning.main',
+  partly: 'warning.dark',
   reason: 'info.main',
   no_reason: 'error.main',
   joined_later: 'text.disabled',
@@ -96,180 +104,205 @@ export default function RegisterGrid({
     <Box>
       <StudentListToolbar view={view} searchLabel="Find a student" />
 
-      <Box
-        sx={{
-          overflowX: 'auto',
-          border: `1px solid ${theme.palette.divider}`,
-          borderRadius: 2,
-          bgcolor: 'background.paper',
-        }}
-      >
-        <Box sx={{ display: 'table', borderCollapse: 'collapse', minWidth: '100%' }} role="table">
-          <Box sx={{ display: 'table-row' }} role="row">
-            <Box
-              role="columnheader"
-              sx={{
-                display: 'table-cell',
-                position: 'sticky',
-                left: 0,
-                zIndex: 2,
-                bgcolor: 'background.paper',
-                borderBottom: `1px solid ${theme.palette.divider}`,
-                p: 1,
-                width: NAME_COL,
-                minWidth: NAME_COL,
-              }}
-            >
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                Student
-              </Typography>
-            </Box>
-            {data.classes.map((cls) => {
-              const full = formatClassDate(cls.scheduled_date);
-              const { weekday, dayMonth } = splitClassDate(cls.scheduled_date);
-              return (
-                <Box
-                  key={cls.id}
-                  role="columnheader"
-                  sx={{
-                    display: 'table-cell',
-                    borderBottom: `1px solid ${theme.palette.divider}`,
-                    p: 0.5,
-                    width: CELL_W,
-                    minWidth: CELL_W,
-                    textAlign: 'center',
-                  }}
-                >
-                  <Box
-                    component={Link}
-                    href={classHref(cls.id)}
-                    aria-label={full}
-                    sx={{
-                      display: 'block',
-                      py: 0.75,
-                      color: 'text.secondary',
-                      textDecoration: 'none',
-                      borderRadius: 1,
-                      minHeight: 44,
-                      '&:hover': { color: 'text.primary' },
-                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      noWrap
-                      sx={{ display: 'block', fontWeight: 700, lineHeight: 1.2 }}
-                    >
-                      {dayMonth}
-                    </Typography>
-                    <Typography variant="caption" noWrap sx={{ display: 'block', lineHeight: 1.2 }}>
-                      {weekday}
-                    </Typography>
-                  </Box>
-                </Box>
-              );
-            })}
-            <Box
-              role="columnheader"
-              sx={{
-                display: 'table-cell',
-                borderBottom: `1px solid ${theme.palette.divider}`,
-                p: 1,
-                textAlign: 'right',
-                minWidth: 56,
-              }}
-            >
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                %
-              </Typography>
-            </Box>
-          </Box>
-
-          {view.shown.map((student) => (
-            <Box key={student.id} sx={{ display: 'table-row' }} role="row">
+      {view.shown.length === 0 ? (
+        <Box
+          sx={{
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: RADIUS.card,
+            bgcolor: 'background.paper',
+            py: 4,
+          }}
+        >
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+            {view.total === 0 ? 'No students in this classroom yet.' : 'Nobody matches this filter.'}
+          </Typography>
+        </Box>
+      ) : (
+        <Box
+          sx={{
+            overflowX: 'auto',
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: RADIUS.card,
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box sx={{ display: 'table', borderCollapse: 'collapse', minWidth: '100%' }} role="table">
+            <Box sx={{ display: 'table-row' }} role="row">
               <Box
-                role="rowheader"
+                role="columnheader"
                 sx={{
                   display: 'table-cell',
                   position: 'sticky',
                   left: 0,
-                  zIndex: 1,
+                  zIndex: 2,
                   bgcolor: 'background.paper',
-                  borderTop: `1px solid ${theme.palette.divider}`,
+                  borderBottom: `1px solid ${theme.palette.divider}`,
                   p: 1,
                   width: NAME_COL,
                   minWidth: NAME_COL,
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                  <StudentStageAvatar
-                    userId={student.id}
-                    name={student.name}
-                    src={student.avatar_url}
-                    stage={stageKeyOf(student.study_stage)}
-                    size={26}
-                    tapToView={false}
-                  />
-                  <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-                    {student.name}
-                  </Typography>
-                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                  Student
+                </Typography>
               </Box>
-
               {data.classes.map((cls) => {
-                const cell = data.cells[cls.id]?.[student.id];
+                const full = formatClassDate(cls.scheduled_date);
+                const { weekday, dayMonth } = splitClassDate(cls.scheduled_date);
                 return (
                   <Box
                     key={cls.id}
-                    role="cell"
+                    role="columnheader"
                     sx={{
                       display: 'table-cell',
-                      borderTop: `1px solid ${theme.palette.divider}`,
-                      textAlign: 'center',
+                      borderBottom: `1px solid ${theme.palette.divider}`,
+                      p: 0.5,
                       width: CELL_W,
                       minWidth: CELL_W,
+                      textAlign: 'center',
                     }}
                   >
                     <Box
                       component={Link}
-                      href={`${classHref(cls.id)}${classHref(cls.id).includes('?') ? '&' : '?'}student=${student.id}`}
-                      aria-label={`${student.name}, ${formatClassDate(cls.scheduled_date)}: ${describeCell(cell)}`}
+                      href={classHref(cls.id)}
+                      aria-label={full}
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minHeight: 44,
+                        display: 'block',
+                        mx: '2px',
+                        py: 0.75,
+                        color: 'text.secondary',
                         textDecoration: 'none',
-                        fontWeight: 800,
-                        color: cell ? TONE_COLOR[cell.g] : 'text.disabled',
-                        '&:hover': { bgcolor: 'action.hover' },
+                        borderRadius: 1,
+                        minHeight: 44,
+                        '&:hover': { color: 'text.primary' },
+                        '&:active': { bgcolor: 'action.selected' },
                         '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
                       }}
                     >
-                      {cell ? GROUP_LETTER[cell.g] : '?'}
+                      <Typography
+                        variant="caption"
+                        noWrap
+                        sx={{ display: 'block', fontWeight: 700, lineHeight: 1.2 }}
+                      >
+                        {dayMonth}
+                      </Typography>
+                      <Typography variant="caption" noWrap sx={{ display: 'block', lineHeight: 1.2 }}>
+                        {weekday}
+                      </Typography>
                     </Box>
                   </Box>
                 );
               })}
-
               <Box
-                role="cell"
+                role="columnheader"
                 sx={{
                   display: 'table-cell',
-                  borderTop: `1px solid ${theme.palette.divider}`,
+                  borderBottom: `1px solid ${theme.palette.divider}`,
                   p: 1,
                   textAlign: 'right',
-                  fontVariantNumeric: 'tabular-nums',
+                  minWidth: 56,
                 }}
               >
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                  {student.rate == null ? '–' : `${student.rate}%`}
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                  %
                 </Typography>
               </Box>
             </Box>
-          ))}
+
+            {view.shown.map((student) => (
+              <Box key={student.id} sx={{ display: 'table-row' }} role="row">
+                <Box
+                  role="rowheader"
+                  sx={{
+                    display: 'table-cell',
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 1,
+                    bgcolor: 'background.paper',
+                    borderTop: `1px solid ${theme.palette.divider}`,
+                    p: 1,
+                    width: NAME_COL,
+                    minWidth: NAME_COL,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                    <StudentStageAvatar
+                      userId={student.id}
+                      name={student.name}
+                      src={student.avatar_url}
+                      stage={stageKeyOf(student.study_stage)}
+                      size={26}
+                      tapToView={false}
+                    />
+                    <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
+                      {student.name}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {data.classes.map((cls) => {
+                  const cell = data.cells[cls.id]?.[student.id];
+                  return (
+                    <Box
+                      key={cls.id}
+                      role="cell"
+                      sx={{
+                        display: 'table-cell',
+                        borderTop: `1px solid ${theme.palette.divider}`,
+                        textAlign: 'center',
+                        width: CELL_W,
+                        minWidth: CELL_W,
+                      }}
+                    >
+                      <Box
+                        component={Link}
+                        href={`${classHref(cls.id)}${classHref(cls.id).includes('?') ? '&' : '?'}student=${student.id}`}
+                        aria-label={`${student.name}, ${formatClassDate(cls.scheduled_date)}: ${describeCell(cell)}`}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          // A small inset, not a real gap: this grid exists to fit
+                          // many classes on a phone, so the column itself stays
+                          // flush at CELL_W. The inset just keeps a mistap on the
+                          // boundary between two 48px targets from landing on the
+                          // wrong class.
+                          mx: '2px',
+                          minHeight: 44,
+                          borderRadius: 1,
+                          textDecoration: 'none',
+                          fontWeight: 800,
+                          color: cell ? TONE_COLOR[cell.g] : 'text.disabled',
+                          '&:hover': { bgcolor: 'action.hover' },
+                          '&:active': { bgcolor: 'action.selected' },
+                          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+                        }}
+                      >
+                        {cell ? GROUP_LETTER[cell.g] : '?'}
+                      </Box>
+                    </Box>
+                  );
+                })}
+
+                <Box
+                  role="cell"
+                  sx={{
+                    display: 'table-cell',
+                    borderTop: `1px solid ${theme.palette.divider}`,
+                    p: 1,
+                    textAlign: 'right',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {student.rate == null ? '–' : `${student.rate}%`}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
         </Box>
-      </Box>
+      )}
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
         {(['whole', 'partly', 'reason', 'no_reason', 'joined_later'] as RegisterGroup[]).map((g) => (

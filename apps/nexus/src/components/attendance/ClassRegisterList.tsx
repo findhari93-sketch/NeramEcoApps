@@ -8,7 +8,7 @@
  * level, no tabs inside tabs.
  */
 import { useMemo, useState } from 'react';
-import { Box, Collapse, Stack, Typography } from '@neram/ui';
+import { Box, Collapse, Stack, Typography, useMediaQuery } from '@neram/ui';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import StudentStatFilters, { type StatFilterTile } from '@/components/tests/StudentStatFilters';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
@@ -16,7 +16,7 @@ import { useStudentListView } from '@/components/students/list/useStudentListVie
 import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
 import { stageKeyOf } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
-import { RADIUS } from '@/components/timetable/timetable-theme';
+import { RADIUS, REDUCED_MOTION_QUERY } from '@/components/timetable/timetable-theme';
 import { GROUP_LABEL, describePresence, type RegisterGroup } from '@/lib/attendance-register';
 import type { Insights, StudentInsight } from '@/components/timetable/attendance/types';
 import PresenceStrip from './PresenceStrip';
@@ -68,6 +68,13 @@ export default function ClassRegisterList({
   const [active, setActive] = useState<TileKey>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showLater, setShowLater] = useState(false);
+
+  // The joined-later note and the student detail both open with a Collapse,
+  // which always height-animates. A viewer who asked their OS for less motion
+  // gets the same open and closed states, just without the animated height:
+  // a 0ms timeout makes Collapse apply them immediately instead of tweening.
+  const prefersReducedMotion = useMediaQuery(REDUCED_MOTION_QUERY);
+  const collapseTimeout = prefersReducedMotion ? 0 : undefined;
 
   const held = insights.summary.held;
 
@@ -152,7 +159,7 @@ export default function ClassRegisterList({
               {classTally.joined_later} joined the course after this class
             </Typography>
           </Box>
-          <Collapse in={showLater}>
+          <Collapse in={showLater} timeout={collapseTimeout}>
             <Stack spacing={0.5} sx={{ mt: 0.5 }}>
               {byGroup.joined_later.map((s) => (
                 <Typography key={s.id} variant="caption" color="text.secondary">
@@ -249,7 +256,7 @@ export default function ClassRegisterList({
                   )}
 
                   {present && (
-                    <Collapse in={expanded === s.id} id={`student-${s.id}-detail`}>
+                    <Collapse in={expanded === s.id} id={`student-${s.id}-detail`} timeout={collapseTimeout}>
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                         {s.segments.length
                           ? s.segments.map((seg) => `in ${formatClock(seg.start)} to ${formatClock(seg.end)}`).join(', ')

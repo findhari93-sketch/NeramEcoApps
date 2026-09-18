@@ -1,5 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { Box } from '@neram/ui';
 import RegisterGrid from './RegisterGrid';
 import type { RegisterResponse } from '@/app/api/attendance/register/route';
 
@@ -76,5 +77,36 @@ describe('RegisterGrid', () => {
   it('explains how many paused students are hidden', () => {
     render(<RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />);
     expect(screen.getByText(/2 paused/i)).toBeTruthy();
+  });
+
+  it('colours the "partly there" letter with the readable dark warning tone, not the low-contrast main one', () => {
+    render(<RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />);
+    const grid = within(screen.getByRole('table'));
+    const partlyColor = getComputedStyle(grid.getByText('P')).color;
+
+    // Two bare reference boxes, painted with the theme's own tones, so this
+    // test proves the letter matches `warning.dark` (and not `warning.main`)
+    // without hardcoding either colour's hex value.
+    const dark = render(<Box sx={{ color: 'warning.dark' }}>ref</Box>);
+    const darkColor = getComputedStyle(dark.container.firstElementChild as HTMLElement).color;
+    const main = render(<Box sx={{ color: 'warning.main' }}>ref</Box>);
+    const mainColor = getComputedStyle(main.container.firstElementChild as HTMLElement).color;
+
+    expect(partlyColor).toBe(darkColor);
+    expect(partlyColor).not.toBe(mainColor);
+  });
+
+  it('says the classroom is empty instead of a header row over nothing', () => {
+    const emptyData: RegisterResponse = { ...DATA, students: [], cells: {} };
+    render(<RegisterGrid data={emptyData} classHref={(id) => `/teacher/attendance/${id}`} />);
+    expect(screen.getByText('No students in this classroom yet.')).toBeTruthy();
+    expect(screen.queryByRole('table')).toBe(null);
+  });
+
+  it('tells a teacher nobody matches, distinct from an empty classroom, when a search filters out every row', () => {
+    render(<RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />);
+    fireEvent.change(screen.getByLabelText(/Find a student/i), { target: { value: 'Zzzzz no such name' } });
+    expect(screen.getByText('Nobody matches this filter.')).toBeTruthy();
+    expect(screen.queryByRole('table')).toBe(null);
   });
 });

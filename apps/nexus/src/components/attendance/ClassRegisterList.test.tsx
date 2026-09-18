@@ -1,7 +1,25 @@
+import type { ReactNode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import ClassRegisterList from './ClassRegisterList';
 import type { Insights } from '@/components/timetable/attendance/types';
+
+// A probe standing in for @neram/ui's Collapse, everything else re-exported
+// untouched. It renders exactly the same "children only while open" contract
+// the real Collapse does, so every other test is unaffected, but it also
+// exposes the `timeout` prop it was given, the one Finding 3's fix gates on
+// prefers-reduced-motion, which the real Collapse never surfaces to the DOM.
+vi.mock('@neram/ui', async () => {
+  const actual = await vi.importActual<typeof import('@neram/ui')>('@neram/ui');
+  return {
+    ...actual,
+    Collapse: ({ in: open, timeout, id, children }: { in: boolean; timeout?: number; id?: string; children?: ReactNode }) => (
+      <div data-testid="collapse-probe" data-timeout={String(timeout)} id={id}>
+        {open ? children : null}
+      </div>
+    ),
+  };
+});
 
 function student(over: Record<string, unknown>) {
   return {
@@ -123,5 +141,40 @@ describe('ClassRegisterList', () => {
   it('a missed row has nothing to expand and is not a button', () => {
     render(<ClassRegisterList insights={INSIGHTS} highlightStudentId={null} />);
     expect(screen.queryByRole('button', { name: /Meera Krishnan/i })).toBe(null);
+  });
+
+  it('leaves the Collapse height animation on when the viewer has no motion preference', () => {
+    render(<ClassRegisterList insights={INSIGHTS} highlightStudentId={null} />);
+    const probes = screen.getAllByTestId('collapse-probe');
+    expect(probes.length > 0).toBe(true);
+    for (const probe of probes) expect(probe.getAttribute('data-timeout')).toBe('undefined');
+  });
+
+  it('turns the Collapse height animation off for a viewer who asked for reduced motion, without changing what is shown', () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('prefers-reduced-motion'),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => true,
+    })) as unknown as typeof window.matchMedia;
+
+    render(<ClassRegisterList insights={INSIGHTS} highlightStudentId={null} />);
+    const probes = screen.getAllByTestId('collapse-probe');
+    expect(probes.length > 0).toBe(true);
+    for (const probe of probes) expect(probe.getAttribute('data-timeout')).toBe('0');
+
+    // Reduced motion changes only the transition, never the open/closed state
+    // itself: a present row still expands and shows its detail on click.
+    const row = screen.getByRole('button', { name: /Ananya Iyer/i });
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText(/in 7:00 PM to 8:10 PM/)).toBeTruthy();
+
+    window.matchMedia = original;
   });
 });
