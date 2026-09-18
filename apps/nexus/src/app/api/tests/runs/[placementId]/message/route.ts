@@ -12,14 +12,18 @@ import { extractBearerToken } from '@/lib/ms-verify';
 import { errorResponse } from '@/lib/api-errors';
 import { canPostToGraph } from '@/lib/teams-assignment-announcements';
 import { escapeMessageHtml } from '@/lib/teams-class-announcements';
-import { sendNudge, plainToHtml, type NudgeResult } from '@/lib/nudge-delivery';
+import { sendNudge, plainToHtml, plainToHtmlWithLink, type NudgeResult } from '@/lib/nudge-delivery';
+import { shareBaseUrl } from '@/lib/class-share-links';
+import { tellWhyUrl } from '@/lib/tell-why-link';
 import { narrowToRoster, resolveRunClassroom, resolveRunRoster } from '@/lib/run-roster';
 import { formatReopenUntil, reopenUntilProblem } from '@/lib/reopen-deadline';
 import {
+  TELL_WHY_LINK_LABEL,
   fillConstants,
   isTestMessageTemplate,
   renderGroupPostHtml,
   renderTestMessage,
+  templateLinksToWhy,
   type TestMessageContext,
 } from '@/lib/test-message-templates';
 
@@ -188,6 +192,18 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     const canGraph = canPostToGraph(graphToken);
     const bodyHtml = escapeMessageHtml(plain).replace(/\n/g, '<br/>');
 
+    // "Tell me why" carries a real link to the card's "Tell your teacher why",
+    // opened straight onto this run. plainToHtml escapes a URL into inert text,
+    // so the anchor is added here rather than typed into the template. The bell
+    // copy reaches the same page through NotificationBell (metadata.template).
+    const chatHtml = templateLinksToWhy(template)
+      ? plainToHtmlWithLink(
+          plain,
+          tellWhyUrl(shareBaseUrl(request.nextUrl?.origin ?? null), params.placementId),
+          TELL_WHY_LINK_LABEL,
+        )
+      : plainToHtml(plain);
+
     const classroomId = channels.group
       ? await resolveRunClassroom(placement as any, supabase)
       : null;
@@ -196,7 +212,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       studentIds: targets,
       subject,
       plain,
-      html: plainToHtml(plain),
+      html: chatHtml,
       teamsText: subject,
       eventType: alsoReopen ? 'test_reopened' : 'test_result_message',
       metadata: {
@@ -211,7 +227,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       // applied silently.
       respectDormancy: !includeDormant,
       ...(channels.chat && canGraph
-        ? { chat: { delegatedToken: graphToken as string, html: plainToHtml(plain) } }
+        ? { chat: { delegatedToken: graphToken as string, html: chatHtml } }
         : {}),
       ...(channels.group && canGraph && classroomId
         ? {

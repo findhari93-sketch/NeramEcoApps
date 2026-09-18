@@ -12,7 +12,10 @@ import {
   stageColor,
   type StageKey,
 } from '@/lib/student-stage';
+import { languageSentence } from '@/lib/student-language';
 import { DormantIcon, stageIconFor } from './StageGlyph';
+import { useStudentStageFacts } from './StudentStageFactsProvider';
+import TamilMark from './TamilMark';
 
 /**
  * A student avatar that carries their classification.
@@ -29,6 +32,9 @@ import { DormantIcon, stageIconFor } from './StageGlyph';
  *   greyscale   dormant only. Reads as "switched off" before you have processed
  *               anything else on the row.
  *   glyph       a small icon at top-right. Colour is never the only signal.
+ *   த           bottom-left, only for a student who knows Tamil. English only
+ *               and not recorded keep a bare corner; the label says which.
+ *               Bottom-right stays free for the Teams presence dot.
  *
  * It WRAPS GraphAvatar and UserAvatar rather than modifying either, so all their
  * existing call sites keep working untouched and adopting this is a one-line
@@ -57,9 +63,18 @@ export interface StudentStageAvatarProps {
   src?: string | null;
   largeSrc?: string | null;
 
+  /**
+   * users.knows_tamil. An explicit value wins, INCLUDING null, so a screen that
+   * has just reloaded its own payload is never overruled by the session lookup.
+   * Leave it undefined to read the lookup by `userId` instead.
+   */
+  knowsTamil?: boolean | null;
+  /** users.id, used only to look up the language when `knowsTamil` is not passed. */
+  userId?: string | null;
+
   clickable?: boolean;
   tapToView?: boolean;
-  /** Force the glyph off, e.g. where the adjacent chip already says it. */
+  /** Force the corner marks off (glyph and த), e.g. where the adjacent chip already says it. */
   showGlyph?: boolean;
   useGraph?: boolean;
   /**
@@ -82,6 +97,8 @@ export default function StudentStageAvatar({
   presenceStatus,
   src,
   largeSrc,
+  knowsTamil,
+  userId,
   clickable,
   tapToView,
   showGlyph = true,
@@ -89,13 +106,19 @@ export default function StudentStageAvatar({
   sx,
 }: StudentStageAvatarProps) {
   const theme = useTheme();
+  // One context read, no effect. Without a provider (student pages) it is null.
+  const { factsFor } = useStudentStageFacts();
+  const tamil = knowsTamil !== undefined ? knowsTamil : (factsFor(userId)?.knowsTamil ?? null);
   const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
 
   const ringColor = dormant ? dormantColor(mode) : stageColor(stage, mode);
   const ringStyle = dormant ? 'dashed' : STAGE_RING_STYLE[stage];
 
   const label = dormant ? DORMANT_LABEL : STAGE_LABEL[stage];
-  const tooltip = dormant ? DORMANT_EXPLAINER : STAGE_TOOLTIP[stage];
+  // The language sentence goes AFTER "label: tooltip", never before it: the ring's
+  // spoken name must keep starting with the stage, which is how tests find rings.
+  const sentence = languageSentence(tamil);
+  const tooltip = `${dormant ? DORMANT_EXPLAINER : STAGE_TOOLTIP[stage]}${sentence ? ` ${sentence}` : ''}`;
 
   const withGlyph = showGlyph && size >= MIN_GLYPH_SIZE;
   const Glyph = dormant ? DormantIcon : stageIconFor(stage);
@@ -133,6 +156,9 @@ export default function StudentStageAvatar({
   );
 
   const glyphSize = Math.max(12, Math.round(size * 0.36));
+  // Two px larger floor than the glyph: a letter needs more room than an icon to
+  // stay legible on the 30px table avatar.
+  const tamilSize = Math.max(14, Math.round(size * 0.36));
 
   return (
     <Tooltip title={`${label}. ${tooltip}`} arrow enterTouchDelay={0} leaveTouchDelay={4000}>
@@ -176,6 +202,19 @@ export default function StudentStageAvatar({
               }}
             />
           </Box>
+        )}
+        {withGlyph && tamil === true && (
+          <TamilMark
+            size={tamilSize}
+            testId="tamil-badge"
+            sx={{
+              position: 'absolute',
+              bottom: -2,
+              left: -2,
+              // Separates the mark from the photo and ring it overlaps, in both themes.
+              border: `1.5px solid ${theme.palette.background.paper}`,
+            }}
+          />
         )}
       </Box>
     </Tooltip>

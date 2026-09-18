@@ -70,18 +70,68 @@ describe('RecordingSteps', () => {
   });
 
   it('asks for the transcript, says where Nexus already looked, and offers publishing without checkpoints', () => {
-    const props = renderSteps(track());
+    const english = track({ language: 'en', language_label: 'English' });
+    const props = renderSteps(english, { label: 'English', plan: planRecording(english, 'English') });
     expect(document.body.textContent).toContain('Teams class');
-    fireEvent.click(screen.getByRole('button', { name: 'Upload transcript (.vtt)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload transcript' }));
     expect(props.onAction).toHaveBeenCalledWith('upload_transcript');
     fireEvent.click(screen.getByRole('button', { name: 'Publish without checkpoints' }));
     expect(props.onAction).toHaveBeenCalledWith('publish_open');
   });
 
-  it('can look for the transcript again', () => {
-    const props = renderSteps(track());
+  it('can look for the transcript again on an English recording', () => {
+    const english = track({ language: 'en', language_label: 'English' });
+    const props = renderSteps(english, { label: 'English', plan: planRecording(english, 'English') });
     fireEvent.click(screen.getByRole('button', { name: 'Look again' }));
     expect(props.onLookAgain).toHaveBeenCalled();
+  });
+
+  /**
+   * Microsoft Stream cannot transcribe Tamil, so on a Tamil recording there is
+   * nothing for "Look again" to find, and saying Nexus looked in the Teams class
+   * suggests the fix is over there. The way forward is AI Studio.
+   */
+  it('tells a Tamil recording that Stream cannot transcribe it, with no Look again', () => {
+    const props = renderSteps(track());
+    expect(document.body.textContent).toContain('Microsoft Stream cannot write a transcript for a Tamil class');
+    expect(document.body.textContent).not.toContain('Teams class');
+    expect(screen.queryByRole('button', { name: 'Look again' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Upload transcript' }));
+    expect(props.onAction).toHaveBeenCalledWith('upload_transcript');
+  });
+
+  it('shows the Google AI Studio steps, with a prompt to copy for each part of a long class', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    // A two hour class: done in AI Studio in two parts.
+    renderSteps(track({ video_duration_seconds: 7463, recording: { ...resolved, duration_seconds: 7463 } }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Where do I get one?' }));
+    expect(document.body.textContent).toContain('aistudio.google.com');
+    expect(document.body.textContent).toContain('Do not use the transcript from Stream');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy prompt, part 2' }));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain('This is part 2 of 2.');
+    expect(copied).toContain('Tamil mixed with English');
+    expect(await screen.findByRole('button', { name: 'Copied, part 2' })).toBeTruthy();
+  });
+
+  it('gives one Copy prompt button for a class short enough to do at once', () => {
+    renderSteps(track({ video_duration_seconds: 1800, recording: { ...resolved, duration_seconds: 1800 } }));
+    fireEvent.click(screen.getByRole('button', { name: 'Where do I get one?' }));
+    expect(screen.getByRole('button', { name: 'Copy prompt' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Copy prompt, part 1' })).toBeNull();
+  });
+
+  it('shows the prompt to copy by hand when the browser will not copy it', async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+    renderSteps(track({ video_duration_seconds: 1800, recording: { ...resolved, duration_seconds: 1800 } }));
+    fireEvent.click(screen.getByRole('button', { name: 'Where do I get one?' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy prompt' }));
+    const box = (await screen.findByRole('textbox', { name: 'Prompt to copy' })) as HTMLTextAreaElement;
+    expect(box.value).toContain('Transcribe the whole video.');
   });
 
   it('says where the transcript came from', () => {

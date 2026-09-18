@@ -14,6 +14,7 @@ import {
   STAGE_ORDER,
   STAGE_RING_STYLE,
   STAGE_TOOLTIP,
+  describeClassificationChange,
   isExamThisYear,
   matchesSegment,
   segmentCounts,
@@ -188,5 +189,46 @@ describe('counts over the live production shape', () => {
   it('returns a zeroed record for an empty classroom', () => {
     const counts = segmentCounts([]);
     for (const segment of SEGMENT_ORDER) expect(counts[segment]).toBe(0);
+  });
+});
+
+describe('describeClassificationChange', () => {
+  it('names a single class edit', () => {
+    expect(describeClassificationChange({ studyStage: '11th' })).toBe('Class set');
+    expect(describeClassificationChange({ studyStage: null })).toBe('Cleared class');
+  });
+
+  it('names a single exam year edit', () => {
+    expect(describeClassificationChange({ academicYear: '2027-28' })).toBe('Exam year set');
+    expect(describeClassificationChange({ academicYear: null })).toBe('Cleared exam year');
+  });
+
+  it('names a single language edit by what it now says', () => {
+    expect(describeClassificationChange({ knowsTamil: true })).toBe('Marked Knows Tamil');
+    expect(describeClassificationChange({ knowsTamil: false })).toBe('Marked English only');
+    expect(describeClassificationChange({ knowsTamil: null })).toBe('Cleared language');
+  });
+
+  it('lists every field when several changed at once', () => {
+    expect(describeClassificationChange({ studyStage: '12th', academicYear: '2026-27' })).toBe(
+      'Class and exam year set',
+    );
+    expect(describeClassificationChange({ studyStage: '12th', knowsTamil: true })).toBe(
+      'Class and language set',
+    );
+    expect(describeClassificationChange({ academicYear: null, knowsTamil: false })).toBe(
+      'Exam year and language set',
+    );
+    expect(
+      describeClassificationChange({ studyStage: '10th', academicYear: '2028-29', knowsTamil: null }),
+    ).toBe('Class, exam year and language set');
+  });
+
+  it('treats a key that is present but undefined as untouched', () => {
+    expect(describeClassificationChange({ studyStage: '11th', knowsTamil: undefined })).toBe('Class set');
+  });
+
+  it('falls back to a neutral word when nothing was touched', () => {
+    expect(describeClassificationChange({})).toBe('Updated');
   });
 });

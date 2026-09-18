@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   Box,
   Button,
   Chip,
   Divider,
   Drawer,
+  FormControlLabel,
   MenuItem,
+  Radio,
+  RadioGroup,
   TextField,
   Typography,
   alpha,
@@ -29,7 +32,16 @@ import {
   stageColor,
   type StageKey,
 } from '@/lib/student-stage';
+import {
+  LANGUAGE_LABEL,
+  LANGUAGE_OPTION_LABEL,
+  LANGUAGE_SCOPE_NOTE,
+  LANGUAGE_SECTION_HELP,
+  LANGUAGE_SECTION_TITLE,
+  languageKeyOf,
+} from '@/lib/student-language';
 import { DormantIcon, stageIconFor } from './StageGlyph';
+import TamilMark from './TamilMark';
 
 /**
  * The one editor for both classification axes, used by the bulk bar on the
@@ -45,6 +57,24 @@ export type ClassifyMode = 'stage' | 'dormant' | 'reactivate';
 /** Sentinel for "clear the exam year", distinct from "leave it alone" (''). */
 const CLEAR_YEAR = '__clear__';
 
+/** The Language radio values. '' leaves the language alone, like the exam year. */
+type LanguageChoice = '' | 'tamil' | 'english' | 'clear';
+
+const LANGUAGE_CHOICES: ReadonlyArray<{ value: LanguageChoice; label: string }> = [
+  { value: '', label: LANGUAGE_OPTION_LABEL.unchanged },
+  { value: 'tamil', label: LANGUAGE_OPTION_LABEL.tamil },
+  { value: 'english', label: LANGUAGE_OPTION_LABEL.english },
+  { value: 'clear', label: LANGUAGE_OPTION_LABEL.clear },
+];
+
+export interface ClassifyPayload {
+  studyStage?: StageKey | null;
+  academicYear?: string | null;
+  knowsTamil?: boolean | null;
+  participationStatus?: 'active' | 'dormant';
+  reason?: string;
+}
+
 export interface ClassifyDrawerProps {
   open: boolean;
   mode: ClassifyMode;
@@ -55,13 +85,15 @@ export interface ClassifyDrawerProps {
   examYears?: readonly string[];
   /** The current cohort, used to name the expected pairing. */
   currentBatch?: string | null;
+  /** One student's current language, shown as "Now: ..." above the choices. */
+  currentKnowsTamil?: boolean | null;
+  /**
+   * Open already scrolled to the Language group, for the profile's language chip.
+   * The group sits below the exam year, off screen on a phone.
+   */
+  focus?: 'language';
   onClose: () => void;
-  onApply: (payload: {
-    studyStage?: StageKey | null;
-    academicYear?: string | null;
-    participationStatus?: 'active' | 'dormant';
-    reason?: string;
-  }) => void;
+  onApply: (payload: ClassifyPayload) => void;
 }
 
 export default function ClassifyDrawer({
@@ -71,6 +103,8 @@ export default function ClassifyDrawer({
   busy = false,
   examYears = [],
   currentBatch = null,
+  currentKnowsTamil,
+  focus,
   onClose,
   onApply,
 }: ClassifyDrawerProps) {
@@ -78,7 +112,10 @@ export default function ClassifyDrawer({
   const paletteMode = theme.palette.mode === 'dark' ? 'dark' : 'light';
   const [stage, setStage] = useState<StageKey | null>(null);
   const [year, setYear] = useState('');
+  const [lang, setLang] = useState<LanguageChoice>('');
   const [reason, setReason] = useState('');
+  const languageHeadingId = useId();
+  const languageRef = useRef<HTMLDivElement>(null);
 
   // Reset every time the sheet opens, so a previous selection can never be
   // applied by accident to a different set of students.
@@ -86,6 +123,7 @@ export default function ClassifyDrawer({
     if (open) {
       setStage(null);
       setYear('');
+      setLang('');
       setReason('');
     }
   }, [open, mode]);
@@ -93,11 +131,11 @@ export default function ClassifyDrawer({
   const count = names.length;
   const who = count === 1 ? names[0] : `${count} students`;
 
-  // The two fields are independent: either one alone is a valid edit. Requiring
-  // both would force a teacher who only knows the class to guess the year.
+  // The fields are independent: any one alone is a valid edit. Requiring them all
+  // would force a teacher who only knows the class to guess the year.
   const canApply =
     mode === 'stage'
-      ? stage !== null || year !== ''
+      ? stage !== null || year !== '' || lang !== ''
       : mode === 'dormant'
         ? reason.trim().length > 0
         : true;
@@ -111,14 +149,12 @@ export default function ClassifyDrawer({
 
   function handleApply() {
     if (mode === 'stage') {
-      const payload: {
-        studyStage?: StageKey | null;
-        academicYear?: string | null;
-      } = {};
+      const payload: ClassifyPayload = {};
       // Only send what was actually touched. An untouched field must stay
       // untouched: the API treats a present key as an instruction to write.
       if (stage !== null) payload.studyStage = stage === 'unset' ? null : stage;
       if (year !== '') payload.academicYear = year === CLEAR_YEAR ? null : year;
+      if (lang !== '') payload.knowsTamil = lang === 'tamil' ? true : lang === 'english' ? false : null;
       onApply(payload);
     } else if (mode === 'dormant') {
       onApply({ participationStatus: 'dormant', reason: reason.trim() });
@@ -140,6 +176,13 @@ export default function ClassifyDrawer({
       open={open}
       onClose={() => !busy && onClose()}
       PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '88dvh' } }}
+      // Scroll once the slide has finished, so the measurement is of the final
+      // layout. No timer, and a no-op in jsdom where scrollIntoView is absent.
+      SlideProps={{
+        onEntered: () => {
+          if (focus === 'language') languageRef.current?.scrollIntoView?.({ block: 'center' });
+        },
+      }}
     >
       <Box sx={{ p: 2, pb: 1, display: 'flex', flexDirection: 'column', gap: 1.5, overflowY: 'auto' }}>
         <Box>
@@ -273,6 +316,71 @@ export default function ClassifyDrawer({
                 {EXAM_YEAR_SCOPE_WARNING}
               </Typography>
             )}
+
+            {/* Language: a third independent field, below the exam year so the
+                class and year controls keep their place on a 375px screen. */}
+            <Divider sx={{ mt: 1 }} />
+
+            <Box ref={languageRef} sx={{ display: 'flex', flexDirection: 'column', gap: 1, scrollMarginTop: 16 }}>
+              <Box>
+                <Typography id={languageHeadingId} sx={{ fontWeight: 700, fontSize: '0.92rem' }}>
+                  {LANGUAGE_SECTION_TITLE}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {LANGUAGE_SECTION_HELP}
+                </Typography>
+                {count === 1 && currentKnowsTamil !== undefined && (
+                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>
+                    Now: {LANGUAGE_LABEL[languageKeyOf(currentKnowsTamil)]}
+                  </Typography>
+                )}
+              </Box>
+
+              <RadioGroup
+                aria-labelledby={languageHeadingId}
+                value={lang}
+                onChange={(e) => setLang(e.target.value as LanguageChoice)}
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 1,
+                }}
+              >
+                {LANGUAGE_CHOICES.map((choice) => {
+                  const selected = lang === choice.value;
+                  return (
+                    <FormControlLabel
+                      key={choice.value || 'unchanged'}
+                      value={choice.value}
+                      control={<Radio size="small" />}
+                      label={
+                        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                          {choice.value === 'tamil' && <TamilMark size={18} />}
+                          {choice.label}
+                        </Box>
+                      }
+                      sx={{
+                        m: 0,
+                        pr: 1,
+                        minHeight: 48,
+                        borderRadius: 2,
+                        border: `2px ${choice.value === 'clear' ? 'dashed' : 'solid'} ${
+                          selected ? theme.palette.primary.main : theme.palette.divider
+                        }`,
+                        bgcolor: selected ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
+                        '& .MuiFormControlLabel-label': { fontSize: '0.88rem', fontWeight: 700, lineHeight: 1.25 },
+                      }}
+                    />
+                  );
+                })}
+              </RadioGroup>
+
+              {lang !== '' && (
+                <Typography variant="caption" color="text.secondary">
+                  {LANGUAGE_SCOPE_NOTE}
+                </Typography>
+              )}
+            </Box>
           </Box>
         )}
 

@@ -26,6 +26,7 @@ export * from './paper-marking';
 export * from './exam-score';
 export * from './exam-timer';
 export * from './exams';
+export * from './exam-close-sweep';
 export * from './exam-eligibility';
 export * from './exam-results';
 export * from './exam-drawings';

@@ -504,3 +504,113 @@ describe('resolveStudentTestCard', () => {
     });
   });
 });
+
+/**
+ * "Tell your teacher why" (2026-09-17). Twenty students did not sit the 18 Aug
+ * exam and the teacher could not hear from any of them. The card offers the
+ * question beside its one action, only on a test the student owed and has not
+ * sat, and says what they answered once they have.
+ */
+describe('Tell your teacher why', () => {
+  const missedExam: StudentTestFacts = {
+    is_exam: true,
+    placement_context: 'exam',
+    required: true,
+    available_from: past(30 * DAY),
+    available_until: past(29 * DAY),
+    eligibility_bucket: 'mandatory_attended',
+    eligibility_auto_bucket: 'mandatory_attended',
+  };
+
+  it('is offered on an exam the student was required to sit and missed', () => {
+    const c = resolve(missedExam);
+    expect(c.state).toBe('missed');
+    expect(c.why).toEqual({ given: null });
+    // The reopen request stays its own action.
+    expect(c.action.kind).toBe('ask_teacher');
+  });
+
+  it('says what they answered once they have', () => {
+    const c = resolve({
+      ...missedExam,
+      skip_reason: { reason_code: 'did_not_know', reason_note: null, updated_at: past(HOUR) },
+    });
+    expect(c.why).toEqual({ given: { code: 'did_not_know', short_label: "Didn't know" } });
+  });
+
+  it('is offered while they wait on an ask to reopen', () => {
+    const c = resolve({ ...missedExam, access_state: 'pending' });
+    expect(c.state).toBe('awaiting_teacher');
+    expect(c.why).not.toBeNull();
+  });
+
+  it('is offered on a reopened exam they have still not sat', () => {
+    const c = resolve({
+      ...missedExam,
+      is_reopen: true,
+      access_state: 'granted',
+      available_from: past(DAY),
+      available_until: future(2 * DAY),
+    });
+    expect(c.state).toBe('reopened');
+    expect(c.why).not.toBeNull();
+  });
+
+  it('is offered on a closed class test that was required', () => {
+    const c = resolve({ placement_context: 'class_test', required: true, available_until: past(DAY) });
+    expect(c.state).toBe('closed');
+    expect(c.why).not.toBeNull();
+  });
+
+  it('is not offered on an optional class test', () => {
+    const c = resolve({ placement_context: 'class_test', required: false, available_until: past(DAY) });
+    expect(c.why).toBeNull();
+  });
+
+  it('is not offered on a practice paper, which nobody owed', () => {
+    const c = resolve({ placement_context: 'student_practice', available_until: past(DAY) });
+    expect(c.why).toBeNull();
+  });
+
+  it('is not offered to a student excused because they joined after the class', () => {
+    const c = resolve({
+      ...missedExam,
+      eligibility_bucket: 'excused_new_joiner',
+      eligibility_auto_bucket: 'excused_new_joiner',
+    });
+    expect(c.why).toBeNull();
+  });
+
+  it('is not offered to a student the teacher excused, or who is still catching up', () => {
+    expect(resolve({ ...missedExam, eligibility_bucket: 'teacher_override_excused' }).why).toBeNull();
+    expect(resolve({ ...missedExam, eligibility_bucket: 'excused_pending_catchup' }).why).toBeNull();
+  });
+
+  it('is not offered while the test is still open to them', () => {
+    const c = resolve({ ...missedExam, available_from: past(DAY), available_until: future(DAY) });
+    expect(c.state).toBe('open');
+    expect(c.why).toBeNull();
+  });
+
+  it('is never offered to a student who sat it, whatever else is true', () => {
+    for (const over of [
+      { attempts: 1, last_submitted_at: past(DAY) },
+      { attempts: 1, last_submitted_at: past(DAY), is_reopen: true, access_state: 'granted' as const },
+      { attempts: 1, last_submitted_at: past(DAY), exam_result: { rank: null, total_ranked: 9, percentage: null, is_provisional: false, absent: true } },
+    ]) {
+      expect(resolve({ ...missedExam, ...over }).why).toBeNull();
+    }
+  });
+
+  it('marks a reason as given without re-deriving anything else on the card', async () => {
+    const { markWhyGiven } = await import('./student-test-card-state');
+    const before = resolve(missedExam);
+    const after = markWhyGiven(before, 'unwell');
+    expect(after.why).toEqual({ given: { code: 'unwell', short_label: 'Unwell' } });
+    expect(after.reason).toBe(before.reason);
+    expect(after.action).toEqual(before.action);
+    // A card that never offered the question does not start offering it.
+    const practice = resolve({ placement_context: 'student_practice' });
+    expect(markWhyGiven(practice, 'unwell').why).toBeNull();
+  });
+});

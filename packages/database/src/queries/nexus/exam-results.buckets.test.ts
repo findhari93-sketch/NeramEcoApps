@@ -95,3 +95,45 @@ describe('the four buckets', () => {
     expect(out.find((r) => r.student_id === 'e')!.rank).toBeNull();
   });
 });
+
+/**
+ * 2026-09-17. Students an exam was never set for (joined after the covered
+ * classes) are set aside by the publish route before bucketing can call them
+ * absent. A publish made before one of them was excused may already have written
+ * a paperless absent row, and this is what clears it. It must never be able to
+ * remove a result somebody earned.
+ */
+describe('removePaperlessExamResults', () => {
+  function recorder() {
+    const calls: Array<[string, ...unknown[]]> = [];
+    const chain: Record<string, unknown> = {};
+    for (const m of ['from', 'delete', 'eq', 'in', 'is']) {
+      chain[m] = (...args: unknown[]) => {
+        calls.push([m, ...args]);
+        return chain;
+      };
+    }
+    (chain as any).then = (ok: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(ok);
+    return { client: chain as any, calls };
+  }
+
+  it('deletes only rows that hold no paper, for the named students on this exam', async () => {
+    const { removePaperlessExamResults } = await import('./exam-results');
+    const { client, calls } = recorder();
+    await removePaperlessExamResults('exam-1', ['joined-late'], client);
+
+    expect(calls).toContainEqual(['from', 'nexus_exam_results']);
+    expect(calls).toContainEqual(['delete']);
+    expect(calls).toContainEqual(['eq', 'exam_id', 'exam-1']);
+    expect(calls).toContainEqual(['in', 'student_id', ['joined-late']]);
+    // The guard that makes it safe whatever the caller passes.
+    expect(calls).toContainEqual(['is', 'attempt_id', null]);
+  });
+
+  it('does nothing at all when nobody is excused', async () => {
+    const { removePaperlessExamResults } = await import('./exam-results');
+    const { client, calls } = recorder();
+    await removePaperlessExamResults('exam-1', [], client);
+    expect(calls).toHaveLength(0);
+  });
+});

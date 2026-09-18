@@ -22,7 +22,15 @@
  *
  * Pure TypeScript so the API route, the student sheet and the teacher roster all
  * agree. To add a code, widen BOTH this array and the CHECK constraints in
- * supabase/migrations/20260824090100_nexus_test_reasons.sql.
+ * supabase/migrations/20260824090100_nexus_test_reasons.sql (the latest widening
+ * is 20260923090100_nexus_test_reason_did_not_know.sql).
+ *
+ * TWO CONTEXTS, ONE VOCABULARY (2026-09-17). The original labels describe a paper
+ * the student STARTED and walked away from. A test they never sat at all needs
+ * different words for the same codes ("I did not have time", not "I ran out of
+ * time"), plus one answer that only exists there: did_not_know. On the 18 Aug
+ * exam ten students were in the class and never opened the paper, and nothing
+ * in the product could say whether they had even seen that it was open.
  */
 
 export const TEST_REASON_CODES = [
@@ -32,9 +40,17 @@ export const TEST_REASON_CODES = [
   'no_time',
   'unwell',
   'other',
+  'did_not_know',
 ] as const;
 
 export type TestReasonCode = (typeof TEST_REASON_CODES)[number];
+
+/**
+ * Which story the reason is part of.
+ *   abandoned  a sitting that started and stopped (nexus_test_attempts.abandon_reason_*)
+ *   missed     a test they owed and never sat (nexus_test_skip_reasons)
+ */
+export type TestReasonContext = 'abandoned' | 'missed';
 
 export interface TestReason {
   code: TestReasonCode;
@@ -53,6 +69,14 @@ export interface TestReason {
    * and the paper may be failing silently for everyone else too.
    */
   blamesTest: boolean;
+  /**
+   * The row label for a test the student never sat. Null when the code is not
+   * offered there: "I did not understand the questions" means nothing about a
+   * paper nobody opened.
+   */
+  missedLabel: string | null;
+  /** Offered for a sitting that started and stopped. */
+  forAbandoned: boolean;
 }
 
 export const TEST_REASONS: TestReason[] = [
@@ -64,21 +88,80 @@ export const TEST_REASONS: TestReason[] = [
     // is unactionable; "question 12 never loaded" is a bug report.
     requiresNote: true,
     blamesTest: true,
+    missedLabel: 'The test would not open or submit',
+    forAbandoned: true,
   },
-  { code: 'too_hard', label: 'It was too hard for me', shortLabel: 'Too hard', requiresNote: false, blamesTest: false },
+  {
+    code: 'too_hard',
+    label: 'It was too hard for me',
+    shortLabel: 'Too hard',
+    requiresNote: false,
+    blamesTest: false,
+    missedLabel: 'I was not ready for this topic',
+    forAbandoned: true,
+  },
   {
     code: 'not_understood',
     label: 'I did not understand the questions',
     shortLabel: 'Stuck',
     requiresNote: false,
     blamesTest: false,
+    missedLabel: null,
+    forAbandoned: true,
   },
-  { code: 'no_time', label: 'I ran out of time', shortLabel: 'No time', requiresNote: false, blamesTest: false },
-  { code: 'unwell', label: 'I was unwell', shortLabel: 'Unwell', requiresNote: false, blamesTest: false },
-  { code: 'other', label: 'Something else', shortLabel: 'Other', requiresNote: true, blamesTest: false },
+  {
+    code: 'no_time',
+    label: 'I ran out of time',
+    shortLabel: 'No time',
+    requiresNote: false,
+    blamesTest: false,
+    missedLabel: 'I did not have time',
+    forAbandoned: true,
+  },
+  {
+    code: 'unwell',
+    label: 'I was unwell',
+    shortLabel: 'Unwell',
+    requiresNote: false,
+    blamesTest: false,
+    missedLabel: 'I was unwell',
+    forAbandoned: true,
+  },
+  {
+    code: 'other',
+    label: 'Something else',
+    shortLabel: 'Other',
+    requiresNote: true,
+    blamesTest: false,
+    missedLabel: 'Something else',
+    forAbandoned: true,
+  },
+  {
+    // Only for a test they never sat: a student who started a paper knew it was
+    // open. No note, because the answer is complete as it stands, and asking for
+    // one is how a one-tap reply becomes a reply nobody sends.
+    code: 'did_not_know',
+    label: 'I did not know the test was open',
+    shortLabel: "Didn't know",
+    requiresNote: false,
+    blamesTest: false,
+    missedLabel: 'I did not know the test was open',
+    forAbandoned: false,
+  },
 ];
 
 const BY_CODE = new Map<string, TestReason>(TEST_REASONS.map((r) => [r.code, r]));
+
+/** What the "you left a test unfinished" sheet offers, in its original order. */
+export const ABANDON_TEST_REASONS: TestReason[] = TEST_REASONS.filter((r) => r.forAbandoned);
+
+/**
+ * What "Tell your teacher why" offers for a test the student never sat. The
+ * likeliest answer first, so the common reply is the first thing a thumb reaches.
+ */
+const MISSED_ORDER: TestReasonCode[] = ['did_not_know', 'no_time', 'technical_problem', 'too_hard', 'unwell', 'other'];
+
+export const MISSED_TEST_REASONS: TestReason[] = MISSED_ORDER.map((code) => BY_CODE.get(code)!);
 
 export function isTestReasonCode(value: unknown): value is TestReasonCode {
   return typeof value === 'string' && BY_CODE.has(value);
@@ -86,6 +169,27 @@ export function isTestReasonCode(value: unknown): value is TestReasonCode {
 
 export function testReasonRequiresNote(code: unknown): boolean {
   return isTestReasonCode(code) ? BY_CODE.get(code)!.requiresNote : false;
+}
+
+/** Whether this code is one a student may give in this context. */
+export function testReasonFitsContext(code: unknown, context: TestReasonContext): boolean {
+  if (!isTestReasonCode(code)) return false;
+  const r = BY_CODE.get(code)!;
+  return context === 'abandoned' ? r.forAbandoned : r.missedLabel !== null;
+}
+
+/**
+ * The first-person sentence for a code, in the words of its context. A code with
+ * no missed wording (not_understood) falls back to its original label, so a row
+ * written before the contexts split still reads.
+ */
+export function testReasonLabel(
+  code: string | null | undefined,
+  context: TestReasonContext = 'abandoned',
+): string {
+  if (!isTestReasonCode(code)) return 'No reason given';
+  const r = BY_CODE.get(code)!;
+  return context === 'missed' ? (r.missedLabel ?? r.label) : r.label;
 }
 
 /** True when the reason points at the paper rather than at the student. */
@@ -97,17 +201,17 @@ export function testReasonBlamesTest(code: unknown): boolean {
  * How a reason reads back to a teacher or to the student themselves.
  *
  * Prefers the note when there is one, because "question 12 never loaded" says
- * more than "Broken". Falls back to the code's label, then to a neutral string
- * so a row written before a code existed still renders.
+ * more than "Broken". Falls back to the code's label in the words of its context,
+ * then to a neutral string so a row written before a code existed still renders.
  */
 export function describeTestReason(
   code: string | null | undefined,
   note: string | null | undefined,
+  context: TestReasonContext = 'abandoned',
 ): string {
   const trimmed = note?.trim();
   if (trimmed) return trimmed;
-  if (isTestReasonCode(code)) return BY_CODE.get(code)!.label;
-  return 'No reason given';
+  return testReasonLabel(code, context);
 }
 
 /** Just the category, for grouping and tags. Never the free text. */
@@ -129,6 +233,7 @@ export function tallyTestReasons(
     no_time: 0,
     unwell: 0,
     other: 0,
+    did_not_know: 0,
   } as Record<TestReasonCode, number>;
   for (const row of rows || []) {
     const code = isTestReasonCode(row.reason_code) ? row.reason_code : 'other';

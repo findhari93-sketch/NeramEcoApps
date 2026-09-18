@@ -119,6 +119,7 @@ function AttendedRow({
       <StudentStageAvatar
         stage={stageKeyOf(student.study_stage)}
         dormant={student.dormant}
+        userId={student.id}
         name={student.name}
         src={student.avatar_url}
         size={32}

@@ -139,3 +139,16 @@ describe('TestMessageDialog in message mode', () => {
     expect(body.closes_at).toBeUndefined();
   });
 });
+
+/** 2026-09-17: "Tell me why" carries a link to the student's card, and the sheet shows it. */
+describe('TestMessageDialog, the "Tell me why" link', () => {
+  it('shows the teacher that students get a "Tell your teacher why" link', () => {
+    mount({ mode: 'message', initialTemplate: 'why' });
+    expect(screen.getByTestId('why-link-note').textContent).toContain('Tell your teacher why');
+  });
+
+  it('shows no link on a message that does not carry one', () => {
+    mount({ mode: 'message', initialTemplate: 'missed' });
+    expect(screen.queryByTestId('why-link-note')).toBeNull();
+  });
+});

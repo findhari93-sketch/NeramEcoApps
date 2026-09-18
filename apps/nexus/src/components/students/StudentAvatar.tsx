@@ -106,6 +106,7 @@ export default function StudentAvatar({
         presenceStatus={presenceStatus}
         src={resolvedSrc}
         largeSrc={largeSrc}
+        knowsTamil={facts.knowsTamil ?? null}
         clickable={clickable}
         tapToView={tapToView}
         showGlyph={showGlyph}

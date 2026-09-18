@@ -159,3 +159,109 @@ describe('dominantTestReason', () => {
     expect(dominantTestReason(undefined as any)).toBeNull();
   });
 });
+
+/**
+ * 2026-09-17. Twenty students did not sit the 18 Aug exam and the teacher had
+ * no way to hear why. The abandon vocabulary is about a paper somebody STARTED;
+ * a test nobody opened needs its own words, and one new answer the founder's
+ * data made obvious: ten were in the class and simply never opened it.
+ */
+describe('did_not_know and the missed-test wording', () => {
+  it('adds did_not_know as a real code that needs no note and does not blame the paper', async () => {
+    const mod = await import('./test-reasons');
+    expect(mod.TEST_REASON_CODES).toContain('did_not_know');
+    expect(mod.isTestReasonCode('did_not_know')).toBe(true);
+    expect(mod.testReasonRequiresNote('did_not_know')).toBe(false);
+    expect(mod.testReasonBlamesTest('did_not_know')).toBe(false);
+    expect(mod.testReasonShortLabel('did_not_know')).toBe("Didn't know");
+  });
+
+  it('offers a missed test its own list, leading with did_not_know', async () => {
+    const { MISSED_TEST_REASONS } = await import('./test-reasons');
+    const codes = MISSED_TEST_REASONS.map((r) => r.code);
+    expect(codes[0]).toBe('did_not_know');
+    expect(codes).toEqual(['did_not_know', 'no_time', 'technical_problem', 'too_hard', 'unwell', 'other']);
+    // "I did not understand the questions" means nothing about a paper nobody opened.
+    expect(codes).not.toContain('not_understood');
+  });
+
+  it('words each missed reason for a test the student never sat', async () => {
+    const { testReasonLabel } = await import('./test-reasons');
+    expect(testReasonLabel('did_not_know', 'missed')).toBe('I did not know the test was open');
+    expect(testReasonLabel('no_time', 'missed')).toBe('I did not have time');
+    expect(testReasonLabel('technical_problem', 'missed')).toBe('The test would not open or submit');
+    expect(testReasonLabel('too_hard', 'missed')).toBe('I was not ready for this topic');
+    expect(testReasonLabel('unwell', 'missed')).toBe('I was unwell');
+    expect(testReasonLabel('other', 'missed')).toBe('Something else');
+  });
+
+  it('keeps every abandon label exactly as it was', async () => {
+    const { testReasonLabel, ABANDON_TEST_REASONS } = await import('./test-reasons');
+    expect(testReasonLabel('technical_problem', 'abandoned')).toBe('Something went wrong and I could not continue');
+    expect(testReasonLabel('no_time', 'abandoned')).toBe('I ran out of time');
+    expect(testReasonLabel('too_hard', 'abandoned')).toBe('It was too hard for me');
+    // A sitting somebody started cannot be one they did not know was open.
+    expect(ABANDON_TEST_REASONS.map((r) => r.code)).toEqual([
+      'technical_problem',
+      'too_hard',
+      'not_understood',
+      'no_time',
+      'unwell',
+      'other',
+    ]);
+  });
+
+  it('still demands a note for a broken test and for something else, in either context', async () => {
+    const { MISSED_TEST_REASONS } = await import('./test-reasons');
+    const needs = MISSED_TEST_REASONS.filter((r) => r.requiresNote).map((r) => r.code);
+    expect(needs.sort()).toEqual(['other', 'technical_problem']);
+  });
+
+  it('describes a missed reason in missed wording, still preferring the note', async () => {
+    const { describeTestReason } = await import('./test-reasons');
+    expect(describeTestReason('no_time', null, 'missed')).toBe('I did not have time');
+    expect(describeTestReason('no_time', 'exam fell on my cousin\'s wedding', 'missed')).toBe(
+      "exam fell on my cousin's wedding",
+    );
+    // The default context is unchanged, so every existing caller reads the same.
+    expect(describeTestReason('no_time', null)).toBe('I ran out of time');
+  });
+
+  it('refuses did_not_know for an abandoned sitting, and accepts it for a missed test', async () => {
+    const { testReasonFitsContext } = await import('./test-reasons');
+    expect(testReasonFitsContext('did_not_know', 'abandoned')).toBe(false);
+    expect(testReasonFitsContext('did_not_know', 'missed')).toBe(true);
+    expect(testReasonFitsContext('technical_problem', 'abandoned')).toBe(true);
+    expect(testReasonFitsContext('nonsense', 'missed')).toBe(false);
+  });
+
+  it('tallies did_not_know so the totals still add up', async () => {
+    const { tallyTestReasons } = await import('./test-reasons');
+    const rows = [{ reason_code: 'did_not_know' }, { reason_code: 'did_not_know' }, { reason_code: 'unwell' }];
+    const tally = tallyTestReasons(rows);
+    expect(tally.did_not_know).toBe(2);
+    expect(Object.values(tally).reduce((a, b) => a + b, 0)).toBe(rows.length);
+  });
+
+  it('uses no em dash or double dash in any label', async () => {
+    const { TEST_REASONS, testReasonLabel } = await import('./test-reasons');
+    for (const r of TEST_REASONS) {
+      const words = `${r.label} ${r.shortLabel} ${testReasonLabel(r.code, 'missed')}`;
+      expect(words).not.toMatch(/—|–|--|&mdash;/);
+    }
+  });
+
+  it('keeps the migration and this list in step', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { TEST_REASON_CODES } = await import('./test-reasons');
+    const sql = fs.readFileSync(
+      path.resolve(__dirname, '../../../../supabase/migrations/20260923090100_nexus_test_reason_did_not_know.sql'),
+      'utf8',
+    );
+    for (const code of TEST_REASON_CODES) {
+      // Twice: once for the skip reasons table, once for the abandoned attempts.
+      expect(sql.split(`'${code}'`).length - 1).toBeGreaterThanOrEqual(2);
+    }
+  });
+});

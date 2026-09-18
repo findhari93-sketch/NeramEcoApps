@@ -20,6 +20,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useUserNotifications } from '@neram/ui';
 import { pickSeenNotifications, SEEN_DWELL_MS } from '@/lib/notification-seen';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { tellWhyPath } from '@/lib/tell-why-link';
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
   classroom_enrolled: '#2196f3',
@@ -104,6 +105,17 @@ function getNavigationUrl(
     case 'test_regraded': {
       const testId = notification.metadata?.test_id as string | undefined;
       const placementId = notification.metadata?.placement_id as string | undefined;
+      // "Tell me why" asks a question the take page cannot answer. It opens the
+      // student's tests with the "Tell your teacher why" sheet on that run, the
+      // same address the Teams chat link carries.
+      if (
+        notification.event_type === 'test_result_message' &&
+        notification.metadata?.template === 'why' &&
+        placementId &&
+        nexusRole !== 'teacher'
+      ) {
+        return tellWhyPath(placementId);
+      }
       if (!testId) return `/${nexusRole || 'student'}/tests`;
       const run = placementId ? `&placement_id=${encodeURIComponent(placementId)}` : '';
       // A teacher lands on the results they were working from; a student lands

@@ -108,8 +108,14 @@ describe('transcriptLanguageConflict', () => {
     expect(transcriptLanguageConflict(tamilScript, 'en')).toBe(true);
   });
 
-  it('flags an English transcript on the Tamil track', () => {
-    expect(transcriptLanguageConflict(latinScript, 'ta')).toBe(true);
+  /**
+   * An English transcript is what a Tamil track is SUPPOSED to have now.
+   * Microsoft Stream cannot transcribe Tamil, so the transcript comes from AI
+   * Studio or Nexus written in English, to match the English checkpoints.
+   * Warning on it would interrupt the teacher on every correct upload.
+   */
+  it('says nothing about an English transcript on the Tamil track', () => {
+    expect(transcriptLanguageConflict(latinScript, 'ta')).toBe(false);
   });
 
   it('says nothing when the transcript matches the track', () => {

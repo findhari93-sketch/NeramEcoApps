@@ -17,6 +17,18 @@
 
 export type TestMessageTemplate = 'redo' | 'missed' | 'why' | 'regraded' | 'counted' | 'custom';
 
+/**
+ * The button on the student's card, and the words of the link the "why"
+ * message carries to it. One constant so the message, the link and the card
+ * cannot name the same button three ways.
+ */
+export const TELL_WHY_LINK_LABEL = 'Tell your teacher why';
+
+/** Templates whose chat message carries the "Tell your teacher why" link. */
+export function templateLinksToWhy(template: TestMessageTemplate): boolean {
+  return template === 'why';
+}
+
 export const TEST_MESSAGE_TEMPLATES: TestMessageTemplate[] = [
   'redo',
   'missed',
@@ -115,6 +127,12 @@ export function renderTestMessage(
       };
 
     case 'why':
+      // Points at the card's own "Tell your teacher why", never at a Teams reply.
+      // A reply in chat was read by nobody in Nexus: on the 18 Aug exam the
+      // teacher asked twenty students why and had no screen that showed an
+      // answer. The answer given on the card lands on the student's row in the
+      // Students tab. The route adds the link under this text (TELL_WHY_LINK_LABEL),
+      // because a URL typed into a plain message arrives in Teams as inert text.
       return {
         subject: `About ${ctx.testTitle}`,
         body: [
@@ -122,11 +140,11 @@ export function renderTestMessage(
           '',
           'I noticed you have not completed {test}.',
           '',
-          // Deliberately points at the in-app ask rather than only inviting a
-          // reply: a reason typed there lands on the request as student_note,
-          // which is where the teacher answering it will actually be looking.
-          'Before I reopen it, tell me what happened. Reply here, or open the test',
-          'in Nexus and use "Ask to reopen" so your reason reaches me with the request.',
+          'Tell me what happened. It takes one tap: open the link below, or find the',
+          `test in Nexus and press "${TELL_WHY_LINK_LABEL}" on its card.`,
+          '',
+          'Telling me why does not reopen the test. If you want another go at it,',
+          'press "Ask my teacher" on the same card.',
         ].join('\n'),
       };
 

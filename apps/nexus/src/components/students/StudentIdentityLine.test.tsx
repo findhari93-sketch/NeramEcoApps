@@ -21,7 +21,9 @@ describe('StudentIdentityLine', () => {
     vi.spyOn(facts, 'useStudentStageFacts').mockReturnValue({
       ready: true,
       factsFor: (id) =>
-        id === 's1' ? { stage: '11th', dormant: false, photo: null, name: null } : null,
+        id === 's1'
+          ? { stage: '11th', dormant: false, photo: null, name: null, knowsTamil: null }
+          : null,
     });
 
     render(

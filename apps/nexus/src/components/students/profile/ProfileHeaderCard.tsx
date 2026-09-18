@@ -18,6 +18,7 @@ import LockResetOutlinedIcon from '@mui/icons-material/LockResetOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import ExamYearChip from '@/components/students/ExamYearChip';
+import LanguageChip from '@/components/students/LanguageChip';
 import { DormantChip, StudentStageChip } from '@/components/students/StudentStageChip';
 import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import { stageKeyOf } from '@/lib/student-stage';
@@ -48,6 +49,7 @@ export default function ProfileHeaderCard({
   canSetStage,
   canSetDormancy,
   onEditStage,
+  onEditLanguage,
   onToggleDormancy,
   canManageAccount = false,
   onCreateAccount,
@@ -61,6 +63,8 @@ export default function ProfileHeaderCard({
   canSetStage: boolean;
   canSetDormancy: boolean;
   onEditStage: () => void;
+  /** Opens the Set stage sheet at Language. Omit for a viewer who cannot change it. */
+  onEditLanguage?: () => void;
   onToggleDormancy: () => void;
   /** Holds structure.student.account: may create the Microsoft account or reset its password. */
   canManageAccount?: boolean;
@@ -115,6 +119,7 @@ export default function ProfileHeaderCard({
           density="detailed"
         />
       )}
+      <LanguageChip knowsTamil={student.knows_tamil} onClick={onEditLanguage} />
     </Box>
   );
 
@@ -132,6 +137,7 @@ export default function ProfileHeaderCard({
           <StudentStageAvatar
             stage={stage}
             dormant={dormant}
+            knowsTamil={student.knows_tamil}
             src={student.avatar_url}
             name={student.name || ''}
             size={96}
@@ -215,6 +221,7 @@ export default function ProfileHeaderCard({
         <StudentStageAvatar
           stage={stage}
           dormant={dormant}
+          knowsTamil={student.knows_tamil}
           src={student.avatar_url}
           name={student.name || ''}
           size={48}

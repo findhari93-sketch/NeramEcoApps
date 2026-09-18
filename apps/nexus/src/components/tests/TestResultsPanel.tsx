@@ -54,7 +54,7 @@ import RegradePreviewDialog from '@/components/tests/RegradePreviewDialog';
 import TestMessageDialog, { type MessageRecipient } from '@/components/tests/TestMessageDialog';
 import CountAttemptSheet from '@/components/tests/CountAttemptSheet';
 import StudentAvatar from '@/components/students/StudentAvatar';
-import { isResultFilter, type ResultFilter } from '@/lib/test-result-filters';
+import { excusedLabel, isResultFilter, type ResultFilter } from '@/lib/test-result-filters';
 import {
   DEFAULT_QUESTION_FILTERS,
   QUESTION_FILTER_PARAMS,
@@ -384,7 +384,10 @@ export default function TestResultsPanel({
       'Last attempt at',
       'Self-study attempts',
       'Self-study best %',
+      'Reason given',
+      'Their note',
     ];
+    const quote = (s: string | null | undefined) => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const marks = (score: number | null, total: number | null) =>
       score == null || total == null ? '' : `${score}/${total}`;
     const lines = [header.join(',')];
@@ -395,7 +398,7 @@ export default function TestResultsPanel({
         [
           `"${(r.student_name || 'Unknown').replace(/"/g, '""')}"`,
           `"${BUCKET_LABELS[r.bucket || ''] || ''}"`,
-          `"${r.status === 'submitted' ? 'Done' : STATUS_TEXT[r.status]}"`,
+          `"${r.status === 'submitted' ? 'Done' : r.status === 'excused' ? excusedLabel(r.bucket, r.excused_note) : STATUS_TEXT[r.status]}"`,
           r.attempts,
           r.first_percentage ?? '',
           marks(r.first_score, r.first_total_marks),
@@ -406,6 +409,8 @@ export default function TestResultsPanel({
           r.last_submitted_at ?? '',
           r.elsewhere?.attempts ?? 0,
           r.elsewhere?.best_percentage == null ? '' : Math.round(r.elsewhere.best_percentage),
+          quote(r.why?.label ?? (r.request_note ? 'Asked to reopen' : '')),
+          quote([r.why?.note, r.request_note].filter(Boolean).join(' / ')),
         ].join(','),
       );
     }
@@ -515,14 +520,19 @@ export default function TestResultsPanel({
               // they mean to say, so the sheet opens on that template rather than
               // making them pick it again.
               template:
-                filter === 'not_done' || list.every((r) => r.attempts === 0) ? 'missed' : 'redo',
+                filter === 'not_done' || filter === 'no_reason' || list.every((r) => r.attempts === 0)
+                  ? 'missed'
+                  : 'redo',
               mode: 'reopen',
             })
           }
           onMessage={(list) =>
             setMessage({
               recipients: toRecipients(list),
-              template: filter === 'not_done' ? 'missed' : 'redo',
+              // "Not said why" is the group a teacher filters to in order to
+              // ask, so the sheet opens on the message that asks, with its link
+              // to the student's "Tell your teacher why".
+              template: filter === 'no_reason' ? 'why' : filter === 'not_done' ? 'missed' : 'redo',
               mode: 'message',
             })
           }

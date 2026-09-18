@@ -59,6 +59,12 @@ const H = vi.hoisted(() => {
     recordFails: false,
     pointEvents: [] as string[],
     badges: [] as string[],
+    /**
+     * What loadExamEligibilityFacts returns. Empty covered classes by default,
+     * which makes everyone mandatory, so every scenario above the excused block
+     * reads exactly as it did before eligibility reached publishing.
+     */
+    eligibility: null as any,
   };
   return state;
 });
@@ -68,6 +74,14 @@ vi.mock('@neram/database', () => ({
     !row.absent && Boolean(row.attempt_id),
   recomputeExamScores: async () => {},
   getExamResults: async () => H.results,
+  loadExamEligibilityFacts: async () => H.eligibility,
+  /** The real one deletes WHERE attempt_id IS NULL; modelled the same way. */
+  removePaperlessExamResults: async (examId: string, studentIds: string[]) => {
+    for (let i = H.table.length - 1; i >= 0; i--) {
+      const r = H.table[i];
+      if (r.exam_id === examId && studentIds.includes(r.student_id) && r.attempt_id == null) H.table.splice(i, 1);
+    }
+  },
   /**
    * Upsert on (exam_id, student_id), and crucially notified_at is NOT in the
    * payload, so an existing row keeps whatever stamp it already had. That is
@@ -320,6 +334,7 @@ beforeEach(() => {
   H.classroom = { id: 'c1', name: 'NATA 2027', ms_team_id: null, ms_channel_id: null };
   H.roster = [];
   H.results = null;
+  H.eligibility = { coveredClasses: [], students: [], attendance: new Map(), absences: new Map(), overrides: new Map() };
 });
 
 describe('publishing twice, notifying twice', () => {
@@ -574,5 +589,92 @@ describe('the Teams announcement', () => {
     // The channel hears about an exam once. Naming a second sitting there would
     // tell forty classmates who missed the class.
     expect(H.teamsPosts).toHaveLength(1);
+  });
+});
+
+/**
+ * 2026-09-17, the 18 Aug exam. Five students enrolled 31 Aug to 8 Sep, after
+ * the classes the exam covered. getExamResults bucketed each of them absent (no
+ * paper, no open window), so the first publish would have written them absent
+ * rows and told each one privately "You were marked absent".
+ */
+describe('students the exam was never set for', () => {
+  const COVERED = [{ id: 'c-12', title: 'Indus to Dravidian', scheduled_date: '2026-08-12' }];
+  const enrolled = (id: string, at: string) => ({ student_id: id, name: id, avatar_url: null, enrolled_at: at });
+
+  beforeEach(() => {
+    H.eligibility = {
+      coveredClasses: COVERED,
+      students: [
+        enrolled('arun', '2026-03-21T00:00:00Z'),
+        enrolled('meera', '2026-03-21T00:00:00Z'),
+        enrolled('ananya', '2026-08-31T06:00:00Z'),
+        enrolled('salai', '2026-09-10T06:00:00Z'),
+      ],
+      attendance: new Map([
+        ['arun', new Map([['c-12', true]])],
+        ['meera', new Map([['c-12', true]])],
+      ]),
+      absences: new Map(),
+      overrides: new Map(),
+    };
+  });
+
+  const ROWS = () => [
+    examDay('arun', 1, 84),
+    absentee('meera'),
+    // Joined weeks later, never sat it, no window: the engine excuses her.
+    absentee('ananya'),
+    // Joined later too, but sat it anyway. A paper is its own answer.
+    secondSitting('salai', 72),
+  ];
+
+  it('never writes an absent row for a late joiner, and never tells her she was absent', async () => {
+    H.results = summary(ROWS());
+    await publish(req(), PARAMS);
+    await notify(req(), PARAMS);
+
+    expect(H.table.find((r) => r.student_id === 'ananya')).toBeUndefined();
+    expect(H.nudges.filter((n) => n.studentId === 'ananya')).toHaveLength(0);
+    // The student who really was absent is still told.
+    expect(H.nudges.find((n) => n.studentId === 'meera')?.plain).toContain('You were marked absent');
+  });
+
+  it('keeps a late joiner who did sit it, ranked and told', async () => {
+    H.results = summary(ROWS());
+    await publish(req(), PARAMS);
+    await notify(req(), PARAMS);
+
+    expect(H.table.find((r) => r.student_id === 'salai')?.attempt_id).toBe('att-salai');
+    expect(H.nudges.find((n) => n.studentId === 'salai')?.plain).toContain('Your rank');
+  });
+
+  it('tells the teacher how many are not part of the exam, and leaves them out of the roster', async () => {
+    H.results = summary(ROWS());
+    const { GET } = await import('./[examId]/publish/route');
+    const res = await GET(req(), PARAMS);
+    const body = await (res as Response).json();
+
+    expect(body.data.results.excused).toEqual({ total: 1, new_joiner: 1, catching_up: 0, by_teacher: 0 });
+    // Every row the sheet lists is in one of the four groups, and the excused
+    // student is in none of them.
+    expect(body.data.results.rows.map((r: any) => r.student_id).sort()).toEqual(['arun', 'meera', 'salai']);
+    expect(body.data.results.stats.roster).toBe(3);
+    expect(body.data.results.stats.absent).toBe(1);
+  });
+
+  it('clears an absent row written before the student was excused', async () => {
+    // Day one, before anybody linked the covered classes: everyone mandatory.
+    H.eligibility = { ...H.eligibility, coveredClasses: [] };
+    H.results = summary(ROWS());
+    await publish(req(), PARAMS);
+    expect(H.table.find((r) => r.student_id === 'ananya')?.absent).toBe(true);
+
+    // The teacher links the classes, so she is excused, and publishes again.
+    H.eligibility = { ...H.eligibility, coveredClasses: COVERED };
+    await publish(req({ post_to_teams: false }), PARAMS);
+    expect(H.table.find((r) => r.student_id === 'ananya')).toBeUndefined();
+    // Nobody who earned a result lost it.
+    expect(H.table.map((r) => r.student_id).sort()).toEqual(['arun', 'meera', 'salai']);
   });
 });

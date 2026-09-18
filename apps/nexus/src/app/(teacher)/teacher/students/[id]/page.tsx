@@ -35,7 +35,7 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ParentAccessCard from '@/components/parent/ParentAccessCard';
-import ClassifyDrawer, { type ClassifyMode } from '@/components/students/ClassifyDrawer';
+import ClassifyDrawer, { type ClassifyMode, type ClassifyPayload } from '@/components/students/ClassifyDrawer';
 import AddStudentSheet from '@/components/students/AddStudentSheet';
 import CreateAccountForm from '@/components/students/CreateAccountForm';
 import ResetPasswordSheet from '@/components/students/ResetPasswordSheet';
@@ -55,7 +55,8 @@ import SketchbookSection from '@/components/sketchbook/SketchbookSection';
 import FeeSection from '@/components/students/profile/FeeSection';
 import TimelineSection from '@/components/students/profile/TimelineSection';
 import { formatCurrencyINR } from '@/lib/student-profile-fields';
-import type { StageKey } from '@/lib/student-stage';
+import { describeClassificationChange } from '@/lib/student-stage';
+import { refreshStudentStageFacts } from '@/lib/stage-facts-cache';
 import type {
   ProfileTimelineEvent,
   StudentFinancePayload,
@@ -84,6 +85,8 @@ export default function StudentProfilePage() {
   const [perfState, setPerfState] = useState<FetchState>({ loading: false, error: null });
 
   const [drawer, setDrawer] = useState<ClassifyMode | null>(null);
+  // Set by the language chip, so the sheet opens scrolled to Language.
+  const [drawerFocus, setDrawerFocus] = useState<'language' | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [examYears, setExamYears] = useState<string[]>([]);
@@ -222,12 +225,7 @@ export default function StudentProfilePage() {
     if (core) void loadPerformance();
   }, [core, loadPerformance]);
 
-  async function applyClassification(payload: {
-    studyStage?: StageKey | null;
-    academicYear?: string | null;
-    participationStatus?: 'active' | 'dormant';
-    reason?: string;
-  }) {
+  async function applyClassification(payload: ClassifyPayload) {
     if (!activeClassroom || !core) return;
     setSaving(true);
     try {
@@ -249,7 +247,11 @@ export default function StudentProfilePage() {
       }
       setDrawer(null);
       setReloadKey((k) => k + 1);
-      setSnackbar('Updated');
+      // Other screens read stage and language from the session lookup.
+      void refreshStudentStageFacts();
+      setSnackbar(
+        payload.participationStatus ? 'Updated' : `${describeClassificationChange(payload)}.`,
+      );
     } catch {
       setSnackbar('Could not update this student');
     } finally {
@@ -307,7 +309,18 @@ export default function StudentProfilePage() {
       currentBatch={core.currentBatch}
       canSetStage={canSetStage}
       canSetDormancy={canSetDormancy}
-      onEditStage={() => setDrawer('stage')}
+      onEditStage={() => {
+        setDrawerFocus(undefined);
+        setDrawer('stage');
+      }}
+      onEditLanguage={
+        canSetStage
+          ? () => {
+              setDrawerFocus('language');
+              setDrawer('stage');
+            }
+          : undefined
+      }
       onToggleDormancy={() =>
         setDrawer(core.enrollment.participation_status === 'dormant' ? 'reactivate' : 'dormant')
       }
@@ -433,6 +446,8 @@ export default function StudentProfilePage() {
         busy={saving}
         examYears={examYears}
         currentBatch={core.currentBatch}
+        currentKnowsTamil={core.student.knows_tamil}
+        focus={drawer === 'stage' ? drawerFocus : undefined}
         onClose={() => setDrawer(null)}
         onApply={applyClassification}
       />

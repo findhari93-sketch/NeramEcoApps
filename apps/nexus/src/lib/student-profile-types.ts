@@ -36,6 +36,8 @@ export interface ProfileStudent {
   ms_oid: string | null;
   linked_classroom_email: string | null;
   academic_year: string | null;
+  /** users.knows_tamil: true Knows Tamil, false English only, null not recorded. */
+  knows_tamil: boolean | null;
   student_program: string | null;
   lifecycle_status: string | null;
   is_alumni: boolean | null;

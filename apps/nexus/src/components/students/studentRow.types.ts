@@ -47,6 +47,8 @@ export interface EnrolledStudent {
   batch: StudentBatch | null; // classroom section (nexus_batches)
   exam_batch: string | null; // exam-year cohort (users.academic_year)
   academic_year?: string | null; // same value, named after the column
+  /** users.knows_tamil: true Knows Tamil, false English only, null not recorded. */
+  knows_tamil?: boolean | null;
 
   // Classification, two orthogonal axes. See lib/student-stage.ts.
   study_stage: string | null; // nexus_enrollments.current_standard

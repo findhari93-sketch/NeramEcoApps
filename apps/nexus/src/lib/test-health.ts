@@ -18,6 +18,8 @@
  * and cannot drift into disagreeing about it on the same screen.
  */
 
+import { factsFromErrorRow, failureCodeOf, isExpectedRefusal } from './test-error-classify';
+
 export type TestIssueSeverity = 'error' | 'warning';
 export type TestIssueStream = 'structural' | 'technical' | 'reported';
 
@@ -26,8 +28,24 @@ export interface TestIssue {
   severity: TestIssueSeverity;
   /** One line, addressed to a teacher, naming what to do where possible. */
   title: string;
-  /** How many questions or events this covers. 1 for a whole-paper problem. */
+  /**
+   * How many questions this covers, or for a technical issue how many distinct
+   * STUDENTS. 1 for a whole-paper problem.
+   */
   count: number;
+  /** Technical issues only: which phase, so the panel can list who it happened to. */
+  phase?: string;
+}
+
+/** A nexus_test_attempt_errors row, as much as the health check reads. */
+export interface AttemptErrorRow {
+  phase?: string | null;
+  question_id?: string | null;
+  student_id?: string | null;
+  attempt_id?: string | null;
+  message?: string | null;
+  detail?: unknown;
+  created_at?: string | null;
 }
 
 /** One question, as much as a structural check needs. */
@@ -146,15 +164,130 @@ export function structuralIssues(input: StructuralInput): TestIssue[] {
   return issues;
 }
 
-/** Machine-observed failures, grouped into one line per phase. */
+export interface FailureFilterContext {
+  /** users.id of anyone on staff. A teacher previewing a paper is not a student failing to sit it. */
+  staffIds?: ReadonlySet<string>;
+  /** nexus_test_attempts.status by attempt id, for closed-attempt submit rows. */
+  attemptStatusById?: ReadonlyMap<string, string>;
+  /**
+   * When a teacher last pressed "Mark as fixed" on this paper. Rows at or before
+   * it are hidden; anything that fails afterwards shows again.
+   */
+  clearedAt?: string | null;
+}
+
+/**
+ * PURE. The rows that are the app really failing a real student since the paper
+ * was last marked fixed.
+ *
+ * Three things were inflating the banner on acf8084d and each is removed here:
+ * the door refusing on purpose (see test-error-classify.ts), staff previews (the
+ * errors route stored whoever called it), and failures a teacher had already
+ * dealt with but had no way to say so.
+ */
+export function realFailures(rows: AttemptErrorRow[], ctx: FailureFilterContext = {}): AttemptErrorRow[] {
+  const clearedMs = ctx.clearedAt ? Date.parse(ctx.clearedAt) : NaN;
+  return (rows || []).filter((row) => {
+    if (!row) return false;
+    if (row.student_id && ctx.staffIds?.has(row.student_id)) return false;
+    if (Number.isFinite(clearedMs) && row.created_at) {
+      const at = Date.parse(row.created_at);
+      if (Number.isFinite(at) && at <= clearedMs) return false;
+    }
+    const looked = row.attempt_id ? ctx.attemptStatusById?.get(row.attempt_id) ?? null : null;
+    return !isExpectedRefusal(factsFromErrorRow(row, looked));
+  });
+}
+
+/**
+ * The attempts whose status decides whether a row is a failure: a submit refused
+ * because the attempt was closed, on a row that did not record whether that
+ * attempt was in fact submitted (every row written before this change).
+ */
+export function attemptIdsToLookUp(rows: AttemptErrorRow[]): string[] {
+  const ids = new Set<string>();
+  for (const row of rows || []) {
+    if (row?.phase !== 'submit' || !row.attempt_id) continue;
+    const facts = factsFromErrorRow(row);
+    if (facts.attemptStatus) continue;
+    if (failureCodeOf(facts) === 'ATTEMPT_CLOSED') ids.add(row.attempt_id);
+  }
+  return [...ids];
+}
+
+/** One student a technical failure happened to, for the panel's "See who". */
+export interface AffectedStudent {
+  student_id: string;
+  /** When it last happened to them. */
+  last_at: string | null;
+  /** The message from that latest time. */
+  message: string;
+  /** How many times it was recorded for them in this phase. */
+  times: number;
+}
+
+/** PURE. Who each phase's failures happened to, newest first. */
+export function affectedStudentsByPhase(rows: AttemptErrorRow[]): Record<string, AffectedStudent[]> {
+  const byPhase = new Map<string, Map<string, AffectedStudent>>();
+  const ms = (at: string | null | undefined) => {
+    const parsed = at ? Date.parse(at) : NaN;
+    return Number.isFinite(parsed) ? parsed : -Infinity;
+  };
+
+  for (const row of rows || []) {
+    if (!row?.student_id) continue;
+    const phase = row.phase || 'unknown';
+    let students = byPhase.get(phase);
+    if (!students) {
+      students = new Map();
+      byPhase.set(phase, students);
+    }
+    const existing = students.get(row.student_id);
+    if (!existing) {
+      students.set(row.student_id, {
+        student_id: row.student_id,
+        last_at: row.created_at ?? null,
+        message: String(row.message ?? ''),
+        times: 1,
+      });
+      continue;
+    }
+    existing.times += 1;
+    if (ms(row.created_at) > ms(existing.last_at)) {
+      existing.last_at = row.created_at ?? null;
+      existing.message = String(row.message ?? '');
+    }
+  }
+
+  const out: Record<string, AffectedStudent[]> = {};
+  for (const [phase, students] of byPhase) {
+    out[phase] = [...students.values()].sort((a, b) => ms(b.last_at) - ms(a.last_at));
+  }
+  return out;
+}
+
+/**
+ * Machine-observed failures, one line per phase, counting distinct STUDENTS.
+ *
+ * It used to count rows, so one student tapping Submit three times read as three
+ * students. A row with no student id (never written by the errors route, which
+ * always stores the caller) still counts once rather than vanishing.
+ */
 export function technicalIssues(
-  errors: Array<{ phase?: string | null; question_id?: string | null }>,
+  errors: Array<{ phase?: string | null; question_id?: string | null; student_id?: string | null }>,
 ): TestIssue[] {
-  const byPhase = new Map<string, number>();
+  const studentsByPhase = new Map<string, Set<string>>();
+  let anonymous = 0;
   for (const e of errors || []) {
     const phase = e?.phase || 'unknown';
-    byPhase.set(phase, (byPhase.get(phase) || 0) + 1);
+    let students = studentsByPhase.get(phase);
+    if (!students) {
+      students = new Set();
+      studentsByPhase.set(phase, students);
+    }
+    students.add(e?.student_id || `anonymous-${anonymous++}`);
   }
+  const byPhase = new Map<string, number>([...studentsByPhase].map(([phase, set]) => [phase, set.size]));
 
   const WORDING: Record<string, string> = {
     load: 'failed to open the paper',
@@ -177,6 +310,7 @@ export function technicalIssues(
       severity: HARD.has(phase) ? ('error' as const) : ('warning' as const),
       title: `${count} ${plural(count, 'student', 'students')} ${WORDING[phase] || WORDING.unknown}`,
       count,
+      phase,
     }));
 }
 
@@ -205,7 +339,8 @@ export function reportedIssues(reports: Array<{ report_type?: string | null }>):
  */
 export function collectTestIssues(input: {
   structural?: StructuralInput;
-  errors?: Array<{ phase?: string | null; question_id?: string | null }>;
+  /** Already passed through realFailures, so these are real students and real failures. */
+  errors?: Array<{ phase?: string | null; question_id?: string | null; student_id?: string | null }>;
   reports?: Array<{ report_type?: string | null }>;
 }): TestIssue[] {
   const all = [

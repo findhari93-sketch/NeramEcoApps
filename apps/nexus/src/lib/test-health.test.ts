@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  affectedStudentsByPhase,
+  attemptIdsToLookUp,
   collectTestIssues,
   hasBlockingIssue,
+  realFailures,
   reportedIssues,
   structuralIssues,
   technicalIssues,
+  type AttemptErrorRow,
   type CheckableQuestion,
 } from './test-health';
 
@@ -133,6 +137,164 @@ describe('technicalIssues', () => {
 
   it('says nothing for a paper nothing went wrong with', () => {
     expect(technicalIssues([])).toEqual([]);
+  });
+
+  /**
+   * "21 students could not submit" on acf8084d was 21 ROWS. One student tapping
+   * Submit three times is one student, and the sentence says students.
+   */
+  it('counts distinct students, not rows', () => {
+    const rows = [
+      ...Array.from({ length: 3 }, () => ({ phase: 'submit', student_id: 'asha' })),
+      ...Array.from({ length: 5 }, () => ({ phase: 'submit', student_id: 'bala' })),
+      { phase: 'submit', student_id: 'chitra' },
+    ];
+    const issues = technicalIssues(rows);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].count).toBe(3);
+    expect(issues[0].title).toBe('3 students could not submit their answers');
+    expect(issues[0].phase).toBe('submit');
+  });
+
+  it('says "1 student" for one student however many rows they wrote', () => {
+    expect(technicalIssues([{ phase: 'load', student_id: 'a' }, { phase: 'load', student_id: 'a' }])[0].title).toBe(
+      '1 student failed to open the paper',
+    );
+  });
+});
+
+/** Shaped like the real rows on acf8084d, read on production 2026-09-17. */
+function acf8084dRows(): AttemptErrorRow[] {
+  const rows: AttemptErrorRow[] = [];
+  const at = (minute: number) => `2026-09-11T10:${String(minute).padStart(2, '0')}:00Z`;
+  // The real bug, fixed in fd1c945d: 12 rows from 4 reopened students.
+  ['r1', 'r2', 'r3', 'r4'].forEach((s, i) => {
+    for (let n = 0; n < 3; n++) {
+      rows.push({ phase: 'submit', student_id: s, attempt_id: `open-${s}`, message: 'EXAM_CLOSED', detail: { status: 500 }, created_at: at(i * 3 + n) });
+    }
+  });
+  // 9 rows from 8 students who had already submitted.
+  ['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd8'].forEach((s, i) =>
+    rows.push({
+      phase: 'submit',
+      student_id: s,
+      attempt_id: `done-${s}`,
+      message: 'This attempt is already finished. Start a new one to try again.',
+      detail: { status: 409 },
+      created_at: at(20 + i),
+    }),
+  );
+  // 9 rows from 7 students who had already sat it.
+  ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l1', 'l2'].forEach((s, i) =>
+    rows.push({ phase: 'load', student_id: s, message: 'You have used all your attempts at this test.', detail: { status: 403 }, created_at: at(30 + i) }),
+  );
+  // 3 rows from 1 student sent from practice to the live exam.
+  for (let n = 0; n < 3; n++) {
+    rows.push({
+      phase: 'load',
+      student_id: 'p1',
+      message: 'This paper is your class exam right now. Take it from the exam, where it counts.',
+      detail: { status: 409 },
+      created_at: at(40 + n),
+    });
+  }
+  return rows;
+}
+
+describe('realFailures', () => {
+  const submittedAttempts = () =>
+    new Map(['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8'].map((s) => [`done-${s}`, 'submitted']));
+
+  it('turns the acf8084d banner into the one real problem it had', () => {
+    const rows = realFailures(acf8084dRows(), { attemptStatusById: submittedAttempts() });
+    const issues = technicalIssues(rows);
+    expect(issues.map((i) => i.title)).toEqual(['4 students could not submit their answers']);
+  });
+
+  it('keeps a closed-attempt submit whose attempt was NOT submitted, because that work was lost', () => {
+    const status = submittedAttempts();
+    status.set('done-d1', 'abandoned');
+    const rows = realFailures(acf8084dRows(), { attemptStatusById: status });
+    expect(technicalIssues(rows)[0].title).toBe('5 students could not submit their answers');
+  });
+
+  it('uses the attempt status a newer row carried itself', () => {
+    const rows = realFailures(
+      [
+        {
+          phase: 'submit',
+          student_id: 's',
+          attempt_id: 'a',
+          message: 'This attempt is already finished. Start a new one to try again.',
+          detail: { status: 409, code: 'ATTEMPT_CLOSED', attempt_status: 'submitted' },
+        },
+      ],
+      {},
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it('drops staff previews', () => {
+    const rows = realFailures(
+      [
+        { phase: 'image', student_id: 'teacher-1', message: 'Question image failed to load' },
+        { phase: 'image', student_id: 'student-1', message: 'Question image failed to load' },
+      ],
+      { staffIds: new Set(['teacher-1']) },
+    );
+    expect(rows.map((r) => r.student_id)).toEqual(['student-1']);
+  });
+
+  it('hides everything at or before the latest "Mark as fixed", and shows what came after', () => {
+    const rows = realFailures(
+      [
+        { phase: 'image', student_id: 'a', message: 'x', created_at: '2026-09-17T09:00:00Z' },
+        { phase: 'image', student_id: 'b', message: 'x', created_at: '2026-09-17T10:00:00Z' },
+        { phase: 'image', student_id: 'c', message: 'x', created_at: '2026-09-17T11:00:00Z' },
+      ],
+      { clearedAt: '2026-09-17T10:00:00Z' },
+    );
+    expect(rows.map((r) => r.student_id)).toEqual(['c']);
+  });
+
+  it('shows everything when the paper was never marked fixed', () => {
+    expect(realFailures([{ phase: 'image', student_id: 'a', message: 'x', created_at: '2020-01-01T00:00:00Z' }], { clearedAt: null })).toHaveLength(1);
+  });
+});
+
+describe('attemptIdsToLookUp', () => {
+  it('asks only about closed-attempt submits that did not record the answer themselves', () => {
+    const ids = attemptIdsToLookUp([
+      ...acf8084dRows(),
+      {
+        phase: 'submit',
+        student_id: 'x',
+        attempt_id: 'already-known',
+        message: 'This attempt is already finished. Start a new one to try again.',
+        detail: { status: 409, attempt_status: 'submitted' },
+      },
+    ]);
+    expect(ids.sort()).toEqual(['done-d1', 'done-d2', 'done-d3', 'done-d4', 'done-d5', 'done-d6', 'done-d7', 'done-d8']);
+  });
+});
+
+describe('affectedStudentsByPhase', () => {
+  it('lists each student once per phase with their latest message, when it last happened and how often', () => {
+    const byPhase = affectedStudentsByPhase([
+      { phase: 'submit', student_id: 'asha', message: 'Failed to fetch', created_at: '2026-09-17T09:00:00Z' },
+      { phase: 'submit', student_id: 'asha', message: 'Submit failed (HTTP 502)', created_at: '2026-09-17T09:05:00Z' },
+      { phase: 'submit', student_id: 'bala', message: 'Failed to fetch', created_at: '2026-09-17T09:10:00Z' },
+      { phase: 'image', student_id: 'asha', message: 'Question image failed to load', created_at: '2026-09-17T08:00:00Z' },
+    ]);
+    expect(byPhase.submit).toEqual([
+      { student_id: 'bala', last_at: '2026-09-17T09:10:00Z', message: 'Failed to fetch', times: 1 },
+      { student_id: 'asha', last_at: '2026-09-17T09:05:00Z', message: 'Submit failed (HTTP 502)', times: 2 },
+    ]);
+    expect(byPhase.image).toHaveLength(1);
+  });
+
+  it('skips rows with no student to name', () => {
+    expect(affectedStudentsByPhase([{ phase: 'load', message: 'x' }])).toEqual({});
   });
 });
 

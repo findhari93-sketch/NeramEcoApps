@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
-import { foldStudentFacts } from '@/lib/stage-facts';
+import { foldStudentFacts, type StageFactMember } from '@/lib/stage-facts';
 
 /**
  * GET /api/students/stage-facts   (staff)
@@ -59,8 +59,10 @@ export async function GET(request: NextRequest) {
     // which is what this needs: an avatar on the drawing-review queue has no
     // classroom context to scope by. Dormant students are loaded rather than
     // filtered, because "paused" is one of the three states the ring reports.
-    const { members } = await loadClassroomRoster(null, {
+    // knows_tamil rides on the same users embed, for the த badge.
+    const { members } = await loadClassroomRoster<StageFactMember['user']>(null, {
       includeDormant: true,
+      userColumns: 'knows_tamil',
       client: supabase,
     });
 

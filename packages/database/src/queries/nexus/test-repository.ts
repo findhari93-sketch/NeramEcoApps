@@ -1558,7 +1558,7 @@ const TIMED_GRACE_MS = 30 * 1000;
  * cruel. Anything past this is refused and left for the close sweep, which
  * submits whatever was autosaved.
  */
-const EXAM_SUBMIT_GRACE_MS = 60 * 1000;
+export const EXAM_SUBMIT_GRACE_MS = 60 * 1000;
 const PER_QUESTION_GRACE_MS = 60 * 1000;
 
 export interface NexusAttemptRow {

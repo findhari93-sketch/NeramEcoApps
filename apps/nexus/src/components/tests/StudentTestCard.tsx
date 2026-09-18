@@ -27,9 +27,11 @@ import { Box, Typography, Button, Paper, Chip, LinearProgress, Checkbox, IconBut
 import MoreVertOutlinedIcon from '@mui/icons-material/MoreVertOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import ClassOutlinedIcon from '@mui/icons-material/ClassOutlined';
+import FeedbackOutlinedIcon from '@mui/icons-material/FeedbackOutlined';
 import { NEXUS_TEST_KIND_LABELS, type NexusTestKind } from '@neram/database';
 import type { StudentTestCard as CardState } from '@/lib/student-test-card-state';
 import TestStatusStrip from './TestStatusStrip';
+import { TELL_WHY_LINK_LABEL } from '@/lib/test-message-templates';
 
 export type TestStatus = 'open' | 'upcoming' | 'closed' | 'done' | 'missed';
 
@@ -80,6 +82,8 @@ export interface StudentTest {
     blocked: boolean;
     outstanding: Array<{ id: string; title: string | null; date: string }>;
   } | null;
+  /** What the student already told their teacher about not sitting it. */
+  skip_reason?: { reason_code: string; reason_note: string | null; updated_at: string | null } | null;
   /**
    * The resolved answer. Optional only so a caller mid-migration still renders;
    * every server response carries it.
@@ -139,6 +143,8 @@ export interface StudentTestCardProps {
   onReview?: (test: StudentTest) => void;
   /** Opt-in: where "Go to my catch-up" sends them. */
   onCatchUp?: (href: string) => void;
+  /** Opt-in: "Tell your teacher why", on a test they owed and did not sit. */
+  onExplain?: (test: StudentTest) => void;
 }
 
 export default function StudentTestCard({
@@ -153,6 +159,7 @@ export default function StudentTestCard({
   onAskTeacher,
   onReview,
   onCatchUp,
+  onExplain,
 }: StudentTestCardProps) {
   const card = test.card ?? null;
   const resultChip = examResultChip(test);
@@ -197,6 +204,7 @@ export default function StudentTestCard({
           : true);
 
   const showButton = !selectable && (!card || (card.action.kind !== 'none' && wired));
+  const showWhy = !selectable && Boolean(onExplain);
   const label = card && 'label' in card.action ? card.action.label : 'Start';
   const primary = card ? card.action.kind === 'start' || card.action.kind === 'retry' : true;
 
@@ -393,6 +401,48 @@ export default function StudentTestCard({
         >
           {label}
         </Button>
+      )}
+
+      {/*
+        "Tell your teacher why", BESIDE the one action and visibly quieter than
+        it. Asking for another sitting and saying why you missed this one are two
+        different things a student may want, and neither replaces the other.
+        Rendered only when the page wired it, so it is never a button with
+        nowhere to go.
+      */}
+      {showWhy && card?.why && (
+        card.why.given ? (
+          <Box
+            data-testid="test-card-why-given"
+            sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, flexWrap: 'wrap' }}
+          >
+            <FeedbackOutlinedIcon aria-hidden sx={{ fontSize: 18, color: 'text.secondary' }} />
+            <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 160 }}>
+              You told your teacher:{' '}
+              <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                {card.why.given.short_label}
+              </Box>
+            </Typography>
+            <Button
+              onClick={() => onExplain?.(test)}
+              aria-label={`Change what you told your teacher about ${test.title}`}
+              sx={{ textTransform: 'none', minHeight: 44, minWidth: 64 }}
+            >
+              Change
+            </Button>
+          </Box>
+        ) : (
+          <Button
+            fullWidth
+            data-testid="test-card-why"
+            startIcon={<FeedbackOutlinedIcon />}
+            onClick={() => onExplain?.(test)}
+            aria-label={`Tell your teacher why you did not sit ${test.title}`}
+            sx={{ textTransform: 'none', minHeight: 44, mt: showButton ? 1 : 2 }}
+          >
+            {TELL_WHY_LINK_LABEL}
+          </Button>
+        )
       )}
     </Paper>
   );

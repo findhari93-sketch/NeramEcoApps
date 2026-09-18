@@ -592,3 +592,146 @@ describe('The chain from a checked question to a re-grade', () => {
     await waitFor(() => expect(screen.getByTestId('regrade')).not.toBeNull());
   });
 });
+
+/**
+ * 2026-09-17, the 18 Aug exam. Twenty under Not done, five of whom joined weeks
+ * later, and no way on this screen to learn why any of the rest had not sat it.
+ */
+describe('Students: excused, and why they did not sit it', () => {
+  const unsat = (over: Record<string, unknown>) =>
+    student({
+      attempts: 0,
+      status: 'missed',
+      passed: null,
+      first_percentage: null,
+      best_percentage: null,
+      first_submitted_at: null,
+      last_submitted_at: null,
+      ...over,
+    });
+
+  const lateJoiner = unsat({
+    student_id: 'j1',
+    student_name: 'Ananya Anoop',
+    status: 'excused',
+    bucket: 'excused_new_joiner',
+    is_mandatory: false,
+  });
+  const didNotKnow = unsat({
+    student_id: 'k1',
+    student_name: 'Kaira Rohit',
+    why: {
+      code: 'did_not_know',
+      short_label: "Didn't know",
+      label: 'I did not know the test was open',
+      note: 'The bell showed nothing on my phone',
+      at: '2026-09-17T06:00:00Z',
+      for_this_run: true,
+    },
+  });
+  const askedWithNote = unsat({
+    student_id: 'l1',
+    student_name: 'Lakshana S',
+    access_request_pending: true,
+    request_note: 'My laptop died on the 18th',
+  });
+  const silent = unsat({ student_id: 'm1', student_name: 'Mukunthan P' });
+
+  const payload = () =>
+    runPayload({ rows: [passed, failed, lateJoiner, didNotKnow, askedWithNote, silent] });
+
+  it('gives Excused its own tile and leaves it out of Not done', async () => {
+    mount(payload());
+    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
+
+    expect(within(tile('all')).getByText('6')).not.toBeNull();
+    expect(within(tile('did')).getByText('2')).not.toBeNull();
+    expect(within(tile('not_done')).getByText('3')).not.toBeNull();
+    expect(within(tile('excused')).getByText('1')).not.toBeNull();
+    expect(within(tile('excused')).getByText('joined after the class')).not.toBeNull();
+
+    fireEvent.click(tile('not_done'));
+    expect(screen.queryByText('Ananya Anoop')).toBeNull();
+    fireEvent.click(tile('excused'));
+    expect(screen.getByText('Ananya Anoop')).not.toBeNull();
+  });
+
+  it('says a late joiner joined after the class, never "Missed the date"', async () => {
+    mount(runPayload({ rows: [passed, lateJoiner] }));
+    await waitFor(() => expect(screen.getByText('Ananya Anoop')).not.toBeNull());
+    expect(screen.getAllByText('Joined after this class').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Missed the date')).toBeNull();
+  });
+
+  it('shows no Excused tile when nobody is excused', async () => {
+    mount(runPayload());
+    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
+    expect(screen.queryByTestId('stat-tile-excused')).toBeNull();
+  });
+
+  it('narrows to the students who have not said why in one press', async () => {
+    mount(payload());
+    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
+
+    expect(within(tile('no_reason')).getByText('1')).not.toBeNull();
+    expect(within(tile('no_reason')).getByText('of 3 not done')).not.toBeNull();
+    fireEvent.click(tile('no_reason'));
+
+    expect(screen.getByText('Mukunthan P')).not.toBeNull();
+    expect(screen.queryByText('Kaira Rohit')).toBeNull();
+    expect(screen.queryByText('Lakshana S')).toBeNull();
+  });
+
+  it('opens the "Tell me why" message for the students who have not said why', async () => {
+    mount(payload());
+    await waitFor(() => expect(screen.getByText('Asha Kumar')).not.toBeNull());
+
+    fireEvent.click(tile('no_reason'));
+    fireEvent.click(screen.getByLabelText('Select all 1 shown'));
+    fireEvent.click(screen.getByText('Message (1)'));
+
+    const composer = await screen.findByTestId('composer');
+    expect(composer.getAttribute('data-template')).toBe('why');
+    expect(screen.getByTestId('composer-names').textContent).toBe('Mukunthan P');
+  });
+
+  it("puts the student's reason on their row, and their note one tap away", async () => {
+    mount(payload());
+    await waitFor(() => expect(screen.getByText('Kaira Rohit')).not.toBeNull());
+
+    const toggle = screen.getByTestId('reason-toggle-k1');
+    expect(toggle.textContent).toContain("Didn't know");
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('The bell showed nothing on my phone')).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('I did not know the test was open')).not.toBeNull();
+    expect(screen.getByText('The bell showed nothing on my phone')).not.toBeNull();
+  });
+
+  it('shows what a student wrote when they asked to reopen', async () => {
+    mount(payload());
+    await waitFor(() => expect(screen.getByText('Lakshana S')).not.toBeNull());
+
+    fireEvent.click(screen.getByTestId('reason-toggle-l1'));
+    expect(screen.getByText('Asked to reopen:')).not.toBeNull();
+    expect(screen.getByText(/My laptop died on the 18th/)).not.toBeNull();
+  });
+
+  it('reads a make-up as a make-up, and offers no Close that could not close it', async () => {
+    const makeup = unsat({
+      student_id: 'mk1',
+      student_name: 'Salai V',
+      status: 'not_started',
+      window_open_until: '2026-09-20T17:15:00Z',
+      window_source: 'makeup',
+    });
+    mount(runPayload({ rows: [passed, makeup] }));
+    await waitFor(() => expect(screen.getByText('Salai V')).not.toBeNull());
+
+    expect(screen.getByText(/make-up until 20 Sept?/)).not.toBeNull();
+    expect(screen.queryByText('Close')).toBeNull();
+    expect(screen.getByLabelText('Open this test for Salai V')).not.toBeNull();
+  });
+});

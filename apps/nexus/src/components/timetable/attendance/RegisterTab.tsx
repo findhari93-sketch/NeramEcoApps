@@ -187,6 +187,7 @@ export default function RegisterTab({
             >
               <StudentStageAvatar
                 stage={stageKeyOf(record.study_stage)}
+                userId={record.student_id}
                 src={record.student?.avatar_url}
                 name={record.student?.name}
                 size={32}

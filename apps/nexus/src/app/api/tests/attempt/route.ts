@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import {
   applyTestDraw,
+  getAttemptById,
   getSupabaseAdminClient,
   getComposedTestQuestions,
   getPlacementById,
@@ -142,12 +143,15 @@ export async function GET(request: NextRequest) {
     let examForTimer: Awaited<ReturnType<typeof getExam>> = null;
     // Which door this sitting comes through. Null for a paper opened without one.
     let doorContext: string | null = null;
+    // The door itself, for counting what it has left after this sitting.
+    let door: Awaited<ReturnType<typeof getPlacementById>> = null;
 
     // A placement carries its own window and visibility on top of the test's.
     if (placementId) {
       const placement = await getPlacementById(placementId);
       if (placement && placement.test_id === testId) {
         doorContext = String(placement.context_type);
+        door = placement;
         if (!placement.is_active || !placement.is_visible) {
           return NextResponse.json({ error: 'This test is not available' }, { status: 403 });
         }
@@ -414,6 +418,31 @@ export async function GET(request: NextRequest) {
     // "inherit," which is exactly test.test_type/duration_minutes unchanged.
     const resolvedTimer = resolveExamTimer(examForTimer, test);
 
+    /**
+     * How many more sittings this door allows once the one being opened is
+     * submitted. null means unlimited, or unknown.
+     *
+     * The take page reads it to decide whether a result offers "Try again". On
+     * an exam it did not know, offered it anyway, and the press landed the
+     * student back on their finished paper with blank answers. Counted exactly
+     * as startOrResumeAttempt counts the limit: submitted attempts on THIS door,
+     * against gating.attempt_limit plus any teacher-granted extras.
+     */
+    let attemptsLeftAfterThis: number | null = null;
+    const doorLimit = Number((door?.gating as { attempt_limit?: unknown } | null)?.attempt_limit);
+    if (door && Number.isFinite(doorLimit) && doorLimit > 0) {
+      const { count, error: countErr } = await (getSupabaseAdminClient() as any)
+        .from('nexus_test_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('test_id', testId)
+        .eq('student_id', user.id)
+        .eq('placement_id', door.id)
+        .eq('status', 'submitted');
+      if (!countErr && typeof count === 'number') {
+        attemptsLeftAfterThis = Math.max(0, doorLimit + extraAttempts - count - 1);
+      }
+    }
+
     return NextResponse.json({
       test: {
         id: test.id,
@@ -432,6 +461,7 @@ export async function GET(request: NextRequest) {
       previous_attempts: started.previous_attempts,
       best_percentage: started.best_percentage,
       resumed: started.resumed,
+      attempts_left_after_this: attemptsLeftAfterThis,
       // null for every non-exam context, which is what makes an ordinary test
       // completely unaffected by the proctoring UI in take/page.tsx.
       proctoring,
@@ -450,13 +480,18 @@ export async function GET(request: NextRequest) {
  * Body: { attempt_id, answers, action: 'save' | 'submit' }
  */
 export async function POST(request: NextRequest) {
+  // Held outside the try so a closed-attempt refusal can say what the attempt is.
+  let userId: string | null = null;
+  let attemptId: string | null = null;
   try {
     const user = await resolveUser(request);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    userId = user.id;
 
     const body = await request.json();
     const { attempt_id, answers, action } = body || {};
     if (!attempt_id) return NextResponse.json({ error: 'Missing attempt_id' }, { status: 400 });
+    attemptId = String(attempt_id);
 
     if (action === 'submit') {
       const result = await submitAttempt({
@@ -507,6 +542,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ action: 'saved' });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save attempt';
+
+    /**
+     * A closed attempt says whether it is in fact submitted.
+     *
+     * A double tap, or the timer firing as the student pressed Submit, reaches
+     * here with a paper that went in a moment ago. The take page used to treat
+     * that 409 as a failed submit and show nothing, so the student kept tapping.
+     * The student attempts route cannot answer this for an exam (it hides
+     * attempts until results are published), so the answer travels with the
+     * refusal. One read by primary key, only on this path.
+     */
+    if ((message === 'ATTEMPT_ALREADY_SUBMITTED' || message === 'ATTEMPT_NOT_OPEN') && userId && attemptId) {
+      const row = await getAttemptById(attemptId, userId).catch(() => null);
+      return NextResponse.json(
+        {
+          error: 'This attempt is already finished. Start a new one to try again.',
+          code: 'ATTEMPT_CLOSED',
+          attempt_status: row?.status ?? null,
+        },
+        { status: 409 },
+      );
+    }
+
     const known = attemptError(message);
     if (known) return known;
     console.error('Test attempt POST error:', message);

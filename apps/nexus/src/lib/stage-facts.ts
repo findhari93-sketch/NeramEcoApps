@@ -1,4 +1,4 @@
-import type { RosterMember } from '@neram/database';
+import type { RosterMember, RosterMemberUser } from '@neram/database';
 
 /**
  * One fact per student, folded from however many enrolments they hold.
@@ -19,12 +19,20 @@ export interface StudentFact {
   photo: string | null;
   /** users.name, so a screen holding only an id can still show the real name. */
   name: string | null;
+  /**
+   * users.knows_tamil: true Knows Tamil, false English only, null not recorded.
+   * Drives the த badge. A roster loaded without the column reads as null.
+   */
+  knowsTamil: boolean | null;
 }
 
-export function foldStudentFacts(members: RosterMember[]): Record<string, StudentFact> {
+/** The roster row this fold reads: the base users embed plus the language column. */
+export type StageFactMember = RosterMember<RosterMemberUser & { knows_tamil?: boolean | null }>;
+
+export function foldStudentFacts(members: StageFactMember[]): Record<string, StudentFact> {
   /**
    * Classroom-per-year means a returning student legitimately holds an enrolment
-   * in both the 2026 and the 2027 classroom, so the four fields fold three
+   * in both the 2026 and the 2027 classroom, so the five fields fold three
    * different ways:
    *
    *   stage        varies per enrolment  -> newest enrolled_at wins, because a
@@ -35,8 +43,8 @@ export function foldStudentFacts(members: RosterMember[]): Record<string, Studen
    *                                        matching pickTrackedIds. Dormant in
    *                                        last year's archived classroom and
    *                                        active in this year's is not a break.
-   *   photo, name  PER USER, not per enrolment -> first sight, and that is the
-   *                                        whole rule. loadClassroomRoster joins
+   *   photo, name, PER USER, not per enrolment -> first sight, and that is the
+   *   knowsTamil                           whole rule. loadClassroomRoster joins
    *                                        one `user:users!...` embed per query,
    *                                        so every row for a person carries the
    *                                        identical users row: "newest" and "all
@@ -57,6 +65,7 @@ export function foldStudentFacts(members: RosterMember[]): Record<string, Studen
         dormant: member.participation_status === 'dormant',
         photo: member.user?.avatar_url ?? null,
         name: member.user?.name ?? null,
+        knowsTamil: typeof member.user?.knows_tamil === 'boolean' ? member.user.knows_tamil : null,
       };
       newest.set(member.user_id, at);
       continue;

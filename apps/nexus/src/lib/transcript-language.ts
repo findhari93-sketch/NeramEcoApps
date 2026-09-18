@@ -12,7 +12,9 @@
  * SCRIPT, NOT LANGUAGE, and the distinction is the whole limit of this file.
  * Counting characters in the Tamil Unicode block against Latin letters is exact,
  * free and needs no model, and it catches the case above completely, because
- * Stream transcribes Tamil speech into Tamil script. What it CANNOT catch is a
+ * that transcript was in Tamil script. (Microsoft Stream on SharePoint cannot
+ * transcribe Tamil at all, checked 2026-09-17, so Tamil tracks now get English
+ * transcripts; see transcriptLanguageConflict.) What it CANNOT catch is a
  * Tamil class transcribed into Latin letters ("vanakkam nanbargale"), which
  * counts as Latin and reads as English. Catching that needs the model. The cheap
  * route if it ever matters: lib/ai-generate.ts already sends the transcript to
@@ -133,7 +135,9 @@ export function transcriptLanguageConflict(
   script: TranscriptScript,
   trackLanguage: string,
 ): boolean {
-  if (!script.likelyLanguage) return false;
-  if (trackLanguage !== 'ta' && trackLanguage !== 'en') return false;
-  return script.likelyLanguage !== trackLanguage;
+  // Only Tamil script on the English track is a contradiction. The reverse is
+  // the expected case: Microsoft Stream cannot transcribe Tamil, so a Tamil
+  // track's transcript is written in English (by AI Studio or by Nexus) to match
+  // its checkpoints, which are always English.
+  return trackLanguage === 'en' && script.likelyLanguage === 'ta';
 }

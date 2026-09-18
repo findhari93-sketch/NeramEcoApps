@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { sendTeamsChatMessage } from './teams-messaging';
 
+/** A sender token carrying the teacher's account id, so the chat can bind them. */
+const TOKEN = `${Buffer.from('{}').toString('base64url')}.${Buffer.from(JSON.stringify({ oid: '11111111-2222-4333-8444-555555555555' })).toString('base64url')}.sig`;
+
 function reply(ok: boolean, body: unknown = {}) {
   return {
     ok,
@@ -39,7 +42,7 @@ describe('sendTeamsChatMessage with a card attachment', () => {
     );
 
     const result = await sendTeamsChatMessage(
-      'token',
+      TOKEN,
       'student@neramclasses.com',
       '<attachment id="drawing-review-card"></attachment>',
       { attachments: [card], fallbackHtml: '<p>fallback</p>' },
@@ -64,7 +67,7 @@ describe('sendTeamsChatMessage with a card attachment', () => {
     );
 
     const result = await sendTeamsChatMessage(
-      'token',
+      TOKEN,
       'student@neramclasses.com',
       '<attachment id="drawing-review-card"></attachment>',
       { attachments: [card], fallbackHtml: '<p>fallback</p>' },
@@ -87,7 +90,7 @@ describe('sendTeamsChatMessage with a card attachment', () => {
       }),
     );
 
-    const result = await sendTeamsChatMessage('token', 'student@neramclasses.com', '<p>hello</p>');
+    const result = await sendTeamsChatMessage(TOKEN, 'student@neramclasses.com', '<p>hello</p>');
 
     expect(result.ok).toBe(false);
     expect(posts).toHaveLength(1);

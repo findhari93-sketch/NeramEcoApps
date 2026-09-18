@@ -24,6 +24,19 @@ import {
  * The student id comes from the verified token and is never read from the URL
  * or the body.
  */
+/**
+ * Why an exam door's review is still shut, or null when it may be shown.
+ * Fails closed: an exam that cannot be found is treated as unpublished.
+ */
+async function examReviewLock(placement: { gating?: unknown }): Promise<'open' | 'unpublished' | null> {
+  const examId = (placement.gating as { exam_id?: string } | null)?.exam_id;
+  const exam = examId ? await getExam(examId) : null;
+  if (!exam) return 'unpublished';
+  if (exam.closes_at && new Date(exam.closes_at) > new Date()) return 'open';
+  if (exam.results_state === 'unpublished') return 'unpublished';
+  return null;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { testId: string } },
@@ -65,19 +78,18 @@ export async function GET(
      * seeing what you got wrong is how that works.
      */
     if (placement?.context_type === 'exam') {
-      const examId = (placement.gating as { exam_id?: string } | null)?.exam_id;
-      const exam = examId ? await getExam(examId) : null;
-      const stillOpen = exam?.closes_at ? new Date(exam.closes_at) > new Date() : false;
-      if (!exam || exam.results_state === 'unpublished' || stillOpen) {
+      const lock = await examReviewLock(placement);
+      if (lock) {
         return NextResponse.json({
           data: {
             test: null,
             attempts: [],
             student: me,
             code: 'RESULTS_NOT_PUBLISHED',
-            message: stillOpen
-              ? 'Your answers open up once the exam has finished.'
-              : 'Your teacher has not published the results for this exam yet.',
+            message:
+              lock === 'open'
+                ? 'Your answers open up once the exam has finished.'
+                : 'Your teacher has not published the results for this exam yet.',
           },
         });
       }
@@ -88,8 +100,29 @@ export async function GET(
       supabase,
     );
 
+    /**
+     * The same gate for a whole-paper history.
+     *
+     * Asked without a placement_id (the Performance tab does), the query returns
+     * every sitting on the paper, exam sittings included, and the gate above
+     * never ran. Each exam door's sittings are dropped until that exam's review
+     * would open through its own door.
+     */
+    let attempts = review.attempts;
+    if (!placementId) {
+      const doorIds = [...new Set(attempts.map((a) => a.placement_id).filter(Boolean))] as string[];
+      const locked = new Set<string>();
+      await Promise.all(
+        doorIds.map(async (id) => {
+          const door = await getPlacementById(id, supabase);
+          if (door?.context_type === 'exam' && (await examReviewLock(door))) locked.add(id);
+        }),
+      );
+      attempts = attempts.filter((a) => !a.placement_id || !locked.has(a.placement_id));
+    }
+
     return NextResponse.json(
-      { data: { test: review.test, attempts: review.attempts, student: me } },
+      { data: { test: review.test, attempts, student: me } },
       { headers: { 'Cache-Control': 'private, max-age=0, must-revalidate' } },
     );
   } catch (err) {

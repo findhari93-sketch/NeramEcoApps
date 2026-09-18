@@ -13,7 +13,7 @@
  * from the class they gate, which is where their unlock rules live.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { Box, Typography, Button, Paper, Skeleton, Alert, Snackbar, CircularProgress, Tabs, Tab } from '@neram/ui';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
@@ -30,6 +30,9 @@ import TestsSection from '@/components/tests/TestsSection';
 import ClassTestsTab, { type RecentAttempt } from '@/components/tests/ClassTestsTab';
 import StudentRescheduleSheet from '@/components/tests/StudentRescheduleSheet';
 import AskTeacherSheet from '@/components/tests/AskTeacherSheet';
+import TellTeacherWhySheet, { type GivenReason } from '@/components/tests/TellTeacherWhySheet';
+import { markWhyGiven } from '@/lib/student-test-card-state';
+import { WHY_PARAM, findTestForWhyLink } from '@/lib/tell-why-link';
 import PerformanceTab, { type PerformanceTabData } from '@/components/tests/PerformanceTab';
 
 interface Overview {
@@ -84,6 +87,10 @@ export default function StudentTestsPage() {
   const [rescheduleTest, setRescheduleTest] = useState<StudentTest | null>(null);
   /** The test a student is asking their teacher to reopen. */
   const [askTest, setAskTest] = useState<StudentTest | null>(null);
+  /** The test a student is telling their teacher why they did not sit. */
+  const [whyTest, setWhyTest] = useState<StudentTest | null>(null);
+  /** The ?why= link is honoured once per visit, not on every reload of the list. */
+  const whyLinkHandled = useRef(false);
 
   const tabParam = searchParams.get('tab');
   const tab: TabKey = TAB_KEYS.includes(tabParam as TabKey) ? (tabParam as TabKey) : 'class';
@@ -186,9 +193,76 @@ export default function StudentTestsPage() {
       onReview: start,
       onReschedule: setRescheduleTest,
       onAskTeacher: setAskTest,
+      onExplain: setWhyTest,
       onCatchUp: (href: string) => router.push(href),
     }),
     [start, router],
+  );
+
+  /**
+   * The link in a teacher's "Tell me why" message: /student/tests?why=<placement>.
+   *
+   * Opens the sheet straight onto that test once the list has loaded, then
+   * drops the parameter so closing the sheet (or a refresh) does not open it
+   * again. When the card no longer asks the question (they have sat it since, or
+   * they were excused) the student is told why nothing opened.
+   */
+  const whyParam = searchParams.get(WHY_PARAM);
+  useEffect(() => {
+    // Wait for a list loaded FOR a class: the first load can land before the
+    // active classroom is known, and reading the link against that empty list
+    // would tell the student the test is not theirs.
+    if (!whyParam || !data || !data.has_classroom || whyLinkHandled.current) return;
+    whyLinkHandled.current = true;
+
+    const found = findTestForWhyLink(data, whyParam);
+    if (found.kind === 'ask') setWhyTest(found.test);
+    else if (found.kind === 'not_needed') notify('You have already sat this one, so there is nothing to explain.', 'success');
+    else notify('That test is not on your list for this class. Check the class picked at the top.', 'error');
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(WHY_PARAM);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [whyParam, data, searchParams, router, pathname, notify]);
+
+  const submitWhy = useCallback(
+    async (input: { test_id: string; placement_id: string | null; reason_code: string; reason_note: string }) => {
+      const json = await authFetch('/api/student/tests/reasons', {
+        method: 'POST',
+        body: JSON.stringify({ ...input, classroom_id: activeClassroom?.id ?? null }),
+      });
+      const reason = json?.data?.reason as GivenReason | undefined;
+      return reason ?? { reason_code: input.reason_code, reason_note: input.reason_note || null, updated_at: null };
+    },
+    [authFetch, activeClassroom?.id],
+  );
+
+  /**
+   * Patch the answer onto every copy of that test on the page (it can sit in To
+   * do, Exams and All class tests at once) rather than refetching the whole list
+   * on a phone for one line of text.
+   */
+  const onWhySent = useCallback(
+    (test: StudentTest, reason: GivenReason) => {
+      setWhyTest(null);
+      const patch = (t: StudentTest): StudentTest =>
+        t.id === test.id && t.placement_id === test.placement_id
+          ? { ...t, skip_reason: reason, card: t.card ? markWhyGiven(t.card, reason.reason_code) : t.card }
+          : t;
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              due: prev.due.map(patch),
+              all: prev.all?.map(patch),
+              exams: prev.exams?.map(patch),
+            }
+          : prev,
+      );
+      notify('Sent. Your teacher can see it now.', 'success');
+    },
+    [notify],
   );
 
   async function practiseMistakes() {
@@ -393,6 +467,11 @@ export default function StudentTestsPage() {
           reach this only by pressing Start and reading the 403 that came back,
           which hid the way through the door behind the door. */}
       <AskTeacherSheet test={askTest} onClose={() => setAskTest(null)} getToken={getToken} />
+
+      {/* Why they did not sit a test they owed. Its own sheet, beside the ask
+          to reopen, because saying why and asking for another go are two
+          different things a student may want. */}
+      <TellTeacherWhySheet test={whyTest} onClose={() => setWhyTest(null)} submit={submitWhy} onSent={onWhySent} />
 
       <StudentRescheduleSheet
         test={rescheduleTest}

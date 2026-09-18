@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useMemo } from 'react';
 import { useAuthSWR } from '@/lib/nexus-swr';
+import { STAGE_FACTS_KEY } from '@/lib/stage-facts-cache';
 import { stageKeyOf, type StageKey } from '@/lib/student-stage';
 
 /**
@@ -38,6 +39,8 @@ export interface StudentStageFacts {
   photo: string | null;
   /** users.name, so a screen holding only an id still shows the real name. */
   name: string | null;
+  /** users.knows_tamil: true Knows Tamil, false English only, null not recorded. */
+  knowsTamil: boolean | null;
 }
 
 interface StageFactsContextValue {
@@ -59,7 +62,13 @@ export function useStudentStageFacts(): StageFactsContextValue {
 interface Payload {
   facts: Record<
     string,
-    { stage: string | null; dormant: boolean; photo: string | null; name: string | null }
+    {
+      stage: string | null;
+      dormant: boolean;
+      photo: string | null;
+      name: string | null;
+      knowsTamil?: boolean | null;
+    }
   >;
 }
 
@@ -72,7 +81,7 @@ export default function StudentStageFactsProvider({ children }: { children: Reac
    * a function invocation each time a teacher alt-tabs back. An hour of
    * deduping means walking between eight screens costs one request in total.
    */
-  const { data } = useAuthSWR<Payload>('/api/students/stage-facts', {
+  const { data } = useAuthSWR<Payload>(STAGE_FACTS_KEY, {
     revalidateOnFocus: false,
     revalidateIfStale: false,
     dedupingInterval: 3_600_000,
@@ -96,6 +105,8 @@ export default function StudentStageFactsProvider({ children }: { children: Reac
         dormant: !!row.dormant,
         photo: row.photo ?? null,
         name: row.name ?? null,
+        // Anything but a real boolean is "not recorded", never English only.
+        knowsTamil: typeof row.knowsTamil === 'boolean' ? row.knowsTamil : null,
       });
     }
 

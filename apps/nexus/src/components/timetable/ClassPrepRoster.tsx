@@ -251,6 +251,7 @@ export default function ClassPrepRoster({
                     that the two unprepared names are break-year students. */}
                 <StudentStageAvatar
                   stage={stageKeyOf(r.study_stage)}
+                  userId={r.student_id}
                   name={r.name}
                   src={r.avatar_url}
                   size={32}

@@ -175,6 +175,8 @@ export interface User extends Timestamps {
   // First time the student got PAST the photo gate (migration 20260919090000).
   // NULL means Not started. nexus_first_login_at is stamped even when the gate stopped them.
   nexus_entered_at: string | null;
+  /** Staff recorded in Nexus. true Knows Tamil, false English only, null not recorded. */
+  knows_tamil: boolean | null;
   metadata: Record<string, unknown> | null;
 
   // Lifecycle focus (reversible archive) + academic-year cohort + exam status

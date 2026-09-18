@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refuseUnlessStudent, verifyQBAccess } from '@/lib/qb-auth';
 import { getSupabaseAdminClient } from '@neram/database';
-import { isTestReasonCode, testReasonRequiresNote } from '@/lib/test-reasons';
+import { isTestReasonCode, testReasonFitsContext, testReasonRequiresNote } from '@/lib/test-reasons';
 
 /** Long enough for a real bug report, short enough not to be a storage problem. */
 const MAX_NOTE = 1000;
@@ -64,6 +64,13 @@ export async function POST(request: NextRequest) {
       if (findErr) throw findErr;
       if (!attempt) return NextResponse.json({ error: 'That attempt is not yours' }, { status: 403 });
 
+      // A sitting somebody started is one they knew was open. did_not_know is
+      // only an answer for a test they never sat, and the abandon sheet never
+      // offers it, so reaching here with it is a client bug worth refusing.
+      if (!testReasonFitsContext(code, 'abandoned')) {
+        return NextResponse.json({ error: 'That reason is for a test you did not start' }, { status: 400 });
+      }
+
       // A submitted paper has no unfinished story to tell, and letting a reason
       // land on one would put "I ran out of time" next to a score.
       if (attempt.status !== 'abandoned' && attempt.status !== 'expired') {
@@ -96,6 +103,21 @@ export async function POST(request: NextRequest) {
       if (testErr) throw testErr;
       if (!test || !test.is_active) return NextResponse.json({ error: 'That test does not exist' }, { status: 404 });
 
+      // The placement is part of the row's identity and the teacher's Students
+      // tab reads reasons by it, so a placement from another paper would land a
+      // reason on the wrong run. Checked, never trusted.
+      if (placementId) {
+        const { data: placement, error: placementErr } = await supabase
+          .from('nexus_test_placements')
+          .select('id, test_id')
+          .eq('id', placementId)
+          .maybeSingle();
+        if (placementErr) throw placementErr;
+        if (!placement || placement.test_id !== test.id) {
+          return NextResponse.json({ error: 'That test is not set in that place' }, { status: 400 });
+        }
+      }
+
       // Upsert on the identity the two partial unique indexes define, so a
       // student changing their mind updates their row rather than stacking a
       // second one. See migration 20260824090100 for why NULL placement_id
@@ -125,13 +147,39 @@ export async function POST(request: NextRequest) {
         : await supabase.from('nexus_test_skip_reasons').insert(row);
       if (error) throw error;
 
-      return NextResponse.json({ data: { recorded: 'skip' } }, { status: 201 });
+      // Echoed back so the card can say "You told your teacher: Didn't know"
+      // without a second round trip.
+      return NextResponse.json(
+        {
+          data: {
+            recorded: 'skip',
+            reason: { reason_code: code, reason_note: note || null, updated_at: row.updated_at },
+          },
+        },
+        { status: 201 },
+      );
     }
 
     return NextResponse.json({ error: 'Either attempt_id or test_id is required' }, { status: 400 });
   } catch (err) {
+    /**
+     * A reason code the database has not been taught yet.
+     *
+     * The codes live in two places, this app and a CHECK constraint, and this
+     * environment's migration may be behind (staging drift is routine here). A
+     * PostgrestError is not an Error, so without this the student saw a bare
+     * 500 and an invitation to try again, which could never work.
+     */
+    const code = (err as { code?: string } | null)?.code;
+    if (code === '23514') {
+      console.error('Test reason POST refused by a CHECK constraint (migration behind?):', err);
+      return NextResponse.json(
+        { error: 'That reason is not available yet. Pick another one, or tell your teacher directly.' },
+        { status: 409 },
+      );
+    }
     const message = err instanceof Error ? err.message : 'Could not record that reason';
-    console.error('Test reason POST error:', message);
+    console.error('Test reason POST error:', err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

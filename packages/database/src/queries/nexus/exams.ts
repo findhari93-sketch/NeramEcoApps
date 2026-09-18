@@ -1073,20 +1073,9 @@ export async function closeExamNow(
   return { closed };
 }
 
-/** Exams whose window has closed but which still hold open attempts. */
-export async function listExamsNeedingClose(
-  client?: TypedSupabaseClient,
-): Promise<NexusExam[]> {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from(EXAMS)
-    .select('*')
-    .lt('closes_at', new Date().toISOString())
-    // A week is generous for a sweep that runs hourly, and bounds the scan.
-    .gt('closes_at', new Date(Date.now() - 7 * 86_400_000).toISOString());
-  if (error) throw error;
-  return (data || []) as unknown as NexusExam[];
-}
+// The hourly close sweep's query lives in exam-close-sweep.ts. It judges each
+// paper against its student's own window; the exam-wide query that used to sit
+// here cut reopened students' sittings short.
 
 /* ─────────────────────────── Result snapshot ──────────────────────────── */
 

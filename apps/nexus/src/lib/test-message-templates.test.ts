@@ -43,8 +43,13 @@ describe('renderTestMessage', () => {
     expect(renderTestMessage('missed', { ...ctx, dueLabel: null }).body).not.toContain('{due}');
   });
 
-  it('points "tell me why" at the in-app ask, where the reason is recorded', () => {
-    expect(renderTestMessage('why', ctx).body).toContain('Ask to reopen');
+  // Updated 2026-09-17: the in-app place a reason is recorded is now the card's
+  // own "Tell your teacher why", which the teacher sees on the student's row.
+  // "Ask to reopen" was never the button's name ("Ask my teacher" is).
+  it('points "tell me why" at the in-app answer, where the reason is recorded', () => {
+    const { body } = renderTestMessage('why', ctx);
+    expect(body).toContain('"Tell your teacher why"');
+    expect(body).toContain('"Ask my teacher"');
   });
 
   it('tells a re-graded student it was not their fault', () => {
@@ -184,5 +189,32 @@ describe('isTestMessageTemplate', () => {
   it('refuses anything else', () => {
     expect(isTestMessageTemplate('shout')).toBe(false);
     expect(isTestMessageTemplate(null)).toBe(false);
+  });
+});
+
+/**
+ * 2026-09-17. The "why" message used to ask for a reply in Teams chat, and
+ * nothing in Nexus read replies back. It now sends students to the card, whose
+ * answer reaches the teacher's Students tab.
+ */
+describe('the "Tell me why" message', () => {
+  it('never asks the student to reply in chat', () => {
+    const { body } = renderTestMessage('why', ctx);
+    expect(body).not.toMatch(/reply/i);
+  });
+
+  it('names the link the route puts under it, so the text and the link agree', async () => {
+    const { TELL_WHY_LINK_LABEL, templateLinksToWhy } = await import('./test-message-templates');
+    expect(renderTestMessage('why', ctx).body).toContain(TELL_WHY_LINK_LABEL);
+    expect(templateLinksToWhy('why')).toBe(true);
+    for (const t of TEST_MESSAGE_TEMPLATES) {
+      if (t !== 'why') expect(templateLinksToWhy(t)).toBe(false);
+    }
+  });
+
+  it('does not claim a reason reopens anything', () => {
+    const body = renderTestMessage('why', { ...ctx, reopening: false }).body;
+    expect(body).toContain('does not reopen the test');
+    expect(body).not.toContain('I have reopened');
   });
 });

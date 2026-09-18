@@ -15667,6 +15667,7 @@ export type Database = {
           has_password: boolean | null
           id: string
           is_alumni: boolean
+          knows_tamil: boolean | null
           nexus_access_enabled: boolean
           student_program: string
           staff_role: string | null
@@ -15721,6 +15722,7 @@ export type Database = {
           has_password?: boolean | null
           id?: string
           is_alumni?: boolean
+          knows_tamil?: boolean | null
           nexus_access_enabled?: boolean
           student_program?: string
           staff_role?: string | null
@@ -15775,6 +15777,7 @@ export type Database = {
           has_password?: boolean | null
           id?: string
           is_alumni?: boolean
+          knows_tamil?: boolean | null
           nexus_access_enabled?: boolean
           student_program?: string
           staff_role?: string | null

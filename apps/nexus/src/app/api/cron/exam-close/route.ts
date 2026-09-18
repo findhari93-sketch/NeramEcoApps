@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getSupabaseAdminClient,
-  listExamsNeedingClose,
+  listExamAttemptsDueForClose,
   submitAttempt,
 } from '@neram/database';
 import { assertCronRequest } from '@/lib/cron-auth';
@@ -9,7 +9,7 @@ import { assertCronRequest } from '@/lib/cron-auth';
 export const dynamic = 'force-dynamic';
 
 /**
- * Shut the door on exams whose window has passed.
+ * Shut the door on exam papers whose student's window has passed.
  *
  * A student who runs out of time has their paper submitted for them with
  * whatever the 30-second autosave captured, rather than losing an hour of work
@@ -24,8 +24,10 @@ export const dynamic = 'force-dynamic';
  *   2. A window check inside submitAttempt, which refuses a late POST.
  *   3. This sweep, which handles the student who simply walked away.
  *
- * The teacher's "Close exam now" button calls the same closeExamNow path, so
- * nobody waits up to an hour for a paper to be marked.
+ * Each paper is judged against its STUDENT'S window (reopen, make-up, else the
+ * exam's own), never the exam's alone. Sweeping on the exam's close cut short
+ * the sitting of every student the teacher had reopened it for. See
+ * listExamAttemptsDueForClose.
  */
 export async function GET(request: NextRequest) {
   const unauthorized = assertCronRequest(request);
@@ -35,73 +37,42 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdminClient();
 
   try {
-    const exams = await listExamsNeedingClose(supabase);
+    const due = await listExamAttemptsDueForClose(supabase);
 
     let closed = 0;
     let failed = 0;
-    const touched: string[] = [];
+    const touched = new Set<string>();
 
-    for (const exam of exams) {
-      // Only the exam's own door. This read used to be by paper, so closing the
-      // 18 Aug exam also force-submitted two Study Materials practice attempts
-      // that happened to be open on the same paper, at 0% and 6%.
-      const { data: placement, error: placementError } = await supabase
-        .from('nexus_test_placements' as any)
-        .select('id')
-        .eq('context_type', 'exam')
-        .eq('context_id', exam.scheduled_class_id)
-        .eq('is_active', true)
-        .maybeSingle();
-      if (placementError) {
-        console.error(`[exam-close] could not read the placement for ${exam.id}:`, placementError);
-        continue;
-      }
-      const placementId = (placement as { id?: string } | null)?.id;
-      if (!placementId) continue;
-
-      const { data: open, error } = await supabase
-        .from('nexus_test_attempts' as any)
-        .select('id, student_id')
-        .eq('test_id', exam.test_id)
-        .eq('placement_id', placementId)
-        .eq('status', 'in_progress');
-      if (error) {
-        console.error(`[exam-close] could not read attempts for ${exam.id}:`, error);
-        continue;
-      }
-      if (!open || open.length === 0) continue;
-
-      touched.push(exam.id);
-      for (const attempt of open as any[]) {
-        try {
-          await submitAttempt(
-            {
-              attemptId: attempt.id,
-              studentId: attempt.student_id,
-              // The whole reason this sweep exists is to submit after the door
-              // has shut, so it is the one caller allowed past that guard.
-              allowAfterClose: true,
-            },
-            supabase,
-          );
-          closed += 1;
-        } catch (err) {
-          // One student's paper failing must not stop the rest of the sweep.
-          // EXAM_CLOSED here would mean the submit guard beat us to it, which
-          // is fine and not worth logging as a failure.
-          const message = err instanceof Error ? err.message : String(err);
-          if (message !== 'ATTEMPT_ALREADY_SUBMITTED') {
-            console.error(`[exam-close] attempt ${attempt.id} did not submit:`, message);
-            failed += 1;
-          }
+    for (const paper of due) {
+      touched.add(paper.examId);
+      try {
+        await submitAttempt(
+          {
+            attemptId: paper.attemptId,
+            studentId: paper.studentId,
+            // The whole reason this sweep exists is to submit after the door
+            // has shut, so it is the one caller allowed past that guard.
+            allowAfterClose: true,
+          },
+          supabase,
+        );
+        closed += 1;
+      } catch (err) {
+        // One student's paper failing must not stop the rest of the sweep.
+        // ATTEMPT_ALREADY_SUBMITTED means the student's own submit beat us to
+        // it, which is fine and not worth logging as a failure.
+        const message = err instanceof Error ? err.message : String(err);
+        if (message !== 'ATTEMPT_ALREADY_SUBMITTED') {
+          console.error(`[exam-close] attempt ${paper.attemptId} did not submit:`, message);
+          failed += 1;
         }
       }
     }
 
     return NextResponse.json({
       ok: true,
-      exams_checked: exams.length,
-      exams_with_open_attempts: touched.length,
+      papers_due: due.length,
+      exams_with_open_attempts: touched.size,
       attempts_closed: closed,
       attempts_failed: failed,
       ms: Date.now() - started,

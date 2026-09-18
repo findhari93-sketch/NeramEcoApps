@@ -51,9 +51,11 @@ import {
   RESULT_FILTER_EMPTY,
   RESULT_FILTER_LABELS,
   countByResultFilter,
+  excusedLabel,
   matchesResultFilter,
   type ResultFilter,
 } from '@/lib/test-result-filters';
+import ResultReasonToggle, { ResultReasonDetail } from '@/components/tests/ResultReasonToggle';
 
 type ResultStatus = 'submitted' | 'in_progress' | 'not_started' | 'missed' | 'excused';
 
@@ -87,6 +89,24 @@ export interface StudentResultRow {
   sat_via_at?: string | null;
   /** A dormant student shown only because they really sat it. Not in any count. */
   paused?: boolean;
+  /**
+   * What the student said through "Tell your teacher why". Only on a row with no
+   * sitting. `label` is their own sentence, `short_label` the tag.
+   */
+  why?: {
+    code: string;
+    short_label: string;
+    label: string;
+    note: string | null;
+    at: string | null;
+    for_this_run: boolean;
+  } | null;
+  /** What they wrote when asking to be let back in. */
+  request_note?: string | null;
+  /** A make-up is closed from the exam screen, a reopen from this row. */
+  window_source?: 'reopen' | 'makeup' | null;
+  /** The teacher's note on an excusing override. */
+  excused_note?: string | null;
 }
 
 export interface StudentResultStats {
@@ -166,10 +186,25 @@ const TILE_TONES: Record<ResultFilter, StatTone> = {
   all: 'neutral',
   did: 'info',
   not_done: 'warning',
+  no_reason: 'warning',
+  excused: 'neutral',
   passed: 'success',
   below_pass: 'error',
   below_avg: 'warning',
 };
+
+/** The status words under a name, for a student with no sitting. */
+function unsatText(r: StudentResultRow): string {
+  return r.status === 'excused' ? excusedLabel(r.bucket, r.excused_note) : STATUS_TEXT[r.status];
+}
+
+/** The window clause, naming a make-up as one so nobody reaches for the wrong control. */
+function windowText(r: StudentResultRow): string {
+  if (!r.window_open_until) return '';
+  return r.window_source === 'makeup'
+    ? ` · make-up until ${formatWhen(r.window_open_until)}`
+    : ` · open until ${formatWhen(r.window_open_until)}`;
+}
 
 function formatWhen(iso: string | null): string {
   if (!iso) return '';
@@ -285,16 +320,42 @@ export default function TestResultsStudents({
     const counted = view.staged.filter((r) => !r.paused);
     const notStarted = counted.filter((r) => r.status === 'not_started').length;
     const missed = counted.filter((r) => r.status === 'missed').length;
+    const inProgress = counted.filter((r) => r.status === 'in_progress').length;
+    const joinedLater = counted.filter((r) => r.status === 'excused' && r.bucket === 'excused_new_joiner').length;
     const hints: Record<ResultFilter, string> = {
-      all: isRunScoped ? 'set for this run' : `${stats?.attempts ?? 0} attempts, retakes included`,
+      // Done + Not done + Excused make Everyone. The one group with no tile of
+      // its own is named here, so the tiles can be added up by eye.
+      all: isRunScoped
+        ? inProgress > 0
+          ? `${inProgress} sitting it now`
+          : 'set for this run'
+        : `${stats?.attempts ?? 0} attempts, retakes included`,
       did: `of ${counts.all}`,
       not_done: `${notStarted} not started, ${missed} missed`,
+      no_reason: `of ${counts.not_done} not done`,
+      excused:
+        joinedLater === counts.excused
+          ? 'joined after the class'
+          : joinedLater > 0
+            ? `${joinedLater} joined later`
+            : 'not required to sit it',
       passed: passMark == null ? 'passed' : `${passMark}% or more`,
       below_pass: passMark == null ? 'sat it, did not pass' : `sat it, under ${passMark}%`,
       below_avg: average == null ? 'no average yet' : `sat it, under ${Math.round(average)}%`,
     };
+    // Not said why only means something while somebody has not done it, and
+    // Excused only appears when somebody is (or when a link opened onto it).
     const keys: ResultFilter[] = isRunScoped
-      ? ['all', 'did', 'not_done', 'passed', 'below_pass', 'below_avg']
+      ? [
+          'all',
+          'did',
+          'not_done',
+          ...(counts.not_done > 0 || filter === 'no_reason' ? (['no_reason'] as const) : []),
+          ...(counts.excused > 0 || filter === 'excused' ? (['excused'] as const) : []),
+          'passed',
+          'below_pass',
+          'below_avg',
+        ]
       : ['all', 'passed', 'below_pass', 'below_avg'];
     return keys.map((key) => ({
       key,
@@ -303,7 +364,18 @@ export default function TestResultsStudents({
       hint: hints[key],
       tone: TILE_TONES[key],
     }));
-  }, [view.staged, counts, isRunScoped, stats?.attempts, passMark, average]);
+  }, [view.staged, counts, isRunScoped, stats?.attempts, passMark, average, filter]);
+
+  // Which rows have their reason opened. Per student, and kept across filters so
+  // a teacher reading reasons can move between groups without losing their place.
+  const [openReasons, setOpenReasons] = useState<Set<string>>(new Set());
+  const toggleReason = (id: string) =>
+    setOpenReasons((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const filtered = view.shown;
 
@@ -453,6 +525,8 @@ export default function TestResultsStudents({
                     : { label: 'First', pct: r.first_percentage, score: r.first_score, total: r.first_total_marks };
                 const sat = r.attempts > 0;
                 const isSelected = selected.has(r.student_id);
+                const closable = Boolean(r.window_open_until) && r.window_source !== 'makeup';
+                const reasonOpen = !sat && Boolean(r.why || r.request_note) && openReasons.has(r.student_id);
 
                 return (
                   <Box key={r.student_id}>
@@ -534,12 +608,21 @@ export default function TestResultsStudents({
                             </>
                           ) : (
                             <>
-                              {STATUS_TEXT[r.status]}
-                              {r.window_open_until ? ` · open until ${formatWhen(r.window_open_until)}` : ''}
+                              {unsatText(r)}
+                              {windowText(r)}
                               {r.access_request_pending ? ' · asked to reopen' : ''}
                             </>
                           )}
                         </Typography>
+
+                        {/* What they told the teacher, one tap from the note. */}
+                        {!sat && (r.why || r.request_note) && (
+                          <ResultReasonToggle
+                            row={r}
+                            open={openReasons.has(r.student_id)}
+                            onToggle={() => toggleReason(r.student_id)}
+                          />
+                        )}
 
                         {/* How the sitting was counted, when it was not the run's
                             own door. Replaces the self-study line, which would
@@ -627,23 +710,24 @@ export default function TestResultsStudents({
                               )}
                               {/* Opening goes through the reopen sheet, so a
                                   single student is told when it closes too. */}
+                              {/* A make-up is not a reopen, and this control closes
+                                  reopens only, so a make-up row offers the reopen
+                                  sheet rather than a Close that would do nothing. */}
                               <Button
                                 size="small"
                                 disabled={acting === r.student_id}
                                 startIcon={
-                                  r.window_open_until ? undefined : <LockOpenOutlinedIcon sx={{ fontSize: 16 }} />
+                                  closable ? undefined : <LockOpenOutlinedIcon sx={{ fontSize: 16 }} />
                                 }
-                                onClick={() =>
-                                  r.window_open_until ? onSetAccess(r.student_id, 'close') : onReopen([r])
-                                }
+                                onClick={() => (closable ? onSetAccess(r.student_id, 'close') : onReopen([r]))}
                                 aria-label={
-                                  r.window_open_until
+                                  closable
                                     ? `Close this test for ${r.student_name || 'this student'}`
                                     : `Open this test for ${r.student_name || 'this student'}`
                                 }
                                 sx={{ textTransform: 'none', minHeight: 44 }}
                               >
-                                {r.window_open_until ? 'Close' : sat ? 'Open again' : 'Open for them'}
+                                {closable ? 'Close' : sat ? 'Open again' : 'Open for them'}
                               </Button>
                             </>
                           )}
@@ -652,7 +736,13 @@ export default function TestResultsStudents({
 
                       <Chip
                         size="small"
-                        label={sat ? formatScore(lead.pct, lead.score, lead.total) : STATUS_TEXT[r.status]}
+                        label={
+                          sat
+                            ? formatScore(lead.pct, lead.score, lead.total)
+                            : r.status === 'excused'
+                              ? 'Excused'
+                              : STATUS_TEXT[r.status]
+                        }
                         color={
                           !sat
                             ? r.status === 'missed'
@@ -667,6 +757,11 @@ export default function TestResultsStudents({
                         sx={{ height: 26, fontWeight: 700, minWidth: 56 }}
                       />
                     </Box>
+                    {/* Outside the row, so reading a note never opens the
+                        answer sheet and the note can use the full width. */}
+                    {reasonOpen && (
+                      <ResultReasonDetail row={r} id={`reason-${r.student_id}`} indent={canAct ? 12.5 : 6.75} />
+                    )}
                   </Box>
                 );
               })}

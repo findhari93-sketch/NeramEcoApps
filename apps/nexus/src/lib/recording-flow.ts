@@ -116,7 +116,8 @@ const FIND_VIDEO = action('find_video', 'Find video in SharePoint');
 const PASTE_LINK = action('paste_link', 'Paste a SharePoint link');
 const REPLACE_VIDEO = action('replace_video', 'Replace video');
 const COPY_TO_LIBRARY = action('copy_to_library', 'Copy to Neram library');
-const UPLOAD_TRANSCRIPT = action('upload_transcript', 'Upload transcript (.vtt)');
+// No format in the label: .vtt, .srt and the .txt an AI Studio answer is saved as all work.
+const UPLOAD_TRANSCRIPT = action('upload_transcript', 'Upload transcript');
 const CREATE_CHECKPOINTS = action('create_checkpoints', 'Create checkpoints');
 const PUBLISH_OPEN = action('publish_open', 'Publish without checkpoints');
 const REVIEW_CHECKPOINTS = action('review_checkpoints', 'Review checkpoints');

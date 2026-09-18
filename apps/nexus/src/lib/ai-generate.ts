@@ -69,6 +69,12 @@ export interface GenerateOptions {
   feature?: AiFeatureId;
   /** users.id of the teacher who triggered this, when there is one. */
   actorId?: string | null;
+  /**
+   * The language the class was taught in, as a track stores it ('en', 'ta').
+   * The checkpoints are written in English either way; this only tells the
+   * model what kind of transcript it is reading.
+   */
+  spokenLanguage?: string | null;
 }
 
 import { dropTranscriptTrivia } from './recap-question-quality';
@@ -122,7 +128,17 @@ Rules:
 6. Questions must be distinct from one another. No rephrasings of the same fact.
 7. The title is 3 to 8 words naming what this stretch of the class covered. The description is one or two sentences. Both describe the segment you were given; do not comment on the split itself.
 8. Write UP TO the number of questions asked for, never more, and fewer whenever the segment does not carry that much teaching. If a segment is greetings, waiting for students, an audio check, timetable admin or small talk with nothing taught in it, return an EMPTY questions array and say so in the description. Do not pad.
-9. Never ask about the mechanics of the recording. No questions about who was greeted, what was said first or last, how many times a phrase occurred, what time of day it was, or what words the tutor used. Every question must be about the subject being taught.`;
+9. Never ask about the mechanics of the recording. No questions about who was greeted, what was said first or last, how many times a phrase occurred, what time of day it was, or what words the tutor used. Every question must be about the subject being taught.
+10. Write every title, description, question, option and explanation in English, whatever language the transcript is in. The transcript may be in Tamil script, Tamil written in English letters, or a mix of Tamil and English: understand what was taught and write it in English. Keep technical, architectural and drawing terms in English as the tutor said them. Never write in Tamil script.`;
+
+/**
+ * Track languages whose classes are taught in Tamil mixed with English.
+ *
+ * The model is told so, because the transcripts of these classes are the hard
+ * case for rule 10: a translated transcript, or Microsoft's attempt to spell
+ * Tamil speech as English words, reads oddly unless the model knows why.
+ */
+const TAMIL_TAUGHT = new Set(['ta', 'ta_en']);
 
 /** Transcript lines inside one segment's window, for the questions pass. */
 function sliceTranscript(entries: TranscriptEntry[], start: number, end: number): string {
@@ -274,9 +290,14 @@ async function draftSegments(
   poolPerSegment: number,
   feature: AiFeatureId,
   actorId: string | null,
+  spokenLanguage: string | null,
 ): Promise<Record<number, SegmentDraft>> {
+  const taughtIn =
+    spokenLanguage && TAMIL_TAUGHT.has(spokenLanguage)
+      ? 'This class was taught in Tamil mixed with English.\n'
+      : '';
   const prompt = `Class: "${itemTitle}"
-
+${taughtIn}
 For EACH segment below, write a title, a description, and up to ${poolPerSegment} questions, using only that segment's transcript. A segment with no teaching in it gets an empty questions array, which is the right answer and not a failure.
 
 ${batch
@@ -409,6 +430,7 @@ export async function generateSectionsAndQuestions(
         poolPerSegment,
         feature,
         actorId,
+        options.spokenLanguage ?? null,
       );
       let got = false;
       for (const b of batch) {

@@ -234,3 +234,45 @@ describe('the questions it accepts', () => {
     expect(out.sections[0].questions).toHaveLength(1);
   });
 });
+
+describe('the language checkpoints are written in', () => {
+  it('always asks for English, whatever language the transcript is in', async () => {
+    // NATA and JEE Paper 2 are sat in English, so a Tamil class still gets
+    // English checkpoints. Without the rule the output followed the transcript,
+    // and a Tamil-script transcript produced Tamil questions.
+    vi.mocked(generateGeminiText).mockResolvedValue(reply(0, 3));
+
+    await generateSectionsAndQuestions(transcript(), 'Perspective', { targetSegmentSeconds: 900 });
+
+    const system = (vi.mocked(generateGeminiText).mock.calls[0][0] as any).systemInstruction as string;
+    expect(system).toMatch(/in English/);
+    expect(system).toMatch(/Tamil/);
+    expect(system).toMatch(/technical/i);
+  });
+
+  it('tells the model a Tamil track was taught in Tamil mixed with English', async () => {
+    vi.mocked(generateGeminiText).mockResolvedValue(reply(0, 3));
+
+    await generateSectionsAndQuestions(transcript(), 'Perspective', {
+      targetSegmentSeconds: 900,
+      spokenLanguage: 'ta',
+    });
+
+    const text = (vi.mocked(generateGeminiText).mock.calls[0][0] as any).parts[0].text as string;
+    expect(text).toContain('This class was taught in Tamil mixed with English.');
+  });
+
+  it('says nothing about Tamil for an English track or when the language is unknown', async () => {
+    vi.mocked(generateGeminiText).mockResolvedValue(reply(0, 3));
+
+    await generateSectionsAndQuestions(transcript(), 'Perspective', {
+      targetSegmentSeconds: 900,
+      spokenLanguage: 'en',
+    });
+    await generateSectionsAndQuestions(transcript(), 'Perspective', { targetSegmentSeconds: 900 });
+
+    for (const call of vi.mocked(generateGeminiText).mock.calls) {
+      expect((call[0] as any).parts[0].text).not.toContain('taught in Tamil');
+    }
+  });
+});

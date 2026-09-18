@@ -124,4 +124,37 @@ describe('foldStudentFacts', () => {
   it('returns an empty map for an empty roster', () => {
     expect(foldStudentFacts([])).toEqual({});
   });
+
+  it('carries whether a student knows Tamil, keeping true, false and unrecorded apart', () => {
+    const facts = foldStudentFacts([
+      member({ user_id: 'ta', user: { knows_tamil: true } as Member['user'] }),
+      member({ user_id: 'en', user: { knows_tamil: false } as Member['user'] }),
+      member({ user_id: 'unset', user: { knows_tamil: null } as Member['user'] }),
+    ]);
+    expect(facts.ta.knowsTamil).toBe(true);
+    expect(facts.en.knowsTamil).toBe(false);
+    expect(facts.unset.knowsTamil).toBeNull();
+  });
+
+  it('reads a roster loaded without the language column as unrecorded, not English only', () => {
+    const facts = foldStudentFacts([member({ user_id: 'u1' })]);
+    expect(facts.u1.knowsTamil).toBeNull();
+  });
+
+  it('keeps the language from the users row across a second enrolment', () => {
+    // Language is per person, so every row for them carries the same users embed.
+    const facts = foldStudentFacts([
+      member({
+        user_id: 'u1',
+        enrolled_at: '2025-06-01T00:00:00+00:00',
+        user: { knows_tamil: false } as Member['user'],
+      }),
+      member({
+        user_id: 'u1',
+        enrolled_at: '2026-06-01T00:00:00+00:00',
+        user: { knows_tamil: false } as Member['user'],
+      }),
+    ]);
+    expect(facts.u1.knowsTamil).toBe(false);
+  });
 });
