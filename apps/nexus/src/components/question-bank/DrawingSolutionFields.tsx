@@ -11,6 +11,9 @@ import {
   Snackbar,
   Alert,
 } from '@neram/ui';
+import AddIcon from '@mui/icons-material/Add';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ImageUploadZone from './ImageUploadZone';
@@ -85,6 +88,7 @@ export default function DrawingSolutionFields({
   const [level, setLevel] = useState<SkillLevel>('expert');
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
+  const [showVideo, setShowVideo] = useState(() => Boolean(value.solution_video_url));
   const suffix = labelSuffix ? ` ${labelSuffix}` : '';
 
   const prompt = useMemo(
@@ -114,40 +118,15 @@ export default function DrawingSolutionFields({
 
   return (
     <Stack spacing={2.5}>
+      {/* Step one first. The dropzone used to open this block, and the button
+          that makes the image to drop into it came last, which reads backwards:
+          there is nothing to upload until Gemini has been asked. */}
       <Box>
         <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-          Solution image{suffix}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Hidden during a test until the student submits. In practice they can choose to reveal it
-          before they draw.
-        </Typography>
-        <ImageUploadZone
-          image={value.solution_image}
-          onChange={(img) => onChange({ solution_image: img })}
-          getToken={getToken}
-          subfolder="drawing-solutions"
-          height={160}
-          label="Drop the solution image, paste, or click to upload"
-        />
-      </Box>
-
-      <TextField
-        label={`Solution video URL${suffix}`}
-        value={value.solution_video_url}
-        onChange={(e) => onChange({ solution_video_url: e.target.value })}
-        fullWidth
-        size="small"
-        placeholder="https://..."
-      />
-
-      <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-          Make the solution image with an external tool
+          1. Make the image with Gemini
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-          Copy this prompt, paste it into Gemini with no image attached, then upload what it gives
-          you into Solution image above.
+          Copy the prompt, then paste it into Gemini with no image attached.
         </Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1.5 }}>
           <TextField
@@ -201,6 +180,47 @@ export default function DrawingSolutionFields({
         </Stack>
       </Box>
 
+      <Box>
+        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+          2. Upload the image it gives you
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Hidden during a test until the student submits. In practice they can choose to reveal it
+          before they draw.
+        </Typography>
+        <ImageUploadZone
+          image={value.solution_image}
+          onChange={(img) => onChange({ solution_image: img })}
+          getToken={getToken}
+          subfolder="drawing-solutions"
+          height={160}
+          label="Drop the solution image, paste, or click to upload"
+        />
+        {/* Almost no drawing has a solution video, so the field stays a
+            button until one does. One of these per part is four fields nobody
+            fills in. */}
+        {showVideo ? (
+          <TextField
+            label={`Solution video URL${suffix}`}
+            value={value.solution_video_url}
+            onChange={(e) => onChange({ solution_video_url: e.target.value })}
+            fullWidth
+            size="small"
+            placeholder="https://..."
+            sx={{ mt: 1.5 }}
+          />
+        ) : (
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => setShowVideo(true)}
+            sx={{ textTransform: 'none', minHeight: 44, mt: 0.5 }}
+          >
+            Add a video link
+          </Button>
+        )}
+      </Box>
+
       <Snackbar
         open={copied}
         autoHideDuration={3000}
@@ -212,6 +232,29 @@ export default function DrawingSolutionFields({
           Could not reach the clipboard. Select the prompt text manually, or try over https.
         </Alert>
       </Snackbar>
+    </Stack>
+  );
+}
+
+/**
+ * "Solution image added" or "No solution yet", for the line that heads a
+ * collapsed solution.
+ *
+ * Shared so a part and a single-task question say the same words. The glyph
+ * carries the state as well as the colour, since a tick and an empty circle
+ * differ in shape.
+ */
+export function SolutionStatus({ hasSolution }: { hasSolution: boolean }) {
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center">
+      {hasSolution ? (
+        <CheckCircleOutlineIcon sx={{ fontSize: 16, color: 'success.main' }} aria-hidden />
+      ) : (
+        <RadioButtonUncheckedIcon sx={{ fontSize: 16, color: 'text.disabled' }} aria-hidden />
+      )}
+      <Typography variant="caption" color="text.secondary">
+        {hasSolution ? 'Solution image added' : 'No solution yet'}
+      </Typography>
     </Stack>
   );
 }

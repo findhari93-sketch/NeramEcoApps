@@ -9,6 +9,7 @@
 import type { DiagnosticStep } from '../DiagnosticsStepList';
 import type { RsvpReasonCode } from '@/lib/rsvp-reasons';
 import type { AttendanceBucket } from '@/lib/attendance-quality';
+import type { RegisterGroup } from '@/lib/attendance-register';
 
 /** Register tab. One row per enrolled student, from /api/timetable/attendance-report. */
 export interface AttendanceRecord {
@@ -142,7 +143,7 @@ export interface StudentInsight {
    * the person who did the harder thing as having watched nothing.
    */
   catchup?: StudentCatchup | null;
-  /** Which of the five states this student is in. Computed server-side. */
+  /** Which of the seven states this student is in. Computed server-side. */
   bucket: AttendanceBucket;
   /** Minutes inside the class itself, ignoring time before it started. */
   minutesIn: number;
@@ -150,7 +151,21 @@ export interface StudentInsight {
   leftEarlyByMin: number;
   outMin: number;
   segments: Array<{ start: string; end: string }>;
-  group: 'whole' | 'partly' | 'joined_later' | 'reason' | 'no_reason';
+  /**
+   * The register's grouping, imported rather than spelled out again. It was a
+   * hand-written copy of the same union, which meant adding a group to the rules
+   * module left this type quietly one value short: assignable either way, so the
+   * compiler said nothing while the panel and the register disagreed.
+   */
+  group: RegisterGroup;
+  /** A declared away window covers this class's date. Computed server-side. */
+  away?: boolean;
+  /**
+   * That window in the words the student will also see, or null. Composed
+   * server-side so the panel, the register and the student's own banner cannot
+   * describe the same fortnight three different ways.
+   */
+  away_window?: string | null;
 }
 
 /** Everything about one class's attendance, from /api/timetable/class-insights. */

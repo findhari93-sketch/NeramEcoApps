@@ -20,6 +20,7 @@ import {
 } from '@neram/database';
 import { buildExamEligibilityRoster } from '@/lib/exam-eligibility-roster';
 import { buildExamRunRoster } from '@/lib/exam-run-roster';
+import { buildRunCatchup, type RunCatchup } from '@/lib/run-catchup';
 import { pickRunReasons, requestNotesByStudent, type RowReason, type SkipReasonRow } from '@/lib/test-result-reasons';
 import {
   CLASSROOM_ANCHORED_CONTEXTS,
@@ -116,6 +117,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       // so the row needs to know which kind of window it is looking at.
       window_source: r.window_open_until ? (extras?.windowSources[r.student_id] ?? 'reopen') : null,
       excused_note: extras?.overrideNotes[r.student_id] ?? null,
+      // Why they may not have sat it. The same gate api/tests/attempt enforces,
+      // so the chip on the row and the refusal at the door cannot disagree.
+      catchup: extras?.catchup[r.student_id] ?? null,
     }));
 
     // What an AI already said about each question, from any paper. Decoration:
@@ -148,6 +152,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
                 context_type: (selected as any).context_type,
                 closes_at: (selected as any).available_until ?? null,
                 passing_pct: (selected as any).passing_pct ?? null,
+                exam: scope?.exam ?? null,
               }
             : null,
         },
@@ -161,6 +166,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
+/** The exam a run belongs to, for the publish control. Null on every other door. */
+interface RunExam {
+  id: string;
+  title: string | null;
+  results_state: string;
+  results_published_at: string | null;
+  closes_at: string | null;
+}
+
 /** What the rows need beyond getTestResults, decided while the roster is built. */
 interface RunExtras {
   /** reopen or makeup, per student holding a window of their own. */
@@ -169,9 +183,17 @@ interface RunExtras {
   overrideNotes: Record<string, string>;
   /** What a student wrote when asking to be let back in. */
   requestNotes: Record<string, string>;
+  /**
+   * Per student, whether the catch-up this run depends on is done.
+   *
+   * Empty for a run that covers no class (a practice pool, a paper assigned to
+   * the whole classroom): there is no lecture to be behind on, so the row says
+   * nothing rather than guessing.
+   */
+  catchup: Record<string, RunCatchup>;
 }
 
-const NO_EXTRAS: RunExtras = { windowSources: {}, overrideNotes: {}, requestNotes: {} };
+const NO_EXTRAS: RunExtras = { windowSources: {}, overrideNotes: {}, requestNotes: {}, catchup: {} };
 
 /**
  * Turn one placement into the roster and window that scope the results.
@@ -183,7 +205,7 @@ const NO_EXTRAS: RunExtras = { windowSources: {}, overrideNotes: {}, requestNote
 async function buildRunOptions(
   placement: any,
   supabase: ReturnType<typeof getSupabaseAdminClient>,
-): Promise<{ opts: NexusTestResultsOptions; extras: RunExtras }> {
+): Promise<{ opts: NexusTestResultsOptions; extras: RunExtras; exam?: RunExam | null }> {
   const contextType = String(placement.context_type);
   const base: NexusTestResultsOptions = {
     placementId: placement.id,
@@ -200,7 +222,23 @@ async function buildRunOptions(
   // invigilation roster uses. See lib/exam-run-roster.ts for what this fixed.
   if (contextType === 'exam') {
     const exam = await getExamByClass(placement.context_id, supabase);
-    if (exam) return buildExamRunOptions(exam, placement, base, supabase);
+    if (exam) {
+      const built = await buildExamRunOptions(exam, placement, base, supabase);
+      // Publication state lives on the exam, never on the placement, and this
+      // is the only read of it the screen gets. Without it the Conducted card
+      // could say "Results not published" and send a teacher to a page with no
+      // way to publish, which is exactly what it did.
+      return {
+        ...built,
+        exam: {
+          id: (exam as any).id,
+          title: (exam as any).title ?? null,
+          results_state: (exam as any).results_state ?? 'unpublished',
+          results_published_at: (exam as any).results_published_at ?? null,
+          closes_at: (exam as any).closes_at ?? null,
+        },
+      };
+    }
     // An exam placement whose exam row is gone: the generic reading below is
     // still a correct roster, just without exam overrides and make-ups.
   }
@@ -286,6 +324,12 @@ async function buildRunOptions(
       overrideNotes: Object.fromEntries(
         roster.filter((r) => r.override?.note?.trim()).map((r) => [r.student_id, r.override!.note!.trim()]),
       ),
+      catchup: buildRunCatchup({
+        studentIds: roster.map((r) => r.student_id),
+        coveredClasses: facts.coveredClasses as any,
+        attendance: facts.attendance as any,
+        absences: facts.absences as any,
+      }),
     },
   };
 }
@@ -329,6 +373,7 @@ async function buildExamRunOptions(
       windowSources: built.windowSources,
       overrideNotes: built.overrideNotes,
       requestNotes: requestNotesByStudent(access),
+      catchup: built.catchupByStudent,
     },
   };
 }

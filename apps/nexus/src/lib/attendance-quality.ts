@@ -90,12 +90,20 @@ export type AttendanceBucket =
   | 'excused'
   | 'caught_up'
   | 'late_joiner'
+  | 'away'
   | 'missed_with_reason'
   | 'missed_no_reason';
 
 interface Bucketable {
   attended?: boolean;
   rsvp?: string | null;
+  /**
+   * A declared away window covers this class's date. See lib/away-windows.ts.
+   * Passed in rather than read off the absence row, because the window is the
+   * truth and the row only caches it: a class rescheduled into or out of a
+   * window must get the current answer, not the one stamped at derivation.
+   */
+  away?: boolean;
   /**
    * Their enrolment starts after this class ran, so they were never expected in
    * the room. Computed server-side against the roster's enrolled_at, never
@@ -112,7 +120,7 @@ interface Bucketable {
 }
 
 /**
- * Which of the six states a student is in for this class.
+ * Which of the seven states a student is in for this class.
  *
  * Order is the whole design. `attended` wins first because a student who opted
  * out and then turned up anyway is present, not absent with a reason: reading
@@ -126,6 +134,14 @@ interface Bucketable {
  * given" about a class that happened before they existed here, and the student
  * cannot clear it, since the per-class reason route deliberately 400s for them.
  *
+ * `away` comes after those four and before both reason tests, matching
+ * `registerGroupOf` in attendance-register.ts exactly. The two are emitted side
+ * by side on the same object by class-insights, so any difference in their order
+ * ships a payload that contradicts itself: the panel reads `bucket` while the
+ * class screen reads `group`. Excused and caught_up still outrank it, because
+ * both are things somebody has already done about this specific class, where a
+ * window is a standing statement about a period.
+ *
  * What is left, missed with no reason and not caught up, is the only group that
  * needs a person to make a phone call, which is why the panel opens on it.
  */
@@ -134,6 +150,7 @@ export function bucketFor(student: Bucketable): AttendanceBucket {
   if (student.absence?.excused_at) return 'excused';
   if (student.absence?.caught_up_at) return 'caught_up';
   if (student.joinedAfterClass) return 'late_joiner';
+  if (student.away) return 'away';
   const explained =
     !!student.absence?.reason_code ||
     !!student.absence?.reason_note ||
@@ -148,6 +165,7 @@ export function tallyBuckets(students: Bucketable[]): Record<AttendanceBucket, n
     excused: 0,
     caught_up: 0,
     late_joiner: 0,
+    away: 0,
     missed_with_reason: 0,
     missed_no_reason: 0,
   };

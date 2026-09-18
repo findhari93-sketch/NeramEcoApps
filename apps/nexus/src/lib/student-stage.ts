@@ -22,6 +22,7 @@
  */
 
 import type { NexusStudyStage } from '@neram/database';
+import { languageLabelOf } from './student-language';
 
 /** The stage as the UI thinks of it: the four DB values plus the absence of one. */
 export type StageKey = 'gap_year' | '12th' | '11th' | '10th' | 'unset';
@@ -255,13 +256,15 @@ export function pairMismatchColor(mode: 'light' | 'dark'): string {
 export function describeClassificationChange(payload: {
   studyStage?: string | null;
   academicYear?: string | null;
-  knowsTamil?: boolean | null;
+  homeLanguage?: string | null;
+  limitedEnglish?: boolean;
 }): string {
   const touched = (key: keyof typeof payload) => key in payload && payload[key] !== undefined;
+  const language = touched('homeLanguage') || touched('limitedEnglish');
   const fields = [
     touched('studyStage') ? 'class' : null,
     touched('academicYear') ? 'exam year' : null,
-    touched('knowsTamil') ? 'language' : null,
+    language ? 'language' : null,
   ].filter((field): field is string => field !== null);
 
   if (fields.length > 1) {
@@ -272,9 +275,16 @@ export function describeClassificationChange(payload: {
   if (touched('academicYear')) {
     return payload.academicYear === null ? 'Cleared exam year' : 'Exam year set';
   }
-  if (touched('knowsTamil')) {
-    if (payload.knowsTamil === null) return 'Cleared language';
-    return payload.knowsTamil ? 'Marked Knows Tamil' : 'Marked English only';
+  // Both halves of the language in one gesture: neither verb alone would be true.
+  if (touched('homeLanguage') && touched('limitedEnglish')) return 'Language set';
+  if (touched('homeLanguage')) {
+    // Only Undo sends null, so this reads as the reversal it is.
+    return payload.homeLanguage === null
+      ? 'Cleared language'
+      : `Marked ${languageLabelOf(payload.homeLanguage)}`;
+  }
+  if (touched('limitedEnglish')) {
+    return payload.limitedEnglish ? 'Marked limited English' : 'Cleared limited English';
   }
   return 'Updated';
 }

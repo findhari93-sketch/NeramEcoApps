@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   attendance: [] as Record<string, unknown>[],
   rsvps: [] as Record<string, unknown>[],
   absences: [] as Record<string, unknown>[],
+  awayWindows: [] as Record<string, unknown>[],
   members: [] as Record<string, unknown>[],
 }));
 
@@ -26,10 +27,11 @@ function builder(table: string) {
     if (table === 'nexus_attendance') return state.attendance;
     if (table === 'nexus_class_rsvp') return state.rsvps;
     if (table === 'nexus_class_absences') return state.absences;
+    if (table === 'nexus_student_away_windows') return state.awayWindows;
     return [];
   };
   const chain = () => b;
-  for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'not', 'order', 'limit']) {
+  for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'not', 'is', 'or', 'order', 'limit']) {
     b[method] = chain;
   }
   b.single = () => {
@@ -112,6 +114,7 @@ beforeEach(() => {
   }));
   state.rsvps = [];
   state.absences = [];
+  state.awayWindows = [];
 });
 
 describe('GET /api/timetable/class-insights, the real-end regression', () => {

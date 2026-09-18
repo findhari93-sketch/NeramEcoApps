@@ -57,7 +57,8 @@ export function CompactRow(props: StudentRowProps) {
     >
       <StudentStageAvatar
         stage={stage}
-        knowsTamil={student.knows_tamil}
+        language={student.home_language}
+        limitedEnglish={student.limited_english}
         userId={student.id}
         dormant={dormant}
         msOid={student.ms_oid}
@@ -126,7 +127,8 @@ export function StudentCard(props: StudentRowProps) {
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
         <StudentStageAvatar
           stage={stage}
-          knowsTamil={student.knows_tamil}
+          language={student.home_language}
+          limitedEnglish={student.limited_english}
           userId={student.id}
           dormant={dormant}
           msOid={student.ms_oid}
@@ -195,7 +197,8 @@ export function DetailedRow(props: StudentRowProps) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <StudentStageAvatar
           stage={stage}
-          knowsTamil={student.knows_tamil}
+          language={student.home_language}
+          limitedEnglish={student.limited_english}
           userId={student.id}
           dormant={dormant}
           msOid={student.ms_oid}

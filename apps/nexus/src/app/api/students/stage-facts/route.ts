@@ -59,15 +59,15 @@ export async function GET(request: NextRequest) {
     // which is what this needs: an avatar on the drawing-review queue has no
     // classroom context to scope by. Dormant students are loaded rather than
     // filtered, because "paused" is one of the three states the ring reports.
-    // knows_tamil rides on the same users embed, for the த badge.
+    // The language columns ride on the same users embed, for the avatar mark.
     const { members } = await loadClassroomRoster<StageFactMember['user']>(null, {
       includeDormant: true,
-      userColumns: 'knows_tamil',
+      userColumns: 'home_language, limited_english',
       client: supabase,
     });
 
     // One fact per student, not per enrolment. See lib/stage-facts.ts for why
-    // the four fields fold three different ways.
+    // the fields fold three different ways.
     const facts = foldStudentFacts(members);
 
     return NextResponse.json({ facts, count: Object.keys(facts).length });

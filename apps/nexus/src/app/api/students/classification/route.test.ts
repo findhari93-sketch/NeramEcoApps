@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  * The language axis of PATCH /api/students/classification.
  *
- * users.knows_tamil is per USER and global, exactly like users.academic_year, so
- * it inherits that axis's two protections: only ids that survive the
- * classroom-scoped enrolment read are ever written, and a write that changes
- * nothing leaves no history and no audit row.
+ * users.home_language and users.limited_english are per USER and global, exactly
+ * like users.academic_year, so they inherit that axis's two protections: only ids
+ * that survive the classroom-scoped enrolment read are ever written, and a write
+ * that changes nothing leaves no history and no audit row.
  */
 
 interface Call {
@@ -126,39 +126,64 @@ beforeEach(() => {
   state.history = [];
   state.enrollments = [enrol('s1'), enrol('s2')];
   state.users = [
-    { id: 's1', academic_year: '2026-27', knows_tamil: null },
-    { id: 's2', academic_year: '2026-27', knows_tamil: true },
+    { id: 's1', academic_year: '2026-27', home_language: null, limited_english: false },
+    { id: 's2', academic_year: '2026-27', home_language: 'tamil', limited_english: true },
   ];
 });
 
 describe('PATCH /api/students/classification, language', () => {
-  it('refuses a value that is not true, false or null', async () => {
-    const res = await patch({ classroomId: 'c1', studentIds: ['s1'], knowsTamil: 'yes' });
+  it('refuses a word that is not one of the five languages', async () => {
+    const res = await patch({ classroomId: 'c1', studentIds: ['s1'], homeLanguage: 'Tamil' });
+    expect(res.status).toBe(400);
+    expect(userUpdates()).toHaveLength(0);
+  });
+
+  it('refuses a non-boolean English fluency tick', async () => {
+    const res = await patch({ classroomId: 'c1', studentIds: ['s1'], limitedEnglish: 'yes' });
     expect(res.status).toBe(400);
     expect(userUpdates()).toHaveLength(0);
   });
 
   it('accepts a language-only edit under the class capability', async () => {
-    const res = await patch({ classroomId: 'c1', studentIds: ['s1'], knowsTamil: true });
+    const res = await patch({ classroomId: 'c1', studentIds: ['s1'], homeLanguage: 'hindi' });
     expect(res.status).toBe(200);
     expect(state.capabilities).toEqual(['coord.student.stage']);
   });
 
-  it('writes users.knows_tamil, records history, and returns the previous value for Undo', async () => {
-    const body = await (await patch({ classroomId: 'c1', studentIds: ['s1'], knowsTamil: true })).json();
+  it('writes users.home_language, records history, and returns the previous value for Undo', async () => {
+    const body = await (
+      await patch({ classroomId: 'c1', studentIds: ['s1'], homeLanguage: 'kannada' })
+    ).json();
 
     expect(userUpdates()).toHaveLength(1);
-    expect(userUpdates()[0].patch).toMatchObject({ knows_tamil: true });
+    expect(userUpdates()[0].patch).toMatchObject({ home_language: 'kannada' });
     expect(userUpdates()[0].filters).toContainEqual(['in', 'id', ['s1']]);
-    expect(state.history).toEqual([['s1', 'knows_tamil', null, true, 'staff-1']]);
+    expect(state.history).toEqual([['s1', 'home_language', null, 'kannada', 'staff-1']]);
 
     expect(body.changed).toBe(1);
-    expect(body.students[0]).toMatchObject({ id: 's1', knows_tamil: true, previous: { knows_tamil: null } });
+    expect(body.students[0]).toMatchObject({
+      id: 's1',
+      home_language: 'kannada',
+      previous: { home_language: null },
+    });
+  });
+
+  it('writes the English fluency tick on its own column and its own history field', async () => {
+    const body = await (
+      await patch({ classroomId: 'c1', studentIds: ['s1'], limitedEnglish: true })
+    ).json();
+
+    expect(userUpdates()[0].patch).toMatchObject({ limited_english: true });
+    expect(state.history).toEqual([['s1', 'limited_english', false, true, 'staff-1']]);
+    expect(body.students[0]).toMatchObject({
+      limited_english: true,
+      previous: { limited_english: false },
+    });
   });
 
   it('never writes an id that is not an active student in this classroom', async () => {
     const body = await (
-      await patch({ classroomId: 'c1', studentIds: ['s1', 'outsider'], knowsTamil: false })
+      await patch({ classroomId: 'c1', studentIds: ['s1', 'outsider'], homeLanguage: 'english' })
     ).json();
 
     const written = userUpdates().flatMap((c) => c.filters.filter((f) => f[1] === 'id').map((f) => f[2]));
@@ -166,58 +191,75 @@ describe('PATCH /api/students/classification, language', () => {
     expect(body.skipped.map((s: { studentId: string }) => s.studentId)).toEqual(['outsider']);
   });
 
-  it('leaves no write, history or audit row when the value is already set', async () => {
-    const body = await (await patch({ classroomId: 'c1', studentIds: ['s2'], knowsTamil: true })).json();
+  it('leaves no write, history or audit row when the language is already set', async () => {
+    const body = await (
+      await patch({ classroomId: 'c1', studentIds: ['s2'], homeLanguage: 'tamil' })
+    ).json();
     expect(userUpdates()).toHaveLength(0);
     expect(state.history).toHaveLength(0);
     expect(auditInserts()).toHaveLength(0);
     expect(body.changed).toBe(0);
   });
 
-  it('clears the language with null', async () => {
-    await patch({ classroomId: 'c1', studentIds: ['s2'], knowsTamil: null });
-    expect(userUpdates()[0].patch).toMatchObject({ knows_tamil: null });
-    expect(state.history).toEqual([['s2', 'knows_tamil', true, null, 'staff-1']]);
+  it('clears the language with null, which is what Undo sends', async () => {
+    await patch({ classroomId: 'c1', studentIds: ['s2'], homeLanguage: null });
+    expect(userUpdates()[0].patch).toMatchObject({ home_language: null });
+    expect(state.history).toEqual([['s2', 'home_language', 'tamil', null, 'staff-1']]);
   });
 
   it('applies different values per student, which is how Undo restores a bulk edit', async () => {
     const res = await patch({
       classroomId: 'c1',
       assignments: [
-        { studentId: 's1', knowsTamil: false },
-        { studentId: 's2', knowsTamil: null },
+        { studentId: 's1', homeLanguage: 'malayalam' },
+        { studentId: 's2', homeLanguage: null },
       ],
     });
     expect(res.status).toBe(200);
     const byValue = new Map(
-      userUpdates().map((c) => [c.patch?.knows_tamil, c.filters.find((f) => f[1] === 'id')?.[2]]),
+      userUpdates().map((c) => [c.patch?.home_language, c.filters.find((f) => f[1] === 'id')?.[2]]),
     );
-    expect(byValue.get(false)).toEqual(['s1']);
+    expect(byValue.get('malayalam')).toEqual(['s1']);
     expect(byValue.get(null)).toEqual(['s2']);
   });
 
-  it('names knowsTamil when a per-student entry changes nothing', async () => {
+  it('names both language fields when a per-student entry changes nothing', async () => {
     const res = await patch({ classroomId: 'c1', assignments: [{ studentId: 's1' }] });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain('knowsTamil');
+    const { error } = await res.json();
+    expect(error).toContain('homeLanguage');
+    expect(error).toContain('limitedEnglish');
   });
 
-  it('audits language in its own insert, in words rather than booleans', async () => {
-    await patch({ classroomId: 'c1', studentIds: ['s1'], studyStage: '11th', knowsTamil: true });
+  it('audits both language fields in their own insert, apart from the stage', async () => {
+    await patch({
+      classroomId: 'c1',
+      studentIds: ['s1'],
+      studyStage: '11th',
+      homeLanguage: 'hindi',
+      limitedEnglish: true,
+    });
 
     const inserts = auditInserts();
     expect(inserts).toHaveLength(2);
-    const language = inserts.find((c) => c.rows?.every((r) => r.axis === 'language'));
+    const language = inserts.find((c) => c.rows?.some((r) => r.axis === 'language'));
     expect(language?.rows).toEqual([
-      expect.objectContaining({ student_id: 's1', axis: 'language', from_value: null, to_value: 'tamil' }),
+      expect.objectContaining({ student_id: 's1', axis: 'language', from_value: null, to_value: 'hindi' }),
+      expect.objectContaining({
+        student_id: 's1',
+        axis: 'english_fluency',
+        from_value: 'follows',
+        to_value: 'limited',
+      }),
     ]);
     const stage = inserts.find((c) => c !== language);
-    expect(stage?.rows?.every((r) => r.axis !== 'language')).toBe(true);
+    expect(stage?.rows?.every((r) => r.axis === 'study_stage')).toBe(true);
   });
 
-  it('does not read the language column for a year-only edit', async () => {
+  it('does not read the language columns for a year-only edit', async () => {
     await patch({ classroomId: 'c1', studentIds: ['s1'], academicYear: '2027-28' });
     expect(userReads()).toHaveLength(1);
-    expect(userReads()[0].columns).not.toContain('knows_tamil');
+    expect(userReads()[0].columns).not.toContain('home_language');
+    expect(userReads()[0].columns).not.toContain('limited_english');
   });
 });

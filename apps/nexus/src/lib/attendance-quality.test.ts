@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { registerGroupOf } from './attendance-register';
 import {
   barelyAttendedCutoff,
   scheduledMinutes,
@@ -171,9 +172,57 @@ describe('tallyBuckets', () => {
       excused: 0,
       caught_up: 1,
       late_joiner: 1,
+      away: 0,
       missed_with_reason: 1,
       missed_no_reason: 2,
     });
     expect(Object.values(tally).reduce((a, b) => a + b, 0)).toBe(7);
+  });
+
+  it('counts a declared away window in its own bucket', () => {
+    const tally = tallyBuckets([{ attended: false, away: true }, { attended: false }]);
+    expect(tally.away).toBe(1);
+    expect(tally.missed_no_reason).toBe(1);
+  });
+});
+
+/**
+ * bucketFor and registerGroupOf are two orderings of the same facts, emitted
+ * side by side on every student object class-insights returns. They differ on
+ * purpose in one place (a caught-up silent absence is its own bucket but stays
+ * in "no reason" for the register, because catching up is a label on a row and
+ * the register answers who was in the room). Everywhere else they must agree, or
+ * the panel and the class screen describe the same student differently.
+ */
+describe('bucketFor and registerGroupOf agree about away', () => {
+  const cases: Array<{ name: string; input: Record<string, unknown> }> = [
+    { name: 'a plain declared window', input: { attended: false, away: true } },
+    { name: 'a window with a one-off opt out inside it', input: { attended: false, away: true, rsvp: 'not_attending' } },
+    { name: 'a window with a per-class reason inside it', input: { attended: false, away: true, absence: { reason_code: 'unwell' } } },
+  ];
+
+  for (const c of cases) {
+    it(`both call ${c.name} away`, () => {
+      expect(bucketFor(c.input)).toBe('away');
+      expect(registerGroupOf(c.input)).toBe('away');
+    });
+  }
+
+  it('both let a teacher excusing the class outrank the window', () => {
+    const input = { attended: false, away: true, absence: { excused_at: '2026-09-15T20:00:00Z' } };
+    expect(bucketFor(input)).toBe('excused');
+    expect(registerGroupOf(input)).toBe('reason');
+  });
+
+  it('both let turning up anyway outrank the window', () => {
+    const input = { attended: true, away: true };
+    expect(bucketFor(input)).toBe('attended');
+    expect(registerGroupOf(input)).toBe('whole');
+  });
+
+  it('both let enrolling after the class outrank the window', () => {
+    const input = { attended: false, away: true, joinedAfterClass: true };
+    expect(bucketFor(input)).toBe('late_joiner');
+    expect(registerGroupOf(input)).toBe('joined_later');
   });
 });

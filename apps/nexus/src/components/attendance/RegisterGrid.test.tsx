@@ -17,14 +17,14 @@ const DATA: RegisterResponse = {
       held: { start: '2026-09-15T13:30:00.000Z', end: '2026-09-15T14:40:00.000Z', source: 'observed', minutes: 70 },
       measured: true,
       sync_status: 'ok',
-      counts: { whole: 1, partly: 1, reason: 1, noReason: 1, joinedLater: 0 },
+      counts: { whole: 1, partly: 1, away: 0, reason: 1, noReason: 1, joinedLater: 0 },
     },
   ],
   students: [
-    { id: 's1', name: 'Student A', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 1, counted: 1, rate: 100 },
-    { id: 's2', name: 'Student B', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 1, counted: 1, rate: 100 },
-    { id: 's3', name: 'Student C', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 0, counted: 1, rate: 0 },
-    { id: 's4', name: 'Student D', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 0, counted: 1, rate: 50 },
+    { id: 's1', name: 'Student A', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 1, counted: 1, rate: 100, away: 0, away_now: null },
+    { id: 's2', name: 'Student B', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 1, counted: 1, rate: 100, away: 0, away_now: null },
+    { id: 's3', name: 'Student C', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 0, counted: 1, rate: 0, away: 0, away_now: null },
+    { id: 's4', name: 'Student D', avatar_url: null, study_stage: null, enrolled_at: '2026-06-01T00:00:00Z', present: 0, counted: 1, rate: 50, away: 0, away_now: null },
   ],
   cells: {
     'class-1': {
@@ -35,6 +35,7 @@ const DATA: RegisterResponse = {
     },
   },
   paused_hidden: 2,
+  away_today: 0,
 };
 
 /**
@@ -209,7 +210,7 @@ describe('RegisterGrid', () => {
           held: null,
           measured: false,
           sync_status: null,
-          counts: { whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 0 },
+          counts: { whole: 0, partly: 0, away: 0, reason: 0, noReason: 0, joinedLater: 0 },
         },
       ],
       cells: { 'class-unsynced': {} },
@@ -243,7 +244,7 @@ describe('RegisterGrid', () => {
           held: { start: '2026-09-14T13:30:00.000Z', end: '2026-09-14T14:40:00.000Z', source: 'observed', minutes: 70 },
           measured: true,
           sync_status: 'ok',
-          counts: { whole: 1, partly: 0, reason: 0, noReason: 0, joinedLater: 0 },
+          counts: { whole: 1, partly: 0, away: 0, reason: 0, noReason: 0, joinedLater: 0 },
         },
       ],
       // Only s1 (Student A) belongs to this class's batch; s2-s4 get no cell

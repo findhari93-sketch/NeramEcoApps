@@ -25,6 +25,7 @@ import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
@@ -365,6 +366,7 @@ const CLASSROOM: ZoneConfig = {
         { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
         { label: 'Reviews', path: '/student/reviews', icon: <RateReviewOutlinedIcon /> },
         { label: 'Exams', path: '/student/exams', icon: <EventNoteOutlinedIcon /> },
+        { label: 'Away dates', path: '/student/planned-absence', icon: <EventBusyOutlinedIcon /> },
         { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
       ],
     },

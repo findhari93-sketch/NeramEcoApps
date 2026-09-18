@@ -29,6 +29,7 @@ import {
   type ClassAttendanceView,
   type ScheduledClassRow,
 } from '@/lib/parent-attendance';
+import { loadAwayWindows } from '@/lib/away-windows';
 import { sessionWindow } from '@/lib/attendance-register';
 
 /** Classes a parent should never see in an attendance list. */
@@ -120,7 +121,7 @@ export async function loadChildAttendance(
   // meets the others. Handing three different Supabase query builders straight
   // to Promise.all makes TypeScript try to unify three deep generic result
   // types and it gives up with "type instantiation is excessively deep".
-  const [measuredRows, mineRows, absenceRows] = await Promise.all([
+  const [measuredRows, mineRows, absenceRows, awayWindows] = await Promise.all([
     // Roster-wide, deliberately. One row from ANY student proves the class was
     // synced, which is what lets this child's missing row mean "absent" instead
     // of "unknown".
@@ -157,6 +158,10 @@ export async function loadChildAttendance(
         .in('scheduled_class_id', classIds);
       return (data || []) as AbsenceRow[];
     })(),
+    // This child's declared away windows, so a class inside a fortnight of
+    // school exams reads as "Away" rather than a bare "Missed". Of everyone who
+    // reads these screens the parent is the one who already knows the answer.
+    loadAwayWindows(supabase, { studentIds: [studentId] }),
   ]);
 
   const measuredClassIds = new Set<string>(
@@ -175,7 +180,14 @@ export async function loadChildAttendance(
 
   return {
     classes,
-    views: buildClassAttendanceViews(classes, mineRows, measuredClassIds, absenceRows, sessionWindows),
+    views: buildClassAttendanceViews(
+      classes,
+      mineRows,
+      measuredClassIds,
+      absenceRows,
+      sessionWindows,
+      awayWindows,
+    ),
   };
 }
 

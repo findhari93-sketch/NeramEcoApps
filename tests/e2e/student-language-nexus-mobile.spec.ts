@@ -2,13 +2,13 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
 import { APP_URLS, getTestAuthToken, injectAuthForPage } from '../utils/credentials';
 
 /**
- * Knows Tamil: the த badge, the language filter, the Set stage sheet and the
- * profile chip, at 375px.
+ * Student language: the avatar mark, the language filter, the Set stage sheet
+ * and the profile chip, at 375px.
  *
- * Writes users.knows_tamil on ONE real student of the teacher's first classroom
- * and puts the original value back in afterAll. Skips (rather than failing) when
- * the column has not reached this database, which the /api/students payload
- * tells us by carrying or not carrying `knows_tamil`.
+ * Writes users.home_language and users.limited_english on ONE real student of the
+ * teacher's first classroom and puts the original values back in afterAll. Skips
+ * (rather than failing) when the columns have not reached this database, which the
+ * /api/students payload tells us by carrying or not carrying `home_language`.
  */
 
 const NEXUS = APP_URLS.nexus;
@@ -25,30 +25,39 @@ interface StudentRow {
   name: string;
   email: string | null;
   participation_status: 'active' | 'dormant';
-  knows_tamil?: boolean | null;
+  home_language?: string | null;
+  limited_english?: boolean | null;
 }
 
 test.describe('Student language on a phone', () => {
   let token = '';
   let classroomId = '';
   let student: StudentRow | null = null;
-  let original: boolean | null = null;
+  let original: string | null = null;
+  let originalLimited = false;
   let migrated = false;
   let canClassify = false;
 
   const headers = () => ({ Authorization: `Bearer ${token}` });
 
-  const setLanguage = (request: APIRequestContext, value: unknown) =>
+  const setLanguage = (request: APIRequestContext, value: unknown, limitedEnglish?: boolean) =>
     request.patch(`${NEXUS}/api/students/classification`, {
       headers: headers(),
-      data: { classroomId, studentIds: [student!.id], knowsTamil: value },
+      data: {
+        classroomId,
+        studentIds: [student!.id],
+        homeLanguage: value,
+        ...(limitedEnglish === undefined ? {} : { limitedEnglish }),
+      },
     });
 
-  async function languageNow(request: APIRequestContext): Promise<boolean | null | undefined> {
+  async function rowNow(request: APIRequestContext): Promise<StudentRow | undefined> {
     const res = await request.get(`${NEXUS}/api/students?classroom=${classroomId}`, { headers: headers() });
     const body = await res.json();
-    return (body.students as StudentRow[]).find((s) => s.id === student!.id)?.knows_tamil;
+    return (body.students as StudentRow[]).find((s) => s.id === student!.id);
   }
+
+  const languageNow = async (request: APIRequestContext) => (await rowNow(request))?.home_language;
 
   async function openStudents(page: Page, query = '') {
     const ok = await injectAuthForPage(page, 'teacher');
@@ -57,6 +66,15 @@ test.describe('Student language on a phone', () => {
     await expect(page.getByRole('group', { name: 'Filter students by language' })).toBeVisible({
       timeout: 60_000,
     });
+  }
+
+  /** Opens the Set stage sheet's Language select and picks one. */
+  async function pickLanguage(page: Page, name: RegExp) {
+    const sheet = page.getByRole('presentation').filter({ hasText: /Set class and exam year/i });
+    const field = sheet.locator('[data-testid="language-select"]');
+    await field.scrollIntoViewIfNeeded();
+    await field.click();
+    await page.getByRole('option', { name }).click();
   }
 
   test.beforeAll(async ({ request }) => {
@@ -76,27 +94,28 @@ test.describe('Student language on a phone', () => {
 
     const rows = ((await res.json()).students || []) as StudentRow[];
     student = rows.find((s) => s.participation_status === 'active' && !!s.email) ?? null;
-    if (!student || !('knows_tamil' in student)) return;
+    if (!student || !('home_language' in student)) return;
     migrated = true;
-    original = student.knows_tamil ?? null;
+    original = student.home_language ?? null;
+    originalLimited = student.limited_english === true;
 
-    // Probe the write with the value it already has: a no-op, but it answers 403
+    // Probe the write with the values it already has: a no-op, but it answers 403
     // for a viewer without coord.student.stage.
-    canClassify = (await setLanguage(request, original)).status() === 200;
+    canClassify = (await setLanguage(request, original, originalLimited)).status() === 200;
   });
 
   test.afterAll(async ({ request }) => {
-    if (migrated && canClassify && student) await setLanguage(request, original);
+    if (migrated && canClassify && student) await setLanguage(request, original, originalLimited);
   });
 
   test.beforeEach(() => {
-    test.skip(!migrated, 'users.knows_tamil is not in this environment yet');
+    test.skip(!migrated, 'users.home_language is not in this environment yet');
   });
 
-  test('the API refuses anything but true, false or null', async ({ request }) => {
+  test('the API refuses anything but one of the five languages', async ({ request }) => {
     test.skip(!canClassify, 'Signed-in account cannot classify');
-    const res = await setLanguage(request, 'yes');
-    expect(res.status()).toBe(400);
+    expect((await setLanguage(request, 'Tamil')).status()).toBe(400);
+    expect((await setLanguage(request, 'telugu')).status()).toBe(400);
   });
 
   test('a saved language reaches the roster and the avatar lookup, and a repeat changes nothing', async ({
@@ -104,31 +123,41 @@ test.describe('Student language on a phone', () => {
   }) => {
     test.skip(!canClassify, 'Signed-in account cannot classify');
 
-    const first = await setLanguage(request, true);
+    const first = await setLanguage(request, 'hindi', false);
     expect(first.status()).toBe(200);
-    expect(await languageNow(request)).toBe(true);
+    expect(await languageNow(request)).toBe('hindi');
 
     const facts = await (
       await request.get(`${NEXUS}/api/students/stage-facts`, { headers: headers() })
     ).json();
-    expect(facts.facts[student!.id]?.knowsTamil).toBe(true);
+    expect(facts.facts[student!.id]?.language).toBe('hindi');
+    expect(facts.facts[student!.id]?.limitedEnglish).toBe(false);
 
-    const repeat = await (await setLanguage(request, true)).json();
+    const repeat = await (await setLanguage(request, 'hindi', false)).json();
     expect(repeat.changed).toBe(0);
   });
 
-  test('the language filter fits the phone and narrows to Tamil students wearing த', async ({
+  test('the limited English tick rides on top of the language', async ({ request }) => {
+    test.skip(!canClassify, 'Signed-in account cannot classify');
+    expect((await setLanguage(request, 'tamil', true)).status()).toBe(200);
+    const row = await rowNow(request);
+    expect(row?.home_language).toBe('tamil');
+    expect(row?.limited_english).toBe(true);
+  });
+
+  test('the language filter fits the phone and narrows to students wearing the mark', async ({
     page,
     request,
   }) => {
     test.skip(!canClassify, 'Signed-in account cannot classify');
-    await setLanguage(request, true);
+    await setLanguage(request, 'tamil', false);
     await openStudents(page);
 
     const group = page.getByRole('group', { name: 'Filter students by language' });
     const chips = group.getByRole('button');
-    await expect(chips).toHaveCount(3);
-    for (let i = 0; i < 3; i++) {
+    // Five languages plus the separate English fluency narrowing.
+    await expect(chips).toHaveCount(6);
+    for (let i = 0; i < 6; i++) {
       const box = await chips.nth(i).boundingBox();
       expect(box!.height, `language chip ${i}`).toBeGreaterThanOrEqual(44);
     }
@@ -151,14 +180,14 @@ test.describe('Student language on a phone', () => {
     const count = await rings.count();
     for (let i = 0; i < count; i++) {
       const label = (await rings.nth(i).getAttribute('aria-label')) || '';
-      expect(label, 'every ring left after the Tamil filter says so').toMatch(/ Knows Tamil\.$/);
-      await expect(rings.nth(i).getByTestId('tamil-badge')).toHaveText('த');
+      expect(label, 'every ring left after the Tamil filter says so').toMatch(/ Tamil\.$/);
+      await expect(rings.nth(i).getByTestId('language-badge')).toHaveText('த');
     }
   });
 
-  test('Set stage marks one student Knows Tamil, and Undo puts it back', async ({ page, request }) => {
+  test('Set stage marks one student Kannada, and Undo puts it back', async ({ page, request }) => {
     test.skip(!canClassify, 'Signed-in account cannot classify');
-    await setLanguage(request, null);
+    await setLanguage(request, 'english', false);
     await openStudents(page);
 
     await page.getByRole('tablist', { name: /filter students/i }).getByRole('tab', { name: /^All active/ }).click();
@@ -170,34 +199,32 @@ test.describe('Student language on a phone', () => {
     await expect(row).toHaveAttribute('aria-selected', 'true');
 
     await page.getByRole('button', { name: 'Set stage', exact: true }).click();
+    await pickLanguage(page, /Kannada/);
 
     const sheet = page.getByRole('presentation').filter({ hasText: /Set class and exam year/i });
-    const language = sheet.getByRole('radiogroup', { name: 'Language' });
-    await language.scrollIntoViewIfNeeded();
-    await language.getByRole('radio', { name: 'Knows Tamil' }).check();
-
     const apply = sheet.getByRole('button', { name: /^Apply/ });
     const applyBox = await apply.boundingBox();
     expect(applyBox!.y + applyBox!.height).toBeLessThanOrEqual(812);
     await apply.click();
 
-    await expect(page.getByText('Marked Knows Tamil for 1 student.')).toBeVisible({ timeout: 30_000 });
-    await expect.poll(() => languageNow(request), { timeout: 30_000 }).toBe(true);
+    await expect(page.getByText('Marked Kannada for 1 student.')).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => languageNow(request), { timeout: 30_000 }).toBe('kannada');
 
     await page.getByRole('button', { name: 'Undo' }).click();
-    await expect.poll(() => languageNow(request), { timeout: 30_000 }).toBeNull();
+    await expect.poll(() => languageNow(request), { timeout: 30_000 }).toBe('english');
   });
 
   test('the profile chip opens the sheet at Language', async ({ page, request }) => {
     test.skip(!canClassify, 'Signed-in account cannot classify');
-    await setLanguage(request, false);
+    await setLanguage(request, 'malayalam', false);
 
     const ok = await injectAuthForPage(page, 'teacher');
     test.skip(!ok, 'Nexus test-login unavailable');
     await page.goto(`${NEXUS}/teacher/students/${student!.id}`, { waitUntil: 'domcontentloaded' });
 
-    const chip = page.getByRole('button', { name: 'English only. Change language' });
+    const chip = page.getByRole('button', { name: 'Malayalam. Change language' });
     await expect(chip).toBeVisible({ timeout: 60_000 });
+    await expect(chip.getByTestId('language-badge').or(chip.getByText('M')).first()).toBeVisible();
 
     // 28px visual; the ::before stretches the tap area to 44px.
     const tapHeight = await chip.evaluate((el) => {
@@ -207,13 +234,13 @@ test.describe('Student language on a phone', () => {
     expect(tapHeight).toBeGreaterThanOrEqual(44);
 
     await chip.click();
-    const language = page.getByRole('radiogroup', { name: 'Language' });
-    await expect(language).toBeVisible();
-    await expect(page.getByText('Now: English only')).toBeVisible();
+    const field = page.locator('[data-testid="language-select"]');
+    await expect(field).toBeVisible();
+    await expect(page.getByText('Now: Malayalam')).toBeVisible();
     // Scrolled into view once the sheet finished sliding in.
     await expect
       .poll(async () => {
-        const box = await language.boundingBox();
+        const box = await field.boundingBox();
         return !!box && box.y >= 0 && box.y + box.height <= 812;
       })
       .toBe(true);

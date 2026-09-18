@@ -10,7 +10,7 @@ import {
 } from '@neram/database';
 import { loadClassFactsForStudents } from '@/lib/catchup-facts';
 import { turnaround } from '@/lib/catchup-turnaround';
-import { tallyReasons } from '@/lib/rsvp-reasons';
+import { describeReason, tallyReasons } from '@/lib/rsvp-reasons';
 import { ATTENDANCE_FAILURE_MESSAGES, type AttendanceSyncFailure } from '@/lib/attendance-sync';
 import {
   barelyAttendedCutoff,
@@ -25,6 +25,13 @@ import {
   registerGroupOf,
   sessionWindow,
 } from '@/lib/attendance-register';
+import {
+  AWAY_COLUMNS,
+  coveringWindow,
+  describeWindow,
+  groupByStudent,
+  type AwayWindow,
+} from '@/lib/away-windows';
 
 /**
  * GET /api/timetable/class-insights?class_id={id}&classroom_id={id}  (teacher)
@@ -82,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     // Dormant students are excluded, so the attendance rate on this panel counts
     // only the students who are actually expected in the room.
-    const [{ members }, { data: attendance }, { data: optOuts }, { data: absenceRows }] =
+    const [{ members }, { data: attendance }, { data: optOuts }, { data: absenceRows }, { data: awayRows }] =
       await Promise.all([
         // `phone` is not in the roster's base columns, and it is asked for here
         // so a teacher can ring somebody straight off the missed list instead of
@@ -112,7 +119,20 @@ export async function GET(request: NextRequest) {
               'activated_on, days_used, test_passed_at',
           )
           .eq('scheduled_class_id', classId),
+        // Declared away windows covering the day this class ran. Read live
+        // rather than taken from a flag on the absence row, so a class moved
+        // into or out of a window gets the current answer. The register endpoint
+        // reads the same table the same way, which is what stops this screen and
+        // that one describing the same night differently.
+        supabase
+          .from('nexus_student_away_windows')
+          .select(AWAY_COLUMNS)
+          .is('cancelled_at', null)
+          .lte('starts_on', cls.scheduled_date)
+          .or(`ends_on.is.null,ends_on.gte.${cls.scheduled_date}`),
       ]);
+
+    const awayByStudent = groupByStudent((awayRows || []) as AwayWindow[]);
 
     // Whether Teams attendance has been read for this class at all, the same
     // test the register endpoint uses. A class with zero attendance rows has
@@ -186,6 +206,7 @@ export async function GET(request: NextRequest) {
       const a = attById.get(r.user_id);
       const opt = optById.get(r.user_id);
       const abs = absenceById.get(r.user_id) ?? null;
+      const awayWindow = coveringWindow(awayByStudent.get(r.user_id) || [], cls.scheduled_date);
       const attended = !!a?.attended;
       const presence = presenceOf(a || {}, held);
       const flags = attendanceFlags(presence);
@@ -205,6 +226,18 @@ export async function GET(request: NextRequest) {
         // Enrolled after this class ran, so there was never anything for them to
         // explain. Read by bucketFor below, which is why it is set before it.
         joinedAfterClass: joinedAfterClass(r.enrolled_at, cls.scheduled_date),
+        // A declared away window covers this class's date. Same reasoning: read
+        // by bucketFor below, so it is set before it.
+        away: !!awayWindow,
+        // Described against the class's own date, not today, so a class reviewed
+        // in December still reads "Away until 20 Oct" rather than describing a
+        // window that has long since closed as if it were upcoming.
+        away_window: awayWindow
+          ? `${describeWindow(awayWindow, cls.scheduled_date)}: ${describeReason(
+              awayWindow.reason_code,
+              awayWindow.reason_note,
+            )}`
+          : null,
         rsvp: opt ? 'not_attending' : 'attending',
         reason: opt ? (opt.reason_code || opt.reason || null) : null,
         attended,
@@ -246,6 +279,7 @@ export async function GET(request: NextRequest) {
           attended,
           presence,
           joinedAfterClass: row.joinedAfterClass,
+          away: row.away,
           rsvp: row.rsvp,
           absence: row.absence,
         }),
@@ -257,7 +291,7 @@ export async function GET(request: NextRequest) {
     const durations = students.filter((s: any) => s.attended && s.duration_minutes != null).map((s: any) => s.duration_minutes);
     const avgDuration = durations.length ? Math.round(durations.reduce((x: number, y: number) => x + y, 0) / durations.length) : 0;
 
-    // The five states, counted once each. Named stateTally only because `buckets`
+    // The seven states, counted once each. Named stateTally only because `buckets`
     // below is the older RSVP-vs-actual matrix, which answers a different
     // question (did the RSVP predict the room) and is still shown.
     const stateTally = tallyBuckets(students);
@@ -323,8 +357,19 @@ export async function GET(request: NextRequest) {
         // is genuinely still owed, but held apart everywhere it is labelled: a
         // late joiner needs the recording, not a phone call asking where they were.
         lateJoiners: stateTally.late_joiner,
+        // Missed because they told us in advance they would be away for a
+        // stretch. Held apart from missedWithReason for the same reason late
+        // joiners are held apart: the number is actionable in a different way.
+        // A fortnight of declared exam leave is not eight separate incidents.
+        away: stateTally.away,
+        // Away is counted here, exactly like late joiners and for the same
+        // reason: the work is genuinely still owed. Declaring a window explains
+        // the empty seat, it does not cancel the class or the catch-up behind it.
         notCaughtUp:
-          stateTally.missed_no_reason + stateTally.missed_with_reason + stateTally.late_joiner,
+          stateTally.missed_no_reason +
+          stateTally.missed_with_reason +
+          stateTally.away +
+          stateTally.late_joiner,
       },
       buckets,
       reasonTally: tallyReasons(optOuts || []),

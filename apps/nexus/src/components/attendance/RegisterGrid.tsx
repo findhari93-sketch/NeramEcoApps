@@ -44,17 +44,26 @@ const CELL_W = 48;
  * short of the 4.5:1 body text needs. No tone in this palette is guaranteed to
  * clear that bar as literal text, so the letter stops carrying colour at all.
  *
- * The letter (F, P, R, X) is already the real signal, colour was always
+ * The letter (F, P, A, R, X) is already the real signal, colour was always
  * reinforcement, so ink is now one fixed, high-contrast `text.primary` for
  * every real group, and the group lives in the cell's background instead: a
  * light tint of its tone, via `alpha()`. `joined_later` keeps the existing
  * `text.disabled` treatment and no tint, unchanged, same as the "no data" `?`
  * cell: that pairing is a separate, already-flagged theme-wide gap, not
  * something this pass is re-opening.
+ *
+ * `away` takes full-contrast ink with NO tint, which makes it the only
+ * combination of the two and so distinct from all five other cells. That is
+ * deliberate on both halves. No tint, because a planned absence is settled and
+ * a fifth tone would mean redoing the contrast exercise below. Full ink,
+ * because the other two untinted cells (`joined_later` and "no data") are
+ * absences of information, while a declared window is a recorded fact, and a
+ * run of A's has to read as a block of leave at a glance.
  */
 const LETTER_COLOR: Record<RegisterGroup, string> = {
   whole: 'text.primary',
   partly: 'text.primary',
+  away: 'text.primary',
   reason: 'text.primary',
   no_reason: 'text.primary',
   joined_later: 'text.disabled',
@@ -64,6 +73,7 @@ const LETTER_COLOR: Record<RegisterGroup, string> = {
 const TONE_KEY: Record<RegisterGroup, 'success' | 'warning' | 'info' | 'error' | null> = {
   whole: 'success',
   partly: 'warning',
+  away: null,
   reason: 'info',
   no_reason: 'error',
   joined_later: null,

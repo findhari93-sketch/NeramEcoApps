@@ -31,7 +31,11 @@ const BASE: DrawingFormState = {
   solution_video_url: '',
 };
 
-function setup(over: Partial<DrawingFormState> = {}, onChange = vi.fn()) {
+function setup(
+  over: Partial<DrawingFormState> = {},
+  onChange = vi.fn(),
+  parts?: { hasParts?: boolean; derivedMarks?: number | null },
+) {
   const value = { ...BASE, ...over };
   render(
     <DrawingQuestionPanel
@@ -40,6 +44,8 @@ function setup(over: Partial<DrawingFormState> = {}, onChange = vi.fn()) {
       getToken={async () => 'token'}
       questionText="Draw a village railway station at dusk."
       categories={['drawing', '2d_composition']}
+      hasParts={parts?.hasParts}
+      derivedMarks={parts?.derivedMarks ?? null}
     />,
   );
   return { onChange };
@@ -80,11 +86,49 @@ describe('the removed fields', () => {
 });
 
 describe('marks', () => {
-  it('is labelled for the exam, and keeps only digits', () => {
+  // Every drawing is 50, so the panel states it. A labelled number input asking
+  // for a figure the teacher already knows is a control that only gets skipped,
+  // which is how all 129 drawing questions ended up with no marks at all.
+  it('states the marks instead of asking for them', () => {
+    setup();
+    expect(screen.getByText('Worth 50 marks in the exam.')).toBeTruthy();
+    expect(screen.queryByLabelText('Marks in the exam')).toBeNull();
+  });
+
+  it('opens the field on Change, and keeps only digits', () => {
     const { onChange } = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     const field = screen.getByLabelText('Marks in the exam');
     fireEvent.change(field, { target: { value: '5a0' } });
 
     expect(onChange).toHaveBeenCalledWith({ drawing_marks: '50' });
+  });
+
+  it('reads the parts total, and offers no way to fight it', () => {
+    setup({}, vi.fn(), { hasParts: true, derivedMarks: 40 });
+    expect(screen.getByText('Worth 40 marks in the exam, the total of the parts.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+  });
+});
+
+describe('with parts', () => {
+  it('leaves the solution to each part, and keeps only the marks line', () => {
+    setup({}, vi.fn(), { hasParts: true });
+    expect(screen.queryByRole('button', { name: /copy prompt/i })).toBeNull();
+    expect(screen.queryByText('Solution')).toBeNull();
+    expect(screen.getByText('Worth 50 marks in the exam.')).toBeTruthy();
+  });
+
+  it('heads the single solution with whether there is one yet', () => {
+    setup();
+    expect(screen.getByText('No solution yet')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /copy prompt/i })).toBeTruthy();
+  });
+
+  it('hides the video field until it is asked for', () => {
+    setup();
+    expect(screen.queryByLabelText(/solution video url/i)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a video link' }));
+    expect(screen.getByLabelText(/solution video url/i)).toBeTruthy();
   });
 });

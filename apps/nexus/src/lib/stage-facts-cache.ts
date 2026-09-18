@@ -16,7 +16,7 @@ export const STAGE_FACTS_KEY = '/api/students/stage-facts';
  *
  * The provider dedupes for an hour and never revalidates on focus, which is right
  * for reads and wrong straight after a save: without this, a student just marked
- * Knows Tamil would keep a bare corner on every other screen for up to an hour.
+ * as Hindi would keep a bare corner on every other screen for up to an hour.
  * The one-argument form refetches underneath the data already on screen rather
  * than blanking it first.
  */

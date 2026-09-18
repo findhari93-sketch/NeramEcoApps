@@ -5,6 +5,11 @@ import {
   presenceOf,
   registerGroupOf,
   sessionWindow,
+  GROUP_LABEL,
+  GROUP_LETTER,
+  GROUP_ORDER,
+  GROUP_TONE,
+  type RegisterGroup,
 } from './attendance-register';
 
 /** The 15 Sep 2026 class: booked 7:00 to 8:30 PM IST, really ended about 8:10. */
@@ -210,6 +215,70 @@ describe('registerGroupOf', () => {
   it('leaves a silent absence in no reason, even once caught up', () => {
     expect(registerGroupOf({ attended: false, absence: { caught_up_at: ist('20:00') } })).toBe('no_reason');
     expect(registerGroupOf({ attended: false })).toBe('no_reason');
+  });
+
+  it('puts a declared away window in its own group, not in no reason', () => {
+    expect(registerGroupOf({ attended: false, away: true })).toBe('away');
+  });
+
+  /**
+   * The declaration describes an intention; the register describes the room.
+   * When they disagree the room wins, or a student who pushed through their exam
+   * week to attend anyway would be recorded as absent for it.
+   */
+  it('lets turning up anyway beat a declared away window', () => {
+    expect(registerGroupOf({ attended: true, presence: clean, away: true })).toBe('whole');
+    expect(
+      registerGroupOf({ attended: true, presence: { ...clean, lateByMin: 24 }, away: true }),
+    ).toBe('partly');
+  });
+
+  it('reads a one-off opt out inside an away window as the away window', () => {
+    expect(
+      registerGroupOf({ attended: false, away: true, rsvp: 'not_attending' }),
+    ).toBe('away');
+    expect(
+      registerGroupOf({ attended: false, away: true, absence: { reason_code: 'unwell' } }),
+    ).toBe('away');
+  });
+
+  /**
+   * The one thing that outranks away. Excusing is a teacher's decision about
+   * this class; a window is the student's declaration about a period. This also
+   * keeps the function in step with bucketFor, which carries `excused` as its
+   * own bucket and is emitted beside this one on the same object.
+   */
+  it('lets a teacher excusing the class outrank a declared away window', () => {
+    expect(
+      registerGroupOf({ attended: false, away: true, absence: { excused_at: ist('20:00') } }),
+    ).toBe('reason');
+  });
+
+  it('still owes nothing for a class that ran before they enrolled, away or not', () => {
+    expect(registerGroupOf({ attended: false, away: true, joinedAfterClass: true })).toBe('joined_later');
+  });
+});
+
+describe('the group tables', () => {
+  /**
+   * Every group must carry a label, a tone and a letter, and appear exactly once
+   * in the display order. A group added to the union but missed in one of these
+   * renders as a blank cell rather than failing loudly.
+   */
+  it('cover every group exactly once', () => {
+    const groups: RegisterGroup[] = ['whole', 'partly', 'away', 'reason', 'no_reason', 'joined_later'];
+    expect([...GROUP_ORDER].sort()).toEqual([...groups].sort());
+    expect(GROUP_ORDER.length).toBe(new Set(GROUP_ORDER).size);
+    for (const g of groups) {
+      expect(GROUP_LABEL[g]).toBeTruthy();
+      expect(GROUP_TONE[g]).toBeTruthy();
+      expect(GROUP_LETTER[g]).toBeTruthy();
+    }
+  });
+
+  it('gives each group its own letter, so colour is never the only signal', () => {
+    const letters = GROUP_ORDER.map((g) => GROUP_LETTER[g]);
+    expect(letters.length).toBe(new Set(letters).size);
   });
 });
 

@@ -6,7 +6,6 @@ import {
   Stack,
   Typography,
   Button,
-  Chip,
   IconButton,
   TextField,
   ToggleButton,
@@ -23,22 +22,20 @@ import {
 } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
+import CallMergeIcon from '@mui/icons-material/CallMerge';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
 import ChecklistIcon from '@mui/icons-material/Checklist';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import type { QBDrawingParts, QBDrawingPartsMode } from '@neram/database';
 import MathField from '@/components/common/MathField';
-import DrawingSolutionFields from '../DrawingSolutionFields';
+import DrawingSolutionFields, { SolutionStatus } from '../DrawingSolutionFields';
 import { PartBadge, PartsOrDivider } from '../DrawingPartsView';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import {
   MAX_DRAWING_PARTS,
   MIN_DRAWING_PARTS,
   composeDrawingPartsText,
-  drawingPartsSummary,
   normalizeDrawingParts,
   partIdAt,
   partLabelAt,
@@ -309,6 +306,13 @@ export default function DrawingPartsEditor({
   questionMarks,
 }: EditorProps) {
   const [pending, setPending] = useState<Pending>(null);
+  /**
+   * The shared instruction, printed above the parts. Nobody writes one, so the
+   * two fields are hidden unless the question already carries one, which only
+   * happens through a JSON import. Seeded once so clearing the text does not
+   * make the field disappear under the cursor.
+   */
+  const [showStem] = useState(() => Boolean(value.stem.trim() || value.stem_hi.trim()));
   const anyOne = value.mode === 'any_one';
   const total = partsFormTotalMarks(value);
   const noun = anyOne ? 'Option' : 'Part';
@@ -343,33 +347,21 @@ export default function DrawingPartsEditor({
     setPending(null);
   };
 
-  const summary = drawingPartsSummary({
-    mode: value.mode,
-    items: value.items.map((_, i) => ({ id: partIdAt(i), label: partLabelAt(i), text: '' })),
-  });
-
   return (
     <Box
       component="section"
       aria-labelledby="drawing-parts-heading"
       sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: { xs: 1.5, md: 2 }, mb: 1.5 }}
     >
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1}
-        sx={{ mb: 1.5, flexWrap: 'wrap', rowGap: 0.5 }}
+      {/* The heading is the toggle's label. A separate "Parts" title, a chip
+          repeating the mode the toggle already shows, and a caption made three
+          lines of furniture above one control. */}
+      <Typography
+        id="drawing-parts-heading"
+        variant="subtitle2"
+        component="h3"
+        sx={{ fontWeight: 700, mb: 0.75 }}
       >
-        <Typography id="drawing-parts-heading" variant="subtitle2" component="h3" sx={{ fontWeight: 700 }}>
-          Parts
-        </Typography>
-        <Chip size="small" label={summary} variant="outlined" color="primary" />
-        <Button size="small" onClick={requestMerge} sx={{ textTransform: 'none', minHeight: 44, ml: 'auto !important' }}>
-          Merge into one question
-        </Button>
-      </Stack>
-
-      <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 0.75 }} id="parts-mode-label">
         How students answer
       </Typography>
       <ToggleButtonGroup
@@ -381,43 +373,60 @@ export default function DrawingPartsEditor({
         onChange={(_, mode: QBDrawingPartsMode | null) => {
           if (mode) onChange({ ...value, mode });
         }}
-        aria-labelledby="parts-mode-label"
+        aria-labelledby="drawing-parts-heading"
         sx={{ mb: 2 }}
       >
-        <ToggleButton value="any_one" sx={{ minHeight: 48, textTransform: 'none', gap: 1 }}>
+        {/* The label shortens on a phone, so each button carries the full one.
+            Without it the accessible name changes with the viewport, which
+            leaves the control describing itself differently to a screen reader
+            depending on the window width. The short text is contained in the
+            full one, so the visible label is still part of the name. */}
+        <ToggleButton
+          value="any_one"
+          aria-label="Attempt any one"
+          sx={{ minHeight: 48, textTransform: 'none', gap: 1 }}
+        >
           <AltRouteIcon fontSize="small" aria-hidden />
           <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Attempt any one</Box>
           <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Any one</Box>
         </ToggleButton>
-        <ToggleButton value="all" sx={{ minHeight: 48, textTransform: 'none', gap: 1 }}>
+        <ToggleButton
+          value="all"
+          aria-label="Answer all parts"
+          sx={{ minHeight: 48, textTransform: 'none', gap: 1 }}
+        >
           <ChecklistIcon fontSize="small" aria-hidden />
           <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Answer all parts</Box>
           <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>All parts</Box>
         </ToggleButton>
       </ToggleButtonGroup>
 
-      <TextField
-        label="Shared instruction (optional)"
-        value={value.stem}
-        onChange={(e) => onChange({ ...value, stem: e.target.value })}
-        multiline
-        minRows={1}
-        fullWidth
-        size="small"
-        helperText='Printed before the parts, for example "Attempt any ONE of the following:"'
-        sx={{ mb: showHindi ? 1.5 : 2 }}
-      />
-      {showHindi && (
-        <TextField
-          label="Shared instruction (Hindi)"
-          value={value.stem_hi}
-          onChange={(e) => onChange({ ...value, stem_hi: e.target.value })}
-          multiline
-          minRows={1}
-          fullWidth
-          size="small"
-          sx={{ mb: 2 }}
-        />
+      {showStem && (
+        <>
+          <TextField
+            label="Shared instruction"
+            value={value.stem}
+            onChange={(e) => onChange({ ...value, stem: e.target.value })}
+            multiline
+            minRows={1}
+            fullWidth
+            size="small"
+            helperText="Printed above the parts. Clear it if the parts read fine without it."
+            sx={{ mb: showHindi ? 1.5 : 2 }}
+          />
+          {showHindi && (
+            <TextField
+              label="Shared instruction (Hindi)"
+              value={value.stem_hi}
+              onChange={(e) => onChange({ ...value, stem_hi: e.target.value })}
+              multiline
+              minRows={1}
+              fullWidth
+              size="small"
+              sx={{ mb: 2 }}
+            />
+          )}
+        </>
       )}
 
       {value.items.map((item, i) => {
@@ -495,16 +504,7 @@ export default function DrawingPartsEditor({
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
                         Solution for {label}
                       </Typography>
-                      <Stack direction="row" spacing={0.5} alignItems="center">
-                        {hasSolution ? (
-                          <CheckCircleOutlineIcon sx={{ fontSize: 16, color: 'success.main' }} aria-hidden />
-                        ) : (
-                          <RadioButtonUncheckedIcon sx={{ fontSize: 16, color: 'text.disabled' }} aria-hidden />
-                        )}
-                        <Typography variant="caption" color="text.secondary">
-                          {hasSolution ? 'Solution image added' : 'No solution yet'}
-                        </Typography>
-                      </Stack>
+                      <SolutionStatus hasSolution={hasSolution} />
                     </Stack>
                   </AccordionSummary>
                   <AccordionDetails>
@@ -540,12 +540,22 @@ export default function DrawingPartsEditor({
         >
           Add {noun.toLowerCase()}
         </Button>
-        <Box sx={{ flex: 1 }} />
         {!anyOne && (
           <Typography variant="body2" color="text.secondary">
             {total != null ? `Total: ${total} marks` : 'Give every part its marks to total them'}
           </Typography>
         )}
+        <Box sx={{ flex: 1 }} />
+        {/* Down here with the other structural action rather than up in the
+            heading: splitting is the common job, putting it back is not. */}
+        <Button
+          size="small"
+          startIcon={<CallMergeIcon />}
+          onClick={requestMerge}
+          sx={{ textTransform: 'none', minHeight: 44, color: 'text.secondary' }}
+        >
+          Merge into one question
+        </Button>
       </Stack>
 
       <Dialog open={pending !== null} onClose={() => setPending(null)} maxWidth="xs" fullWidth>

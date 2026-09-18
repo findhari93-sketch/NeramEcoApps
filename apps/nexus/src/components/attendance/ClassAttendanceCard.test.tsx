@@ -12,7 +12,7 @@ const CLS: RegisterClass = {
   held: { start: '2026-09-15T13:30:00.000Z', end: '2026-09-15T14:40:00.000Z', source: 'observed', minutes: 70 },
   measured: true,
   sync_status: 'ok',
-  counts: { whole: 14, partly: 6, reason: 1, noReason: 16, joinedLater: 3 },
+  counts: { whole: 14, partly: 6, away: 0, reason: 1, noReason: 16, joinedLater: 3 },
 };
 
 describe('ClassAttendanceCard', () => {
@@ -44,7 +44,7 @@ describe('ClassAttendanceCard', () => {
   it('says so when Teams attendance has not been read', () => {
     render(
       <ClassAttendanceCard
-        cls={{ ...CLS, measured: false, held: null, counts: { whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 0 } }}
+        cls={{ ...CLS, measured: false, held: null, counts: { whole: 0, partly: 0, away: 0, reason: 0, noReason: 0, joinedLater: 0 } }}
         href="/teacher/attendance/class-1"
       />,
     );
@@ -54,7 +54,7 @@ describe('ClassAttendanceCard', () => {
   it('does not claim attendance was never read when it was, even if nobody counts against anyone', () => {
     render(
       <ClassAttendanceCard
-        cls={{ ...CLS, measured: true, counts: { whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 0 } }}
+        cls={{ ...CLS, measured: true, counts: { whole: 0, partly: 0, away: 0, reason: 0, noReason: 0, joinedLater: 0 } }}
         href="/teacher/attendance/class-1"
       />,
     );
@@ -67,7 +67,7 @@ describe('ClassAttendanceCard', () => {
   it('still surfaces joined-later students when the class was measured but everyone else counts to zero', () => {
     render(
       <ClassAttendanceCard
-        cls={{ ...CLS, measured: true, counts: { whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 5 } }}
+        cls={{ ...CLS, measured: true, counts: { whole: 0, partly: 0, away: 0, reason: 0, noReason: 0, joinedLater: 5 } }}
         href="/teacher/attendance/class-1"
       />,
     );

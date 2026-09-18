@@ -64,6 +64,22 @@ import MathField from '@/components/common/MathField';
 // here would drift the moment either changed.
 import { questionNeedsImage } from '@/lib/qb-image-needs';
 
+/**
+ * Every drawing question in the bank is worth this, so a blank means "nobody has
+ * said yet" rather than "worth nothing". The editor fills it in, and a migration
+ * backfilled the questions that predate the rule.
+ */
+const DEFAULT_DRAWING_MARKS = 50;
+
+/** The format names a teacher reads, in place of the column's enum. */
+const FORMAT_LABELS: Record<string, string> = {
+  MCQ: 'MCQ',
+  NUMERICAL: 'Numerical',
+  DRAWING_PROMPT: 'Drawing',
+  IMAGE_BASED: 'Image based',
+  SUBJECTIVE: 'Written answer',
+};
+
 /** What a question's Source & Format panel needs when it has no source row. */
 export type PaperFallback = Pick<NexusQBOriginalPaper, 'exam_type' | 'year' | 'session'>;
 
@@ -179,7 +195,12 @@ function getInitialFormData(
     solution_image: question.solution_image_url
       ? { url: question.solution_image_url, uploaded: true }
       : undefined,
-    drawing_marks: question.drawing_marks != null ? String(question.drawing_marks) : '',
+    drawing_marks:
+      question.drawing_marks != null
+        ? String(question.drawing_marks)
+        : question.question_format === 'DRAWING_PROMPT'
+          ? String(DEFAULT_DRAWING_MARKS)
+          : '',
     drawing_parts: question.question_format === 'DRAWING_PROMPT' ? partsToForm(question.drawing_parts) : null,
   };
 }
@@ -215,15 +236,10 @@ function buildSubmitPayload(form: FormData) {
       form.question_format === 'NUMERICAL' && form.answer_tolerance
         ? Number(form.answer_tolerance)
         : null,
-    explanation_brief: form.explanation_brief || null,
-    explanation_detailed: form.explanation_detailed || null,
     solution_video_url: form.solution_video_url || null,
     solution_image_url: form.solution_image?.uploaded ? form.solution_image.url : null,
-    difficulty: form.difficulty,
-    exam_relevance: form.exam_relevance,
     categories: form.categories,
     topic_id: form.topic_id || null,
-    sub_topic: form.sub_topic || null,
   };
 
   if (form.question_format === 'DRAWING_PROMPT') {
@@ -232,7 +248,17 @@ function buildSubmitPayload(form: FormData) {
     // question-level solution from them, so what this form holds for those
     // is only a fallback.
     questionData.drawing_parts = form.drawing_parts ? formToParts(form.drawing_parts) : null;
+    // Difficulty, exam relevance, sub-topic and the two explanation fields are
+    // not on a drawing's pane, so they are not in its payload either. The PATCH
+    // is a partial update, so a key left out keeps whatever the row holds;
+    // sending the form's copy would let a stale value overwrite an edit made on
+    // the full editor at Question bank, Questions, Edit.
   } else {
+    questionData.difficulty = form.difficulty;
+    questionData.exam_relevance = form.exam_relevance;
+    questionData.sub_topic = form.sub_topic || null;
+    questionData.explanation_brief = form.explanation_brief || null;
+    questionData.explanation_detailed = form.explanation_detailed || null;
     questionData.drawing_parts = null;
   }
 
@@ -469,6 +495,23 @@ export default function QuestionEditForm({
   }, []);
 
   const partsTotal = form.drawing_parts ? partsFormTotalMarks(form.drawing_parts) : null;
+  /**
+   * A drawing's pane is the question, its solutions, an image and tags. The
+   * founder's call, field by field: difficulty is unused, exam relevance is
+   * already settled by the paper the question came from, and a brief and
+   * detailed explanation on a drawing say nothing the model answer does not.
+   * Every other format keeps all of it, because students read the explanation
+   * text after answering an MCQ.
+   */
+  const isDrawing = form.question_format === 'DRAWING_PROMPT';
+  const sourceLine = [
+    form.exam_type ? QB_EXAM_TYPE_LABELS[form.exam_type] || form.exam_type : null,
+    form.year || null,
+    form.session && form.session !== '-' ? form.session : null,
+    form.question_number ? `Q${form.question_number}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   const handleCancel = () => {
     setForm(getInitialFormData(question, sources, paper));
@@ -500,6 +543,10 @@ export default function QuestionEditForm({
           display: 'flex',
           alignItems: 'center',
           gap: 1,
+          rowGap: 1,
+          // The section select takes a phone row of its own (see its `order`),
+          // because inline it left Save hanging off the right edge at 375px.
+          flexWrap: 'wrap',
           p: 1.5,
           bgcolor: alpha(theme.palette.primary.main, 0.04),
           borderBottom: 1,
@@ -509,7 +556,13 @@ export default function QuestionEditForm({
         <Typography variant="body2" fontWeight={700}>
           Q{question.display_order}
         </Typography>
-        <Chip label={form.question_format} size="small" color="primary" variant="outlined" sx={{ fontSize: '0.7rem' }} />
+        <Chip
+          label={FORMAT_LABELS[form.question_format] ?? form.question_format}
+          size="small"
+          color="primary"
+          variant="outlined"
+          sx={{ fontSize: '0.7rem' }}
+        />
         {dirty && (
           <Chip label="Unsaved" size="small" color="warning" sx={{ fontSize: '0.65rem', height: 20 }} />
         )}
@@ -520,6 +573,9 @@ export default function QuestionEditForm({
             displayEmpty
             disabled={sectionSaving}
             SelectDisplayProps={{ 'aria-label': `Section for question ${question.display_order ?? 0}` }}
+            renderValue={(value) =>
+              value ? `Section: ${qbSectionLabel(value as QBQuestionSection)}` : 'Unsectioned'
+            }
             onChange={async (e) => {
               setSectionSaving(true);
               try {
@@ -528,7 +584,12 @@ export default function QuestionEditForm({
                 setSectionSaving(false);
               }
             }}
-            sx={{ minWidth: 180, minHeight: 44 }}
+            sx={{
+              minHeight: 44,
+              minWidth: { xs: 0, sm: 180 },
+              width: { xs: '100%', sm: 'auto' },
+              order: { xs: 2, sm: 0 },
+            }}
           >
             <MenuItem value="" disabled><em>Unsectioned</em></MenuItem>
             {QB_SECTIONS.map((s) => (
@@ -670,7 +731,7 @@ export default function QuestionEditForm({
           {showImageZone ? (
             <>
               <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
-                Question Image
+                {isDrawing ? 'Figure for this question' : 'Question Image'}
               </Typography>
               <ImageUploadZone
                 image={form.question_image}
@@ -686,10 +747,35 @@ export default function QuestionEditForm({
               size="small"
               startIcon={<AddIcon />}
               onClick={() => setShowImageZone(true)}
-              sx={{ textTransform: 'none', minHeight: 36, display: 'block' }}
+              sx={{ textTransform: 'none', minHeight: 44 }}
             >
-              Add image
+              {isDrawing ? 'Add figure image' : 'Add image'}
             </Button>
+          )}
+
+          {/* The solution and the marks, in the flow. They used to sit in an
+              accordion called "Drawing setup", one of three collapsed sections
+              named after solutions, which is how a teacher loses the one they
+              are looking for. */}
+          {isDrawing && (
+            <Box sx={{ mt: 2 }}>
+              <DrawingQuestionPanel
+                value={{
+                  drawing_marks: form.drawing_marks,
+                  solution_image: form.solution_image,
+                  solution_video_url: form.solution_video_url,
+                }}
+                onChange={(patch) => {
+                  setForm((prev) => ({ ...prev, ...patch }));
+                  setDirty(true);
+                }}
+                getToken={getToken}
+                questionText={form.question_text}
+                categories={form.categories}
+                hasParts={Boolean(form.drawing_parts)}
+                derivedMarks={partsTotal}
+              />
+            </Box>
           )}
 
           {/* MCQ Options */}
@@ -856,7 +942,11 @@ export default function QuestionEditForm({
           }}
         />
 
-        {/* Section 2: Classification (collapsible) */}
+        {/* Section 2: Classification (collapsible). Not on a drawing: nobody
+            sets its difficulty, and its exam relevance is settled by the paper
+            it came from. The stored values are left alone, and the full editor
+            at Question bank, Questions, Edit still shows them. */}
+        {!isDrawing && (
         <Accordion defaultExpanded={false} disableGutters variant="outlined" sx={{ mb: 1 }}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="body2" fontWeight={600}>Classification</Typography>
@@ -902,38 +992,12 @@ export default function QuestionEditForm({
             />
           </AccordionDetails>
         </Accordion>
-
-        {/* Section 2b: Drawing setup. Only a drawing has any of this, and a
-            teacher who opened a drawing came for it, so it starts open. It owns
-            the solution image and video for this format, which is why the
-            Solution panel below hides its copies of those two. */}
-        {form.question_format === 'DRAWING_PROMPT' && (
-          <Accordion defaultExpanded disableGutters variant="outlined" sx={{ mb: 1 }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="body2" fontWeight={600}>Drawing setup</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <DrawingQuestionPanel
-                value={{
-                  drawing_marks: form.drawing_marks,
-                  solution_image: form.solution_image,
-                  solution_video_url: form.solution_video_url,
-                }}
-                onChange={(patch) => {
-                  setForm((prev) => ({ ...prev, ...patch }));
-                  setDirty(true);
-                }}
-                getToken={getToken}
-                questionText={form.question_text}
-                categories={form.categories}
-                hasParts={Boolean(form.drawing_parts)}
-                derivedMarks={partsTotal}
-              />
-            </AccordionDetails>
-          </Accordion>
         )}
 
-        {/* Section 3: Solution (collapsible) */}
+        {/* Section 3: Solution (collapsible). A drawing's solution is its
+            image, and it sits with the question above; a written explanation of
+            a drawing says nothing the model answer does not. */}
+        {!isDrawing && (
         <Accordion defaultExpanded={false} disableGutters variant="outlined" sx={{ mb: 1 }}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="body2" fontWeight={600}>Solution</Typography>
@@ -954,42 +1018,47 @@ export default function QuestionEditForm({
               onChange={(next) => updateField('explanation_detailed', next)}
               minRows={3}
             />
-            {/* Drawing setup owns these two for a drawing. Rendering both would
-                be two controls writing one column, and the last one touched
-                would silently win. */}
-            {form.question_format !== 'DRAWING_PROMPT' && (
-              <>
-                <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
-                  Solution Image
-                </Typography>
-                <ImageUploadZone
-                  image={form.solution_image}
-                  onChange={(img) => { updateField('solution_image', img); }}
-                  label="Paste or drop solution image"
-                  height={120}
-                  getToken={getToken}
-                  subfolder="solutions"
-                />
-                <TextField
-                  label="Solution Video URL"
-                  value={form.solution_video_url}
-                  onChange={(e) => updateField('solution_video_url', e.target.value)}
-                  size="small"
-                  fullWidth
-                  sx={{ mt: 1.5 }}
-                  placeholder="YouTube or SharePoint link"
-                />
-              </>
-            )}
+            <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
+              Solution Image
+            </Typography>
+            <ImageUploadZone
+              image={form.solution_image}
+              onChange={(img) => { updateField('solution_image', img); }}
+              label="Paste or drop solution image"
+              height={120}
+              getToken={getToken}
+              subfolder="solutions"
+            />
+            <TextField
+              label="Solution Video URL"
+              value={form.solution_video_url}
+              onChange={(e) => updateField('solution_video_url', e.target.value)}
+              size="small"
+              fullWidth
+              sx={{ mt: 1.5 }}
+              placeholder="YouTube or SharePoint link"
+            />
           </AccordionDetails>
         </Accordion>
+        )}
 
-        {/* Section 4: Source (collapsible) */}
+        {/* Section 4: Source, and on a drawing the only other thing left, the
+            format. Collapsed and last, because changing a format is destructive
+            (the server clears the parts with it) and reading the provenance is
+            something a teacher does once. */}
         <Accordion defaultExpanded={false} disableGutters variant="outlined">
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="body2" fontWeight={600}>Source &amp; Format</Typography>
+            <Typography variant="body2" fontWeight={600}>
+              {isDrawing ? 'More settings' : <>Source &amp; Format</>}
+            </Typography>
           </AccordionSummary>
           <AccordionDetails>
+            {isDrawing ? (
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
+                {sourceLine ? `From ${sourceLine}. Change it on the paper.` : 'No source recorded.'}
+              </Typography>
+            ) : (
+            <>
             {/* Where the question came from. Read-only: this tuple lives on the
                 paper and its source row, and Save has never carried these four
                 fields, so an editable control here only invites a correction
@@ -1031,16 +1100,37 @@ export default function QuestionEditForm({
             <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
               Taken from the paper this question belongs to. Change it on the paper.
             </Typography>
+            </>
+            )}
             <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
               Question Format
             </Typography>
             <RadioGroup
               row
               value={form.question_format}
-              onChange={(e) => updateField('question_format', e.target.value as QBQuestionFormat)}
+              onChange={(e) => {
+                const next = e.target.value as QBQuestionFormat;
+                setForm((prev) => ({
+                  ...prev,
+                  question_format: next,
+                  // A question that becomes a drawing gets the same 50 a drawing
+                  // is born with, so the rule does not depend on how the row
+                  // arrived.
+                  drawing_marks:
+                    next === 'DRAWING_PROMPT' && !prev.drawing_marks
+                      ? String(DEFAULT_DRAWING_MARKS)
+                      : prev.drawing_marks,
+                }));
+                setDirty(true);
+              }}
             >
               {(['MCQ', 'NUMERICAL', 'DRAWING_PROMPT', 'IMAGE_BASED'] as QBQuestionFormat[]).map((f) => (
-                <FormControlLabel key={f} value={f} control={<Radio size="small" />} label={f} />
+                <FormControlLabel
+                  key={f}
+                  value={f}
+                  control={<Radio size="small" />}
+                  label={FORMAT_LABELS[f] ?? f}
+                />
               ))}
             </RadioGroup>
           </AccordionDetails>

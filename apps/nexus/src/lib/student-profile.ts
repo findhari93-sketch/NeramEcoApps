@@ -42,7 +42,7 @@ import type {
   StudentProfileCore,
 } from './student-profile-types';
 
-import { languageEventTitle } from './student-language';
+import { englishFluencyEventTitle, languageEventTitle } from './student-language';
 /** Above this many open checklist items we stop shipping them to a phone. */
 const CHECKLIST_ITEM_CAP = 60;
 /** The activity feed is a summary, not an audit log. */
@@ -76,7 +76,7 @@ export async function loadStudentProfileCore(
       .from('users')
       .select(
         'id, name, first_name, last_name, email, personal_email, phone, avatar_url, ' +
-          'date_of_birth, gender, ms_oid, linked_classroom_email, academic_year, knows_tamil, ' +
+          'date_of_birth, gender, ms_oid, linked_classroom_email, academic_year, home_language, limited_english, ' +
           'student_program, lifecycle_status, is_alumni, photo_status, ' +
           'last_login_at, nexus_first_login_at, nexus_last_login_at, nexus_entered_at',
       )
@@ -316,7 +316,8 @@ export async function loadStudentProfileCore(
       ms_oid: user.ms_oid ?? null,
       linked_classroom_email: user.linked_classroom_email ?? null,
       academic_year: user.academic_year ?? null,
-      knows_tamil: typeof user.knows_tamil === 'boolean' ? user.knows_tamil : null,
+      home_language: user.home_language ?? null,
+      limited_english: user.limited_english === true,
       student_program: user.student_program ?? null,
       lifecycle_status: user.lifecycle_status ?? null,
       is_alumni: user.is_alumni ?? null,
@@ -534,6 +535,15 @@ function buildTimeline(input: {
         at: c.created_at,
         kind: 'classification',
         title: languageEventTitle(c.to_value),
+        detail: c.reason || null,
+      });
+      continue;
+    }
+    if (c.axis === 'english_fluency') {
+      events.push({
+        at: c.created_at,
+        kind: 'classification',
+        title: englishFluencyEventTitle(c.to_value),
         detail: c.reason || null,
       });
       continue;

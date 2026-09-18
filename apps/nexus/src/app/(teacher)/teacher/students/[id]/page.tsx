@@ -36,6 +36,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ParentAccessCard from '@/components/parent/ParentAccessCard';
 import ClassifyDrawer, { type ClassifyMode, type ClassifyPayload } from '@/components/students/ClassifyDrawer';
+import AwayWindowsSection from '@/components/students/profile/AwayWindowsSection';
 import AddStudentSheet from '@/components/students/AddStudentSheet';
 import CreateAccountForm from '@/components/students/CreateAccountForm';
 import ResetPasswordSheet from '@/components/students/ResetPasswordSheet';
@@ -95,6 +96,9 @@ export default function StudentProfilePage() {
   const canSetDormancy = can('coord.student.dormancy');
   const canSeeFinance = can('coord.student.finance');
   const canManageAccount = can('structure.student.account');
+  // The same capability that lets a teacher mark attendance by hand. Recording a
+  // window is the same kind of act: writing down what happened in the room.
+  const canRecordAway = can('teach.attendance.mark');
 
   const [accountSheet, setAccountSheet] = useState<'create' | 'reset' | null>(null);
   /** A new password is on screen that nobody has copied yet, so closing the sheet asks first. */
@@ -291,6 +295,7 @@ export default function StudentProfilePage() {
     { id: 'profile-classroom', label: 'Class and progress' },
     { id: 'profile-sign-ins', label: 'Sign-in history' },
     { id: 'profile-attendance', label: 'Attendance' },
+    { id: 'profile-away-dates', label: 'Away dates' },
     { id: 'profile-work', label: 'Assignments and tests' },
     { id: 'profile-sketchbook', label: 'Sketchbook' },
     { id: 'profile-application', label: 'Application form' },
@@ -367,6 +372,15 @@ export default function StudentProfilePage() {
         loading={perfState.loading}
         error={perfState.error}
         onFirstOpen={loadPerformance}
+      />
+
+      {/* Directly under Attendance, because it is the answer to the question
+          the section above raises about a student with a run of missed classes. */}
+      <AwayWindowsSection
+        studentId={core.student.id}
+        studentName={core.student.name || 'This student'}
+        getToken={getToken}
+        canRecord={canRecordAway}
       />
 
       <WorkSection
@@ -446,7 +460,8 @@ export default function StudentProfilePage() {
         busy={saving}
         examYears={examYears}
         currentBatch={core.currentBatch}
-        currentKnowsTamil={core.student.knows_tamil}
+        currentLanguage={core.student.home_language}
+        currentLimitedEnglish={core.student.limited_english}
         focus={drawer === 'stage' ? drawerFocus : undefined}
         onClose={() => setDrawer(null)}
         onApply={applyClassification}

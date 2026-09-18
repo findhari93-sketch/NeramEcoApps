@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   attendance: [] as Record<string, unknown>[],
   absences: [] as Record<string, unknown>[],
   rsvps: [] as Record<string, unknown>[],
+  awayWindows: [] as Record<string, unknown>[],
+  awayError: null as { code?: string; message?: string } | null,
   members: [] as Record<string, unknown>[],
   writes: [] as string[],
   // Every `.order(col)` call any query builder made, by table. Not the same
@@ -34,13 +36,14 @@ function builder(table: string) {
     if (table === 'nexus_attendance') return state.attendance;
     if (table === 'nexus_class_absences') return state.absences;
     if (table === 'nexus_class_rsvp') return state.rsvps;
+    if (table === 'nexus_student_away_windows') return state.awayWindows;
     if (table === 'users') return [{ id: 'staff-1', user_type: 'teacher', staff_role: 'teacher', can_teach: true }];
     return [];
   };
   let rangeArgs: [number, number] | null = null;
   const orderCols: string[] = [];
   const chain = () => b;
-  for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'not', 'limit']) {
+  for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'not', 'is', 'or', 'limit']) {
     b[method] = chain;
   }
   // Recorded, not just chained through: this is what the ordering regression
@@ -69,6 +72,9 @@ function builder(table: string) {
   b.maybeSingle = () => Promise.resolve({ data: rows()[0] ?? null, error: null });
   b.single = () => Promise.resolve({ data: rows()[0] ?? null, error: null });
   b.then = (onFulfilled: (v: unknown) => unknown) => {
+    if (table === 'nexus_student_away_windows' && state.awayError) {
+      return Promise.resolve({ data: null, error: state.awayError }).then(onFulfilled);
+    }
     if (orderCols.length) state.orderCalls.push({ table, cols: [...orderCols] });
     const all = rows() as unknown[];
     const [from, to] = rangeArgs ?? [0, SERVER_ROW_CAP - 1];
@@ -104,6 +110,8 @@ beforeEach(() => {
   state.capability = true;
   state.writes = [];
   state.orderCalls = [];
+  state.awayWindows = [];
+  state.awayError = null;
   state.classes = [
     {
       id: 'class-1',
@@ -205,9 +213,127 @@ describe('GET /api/attendance/register', () => {
     expect(body.classes[0].counts).toEqual({
       whole: 1,
       partly: 1,
+      away: 0,
       reason: 0,
       noReason: 1,
       joinedLater: 1,
+    });
+  });
+
+  describe('declared away windows', () => {
+    /** 'silent' is the student who otherwise reads as "missed, no reason". */
+    const declareAway = (over: Record<string, unknown> = {}) => {
+      state.awayWindows = [
+        {
+          id: 'w1',
+          student_id: 'silent',
+          starts_on: '2026-09-14',
+          ends_on: '2026-09-20',
+          reason_code: 'clash',
+          reason_note: null,
+          source: 'student',
+          cancelled_at: null,
+          created_at: '2026-09-10T00:00:00Z',
+          ...over,
+        },
+      ];
+    };
+
+    it('moves a covered class out of no reason and into away', async () => {
+      declareAway();
+      const body = await (await call()).json();
+      expect(body.cells['class-1'].silent.g).toBe('away');
+      expect(body.classes[0].counts.away).toBe(1);
+      expect(body.classes[0].counts.noReason).toBe(0);
+    });
+
+    /**
+     * The rule that is easiest to reverse by accident, so it is pinned twice
+     * over. `excused_at` leaves the denominator because a teacher decided it; an
+     * away window is the student's own auto-accepted declaration, and if
+     * declaring away removed classes from your own denominator the attendance
+     * rate would be self-reported. The window explains the absence, it does not
+     * unbook the class.
+     */
+    it('keeps an away class in the attendance rate denominator', async () => {
+      declareAway();
+      const body = await (await call()).json();
+      const silent = body.students.find((s: { id: string }) => s.id === 'silent');
+      expect(silent.counted).toBe(1);
+      expect(silent.present).toBe(0);
+      expect(silent.rate).toBe(0);
+    });
+
+    it('reports the away count beside the rate rather than hiding it', async () => {
+      declareAway();
+      const body = await (await call()).json();
+      const silent = body.students.find((s: { id: string }) => s.id === 'silent');
+      expect(silent.away).toBe(1);
+      expect(silent.away_now).toBe('Away until 20 Sep');
+      expect(body.away_today).toBe(1);
+    });
+
+    it('says nobody is away today when every window has already ended', async () => {
+      declareAway({ starts_on: '2026-09-14', ends_on: '2026-09-15' });
+      const body = await (await call()).json();
+      const silent = body.students.find((s: { id: string }) => s.id === 'silent');
+      expect(body.cells['class-1'].silent.g).toBe('away');
+      expect(silent.away_now).toBeNull();
+      expect(body.away_today).toBe(0);
+    });
+
+    it('explains nothing once the window is ended early', async () => {
+      declareAway({ cancelled_at: '2026-09-14T10:00:00Z' });
+      const body = await (await call()).json();
+      expect(body.cells['class-1'].silent.g).toBe('no_reason');
+      expect(body.away_today).toBe(0);
+    });
+
+    it('does not let a window explain a class outside it', async () => {
+      declareAway({ starts_on: '2026-09-16', ends_on: '2026-09-20' });
+      const body = await (await call()).json();
+      expect(body.cells['class-1'].silent.g).toBe('no_reason');
+      // Still away today, though: the window has started, it just did not cover
+      // the class. The two questions are separate and must not be conflated.
+      expect(body.away_today).toBe(1);
+    });
+
+    it('never puts a student who turned up anyway in away', async () => {
+      declareAway({ student_id: 'stayed' });
+      const body = await (await call()).json();
+      expect(body.cells['class-1'].stayed.g).toBe('whole');
+      expect(body.classes[0].counts.away).toBe(0);
+    });
+
+    /**
+     * The migration can land after the app does: deploy-nexus does not depend on
+     * deploy-db-production. This read is paginated here rather than going
+     * through loadAwayWindows, so it needs its own guard, and it did not have
+     * one at first: the whole register 500'd against a database without the
+     * table, which is a working screen taken down by a feature nobody had used
+     * yet.
+     */
+    it('still renders the register when the away table does not exist yet', async () => {
+      state.awayError = { code: 'PGRST205', message: 'Could not find the table' };
+      const res = await call();
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.students.length).toBeGreaterThan(0);
+      expect(body.away_today).toBe(0);
+      expect(body.cells['class-1'].silent.g).toBe('no_reason');
+    });
+
+    it('still fails loudly on any other away read error', async () => {
+      // A failed or truncated read renders a student who told us in advance as
+      // "missed, no reason", so only the missing table is survivable.
+      state.awayError = { code: '57014', message: 'statement timeout' };
+      expect((await call()).status).toBe(500);
+    });
+
+    it('reads the away window without writing anything', async () => {
+      declareAway();
+      await call();
+      expect(state.writes).toEqual([]);
     });
   });
 
@@ -263,7 +389,7 @@ describe('GET /api/attendance/register', () => {
     const cells = body.cells['class-2'];
     expect(Object.keys(cells)).toEqual(['batchStudent']);
     const classTwo = body.classes.find((c: { id: string }) => c.id === 'class-2');
-    expect(classTwo.counts).toEqual({ whole: 0, partly: 0, reason: 0, noReason: 1, joinedLater: 0 });
+    expect(classTwo.counts).toEqual({ whole: 0, partly: 0, away: 0, reason: 0, noReason: 1, joinedLater: 0 });
   });
 
   it('drops an excused absence from the denominator, not just from present', async () => {
@@ -335,7 +461,7 @@ describe('GET /api/attendance/register', () => {
     // not any of the other four. The column has nothing to say.
     expect(body.cells['class-unsynced']).toEqual({});
     // Its own counts stay at zero rather than a roster's worth of "no reason".
-    expect(cls.counts).toEqual({ whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 0 });
+    expect(cls.counts).toEqual({ whole: 0, partly: 0, away: 0, reason: 0, noReason: 0, joinedLater: 0 });
     // And it never enters anybody's percentage: the always-attending
     // 'stayed' student's rate is unaffected by the unsynced class existing.
     const stayed = body.students.find((s: { id: string }) => s.id === 'stayed');

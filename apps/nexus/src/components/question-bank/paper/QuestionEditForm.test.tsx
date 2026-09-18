@@ -164,3 +164,104 @@ describe('QuestionEditForm section control', () => {
     expect(screen.queryByLabelText('Section for question 1')).toBeNull();
   });
 });
+
+/**
+ * A drawing question's pane is stripped to the job: the question, a solution
+ * per part, an image and tags. Difficulty is unused, exam relevance is settled
+ * by the paper the question came from, and a written explanation of a drawing
+ * says nothing its model answer does not.
+ *
+ * The payload assertions are the load-bearing half. The question PATCH is a
+ * partial update, so a hidden field must be left OUT of the body, not sent
+ * with the form's stale copy, or opening a drawing on a paper and saving it
+ * would quietly revert an edit made on the full editor.
+ */
+describe('QuestionEditForm on a drawing', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const getToken = async () => 'token';
+
+  const drawing = {
+    ...question,
+    id: 'd1',
+    question_format: 'DRAWING_PROMPT',
+    question_text: 'Draw a village railway station at dusk.',
+    options: null,
+    correct_answer: null,
+    categories: ['drawing'],
+    explanation_brief: 'Part (a): a 3D composition.',
+    drawing_marks: null,
+  } as unknown as NexusQBQuestion;
+
+  const renderDrawing = (over: Partial<NexusQBQuestion> = {}) =>
+    render(
+      <QuestionEditForm
+        question={{ ...drawing, ...over } as NexusQBQuestion}
+        getToken={getToken}
+        onSaved={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+  it('drops Classification, the explanations and the Source heading', () => {
+    renderDrawing();
+    expect(screen.queryByText('Classification')).toBeNull();
+    expect(screen.queryByLabelText('Brief Explanation')).toBeNull();
+    expect(screen.queryByLabelText('Detailed Explanation')).toBeNull();
+    expect(screen.queryByLabelText('Sub-topic')).toBeNull();
+    expect(screen.queryByText('Source & Format')).toBeNull();
+    expect(screen.getByText('More settings')).toBeTruthy();
+  });
+
+  it('keeps every one of them on an MCQ', () => {
+    render(<QuestionEditForm question={question} getToken={getToken} onSaved={() => {}} onCancel={() => {}} />);
+    expect(screen.getByText('Classification')).toBeTruthy();
+    expect(screen.getByText('Source & Format')).toBeTruthy();
+    expect(screen.queryByText('More settings')).toBeNull();
+  });
+
+  it('starts a drawing with no marks at 50, and says so rather than asking', () => {
+    renderDrawing();
+    expect(screen.getByText('Worth 50 marks in the exam.')).toBeTruthy();
+  });
+
+  it('leaves the hidden fields out of the payload instead of sending a stale copy', async () => {
+    const onSaved = vi.fn();
+    render(
+      <QuestionEditForm question={drawing} getToken={getToken} onSaved={onSaved} onCancel={() => {}} />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Question text'), { target: { value: 'Draw a bus stand at noon.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect('difficulty' in body).toBe(false);
+    expect('exam_relevance' in body).toBe(false);
+    expect('sub_topic' in body).toBe(false);
+    expect('explanation_brief' in body).toBe(false);
+    expect('explanation_detailed' in body).toBe(false);
+    expect(body.drawing_marks).toBe(50);
+    expect(body.question_text).toBe('Draw a bus stand at noon.');
+  });
+
+  it('still sends them on an MCQ', async () => {
+    const onSaved = vi.fn();
+    render(<QuestionEditForm question={question} getToken={getToken} onSaved={onSaved} onCancel={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText('Question text'), { target: { value: 'If $c = 9$ then' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.difficulty).toBe('MEDIUM');
+    expect(body.exam_relevance).toBe('BOTH');
+  });
+});

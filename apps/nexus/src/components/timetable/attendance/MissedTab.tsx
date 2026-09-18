@@ -416,7 +416,16 @@ export default function MissedTab({
     const students = view.shown;
     return {
       silent: students.filter((s) => s.bucket === 'missed_no_reason'),
-      explained: students.filter((s) => s.bucket === 'missed_with_reason'),
+      // `away` sits with `explained` rather than in a list of its own. This
+      // panel is about ONE class, and for one class a declared window and a
+      // one-off note say the same thing: they told us why. The distinction
+      // between a fortnight of leave and eight separate excuses only carries
+      // information across many classes, which is the register's job.
+      //
+      // What matters here is that away appears at all. Filtering by explicit
+      // bucket name means a group left out of this list vanishes from the panel
+      // entirely, and an away student still owes the catch-up work.
+      explained: students.filter((s) => s.bucket === 'missed_with_reason' || s.bucket === 'away'),
       lateJoiners: students.filter((s) => s.bucket === 'late_joiner'),
       done: students.filter((s) => s.bucket === 'caught_up' || s.bucket === 'excused'),
     };
@@ -445,7 +454,9 @@ export default function MissedTab({
   if (!insights) return <Alert severity="info">Could not load this class.</Alert>;
 
   const nobodyMissed = !(insights.students ?? []).some((s) =>
-    ['missed_no_reason', 'missed_with_reason', 'late_joiner', 'caught_up', 'excused'].includes(String(s.bucket)),
+    ['missed_no_reason', 'missed_with_reason', 'away', 'late_joiner', 'caught_up', 'excused'].includes(
+      String(s.bucket),
+    ),
   );
 
   if (nobodyMissed) {

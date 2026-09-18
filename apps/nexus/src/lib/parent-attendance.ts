@@ -27,6 +27,7 @@
  */
 
 import { presenceOf, sessionWindow, type SessionWindow } from './attendance-register';
+import { coveringWindow, type AwayWindow } from './away-windows';
 
 export type ClassMeasurement = 'measured' | 'not_measured';
 
@@ -42,6 +43,7 @@ export type AttendanceLabel =
   | 'partly_attended'
   | 'missed'
   | 'missed_with_reason'
+  | 'missed_away'
   | 'not_recorded';
 
 export const ATTENDANCE_LABEL_TEXT: Record<AttendanceLabel, string> = {
@@ -51,6 +53,7 @@ export const ATTENDANCE_LABEL_TEXT: Record<AttendanceLabel, string> = {
   partly_attended: 'Partly attended',
   missed: 'Missed',
   missed_with_reason: 'Missed (reason given)',
+  missed_away: 'Away (told us in advance)',
   not_recorded: 'Not recorded',
 };
 
@@ -190,8 +193,18 @@ function pickLabel(args: {
   leftEarly: boolean;
   droppedMidClass: boolean;
   hasReason: boolean;
+  away: boolean;
 }): AttendanceLabel {
-  if (!args.attended) return args.hasReason ? 'missed_with_reason' : 'missed';
+  // Away is read before the reason, matching registerGroupOf. It matters most
+  // here of all the places that grouping is done: a declared window usually
+  // leaves no absence row at all, so without this a parent opening the portal
+  // sees a bare "Missed" for the fortnight of exams they themselves arranged,
+  // while the teacher's register says "Away". Of everyone who reads these
+  // screens, the parent is the one who already knows the answer.
+  if (!args.attended) {
+    if (args.away) return 'missed_away';
+    return args.hasReason ? 'missed_with_reason' : 'missed';
+  }
   // Dropping out and rejoining, or both arriving late and leaving early, is
   // better summarised as partial presence than as either single fact.
   if (args.droppedMidClass || (args.late && args.leftEarly)) return 'partly_attended';
@@ -223,7 +236,12 @@ export function buildClassAttendanceViews(
    * what every caller did before and what flagged a whole cohort as leaving
    * early on a class that simply finished 20 minutes ahead of its booking.
    */
-  sessionWindows?: Map<string, SessionWindow>
+  sessionWindows?: Map<string, SessionWindow>,
+  /**
+   * This student's declared away windows. Optional, and a caller that omits it
+   * simply gets the old labels: no caller is made wrong by not passing it.
+   */
+  awayWindows?: AwayWindow[]
 ): ClassAttendanceView[] {
   const measured =
     measuredClassIds instanceof Set ? measuredClassIds : new Set(measuredClassIds);
@@ -308,6 +326,7 @@ export function buildClassAttendanceViews(
         leftEarly,
         droppedMidClass,
         hasReason: !!(abs?.reason_code || abs?.reason_note),
+        away: !!coveringWindow(awayWindows || [], cls.scheduled_date),
       }),
       attended,
       joinedAt: att?.joined_at ?? null,

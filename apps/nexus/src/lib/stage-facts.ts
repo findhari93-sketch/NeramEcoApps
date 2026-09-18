@@ -1,4 +1,5 @@
 import type { RosterMember, RosterMemberUser } from '@neram/database';
+import { languageKeyOf, type LanguageKey } from './student-language';
 
 /**
  * One fact per student, folded from however many enrolments they hold.
@@ -20,14 +21,18 @@ export interface StudentFact {
   /** users.name, so a screen holding only an id can still show the real name. */
   name: string | null;
   /**
-   * users.knows_tamil: true Knows Tamil, false English only, null not recorded.
-   * Drives the த badge. A roster loaded without the column reads as null.
+   * users.home_language, already resolved: NULL, an unknown word and a roster
+   * loaded without the column all read as English. Drives the avatar mark.
    */
-  knowsTamil: boolean | null;
+  language: LanguageKey;
+  /** users.limited_english. Flips the mark to its outlined form. */
+  limitedEnglish: boolean;
 }
 
-/** The roster row this fold reads: the base users embed plus the language column. */
-export type StageFactMember = RosterMember<RosterMemberUser & { knows_tamil?: boolean | null }>;
+/** The roster row this fold reads: the base users embed plus the language columns. */
+export type StageFactMember = RosterMember<
+  RosterMemberUser & { home_language?: string | null; limited_english?: boolean | null }
+>;
 
 export function foldStudentFacts(members: StageFactMember[]): Record<string, StudentFact> {
   /**
@@ -44,7 +49,7 @@ export function foldStudentFacts(members: StageFactMember[]): Record<string, Stu
    *                                        last year's archived classroom and
    *                                        active in this year's is not a break.
    *   photo, name, PER USER, not per enrolment -> first sight, and that is the
-   *   knowsTamil                           whole rule. loadClassroomRoster joins
+   *   language, limitedEnglish             whole rule. loadClassroomRoster joins
    *                                        one `user:users!...` embed per query,
    *                                        so every row for a person carries the
    *                                        identical users row: "newest" and "all
@@ -65,7 +70,8 @@ export function foldStudentFacts(members: StageFactMember[]): Record<string, Stu
         dormant: member.participation_status === 'dormant',
         photo: member.user?.avatar_url ?? null,
         name: member.user?.name ?? null,
-        knowsTamil: typeof member.user?.knows_tamil === 'boolean' ? member.user.knows_tamil : null,
+        language: languageKeyOf(member.user?.home_language),
+        limitedEnglish: member.user?.limited_english === true,
       };
       newest.set(member.user_id, at);
       continue;

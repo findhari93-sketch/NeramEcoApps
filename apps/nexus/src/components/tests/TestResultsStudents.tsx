@@ -39,6 +39,8 @@ import {
 } from '@neram/ui';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import PendingActionsOutlinedIcon from '@mui/icons-material/PendingActionsOutlined';
+import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
 import ChatOutlinedIcon from '@mui/icons-material/ChatOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -56,6 +58,7 @@ import {
   type ResultFilter,
 } from '@/lib/test-result-filters';
 import ResultReasonToggle, { ResultReasonDetail } from '@/components/tests/ResultReasonToggle';
+import { describeRunCatchup, outstandingClassNames, type RunCatchup } from '@/lib/run-catchup';
 
 type ResultStatus = 'submitted' | 'in_progress' | 'not_started' | 'missed' | 'excused';
 
@@ -107,6 +110,11 @@ export interface StudentResultRow {
   window_source?: 'reopen' | 'makeup' | null;
   /** The teacher's note on an excusing override. */
   excused_note?: string | null;
+  /**
+   * Catch-up for the classes this run covers, which is what the door checks.
+   * Null on a run that covers no class, and on the paper-wide view.
+   */
+  catchup?: RunCatchup | null;
 }
 
 export interface StudentResultStats {
@@ -187,6 +195,7 @@ const TILE_TONES: Record<ResultFilter, StatTone> = {
   did: 'info',
   not_done: 'warning',
   no_reason: 'warning',
+  behind: 'warning',
   excused: 'neutral',
   passed: 'success',
   below_pass: 'error',
@@ -288,14 +297,31 @@ export default function TestResultsStudents({
   const averageMarks = scoreShown === 'first' ? stats?.average_first_marks : stats?.average_best_marks;
   const passMark = stats?.pass_mark_pct == null ? null : Math.round(stats.pass_mark_pct);
 
-  // The shared student list: ranked search, sort, the stage ring filter, and no
-  // dormant students. The result tiles stay this screen's own filter (prefilter);
-  // a paused student who really sat it shows only under Everyone, tagged.
-  const prefilter = useMemo(
-    () => (r: StudentResultRow) => (r.paused ? filter === 'all' : matchesResultFilter(r, filter, { average, scoreShown })),
-    [filter, average, scoreShown],
-  );
+  /**
+   * A paused student is off this list, including one who really sat it.
+   *
+   * They used to be kept and tagged, on the reasoning that their score should
+   * stay reachable. In practice that left names on a chase list nobody is
+   * tracking any more (Chetana on the 18 Aug exam), which is the opposite of
+   * what pausing somebody means. The score is still one tap away: Show puts
+   * them back, tagged, under Everyone.
+   */
+  const [showPaused, setShowPaused] = useState(false);
   const keepPaused = useMemo(() => (r: StudentResultRow) => r.paused === true, []);
+  const hasPausedRows = useMemo(() => (rows || []).some((r) => r.paused), [rows]);
+
+  // The shared student list: ranked search, sort, the stage ring filter, and no
+  // dormant students. The result tiles stay this screen's own filter (prefilter).
+  const prefilter = useMemo(
+    () => (r: StudentResultRow) => {
+      // Paused students are dropped here rather than through the shared dormant
+      // filter, because that one reads the stage facts and the server has
+      // already decided: a paused student arrives flagged, facts or no facts.
+      if (r.paused) return showPaused && filter === 'all';
+      return matchesResultFilter(r, filter, { average, scoreShown });
+    },
+    [filter, average, scoreShown, showPaused],
+  );
   const view = useStudentListView<StudentResultRow, ScoreSort>({
     rows,
     accessors: ACCESSORS,
@@ -333,6 +359,7 @@ export default function TestResultsStudents({
       did: `of ${counts.all}`,
       not_done: `${notStarted} not started, ${missed} missed`,
       no_reason: `of ${counts.not_done} not done`,
+      behind: 'chase these first',
       excused:
         joinedLater === counts.excused
           ? 'joined after the class'
@@ -351,6 +378,10 @@ export default function TestResultsStudents({
           'did',
           'not_done',
           ...(counts.not_done > 0 || filter === 'no_reason' ? (['no_reason'] as const) : []),
+          // Crosses Not done and Excused, so it only earns a tile when it holds
+          // somebody. See lib/test-result-filters.ts for why it is not a slice
+          // of either one.
+          ...(counts.behind > 0 || filter === 'behind' ? (['behind'] as const) : []),
           ...(counts.excused > 0 || filter === 'excused' ? (['excused'] as const) : []),
           'passed',
           'below_pass',
@@ -527,6 +558,7 @@ export default function TestResultsStudents({
                 const isSelected = selected.has(r.student_id);
                 const closable = Boolean(r.window_open_until) && r.window_source !== 'makeup';
                 const reasonOpen = !sat && Boolean(r.why || r.request_note) && openReasons.has(r.student_id);
+                const catchupLine = describeRunCatchup(r.catchup);
 
                 return (
                   <Box key={r.student_id}>
@@ -646,6 +678,50 @@ export default function TestResultsStudents({
                               </Typography>
                             </Box>
                           )
+                        )}
+
+                        {/* Why they may not have sat it, for the one reason a
+                            teacher can do something about. The states come from
+                            the same gate api/tests/attempt enforces, so a row
+                            reading "2 classes still to catch up" is the literal
+                            reason that student is refused at the door.
+
+                            Never colour alone: the icon and the sentence carry
+                            it, so it survives a colourblind reader and a
+                            greyscale print. */}
+                        {!sat && catchupLine && (
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, mt: 0.25 }}>
+                            {r.catchup?.state === 'behind' ? (
+                              <PendingActionsOutlinedIcon sx={{ fontSize: 14, mt: '2px', color: 'warning.dark' }} />
+                            ) : r.catchup?.state === 'caught_up' ? (
+                              <TaskAltOutlinedIcon sx={{ fontSize: 14, mt: '2px', color: 'success.main' }} />
+                            ) : (
+                              <HelpOutlineOutlinedIcon sx={{ fontSize: 14, mt: '2px', color: 'text.disabled' }} />
+                            )}
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                minWidth: 0,
+                                // Class titles are typed by a teacher and run
+                                // long. Without this one of them pushes the
+                                // whole row sideways on a 375px phone.
+                                overflowWrap: 'anywhere',
+                                color:
+                                  r.catchup?.state === 'behind'
+                                    ? 'warning.dark'
+                                    : r.catchup?.state === 'caught_up'
+                                      ? 'success.dark'
+                                      : 'text.secondary',
+                              }}
+                            >
+                              {catchupLine}
+                              {r.catchup?.state === 'behind' && r.catchup.outstanding.length > 0 && (
+                                <Box component="span" sx={{ display: 'block', color: 'text.secondary' }}>
+                                  {outstandingClassNames(r.catchup.outstanding)}
+                                </Box>
+                              )}
+                            </Typography>
+                          </Box>
                         )}
                       </Box>
 
@@ -770,7 +846,15 @@ export default function TestResultsStudents({
         )}
       </Paper>
 
-      <PausedFootnote count={(stats?.paused_hidden ?? 0) + view.pausedHidden} />
+      <PausedFootnote
+        count={
+          (stats?.paused_hidden ?? 0) +
+          view.pausedHidden +
+          (showPaused ? 0 : (rows || []).filter((r) => r.paused).length)
+        }
+        shown={showPaused}
+        onToggle={hasPausedRows ? () => setShowPaused((v) => !v) : undefined}
+      />
 
       {canAct && selecting && (
         <Box

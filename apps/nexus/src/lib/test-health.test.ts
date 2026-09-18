@@ -6,6 +6,8 @@ import {
   hasBlockingIssue,
   realFailures,
   reportedIssues,
+  buildHealthPrompt,
+  HEALTH_PROMPT_LIMIT,
   structuralIssues,
   technicalIssues,
   type AttemptErrorRow,
@@ -348,5 +350,104 @@ describe('hasBlockingIssue', () => {
   it('is false for warnings alone', () => {
     expect(hasBlockingIssue(technicalIssues([{ phase: 'image' }]))).toBe(false);
     expect(hasBlockingIssue([])).toBe(false);
+  });
+});
+
+describe('buildHealthPrompt', () => {
+  const base = {
+    testTitle: 'History of Architecture Test',
+    testId: 'acf8084d',
+    placementId: 'c39e7fe6',
+    runLabel: 'Exam: 18 Aug',
+    pageUrl: 'http://localhost:3012/teacher/tests/acf8084d?tab=students',
+    issues: [] as ReturnType<typeof technicalIssues>,
+    affected: {} as Record<string, Array<{ student_id: string; last_at: string | null; message: string; times: number; name?: string | null }>>,
+    reports: [] as Array<{ report_type?: string | null; description?: string | null }>,
+  };
+
+  it('names the paper, the run and the screen', () => {
+    const text = buildHealthPrompt(base);
+    expect(text).toContain('History of Architecture Test');
+    expect(text).toContain('nexus_tests.id acf8084d');
+    expect(text).toContain('nexus_test_placements.id c39e7fe6');
+    expect(text).toContain('Exam: 18 Aug');
+    expect(text).toContain(base.pageUrl);
+  });
+
+  it('lists the students an App problem happened to, with what the app said', () => {
+    const text = buildHealthPrompt({
+      ...base,
+      issues: technicalIssues([{ phase: 'submit', student_id: 's1' }, { phase: 'submit', student_id: 's2' }]),
+      affected: {
+        submit: [
+          { student_id: 's1', name: 'Kaveya Rameshbabu', last_at: '2026-09-17T12:34:00Z', message: 'EXAM_CLOSED', times: 3 },
+          { student_id: 's2', name: null, last_at: null, message: '', times: 1 },
+        ],
+      },
+    });
+    expect(text).toContain('[App] 2 students could not submit their answers (phase: submit)');
+    expect(text).toContain('Kaveya Rameshbabu: 3 times');
+    expect(text).toContain('message: EXAM_CLOSED');
+    // No name recorded falls back to the id rather than printing "null".
+    expect(text).toContain('s2: 1 time');
+    expect(text).toContain('message: none recorded');
+  });
+
+  it('counts the students it does not list', () => {
+    const many = Array.from({ length: 15 }, (_, i) => ({
+      student_id: `s${i}`,
+      name: `Student ${i}`,
+      last_at: '2026-09-17T12:00:00Z',
+      message: 'boom',
+      times: 1,
+    }));
+    const text = buildHealthPrompt({
+      ...base,
+      issues: technicalIssues(many.map((m) => ({ phase: 'submit', student_id: m.student_id }))),
+      affected: { submit: many },
+    });
+    expect(text).toContain('and 3 more students');
+  });
+
+  it('carries what students wrote, and skips empty reports', () => {
+    const text = buildHealthPrompt({
+      ...base,
+      issues: reportedIssues([{ report_type: 'wrong_answer' }]),
+      reports: [
+        { report_type: 'wrong_answer', description: 'Option B is also right' },
+        { report_type: 'other', description: '   ' },
+      ],
+    });
+    expect(text).toContain('WHAT STUDENTS SAID');
+    expect(text).toContain('[wrong_answer] Option B is also right');
+    expect(text.match(/^- \[/gm)).toHaveLength(1);
+  });
+
+  it('says what to do and refuses to deploy', () => {
+    const text = buildHealthPrompt(base);
+    expect(text).toContain('add a regression test that fails without the fix');
+    expect(text).toContain('Do not deploy');
+  });
+
+  it('truncates rather than handing over an unusable paste', () => {
+    const many = Array.from({ length: 400 }, (_, i) => ({
+      student_id: `student-${i}`,
+      name: `A very long student name number ${i} indeed`,
+      last_at: '2026-09-17T12:00:00Z',
+      message: 'x'.repeat(200),
+      times: 2,
+    }));
+    const text = buildHealthPrompt({
+      ...base,
+      issues: [
+        { stream: 'technical', severity: 'error', title: 'lots', count: 400, phase: 'submit' },
+        { stream: 'technical', severity: 'error', title: 'lots', count: 400, phase: 'load' },
+      ],
+      // Past the per-issue cap, so the length has to come from many issues.
+      affected: { submit: many.slice(0, 12), load: many.slice(0, 12) },
+      reports: many.map((m) => ({ report_type: 'other', description: m.message })),
+    });
+    expect(text.length).toBeLessThanOrEqual(HEALTH_PROMPT_LIMIT + 60);
+    expect(text).toContain('(truncated');
   });
 });

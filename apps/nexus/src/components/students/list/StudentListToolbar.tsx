@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Box, Typography } from '@neram/ui';
+import { Box, Button, Typography } from '@neram/ui';
 import PeopleSearchField from '@/components/PeopleSearchField';
 import { pausedFootnote } from '@/lib/student-list-view';
 import ListSortMenu from './ListSortMenu';
@@ -60,13 +60,49 @@ export default function StudentListToolbar<T, S extends string, F extends string
   );
 }
 
-/** The quiet line under a list that explains why its count may differ from another screen's. */
-export function PausedFootnote({ count }: { count: number }) {
+/**
+ * The quiet line under a list that explains why its count may differ from
+ * another screen's.
+ *
+ * `onToggle` makes it a door rather than a dead end, for the lists where a
+ * paused student still holds something worth reading (a score they really did
+ * sit for). Omitted, it stays the plain sentence every other list shows.
+ */
+export function PausedFootnote({
+  count,
+  shown = false,
+  onToggle,
+}: {
+  count: number;
+  /** True while the paused students are in the list, so the button offers Hide. */
+  shown?: boolean;
+  onToggle?: () => void;
+}) {
   const text = pausedFootnote(count);
-  if (!text) return null;
+  if (!text && !onToggle) return null;
   return (
-    <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5, textAlign: 'center' }} data-testid="paused-footnote">
-      {text}
+    <Typography
+      variant="body2"
+      color="text.secondary"
+      sx={{ mt: 1.5, textAlign: 'center' }}
+      data-testid="paused-footnote"
+    >
+      {text ?? (shown ? 'Paused students are in the list below.' : null)}
+      {onToggle && (
+        <Button
+          size="small"
+          onClick={onToggle}
+          sx={{
+            minHeight: 44,
+            ml: 0.5,
+            textTransform: 'none',
+            fontWeight: 700,
+            '&.Mui-focusVisible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+          }}
+        >
+          {shown ? 'Hide them' : 'Show them'}
+        </Button>
+      )}
     </Typography>
   );
 }

@@ -202,13 +202,15 @@ export function attendanceFlags(presence: Presence): {
   };
 }
 
-export type RegisterGroup = 'whole' | 'partly' | 'joined_later' | 'reason' | 'no_reason';
+export type RegisterGroup = 'whole' | 'partly' | 'joined_later' | 'away' | 'reason' | 'no_reason';
 
 export interface GroupInput {
   attended?: boolean | null;
   presence?: Presence | null;
   /** Their enrolment began after this class ran, so nothing was expected of them. */
   joinedAfterClass?: boolean;
+  /** A declared away window covers this class's date. See lib/away-windows.ts. */
+  away?: boolean;
   rsvp?: string | null;
   absence?: {
     reason_code?: string | null;
@@ -219,14 +221,28 @@ export interface GroupInput {
 }
 
 /**
- * Which of the five groups a student is in for this class.
+ * Which of the six groups a student is in for this class.
  *
  * Attended is read first, so a stale absence row (nothing deletes one when a
  * teacher marks somebody present by hand) can never put a student who sat
- * through the class onto a chase list. Joined later outranks both reason checks,
+ * through the class onto a chase list. Joined later outranks every reason check,
  * because a student who enrolled afterwards has nothing to explain. Caught up is
  * deliberately NOT a group: it is a label on a row, and the question this screen
  * answers is who was in the room.
+ *
+ * Away sits below `attended` and above the per-class reasons, and both edges are
+ * load bearing. Below attended, because a student who declared leave and then
+ * turned up anyway was in the room: their declaration does not overrule the
+ * register. Above the reason test, because a one-off opt-out that happens to
+ * fall inside a fortnight of exam leave should read as the fortnight, which is
+ * the larger and more useful truth about why they were not there.
+ *
+ * The one thing that outranks away is `excused_at`. Excusing is a teacher's
+ * decision about this specific class; a window is the student's own declaration
+ * about a period. It also keeps this function in step with `bucketFor` in
+ * attendance-quality.ts, which carries `excused` as its own bucket: the two are
+ * emitted side by side on the same object by class-insights, so a disagreement
+ * between them ships a payload that contradicts itself.
  */
 export function registerGroupOf(input: GroupInput): RegisterGroup {
   if (input.attended) {
@@ -235,19 +251,28 @@ export function registerGroupOf(input: GroupInput): RegisterGroup {
     return p.lateByMin > 0 || p.leftEarlyByMin > 0 || p.outMin > 0 ? 'partly' : 'whole';
   }
   if (input.joinedAfterClass) return 'joined_later';
+  if (input.absence?.excused_at) return 'reason';
+  if (input.away) return 'away';
   const explained =
     !!input.absence?.reason_code ||
     !!input.absence?.reason_note ||
-    !!input.absence?.excused_at ||
     input.rsvp === 'not_attending';
   return explained ? 'reason' : 'no_reason';
 }
 
-export const GROUP_ORDER: RegisterGroup[] = ['whole', 'partly', 'reason', 'no_reason', 'joined_later'];
+export const GROUP_ORDER: RegisterGroup[] = [
+  'whole',
+  'partly',
+  'away',
+  'reason',
+  'no_reason',
+  'joined_later',
+];
 
 export const GROUP_LABEL: Record<RegisterGroup, string> = {
   whole: 'Stayed the whole class',
   partly: 'Partly there',
+  away: 'Away, told us in advance',
   reason: 'Missed, gave a reason',
   no_reason: 'Missed, no reason',
   joined_later: 'Joined the course later',
@@ -256,6 +281,10 @@ export const GROUP_LABEL: Record<RegisterGroup, string> = {
 export const GROUP_TONE: Record<RegisterGroup, 'success' | 'warning' | 'info' | 'error' | 'neutral'> = {
   whole: 'success',
   partly: 'warning',
+  // Neutral rather than info: a planned absence is settled, and giving it the
+  // same weight as a reason offered after the fact would put two different
+  // things in the same colour.
+  away: 'neutral',
   reason: 'info',
   no_reason: 'error',
   joined_later: 'neutral',
@@ -265,6 +294,7 @@ export const GROUP_TONE: Record<RegisterGroup, 'success' | 'warning' | 'info' | 
 export const GROUP_LETTER: Record<RegisterGroup, string> = {
   whole: 'F',
   partly: 'P',
+  away: 'A',
   reason: 'R',
   no_reason: 'X',
   joined_later: '·',

@@ -12,10 +12,10 @@ import {
   stageColor,
   type StageKey,
 } from '@/lib/student-stage';
-import { languageSentence } from '@/lib/student-language';
+import { languageKeyOf, languageSentence, type LanguageKey } from '@/lib/student-language';
 import { DormantIcon, stageIconFor } from './StageGlyph';
 import { useStudentStageFacts } from './StudentStageFactsProvider';
-import TamilMark from './TamilMark';
+import LanguageMark from './LanguageMark';
 
 /**
  * A student avatar that carries their classification.
@@ -32,8 +32,10 @@ import TamilMark from './TamilMark';
  *   greyscale   dormant only. Reads as "switched off" before you have processed
  *               anything else on the row.
  *   glyph       a small icon at top-right. Colour is never the only signal.
- *   த           bottom-left, only for a student who knows Tamil. English only
- *               and not recorded keep a bare corner; the label says which.
+ *   letter      bottom-left, for a student whose language is not English: த
+ *               Tamil, ह Hindi, K Kannada, M Malayalam. Outlined instead of
+ *               filled when they cannot follow English. A plain English student
+ *               keeps a bare corner, and the label says so either way.
  *               Bottom-right stays free for the Teams presence dot.
  *
  * It WRAPS GraphAvatar and UserAvatar rather than modifying either, so all their
@@ -64,12 +66,15 @@ export interface StudentStageAvatarProps {
   largeSrc?: string | null;
 
   /**
-   * users.knows_tamil. An explicit value wins, INCLUDING null, so a screen that
-   * has just reloaded its own payload is never overruled by the session lookup.
-   * Leave it undefined to read the lookup by `userId` instead.
+   * users.home_language. An explicit value wins, INCLUDING null (which reads as
+   * English), so a screen that has just reloaded its own payload is never
+   * overruled by the session lookup. Leave it undefined to read the lookup by
+   * `userId` instead.
    */
-  knowsTamil?: boolean | null;
-  /** users.id, used only to look up the language when `knowsTamil` is not passed. */
+  language?: LanguageKey | string | null;
+  /** users.limited_english. Read with `language`, and ignored without it. */
+  limitedEnglish?: boolean | null;
+  /** users.id, used only to look up the language when `language` is not passed. */
   userId?: string | null;
 
   clickable?: boolean;
@@ -97,7 +102,8 @@ export default function StudentStageAvatar({
   presenceStatus,
   src,
   largeSrc,
-  knowsTamil,
+  language,
+  limitedEnglish,
   userId,
   clickable,
   tapToView,
@@ -108,7 +114,9 @@ export default function StudentStageAvatar({
   const theme = useTheme();
   // One context read, no effect. Without a provider (student pages) it is null.
   const { factsFor } = useStudentStageFacts();
-  const tamil = knowsTamil !== undefined ? knowsTamil : (factsFor(userId)?.knowsTamil ?? null);
+  const facts = language === undefined ? factsFor(userId) : null;
+  const spoken = language === undefined ? (facts?.language ?? 'english') : languageKeyOf(language);
+  const limited = language === undefined ? !!facts?.limitedEnglish : !!limitedEnglish;
   const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
 
   const ringColor = dormant ? dormantColor(mode) : stageColor(stage, mode);
@@ -117,7 +125,7 @@ export default function StudentStageAvatar({
   const label = dormant ? DORMANT_LABEL : STAGE_LABEL[stage];
   // The language sentence goes AFTER "label: tooltip", never before it: the ring's
   // spoken name must keep starting with the stage, which is how tests find rings.
-  const sentence = languageSentence(tamil);
+  const sentence = languageSentence(spoken, limited);
   const tooltip = `${dormant ? DORMANT_EXPLAINER : STAGE_TOOLTIP[stage]}${sentence ? ` ${sentence}` : ''}`;
 
   const withGlyph = showGlyph && size >= MIN_GLYPH_SIZE;
@@ -158,7 +166,7 @@ export default function StudentStageAvatar({
   const glyphSize = Math.max(12, Math.round(size * 0.36));
   // Two px larger floor than the glyph: a letter needs more room than an icon to
   // stay legible on the 30px table avatar.
-  const tamilSize = Math.max(14, Math.round(size * 0.36));
+  const markSize = Math.max(14, Math.round(size * 0.36));
 
   return (
     <Tooltip title={`${label}. ${tooltip}`} arrow enterTouchDelay={0} leaveTouchDelay={4000}>
@@ -203,10 +211,12 @@ export default function StudentStageAvatar({
             />
           </Box>
         )}
-        {withGlyph && tamil === true && (
-          <TamilMark
-            size={tamilSize}
-            testId="tamil-badge"
+        {withGlyph && (
+          <LanguageMark
+            language={spoken}
+            limitedEnglish={limited}
+            size={markSize}
+            testId="language-badge"
             sx={{
               position: 'absolute',
               bottom: -2,

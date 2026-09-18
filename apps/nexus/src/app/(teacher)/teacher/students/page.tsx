@@ -237,6 +237,8 @@ export default function TeacherStudents() {
   // Language narrowing. URL only, never localStorage: a remembered language would
   // quietly hide students on a later visit with nothing on screen saying why.
   const [languages, setLanguages] = useState<LanguageKey[]>([]);
+  /** The separate "cannot follow English" narrowing. It ANDs with the languages. */
+  const [limitedOnly, setLimitedOnly] = useState(false);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -296,6 +298,7 @@ export default function TeacherStudents() {
       setSegment('dormant');
     }
     setLanguages(parseLanguageParam(params.get('lang')));
+    setLimitedOnly(params.get('limited') === '1');
   }, []);
 
   const handleLanguagesChange = useCallback((next: LanguageKey[]) => {
@@ -304,6 +307,12 @@ export default function TeacherStudents() {
     // be applied to rows the teacher can no longer see.
     setSelectedIds(new Set());
     patchQuery({ lang: languageParamOf(next) });
+  }, []);
+
+  const handleLimitedOnlyChange = useCallback((next: boolean) => {
+    setLimitedOnly(next);
+    setSelectedIds(new Set());
+    patchQuery({ limited: next ? '1' : null });
   }, []);
 
   const handleDormantViewChange = useCallback((next: DormantView) => {
@@ -458,7 +467,7 @@ export default function TeacherStudents() {
   // relevance order. Browsing uses the chosen sort. The sign-in and account
   // filters apply either way, and always show as chips, so a narrowed list is
   // never a mystery.
-  const { visibleStudents, languageCounts } = useMemo(() => {
+  const { visibleStudents, languageCounts, limitedCount } = useMemo(() => {
     let rows: EnrolledStudent[];
     if (trimmedQuery && !mismatchOnly) {
       rows = rankPeople(students, trimmedQuery);
@@ -476,13 +485,29 @@ export default function TeacherStudents() {
     rows = rows.filter((s) => matchesFilters(s, filters, now));
     // Counted BEFORE the language narrowing, so each chip's number is what pressing
     // it alone would show.
-    const byLanguage = countLanguages(rows, (s) => s.knows_tamil);
-    rows = rows.filter((s) => matchesLanguages(s.knows_tamil, languages));
+    const byLanguage = countLanguages(rows, (s) => s.home_language);
+    const limitedTotal = rows.filter((s) => s.limited_english === true).length;
+    rows = rows.filter((s) => matchesLanguages(s.home_language, languages));
+    // A different question from "which language", so it narrows what is left
+    // rather than widening it.
+    if (limitedOnly) rows = rows.filter((s) => s.limited_english === true);
     return {
       visibleStudents: trimmedQuery ? rows : sortStudents(rows, sort),
       languageCounts: byLanguage,
+      limitedCount: limitedTotal,
     };
-  }, [students, segment, dormantView, trimmedQuery, mismatchOnly, filters, languages, sort, now]);
+  }, [
+    students,
+    segment,
+    dormantView,
+    trimmedQuery,
+    mismatchOnly,
+    filters,
+    languages,
+    limitedOnly,
+    sort,
+    now,
+  ]);
 
   /** The Dormant segment's own counts, over the same rows the list filters. */
   const dormantCounts = useMemo(() => dormantViewCounts(students, now), [students, now]);
@@ -501,7 +526,7 @@ export default function TeacherStudents() {
   );
   const filtersActive = activeFilterCount(filters) > 0;
   /** Any narrowing a "Clear filters" button should undo, language included. */
-  const narrowingActive = filtersActive || languages.length > 0;
+  const narrowingActive = filtersActive || languages.length > 0 || limitedOnly;
 
   const headerCaption = [
     `${counts.tracked} tracked`,
@@ -686,7 +711,8 @@ export default function TeacherStudents() {
     studentId: string;
     studyStage?: string | null;
     academicYear?: string | null;
-    knowsTamil?: boolean | null;
+    homeLanguage?: string | null;
+    limitedEnglish?: boolean;
   }
 
   /**
@@ -793,14 +819,21 @@ export default function TeacherStudents() {
               ...('academic_year' in (r.previous || {})
                 ? { academicYear: (r.previous.academic_year as string | null) ?? null }
                 : {}),
-              ...('knows_tamil' in (r.previous || {})
-                ? { knowsTamil: (r.previous.knows_tamil as boolean | null) ?? null }
+              ...('home_language' in (r.previous || {})
+                ? { homeLanguage: (r.previous.home_language as string | null) ?? null }
+                : {}),
+              ...('limited_english' in (r.previous || {})
+                ? { limitedEnglish: r.previous.limited_english === true }
                 : {}),
             }));
             // The API rejects an assignment with no fields, so drop any student
             // whose previous state held nothing we touched.
             const usable = revertAssignments.filter(
-              (a) => 'studyStage' in a || 'academicYear' in a || 'knowsTamil' in a,
+              (a) =>
+                'studyStage' in a ||
+                'academicYear' in a ||
+                'homeLanguage' in a ||
+                'limitedEnglish' in a,
             );
             if (usable.length) undo = () => applyClassification({}, undefined, true, usable);
           }
@@ -824,10 +857,12 @@ export default function TeacherStudents() {
   }, [students, selectedIds, drawerTargetIds]);
 
   /** One student's language for the sheet's "Now:" line. Undefined for a bulk edit. */
-  const drawerCurrentKnowsTamil = useMemo(() => {
+  const drawerCurrentLanguage = useMemo(() => {
     const ids = drawerTargetIds ?? Array.from(selectedIds);
     if (ids.length !== 1) return undefined;
-    return students.find((s) => s.id === ids[0])?.knows_tamil ?? null;
+    const student = students.find((s) => s.id === ids[0]);
+    if (!student) return undefined;
+    return { language: student.home_language ?? null, limitedEnglish: student.limited_english === true };
   }, [students, selectedIds, drawerTargetIds]);
 
   /**
@@ -852,6 +887,7 @@ export default function TeacherStudents() {
     (key: AttentionActionKey) => {
       setSearchQuery('');
       handleLanguagesChange([]);
+      handleLimitedOnlyChange(false);
       switch (key) {
         case 'review_mismatches':
           handleFiltersChange({ ...DEFAULT_FILTERS });
@@ -900,6 +936,7 @@ export default function TeacherStudents() {
       handleSegmentChange,
       handleDormantViewChange,
       handleLanguagesChange,
+      handleLimitedOnlyChange,
     ],
   );
 
@@ -1161,7 +1198,14 @@ export default function TeacherStudents() {
 
         {!mismatchOnly && (
           <Box sx={{ mb: 1 }}>
-            <LanguageFilterBar value={languages} counts={languageCounts} onChange={handleLanguagesChange} />
+            <LanguageFilterBar
+              value={languages}
+              counts={languageCounts}
+              limitedOnly={limitedOnly}
+              limitedCount={limitedCount}
+              onChange={handleLanguagesChange}
+              onLimitedChange={handleLimitedOnlyChange}
+            />
           </Box>
         )}
 
@@ -1321,6 +1365,7 @@ export default function TeacherStudents() {
                 onClick={() => {
                   handleFiltersChange({ ...DEFAULT_FILTERS });
                   handleLanguagesChange([]);
+                  handleLimitedOnlyChange(false);
                 }}
                 sx={{ minHeight: 48, fontWeight: 700 }}
               >
@@ -1425,7 +1470,8 @@ export default function TeacherStudents() {
         busy={saving}
         examYears={examYears}
         currentBatch={currentBatch}
-        currentKnowsTamil={drawerCurrentKnowsTamil}
+        currentLanguage={drawerCurrentLanguage?.language}
+        currentLimitedEnglish={drawerCurrentLanguage?.limitedEnglish}
         onClose={closeDrawer}
         onApply={(payload) => applyClassification(payload, drawerTargetIds ?? undefined)}
       />

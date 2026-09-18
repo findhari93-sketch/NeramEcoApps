@@ -48,6 +48,12 @@ export interface OverdueSweepResult {
   scanned: number;
   overdue: number;
   studentsNudged: number;
+  /**
+   * Who this run actually messaged. The test chase runs straight after and
+   * skips them: two notifications about the same missed classes on the same
+   * morning is how a student learns to mute the app.
+   */
+  nudgedStudentIds: string[];
   teachersNotified: number;
   capped: boolean;
   errors: string[];
@@ -72,6 +78,7 @@ export async function sweepOverdueMissedClasses(supabase: any): Promise<OverdueS
     scanned: 0,
     overdue: 0,
     studentsNudged: 0,
+    nudgedStudentIds: [],
     teachersNotified: 0,
     capped: false,
     errors: [],
@@ -210,6 +217,7 @@ export async function sweepOverdueMissedClasses(supabase: any): Promise<OverdueS
         .in('id', itemIdsByStudent.get(t.student_id) || []);
 
       result.studentsNudged += 1;
+      result.nudgedStudentIds.push(t.student_id);
     } catch (err) {
       result.errors.push(
         `overdue nudge ${t.student_id}: ${err instanceof Error ? err.message : 'unknown error'}`,

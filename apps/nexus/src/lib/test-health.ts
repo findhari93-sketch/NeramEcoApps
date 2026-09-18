@@ -356,3 +356,124 @@ export function collectTestIssues(input: {
 export function hasBlockingIssue(issues: TestIssue[]): boolean {
   return (issues || []).some((i) => i.severity === 'error');
 }
+
+/* ── Handing a problem to an AI ─────────────────────────────────────────── */
+
+/** A name beside an affected student, which the panel has and this module does not. */
+export interface NamedAffectedStudent extends AffectedStudent {
+  name?: string | null;
+}
+
+export interface HealthPromptInput {
+  testTitle: string;
+  testId: string;
+  placementId: string | null;
+  /** How the run picker labels this run, e.g. "Exam: 18 Aug". */
+  runLabel: string | null;
+  /** The page the teacher is looking at, so the fix can be checked in place. */
+  pageUrl: string;
+  issues: TestIssue[];
+  affected: Record<string, NamedAffectedStudent[]>;
+  reports: Array<{ report_type?: string | null; description?: string | null }>;
+}
+
+/** Roughly a screenful of paste, past which nobody reads it and nothing is gained. */
+export const HEALTH_PROMPT_LIMIT = 8000;
+/** Enough names to see a pattern. The rest are counted, not listed. */
+const PROMPT_STUDENT_LIMIT = 12;
+const PROMPT_REPORT_LIMIT = 8;
+
+function promptWhen(at: string | null | undefined): string {
+  if (!at) return 'time not recorded';
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return 'time not recorded';
+  return date.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
+/**
+ * PURE. The banner, written out as something an AI can act on without the page.
+ *
+ * The founder's loop is copy the problem, get it fixed, confirm, then press Mark
+ * as fixed. Only the last step existed, so the first was a teacher retyping
+ * "6 students could not submit" into a chat with none of the facts that make it
+ * findable: which paper, which run, who, when, and what the app actually said.
+ *
+ * Everything here is already on the screen. The value is that it leaves in one
+ * piece, with the ids and the table names that turn a symptom into a search.
+ */
+export function buildHealthPrompt(input: HealthPromptInput): string {
+  const lines: string[] = [];
+
+  lines.push('A test paper in Nexus has problems. Find the root cause and fix it.');
+  lines.push('');
+  lines.push(`Paper: ${input.testTitle || 'Untitled'} (nexus_tests.id ${input.testId})`);
+  if (input.runLabel || input.placementId) {
+    lines.push(
+      `Run: ${input.runLabel || 'this run'}${input.placementId ? ` (nexus_test_placements.id ${input.placementId})` : ''}`,
+    );
+  }
+  lines.push(`Teacher screen: ${input.pageUrl}`);
+  lines.push('');
+
+  lines.push('PROBLEMS');
+  const streamWord: Record<TestIssueStream, string> = {
+    structural: 'Paper',
+    technical: 'App',
+    reported: 'Students',
+  };
+  input.issues.forEach((issue, i) => {
+    lines.push(
+      `${i + 1}. [${streamWord[issue.stream]}] ${issue.title}` +
+        (issue.phase ? ` (phase: ${issue.phase})` : ''),
+    );
+    const who = issue.stream === 'technical' && issue.phase ? input.affected[issue.phase] || [] : [];
+    who.slice(0, PROMPT_STUDENT_LIMIT).forEach((s) => {
+      lines.push(
+        `   - ${s.name?.trim() || s.student_id}: ${s.times} ${plural(s.times, 'time', 'times')}, ` +
+          `last ${promptWhen(s.last_at)}, message: ${s.message?.trim() || 'none recorded'}`,
+      );
+    });
+    if (who.length > PROMPT_STUDENT_LIMIT) {
+      lines.push(`   - and ${who.length - PROMPT_STUDENT_LIMIT} more students`);
+    }
+  });
+  if (input.issues.length === 0) lines.push('(none listed)');
+  lines.push('');
+
+  const reports = (input.reports || []).filter((r) => String(r.description ?? '').trim());
+  if (reports.length > 0) {
+    lines.push('WHAT STUDENTS SAID');
+    reports.slice(0, PROMPT_REPORT_LIMIT).forEach((r) => {
+      lines.push(`- [${r.report_type || 'other'}] ${String(r.description).trim()}`);
+    });
+    if (reports.length > PROMPT_REPORT_LIMIT) {
+      lines.push(`- and ${reports.length - PROMPT_REPORT_LIMIT} more reports`);
+    }
+    lines.push('');
+  }
+
+  lines.push('WHERE THE DATA IS');
+  lines.push('- App lines come from nexus_test_attempt_errors, written by POST /api/student/tests/errors.');
+  lines.push('- The banner is built by GET /api/question-bank/tests/[id]/health, rules in apps/nexus/src/lib/test-health.ts.');
+  lines.push('- Expected refusals are already filtered out by apps/nexus/src/lib/test-error-classify.ts, so these rows are real failures.');
+  lines.push('- Paper lines are computed from nexus_test_questions joined to nexus_qb_questions.');
+  lines.push('- Student reports are nexus_qb_question_reports.');
+  lines.push('');
+
+  lines.push('WHAT TO DO');
+  lines.push('1. Reproduce or trace each problem above to its root cause. Do not guess from the wording.');
+  lines.push('2. Fix it, and add a regression test that fails without the fix.');
+  lines.push('3. Tell me exactly how you verified it, with the command output.');
+  lines.push('4. Do not deploy. I will test locally and press Mark as fixed on the screen above.');
+
+  const text = lines.join('\n');
+  if (text.length <= HEALTH_PROMPT_LIMIT) return text;
+  return `${text.slice(0, HEALTH_PROMPT_LIMIT)}\n\n(truncated, open the screen above for the rest)`;
+}

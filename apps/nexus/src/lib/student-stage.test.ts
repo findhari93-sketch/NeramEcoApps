@@ -204,28 +204,47 @@ describe('describeClassificationChange', () => {
   });
 
   it('names a single language edit by what it now says', () => {
-    expect(describeClassificationChange({ knowsTamil: true })).toBe('Marked Knows Tamil');
-    expect(describeClassificationChange({ knowsTamil: false })).toBe('Marked English only');
-    expect(describeClassificationChange({ knowsTamil: null })).toBe('Cleared language');
+    expect(describeClassificationChange({ homeLanguage: 'tamil' })).toBe('Marked Tamil');
+    expect(describeClassificationChange({ homeLanguage: 'kannada' })).toBe('Marked Kannada');
+    expect(describeClassificationChange({ homeLanguage: 'english' })).toBe('Marked English');
+    // Only Undo sends null, because the sheet offers no way to clear a language.
+    expect(describeClassificationChange({ homeLanguage: null })).toBe('Cleared language');
+  });
+
+  it('names the English fluency tick on its own', () => {
+    expect(describeClassificationChange({ limitedEnglish: true })).toBe('Marked limited English');
+    expect(describeClassificationChange({ limitedEnglish: false })).toBe('Cleared limited English');
+  });
+
+  it('calls both halves of the language one field, because they are one gesture', () => {
+    expect(describeClassificationChange({ homeLanguage: 'hindi', limitedEnglish: true })).toBe(
+      'Language set',
+    );
   });
 
   it('lists every field when several changed at once', () => {
     expect(describeClassificationChange({ studyStage: '12th', academicYear: '2026-27' })).toBe(
       'Class and exam year set',
     );
-    expect(describeClassificationChange({ studyStage: '12th', knowsTamil: true })).toBe(
+    expect(describeClassificationChange({ studyStage: '12th', homeLanguage: 'tamil' })).toBe(
       'Class and language set',
     );
-    expect(describeClassificationChange({ academicYear: null, knowsTamil: false })).toBe(
+    expect(describeClassificationChange({ academicYear: null, limitedEnglish: true })).toBe(
       'Exam year and language set',
     );
     expect(
-      describeClassificationChange({ studyStage: '10th', academicYear: '2028-29', knowsTamil: null }),
+      describeClassificationChange({
+        studyStage: '10th',
+        academicYear: '2028-29',
+        homeLanguage: 'malayalam',
+      }),
     ).toBe('Class, exam year and language set');
   });
 
   it('treats a key that is present but undefined as untouched', () => {
-    expect(describeClassificationChange({ studyStage: '11th', knowsTamil: undefined })).toBe('Class set');
+    expect(describeClassificationChange({ studyStage: '11th', homeLanguage: undefined })).toBe(
+      'Class set',
+    );
   });
 
   it('falls back to a neutral word when nothing was touched', () => {

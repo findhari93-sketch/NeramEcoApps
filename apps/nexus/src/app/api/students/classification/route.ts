@@ -9,7 +9,7 @@ import {
 } from '@neram/database';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
-import { isKnowsTamilValue, languageAuditValue } from '@/lib/student-language';
+import { englishFluencyAuditValue, isHomeLanguageValue } from '@/lib/student-language';
 
 /**
  * PATCH /api/students/classification
@@ -18,8 +18,10 @@ import { isKnowsTamilValue, languageAuditValue } from '@/lib/student-language';
  *
  *   studyStage           where the student is in their studies. Drives priority.
  *   academicYear         the exam-year cohort. Drives which exam they sit.
- *   knowsTamil           whether they can follow a class taught in Tamil
- *                        (users.knows_tamil). Drives the த avatar badge.
+ *   homeLanguage         the one language besides English they follow best
+ *                        (users.home_language). Drives the avatar mark.
+ *   limitedEnglish       whether they cannot follow a class taught in English
+ *                        (users.limited_english). Outlines that mark.
  *   participationStatus  whether they are still engaging. Drives whether every
  *                        metric and every automated reminder counts them.
  *
@@ -41,15 +43,20 @@ import { isKnowsTamilValue, languageAuditValue } from '@/lib/student-language';
  *     { classroomId, studentIds: string[],                 // 1..100
  *       studyStage?: '10th'|'11th'|'12th'|'gap_year'|null, // omit = unchanged, null = clear
  *       academicYear?: 'YYYY-YY'|null,                     // omit = unchanged, null = clear
- *       knowsTamil?: true|false|null,                      // omit = unchanged, null = clear
+ *       homeLanguage?: 'tamil'|'hindi'|'kannada'|'malayalam'|'english'|null,
+ *                                                          // omit = unchanged, null = clear
+ *       limitedEnglish?: true|false,                       // omit = unchanged
  *       participationStatus?: 'active'|'dormant',          // omit = unchanged
  *       reason?: string }                                  // REQUIRED going dormant
  *
  *   Per student, different values each (the application-form prefill review):
- *     { classroomId, assignments: [{ studentId, studyStage?, academicYear?, knowsTamil? }] }
+ *     { classroomId, assignments: [{ studentId, studyStage?, academicYear?,
+ *                                    homeLanguage?, limitedEnglish? }] }
  *
- * knowsTamil is on the per-student shape because Undo needs it: a bulk "Knows
- * Tamil" over students who held different values can only be reverted per student.
+ * The language is on the per-student shape because Undo needs it: a bulk "Tamil"
+ * over students who held different languages can only be reverted per student.
+ * null is how Undo puts a student back to never-recorded; the UI offers no such
+ * option, because on screen an unrecorded student simply reads as English.
  *
  * The per-student shape deliberately cannot set participationStatus: bulk
  * dormancy is always one decision applied uniformly, and allowing it here would
@@ -70,8 +77,10 @@ interface Change {
   hasYear: boolean;
   academicYear: string | null;
   hasLanguage: boolean;
-  /** The raw body value until validated, so a bad value is refused, not coerced. */
-  knowsTamil: unknown;
+  /** The raw body values until validated, so a bad value is refused, not coerced. */
+  homeLanguage: unknown;
+  hasLimited: boolean;
+  limitedEnglish: unknown;
 }
 
 function bad(error: string) {
@@ -95,7 +104,8 @@ export async function PATCH(request: NextRequest) {
       Array.isArray(body?.studentIds) ||
       Object.prototype.hasOwnProperty.call(body ?? {}, 'studyStage') ||
       Object.prototype.hasOwnProperty.call(body ?? {}, 'academicYear') ||
-      Object.prototype.hasOwnProperty.call(body ?? {}, 'knowsTamil') ||
+      Object.prototype.hasOwnProperty.call(body ?? {}, 'homeLanguage') ||
+      Object.prototype.hasOwnProperty.call(body ?? {}, 'limitedEnglish') ||
       Object.prototype.hasOwnProperty.call(body ?? {}, 'participationStatus');
 
     if (usesAssignments && usesFlat) {
@@ -131,10 +141,11 @@ export async function PATCH(request: NextRequest) {
 
         const hasStage = Object.prototype.hasOwnProperty.call(entry, 'studyStage');
         const hasYear = Object.prototype.hasOwnProperty.call(entry, 'academicYear');
-        const hasLanguage = Object.prototype.hasOwnProperty.call(entry, 'knowsTamil');
-        if (!hasStage && !hasYear && !hasLanguage) {
+        const hasLanguage = Object.prototype.hasOwnProperty.call(entry, 'homeLanguage');
+        const hasLimited = Object.prototype.hasOwnProperty.call(entry, 'limitedEnglish');
+        if (!hasStage && !hasYear && !hasLanguage && !hasLimited) {
           return bad(
-            `Nothing to change for ${studentId}: send studyStage, academicYear, knowsTamil, or a combination.`,
+            `Nothing to change for ${studentId}: send studyStage, academicYear, homeLanguage, limitedEnglish, or a combination.`,
           );
         }
         changes.push({
@@ -144,7 +155,9 @@ export async function PATCH(request: NextRequest) {
           hasYear,
           academicYear: hasYear ? ((entry.academicYear ?? null) as string | null) : null,
           hasLanguage,
-          knowsTamil: hasLanguage ? entry.knowsTamil : null,
+          homeLanguage: hasLanguage ? entry.homeLanguage : null,
+          hasLimited,
+          limitedEnglish: hasLimited ? entry.limitedEnglish : null,
         });
       }
     } else {
@@ -158,10 +171,11 @@ export async function PATCH(request: NextRequest) {
 
       const hasStage = Object.prototype.hasOwnProperty.call(body, 'studyStage');
       const hasYear = Object.prototype.hasOwnProperty.call(body, 'academicYear');
-      const hasLanguage = Object.prototype.hasOwnProperty.call(body, 'knowsTamil');
-      if (!hasStage && !hasYear && !hasLanguage && !hasParticipation) {
+      const hasLanguage = Object.prototype.hasOwnProperty.call(body, 'homeLanguage');
+      const hasLimited = Object.prototype.hasOwnProperty.call(body, 'limitedEnglish');
+      if (!hasStage && !hasYear && !hasLanguage && !hasLimited && !hasParticipation) {
         return bad(
-          'Nothing to change: send studyStage, academicYear, knowsTamil, participationStatus, or a combination.',
+          'Nothing to change: send studyStage, academicYear, homeLanguage, limitedEnglish, participationStatus, or a combination.',
         );
       }
       for (const studentId of studentIds) {
@@ -172,7 +186,9 @@ export async function PATCH(request: NextRequest) {
           hasYear,
           academicYear: hasYear ? ((body.academicYear ?? null) as string | null) : null,
           hasLanguage,
-          knowsTamil: hasLanguage ? body.knowsTamil : null,
+          homeLanguage: hasLanguage ? body.homeLanguage : null,
+          hasLimited,
+          limitedEnglish: hasLimited ? body.limitedEnglish : null,
         });
       }
     }
@@ -180,11 +196,12 @@ export async function PATCH(request: NextRequest) {
     const touchesStage = changes.some((c) => c.hasStage);
     const touchesYear = changes.some((c) => c.hasYear);
     const touchesLanguage = changes.some((c) => c.hasLanguage);
+    const touchesLimited = changes.some((c) => c.hasLimited);
 
     // ── Authorisation, per axis, before any database access ─────────────────
     // Language is data entry of the same kind as a class: a teacher learns it by
     // talking to the student, and a wrong value is visible and self-correcting.
-    if (touchesStage || touchesYear || touchesLanguage) {
+    if (touchesStage || touchesYear || touchesLanguage || touchesLimited) {
       assertCapability(staff, 'coord.student.stage');
     }
     if (hasParticipation) assertCapability(staff, 'coord.student.dormancy');
@@ -201,9 +218,12 @@ export async function PATCH(request: NextRequest) {
       ) {
         return bad('academicYear must be in YYYY-YY format, e.g. 2027-28');
       }
-      // Validated raw: 'yes', 'true' or 1 must be refused, not read as Knows Tamil.
-      if (change.hasLanguage && !isKnowsTamilValue(change.knowsTamil)) {
-        return bad('knowsTamil must be true, false or null');
+      // Validated raw: 'Tamil', 'ta' or 1 must be refused, not coerced into a key.
+      if (change.hasLanguage && !isHomeLanguageValue(change.homeLanguage)) {
+        return bad('homeLanguage must be tamil, hindi, kannada, malayalam, english or null');
+      }
+      if (change.hasLimited && typeof change.limitedEnglish !== 'boolean') {
+        return bad('limitedEnglish must be true or false');
       }
     }
 
@@ -274,14 +294,16 @@ export async function PATCH(request: NextRequest) {
 
     // Prior per-user values (exam year, language), read only for the axes in play.
     // The column list follows the axes too, so a year-only edit never names
-    // knows_tamil and keeps working on a database that has not been migrated yet.
+    // home_language and keeps working on a database that has not been migrated yet.
     const yearBefore = new Map<string, string | null>();
-    const languageBefore = new Map<string, boolean | null>();
-    if (touchesYear || touchesLanguage) {
+    const languageBefore = new Map<string, string | null>();
+    const limitedBefore = new Map<string, boolean>();
+    if (touchesYear || touchesLanguage || touchesLimited) {
       const columns = [
         'id',
         touchesYear ? 'academic_year' : null,
-        touchesLanguage ? 'knows_tamil' : null,
+        touchesLanguage ? 'home_language' : null,
+        touchesLimited ? 'limited_english' : null,
       ]
         .filter(Boolean)
         .join(', ');
@@ -292,9 +314,8 @@ export async function PATCH(request: NextRequest) {
       if (userReadError) throw userReadError;
       for (const user of (users || []) as any[]) {
         if (touchesYear) yearBefore.set(user.id, user.academic_year ?? null);
-        if (touchesLanguage) {
-          languageBefore.set(user.id, typeof user.knows_tamil === 'boolean' ? user.knows_tamil : null);
-        }
+        if (touchesLanguage) languageBefore.set(user.id, user.home_language ?? null);
+        if (touchesLimited) limitedBefore.set(user.id, user.limited_english === true);
       }
     }
 
@@ -410,12 +431,12 @@ export async function PATCH(request: NextRequest) {
     }
 
     // ── Write the language ──────────────────────────────────────────────────
-    // users.knows_tamil is per-USER and global, like the exam year, and guarded
+    // users.home_language is per-USER and global, like the exam year, and guarded
     // the same way: only ids that passed the classroom-scoped read reach here.
-    const languageGroups = new Map<string, { value: boolean | null; ids: string[] }>();
+    const languageGroups = new Map<string, { value: string | null; ids: string[] }>();
     for (const change of applicable) {
       if (!change.hasLanguage) continue;
-      const value = change.knowsTamil as boolean | null;
+      const value = change.homeLanguage as string | null;
       const group = languageGroups.get(String(value)) ?? { value, ids: [] };
       group.ids.push(change.studentId);
       languageGroups.set(String(value), group);
@@ -428,7 +449,7 @@ export async function PATCH(request: NextRequest) {
 
       const { error: languageError } = await supabase
         .from('users')
-        .update({ knows_tamil: value, updated_at: now })
+        .update({ home_language: value, updated_at: now })
         .in('id', toWrite);
       if (languageError) throw languageError;
 
@@ -436,8 +457,40 @@ export async function PATCH(request: NextRequest) {
         await recordUserHistory(
           supabase,
           id,
-          'knows_tamil',
+          'home_language',
           languageBefore.get(id) ?? null,
+          value,
+          staff.id,
+        );
+      }
+    }
+
+    // ── Write the English-fluency tick ──────────────────────────────────────
+    const limitedGroups = new Map<string, { value: boolean; ids: string[] }>();
+    for (const change of applicable) {
+      if (!change.hasLimited) continue;
+      const value = change.limitedEnglish === true;
+      const group = limitedGroups.get(String(value)) ?? { value, ids: [] };
+      group.ids.push(change.studentId);
+      limitedGroups.set(String(value), group);
+    }
+
+    for (const { value, ids } of limitedGroups.values()) {
+      const toWrite = ids.filter((id) => limitedBefore.get(id) !== value);
+      if (!toWrite.length) continue;
+
+      const { error: limitedError } = await supabase
+        .from('users')
+        .update({ limited_english: value, updated_at: now })
+        .in('id', toWrite);
+      if (limitedError) throw limitedError;
+
+      for (const id of toWrite) {
+        await recordUserHistory(
+          supabase,
+          id,
+          'limited_english',
+          limitedBefore.get(id) ?? false,
           value,
           staff.id,
         );
@@ -448,9 +501,9 @@ export async function PATCH(request: NextRequest) {
     // A no-op write leaves no noise, so the trail reads as a list of real
     // decisions rather than a list of times someone opened the sheet.
     const events: Record<string, unknown>[] = [];
-    // Kept apart and inserted on their own: if the 'language' axis CHECK has not
-    // reached this database yet, only these rows are lost, not the stage and year
-    // rows the same request wrote.
+    // Kept apart and inserted on their own: if the 'language' or 'english_fluency'
+    // axis CHECK has not reached this database yet, only these rows are lost, not
+    // the stage and year rows the same request wrote.
     const languageEvents: Record<string, unknown>[] = [];
 
     for (const change of applicable) {
@@ -485,15 +538,28 @@ export async function PATCH(request: NextRequest) {
 
       if (
         change.hasLanguage &&
-        (languageBefore.get(change.studentId) ?? null) !== (change.knowsTamil as boolean | null)
+        (languageBefore.get(change.studentId) ?? null) !== (change.homeLanguage as string | null)
       ) {
         languageEvents.push({
           enrollment_id: row.id,
           classroom_id: classroomId,
           student_id: change.studentId,
           axis: 'language',
-          from_value: languageAuditValue(languageBefore.get(change.studentId) ?? null),
-          to_value: languageAuditValue(change.knowsTamil as boolean | null),
+          from_value: languageBefore.get(change.studentId) ?? null,
+          to_value: change.homeLanguage as string | null,
+          reason: reason || null,
+          performed_by: staff.id,
+        });
+      }
+
+      if (change.hasLimited && limitedBefore.get(change.studentId) !== change.limitedEnglish) {
+        languageEvents.push({
+          enrollment_id: row.id,
+          classroom_id: classroomId,
+          student_id: change.studentId,
+          axis: 'english_fluency',
+          from_value: englishFluencyAuditValue(limitedBefore.get(change.studentId) === true),
+          to_value: englishFluencyAuditValue(change.limitedEnglish === true),
           reason: reason || null,
           performed_by: staff.id,
         });
@@ -556,9 +622,16 @@ export async function PATCH(request: NextRequest) {
         // Only reported when this request read it; otherwise the key is omitted.
         ...(touchesLanguage
           ? {
-              knows_tamil: change.hasLanguage
-                ? (change.knowsTamil as boolean | null)
+              home_language: change.hasLanguage
+                ? (change.homeLanguage as string | null)
                 : (languageBefore.get(change.studentId) ?? null),
+            }
+          : {}),
+        ...(touchesLimited
+          ? {
+              limited_english: change.hasLimited
+                ? change.limitedEnglish === true
+                : (limitedBefore.get(change.studentId) ?? false),
             }
           : {}),
         participation_status: hasParticipation
@@ -588,7 +661,10 @@ export async function PATCH(request: NextRequest) {
             ? { academic_year: yearBefore.get(change.studentId) ?? null }
             : {}),
           ...(change.hasLanguage
-            ? { knows_tamil: languageBefore.get(change.studentId) ?? null }
+            ? { home_language: languageBefore.get(change.studentId) ?? null }
+            : {}),
+          ...(change.hasLimited
+            ? { limited_english: limitedBefore.get(change.studentId) ?? false }
             : {}),
           ...(hasParticipation
             ? { participation_status: row?.participation_status ?? 'active' }

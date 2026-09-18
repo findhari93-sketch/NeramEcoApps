@@ -162,7 +162,18 @@ export default function QuestionDetail({
 
   // Build available solution tabs dynamically
   const solutionTabs: SolutionTab[] = [];
-  if (question.explanation_brief || question.explanation_detailed || question.explanation_brief_hi || question.explanation_detailed_hi) {
+  /**
+   * Not on a drawing. The explanation on those is a line the bulk import wrote
+   * from the question itself ("Part (a): Create a 3D composition with cubes,
+   * cones and cylinders"), which tells a student nothing the prompt above has
+   * not already said, and no teacher screen edits it any more. The model answer
+   * image is a drawing's explanation. The stored text is left untouched.
+   */
+  const explanationSuits = question.question_format !== 'DRAWING_PROMPT';
+  if (
+    explanationSuits &&
+    (question.explanation_brief || question.explanation_detailed || question.explanation_brief_hi || question.explanation_detailed_hi)
+  ) {
     solutionTabs.push({ label: 'Explanation', key: 'explanation' });
   }
   if (question.solution_video_url) {

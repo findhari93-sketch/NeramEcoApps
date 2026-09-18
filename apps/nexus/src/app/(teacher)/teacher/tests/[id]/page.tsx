@@ -133,6 +133,9 @@ export default function TestDetailPage() {
   const [tab, setTab] = useState<TestPageTab>(() => resolveTestPageTab(searchParams?.get('tab')));
   /** The run both Questions and Students report on. */
   const [runId, setRunId] = useState(searchParams?.get('placement_id') || '');
+  // Lifted out of the results panel because the health banner sits above the
+  // tabs, and a problem copied out of it has to name the run it happened on.
+  const [runLabel, setRunLabel] = useState<string | null>(null);
   /** Whether a run has been chosen yet, by the URL or by the default. */
   const runChosen = useRef(Boolean(searchParams?.get('placement_id')));
   /**
@@ -520,7 +523,13 @@ export default function TestDetailPage() {
 
       {/* Above the tabs on purpose. If this paper is broken, that is the first
           thing a teacher needs to know. Renders nothing when nothing is wrong. */}
-      <TestHealthPanel testId={test.id} getToken={getToken} />
+      <TestHealthPanel
+        testId={test.id}
+        testTitle={test.title}
+        placementId={runId || null}
+        runLabel={runLabel}
+        getToken={getToken}
+      />
 
       <Tabs
         value={tab}
@@ -550,6 +559,7 @@ export default function TestDetailPage() {
           view={tab === 'students' ? 'students' : 'questions'}
           runId={runId}
           onRunIdChange={setRunId}
+          onRunLabelChange={setRunLabel}
           initialFilter={resultsFilter}
           testTitle={test.title}
           pool={questions}

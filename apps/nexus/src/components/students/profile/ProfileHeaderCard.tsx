@@ -119,7 +119,11 @@ export default function ProfileHeaderCard({
           density="detailed"
         />
       )}
-      <LanguageChip knowsTamil={student.knows_tamil} onClick={onEditLanguage} />
+      <LanguageChip
+        language={student.home_language}
+        limitedEnglish={student.limited_english}
+        onClick={onEditLanguage}
+      />
     </Box>
   );
 
@@ -137,7 +141,8 @@ export default function ProfileHeaderCard({
           <StudentStageAvatar
             stage={stage}
             dormant={dormant}
-            knowsTamil={student.knows_tamil}
+            language={student.home_language}
+            limitedEnglish={student.limited_english}
             src={student.avatar_url}
             name={student.name || ''}
             size={96}
@@ -221,7 +226,8 @@ export default function ProfileHeaderCard({
         <StudentStageAvatar
           stage={stage}
           dormant={dormant}
-          knowsTamil={student.knows_tamil}
+          language={student.home_language}
+          limitedEnglish={student.limited_english}
           src={student.avatar_url}
           name={student.name || ''}
           size={48}

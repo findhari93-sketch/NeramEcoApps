@@ -16,10 +16,12 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import ClassAttendanceCard from '@/components/attendance/ClassAttendanceCard';
 import RegisterGrid from '@/components/attendance/RegisterGrid';
+import StandingList from '@/components/attendance/StandingList';
 import { istRange } from '@/components/attendance/attendance-format';
 import type { RegisterResponse } from '@/app/api/attendance/register/route';
+import type { StandingResponse } from '@/app/api/attendance/standing/route';
 
-type ViewKey = 'classes' | 'register';
+type ViewKey = 'classes' | 'register' | 'students';
 const RANGES = [14, 30, 90] as const;
 type RangeKey = (typeof RANGES)[number];
 
@@ -27,7 +29,9 @@ function AttendanceRegisterWorkspace() {
   const searchParams = useSearchParams();
   const { activeClassroom } = useNexusAuthContext();
 
-  const initialView = searchParams.get('view') === 'register' ? 'register' : 'classes';
+  const viewParam = searchParams.get('view');
+  const initialView: ViewKey =
+    viewParam === 'register' || viewParam === 'students' ? viewParam : 'classes';
   const initialRange = (RANGES as readonly number[]).includes(Number(searchParams.get('range')))
     ? (Number(searchParams.get('range')) as RangeKey)
     : 30;
@@ -59,6 +63,12 @@ function AttendanceRegisterWorkspace() {
       : null,
   );
 
+  const { data: standing, error: standingError } = useAuthSWR<StandingResponse>(
+    activeClassroom && view === 'students'
+      ? `/api/attendance/standing?classroom_id=${activeClassroom.id}&from=${from}&to=${to}`
+      : null,
+  );
+
   const classHref = (classId: string) => `/teacher/attendance/${classId}?view=${view}&range=${range}`;
 
   return (
@@ -84,6 +94,7 @@ function AttendanceRegisterWorkspace() {
       >
         <Tab value="classes" label="Classes" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }} />
         <Tab value="register" label="Register" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }} />
+        <Tab value="students" label="Students" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }} />
       </Tabs>
 
       {error && (
@@ -117,6 +128,35 @@ function AttendanceRegisterWorkspace() {
       {data && view === 'register' && (
         <RegisterGrid data={data} classHref={classHref} />
       )}
+
+      {/*
+        The standing read resolves the whole catch-up backlog and reads the
+        sign-in log, so its SWR key stays null until this view is actually
+        opened: the two tabs that already shipped do not get slower because a
+        third exists.
+
+        An if/else chain, not three independent conditions.
+
+        As three conditions this rendered NOTHING in the gap before the request
+        starts: useAuthSWR reports `isLoading: false` while it is still waiting
+        for the token, so error, data and loading were all falsy at once and the
+        tab was simply blank. Skeletons are the honest default for "we have not
+        got an answer yet", whatever the reason we have not got one.
+      */}
+      {view === 'students' &&
+        (standingError ? (
+          <Alert severity="error" sx={{ borderRadius: 2 }}>
+            {standingError.message || 'Could not work out where students stand.'}
+          </Alert>
+        ) : standing ? (
+          <StandingList data={standing} />
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} variant="rectangular" height={92} sx={{ borderRadius: 2 }} />
+            ))}
+          </Box>
+        ))}
     </Box>
   );
 }

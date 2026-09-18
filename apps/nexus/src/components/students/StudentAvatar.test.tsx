@@ -37,7 +37,7 @@ function stub(map: Record<string, Partial<Fact> & Pick<Fact, 'stage'>>) {
     ready: true,
     factsFor: (id) =>
       id && map[id]
-        ? { dormant: false, photo: null, name: null, knowsTamil: null, ...map[id] }
+        ? { dormant: false, photo: null, name: null, language: 'english', limitedEnglish: false, ...map[id] }
         : null,
   });
 }
@@ -54,19 +54,19 @@ describe('StudentAvatar', () => {
     expect(screen.getByLabelText(/Class 11/)).toBeTruthy();
   });
 
-  it('wears the த badge for a student the lookup says knows Tamil', () => {
+  it('wears the த mark for a student the lookup says follows Tamil', () => {
     // The whole point of carrying the language in the lookup: ~95 call sites that
     // pass nothing but a user id get the badge without a payload change.
-    stub({ 's1': { stage: '11th', knowsTamil: true } });
+    stub({ 's1': { stage: '11th', language: 'tamil' } });
     render(<StudentAvatar userId="s1" name="Nithya Raman" />);
-    expect(screen.getByTestId('tamil-badge').textContent).toBe('த');
-    expect(screen.getByLabelText(/^Class 11:.* Knows Tamil\.$/)).toBeTruthy();
+    expect(screen.getByTestId('language-badge').textContent).toBe('த');
+    expect(screen.getByLabelText(/^Class 11:.* Tamil\.$/)).toBeTruthy();
   });
 
-  it('keeps a bare corner for a student the lookup says is English only', () => {
-    stub({ 's1': { stage: '11th', knowsTamil: false } });
+  it('keeps a bare corner for a student the lookup says is English', () => {
+    stub({ 's1': { stage: '11th', language: 'english' } });
     render(<StudentAvatar userId="s1" name="Nithya Raman" />);
-    expect(screen.queryByTestId('tamil-badge')).toBeNull();
+    expect(screen.queryByTestId('language-badge')).toBeNull();
   });
 
   it('says dormant rather than a stage for a paused student', () => {

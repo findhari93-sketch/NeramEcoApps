@@ -237,3 +237,48 @@ describe('Excused and Not said why', () => {
     expect(hasSaidWhy(silent)).toBe(false);
   });
 });
+
+describe('the behind filter', () => {
+  const row = (over: Partial<FilterableRow> = {}): FilterableRow => ({
+    status: 'excused',
+    passed: null,
+    catchup: { state: 'behind' },
+    ...over,
+  });
+
+  it('holds an excused new joiner who still owes catch-up', () => {
+    // The whole point: these students are not required to sit it, and they are
+    // exactly who a teacher chases, because catching up opens the door.
+    expect(matchesResultFilter(row(), 'behind')).toBe(true);
+    expect(matchesResultFilter(row({ status: 'missed' }), 'behind')).toBe(true);
+    expect(matchesResultFilter(row({ status: 'not_started' }), 'behind')).toBe(true);
+  });
+
+  it('leaves out anybody who has already sat it', () => {
+    expect(matchesResultFilter(row({ status: 'submitted', passed: true }), 'behind')).toBe(false);
+  });
+
+  it('leaves out somebody mid-paper, who has nothing to be chased about', () => {
+    expect(matchesResultFilter(row({ status: 'in_progress' }), 'behind')).toBe(false);
+  });
+
+  it('leaves out every other catch-up state, including an unknown one', () => {
+    for (const state of ['attended', 'caught_up', 'unknown'] as const) {
+      expect(matchesResultFilter(row({ catchup: { state } }), 'behind')).toBe(false);
+    }
+    expect(matchesResultFilter(row({ catchup: null }), 'behind')).toBe(false);
+    expect(matchesResultFilter({ status: 'missed', passed: null }, 'behind')).toBe(false);
+  });
+
+  it('is counted beside the groups it crosses', () => {
+    const counts = countByResultFilter([
+      row({ status: 'excused' }),
+      row({ status: 'missed' }),
+      row({ status: 'submitted', passed: true, catchup: { state: 'caught_up' } }),
+    ]);
+    expect(counts.behind).toBe(2);
+    expect(counts.excused).toBe(1);
+    expect(counts.not_done).toBe(1);
+    expect(counts.did).toBe(1);
+  });
+});

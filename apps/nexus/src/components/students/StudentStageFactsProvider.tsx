@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo } from 'react';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import { STAGE_FACTS_KEY } from '@/lib/stage-facts-cache';
+import { languageKeyOf, type LanguageKey } from '@/lib/student-language';
 import { stageKeyOf, type StageKey } from '@/lib/student-stage';
 
 /**
@@ -39,8 +40,10 @@ export interface StudentStageFacts {
   photo: string | null;
   /** users.name, so a screen holding only an id still shows the real name. */
   name: string | null;
-  /** users.knows_tamil: true Knows Tamil, false English only, null not recorded. */
-  knowsTamil: boolean | null;
+  /** users.home_language, already resolved. NULL and unknown words read as English. */
+  language: LanguageKey;
+  /** users.limited_english. Flips the avatar mark to its outlined form. */
+  limitedEnglish: boolean;
 }
 
 interface StageFactsContextValue {
@@ -67,7 +70,8 @@ interface Payload {
       dormant: boolean;
       photo: string | null;
       name: string | null;
-      knowsTamil?: boolean | null;
+      language?: string | null;
+      limitedEnglish?: boolean;
     }
   >;
 }
@@ -105,8 +109,9 @@ export default function StudentStageFactsProvider({ children }: { children: Reac
         dormant: !!row.dormant,
         photo: row.photo ?? null,
         name: row.name ?? null,
-        // Anything but a real boolean is "not recorded", never English only.
-        knowsTamil: typeof row.knowsTamil === 'boolean' ? row.knowsTamil : null,
+        // Anything unrecorded reads as English, which is what the UI shows.
+        language: languageKeyOf(row.language),
+        limitedEnglish: row.limitedEnglish === true,
       });
     }
 

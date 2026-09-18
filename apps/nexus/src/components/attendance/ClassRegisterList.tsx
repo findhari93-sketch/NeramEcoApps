@@ -48,6 +48,11 @@ const ACCESSORS: ListAccessors<StudentInsight> = {
 function missedLine(s: StudentInsight): string {
   const absence = s.absence;
   if (absence?.excused_at) return 'Excused by a teacher.';
+  // Before the per-class checks, matching the grouping's own precedence. A
+  // declared window usually leaves no absence row and no RSVP at all, so
+  // without this an away student read as "No reason given" while sitting under
+  // a heading that says they told us in advance.
+  if (s.away && s.away_window) return `${s.away_window}.`;
   const code = absence?.reason_code || (s.rsvp === 'not_attending' ? s.reason : null);
   const note = absence?.reason_note?.trim();
   if (!code && !note) return 'No reason given.';
@@ -118,7 +123,7 @@ export default function ClassRegisterList({
 
   const byGroup = useMemo(() => {
     const map: Record<RegisterGroup, StudentInsight[]> = {
-      whole: [], partly: [], reason: [], no_reason: [], joined_later: [],
+      whole: [], partly: [], away: [], reason: [], no_reason: [], joined_later: [],
     };
     for (const s of view.shown) map[s.group].push(s);
     // Shortest time in the room first: the people who were barely there head the
@@ -133,7 +138,7 @@ export default function ClassRegisterList({
    * typed a name would stop being one.
    */
   const classTally = useMemo(() => {
-    const t: Record<RegisterGroup, number> = { whole: 0, partly: 0, reason: 0, no_reason: 0, joined_later: 0 };
+    const t: Record<RegisterGroup, number> = { whole: 0, partly: 0, away: 0, reason: 0, no_reason: 0, joined_later: 0 };
     for (const s of insights.students) t[s.group]++;
     return t;
   }, [insights.students]);
@@ -143,6 +148,7 @@ export default function ClassRegisterList({
   const tiles: StatFilterTile<TileKey>[] = [
     { key: 'whole', label: 'Whole class', value: classTally.whole, hint: 'Stayed throughout', tone: GROUP_TONE.whole },
     { key: 'partly', label: 'Partly there', value: classTally.partly, hint: 'Late, early or stepped out', tone: GROUP_TONE.partly },
+    { key: 'away', label: 'Away', value: classTally.away, hint: 'Told us in advance', tone: GROUP_TONE.away },
     { key: 'reason', label: 'Missed, reason', value: classTally.reason, hint: 'Told us why', tone: GROUP_TONE.reason },
     { key: 'no_reason', label: 'Missed, no reason', value: classTally.no_reason, hint: 'Nothing said', tone: GROUP_TONE.no_reason },
   ];

@@ -38,7 +38,10 @@ import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import RecordVoiceOverOutlinedIcon from '@mui/icons-material/RecordVoiceOverOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import { copyText, downloadText } from '@/lib/clipboard';
+import { buildHealthPrompt } from '@/lib/test-health';
 import type { AffectedStudent, TestIssue, TestIssueStream } from '@/lib/test-health';
 
 const STREAM_META: Record<TestIssueStream, { label: string; icon: React.ReactNode }> = {
@@ -96,9 +99,17 @@ function when(at: string | null): string {
 
 export default function TestHealthPanel({
   testId,
+  testTitle,
+  placementId,
+  runLabel,
   getToken,
 }: {
   testId: string;
+  /** For the copied problem, which reaches an AI with no access to this screen. */
+  testTitle?: string | null;
+  placementId?: string | null;
+  /** How the run picker labels the run in view, e.g. "Exam: 18 Aug". */
+  runLabel?: string | null;
   getToken: () => Promise<string | null>;
 }) {
   const [issues, setIssues] = useState<TestIssue[] | null>(null);
@@ -108,7 +119,7 @@ export default function TestHealthPanel({
   const [blocking, setBlocking] = useState(false);
   const [failed, setFailed] = useState(false);
   const [openPhases, setOpenPhases] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState<'clear' | 'undo' | null>(null);
+  const [busy, setBusy] = useState<'clear' | 'undo' | 'copy' | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   // Separate from the content so the message stays put while the Snackbar fades out.
   const [toastOpen, setToastOpen] = useState(false);
@@ -195,6 +206,53 @@ export default function TestHealthPanel({
     } catch (err) {
       showToast({
         message: err instanceof Error ? err.message : 'Could not undo. Try again.',
+        severity: 'error',
+        undo: false,
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * The banner, as a prompt.
+   *
+   * The loop this closes: copy the problem, get it fixed, confirm, press Mark as
+   * fixed. Retyping "6 students could not submit" into a chat loses every fact
+   * that makes it findable, so the paste carries the ids, the names, the times
+   * and what the app actually said.
+   *
+   * Download is the fallback rather than a failure message, because the clipboard
+   * is refused on an insecure origin and whenever the window has lost focus, and
+   * neither is something a teacher can do anything about. See lib/clipboard.ts.
+   */
+  const copyPrompt = async () => {
+    if (busy) return;
+    setBusy('copy');
+    try {
+      const text = buildHealthPrompt({
+        testTitle: testTitle || 'Untitled paper',
+        testId,
+        placementId: placementId ?? null,
+        runLabel: runLabel ?? null,
+        pageUrl: typeof window === 'undefined' ? '' : window.location.href,
+        issues: issues || [],
+        affected,
+        reports,
+      });
+      if (await copyText(text)) {
+        showToast({ message: 'Copied. Paste it to Claude and ask for a fix.', severity: 'success', undo: false });
+      } else {
+        downloadText(`test-problem-${testId}.txt`, text);
+        showToast({
+          message: 'Your browser blocked the clipboard, so it downloaded as a file instead.',
+          severity: 'success',
+          undo: false,
+        });
+      }
+    } catch (err) {
+      showToast({
+        message: err instanceof Error ? err.message : 'Could not copy the problem. Try again.',
         severity: 'error',
         undo: false,
       });
@@ -398,20 +456,29 @@ export default function TestHealthPanel({
           })}
         </Box>
 
-        {hasAppIssues && (
-          <Box
-            sx={{
-              mt: 1.5,
-              pt: 1.5,
-              borderTop: 1,
-              borderColor: 'divider',
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              columnGap: 1.5,
-              rowGap: 1,
-            }}
+        <Box
+          sx={{
+            mt: 1.5,
+            pt: 1.5,
+            borderTop: 1,
+            borderColor: 'divider',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 1.5,
+            rowGap: 1,
+          }}
+        >
+          <Button
+            variant="contained"
+            onClick={copyPrompt}
+            disabled={busy !== null}
+            startIcon={busy === 'copy' ? <CircularProgress size={16} color="inherit" /> : <ContentCopyOutlinedIcon />}
+            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600, ...FOCUS_RING }}
           >
+            Copy for Claude
+          </Button>
+          {hasAppIssues && (
             <Button
               variant="outlined"
               onClick={markFixed}
@@ -421,12 +488,14 @@ export default function TestHealthPanel({
             >
               Mark as fixed
             </Button>
-            <Typography variant="caption" color="text.secondary" sx={{ flex: '1 1 200px' }}>
-              Hides the App lines above. Anything that fails for a student after now shows again.
-              {clearedAt ? ` Last marked fixed ${when(clearedAt)}.` : ''}
-            </Typography>
-          </Box>
-        )}
+          )}
+          <Typography variant="caption" color="text.secondary" sx={{ flex: '1 1 200px' }}>
+            {hasAppIssues
+              ? 'Copy hands the whole problem over. Mark as fixed hides the App lines above, and anything that fails for a student after now shows again.'
+              : 'Copy hands the whole problem over, with the ids and the names an AI needs to find it.'}
+            {hasAppIssues && clearedAt ? ` Last marked fixed ${when(clearedAt)}.` : ''}
+          </Typography>
+        </Box>
 
         {reports.length > 0 && (
           <Box sx={{ mt: 2, pt: 1.5, borderTop: 1, borderColor: 'divider' }}>

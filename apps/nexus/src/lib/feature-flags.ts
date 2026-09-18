@@ -177,6 +177,7 @@ export const FEATURES: FeatureDef[] = [
   // Behaviour switch, not a page. Messages Not started students (never entered
   // Nexus) on day 1, 3 and 7. OFF until each live classroom has a connected Teams
   // sender, because a student stuck at the photo gate cannot see the Nexus bell.
+  { id: 'staff.test-chase', label: 'Automatic chase for students whose catch-up is holding up a test', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   { id: 'staff.join-reminders', label: 'Automatic reminders to students who have not entered Nexus (day 1, 3, 7)', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   // Longer path wins in featureForPath, so this correctly beats staff.students
   // for the sub-route and can be switched off independently of the roster.

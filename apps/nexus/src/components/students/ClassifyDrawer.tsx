@@ -1,16 +1,15 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type HTMLAttributes } from 'react';
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   Divider,
   Drawer,
   FormControlLabel,
   MenuItem,
-  Radio,
-  RadioGroup,
   TextField,
   Typography,
   alpha,
@@ -33,15 +32,20 @@ import {
   type StageKey,
 } from '@/lib/student-stage';
 import {
-  LANGUAGE_LABEL,
-  LANGUAGE_OPTION_LABEL,
+  LANGUAGES,
+  LANGUAGE_ORDER,
   LANGUAGE_SCOPE_NOTE,
   LANGUAGE_SECTION_HELP,
   LANGUAGE_SECTION_TITLE,
-  languageKeyOf,
+  LANGUAGE_UNCHANGED_LABEL,
+  LIMITED_ENGLISH_BULK_NOTE,
+  LIMITED_ENGLISH_HELP,
+  LIMITED_ENGLISH_LABEL,
+  languageLabel,
+  type LanguageKey,
 } from '@/lib/student-language';
 import { DormantIcon, stageIconFor } from './StageGlyph';
-import TamilMark from './TamilMark';
+import LanguageMark from './LanguageMark';
 
 /**
  * The one editor for both classification axes, used by the bulk bar on the
@@ -57,20 +61,20 @@ export type ClassifyMode = 'stage' | 'dormant' | 'reactivate';
 /** Sentinel for "clear the exam year", distinct from "leave it alone" (''). */
 const CLEAR_YEAR = '__clear__';
 
-/** The Language radio values. '' leaves the language alone, like the exam year. */
-type LanguageChoice = '' | 'tamil' | 'english' | 'clear';
-
-const LANGUAGE_CHOICES: ReadonlyArray<{ value: LanguageChoice; label: string }> = [
-  { value: '', label: LANGUAGE_OPTION_LABEL.unchanged },
-  { value: 'tamil', label: LANGUAGE_OPTION_LABEL.tamil },
-  { value: 'english', label: LANGUAGE_OPTION_LABEL.english },
-  { value: 'clear', label: LANGUAGE_OPTION_LABEL.clear },
-];
+/**
+ * The Language select values. '' leaves the language alone, like the exam year.
+ *
+ * There is no "clear" option on purpose: an unrecorded student reads as English
+ * everywhere, so clearing would be a change nobody could see. Undo still sends
+ * null through the API to put one back.
+ */
+type LanguageChoice = '' | LanguageKey;
 
 export interface ClassifyPayload {
   studyStage?: StageKey | null;
   academicYear?: string | null;
-  knowsTamil?: boolean | null;
+  homeLanguage?: LanguageKey | null;
+  limitedEnglish?: boolean;
   participationStatus?: 'active' | 'dormant';
   reason?: string;
 }
@@ -86,7 +90,8 @@ export interface ClassifyDrawerProps {
   /** The current cohort, used to name the expected pairing. */
   currentBatch?: string | null;
   /** One student's current language, shown as "Now: ..." above the choices. */
-  currentKnowsTamil?: boolean | null;
+  currentLanguage?: string | null;
+  currentLimitedEnglish?: boolean;
   /**
    * Open already scrolled to the Language group, for the profile's language chip.
    * The group sits below the exam year, off screen on a phone.
@@ -103,7 +108,8 @@ export default function ClassifyDrawer({
   busy = false,
   examYears = [],
   currentBatch = null,
-  currentKnowsTamil,
+  currentLanguage,
+  currentLimitedEnglish,
   focus,
   onClose,
   onApply,
@@ -113,8 +119,10 @@ export default function ClassifyDrawer({
   const [stage, setStage] = useState<StageKey | null>(null);
   const [year, setYear] = useState('');
   const [lang, setLang] = useState<LanguageChoice>('');
+  // Null means untouched, which is what a bulk edit needs: leave every student's
+  // tick exactly as it is. Any interaction commits a real boolean.
+  const [limited, setLimited] = useState<boolean | null>(null);
   const [reason, setReason] = useState('');
-  const languageHeadingId = useId();
   const languageRef = useRef<HTMLDivElement>(null);
 
   // Reset every time the sheet opens, so a previous selection can never be
@@ -124,6 +132,7 @@ export default function ClassifyDrawer({
       setStage(null);
       setYear('');
       setLang('');
+      setLimited(null);
       setReason('');
     }
   }, [open, mode]);
@@ -135,7 +144,7 @@ export default function ClassifyDrawer({
   // would force a teacher who only knows the class to guess the year.
   const canApply =
     mode === 'stage'
-      ? stage !== null || year !== '' || lang !== ''
+      ? stage !== null || year !== '' || lang !== '' || limited !== null
       : mode === 'dormant'
         ? reason.trim().length > 0
         : true;
@@ -154,7 +163,8 @@ export default function ClassifyDrawer({
       // untouched: the API treats a present key as an instruction to write.
       if (stage !== null) payload.studyStage = stage === 'unset' ? null : stage;
       if (year !== '') payload.academicYear = year === CLEAR_YEAR ? null : year;
-      if (lang !== '') payload.knowsTamil = lang === 'tamil' ? true : lang === 'english' ? false : null;
+      if (lang !== '') payload.homeLanguage = lang;
+      if (limited !== null) payload.limitedEnglish = limited;
       onApply(payload);
     } else if (mode === 'dormant') {
       onApply({ participationStatus: 'dormant', reason: reason.trim() });
@@ -322,60 +332,75 @@ export default function ClassifyDrawer({
             <Divider sx={{ mt: 1 }} />
 
             <Box ref={languageRef} sx={{ display: 'flex', flexDirection: 'column', gap: 1, scrollMarginTop: 16 }}>
-              <Box>
-                <Typography id={languageHeadingId} sx={{ fontWeight: 700, fontSize: '0.92rem' }}>
-                  {LANGUAGE_SECTION_TITLE}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                  {LANGUAGE_SECTION_HELP}
-                </Typography>
-                {count === 1 && currentKnowsTamil !== undefined && (
-                  <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>
-                    Now: {LANGUAGE_LABEL[languageKeyOf(currentKnowsTamil)]}
-                  </Typography>
-                )}
-              </Box>
-
-              <RadioGroup
-                aria-labelledby={languageHeadingId}
+              {/* A select rather than tiles: five languages plus "leave
+                  unchanged" is six options, and the exam-year field directly
+                  above already solves that shape on a 375px sheet. Its own label
+                  heads the section, exactly as the exam year's does. */}
+              <TextField
+                select
+                size="small"
+                label={LANGUAGE_SECTION_TITLE}
                 value={lang}
                 onChange={(e) => setLang(e.target.value as LanguageChoice)}
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 1,
+                helperText={LANGUAGE_SECTION_HELP}
+                SelectProps={{
+                  native: false,
+                  // On the display element, so a test can reach the field itself
+                  // rather than the menu, which shares its label while open. MUI
+                  // types this slot as bare HTMLAttributes, which has no data-*.
+                  SelectDisplayProps: { 'data-testid': 'language-select' } as HTMLAttributes<HTMLDivElement>,
                 }}
+                sx={{ mt: 0.5, '& .MuiInputBase-root': { minHeight: 48 } }}
               >
-                {LANGUAGE_CHOICES.map((choice) => {
-                  const selected = lang === choice.value;
-                  return (
-                    <FormControlLabel
-                      key={choice.value || 'unchanged'}
-                      value={choice.value}
-                      control={<Radio size="small" />}
-                      label={
-                        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-                          {choice.value === 'tamil' && <TamilMark size={18} />}
-                          {choice.label}
-                        </Box>
-                      }
-                      sx={{
-                        m: 0,
-                        pr: 1,
-                        minHeight: 48,
-                        borderRadius: 2,
-                        border: `2px ${choice.value === 'clear' ? 'dashed' : 'solid'} ${
-                          selected ? theme.palette.primary.main : theme.palette.divider
-                        }`,
-                        bgcolor: selected ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
-                        '& .MuiFormControlLabel-label': { fontSize: '0.88rem', fontWeight: 700, lineHeight: 1.25 },
-                      }}
-                    />
-                  );
-                })}
-              </RadioGroup>
+                <MenuItem value="">
+                  <em>{LANGUAGE_UNCHANGED_LABEL}</em>
+                </MenuItem>
+                {LANGUAGE_ORDER.map((key) => (
+                  <MenuItem key={key} value={key} sx={{ minHeight: 48, gap: 1 }}>
+                    {/* The mark beside the word is where a teacher learns which
+                        letter means which language. English has none, so it keeps
+                        the space rather than shuffling its label left. */}
+                    <Box
+                      component="span"
+                      sx={{ width: 20, flexShrink: 0, display: 'inline-flex', justifyContent: 'center' }}
+                    >
+                      <LanguageMark language={key} size={20} />
+                    </Box>
+                    {LANGUAGES[key].label}
+                  </MenuItem>
+                ))}
+              </TextField>
 
-              {lang !== '' && (
+              {count === 1 && currentLanguage !== undefined && (
+                <Typography variant="caption" sx={{ fontWeight: 600, mt: -1 }}>
+                  Now: {languageLabel(currentLanguage, currentLimitedEnglish)}
+                </Typography>
+              )}
+
+              <FormControlLabel
+                sx={{ m: 0, minHeight: 48 }}
+                control={
+                  <Checkbox
+                    checked={limited ?? currentLimitedEnglish ?? false}
+                    onChange={(e) => setLimited(e.target.checked)}
+                    inputProps={{ 'aria-label': LIMITED_ENGLISH_LABEL }}
+                  />
+                }
+                label={
+                  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                    <LanguageMark language="english" limitedEnglish size={18} />
+                    <Box component="span" sx={{ fontSize: '0.88rem', fontWeight: 700 }}>
+                      {LIMITED_ENGLISH_LABEL}
+                    </Box>
+                  </Box>
+                }
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+                {LIMITED_ENGLISH_HELP}
+                {count > 1 && limited === null ? ` ${LIMITED_ENGLISH_BULK_NOTE}` : ''}
+              </Typography>
+
+              {(lang !== '' || limited !== null) && (
                 <Typography variant="caption" color="text.secondary">
                   {LANGUAGE_SCOPE_NOTE}
                 </Typography>

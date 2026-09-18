@@ -84,7 +84,16 @@ beforeEach(() => {
   });
 });
 
-const mount = () => render(<TestHealthPanel testId="acf8084d" getToken={async () => 'token-1'} />);
+const mount = () =>
+  render(
+    <TestHealthPanel
+      testId="acf8084d"
+      testTitle="History of Architecture Test"
+      placementId="c39e7fe6"
+      runLabel="Exam: 18 Aug"
+      getToken={async () => 'token-1'}
+    />,
+  );
 
 describe('TestHealthPanel', () => {
   it('counts students and lets a teacher see who, face beside name', async () => {
@@ -138,10 +147,11 @@ describe('TestHealthPanel', () => {
     expect(screen.getByText('4 students could not submit their answers')).not.toBeNull();
   });
 
-  it('explains what the button does before it is pressed', async () => {
+  it('explains what the buttons do before they are pressed', async () => {
     mount();
     await screen.findByRole('button', { name: 'Mark as fixed' });
-    expect(screen.getByText(/Hides the App lines above/)).not.toBeNull();
+    expect(screen.getByText(/hides the App lines above/)).not.toBeNull();
+    expect(screen.getByText(/Copy hands the whole problem over/)).not.toBeNull();
   });
 
   it('offers no Mark as fixed when nothing on the paper is an App problem', async () => {
@@ -168,5 +178,87 @@ describe('TestHealthPanel', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     await waitFor(() => expect(container.textContent).toBe(''));
+  });
+});
+
+describe('handing the problem to an AI', () => {
+  /** Stand in for a clipboard that works, or for one the browser refuses. */
+  function fakeClipboard(allow: boolean) {
+    const written: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          if (!allow) throw new Error('Document is not focused');
+          written.push(text);
+        },
+      },
+    });
+    // The legacy fallback inside copyText, so a refusal really is a refusal.
+    (document as any).execCommand = () => allow;
+    return written;
+  }
+
+  it('copies a prompt carrying the paper, the run and the people', async () => {
+    const written = fakeClipboard(true);
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy for Claude' }));
+
+    await waitFor(() => expect(written).toHaveLength(1));
+    const text = written[0];
+    expect(text).toContain('History of Architecture Test');
+    expect(text).toContain('nexus_tests.id acf8084d');
+    expect(text).toContain('nexus_test_placements.id c39e7fe6');
+    expect(text).toContain('Exam: 18 Aug');
+    expect(text).toContain('4 students could not submit their answers');
+    expect(text).toContain('Kaveya S: 3 times');
+    expect(text).toContain('EXAM_CLOSED');
+    expect(text).toContain('Do not deploy');
+  });
+
+  it('says so, once it has copied', async () => {
+    fakeClipboard(true);
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy for Claude' }));
+    expect(await screen.findByText(/Paste it to Claude/)).not.toBeNull();
+  });
+
+  it('downloads it instead when the browser refuses the clipboard', async () => {
+    fakeClipboard(false);
+    const clicked: string[] = [];
+    const realCreate = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = realCreate(tag);
+      if (tag === 'a') (el as any).click = () => clicked.push((el as HTMLAnchorElement).download);
+      return el;
+    });
+    (URL as any).createObjectURL = () => 'blob:x';
+    (URL as any).revokeObjectURL = () => {};
+
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy for Claude' }));
+
+    expect(await screen.findByText(/downloaded as a file instead/)).not.toBeNull();
+    expect(clicked).toContain('test-problem-acf8084d.txt');
+    vi.mocked(document.createElement).mockRestore();
+  });
+
+  it('is offered even on a paper whose only problem is the paper itself', async () => {
+    // Mark as fixed clears App lines, so it stays App-only. Copy does not.
+    net.health = [
+      () =>
+        reply(200, {
+          data: {
+            issues: [{ stream: 'structural', severity: 'error', title: '2 questions have no correct answer recorded', count: 2 }],
+            blocking: true,
+            affected: {},
+            cleared: null,
+            reports: [],
+          },
+        }),
+    ];
+    mount();
+    expect(await screen.findByRole('button', { name: 'Copy for Claude' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mark as fixed' })).toBeNull();
   });
 });

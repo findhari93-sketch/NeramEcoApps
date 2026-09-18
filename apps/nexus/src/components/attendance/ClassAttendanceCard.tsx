@@ -10,18 +10,24 @@ import { formatClassDate, formatHeldRange } from './attendance-format';
 /**
  * One past class, as a row a teacher reads in a second.
  *
- * The bar is four proportional boxes, not a chart: it renders at 375px, costs no
+ * The bar is five proportional boxes, not a chart: it renders at 375px, costs no
  * JavaScript, and the counts are written out beside it, so the colours are a
  * second reading of the numbers rather than the only one.
  */
 export default function ClassAttendanceCard({ cls, href }: { cls: RegisterClass; href: string }) {
   const theme = useTheme();
-  const { whole, partly, reason, noReason, joinedLater } = cls.counts;
-  const total = whole + partly + reason + noReason;
+  const { whole, partly, away, reason, noReason, joinedLater } = cls.counts;
+  // Away IS in the total: a student on declared leave was still expected at this
+  // class, which is the same reason the attendance rate keeps them in its
+  // denominator. Only joinedLater is outside, because they had not enrolled yet.
+  const total = whole + partly + away + reason + noReason;
 
   const parts: Array<{ key: string; value: number; color: string; label: string }> = [
     { key: 'whole', value: whole, color: theme.palette.success.main, label: `${whole} whole` },
     { key: 'partly', value: partly, color: theme.palette.warning.main, label: `${partly} partly` },
+    // grey.400 is what StudentStatFilters paints for the `neutral` tone, so the
+    // bar segment and the Away tile on the class screen are the same colour.
+    { key: 'away', value: away, color: theme.palette.grey[400], label: `${away} away` },
     { key: 'reason', value: reason, color: theme.palette.info.main, label: `${reason} reason` },
     { key: 'no_reason', value: noReason, color: theme.palette.error.main, label: `${noReason} no reason` },
   ];

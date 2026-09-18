@@ -11,11 +11,19 @@
  * Two kinds of placeholder, and the difference matters:
  *   - CONSTANT across the batch: {test}, {pass_mark}, {due}. Substituted here,
  *     once, by fillConstants.
- *   - PER RECIPIENT: {name}, {score}. Left in the text and substituted by
- *     sendNudge, which is the only thing that knows who is actually reachable.
+ *   - PER RECIPIENT: {name}, {score}, {classes}. Left in the text and
+ *     substituted by sendNudge, which is the only thing that knows who is
+ *     actually reachable.
  */
 
-export type TestMessageTemplate = 'redo' | 'missed' | 'why' | 'regraded' | 'counted' | 'custom';
+export type TestMessageTemplate =
+  | 'redo'
+  | 'missed'
+  | 'why'
+  | 'catchup'
+  | 'regraded'
+  | 'counted'
+  | 'custom';
 
 /**
  * The button on the student's card, and the words of the link the "why"
@@ -33,6 +41,7 @@ export const TEST_MESSAGE_TEMPLATES: TestMessageTemplate[] = [
   'redo',
   'missed',
   'why',
+  'catchup',
   'regraded',
   'counted',
   'custom',
@@ -47,6 +56,7 @@ export const TEMPLATE_LABELS: Record<TestMessageTemplate, string> = {
   redo: 'Redo this test',
   missed: 'You missed this',
   why: 'Tell me why',
+  catchup: 'Catch up first',
   regraded: 'Score changed',
   counted: 'No need to retake',
   custom: 'Write my own',
@@ -145,6 +155,26 @@ export function renderTestMessage(
           '',
           'Telling me why does not reopen the test. If you want another go at it,',
           'press "Ask my teacher" on the same card.',
+        ].join('\n'),
+      };
+
+    // The one message on this screen a student can act on without the teacher.
+    // Finishing the catch-up calls grantClassTestWindowForClass, which opens
+    // the run's own window for them, so promising the door will open is a
+    // statement about what the code does and not a favour being offered.
+    case 'catchup':
+      return {
+        subject: `Catch up, then sit: ${ctx.testTitle}`,
+        body: [
+          'Hi {name},',
+          '',
+          'You have not sat {test} yet, and there is catch-up waiting first:',
+          '{classes}',
+          '',
+          'Finish that catch-up and the test opens for you on its own. You do not',
+          'need to ask me first.',
+          '',
+          'If something is stopping you, reply and tell me what it is.',
         ].join('\n'),
       };
 

@@ -9,6 +9,14 @@ import {
   sessionWindow,
   type RegisterGroup,
 } from '@/lib/attendance-register';
+import {
+  AWAY_COLUMNS,
+  coveringWindow,
+  isMissingTable,
+  describeWindow,
+  groupByStudent,
+  type AwayWindow,
+} from '@/lib/away-windows';
 
 /**
  * GET /api/attendance/register?classroom_id=&from=&to=   (staff)
@@ -46,8 +54,35 @@ export interface RegisterClass {
   held: { start: string; end: string; source: 'observed' | 'booked'; minutes: number } | null;
   measured: boolean;
   sync_status: string | null;
-  counts: { whole: number; partly: number; reason: number; noReason: number; joinedLater: number };
+  counts: RegisterCounts;
 }
+
+export interface RegisterCounts {
+  whole: number;
+  partly: number;
+  away: number;
+  reason: number;
+  noReason: number;
+  joinedLater: number;
+}
+
+/**
+ * Which counter each group increments.
+ *
+ * A `Record<RegisterGroup, ...>` rather than an if/else chain, so adding a group
+ * to the union is a type error here instead of a silent miscount. The chain this
+ * replaced ended in a bare `else counts.joinedLater++`, which meant a new group
+ * would have been tallied as "joined the course later": a count nobody would
+ * question, on the one group that is also excluded from the attendance rate.
+ */
+const COUNT_KEY: Record<RegisterGroup, keyof RegisterCounts> = {
+  whole: 'whole',
+  partly: 'partly',
+  away: 'away',
+  reason: 'reason',
+  no_reason: 'noReason',
+  joined_later: 'joinedLater',
+};
 
 export interface RegisterStudent {
   id: string;
@@ -58,6 +93,17 @@ export interface RegisterStudent {
   present: number;
   counted: number;
   rate: number | null;
+  /**
+   * Classes in this range that a declared away window explains.
+   *
+   * Reported beside the rate rather than removed from it. See the denominator
+   * comment in the class loop: a rate can be lifted by staff, never by the
+   * student themselves, so the honest rendering is "40%, 8 away" rather than a
+   * number quietly adjusted upward.
+   */
+  away: number;
+  /** The window covering today, in words, or null. */
+  away_now: string | null;
 }
 
 export interface RegisterResponse {
@@ -67,6 +113,8 @@ export interface RegisterResponse {
   students: RegisterStudent[];
   cells: Record<string, Record<string, RegisterCell>>;
   paused_hidden: number;
+  /** How many students on this roster are away today. */
+  away_today: number;
 }
 
 /** Plain date arithmetic on a YYYY-MM-DD, no timezone reinterpretation. */
@@ -177,7 +225,7 @@ export async function GET(request: NextRequest) {
     const classes = (rawClasses || []).filter((c: any) => hasEnded(c.scheduled_date, c.end_time, now));
     const classIds = classes.map((c: any) => c.id);
 
-    const [{ members, counts: rosterCounts }, attendance, absences, optOuts] =
+    const [{ members, counts: rosterCounts }, attendance, absences, optOuts, awayWindows] =
       await Promise.all([
         loadClassroomRoster(classroomId, { client: supabase }),
         // Each `.order()` pair is the table's own `UNIQUE(scheduled_class_id,
@@ -228,6 +276,38 @@ export async function GET(request: NextRequest) {
                 .range(pageFrom, pageTo),
             )
           : Promise.resolve([]),
+        // Declared away windows overlapping this range. Read here rather than
+        // trusted from a flag stamped onto the absence row, because the window
+        // is the truth and the absence row is only a cache of it: a class
+        // rescheduled into or out of a window gets the right answer from this
+        // read on the very next page load, while a stamped row would keep
+        // asserting a student was away on a day they were not.
+        //
+        // Ordered and paged like the three reads above, for the same reason. A
+        // truncated away read does not render as nothing, it renders as
+        // "missed, no reason": the same falsehood, through a new door.
+        //
+        // Wrapped, because this is the one read whose table may legitimately not
+        // exist yet: `deploy-nexus` does not depend on `deploy-db-production`,
+        // so the app can go live minutes before the migration lands. Without
+        // this the whole register 500s during that window, which is a working
+        // screen taken down by a table nobody has declared a window in. Only
+        // "the table is not there" is swallowed; every other error still throws,
+        // for the reason the pagination comment above gives.
+        fetchAllPages((pageFrom, pageTo) =>
+          supabase
+            .from('nexus_student_away_windows')
+            .select(AWAY_COLUMNS)
+            .is('cancelled_at', null)
+            .lte('starts_on', to)
+            .or(`ends_on.is.null,ends_on.gte.${from}`)
+            .order('student_id')
+            .order('id')
+            .range(pageFrom, pageTo),
+        ).catch((err) => {
+          if (isMissingTable(err)) return [];
+          throw err;
+        }),
       ]);
 
     const key = (classId: string, studentId: string) => `${classId}:${studentId}`;
@@ -241,8 +321,15 @@ export async function GET(request: NextRequest) {
       attByClass.set(a.scheduled_class_id, list);
     }
 
-    const tally = new Map<string, { present: number; counted: number }>(
-      members.map((m: any) => [m.user_id as string, { present: 0, counted: 0 }]),
+    // Not scoped to the roster: a window is a fact about a student, not about a
+    // classroom, and the lookup below only ever asks about roster members, so
+    // another classroom's rows are inert. Keeping the filter off the query means
+    // no `.in()` list to chunk as the school grows.
+    const awayByStudent = groupByStudent(awayWindows as AwayWindow[]);
+    const todayYmd = istTodayYmd();
+
+    const tally = new Map<string, { present: number; counted: number; away: number }>(
+      members.map((m: any) => [m.user_id as string, { present: 0, counted: 0, away: 0 }]),
     );
     const cells: Record<string, Record<string, RegisterCell>> = {};
 
@@ -250,7 +337,14 @@ export async function GET(request: NextRequest) {
       const rows = attByClass.get(cls.id) || [];
       const measured = rows.length > 0;
       const window = sessionWindow(cls, rows);
-      const counts = { whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 0 };
+      const counts: RegisterCounts = {
+        whole: 0,
+        partly: 0,
+        away: 0,
+        reason: 0,
+        noReason: 0,
+        joinedLater: 0,
+      };
       const classCells: Record<string, RegisterCell> = {};
 
       // An unmeasured class (Teams attendance never read, or the read failed)
@@ -280,6 +374,7 @@ export async function GET(request: NextRequest) {
           attended,
           presence,
           joinedAfterClass: joinedAfterClass(m.enrolled_at, cls.scheduled_date),
+          away: !!coveringWindow(awayByStudent.get(m.user_id) || [], cls.scheduled_date),
           rsvp: optByKey.has(key(cls.id, m.user_id)) ? 'not_attending' : 'attending',
           absence,
         });
@@ -293,11 +388,7 @@ export async function GET(request: NextRequest) {
         }
         classCells[m.user_id] = cell;
 
-        if (group === 'whole') counts.whole++;
-        else if (group === 'partly') counts.partly++;
-        else if (group === 'reason') counts.reason++;
-        else if (group === 'no_reason') counts.noReason++;
-        else counts.joinedLater++;
+        counts[COUNT_KEY[group]]++;
 
         // A class nobody has read attendance for measures nothing, and a student
         // who was not yet enrolled is not owed that class either. An excused
@@ -306,11 +397,24 @@ export async function GET(request: NextRequest) {
         // held against the student, and counting it in `counted` while never
         // in `present` would still mark them down for it, which is the exact
         // opposite of what excusing means.
+        //
+        // A declared away window is NOT dropped from the denominator, and the
+        // difference from an excuse is the whole of the reasoning. `excused_at`
+        // is a teacher's act, audited by `excused_by` and `excuse_note`. An away
+        // window is the student's own declaration, auto-accepted with nobody
+        // approving it. If declaring away removed classes from your own
+        // denominator, the attendance rate would be self-reported, and a student
+        // who declared open-ended leave on day one would read as 100%. So the
+        // window explains why they were not there; it does not unbook the class.
+        // The rate is reported with its away count beside it instead, and a
+        // teacher who agrees the fortnight should not count has the existing,
+        // audited lever: excuse those classes.
         const excused = !!absence?.excused_at;
         const row = tally.get(m.user_id);
         if (row && measured && group !== 'joined_later' && !excused) {
           row.counted++;
           if (group === 'whole' || group === 'partly') row.present++;
+          if (group === 'away') row.away++;
         }
       }
 
@@ -335,8 +439,11 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    let awayToday = 0;
     const students: RegisterStudent[] = (members as any[]).map((m) => {
-      const row = tally.get(m.user_id) || { present: 0, counted: 0 };
+      const row = tally.get(m.user_id) || { present: 0, counted: 0, away: 0 };
+      const nowWindow = coveringWindow(awayByStudent.get(m.user_id) || [], todayYmd);
+      if (nowWindow) awayToday++;
       return {
         id: m.user_id,
         name: m.user?.name || 'Student',
@@ -346,6 +453,8 @@ export async function GET(request: NextRequest) {
         present: row.present,
         counted: row.counted,
         rate: row.counted ? Math.round((row.present / row.counted) * 100) : null,
+        away: row.away,
+        away_now: nowWindow ? describeWindow(nowWindow, todayYmd) : null,
       };
     });
 
@@ -360,6 +469,7 @@ export async function GET(request: NextRequest) {
         // { tracked, dormant, total }, so `dormant` is the honest field for the
         // paused students this register leaves out of the roster.
         paused_hidden: rosterCounts?.dormant ?? 0,
+        away_today: awayToday,
       } satisfies RegisterResponse,
       { headers: { 'Cache-Control': 'private, max-age=60' } },
     );

@@ -425,3 +425,68 @@ describe('buildClassAttendanceViews', () => {
     expect(view.leftEarly).toBe(true);
   });
 });
+
+describe('a declared away window, as a parent reads it', () => {
+  const away = {
+    id: 'w1',
+    student_id: 's1',
+    starts_on: '2026-07-20',
+    ends_on: '2026-07-30',
+    reason_code: 'clash',
+    reason_note: null,
+    source: 'student',
+    cancelled_at: null,
+    created_at: '2026-07-15T00:00:00Z',
+  };
+
+  /**
+   * The failure this closes. A declared window usually leaves no absence row and
+   * no RSVP at all, so before this the portal showed a bare "Missed" for the
+   * fortnight of school exams the family themselves told us about, while the
+   * teacher's register said "Away". The parent is the one reader who already
+   * knows the answer, so that is the worst screen to get it wrong on.
+   */
+  it('reads as away rather than a bare missed', () => {
+    const [view] = buildClassAttendanceViews([cls('c1')], [], ['c1'], [], undefined, [away]);
+    expect(view.label).toBe('missed_away');
+  });
+
+  it('is still a bare missed when no window covers the class', () => {
+    const [view] = buildClassAttendanceViews(
+      [cls('c1', '2026-08-15')],
+      [],
+      ['c1'],
+      [],
+      undefined,
+      [away],
+    );
+    expect(view.label).toBe('missed');
+  });
+
+  it('is not away once the window is ended early', () => {
+    const [view] = buildClassAttendanceViews([cls('c1')], [], ['c1'], [], undefined, [
+      { ...away, cancelled_at: '2026-07-21T00:00:00Z' },
+    ]);
+    expect(view.label).toBe('missed');
+  });
+
+  it('never overrides a class the child actually attended', () => {
+    const [view] = buildClassAttendanceViews([cls('c1')], [attRow()], ['c1'], [], undefined, [away]);
+    expect(view.label).toBe('attended');
+  });
+
+  /**
+   * The honesty rule still outranks everything. A window explains an absence;
+   * it cannot invent a measurement for a class nobody ever synced.
+   */
+  it('still says not recorded for an unmeasured class', () => {
+    const [view] = buildClassAttendanceViews([cls('c1')], [], [], [], undefined, [away]);
+    expect(view.label).toBe('not_recorded');
+    expect(view.measurement).toBe('not_measured');
+  });
+
+  it('leaves callers that pass no windows exactly as they were', () => {
+    const [view] = buildClassAttendanceViews([cls('c1')], [], ['c1'], []);
+    expect(view.label).toBe('missed');
+  });
+});

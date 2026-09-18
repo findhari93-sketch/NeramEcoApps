@@ -22,6 +22,7 @@
  */
 
 import { resolveExamWindowForStudent, type ExamMakeup } from '@neram/database';
+import { buildRunCatchup, type RunCatchup } from './run-catchup';
 import {
   buildExamEligibilityRoster,
   type BuildEligibilityRosterInput,
@@ -66,6 +67,11 @@ export interface ExamRunRoster {
   pendingRequestStudentIds: string[];
   /** The teacher's own words on an override, keyed by student. */
   overrideNotes: Record<string, string>;
+  /**
+   * Whether each student has done the catch-up for the classes this exam covers.
+   * Free: it is read from the same facts the buckets are built from.
+   */
+  catchupByStudent: Record<string, RunCatchup>;
 }
 
 export function buildExamRunRoster(input: ExamRunRosterInput): ExamRunRoster {
@@ -127,6 +133,12 @@ export function buildExamRunRoster(input: ExamRunRosterInput): ExamRunRoster {
       is_mandatory: r.is_mandatory,
     })),
     pausedStudentIds: input.facts.students.filter((s) => s.dormant).map((s) => s.student_id),
+    catchupByStudent: buildRunCatchup({
+      studentIds: rows.map((r) => r.student_id),
+      coveredClasses: input.facts.coveredClasses,
+      attendance: input.facts.attendance,
+      absences: input.facts.absences,
+    }),
     windowsByStudent,
     windowSources,
     pendingRequestStudentIds,

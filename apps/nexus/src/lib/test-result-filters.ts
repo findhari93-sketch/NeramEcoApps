@@ -13,6 +13,12 @@
  * mid-paper partition Everyone, so the numbers on the tiles can be checked by
  * eye. Not said why sits INSIDE Not done, and Passed, Not passed and Below
  * average sit inside Done: those are the ways into a group, never new people.
+ *
+ * Behind on catch-up is the one group that crosses that partition, on purpose.
+ * It is everybody without a sitting whose catch-up for the classes this run
+ * covers is still open, and most of them are Excused rather than Not done: a
+ * student who joined after the class is not required to sit it, but is exactly
+ * the person to chase, because finishing the catch-up opens the door for them.
  */
 
 export type ResultFilter =
@@ -21,6 +27,7 @@ export type ResultFilter =
   | 'not_done'
   | 'no_reason'
   | 'excused'
+  | 'behind'
   | 'passed'
   | 'below_pass'
   | 'below_avg';
@@ -31,6 +38,7 @@ export const RESULT_FILTERS: ResultFilter[] = [
   'did',
   'not_done',
   'no_reason',
+  'behind',
   'excused',
   'passed',
   'below_pass',
@@ -42,6 +50,7 @@ export const RESULT_FILTER_LABELS: Record<ResultFilter, string> = {
   did: 'Done',
   not_done: 'Not done',
   no_reason: 'Not said why',
+  behind: 'Behind on catch-up',
   excused: 'Excused',
   passed: 'Passed',
   below_pass: 'Not passed',
@@ -54,6 +63,7 @@ export const RESULT_FILTER_EMPTY: Record<ResultFilter, string> = {
   did: 'Nobody has sat this yet.',
   not_done: 'Everybody has sat this one.',
   no_reason: 'Everybody who has not sat it has told you why.',
+  behind: 'Nobody is held up by catch-up on this one.',
   excused: 'Nobody on this run is excused.',
   passed: 'Nobody has passed it yet.',
   below_pass: 'Nobody who sat it is below the pass mark.',
@@ -69,6 +79,8 @@ export interface FilterableRow {
   why?: unknown | null;
   /** What they wrote when they asked to be let back in. */
   request_note?: string | null;
+  /** Catch-up for the classes this run covers. See lib/run-catchup.ts. */
+  catchup?: { state: 'attended' | 'caught_up' | 'behind' | 'unknown' } | null;
 }
 
 /**
@@ -147,6 +159,12 @@ export function matchesResultFilter(
       return (row.status === 'not_started' || row.status === 'missed') && !hasSaidWhy(row);
     case 'excused':
       return row.status === 'excused';
+    // Anybody without a sitting whose catch-up is still open. Somebody mid-paper
+    // is left out: they are sitting it right now, so there is nothing to chase.
+    case 'behind':
+      return (
+        row.status !== 'submitted' && row.status !== 'in_progress' && row.catchup?.state === 'behind'
+      );
     case 'passed':
       return row.passed === true;
     case 'below_pass':

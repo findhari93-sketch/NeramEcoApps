@@ -16,6 +16,8 @@ import { sendNudge, plainToHtml, plainToHtmlWithLink, type NudgeResult } from '@
 import { shareBaseUrl } from '@/lib/class-share-links';
 import { tellWhyUrl } from '@/lib/tell-why-link';
 import { narrowToRoster, resolveRunClassroom, resolveRunRoster } from '@/lib/run-roster';
+import { loadRunCatchup } from '@/lib/run-catchup-server';
+import { outstandingClassNames } from '@/lib/run-catchup';
 import { formatReopenUntil, reopenUntilProblem } from '@/lib/reopen-deadline';
 import {
   TELL_WHY_LINK_LABEL,
@@ -186,7 +188,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     // Per-student values sendNudge fills in. The score is the one number that
     // makes a redo message land, and it is read here rather than trusted from
     // the browser.
-    const personalise = await loadPersonalisation(targets, placement as any, supabase);
+    const personalise = await loadPersonalisation(targets, placement as any, supabase, template);
 
     const graphToken = extractBearerToken(request.headers.get('Authorization'));
     const canGraph = canPostToGraph(graphToken);
@@ -341,14 +343,29 @@ function groupReasons(results: NudgeResult[]) {
  */
 async function loadPersonalisation(
   studentIds: string[],
-  placement: { id: string; test_id: string; available_from?: string | null; available_until?: string | null },
+  placement: {
+    id: string;
+    test_id: string;
+    context_type?: string | null;
+    context_id?: string | null;
+    available_from?: string | null;
+    available_until?: string | null;
+  },
   supabase: any,
+  template?: string,
 ): Promise<Record<string, Record<string, string>>> {
   const out: Record<string, Record<string, string>> = {};
 
-  const [{ data: users }, byRun] = await Promise.all([
+  // {classes} is read only for the one template that uses it. Every other
+  // message would pay two queries for a placeholder it never prints.
+  const wantsClasses = template === 'catchup';
+
+  const [{ data: users }, byRun, catchup] = await Promise.all([
     supabase.from('users').select('id, name').in('id', studentIds),
     loadRunSittings<any>([placement], { studentIds, columns: 'percentage' }, supabase),
+    wantsClasses
+      ? loadRunCatchup(placement as any, studentIds, supabase).catch(() => ({}))
+      : Promise.resolve({} as Record<string, { outstanding: Array<{ title: string | null; date: string }> }>),
   ]);
 
   const best = new Map<string, number>();
@@ -376,11 +393,32 @@ async function loadPersonalisation(
       name: first,
       score: pct == null ? 'no attempt yet' : `${Math.round(pct)}%`,
       date: madeOn.get(u.id) ?? 'your earlier attempt',
+      classes: classLine((catchup as any)[u.id]),
     };
   }
 
   for (const id of studentIds) {
-    if (!out[id]) out[id] = { name: 'there', score: 'no attempt yet', date: 'your earlier attempt' };
+    if (!out[id]) {
+      out[id] = {
+        name: 'there',
+        score: 'no attempt yet',
+        date: 'your earlier attempt',
+        classes: classLine((catchup as any)[id]),
+      };
+    }
   }
   return out;
+}
+
+/**
+ * The classes one student still owes, for {classes}.
+ *
+ * A student with nothing outstanding gets a sentence that is still true rather
+ * than an empty line: the selection can go stale between the teacher reading
+ * the screen and pressing Send, and a message with a blank where the reason
+ * should be is worse than a vague one.
+ */
+function classLine(catchup: { outstanding?: Array<{ title: string | null; date: string }> } | undefined): string {
+  const names = outstandingClassNames(catchup?.outstanding ?? []);
+  return names || 'the classes you missed';
 }
