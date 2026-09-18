@@ -180,18 +180,25 @@ export async function GET(request: NextRequest) {
       const classCells: Record<string, RegisterCell> = {};
 
       for (const m of members as any[]) {
-        // A class limited to one batch is only about that batch's students.
-        if (cls.batch_id && m.batch_id && m.batch_id !== cls.batch_id) continue;
+        // A class limited to one batch is only about that batch's students. A
+        // member with no batch_id at all is not in THIS batch, so they must be
+        // excluded too: `m.batch_id !== cls.batch_id` alone handles that,
+        // because null !== cls.batch_id is true. The old `m.batch_id &&` guard
+        // short-circuited on a null batch_id and let every unbatched member
+        // through, which is the one predicate the roster query itself avoids by
+        // using `.eq` (SQL .eq never matches NULL).
+        if (cls.batch_id && m.batch_id !== cls.batch_id) continue;
 
         const a = attByKey.get(key(cls.id, m.user_id));
         const attended = !!a?.attended;
         const presence = attended ? presenceOf(a, window) : null;
+        const absence = absByKey.get(key(cls.id, m.user_id)) ?? null;
         const group = registerGroupOf({
           attended,
           presence,
           joinedAfterClass: joinedAfterClass(m.enrolled_at, cls.scheduled_date),
           rsvp: optByKey.has(key(cls.id, m.user_id)) ? 'not_attending' : 'attending',
-          absence: absByKey.get(key(cls.id, m.user_id)) ?? null,
+          absence,
         });
 
         const cell: RegisterCell = { g: group };
@@ -210,9 +217,15 @@ export async function GET(request: NextRequest) {
         else counts.joinedLater++;
 
         // A class nobody has read attendance for measures nothing, and a student
-        // who was not yet enrolled is not owed that class either.
+        // who was not yet enrolled is not owed that class either. An excused
+        // absence is dropped from the denominator too, not just skipped for
+        // "present": excusing a class is the teacher saying this one is not
+        // held against the student, and counting it in `counted` while never
+        // in `present` would still mark them down for it, which is the exact
+        // opposite of what excusing means.
+        const excused = !!absence?.excused_at;
         const row = tally.get(m.user_id);
-        if (row && measured && group !== 'joined_later') {
+        if (row && measured && group !== 'joined_later' && !excused) {
           row.counted++;
           if (group === 'whole' || group === 'partly') row.present++;
         }

@@ -167,4 +167,79 @@ describe('GET /api/attendance/register', () => {
     const body = await (await call()).json();
     expect(body.paused_hidden).toBe(1);
   });
+
+  it('excludes a roster member with no batch_id from a batch-scoped class', async () => {
+    // A member of the right batch appears in the same assertion set, so one
+    // test covers both halves of the guard: excluded when unbatched, included
+    // when matching. Regression case for the null-batch_id short-circuit bug:
+    // `m.batch_id && ...` treated a null batch_id as "no opinion" instead of
+    // "not in this batch", so every unbatched member leaked into a batch-scoped
+    // class's cells and counts.
+    state.classes.push({
+      id: 'class-2',
+      title: 'Batch Only Session',
+      scheduled_date: '2026-09-14',
+      start_time: '19:00:00',
+      end_time: '20:30:00',
+      batch_id: 'batch-A',
+      attendance_sync_status: 'ok',
+    });
+    state.members.push({
+      user_id: 'batchStudent',
+      enrolled_at: '2026-06-01T00:00:00Z',
+      batch_id: 'batch-A',
+      current_standard: null,
+      user: { name: 'Student E', avatar_url: null },
+    });
+
+    const body = await (await call()).json();
+    const cells = body.cells['class-2'];
+    expect(Object.keys(cells)).toEqual(['batchStudent']);
+    const classTwo = body.classes.find((c: { id: string }) => c.id === 'class-2');
+    expect(classTwo.counts).toEqual({ whole: 0, partly: 0, reason: 0, noReason: 1, joinedLater: 0 });
+  });
+
+  it('drops an excused absence from the denominator, not just from present', async () => {
+    // Excusing a class is the teacher saying it is not held against the
+    // student. It must stay visible (the 'reason' group, the class counts)
+    // while leaving their percentage, which is why `counted` has to drop too,
+    // not only `present`.
+    state.members.push({
+      user_id: 'excused',
+      enrolled_at: '2026-06-01T00:00:00Z',
+      batch_id: null,
+      current_standard: null,
+      user: { name: 'Student F', avatar_url: null },
+    });
+    state.absences.push({
+      scheduled_class_id: 'class-1',
+      student_id: 'excused',
+      kind: 'no_show',
+      reason_code: null,
+      reason_note: null,
+      excused_at: '2026-09-16T00:00:00Z',
+      caught_up_at: null,
+    });
+
+    const body = await (await call()).json();
+    expect(body.cells['class-1'].excused.g).toBe('reason');
+    expect(body.classes[0].counts.reason).toBe(1);
+    const student = body.students.find((s: { id: string }) => s.id === 'excused');
+    expect(student.counted).toBe(0);
+    expect(student.rate).toBe(null);
+  });
+
+  // A dormant student is not reachable as a regression test here: this
+  // route's mock of loadClassroomRoster is a stub that returns exactly
+  // `state.members` unfiltered, it does not reimplement the real
+  // participation_status filtering. In production, loadClassroomRoster is
+  // called with its default options (includeDormant left false), so a
+  // dormant member is dropped from `members` before this route ever sees the
+  // array; the route itself has no dormant-filtering code path to exercise.
+  // Putting a dormant-flagged row into state.members here and asserting it is
+  // absent from `students`/`cells` would only prove the test fixture was
+  // written without one, not that the route filters anything, so it is
+  // skipped per the brief's own fallback instruction. What the route DOES
+  // own, reporting `rosterCounts.dormant` as `paused_hidden`, is already
+  // covered by 'says how many dormant students were hidden' above.
 });
