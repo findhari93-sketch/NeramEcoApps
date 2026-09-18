@@ -36,7 +36,7 @@ import ReviewDialogs from '@/components/drawings/review/ReviewDialogs';
 import InspirationSwitch from '@/components/drawings/review/InspirationSwitch';
 import TeacherSketchActions from '@/components/sketchbook/TeacherSketchActions';
 import { flipSketch } from '@/components/sketchbook/sketchbook-api';
-import { canRedo, opensForGrading, reviewKindOf } from '@/lib/drawing-source';
+import { canRedo, opensForGrading, reviewKindOf, wasReviewedBefore } from '@/lib/drawing-source';
 import {
   drawingAttemptsToViews,
   attemptStatusLabel,
@@ -805,7 +805,12 @@ export default function DrawingReviewDetailPage() {
   // Re-grading a round that already carries a review action. A redo is still open
   // work, so it gets its own wording rather than "already reviewed". Suppressed on
   // superseded rounds, where supersededBanner already carries the warning.
-  const reReviewNotice = ['reviewed', 'redo', 'completed'].includes(submission.status) && isEditMode && !isSuperseded ? (
+  //
+  // wasReviewedBefore, not a raw status check: a sketch is stored 'completed'
+  // the moment it is uploaded (drawing-source.ts), which used to make this
+  // banner (and the "Update review" button below) claim every brand-new,
+  // never-reviewed sketch was already reviewed.
+  const reReviewNotice = (submission.status === 'redo' || wasReviewedBefore(sub)) && isEditMode && !isSuperseded ? (
     <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#fff8e1' }}>
       <Typography variant="body2" color="warning.dark" fontWeight={600}>
         {submission.status === 'redo'
@@ -1038,7 +1043,7 @@ export default function DrawingReviewDetailPage() {
             attemptIndex={attemptIndex}
             attemptTotal={attempts.length}
             statusLabel={attemptStatusLabel(submission.status)}
-            alreadyReviewed={['reviewed', 'completed'].includes(submission.status)}
+            alreadyReviewed={wasReviewedBefore(sub)}
             onEvaluate={() => setIsEditMode(true)}
             onOpenLatest={latestAttempt ? () => openAttempt(latestAttempt.id) : null}
             onSaveDraft={handleSaveDraft}
