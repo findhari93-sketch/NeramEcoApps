@@ -267,7 +267,6 @@ export default function RegisterGrid({
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                     <StudentStageAvatar
-                      userId={student.id}
                       name={student.name}
                       src={student.avatar_url}
                       stage={stageKeyOf(student.study_stage)}

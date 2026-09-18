@@ -242,7 +242,6 @@ export default function ClassRegisterList({
                     }}
                   >
                     <StudentStageAvatar
-                      userId={s.id}
                       name={s.name}
                       src={s.avatar_url}
                       stage={stageKeyOf(s.study_stage)}
