@@ -16,7 +16,7 @@ import { formatClassDate, formatHeldRange } from './attendance-format';
  */
 export default function ClassAttendanceCard({ cls, href }: { cls: RegisterClass; href: string }) {
   const theme = useTheme();
-  const { whole, partly, reason, noReason } = cls.counts;
+  const { whole, partly, reason, noReason, joinedLater } = cls.counts;
   const total = whole + partly + reason + noReason;
 
   const parts: Array<{ key: string; value: number; color: string; label: string }> = [
@@ -26,6 +26,14 @@ export default function ClassAttendanceCard({ cls, href }: { cls: RegisterClass;
     { key: 'no_reason', value: noReason, color: theme.palette.error.main, label: `${noReason} no reason` },
   ];
   const summary = parts.map((p) => p.label).join('   ');
+  /**
+   * Students who had not yet enrolled when the class ran. They owe nothing
+   * for a class before they joined, so they are left out of the bar and the
+   * four counts above, but the route hands the count back and it was going
+   * unread on the card. Written out rather than dropped, same reasoning as
+   * the other four.
+   */
+  const joinedLaterNote = joinedLater > 0 ? `${joinedLater} joined the course later` : null;
 
   return (
     <Box
@@ -56,7 +64,21 @@ export default function ClassAttendanceCard({ cls, href }: { cls: RegisterClass;
         <ChevronRightIcon sx={{ color: 'text.disabled' }} />
       </Box>
 
-      {cls.measured && total > 0 ? (
+      {/*
+        Three states, keyed off `measured` and `total` separately rather than
+        the single `measured && total > 0` this started as. `total` excludes
+        joinedLater, so a class where every enrolled-at-the-time student was
+        somehow still zero across the board (nobody whole, partly, excused or
+        unexcused) is a real, if rare, measured class, and saying attendance
+        was never read from Teams would be false. It draws no bar either way:
+        a bar of four zeroes carries no information and would be drawn only
+        to fill the space.
+      */}
+      {!cls.measured ? (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.25 }}>
+          Attendance not read from Teams yet{joinedLaterNote ? `   ${joinedLaterNote}` : ''}
+        </Typography>
+      ) : total > 0 ? (
         <>
           <Box
             role="img"
@@ -70,12 +92,12 @@ export default function ClassAttendanceCard({ cls, href }: { cls: RegisterClass;
               ))}
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-            {summary}
+            {summary}{joinedLaterNote ? `   ${joinedLaterNote}` : ''}
           </Typography>
         </>
       ) : (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.25 }}>
-          Attendance not read from Teams yet
+          Nobody was counted for this class{joinedLaterNote ? `   ${joinedLaterNote}` : ''}
         </Typography>
       )}
     </Box>

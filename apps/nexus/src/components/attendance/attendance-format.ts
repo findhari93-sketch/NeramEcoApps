@@ -68,3 +68,27 @@ export function formatHeldRange(cls: RegisterClass): string {
   const end = formatClock(cls.held.end);
   return `held ${dropRepeatedMeridiem(start, end)} to ${end}`;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Today in IST as YYYY-MM-DD, and the same date a number of days earlier.
+ *
+ * `Date.now()` is already a timezone-independent instant. An earlier version
+ * of this also added the browser's own `getTimezoneOffset()` on top of the
+ * fixed IST one, which was double counting: for a browser whose local zone IS
+ * IST (offset -330), the two terms cancelled, the "shifted" instant stayed
+ * exactly where it started, and `toISOString` then read the UTC calendar
+ * date rather than the IST one. Every day between IST midnight and 5:29 AM,
+ * that UTC date is still "yesterday", so a teacher opening the page in that
+ * window silently got yesterday's range. The fix is the one fixed +05:30
+ * shift this file already uses for `formatClock`, applied once, with nothing
+ * added on top of it, and applied to `from` the same way so the two dates
+ * stay a consistent number of days apart.
+ */
+export function istRange(days: number): { from: string; to: string } {
+  const ist = new Date(Date.now() + IST_OFFSET_MS);
+  const to = ist.toISOString().slice(0, 10);
+  const from = new Date(ist.getTime() - days * DAY_MS).toISOString().slice(0, 10);
+  return { from, to };
+}

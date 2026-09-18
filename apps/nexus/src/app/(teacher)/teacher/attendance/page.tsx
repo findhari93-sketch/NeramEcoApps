@@ -16,21 +16,12 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import ClassAttendanceCard from '@/components/attendance/ClassAttendanceCard';
 import RegisterGrid from '@/components/attendance/RegisterGrid';
+import { istRange } from '@/components/attendance/attendance-format';
 import type { RegisterResponse } from '@/app/api/attendance/register/route';
 
 type ViewKey = 'classes' | 'register';
 const RANGES = [14, 30, 90] as const;
 type RangeKey = (typeof RANGES)[number];
-
-/** Today in IST as YYYY-MM-DD, and the same date a number of days earlier. */
-function istRange(days: number): { from: string; to: string } {
-  const now = new Date();
-  const ist = new Date(now.getTime() + (330 + now.getTimezoneOffset()) * 60_000);
-  const to = ist.toISOString().slice(0, 10);
-  const fromDate = new Date(`${to}T00:00:00Z`);
-  fromDate.setUTCDate(fromDate.getUTCDate() - days);
-  return { from: fromDate.toISOString().slice(0, 10), to };
-}
 
 function AttendanceRegisterWorkspace() {
   const searchParams = useSearchParams();

@@ -29,6 +29,10 @@ describe('ClassAttendanceCard', () => {
     expect(screen.getByText(/6 partly/)).toBeTruthy();
     expect(screen.getByText(/1 reason/)).toBeTruthy();
     expect(screen.getByText(/16 no reason/)).toBeTruthy();
+    // joinedLater sits outside the bar (they owe nothing for a class before
+    // they joined) but is a real count the route returns, so it must still
+    // be written out somewhere rather than silently dropped.
+    expect(screen.getByText(/3 joined the course later/)).toBeTruthy();
   });
 
   it('links to the class', () => {
@@ -45,5 +49,29 @@ describe('ClassAttendanceCard', () => {
       />,
     );
     expect(screen.getByText(/Attendance not read from Teams yet/)).toBeTruthy();
+  });
+
+  it('does not claim attendance was never read when it was, even if nobody counts against anyone', () => {
+    render(
+      <ClassAttendanceCard
+        cls={{ ...CLS, measured: true, counts: { whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 0 } }}
+        href="/teacher/attendance/class-1"
+      />,
+    );
+    expect(screen.getByText(/Nobody was counted for this class/)).toBeTruthy();
+    expect(screen.queryByText(/Attendance not read from Teams yet/)).toBe(null);
+    // No bar for four zeroes: it would carry no information.
+    expect(screen.queryByRole('img')).toBe(null);
+  });
+
+  it('still surfaces joined-later students when the class was measured but everyone else counts to zero', () => {
+    render(
+      <ClassAttendanceCard
+        cls={{ ...CLS, measured: true, counts: { whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 5 } }}
+        href="/teacher/attendance/class-1"
+      />,
+    );
+    expect(screen.getByText(/Nobody was counted for this class/)).toBeTruthy();
+    expect(screen.getByText(/5 joined the course later/)).toBeTruthy();
   });
 });
