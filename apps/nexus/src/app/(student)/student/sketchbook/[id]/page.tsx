@@ -8,16 +8,11 @@ import StudentDrawingReview from '@/components/sketchbook/StudentDrawingReview';
 import { deleteSketch } from '@/components/sketchbook/sketchbook-api';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import type { SketchbookEntry, SketchbookPayload } from '@/lib/sketchbook-payload';
+import { canDeleteOwnSketch, type SketchbookPayload } from '@/lib/sketchbook-payload';
 
 interface SubmissionDetail {
   submission: { original_image_url: string; tutor_feedback: string | null; reviewed_image_url: string | null; corrected_image_url: string | null };
   practised_from: { item_id: string; title: string; image_url: string } | null;
-}
-
-/** A student deletes only their own sketch, before anyone reviewed or featured it. */
-function canDelete(entry: SketchbookEntry): boolean {
-  return entry.source_type === 'sketchbook' && entry.review.state === 'none' && entry.featured.length === 0;
 }
 
 export default function StudentSketchPage() {
@@ -46,7 +41,7 @@ export default function StudentSketchPage() {
         backHref="/student/sketchbook"
         getToken={getToken}
         review={<StudentDrawingReview entry={sketch} submission={detail?.submission ?? null} practisedFrom={detail?.practised_from ?? null} />}
-        onDelete={canDelete(sketch) ? async () => {
+        onDelete={canDeleteOwnSketch(sketch) ? async () => {
           await deleteSketch(getToken, sketch.id);
           router.push('/student/sketchbook');
         } : undefined}

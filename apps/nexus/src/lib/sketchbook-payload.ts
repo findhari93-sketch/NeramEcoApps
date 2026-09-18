@@ -82,6 +82,16 @@ export function entryFor(
   return { ...safe, seenBy, featured, kind: reviewKindOf(row), review: summarizeReview(row, released) };
 }
 
+/**
+ * May the student delete this drawing themselves? Only their own sketchbook
+ * upload, before a teacher has reviewed it and while no class is showing it.
+ * The server enforces the same rule (DELETE /api/sketchbook/entries/[id]
+ * answers 409), so this only decides whether the button is offered.
+ */
+export function canDeleteOwnSketch(entry: SketchbookEntry): boolean {
+  return entry.source_type === 'sketchbook' && entry.review.state === 'none' && entry.featured.length === 0;
+}
+
 /** One assembly for the student's own view and the teacher's peek, so they never drift. */
 export async function buildSketchbookPayload(
   studentId: string,
