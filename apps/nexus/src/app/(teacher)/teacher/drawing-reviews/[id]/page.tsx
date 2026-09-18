@@ -20,6 +20,9 @@ import {
 import NextLink from 'next/link';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
+import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
+import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
@@ -30,13 +33,17 @@ import ReviewHeader from '@/components/drawings/review/ReviewHeader';
 import ReviewPanelBody from '@/components/drawings/review/ReviewPanelBody';
 import ReviewActionBar from '@/components/drawings/review/ReviewActionBar';
 import ReviewDialogs from '@/components/drawings/review/ReviewDialogs';
+import InspirationSwitch from '@/components/drawings/review/InspirationSwitch';
+import TeacherSketchActions from '@/components/sketchbook/TeacherSketchActions';
+import { flipSketch } from '@/components/sketchbook/sketchbook-api';
+import { canRedo, opensForGrading, reviewKindOf } from '@/lib/drawing-source';
 import {
   drawingAttemptsToViews,
   attemptStatusLabel,
-  drawingRoundOpensForGrading,
 } from '@/lib/submission-history';
 import { useNavBadges } from '@/components/NavBadgeProvider';
 import type { DrawingSubmission, DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
+import type { SketchbookFeatureFact, SubmissionInspirationState } from '@neram/database/queries/nexus';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 import type { Rotation } from '@/lib/image-rotation';
 import { compressImage } from '@/utils/imageCompression';
@@ -45,8 +52,8 @@ import WalkthroughStage from '@/components/drawings/voice/WalkthroughStage';
 import type { StagePlayback } from '@/components/drawings/voice/VoiceNotePlayer';
 import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
-import { parseLane, useReviewQueue } from '@/hooks/useReviewQueue';
-import { parseReviewContext } from '@/lib/review-context';
+import { useReviewQueue } from '@/hooks/useReviewQueue';
+import { parseReviewContext, reviewBackHref, reviewCrumbs, reviewHref } from '@/lib/review-context';
 import { useAiDraft } from '@/hooks/useAiDraft';
 import { useAutoDraft } from '@/hooks/useAutoDraft';
 import { BAND_LABEL } from '@/lib/drawing-triage';
@@ -66,20 +73,15 @@ export default function DrawingReviewDetailPage() {
   // Layout is ReviewShell's job and is expressed as breakpoints.
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  // Where "Back" and post-review navigation return to. When this drawing was
-  // opened from a specific assignment (roster link carries ?assignment=<id>),
-  // return to that assignment instead of the shared Drawing Reviews queue.
-  const fromAssignmentId = searchParams.get('assignment');
-  // Opened from a triage band ("Looks routine"): J, K and Save and next stay in it.
-  const lane = fromAssignmentId ? parseLane(searchParams.get('lane')) : null;
-  const laneQs = lane ? `&lane=${lane}` : '';
-  const backHref = fromAssignmentId
-    ? `/teacher/assignments/${fromAssignmentId}`
-    : '/teacher/drawing-reviews';
+  // Where this drawing was opened from (lib/review-context): Back, the trail,
+  // J and K, and Save and next all follow that place.
+  const reviewCtx = useMemo(() => parseReviewContext(searchParams), [searchParams]);
+  const lane = reviewCtx.lane;
 
   const [submission, setSubmission] = useState<DrawingSubmissionWithDetails | null>(null);
   const [attempts, setAttempts] = useState<DrawingSubmission[]>([]);
   const [loading, setLoading] = useState(true);
+  const backHref = submission ? reviewBackHref(reviewCtx, submission as any) : '/teacher/sketchbook';
 
   // Workspace data managed by AIFeedbackWorkspace, mirrored here for submission
   const workspaceRef = useRef<WorkspaceData>({
@@ -102,9 +104,12 @@ export default function DrawingReviewDetailPage() {
   const [draftSaved, setDraftSaved] = useState(false);
   const [error, setError] = useState('');
   const [action, setAction] = useState<'redo' | 'complete'>('complete');
-  // Always OFF by default. Publishing a student's work to the shared gallery is
-  // the teacher's call, so it is opt-in for every drawing, practice or assignment.
-  const [showInGallery, setShowInGallery] = useState(false);
+  // The Show in Inspiration switch, the drawing this was practised from, where
+  // it is featured, and a test drawing's marks ceiling (GET /api/drawing/submissions/[id]).
+  const [inspiration, setInspiration] = useState<{ original: SubmissionInspirationState | null; reference: SubmissionInspirationState | null } | null>(null);
+  const [practisedFrom, setPractisedFrom] = useState<{ item_id: string; title: string; image_url: string } | null>(null);
+  const [featured, setFeatured] = useState<SketchbookFeatureFact[]>([]);
+  const [examMaxMarks, setExamMaxMarks] = useState<number | null>(null);
   const [tagLabels, setTagLabels] = useState<string[]>([]);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -187,11 +192,16 @@ export default function DrawingReviewDetailPage() {
       setVoice(data.voice_feedback ?? null);
       setVoiceByAttempt(data.voice_by_submission ?? {});
       setStudentTeamsEmail(data.student_teams_email ?? null);
+      setInspiration(data.inspiration ?? null);
+      setPractisedFrom(data.practised_from ?? null);
+      setFeatured(Array.isArray(data.featured) ? data.featured : []);
+      setExamMaxMarks(typeof data.exam_max_marks === 'number' ? data.exam_max_marks : null);
     } catch {
       setSubmission(null);
       setAttempts([]);
       setVoice(null);
       setVoiceByAttempt({});
+      setInspiration(null); setPractisedFrom(null); setFeatured([]); setExamMaxMarks(null);
     } finally {
       setLoading(false);
     }
@@ -231,20 +241,12 @@ export default function DrawingReviewDetailPage() {
       setRegionAnnotations(saved as RegionAnnotation[]);
     }
 
-    // Which rounds open ready to grade (see drawingRoundOpensForGrading). A round
-    // that opens locked is never a dead end: the bottom bar's "Evaluate" reopens it.
+    // Which rounds open ready to grade (see opensForGrading in lib/drawing-source).
+    // A round that opens locked is never a dead end: the bottom bar's "Evaluate" reopens it.
     const newerAttemptExists = attempts.some(
       (a) => a.id !== submission.id && a.submitted_at > submission.submitted_at,
     );
-    setIsEditMode(drawingRoundOpensForGrading(submission.status, newerAttemptExists));
-
-    // Visibility toggle reflects the server state for any round that has already
-    // been through a review action (that is where is_gallery_visible is written),
-    // so a teacher who published a drawing earlier still sees it published. A
-    // round nobody has reviewed yet starts OFF: no work reaches the gallery
-    // without the teacher turning it on.
-    const hasBeenReviewed = ['reviewed', 'redo', 'completed'].includes(submission.status);
-    setShowInGallery(hasBeenReviewed ? !!(submission as any).is_gallery_visible : false);
+    setIsEditMode(opensForGrading(submission as any, newerAttemptExists));
 
     // Hydrate tag labels from the loaded submission.
     const existingTags = ((submission as any).tags as DrawingTag[] | undefined) || [];
@@ -347,9 +349,15 @@ export default function DrawingReviewDetailPage() {
     }
   }, [submission, getToken]);
 
+  // On practice the reaction is set by the quick bar (Nice, Great, Wow), and the
+  // workspace's own picker is hidden. The workspace still reports its stale copy
+  // of the reaction with every other change, so keep the page's value.
+  const isPracticeRef = useRef(false);
+  isPracticeRef.current = !!submission && reviewKindOf(submission as any) === 'practice';
   const handleWorkspaceChange = useCallback((data: WorkspaceData) => {
-    workspaceRef.current = data;
-    setWorkspaceData(data);
+    const next = isPracticeRef.current ? { ...data, reaction: workspaceRef.current.reaction } : data;
+    workspaceRef.current = next;
+    setWorkspaceData(next);
   }, []);
 
   const handleSaveReview = async (reviewAction: 'redo' | 'complete') => {
@@ -373,7 +381,8 @@ export default function DrawingReviewDetailPage() {
           ai_overlay_annotations: regionAnnotations.length > 0 ? regionAnnotations : null,
           tutor_resources: ws.resources,
           reaction: ws.reaction,
-          is_gallery_visible: showInGallery,
+          // The old gallery flag stays as it was. Inspiration has its own switch.
+          is_gallery_visible: !!(submission as any)?.is_gallery_visible,
           tag_labels: tagLabels,
           action: reviewAction,
         }),
@@ -388,23 +397,28 @@ export default function DrawingReviewDetailPage() {
       // line receipt of who was just told. With nothing left, back to the list.
       const who = String((submission as any)?.student?.name || '').trim().split(/\s+/)[0] || 'the student';
       const chatMissed = result?.delivery && result.delivery.chat === false;
-      // A held assignment tells nobody on Complete, so the receipt must not say
-      // "sent": that would be the one sentence on this screen that is false.
+      const verb = reviewAction === 'redo' ? 'Redo' : 'Review';
+      // A held assignment tells nobody on Complete, and a practice re-save that
+      // changed nothing tells nobody either, so neither receipt may say "sent".
       const told = result?.held
-        ? `${reviewAction === 'redo' ? 'Redo' : 'Review'} for ${who} held. ${result.held_count} waiting to hand back.`
-        : `${reviewAction === 'redo' ? 'Redo' : 'Review'} sent to ${who}.` +
-          (chatMissed ? ' Teams chat did not send, the Nexus bell did.' : '');
-      // In a lane, next means next in that band, and the count is that band's.
-      const nextId = lane ? queue.afterId : result?.next_submission_id;
+        ? `${verb} for ${who} held. ${result.held_count} waiting to hand back.`
+        : result?.notified
+          ? `${verb} sent to ${who}.` + (chatMissed ? ' Teams chat did not send, the Nexus bell did.' : '')
+          : `${verb} saved.`;
+      // A lane, a sketchbook month, the flip-through or an exam walk their own
+      // list; a plain assignment link uses the server's oldest-first pick.
+      const ownList = !!lane || (reviewCtx.from !== null && reviewCtx.from !== 'assignment');
+      const nextId = ownList ? queue.afterId : result?.next_submission_id;
+      const waiting = Math.max(0, queue.total - (queue.position != null ? 1 : 0));
       const left = lane
-        ? `${Math.max(0, queue.total - (queue.position != null ? 1 : 0))} left in ${BAND_LABEL[lane]}.`
-        : `${result?.remaining} left to review.`;
+        ? `${waiting} left in ${BAND_LABEL[lane]}.`
+        : reviewCtx.from === 'flip' || reviewCtx.from === 'exam'
+          ? `${waiting} left.`
+          : reviewCtx.from === 'sketchbook'
+            ? ''
+            : `${result?.remaining} left to review.`;
       if (nextId) {
-        const qs = new URLSearchParams();
-        if (fromAssignmentId) qs.set('assignment', fromAssignmentId);
-        if (lane) qs.set('lane', lane);
-        qs.set('notice', `${told} ${left}`);
-        router.push(`/teacher/drawing-reviews/${nextId}?${qs.toString()}`);
+        router.push(reviewHref(nextId, reviewCtx, { notice: `${told} ${left}`.trim() }));
       } else {
         router.push(backHref);
       }
@@ -447,11 +461,8 @@ export default function DrawingReviewDetailPage() {
   // Jump to another round's own review screen, keeping the assignment context so
   // "Back" still returns where the teacher came from.
   const openAttempt = useCallback(
-    (attemptId: string) => {
-      const qs = fromAssignmentId ? `?assignment=${fromAssignmentId}${laneQs}` : '';
-      router.push(`/teacher/drawing-reviews/${attemptId}${qs}`);
-    },
-    [router, fromAssignmentId, laneQs],
+    (attemptId: string) => router.push(reviewHref(attemptId, reviewCtx)),
+    [router, reviewCtx],
   );
 
   // The AI draft on this sheet, if evaluation ever produced one. Null otherwise.
@@ -498,13 +509,28 @@ export default function DrawingReviewDetailPage() {
   const [uprightNoticeHidden, setUprightNoticeHidden] = useState(false);
 
   // The queue this drawing belongs to, for J and K and the "3 / 12" chip.
-  const reviewCtx = useMemo(() => parseReviewContext(searchParams), [searchParams]);
   const queue = useReviewQueue(
     reviewCtx,
     ((submission as any)?.assignment_id as string | null) ?? null,
     id,
     getToken,
   );
+
+  // A practice drawing on screen for 1.5 seconds has been looked at: the same
+  // rule as the flip-through card, so it leaves that inbox.
+  useEffect(() => {
+    if (!submission || reviewKindOf(submission as any) !== 'practice') return;
+    const timer = setTimeout(() => { void flipSketch(getToken, submission.id, 'seen').catch(() => {}); }, 1500);
+    return () => clearTimeout(timer);
+  }, [submission?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Practice only: move on without saving. From the flip-through that is a skip. */
+  const handleNext = useCallback(() => {
+    if (reviewCtx.from === 'flip' && submission && !(submission as any).reviewed_at) {
+      void flipSketch(getToken, submission.id, 'skipped').catch(() => {});
+    }
+    router.push(queue.nextId ? reviewHref(queue.nextId, reviewCtx) : backHref);
+  }, [reviewCtx, submission, getToken, router, queue.nextId, backHref]);
 
   // Handlers change identity every render; the key listener reads the latest.
   const saveReviewRef = useRef(handleSaveReview);
@@ -532,8 +558,7 @@ export default function DrawingReviewDetailPage() {
       const go = (to: string | null) => {
         if (!to) return;
         e.preventDefault();
-        const qs = fromAssignmentId ? `?assignment=${fromAssignmentId}${laneQs}` : '';
-        router.push(`/teacher/drawing-reviews/${to}${qs}`);
+        router.push(reviewHref(to, reviewCtx));
       };
       if (e.key === 'j' || e.key === 'J') go(state.queue.nextId);
       else if (e.key === 'k' || e.key === 'K') go(state.queue.prevId);
@@ -546,7 +571,7 @@ export default function DrawingReviewDetailPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [fromAssignmentId, laneQs, router]);
+  }, [reviewCtx, router]);
 
   if (loading) {
     return (
@@ -563,6 +588,12 @@ export default function DrawingReviewDetailPage() {
 
   const timeAgo = getTimeAgo(submission.submitted_at);
   const sub = submission as any;
+  const kind = reviewKindOf(sub);
+  const isPractice = kind === 'practice';
+  // A test drawing is marked out of the marks its test gives the question. When
+  // that cannot be read, 100 keeps the box usable rather than refusing a mark.
+  const evaluationType: 'marks' | 'stars' = kind === 'test' ? 'marks' : (submission.assignment?.evaluation_type ?? 'stars');
+  const maxMarks = kind === 'test' ? (examMaxMarks ?? 100) : (submission.assignment?.max_marks ?? 5);
 
   // Which round of the thread is on screen. The header used to label every round
   // with the thread total, so an older attempt still read as the newest one.
@@ -572,13 +603,14 @@ export default function DrawingReviewDetailPage() {
       : ['reviewed', 'completed'].includes(submission.status) ? 'success'
       : 'info';
 
-  // This drawing belongs to a class assignment when it was opened from one
-  // (?assignment=) or the submission itself carries an assignment_id. A breadcrumb
-  // bar shows where this submission sits in the hierarchy and lets the teacher jump
-  // to any parent. When reached from the shared queue instead, the trail roots at
-  // Drawing Reviews rather than a specific assignment.
-  const assignmentId: string | null = fromAssignmentId ?? (sub.assignment_id as string | null);
-  const assignmentTitle: string = sub.assignment?.title || 'Assignment';
+  // Where this drawing sits: its assignment, the student's sketchbook, the exam
+  // or the Inspiration drawing it was opened from (lib/review-context).
+  const crumbs = reviewCrumbs(reviewCtx, sub);
+  const ContextIcon =
+    kind === 'assignment' ? AssignmentOutlinedIcon
+      : kind === 'test' ? EventNoteOutlinedIcon
+        : reviewCtx.from === 'inspiration' ? CollectionsOutlinedIcon
+          : AutoStoriesOutlinedIcon;
   const assignmentContextBar = (
     <Box
       sx={{
@@ -592,44 +624,35 @@ export default function DrawingReviewDetailPage() {
         borderColor: 'divider',
       }}
     >
-      <AssignmentOutlinedIcon sx={{ fontSize: 18, color: 'primary.main', flexShrink: 0 }} />
-      <Breadcrumbs
-        separator={<NavigateNextIcon sx={{ fontSize: '0.85rem' }} />}
-        sx={{ flex: 1, minWidth: 0 }}
-      >
-        <MuiLink
-          component={NextLink}
-          href={assignmentId ? '/teacher/assignments' : '/teacher/drawing-reviews'}
-          underline="hover"
-          color="text.secondary"
-          variant="caption"
-          sx={{ fontWeight: 500 }}
-        >
-          {assignmentId ? 'Assignments' : 'Drawing Reviews'}
-        </MuiLink>
-        {assignmentId && (
-          <MuiLink
-            component={NextLink}
-            href={`/teacher/assignments/${assignmentId}`}
-            underline="hover"
-            color="text.secondary"
-            variant="caption"
-            sx={{
-              fontWeight: 500,
-              display: 'inline-block',
-              maxWidth: { xs: 150, sm: 280 },
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              verticalAlign: 'bottom',
-            }}
-          >
-            {assignmentTitle}
-          </MuiLink>
+      <ContextIcon sx={{ fontSize: 18, color: 'primary.main', flexShrink: 0 }} />
+      <Breadcrumbs separator={<NavigateNextIcon sx={{ fontSize: '0.85rem' }} />} sx={{ flex: 1, minWidth: 0 }}>
+        {crumbs.map((c) =>
+          c.href ? (
+            <MuiLink
+              key={c.label}
+              component={NextLink}
+              href={c.href}
+              underline="hover"
+              color="text.secondary"
+              variant="caption"
+              sx={{
+                fontWeight: 500,
+                display: 'inline-block',
+                maxWidth: { xs: 150, sm: 280 },
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                verticalAlign: 'bottom',
+              }}
+            >
+              {c.label}
+            </MuiLink>
+          ) : (
+            <Typography key={c.label} variant="caption" color="primary.dark" sx={{ fontWeight: 700 }}>
+              {c.label}
+            </Typography>
+          ),
         )}
-        <Typography variant="caption" color="primary.dark" sx={{ fontWeight: 700 }}>
-          Review
-        </Typography>
       </Breadcrumbs>
     </Box>
   );
@@ -744,6 +767,26 @@ export default function DrawingReviewDetailPage() {
     </Box>
   ) : null;
 
+  // A sketch made with "Practise this": the Inspiration drawing it was drawn from.
+  const practisedStrip = practisedFrom ? (
+    <Box
+      component={NextLink}
+      href={`/teacher/inspiration/${practisedFrom.item_id}`}
+      sx={{
+        px: 1.5, py: 1, minHeight: 56, display: 'flex', alignItems: 'center', gap: 1,
+        borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', flexShrink: 0,
+        color: 'text.primary', textDecoration: 'none',
+        '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: -3 },
+      }}
+    >
+      <Box component="img" src={practisedFrom.image_url} alt="" sx={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider', flexShrink: 0 }} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block' }}>Practised from Inspiration</Typography>
+        <Typography variant="body2" noWrap>{practisedFrom.title}</Typography>
+      </Box>
+    </Box>
+  ) : null;
+
   // Previous attempts of this redo, shown while grading the latest one. Each
   // round links to its own review screen so a teacher can grade an earlier
   // attempt that was never closed out, not just preview it.
@@ -840,10 +883,10 @@ export default function DrawingReviewDetailPage() {
         Feedback
       </Typography>
       {/* The running verdict, so it stays in sight while the rail scrolls. */}
-      {(submission.assignment?.evaluation_type ?? 'stars') === 'marks'
+      {evaluationType === 'marks'
         ? workspaceData.marks != null && (
             <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mr: 1 }}>
-              {workspaceData.marks}/{submission.assignment?.max_marks ?? 5}
+              {workspaceData.marks}/{maxMarks}
             </Typography>
           )
         : workspaceData.rating > 0 && (
@@ -888,8 +931,9 @@ export default function DrawingReviewDetailPage() {
         }
         contextBar={assignmentContextBar}
         referenceStrip={
-          partsStrip || referenceStrip ? (
+          practisedStrip || partsStrip || referenceStrip ? (
             <>
+              {practisedStrip}
               {partsStrip}
               {referenceStrip}
             </>
@@ -955,9 +999,28 @@ export default function DrawingReviewDetailPage() {
             onWorkspaceChange={handleWorkspaceChange}
             isEditMode={isEditMode}
             sketchTrigger={sketchTrigger}
-            evaluationType={submission.assignment?.evaluation_type ?? 'stars'}
-            maxMarks={submission.assignment?.max_marks ?? 5}
+            evaluationType={evaluationType}
+            maxMarks={maxMarks}
             selfNote={submission.self_note}
+            showEncouragement={!isPractice}
+            quickActions={isPractice ? (
+              <TeacherSketchActions
+                key={submission.id}
+                compact
+                sketchId={submission.id}
+                reaction={(['heart', 'fire', 'wow'] as const).includes(workspaceData.reaction as never) ? (workspaceData.reaction as 'heart' | 'fire' | 'wow') : null}
+                featured={featured}
+                selfNote={submission.self_note}
+                onChanged={(change) => {
+                  if (change.reaction !== undefined) {
+                    const next = { ...workspaceRef.current, reaction: change.reaction as WorkspaceData['reaction'] };
+                    workspaceRef.current = next;
+                    setWorkspaceData(next);
+                  }
+                  if (change.featured) setFeatured(change.featured);
+                }}
+              />
+            ) : null}
             supersededBanner={supersededBanner}
             reReviewNotice={reReviewNotice}
             voiceSection={voiceSection}
@@ -987,9 +1050,18 @@ export default function DrawingReviewDetailPage() {
             saving={saving}
             pendingAction={action}
             voiceBusy={voiceBusy}
-            mode="owed"
-            canRedo
-            onNext={null}
+            mode={isPractice ? 'practice' : 'owed'}
+            canRedo={canRedo(sub)}
+            onNext={isPractice ? handleNext : null}
+            inspirationSlot={
+              inspiration?.original ? (
+                <InspirationSwitch
+                  state={inspiration.original}
+                  getToken={getToken}
+                  onChange={(next) => setInspiration((prev) => (prev ? { ...prev, original: next } : prev))}
+                />
+              ) : null
+            }
           />
         }
       />

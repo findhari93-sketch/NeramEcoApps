@@ -40,6 +40,11 @@ export interface ReviewPanelBodyProps {
   /** The student's own note on their upload, when they left one. */
   selfNote?: string | null;
 
+  /** Practice only: quick reactions and Feature, above everything else. */
+  quickActions?: ReactNode;
+  /** Passed to AIFeedbackWorkspace. */
+  showEncouragement?: boolean;
+
   supersededBanner: ReactNode;
   reReviewNotice: ReactNode;
   voiceSection: ReactNode;
@@ -60,7 +65,7 @@ interface StudentComment {
 
 export default function ReviewPanelBody({
   submissionId, submission, getToken, onWorkspaceChange, isEditMode, sketchTrigger,
-  evaluationType, maxMarks, selfNote,
+  evaluationType, maxMarks, selfNote, quickActions, showEncouragement = true,
   supersededBanner, reReviewNotice, voiceSection, previousAttemptsPanel,
   tagLabels, onTagLabelsChange, aiDraft = null, draftState = null,
 }: ReviewPanelBodyProps) {
@@ -111,6 +116,7 @@ export default function ReviewPanelBody({
 
   return (
     <>
+      {quickActions}
       {supersededBanner}
       {reReviewNotice}
 
@@ -151,6 +157,7 @@ export default function ReviewPanelBody({
         voiceSlot={voiceSection}
         aiDraft={aiDraft}
         draftState={draftState}
+        showEncouragement={showEncouragement}
       />
 
       {/* Kept open: on a redo round the earlier attempts are the context. */}

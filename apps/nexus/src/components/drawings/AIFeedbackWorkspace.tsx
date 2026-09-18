@@ -57,6 +57,11 @@ interface AIFeedbackWorkspaceProps {
   aiDraft?: AiDraft | null;
   /** Where Gemini's draft for this sheet stands. */
   draftState?: AutoDraftState | null;
+  /**
+   * The "Send some encouragement" picker. Off for practice, where the review
+   * screen shows the quick reactions (Nice, Great, Wow) that the flip-through uses.
+   */
+  showEncouragement?: boolean;
 }
 
 /**
@@ -75,7 +80,7 @@ function StageLabel({ label }: { label: string }) {
 export default function AIFeedbackWorkspace({
   submission, getToken, onChange, defaultCollapsed = false, readOnly = false,
   sketchTrigger = 0, evaluationType = 'stars', maxMarks = 5, voiceSlot, aiDraft = null,
-  draftState = null,
+  draftState = null, showEncouragement = true,
 }: AIFeedbackWorkspaceProps) {
   const drafting = draftState?.phase === 'drafting';
   const isMarks = evaluationType === 'marks';
@@ -540,9 +545,11 @@ export default function AIFeedbackWorkspace({
                 />
 
                 {/* Encouraging reaction sent to the student */}
-                <Box sx={{ mt: 2 }}>
-                  <ReactionPicker value={reaction} onChange={(v) => { setReaction(v); notify({ reaction: v }); }} />
-                </Box>
+                {showEncouragement && (
+                  <Box sx={{ mt: 2 }}>
+                    <ReactionPicker value={reaction} onChange={(v) => { setReaction(v); notify({ reaction: v }); }} />
+                  </Box>
+                )}
               </Box>
             )}
           </Box>
