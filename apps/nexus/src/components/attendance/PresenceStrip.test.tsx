@@ -58,20 +58,35 @@ describe('PresenceStrip', () => {
     });
   });
 
-  it('renders very short segments with minimum width', () => {
+  it('clamps sub-floor segments to minimum width', () => {
     const { container } = render(
       <PresenceStrip
         held={HELD}
         segments={[
-          { start: '2026-09-15T13:30:30.000Z', end: '2026-09-15T13:32:00.000Z' },
+          { start: '2026-09-15T13:30:00.000Z', end: '2026-09-15T13:30:30.000Z' },
         ]}
         tone="success"
-        label="90 seconds in 70 minute class"
+        label="30 seconds in 70 minute class"
       />,
     );
     const seg = container.querySelector('[data-segment]') as HTMLElement;
     const width = parseFloat(seg.style.width);
-    expect(width).toBeGreaterThan(0);
-    expect(width).toBeGreaterThanOrEqual(2);
+    expect(width).toBe(2);
+  });
+
+  it('does not clamp segments already above floor', () => {
+    const { container } = render(
+      <PresenceStrip
+        held={HELD}
+        segments={[
+          { start: '2026-09-15T13:30:00.000Z', end: '2026-09-15T13:31:40.000Z' },
+        ]}
+        tone="success"
+        label="100 seconds in 70 minute class"
+      />,
+    );
+    const seg = container.querySelector('[data-segment]') as HTMLElement;
+    const width = parseFloat(seg.style.width);
+    expect(width).toBeGreaterThan(2);
   });
 });
