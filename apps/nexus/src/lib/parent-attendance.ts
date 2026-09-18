@@ -18,13 +18,15 @@
  *
  * Pure and DB-free on purpose, so all of the above is unit-testable.
  *
- * The `late` / `leftEarly` / `droppedMidClass` derivations are ported verbatim
- * from api/timetable/class-insights/route.ts so the parent and the teacher can
- * never see a different verdict about the same class, and the grace window is
- * imported from lib/class-absences.ts rather than redeclared.
+ * The `late` / `leftEarly` / `droppedMidClass` derivations call `sessionWindow`
+ * and `presenceOf` from lib/attendance-register.ts, the same functions
+ * api/timetable/class-insights/route.ts calls, so the parent and the teacher
+ * can never see a different verdict about the same class. When the caller
+ * does not pass a `sessionWindows` map (see `buildClassAttendanceViews`
+ * below), the class's booked end time is used instead of its real one.
  */
 
-import { LATE_THRESHOLD_MINUTES } from './class-absences';
+import { presenceOf, sessionWindow, type SessionWindow } from './attendance-register';
 
 export type ClassMeasurement = 'measured' | 'not_measured';
 
@@ -214,7 +216,14 @@ export function buildClassAttendanceViews(
   classes: ScheduledClassRow[],
   attendanceRows: AttendanceRow[],
   measuredClassIds: Set<string> | string[],
-  absenceRows: AbsenceRow[] = []
+  absenceRows: AbsenceRow[] = [],
+  /**
+   * When each class really ended, keyed by class id, built by the caller from
+   * the whole room's leave times. Without it the booked end is used, which is
+   * what every caller did before and what flagged a whole cohort as leaving
+   * early on a class that simply finished 20 minutes ahead of its booking.
+   */
+  sessionWindows?: Map<string, SessionWindow>
 ): ClassAttendanceView[] {
   const measured =
     measuredClassIds instanceof Set ? measuredClassIds : new Set(measuredClassIds);
@@ -271,22 +280,24 @@ export function buildClassAttendanceViews(
     }
 
     const attended = !!att?.attended;
-    const joinedMs = toMs(att?.joined_at);
-    const leftMs = toMs(att?.left_at);
-    const graceMs = LATE_THRESHOLD_MINUTES * 60 * 1000;
     const segments = parseSegments(att?.attendance_intervals);
 
-    const late =
-      attended && joinedMs !== null && Number.isFinite(startMs)
-        ? joinedMs - startMs > graceMs
-        : false;
-    const leftEarly =
-      attended && leftMs !== null && Number.isFinite(endMs)
-        ? endMs - leftMs > graceMs
-        : false;
-    // More than one join/leave segment means they dropped out and came back.
-    const segmentCount = segments.length || (attended ? 1 : 0);
-    const droppedMidClass = segmentCount > 1;
+    const window: SessionWindow =
+      sessionWindows?.get(cls.id) ??
+      sessionWindow(cls, [{ attended: true, left_at: null }]);
+    const presence = presenceOf(
+      {
+        attended,
+        joined_at: att?.joined_at ?? null,
+        left_at: att?.left_at ?? null,
+        attendance_intervals: (att?.attendance_intervals as never) ?? null,
+      },
+      window
+    );
+
+    const late = attended && presence.lateByMin > 0;
+    const leftEarly = attended && presence.leftEarlyByMin > 0;
+    const droppedMidClass = attended && presence.outMin > 0;
 
     return {
       ...base,

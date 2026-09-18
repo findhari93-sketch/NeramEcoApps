@@ -29,6 +29,7 @@ import {
   type ClassAttendanceView,
   type ScheduledClassRow,
 } from '@/lib/parent-attendance';
+import { sessionWindow } from '@/lib/attendance-register';
 
 /** Classes a parent should never see in an attendance list. */
 const HIDDEN_CLASS_STATUSES = ['cancelled', 'rescheduled'];
@@ -123,12 +124,14 @@ export async function loadChildAttendance(
     // Roster-wide, deliberately. One row from ANY student proves the class was
     // synced, which is what lets this child's missing row mean "absent" instead
     // of "unknown".
-    (async (): Promise<{ scheduled_class_id: string }[]> => {
+    (async (): Promise<{ scheduled_class_id: string; attended: boolean | null; left_at: string | null }[]> => {
       const { data } = await supabase
         .from('nexus_attendance')
-        .select('scheduled_class_id')
+        // attended and left_at cost nothing here and are what tell us when each
+        // class actually ended, which no single student's row can say.
+        .select('scheduled_class_id, attended, left_at')
         .in('scheduled_class_id', classIds);
-      return (data || []) as { scheduled_class_id: string }[];
+      return (data || []) as { scheduled_class_id: string; attended: boolean | null; left_at: string | null }[];
     })(),
     (async (): Promise<AttendanceRow[]> => {
       const { data } = await supabase
@@ -160,9 +163,19 @@ export async function loadChildAttendance(
     measuredRows.map((r) => r.scheduled_class_id)
   );
 
+  const rowsByClass = new Map<string, { attended: boolean | null; left_at: string | null }[]>();
+  for (const r of measuredRows) {
+    const list = rowsByClass.get(r.scheduled_class_id) || [];
+    list.push({ attended: r.attended, left_at: r.left_at });
+    rowsByClass.set(r.scheduled_class_id, list);
+  }
+  const sessionWindows = new Map(
+    classes.map((c) => [c.id, sessionWindow(c, rowsByClass.get(c.id) || [])])
+  );
+
   return {
     classes,
-    views: buildClassAttendanceViews(classes, mineRows, measuredClassIds, absenceRows),
+    views: buildClassAttendanceViews(classes, mineRows, measuredClassIds, absenceRows, sessionWindows),
   };
 }
 

@@ -7,6 +7,7 @@ import {
   type AttendanceRow,
 } from './parent-attendance';
 import { LATE_THRESHOLD_MINUTES } from './class-absences';
+import { sessionWindow } from './attendance-register';
 
 /** A 6:00pm-7:30pm IST class on the given date. */
 function cls(id: string, date = '2026-07-22'): ScheduledClassRow {
@@ -346,13 +347,22 @@ describe('summarise totals', () => {
   });
 
   it('counts late, left-early and dropped independently', () => {
+    // c2 runs on its own date (2026-07-23), so its intervals are written
+    // against that date rather than the afterStart/beforeEnd helpers, which
+    // are anchored to c1's date (2026-07-22). Real Teams intervals always
+    // carry both a joinDateTime and a leaveDateTime, which is what lets the
+    // shared attendance-register module see the gap between the two.
+    const c2At = (hhmm: string) => `2026-07-23T${hhmm}:00+05:30`;
     const views = buildClassAttendanceViews(
       [cls('c1'), cls('c2', '2026-07-23')],
       [
         attRow({ scheduled_class_id: 'c1', joined_at: afterStart(30) }),
         attRow({
           scheduled_class_id: 'c2',
-          attendance_intervals: [{ joinDateTime: afterStart(0) }, { joinDateTime: afterStart(60) }],
+          attendance_intervals: [
+            { joinDateTime: c2At('18:00'), leaveDateTime: c2At('18:20') },
+            { joinDateTime: c2At('18:30'), leaveDateTime: c2At('19:30') },
+          ],
         }),
       ],
       new Set(['c1', 'c2'])
@@ -362,5 +372,56 @@ describe('summarise totals', () => {
     expect(s.droppedMidClass).toBe(1);
     expect(s.attended).toBe(2);
     expect(s.attendanceRate).toBe(100);
+  });
+});
+
+describe('buildClassAttendanceViews', () => {
+  const ist = (hhmm: string) => `2026-09-15T${hhmm}:00+05:30`;
+
+  it('does not tell a parent their child left early when the class ended', () => {
+    const classes = [
+      { id: 'class-1', title: 'Basic 3D', scheduled_date: '2026-09-15', start_time: '19:00:00', end_time: '20:30:00' },
+    ];
+    const attendance = [
+      { scheduled_class_id: 'class-1', student_id: 'child', attended: true, joined_at: ist('19:02'), left_at: ist('20:10'), attendance_intervals: [{ joinDateTime: ist('19:02'), leaveDateTime: ist('20:10') }] },
+      { scheduled_class_id: 'class-1', student_id: 'other-1', attended: true, left_at: ist('20:10'), attendance_intervals: [{ joinDateTime: ist('19:00'), leaveDateTime: ist('20:10') }] },
+      { scheduled_class_id: 'class-1', student_id: 'other-2', attended: true, left_at: ist('20:10'), attendance_intervals: [{ joinDateTime: ist('19:00'), leaveDateTime: ist('20:10') }] },
+    ];
+    const windows = new Map([['class-1', sessionWindow(classes[0], attendance)]]);
+    const [view] = buildClassAttendanceViews(
+      classes as never,
+      // The child's own row only, which is all the caller ever passes.
+      [attendance[0]] as never,
+      new Set(['class-1']),
+      [],
+      windows,
+    );
+    expect(view.leftEarly).toBe(false);
+    expect(view.label).toBe('attended');
+  });
+
+  it('still reads a genuine early leaver as one', () => {
+    const classes = [
+      { id: 'class-1', title: 'Basic 3D', scheduled_date: '2026-09-15', start_time: '19:00:00', end_time: '20:30:00' },
+    ];
+    const room = [
+      { scheduled_class_id: 'class-1', student_id: 'child', attended: true, joined_at: ist('19:02'), left_at: ist('19:30'), attendance_intervals: [{ joinDateTime: ist('19:02'), leaveDateTime: ist('19:30') }] },
+      { scheduled_class_id: 'class-1', student_id: 'other-1', attended: true, left_at: ist('20:10'), attendance_intervals: [{ joinDateTime: ist('19:00'), leaveDateTime: ist('20:10') }] },
+      { scheduled_class_id: 'class-1', student_id: 'other-2', attended: true, left_at: ist('20:10'), attendance_intervals: [{ joinDateTime: ist('19:00'), leaveDateTime: ist('20:10') }] },
+    ];
+    const windows = new Map([['class-1', sessionWindow(classes[0], room)]]);
+    const [view] = buildClassAttendanceViews(classes as never, [room[0]] as never, new Set(['class-1']), [], windows);
+    expect(view.leftEarly).toBe(true);
+  });
+
+  it('falls back to the booked end when no windows are passed', () => {
+    const classes = [
+      { id: 'class-1', title: 'Basic 3D', scheduled_date: '2026-09-15', start_time: '19:00:00', end_time: '20:30:00' },
+    ];
+    const mine = [
+      { scheduled_class_id: 'class-1', attended: true, joined_at: ist('19:02'), left_at: ist('20:10'), attendance_intervals: [{ joinDateTime: ist('19:02'), leaveDateTime: ist('20:10') }] },
+    ];
+    const [view] = buildClassAttendanceViews(classes as never, mine as never, new Set(['class-1']), []);
+    expect(view.leftEarly).toBe(true);
   });
 });
