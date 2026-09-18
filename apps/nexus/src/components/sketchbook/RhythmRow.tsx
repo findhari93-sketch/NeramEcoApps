@@ -7,6 +7,7 @@ import { useStudentStageFacts } from '@/components/students/StudentStageFactsPro
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import type { StageKey } from '@/lib/student-stage';
 import type { RhythmStatus, StripDay } from '@/lib/sketchbook-status';
+import { sketchbookReviewHref } from '@/lib/review-context';
 import RhythmStrip from './RhythmStrip';
 
 export interface RhythmStudent {
@@ -111,8 +112,8 @@ export default function RhythmRow({ student: s }: { student: RhythmStudent }) {
       {s.latestSketch?.thumbUrl ? (
         <Box
           component={Link}
-          href={`/teacher/sketchbook/${s.userId}/${s.latestSketch.id}`}
-          aria-label={`Open ${name}'s latest sketch, ${sketchDate(s.latestSketch.submittedAt)}`}
+          href={sketchbookReviewHref(s.latestSketch.id, s.userId)}
+          aria-label={`Open ${name}'s latest drawing, ${sketchDate(s.latestSketch.submittedAt)}`}
           sx={{
             width: THUMB,
             height: THUMB,

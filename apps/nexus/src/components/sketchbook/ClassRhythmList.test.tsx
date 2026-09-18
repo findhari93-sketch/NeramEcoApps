@@ -16,6 +16,8 @@ import ClassRhythmList from './ClassRhythmList';
 
 const strip: StripDay[] = Array.from({ length: 14 }, (_, i) => ({ date: `2026-09-${String(7 + i).padStart(2, '0')}`, state: 'missed', today: i === 9 }));
 
+const STUDENT_A = '11111111-1111-4111-8111-111111111111';
+
 const student = (id: string, name: string, status: RhythmStatus, label: string, quietDays: number, sketch = false) => ({
   userId: id, name, email: null, avatarUrl: null, msOid: null, enrolledAt: '2026-06-01T00:00:00Z', start: '2026-09-12',
   status, label, quietDays, lastDrawingDate: null, week: { count: status === 'on_track' ? 3 : 1, goal: 3 }, strip,
@@ -26,7 +28,7 @@ const student = (id: string, name: string, status: RhythmStatus, label: string, 
 const payload = {
   goal: 3, startedOn: '2026-09-12', today: '2026-09-16', pausedCount: 3,
   students: [
-    student('a', 'Asha', 'on_track', 'Goal met', 0, true),
+    student(STUDENT_A, 'Asha', 'on_track', 'Goal met', 0, true),
     student('b', 'Bala', 'needs_nudge', 'No drawing yet, 4 days', 4),
     student('c', 'Charu', 'needs_nudge', 'Quiet 9 days', 9),
     student('d', 'Devi', 'behind', 'Behind, 1 of 3', 1),
@@ -67,8 +69,8 @@ describe('ClassRhythmList', () => {
   it('links the latest sketch thumbnail and says how many paused students are hidden', () => {
     render(<ClassRhythmList classroomId="c1" />);
     const asha = screen.getAllByTestId('rhythm-row').find((r) => within(r).queryByText('Asha'))!;
-    const thumb = within(asha).getByRole('link', { name: /latest sketch/ });
-    expect(thumb.getAttribute('href')).toBe('/teacher/sketchbook/a/sk-a');
+    const thumb = within(asha).getByRole('link', { name: /latest drawing/ });
+    expect(thumb.getAttribute('href')).toBe(`/teacher/drawing-reviews/sk-${STUDENT_A}?from=sketchbook&student=${STUDENT_A}`);
     expect(screen.getByTestId('paused-footnote').textContent).toBe('3 paused students are not shown.');
   });
 

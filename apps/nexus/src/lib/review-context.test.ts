@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  flipReviewHref,
   parseReviewContext,
   pickQueueIds,
   queueSourceFor,
   reviewBackHref,
   reviewCrumbs,
   reviewHref,
+  sketchbookReviewHref,
 } from './review-context';
 
 const A = '11111111-1111-4111-8111-111111111111';
@@ -125,5 +127,15 @@ describe('queueSourceFor and pickQueueIds', () => {
 
   it('has no queue for practice opened without a context', () => {
     expect(queueSourceFor(parseReviewContext(params('')), null)).toBeNull();
+  });
+});
+
+describe('sketchbook and flip links', () => {
+  it('opens a sketchbook tile with its student and month', () => {
+    expect(sketchbookReviewHref('d1', S, '2026-09')).toBe(`/teacher/drawing-reviews/d1?from=sketchbook&student=${S}&month=2026-09`);
+    expect(sketchbookReviewHref('d1', S)).toBe(`/teacher/drawing-reviews/d1?from=sketchbook&student=${S}`);
+  });
+  it('opens a flip card with its classroom', () => {
+    expect(flipReviewHref('d1', C)).toBe(`/teacher/drawing-reviews/d1?from=flip&classroom=${C}`);
   });
 });

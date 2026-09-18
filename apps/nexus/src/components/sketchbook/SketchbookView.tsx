@@ -7,6 +7,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import RhythmCard from './RhythmCard';
 import SketchGrid, { type GridSketch } from './SketchGrid';
 import ThenAndNowCard from './ThenAndNowCard';
@@ -22,6 +23,7 @@ interface SketchbookViewProps {
   onMonthChange: (month: string) => void;
   onAdd?: () => void;
   onOptOutChange?: (optOut: boolean) => Promise<void>;
+  onShareOptOutChange?: (optOut: boolean) => Promise<void>;
 }
 
 function monthLabel(month: string): string {
@@ -37,12 +39,13 @@ function shiftMonth(month: string, by: number): string {
 
 /** The sketchbook home, shared by the student's own page and the teacher's peek. */
 export default function SketchbookView({
-  payload, loading, mode, hrefFor, month, onMonthChange, onAdd, onOptOutChange,
+  payload, loading, mode, hrefFor, month, onMonthChange, onAdd, onOptOutChange, onShareOptOutChange,
 }: SketchbookViewProps) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [menuEl, setMenuEl] = useState<null | HTMLElement>(null);
   const [savingOptOut, setSavingOptOut] = useState(false);
+  const [savingShare, setSavingShare] = useState(false);
 
   const todayIndex = useMemo(() => {
     const today = istDate(new Date());
@@ -66,7 +69,7 @@ export default function SketchbookView({
             {monthLabel(month)}
             {payload && !loading && (
               <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                {payload.sketches.length} {payload.sketches.length === 1 ? 'sketch' : 'sketches'}, {payload.practiceDaysThisMonth} practice {payload.practiceDaysThisMonth === 1 ? 'day' : 'days'}
+                {payload.sketches.length} {payload.sketches.length === 1 ? 'drawing' : 'drawings'}, {payload.practiceDaysThisMonth} practice {payload.practiceDaysThisMonth === 1 ? 'day' : 'days'}
               </Typography>
             )}
           </Typography>
@@ -74,25 +77,42 @@ export default function SketchbookView({
             <Box component="span" aria-hidden sx={{ fontSize: 20 }}>{'›'}</Box>
           </IconButton>
         </Box>
-        {mode === 'own' && onOptOutChange && (
+        {mode === 'own' && (onOptOutChange || onShareOptOutChange) && (
           <>
             <IconButton aria-label="Sketchbook options" onClick={(e) => setMenuEl(e.currentTarget)} sx={{ width: 48, height: 48 }}>
               <MoreVertIcon />
             </IconButton>
             <Menu anchorEl={menuEl} open={!!menuEl} onClose={() => setMenuEl(null)}>
-              <MenuItem
-                disabled={savingOptOut || !payload}
-                onClick={async () => {
-                  if (!payload) return;
-                  setSavingOptOut(true);
-                  try { await onOptOutChange(!payload.featureOptOut); } finally { setSavingOptOut(false); }
-                }}
-                sx={{ minHeight: 48 }}
-              >
-                <ListItemIcon><VisibilityOffOutlinedIcon /></ListItemIcon>
-                <ListItemText primary="Do not feature my sketches" secondary="Teachers can still see them." />
-                <Switch edge="end" checked={!!payload?.featureOptOut} inputProps={{ 'aria-label': 'Do not feature my sketches' }} />
-              </MenuItem>
+              {onOptOutChange && (
+                <MenuItem
+                  disabled={savingOptOut || !payload}
+                  onClick={async () => {
+                    if (!payload) return;
+                    setSavingOptOut(true);
+                    try { await onOptOutChange(!payload.featureOptOut); } finally { setSavingOptOut(false); }
+                  }}
+                  sx={{ minHeight: 48 }}
+                >
+                  <ListItemIcon><VisibilityOffOutlinedIcon /></ListItemIcon>
+                  <ListItemText primary="Do not feature my sketches" secondary="Teachers can still see them." />
+                  <Switch edge="end" checked={!!payload?.featureOptOut} inputProps={{ 'aria-label': 'Do not feature my sketches' }} />
+                </MenuItem>
+              )}
+              {onShareOptOutChange && (
+                <MenuItem
+                  disabled={savingShare || !payload}
+                  onClick={async () => {
+                    if (!payload) return;
+                    setSavingShare(true);
+                    try { await onShareOptOutChange(!payload.shareOptOut); } finally { setSavingShare(false); }
+                  }}
+                  sx={{ minHeight: 48 }}
+                >
+                  <ListItemIcon><CollectionsOutlinedIcon /></ListItemIcon>
+                  <ListItemText primary="Show my drawings in Inspiration" secondary="Your best drawings can help classmates. Your name shows with them." />
+                  <Switch edge="end" checked={!!payload && !payload.shareOptOut} inputProps={{ 'aria-label': 'Show my drawings in Inspiration' }} />
+                </MenuItem>
+              )}
             </Menu>
           </>
         )}
@@ -102,8 +122,9 @@ export default function SketchbookView({
         sketches={payload?.sketches ?? []}
         hrefFor={hrefFor}
         loading={loading}
-        emptyTitle={mode === 'own' ? 'Your sketchbook is empty' : 'No sketches this month'}
-        emptyDescription={mode === 'own' ? 'Draw anything for ten minutes and add it here. Small sketches count.' : 'Try an older month, or check back after the next class.'}
+        viewer={mode}
+        emptyTitle={mode === 'own' ? 'Your sketchbook is empty' : 'No drawings this month'}
+        emptyDescription={mode === 'own' ? 'Draw anything for ten minutes and add it here. Assignment drawings appear here on their own.' : 'Try an older month, or check back after the next class.'}
       />
 
       {mode === 'own' && onAdd && (

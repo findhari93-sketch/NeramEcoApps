@@ -102,3 +102,22 @@ export function summarizeReview(
   }
   return empty;
 }
+
+/** The review part of a tile's spoken label. Null when there is nothing to say. */
+export function reviewStateWords(
+  summary: ReviewSummary,
+  opts: { maxMarks: number | null; viewer: 'own' | 'teacher' },
+): string | null {
+  switch (summary.state) {
+    case 'reviewed':
+      if (summary.marks != null && opts.maxMarks) return `reviewed, ${summary.marks} of ${opts.maxMarks} marks`;
+      if (summary.rating) return `reviewed, ${summary.rating} stars`;
+      return 'reviewed';
+    case 'waiting':
+      return opts.viewer === 'own' ? 'waiting for your teacher' : 'waiting for review';
+    case 'redo':
+      return 'redo asked';
+    default:
+      return null;
+  }
+}

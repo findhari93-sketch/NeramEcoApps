@@ -21,6 +21,7 @@ import FlipThrough from './FlipThrough';
 const row = (id: string) => ({
   id, student_id: 's1', original_image_url: `https://x/${id}.jpg`, thumbnail_url: null, self_note: 'a chair',
   reaction: null, submitted_at: '2026-09-09T10:00:00.000Z', is_gallery_visible: false,
+  source_type: 'sketchbook', status: 'completed', assignment_id: null, reviewed_at: null,
   student: { id: 's1', name: 'Asha Rao', avatar_url: null, ms_oid: null },
   featured: [],
 });
@@ -58,5 +59,13 @@ describe('FlipThrough', () => {
     swr.mockReturnValue({ data: { sketches: [], remaining: 0 }, isLoading: false, mutate: vi.fn() });
     render(<FlipThrough classroomId="c1" />);
     expect(screen.getByText('You have flipped through everything.')).toBeTruthy();
+  });
+
+  it('opens the full review for the card on screen', () => {
+    swr.mockReturnValue({ data: { sketches: [row('11111111-1111-4111-8111-111111111111')], remaining: 0 }, isLoading: false, mutate: vi.fn() });
+    render(<FlipThrough classroomId="22222222-2222-4222-8222-222222222222" />);
+    expect(screen.getByRole('link', { name: 'Open review' }).getAttribute('href')).toBe(
+      '/teacher/drawing-reviews/11111111-1111-4111-8111-111111111111?from=flip&classroom=22222222-2222-4222-8222-222222222222',
+    );
   });
 });

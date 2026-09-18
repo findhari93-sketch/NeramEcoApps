@@ -6,6 +6,7 @@ import {
   isPracticeDrawing,
   opensForGrading,
   reviewKindOf,
+  reviewStateWords,
   summarizeReview,
   wasReviewedBefore,
 } from './drawing-source';
@@ -93,5 +94,17 @@ describe('summarizeReview', () => {
   });
   it('says redo and hides the grade for a redo round', () => {
     expect(summarizeReview({ source_type: 'question_bank', status: 'redo', reviewed_at: '2026-09-16T10:00:00Z', tutor_rating: 2 }, true)).toEqual({ state: 'redo', rating: null, marks: null });
+  });
+});
+
+describe('reviewStateWords', () => {
+  it('names stars, marks, waiting and redo in plain words', () => {
+    expect(reviewStateWords({ state: 'reviewed', rating: 4, marks: null }, { maxMarks: null, viewer: 'own' })).toBe('reviewed, 4 stars');
+    expect(reviewStateWords({ state: 'reviewed', rating: null, marks: 7 }, { maxMarks: 10, viewer: 'own' })).toBe('reviewed, 7 of 10 marks');
+    expect(reviewStateWords({ state: 'reviewed', rating: null, marks: null }, { maxMarks: null, viewer: 'own' })).toBe('reviewed');
+    expect(reviewStateWords({ state: 'waiting', rating: null, marks: null }, { maxMarks: null, viewer: 'own' })).toBe('waiting for your teacher');
+    expect(reviewStateWords({ state: 'waiting', rating: null, marks: null }, { maxMarks: null, viewer: 'teacher' })).toBe('waiting for review');
+    expect(reviewStateWords({ state: 'redo', rating: null, marks: null }, { maxMarks: null, viewer: 'own' })).toBe('redo asked');
+    expect(reviewStateWords({ state: 'none', rating: null, marks: null }, { maxMarks: null, viewer: 'own' })).toBeNull();
   });
 });

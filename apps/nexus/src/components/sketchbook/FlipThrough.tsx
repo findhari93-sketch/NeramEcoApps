@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, Button, Paper, Skeleton, Typography, EmptyState } from '@neram/ui';
+import Link from 'next/link';
+import { Box, Button, Chip, Paper, Skeleton, Typography, EmptyState } from '@neram/ui';
 import DoneAllOutlinedIcon from '@mui/icons-material/DoneAllOutlined';
 import type { SketchbookFeatureFact, SketchbookInboxRow } from '@neram/database/queries/nexus';
 import { useAuthSWR } from '@/lib/nexus-swr';
@@ -10,6 +11,8 @@ import { useNavBadges } from '@/components/NavBadgeProvider';
 import { useStudentStageFacts } from '@/components/students/StudentStageFactsProvider';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import type { StageKey } from '@/lib/student-stage';
+import { drawingSourceLabel } from '@/lib/drawing-source';
+import { flipReviewHref } from '@/lib/review-context';
 import { flipSketch } from './sketchbook-api';
 import TeacherSketchActions from './TeacherSketchActions';
 
@@ -21,6 +24,7 @@ const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'n
  * One sketch per screen. Buttons are the contract; arrow keys and 1/2/3 are
  * conveniences. A card on screen for 1.5 s is "seen" (the physical peek);
  * Next without a reaction is "skipped". The server never downgrades seen.
+ * Open review takes the card to the one review screen for stars, words and markup.
  */
 export default function FlipThrough({ classroomId }: { classroomId: string }) {
   const { getToken } = useNexusAuthContext();
@@ -84,9 +88,12 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
     <Paper elevation={0} sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 'min(70vh, 640px)' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5 }}>
         <StudentStageAvatar stage={stage} dormant={!!fact?.dormant} name={current.student.name} msOid={current.student.ms_oid} fallbackSrc={current.student.avatar_url} size={40} />
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.2 }} noWrap>{current.student.name || 'Student'}</Typography>
-          <Typography variant="caption" color="text.secondary">{fmt(current.submitted_at)}</Typography>
+        <Box sx={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.2 }} noWrap>{current.student.name || 'Student'}</Typography>
+            <Typography variant="caption" color="text.secondary">{fmt(current.submitted_at)}</Typography>
+          </Box>
+          {current.source_type !== 'sketchbook' && <Chip size="small" label={drawingSourceLabel(current.source_type)} sx={{ ml: 1, height: 24 }} />}
         </Box>
         <Typography variant="caption" color="text.secondary" aria-live="polite">{index + 1} of {list.length + (data.remaining || 0)}</Typography>
       </Box>
@@ -110,7 +117,8 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
         />
         <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
           <Button variant="text" disabled={index === 0} onClick={() => setIndex(index - 1)} sx={{ minHeight: 48 }}>Previous</Button>
-          <Button variant="contained" onClick={() => next()} sx={{ minHeight: 48, minWidth: 120 }}>Next</Button>
+          <Button component={Link} href={flipReviewHref(current.id, classroomId)} variant="outlined" sx={{ minHeight: 48 }}>Open review</Button>
+          <Button variant="contained" onClick={() => next()} sx={{ minHeight: 48, minWidth: 96 }}>Next</Button>
         </Box>
       </Box>
     </Paper>

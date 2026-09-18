@@ -53,6 +53,8 @@ interface DrawingSubmissionSheetProps {
   withThumbnail?: boolean;
   /** Copy overrides. The drawing module keeps its defaults. */
   title?: string;
+  /** A line under the title, e.g. why this sheet exists. */
+  intro?: string;
   noteLabel?: string;
   notePlaceholder?: string;
   noteMaxLength?: number;
@@ -62,7 +64,7 @@ interface DrawingSubmissionSheetProps {
 export default function DrawingSubmissionSheet({
   open, onClose, questionId, assignmentId, sourceType, redoFeedback, referenceImageUrl,
   redoVoice, onRedoVoiceProgress, getToken, onSubmitted,
-  submitUrl, submitBody, withThumbnail = false, title, noteLabel = 'Self-reflection note (optional)',
+  submitUrl, submitBody, withThumbnail = false, title, intro, noteLabel = 'Self-reflection note (optional)',
   notePlaceholder = 'e.g., I struggled with the shadow direction...', noteMaxLength, submitLabel,
 }: DrawingSubmissionSheetProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -270,6 +272,12 @@ export default function DrawingSubmissionSheet({
           </Typography>
           <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
         </Box>
+
+        {intro && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {intro}
+          </Typography>
+        )}
 
         {(redoFeedback || redoVoice) && (
           <Box

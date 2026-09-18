@@ -169,3 +169,15 @@ export function pickQueueIds(pick: 'sketchbook' | 'inbox' | 'exam', body: any): 
   }
   return ((body?.sketches ?? []) as Array<{ id: string }>).map((s) => s.id);
 }
+
+/** A tile in a student's sketchbook opens the review screen, and Back returns to that month. */
+export function sketchbookReviewHref(submissionId: string, studentId: string, month?: string | null): string {
+  const qs = new URLSearchParams({ from: 'sketchbook', student: studentId });
+  if (month) qs.set('month', month);
+  return reviewHref(submissionId, parseReviewContext(qs));
+}
+
+/** The flip-through card's "Open review". */
+export function flipReviewHref(submissionId: string, classroomId: string): string {
+  return reviewHref(submissionId, parseReviewContext(new URLSearchParams({ from: 'flip', classroom: classroomId })));
+}

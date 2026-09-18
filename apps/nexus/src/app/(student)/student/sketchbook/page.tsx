@@ -6,7 +6,7 @@ import { Box } from '@neram/ui';
 import PageHeader from '@/components/PageHeader';
 import SketchbookView from '@/components/sketchbook/SketchbookView';
 import AddSketchSheet from '@/components/sketchbook/AddSketchSheet';
-import { setOptOut } from '@/components/sketchbook/sketchbook-api';
+import { setOptOut, setShareOptOut } from '@/components/sketchbook/sketchbook-api';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { istDate } from '@/lib/sketchbook-rhythm';
@@ -33,6 +33,11 @@ export default function StudentSketchbookPage() {
     await mutate();
   }, [getToken, mutate]);
 
+  const onShareOptOutChange = useCallback(async (optOut: boolean) => {
+    await setShareOptOut(getToken, optOut);
+    await mutate();
+  }, [getToken, mutate]);
+
   return (
     <Box sx={{ pb: 10 }}>
       <PageHeader title="Sketchbook" subtitle="Draw often. Small sketches count." backHref="/student/dashboard" />
@@ -45,6 +50,7 @@ export default function StudentSketchbookPage() {
         hrefFor={(s) => `/student/sketchbook/${s.id}`}
         onAdd={() => setAdding(true)}
         onOptOutChange={onOptOutChange}
+        onShareOptOutChange={onShareOptOutChange}
       />
       <AddSketchSheet
         open={adding}
