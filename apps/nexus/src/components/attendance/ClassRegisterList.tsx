@@ -1,0 +1,290 @@
+'use client';
+
+/**
+ * Everyone in one class, in four groups, with the time each was in the room.
+ *
+ * The numbers are the filters: a teacher who reads "Missed, no reason 16" wants
+ * those sixteen, so the tile that says it is the button that shows them. One
+ * level, no tabs inside tabs.
+ */
+import { useMemo, useState } from 'react';
+import { Box, Collapse, Stack, Typography } from '@neram/ui';
+import StudentStageAvatar from '@/components/students/StudentStageAvatar';
+import StudentStatFilters, { type StatFilterTile } from '@/components/tests/StudentStatFilters';
+import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import { useStudentListView } from '@/components/students/list/useStudentListView';
+import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
+import { stageKeyOf } from '@/lib/student-stage';
+import { reasonShortLabel } from '@/lib/rsvp-reasons';
+import { matchTier, MatchTier } from '@/lib/people-search';
+import { RADIUS } from '@/components/timetable/timetable-theme';
+import { GROUP_LABEL, describePresence, type RegisterGroup } from '@/lib/attendance-register';
+import type { Insights, StudentInsight } from '@/components/timetable/attendance/types';
+import PresenceStrip from './PresenceStrip';
+import { formatClock } from './attendance-format';
+
+type TileKey = RegisterGroup | 'all';
+const SECTIONS: RegisterGroup[] = ['whole', 'partly', 'reason', 'no_reason'];
+
+const ACCESSORS: ListAccessors<StudentInsight> = {
+  id: (s) => s.id,
+  name: (s) => s.name,
+  joinedAt: (s) => s.enrolled_at,
+  dormant: (s) => s.dormant,
+};
+
+/**
+ * What a missed student told us, and who told us.
+ *
+ * The free text note, when there is one, says more than the category
+ * ("had fever" over "Unwell"), so it wins. That is the same preference
+ * describeReason already uses; this line just also names who said it and when.
+ */
+function missedLine(s: StudentInsight): string {
+  const absence = s.absence;
+  if (absence?.excused_at) return 'Excused by a teacher.';
+  const code = absence?.reason_code || (s.rsvp === 'not_attending' ? s.reason : null);
+  const note = absence?.reason_note?.trim();
+  if (!code && !note) return 'No reason given.';
+  const who = absence?.reason_source === 'parent' ? 'Parent said' : 'Said';
+  const when = s.rsvp === 'not_attending' ? 'in advance' : 'afterwards';
+  const label = note || (code ? reasonShortLabel(code) : 'Reason given');
+  return `${who} ${when}: ${label}.`;
+}
+
+/** How far a missed student has got with making it up. */
+function catchupLine(s: StudentInsight): string {
+  if (s.absence?.caught_up_at) return 'Caught up.';
+  if (s.absence?.recording_watched_at) return 'Watched the recording.';
+  return 'Recording not watched.';
+}
+
+export default function ClassRegisterList({
+  insights,
+  highlightStudentId,
+}: {
+  insights: Insights;
+  highlightStudentId: string | null;
+}) {
+  const [active, setActive] = useState<TileKey>('all');
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showLater, setShowLater] = useState(false);
+
+  const held = insights.summary.held;
+
+  /**
+   * The shared list: ranked search, the stage filter that matches the avatar
+   * rings, and the sort menu, exactly as every other full list of students in
+   * this app. The sections below group whatever survives it, so a search for one
+   * name still shows which group that student is in.
+   */
+  const view = useStudentListView<StudentInsight, 'suggested'>({
+    rows: insights.students,
+    accessors: ACCESSORS,
+    extraSorts: [suggestedOrder<StudentInsight>('Group order')],
+    defaultSort: 'suggested',
+    urlKeys: false,
+    storageKey: 'nexus:class-register:sort',
+  });
+
+  const byGroup = useMemo(() => {
+    const map: Record<RegisterGroup, StudentInsight[]> = {
+      whole: [], partly: [], reason: [], no_reason: [], joined_later: [],
+    };
+    const q = view.query.trim();
+    for (const s of view.shown) {
+      // The shared search tolerates a typo so a one-name lookup never comes back
+      // empty, which is right for a picker. Here the search box narrows a whole
+      // roster, so a fuzzy-only hit (matched on a different word than the one
+      // typed) reads as a bug, not a feature: typing "Student C" must not also
+      // surface "Student A". Every stronger tier still counts as a real match.
+      if (q && matchTier(s, q) === MatchTier.FUZZY) continue;
+      map[s.group].push(s);
+    }
+    // Shortest time in the room first: the people who were barely there head the
+    // list a teacher reads.
+    map.partly.sort((a, b) => a.minutesIn - b.minutesIn);
+    return map;
+  }, [view.shown, view.query]);
+
+  /**
+   * The tiles count the whole class, never the search results. "Missed, no
+   * reason 16" is a fact about the night, and a number that shrank as someone
+   * typed a name would stop being one.
+   */
+  const classTally = useMemo(() => {
+    const t: Record<RegisterGroup, number> = { whole: 0, partly: 0, reason: 0, no_reason: 0, joined_later: 0 };
+    for (const s of insights.students) t[s.group]++;
+    return t;
+  }, [insights.students]);
+
+  const tiles: StatFilterTile<TileKey>[] = [
+    { key: 'whole', label: 'Whole class', value: classTally.whole, hint: 'Stayed throughout', tone: 'success' },
+    { key: 'partly', label: 'Partly there', value: classTally.partly, hint: 'Late, early or stepped out', tone: 'warning' },
+    { key: 'reason', label: 'Missed, reason', value: classTally.reason, hint: 'Told us why', tone: 'info' },
+    { key: 'no_reason', label: 'Missed, no reason', value: classTally.no_reason, hint: 'Nothing said', tone: 'error' },
+  ];
+
+  const sections = SECTIONS.filter((g) => (active === 'all' || active === g) && byGroup[g].length > 0);
+
+  return (
+    <Box>
+      <StudentStatFilters<TileKey>
+        tiles={tiles}
+        active={active}
+        onChange={setActive}
+        allKey="all"
+        phoneLayout="grid"
+      />
+
+      <StudentListToolbar view={view} searchLabel="Find a student" />
+
+      {classTally.joined_later > 0 && (
+        <Box sx={{ mb: 1.5 }}>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setShowLater((v) => !v)}
+            sx={{
+              appearance: 'none',
+              border: 'none',
+              bgcolor: 'transparent',
+              font: 'inherit',
+              color: 'text.secondary',
+              p: 0,
+              minHeight: 44,
+              cursor: 'pointer',
+              textAlign: 'left',
+              '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+            }}
+          >
+            <Typography variant="caption">
+              {classTally.joined_later} joined the course after this class
+            </Typography>
+          </Box>
+          <Collapse in={showLater}>
+            <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+              {byGroup.joined_later.map((s) => (
+                <Typography key={s.id} variant="caption" color="text.secondary">
+                  {s.name}
+                </Typography>
+              ))}
+            </Stack>
+          </Collapse>
+        </Box>
+      )}
+
+      {sections.map((group) => (
+        <Box key={group} sx={{ mb: 2.5 }}>
+          <Typography
+            variant="caption"
+            sx={{ fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'text.secondary' }}
+          >
+            {GROUP_LABEL[group]}, {byGroup[group].length}
+          </Typography>
+
+          <Stack spacing={1} sx={{ mt: 1 }}>
+            {byGroup[group].map((s) => {
+              const present = group === 'whole' || group === 'partly';
+              // The same sentence the rules module writes everywhere else, so
+              // the register and the panel cannot word the same night differently.
+              const description = present
+                ? describePresence({
+                    minutesIn: s.minutesIn,
+                    segments: [],
+                    lateByMin: s.lateByMin,
+                    leftEarlyByMin: s.leftEarlyByMin,
+                    outMin: s.outMin,
+                    barelyThere: s.barelyAttended,
+                    timesKnown: s.segments.length > 0,
+                  })
+                : `${missedLine(s)} ${catchupLine(s)}`;
+
+              return (
+                <Box
+                  key={s.id}
+                  id={`student-${s.id}`}
+                  onClick={() => present && setExpanded(expanded === s.id ? null : s.id)}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: RADIUS.card,
+                    border: '1px solid',
+                    borderColor: highlightStudentId === s.id ? 'primary.main' : 'divider',
+                    bgcolor: 'background.paper',
+                    cursor: present ? 'pointer' : 'default',
+                    minHeight: 64,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.25,
+                      flexWrap: { xs: 'wrap', md: 'nowrap' },
+                    }}
+                  >
+                    <StudentStageAvatar
+                      userId={s.id}
+                      name={s.name}
+                      src={s.avatar_url}
+                      stage={stageKeyOf(s.study_stage)}
+                      size={32}
+                      tapToView={false}
+                    />
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', flex: 1, minWidth: 120 }} noWrap>
+                      {s.name}
+                    </Typography>
+                    {present && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ fontVariantNumeric: 'tabular-nums' }}
+                      >
+                        {s.minutesIn} of {held.minutes} min
+                      </Typography>
+                    )}
+                  </Box>
+
+                  {present && (
+                    <Box sx={{ mt: 1 }}>
+                      <PresenceStrip
+                        held={held}
+                        segments={s.segments}
+                        tone={group === 'whole' ? 'success' : 'warning'}
+                        label={`${s.name}, ${s.minutesIn} of ${held.minutes} min. ${description || 'Stayed the whole class.'}`}
+                      />
+                    </Box>
+                  )}
+
+                  {description && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                      {description}
+                    </Typography>
+                  )}
+
+                  {present && (
+                    <Collapse in={expanded === s.id}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        {s.segments.length
+                          ? s.segments.map((seg) => `in ${formatClock(seg.start)} to ${formatClock(seg.end)}`).join(', ')
+                          : 'Marked present by hand, no times.'}
+                      </Typography>
+                    </Collapse>
+                  )}
+                </Box>
+              );
+            })}
+          </Stack>
+        </Box>
+      ))}
+
+      {sections.length === 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
+          Nobody matches this filter.
+        </Typography>
+      )}
+
+      <PausedFootnote count={view.pausedHidden} />
+    </Box>
+  );
+}
