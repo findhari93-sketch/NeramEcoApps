@@ -276,3 +276,19 @@ describe('nav-config: Inspiration', () => {
     expect([...paths(panelBottomNav(teaching)), ...paths(panelOverflow(teaching))]).toContain('/teacher/inspiration');
   });
 });
+
+describe('nav-config: Drawing Reviews is retired', () => {
+  it('gives teachers no Drawing Reviews item, and Assignments in its bottom-bar slot', () => {
+    const teaching = PANELS.find((p) => p.id === 'teaching')!;
+    expect(teaching.sidebarItems.map((i) => i.path)).not.toContain('/teacher/drawing-reviews');
+    expect(teaching.bottomNavPaths).not.toContain('/teacher/drawing-reviews');
+    expect(teaching.bottomNavPaths).toContain('/teacher/assignments');
+  });
+
+  it('gives students no Drawings item in either zone', () => {
+    for (const zone of ZONES) {
+      const all = zone.navGroups.flatMap((g) => g.items.map((i) => i.path));
+      expect(all, `${zone.id} zone`).not.toContain('/student/drawings');
+    }
+  });
+});

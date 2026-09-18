@@ -321,3 +321,10 @@ describe('inspiration flags', () => {
     expect(featureForPath('/teacher/inspiration/saved')?.id).toBe('staff.inspiration');
   });
 });
+
+describe('Drawing Reviews retired', () => {
+  it('has no switch, so the one review screen can never be turned off', () => {
+    expect(FEATURES.find((f) => f.id === 'staff.drawing-reviews')).toBeUndefined();
+    expect(featureForPath('/teacher/drawing-reviews/abc')).toBeUndefined();
+  });
+});

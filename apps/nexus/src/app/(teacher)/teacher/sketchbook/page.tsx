@@ -8,10 +8,12 @@ import { useNavBadges } from '@/components/NavBadgeProvider';
 import FlipThrough from '@/components/sketchbook/FlipThrough';
 import ClassRhythmList from '@/components/sketchbook/ClassRhythmList';
 import { patchQuery, readSearch } from '@/lib/list-url-state';
+import { useDraftSweep } from '@/hooks/useDraftSweep';
 
 type View = 'flip' | 'rhythm';
 
 export default function TeacherSketchbookPage() {
+  useDraftSweep();
   const { activeClassroom } = useNexusAuthContext();
   const { getBadgeCount } = useNavBadges();
   const [tab, setTab] = useState<View>('flip');

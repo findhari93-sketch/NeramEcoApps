@@ -10,8 +10,9 @@ import { redirect } from 'next/navigation';
  * load or save anything.
  *
  * Kept as a redirect rather than deleted because the nav linked here before V2
- * and the URL may be bookmarked.
+ * and the URL may be bookmarked. Drawing Reviews was retired in turn
+ * (September 2026), so this goes to Sketchbooks.
  */
 export default function EvaluateRedirect() {
-  redirect('/teacher/drawing-reviews');
+  redirect('/teacher/sketchbook');
 }

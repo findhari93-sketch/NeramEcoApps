@@ -67,6 +67,7 @@ import ClassPickerField, {
 import { remindedAgo } from '@/lib/relative-time';
 import HeadphonesOutlinedIcon from '@mui/icons-material/HeadphonesOutlined';
 import { heardLabel, heardState } from '@/lib/voice-recording';
+import { useDraftSweep } from '@/hooks/useDraftSweep';
 
 interface AttachmentRow {
   id: string;
@@ -142,6 +143,7 @@ const ROSTER_ACCESSORS: ListAccessors<RosterPerson> = {
 const ROSTER_SORTS = [suggestedOrder<RosterPerson>('Suggested order')];
 
 export default function AssignmentReviewPage() {
+  useDraftSweep();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const authFetch = useAuthFetch();

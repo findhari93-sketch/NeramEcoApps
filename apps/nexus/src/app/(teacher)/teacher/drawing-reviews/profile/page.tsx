@@ -3,8 +3,9 @@
 /**
  * Your grading profile: what your corrections say, and the rules you keep.
  *
- * Entered from Drawing Reviews (header link) and from a rule under a criterion
- * while scoring. Back returns to Drawing Reviews.
+ * Entered from a rule under a criterion while scoring. Back returns to
+ * Sketchbooks (Drawing Reviews, its former header link, was retired in
+ * September 2026).
  *
  * Counts and plain sentences, never percentages; see
  * lib/drawing-grading-profile.ts for why. Rules can be removed here, and added
@@ -110,11 +111,11 @@ export default function GradingProfilePage() {
     <Box sx={{ px: { xs: 2, sm: 3 }, py: 2, maxWidth: 720, mx: 'auto' }}>
       <Button
         component={NextLink}
-        href="/teacher/drawing-reviews"
+        href="/teacher/sketchbook"
         startIcon={<ArrowBackIcon />}
         sx={{ minHeight: 44, textTransform: 'none', ml: -1, mb: 1 }}
       >
-        Drawing Reviews
+        Sketchbooks
       </Button>
 
       <Typography variant="h5" component="h1" fontWeight={700}>

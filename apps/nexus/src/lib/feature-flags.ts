@@ -158,7 +158,6 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.curriculum', label: 'Repository', surface: 'staff', group: 'Teaching', paths: ['/teacher/curriculum'], defaultEnabled: true },
   { id: 'staff.course-plans', label: 'Course Plans', surface: 'staff', group: 'Teaching', paths: ['/teacher/course-plans'], defaultEnabled: true },
   { id: 'staff.assignments', label: 'Assignments', surface: 'staff', group: 'Teaching', paths: ['/teacher/assignments'], defaultEnabled: true },
-  { id: 'staff.drawing-reviews', label: 'Drawing Reviews', surface: 'staff', group: 'Teaching', paths: ['/teacher/drawing-reviews'], defaultEnabled: true },
   { id: 'staff.sketchbook', label: 'Sketchbooks', surface: 'staff', group: 'Teaching', paths: ['/teacher/sketchbook'], defaultEnabled: true },
   { id: 'staff.inspiration', label: 'Inspiration', surface: 'staff', group: 'Teaching', paths: ['/teacher/inspiration'], defaultEnabled: true },
   // Behaviour switches, not pages. OFF until delivery is verified on

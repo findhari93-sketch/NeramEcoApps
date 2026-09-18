@@ -44,7 +44,6 @@ import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
-import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined';
@@ -189,7 +188,6 @@ export const PANELS: PanelConfig[] = [
       { label: 'Repository', path: '/teacher/curriculum', icon: <AutoStoriesOutlinedIcon />, group: 'Curriculum' },
       { label: 'Course Plans', path: COURSE_PLANS_PATH, icon: <PlaylistAddCheckOutlinedIcon />, group: 'Curriculum' },
       { label: 'Assignments', path: '/teacher/assignments', icon: <AssignmentTurnedInOutlinedIcon />, group: 'Student work' },
-      { label: 'Drawing Reviews', path: '/teacher/drawing-reviews', icon: <BrushOutlinedIcon />, group: 'Student work' },
       { label: 'Sketchbooks', path: '/teacher/sketchbook', icon: <AutoStoriesOutlinedIcon />, group: 'Student work' },
       { label: 'Inspiration', path: '/teacher/inspiration', icon: <CollectionsOutlinedIcon />, group: 'Student work' },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon />, group: 'Records' },
@@ -200,7 +198,7 @@ export const PANELS: PanelConfig[] = [
     bottomNavPaths: [
       '/teacher/dashboard',
       '/teacher/timetable',
-      '/teacher/drawing-reviews',
+      '/teacher/assignments',
       '/teacher/attendance',
     ],
   },
@@ -353,7 +351,6 @@ const CLASSROOM: ZoneConfig = {
       label: 'Practice',
       items: [
         { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
-        { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
         { label: 'Sketchbook', path: '/student/sketchbook', icon: <AutoStoriesOutlinedIcon /> },
         { label: 'Inspiration', path: INSPIRATION_PATH, icon: <CollectionsOutlinedIcon /> },
         { label: 'Recall', path: '/student/exam-recall', icon: <HistoryEduOutlinedIcon /> },

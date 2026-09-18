@@ -6,12 +6,12 @@
  * Most sheets are drafted the moment the student submits (the phone fires
  * /api/drawing/submissions/[id]/auto-draft). This catches everything else:
  * exam drawings, a phone that lost signal, a run that died, and every sheet
- * that was already waiting before automatic drafting existed. The Drawing
- * Reviews queue calls it once when it opens.
+ * that was already waiting before automatic drafting existed. The Sketchbooks
+ * page and an assignment's page call it (hooks/useDraftSweep).
  *
  * Deliberately not a cron, like the photo auto-check: a missing draft never
  * blocks anyone, a teacher can always review by hand, and the next teacher who
- * opens the queue clears a few more. Bounded per call so one request stays
+ * opens either page clears a few more. Bounded per call so one request stays
  * inside its time budget.
  *
  * Answers { processed, results: [{ id, state }], blocked }.

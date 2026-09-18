@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { listUnflipped } from '@neram/database/queries/nexus';
 import { getRequestUser } from '@/lib/study-materials';
 import { staffStudentIds } from '@/lib/sketchbook-access';
-import { heldSubmissionIds } from '@/lib/drawing-hold';
+import { countOwedDrawings } from '@/lib/owed-drawings';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /** How recently a reason has to have arrived to still count as news. */
@@ -44,42 +44,23 @@ export async function GET(request: NextRequest) {
       // long as Nexus is open, so its cost is paid forever, not once.
       const since = new Date(Date.now() - CATCHUP_BADGE_WINDOW_MS).toISOString();
 
-      const [issues, drawings, photoCount, freshReasons, sketchInbox] = await Promise.all([
+      const [issues, owed, photoCount, freshReasons, sketchInbox] = await Promise.all([
         // Count all open + in_progress issues
         supabase
           .from('nexus_foundation_issues')
           .select('id', { count: 'exact', head: true })
           .in('status', ['open', 'in_progress']),
 
-        // Drawings waiting on THIS teacher, in the classrooms they teach, minus
-        // anything they have already finished and are only holding.
-        //
-        // This used to count every submitted drawing in the tenant, across every
-        // source and every classroom: a number no single teacher could drive to
-        // zero, which the two badges beside it had already been fixed to avoid.
-        // Held reviews come off too. A held review keeps status 'submitted' so
-        // the student sees nothing, and counting it would leave work the teacher
-        // has finished looking like work they have not started.
-        //
-        // Sketchbook uploads insert as 'completed' and never reach this queue;
-        // the exclusion stays as belt-and-braces.
+        // Owed drawing work in the classrooms this teacher teaches: assignment
+        // drawings (Assignments badge) and test drawings (Exams badge). Practice
+        // never counts; see lib/owed-drawings.
         (async () => {
           try {
             const caller = await getRequestUser(request.headers.get('Authorization'));
             const students = await staffStudentIds(caller, null);
-            if (students.length === 0) return 0;
-            const { data: pending } = await supabase
-              .from('drawing_submissions')
-              .select('id')
-              .eq('status', 'submitted')
-              .neq('source_type', 'sketchbook')
-              .in('student_id', students);
-            const ids = ((pending ?? []) as Array<{ id: string }>).map((r) => r.id);
-            if (ids.length === 0) return 0;
-            const held = await heldSubmissionIds(supabase, ids);
-            return ids.length - held.size;
+            return await countOwedDrawings(supabase, students);
           } catch {
-            return 0;
+            return { assignment: 0, test: 0 };
           }
         })(),
 
@@ -137,7 +118,8 @@ export async function GET(request: NextRequest) {
       ]);
 
       badges.issues = issues.count ?? 0;
-      badges.drawing_reviews = typeof drawings === 'number' ? drawings : 0;
+      badges.assignment_drawings = owed.assignment;
+      badges.test_drawings = owed.test;
       badges.photo_review = typeof photoCount.data === 'number' ? photoCount.data : 0;
       badges.catchup = freshReasons.count ?? 0;
       badges.sketchbook_inbox = sketchInbox;
