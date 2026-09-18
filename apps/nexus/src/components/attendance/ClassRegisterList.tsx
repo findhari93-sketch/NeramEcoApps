@@ -7,7 +7,7 @@
  * those sixteen, so the tile that says it is the button that shows them. One
  * level, no tabs inside tabs.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Collapse, Stack, Typography, useMediaQuery } from '@neram/ui';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import StudentStatFilters, { type StatFilterTile } from '@/components/tests/StudentStatFilters';
@@ -17,13 +17,19 @@ import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
 import { stageKeyOf } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
 import { RADIUS, REDUCED_MOTION_QUERY } from '@/components/timetable/timetable-theme';
-import { GROUP_LABEL, describePresence, type RegisterGroup } from '@/lib/attendance-register';
+import { GROUP_LABEL, GROUP_ORDER, GROUP_TONE, describePresence, type RegisterGroup } from '@/lib/attendance-register';
 import type { Insights, StudentInsight } from '@/components/timetable/attendance/types';
 import PresenceStrip from './PresenceStrip';
 import { formatClock } from './attendance-format';
 
 type TileKey = RegisterGroup | 'all';
-const SECTIONS: RegisterGroup[] = ['whole', 'partly', 'reason', 'no_reason'];
+type SortKey = 'suggested' | 'least_time';
+// The shared rules module's own order, minus joined_later: that group is
+// never a section here, it is the collapsible note below the toolbar. Reusing
+// GROUP_ORDER rather than a second hand-written list is what stops this
+// screen and RegisterGrid's legend from being able to drift apart on the
+// order a teacher reads the four groups in.
+const SECTIONS: RegisterGroup[] = GROUP_ORDER.filter((g) => g !== 'joined_later');
 
 const ACCESSORS: ListAccessors<StudentInsight> = {
   id: (s) => s.id,
@@ -84,14 +90,31 @@ export default function ClassRegisterList({
    * this app. The sections below group whatever survives it, so a search for one
    * name still shows which group that student is in.
    */
-  const view = useStudentListView<StudentInsight, 'suggested'>({
+  const view = useStudentListView<StudentInsight, SortKey>({
     rows: insights.students,
     accessors: ACCESSORS,
-    extraSorts: [suggestedOrder<StudentInsight>('Group order')],
+    extraSorts: [
+      suggestedOrder<StudentInsight>('Group order'),
+      {
+        key: 'least_time',
+        label: 'Least time first',
+        compare: (a: StudentInsight, b: StudentInsight) => a.minutesIn - b.minutesIn,
+      },
+    ],
     defaultSort: 'suggested',
     urlKeys: false,
     storageKey: 'nexus:class-register:sort',
   });
+
+  // A grid cell links here with ?student=<id>, and the row highlights, but on
+  // a long class that row can land off screen with nothing to say it exists.
+  // Scrolling to it is the other half of that link: honouring the viewer's
+  // own reduced-motion preference the same way the Collapse timeout above does.
+  useEffect(() => {
+    if (!highlightStudentId) return;
+    const el = document.getElementById(`student-${highlightStudentId}`);
+    el?.scrollIntoView?.({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+  }, [highlightStudentId, prefersReducedMotion]);
 
   const byGroup = useMemo(() => {
     const map: Record<RegisterGroup, StudentInsight[]> = {
@@ -115,11 +138,13 @@ export default function ClassRegisterList({
     return t;
   }, [insights.students]);
 
+  // Tones read off the shared module rather than repeated here, so a tile and
+  // the register grid's own tint for the same group cannot drift apart.
   const tiles: StatFilterTile<TileKey>[] = [
-    { key: 'whole', label: 'Whole class', value: classTally.whole, hint: 'Stayed throughout', tone: 'success' },
-    { key: 'partly', label: 'Partly there', value: classTally.partly, hint: 'Late, early or stepped out', tone: 'warning' },
-    { key: 'reason', label: 'Missed, reason', value: classTally.reason, hint: 'Told us why', tone: 'info' },
-    { key: 'no_reason', label: 'Missed, no reason', value: classTally.no_reason, hint: 'Nothing said', tone: 'error' },
+    { key: 'whole', label: 'Whole class', value: classTally.whole, hint: 'Stayed throughout', tone: GROUP_TONE.whole },
+    { key: 'partly', label: 'Partly there', value: classTally.partly, hint: 'Late, early or stepped out', tone: GROUP_TONE.partly },
+    { key: 'reason', label: 'Missed, reason', value: classTally.reason, hint: 'Told us why', tone: GROUP_TONE.reason },
+    { key: 'no_reason', label: 'Missed, no reason', value: classTally.no_reason, hint: 'Nothing said', tone: GROUP_TONE.no_reason },
   ];
 
   const sections = SECTIONS.filter((g) => (active === 'all' || active === g) && byGroup[g].length > 0);

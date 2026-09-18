@@ -77,6 +77,38 @@ function ymdDaysAgo(ymd: string, days: number): string {
 }
 
 /**
+ * PostgREST caps a single request at 1,000 rows by default. Today's volumes
+ * (about 39 classes and 37 students over a 90 day range) sit comfortably
+ * under that, but a single unpaginated `.in(classIds)` truncates silently the
+ * day a classroom grows past it, and a truncated attendance read renders
+ * every missing row as a student who did not attend: the exact falsehood an
+ * unmeasured class was fixed to stop telling, reappearing through a different
+ * door. Paging the read, rather than detecting the cap and failing the whole
+ * register, is what keeps the screen working at any size instead of going
+ * blank the day a classroom crosses 1,000 rows.
+ */
+const PAGE_SIZE = 1000;
+// 20 pages is 20,000 rows: a guard against an infinite loop if a query ever
+// stopped shrinking, not a limit this range is expected to reach.
+const MAX_PAGES = 20;
+
+async function fetchAllPages(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: unknown }>,
+): Promise<any[]> {
+  const out: any[] = [];
+  let offset = 0;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await buildPage(offset, offset + PAGE_SIZE - 1);
+    if (error) throw error;
+    const rows = data || [];
+    out.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return out;
+}
+
+/**
  * Has this class finished?
  *
  * Nothing in production ever flips a past class to `completed`, so the status
@@ -127,41 +159,49 @@ export async function GET(request: NextRequest) {
     const classes = (rawClasses || []).filter((c: any) => hasEnded(c.scheduled_date, c.end_time, now));
     const classIds = classes.map((c: any) => c.id);
 
-    const empty = { data: [] as any[] };
-    const [{ members, counts: rosterCounts }, { data: attendance }, { data: absences }, { data: optOuts }] =
+    const [{ members, counts: rosterCounts }, attendance, absences, optOuts] =
       await Promise.all([
         loadClassroomRoster(classroomId, { client: supabase }),
         classIds.length
-          ? supabase
-              .from('nexus_attendance')
-              .select(
-                'scheduled_class_id, student_id, attended, joined_at, left_at, duration_minutes, attendance_intervals',
-              )
-              .in('scheduled_class_id', classIds)
-          : empty,
+          ? fetchAllPages((pageFrom, pageTo) =>
+              supabase
+                .from('nexus_attendance')
+                .select(
+                  'scheduled_class_id, student_id, attended, joined_at, left_at, duration_minutes, attendance_intervals',
+                )
+                .in('scheduled_class_id', classIds)
+                .range(pageFrom, pageTo),
+            )
+          : Promise.resolve([]),
         classIds.length
-          ? supabase
-              .from('nexus_class_absences')
-              .select(
-                'scheduled_class_id, student_id, kind, reason_code, reason_note, excused_at, caught_up_at',
-              )
-              .in('scheduled_class_id', classIds)
-          : empty,
+          ? fetchAllPages((pageFrom, pageTo) =>
+              supabase
+                .from('nexus_class_absences')
+                .select(
+                  'scheduled_class_id, student_id, kind, reason_code, reason_note, excused_at, caught_up_at',
+                )
+                .in('scheduled_class_id', classIds)
+                .range(pageFrom, pageTo),
+            )
+          : Promise.resolve([]),
         classIds.length
-          ? supabase
-              .from('nexus_class_rsvp')
-              .select('scheduled_class_id, student_id')
-              .eq('response', 'not_attending')
-              .in('scheduled_class_id', classIds)
-          : empty,
+          ? fetchAllPages((pageFrom, pageTo) =>
+              supabase
+                .from('nexus_class_rsvp')
+                .select('scheduled_class_id, student_id')
+                .eq('response', 'not_attending')
+                .in('scheduled_class_id', classIds)
+                .range(pageFrom, pageTo),
+            )
+          : Promise.resolve([]),
       ]);
 
     const key = (classId: string, studentId: string) => `${classId}:${studentId}`;
-    const attByKey = new Map<string, any>((attendance || []).map((a: any) => [key(a.scheduled_class_id, a.student_id), a]));
-    const absByKey = new Map<string, any>((absences || []).map((a: any) => [key(a.scheduled_class_id, a.student_id), a]));
-    const optByKey = new Set<string>((optOuts || []).map((o: any) => key(o.scheduled_class_id, o.student_id)));
+    const attByKey = new Map<string, any>(attendance.map((a: any) => [key(a.scheduled_class_id, a.student_id), a]));
+    const absByKey = new Map<string, any>(absences.map((a: any) => [key(a.scheduled_class_id, a.student_id), a]));
+    const optByKey = new Set<string>(optOuts.map((o: any) => key(o.scheduled_class_id, o.student_id)));
     const attByClass = new Map<string, any[]>();
-    for (const a of attendance || []) {
+    for (const a of attendance) {
       const list = attByClass.get(a.scheduled_class_id) || [];
       list.push(a);
       attByClass.set(a.scheduled_class_id, list);
@@ -179,7 +219,16 @@ export async function GET(request: NextRequest) {
       const counts = { whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 0 };
       const classCells: Record<string, RegisterCell> = {};
 
-      for (const m of members as any[]) {
+      // An unmeasured class (Teams attendance never read, or the read failed)
+      // has nothing to say about any student. The loop below is skipped
+      // entirely rather than run with every `attended` defaulting to false,
+      // which is what used to happen: it wrote a cell and a "no reason"
+      // count for every enrolled student, so a class that simply had not been
+      // synced yet rendered as its whole roster missing. No cell is written
+      // here, so RegisterGrid draws its "?" glyph and nothing below ever
+      // enters a percentage, matching a batch-excluded student's own
+      // no-cell treatment.
+      for (const m of measured ? (members as any[]) : []) {
         // A class limited to one batch is only about that batch's students. A
         // member with no batch_id at all is not in THIS batch, so they must be
         // excluded too: `m.batch_id !== cls.batch_id` alone handles that,

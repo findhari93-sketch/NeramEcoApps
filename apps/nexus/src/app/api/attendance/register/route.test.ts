@@ -18,6 +18,11 @@ const state = vi.hoisted(() => ({
   writes: [] as string[],
 }));
 
+// PostgREST's own default row cap, simulated so a fixture that forgets to
+// page a read fails the same way the real backend would: truncated at 1,000,
+// not an accidentally-complete result the mock made up.
+const SERVER_ROW_CAP = 1000;
+
 function builder(table: string) {
   const b: Record<string, unknown> = {};
   const rows = () => {
@@ -28,10 +33,18 @@ function builder(table: string) {
     if (table === 'users') return [{ id: 'staff-1', user_type: 'teacher', staff_role: 'teacher', can_teach: true }];
     return [];
   };
+  let rangeArgs: [number, number] | null = null;
   const chain = () => b;
   for (const method of ['select', 'eq', 'in', 'gte', 'lte', 'not', 'order', 'limit']) {
     b[method] = chain;
   }
+  // Records the page this call asked for, so `.then` below can slice like a
+  // real `.range()` would. A query that never calls `.range()` at all reads
+  // as page 0 of the server's own 1,000-row cap, exactly like production.
+  b.range = (from: number, to: number) => {
+    rangeArgs = [from, to];
+    return b;
+  };
   for (const method of ['insert', 'update', 'upsert', 'delete']) {
     b[method] = () => {
       state.writes.push(`${table}.${method}`);
@@ -40,8 +53,11 @@ function builder(table: string) {
   }
   b.maybeSingle = () => Promise.resolve({ data: rows()[0] ?? null, error: null });
   b.single = () => Promise.resolve({ data: rows()[0] ?? null, error: null });
-  b.then = (onFulfilled: (v: unknown) => unknown) =>
-    Promise.resolve({ data: rows(), error: null }).then(onFulfilled);
+  b.then = (onFulfilled: (v: unknown) => unknown) => {
+    const all = rows() as unknown[];
+    const [from, to] = rangeArgs ?? [0, SERVER_ROW_CAP - 1];
+    return Promise.resolve({ data: all.slice(from, to + 1), error: null }).then(onFulfilled);
+  };
   return b;
 }
 
@@ -191,6 +207,12 @@ describe('GET /api/attendance/register', () => {
       current_standard: null,
       user: { name: 'Student E', avatar_url: null },
     });
+    // Teams has read this class (a manual absence mark, in this fixture), so
+    // it is measured and the loop this test means to exercise actually runs.
+    // Without this row class-2 has none at all, which the Finding 1 fix now
+    // reads as "not synced yet" and skips entirely, which is a different
+    // scenario than the batch-scoping this test is about.
+    state.attendance.push({ scheduled_class_id: 'class-2', student_id: 'batchStudent', attended: false });
 
     const body = await (await call()).json();
     const cells = body.cells['class-2'];
@@ -242,4 +264,70 @@ describe('GET /api/attendance/register', () => {
   // skipped per the brief's own fallback instruction. What the route DOES
   // own, reporting `rosterCounts.dormant` as `paused_hidden`, is already
   // covered by 'says how many dormant students were hidden' above.
+
+  it('never reports a class with no attendance rows as its roster missing', async () => {
+    // Finding 1: a class whose Teams attendance was never read (or whose sync
+    // failed) used to hand every enrolled student a "no reason" cell, because
+    // `attended` defaults to false when there is no attendance row at all.
+    // A never-synced class is not the same fact as a room full of no-shows,
+    // and this is the fixture that would have caught the two being confused.
+    state.classes.push({
+      id: 'class-unsynced',
+      title: 'Never Read From Teams',
+      scheduled_date: '2026-09-10',
+      start_time: '19:00:00',
+      end_time: '20:30:00',
+      batch_id: null,
+      attendance_sync_status: null,
+    });
+    // Deliberately no state.attendance rows for class-unsynced.
+
+    const body = await (await call()).json();
+    const cls = body.classes.find((c: { id: string }) => c.id === 'class-unsynced');
+    expect(cls.measured).toBe(false);
+    expect(cls.held).toBe(null);
+    // No cell claims a group for anybody on this class: not "no reason",
+    // not any of the other four. The column has nothing to say.
+    expect(body.cells['class-unsynced']).toEqual({});
+    // Its own counts stay at zero rather than a roster's worth of "no reason".
+    expect(cls.counts).toEqual({ whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 0 });
+    // And it never enters anybody's percentage: the always-attending
+    // 'stayed' student's rate is unaffected by the unsynced class existing.
+    const stayed = body.students.find((s: { id: string }) => s.id === 'stayed');
+    expect(stayed.counted).toBe(1);
+    expect(stayed.rate).toBe(100);
+  });
+
+  it('pages an attendance read past the row cap instead of truncating it', async () => {
+    // Finding 3: a single unpaginated `.in(classIds)` truncates silently at
+    // PostgREST's 1,000-row default, and a truncated read renders every
+    // missing row as a student who did not attend, the same falsehood
+    // Finding 1 fixed for an unmeasured class. The mock's `.then` caps an
+    // un-ranged read at that same 1,000, exactly like the real backend, so
+    // this fixture would fail if the route ever went back to one bare `.in()`.
+    const bulk = Array.from({ length: 1200 }, (_, i) => ({
+      scheduled_class_id: 'class-1',
+      student_id: `bulk-${i}`,
+      attended: true,
+      joined_at: '2026-09-15T13:32:00Z',
+      left_at: '2026-09-15T14:40:00Z',
+      attendance_intervals: [{ joinDateTime: '2026-09-15T13:32:00Z', leaveDateTime: '2026-09-15T14:40:00Z' }],
+    }));
+    state.attendance = bulk;
+    state.members = bulk.map((a) => ({
+      user_id: a.student_id,
+      enrolled_at: '2026-06-01T00:00:00Z',
+      batch_id: null,
+      current_standard: null,
+      user: { name: a.student_id, avatar_url: null },
+    }));
+
+    const body = await (await call()).json();
+    const cells = body.cells['class-1'];
+    expect(Object.keys(cells).length).toBe(1200);
+    // The 1,001st and last rows are exactly the ones a single-page read
+    // would have dropped.
+    expect(cells['bulk-1000'].g).toBe('whole');
+    expect(cells['bulk-1199'].g).toBe('whole');
+  });
 });

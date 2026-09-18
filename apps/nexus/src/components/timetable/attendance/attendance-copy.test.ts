@@ -41,6 +41,7 @@ function insights(students: StudentInsight[]): Insights {
       attendance_synced_at: null,
       has_meeting: true,
       teams_meeting_id: null,
+      measured: true,
     },
     summary: {
       rosterSize: students.length,

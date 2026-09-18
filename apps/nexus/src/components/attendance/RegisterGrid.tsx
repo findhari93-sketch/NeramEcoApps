@@ -17,7 +17,7 @@ import { useStudentListView } from '@/components/students/list/useStudentListVie
 import { stageKeyOf } from '@/lib/student-stage';
 import type { ListAccessors } from '@/lib/student-list-view';
 import { RADIUS } from '@/components/timetable/timetable-theme';
-import { GROUP_LABEL, GROUP_LETTER, type RegisterGroup } from '@/lib/attendance-register';
+import { GROUP_LABEL, GROUP_LETTER, GROUP_ORDER, type RegisterGroup } from '@/lib/attendance-register';
 import type { RegisterCell, RegisterResponse, RegisterStudent } from '@/app/api/attendance/register/route';
 import { formatClassDate } from './attendance-format';
 
@@ -95,9 +95,19 @@ function splitClassDate(ymd: string): { weekday: string; dayMonth: string } {
     : { weekday: full.slice(0, spaceAt), dayMonth: full.slice(spaceAt + 1) };
 }
 
-/** "partly there, 45 min, left 25 min early" */
-function describeCell(cell: RegisterCell | undefined): string {
-  if (!cell) return 'nothing recorded';
+/**
+ * "partly there, 45 min, left 25 min early"
+ *
+ * A cell can be missing for two different reasons, and they must not read the
+ * same: an unmeasured class has nothing recorded for anybody (the whole
+ * column is a "?"), while a measured class can still have no cell for one
+ * student because a batch-scoped class simply is not about them. "Nothing
+ * recorded" used to cover both, which told a batch-excluded student's teacher
+ * that a reading had been attempted and come back empty, rather than that the
+ * student was never in scope for this class at all.
+ */
+function describeCell(cell: RegisterCell | undefined, measured: boolean): string {
+  if (!cell) return measured ? 'not part of this class' : 'attendance not read from Teams yet';
   const bits = [GROUP_LABEL[cell.g].toLowerCase()];
   if (cell.min != null) bits.push(`${cell.min} min`);
   if (cell.late) bits.push(`joined ${cell.late} min late`);
@@ -287,7 +297,7 @@ export default function RegisterGrid({
                       <Box
                         component={Link}
                         href={`${classHref(cls.id)}${classHref(cls.id).includes('?') ? '&' : '?'}student=${student.id}`}
-                        aria-label={`${student.name}, ${formatClassDate(cls.scheduled_date)}: ${describeCell(cell)}`}
+                        aria-label={`${student.name}, ${formatClassDate(cls.scheduled_date)}: ${describeCell(cell, cls.measured)}`}
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
@@ -336,7 +346,7 @@ export default function RegisterGrid({
       )}
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
-        {(['whole', 'partly', 'reason', 'no_reason', 'joined_later'] as RegisterGroup[]).map((g) => (
+        {GROUP_ORDER.map((g) => (
           <Typography
             key={g}
             variant="caption"

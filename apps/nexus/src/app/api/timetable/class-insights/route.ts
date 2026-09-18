@@ -114,6 +114,14 @@ export async function GET(request: NextRequest) {
           .eq('scheduled_class_id', classId),
       ]);
 
+    // Whether Teams attendance has been read for this class at all, the same
+    // test the register endpoint uses. A class with zero attendance rows has
+    // nothing to say about any student, and without this the class screen
+    // computed a group for every roster member anyway (everyone `attended:
+    // false`, defaulting most of them into "missed, no reason"), rendering a
+    // class that simply had not synced yet as its whole roster missing.
+    const measured = (attendance || []).length > 0;
+
     // How long the class was booked for, and how long it actually ran. The
     // second is what every flag below is measured against.
     const held = sessionWindow(cls, attendance || []);
@@ -280,6 +288,7 @@ export async function GET(request: NextRequest) {
         // The id itself, not just whether one exists: the class screen mounts
         // ClassAttendanceDialog, whose Sync button needs the real meeting id.
         teams_meeting_id: cls.teams_meeting_id ?? null,
+        measured,
       },
       summary: {
         rosterSize,

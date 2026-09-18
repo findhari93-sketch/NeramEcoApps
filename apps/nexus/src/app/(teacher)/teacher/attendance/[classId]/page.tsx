@@ -187,13 +187,32 @@ function ClassRegisterPageContent() {
         </Stack>
       )}
 
-      {data.class.attendance_sync_message && (
-        <Alert severity="warning" sx={{ borderRadius: 2, mb: 2 }}>
-          {data.class.attendance_sync_message}
+      {/*
+        A class that has not been synced yet (or whose sync failed) has no
+        cell to draw. The `attendance_sync_message` Alert below only fires
+        when a sync was attempted and failed (`attendance_sync_status` set
+        and not 'ok'), so a never-synced class, whose status column is null,
+        used to fall straight through to ClassRegisterList and render every
+        roster member as missed with no reason. Gating on `measured` instead
+        covers both: never-synced (generic message here) and failed-sync
+        (the specific reason, still shown).
+      */}
+      {!data.class.measured ? (
+        <Alert severity="info" sx={{ borderRadius: 2, mb: 2 }}>
+          {data.class.attendance_sync_message ||
+            'Attendance has not been read from Teams for this class yet. Nobody here is marked present or missed until it has synced.'}
         </Alert>
-      )}
+      ) : (
+        <>
+          {data.class.attendance_sync_message && (
+            <Alert severity="warning" sx={{ borderRadius: 2, mb: 2 }}>
+              {data.class.attendance_sync_message}
+            </Alert>
+          )}
 
-      <ClassRegisterList insights={data} highlightStudentId={highlight} />
+          <ClassRegisterList insights={data} highlightStudentId={highlight} />
+        </>
+      )}
 
       {activeClassroom && (
         <ClassAttendanceDialog

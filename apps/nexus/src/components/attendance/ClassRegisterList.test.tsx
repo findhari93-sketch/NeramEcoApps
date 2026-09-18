@@ -177,4 +177,103 @@ describe('ClassRegisterList', () => {
 
     window.matchMedia = original;
   });
+
+  it('scrolls the highlighted student into view, smoothly, when the viewer has no motion preference', () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    // A grid cell links here with ?student=<id>; on a long class list the
+    // highlighted row can land off screen with nothing pointing at it.
+    render(<ClassRegisterList insights={INSIGHTS} highlightStudentId="b" />);
+
+    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+    Element.prototype.scrollIntoView = original;
+  });
+
+  it('scrolls to the highlighted student without animating, for a viewer who asked for reduced motion', () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('prefers-reduced-motion'),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => true,
+    })) as unknown as typeof window.matchMedia;
+
+    const scrollIntoView = vi.fn();
+    const originalScroll = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    render(<ClassRegisterList insights={INSIGHTS} highlightStudentId="b" />);
+
+    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'auto' }));
+
+    Element.prototype.scrollIntoView = originalScroll;
+    window.matchMedia = original;
+  });
+
+  it('does not scroll when nobody is highlighted', () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    render(<ClassRegisterList insights={INSIGHTS} highlightStudentId={null} />);
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    Element.prototype.scrollIntoView = original;
+  });
+
+  it('shows barely there on a present student row, since the rules compute it but nothing surfaced it', () => {
+    const withBarelyThere = {
+      ...INSIGHTS,
+      students: [
+        ...INSIGHTS.students,
+        student({
+          id: 'g',
+          name: 'Farhan Sheikh',
+          attended: true,
+          minutesIn: 8,
+          barelyAttended: true,
+          group: 'whole',
+          segments: [{ start: '2026-09-15T13:30:00.000Z', end: '2026-09-15T13:38:00.000Z' }],
+        }),
+      ],
+    } as unknown as Insights;
+
+    render(<ClassRegisterList insights={withBarelyThere} highlightStudentId={null} />);
+
+    expect(screen.getByText('Farhan Sheikh')).toBeTruthy();
+    expect(screen.getByText(/Barely there/)).toBeTruthy();
+  });
+
+  it('offers "Least time first" as a sort, ordering a group by time in the room', () => {
+    const withShorterWhole = {
+      ...INSIGHTS,
+      students: [
+        ...INSIGHTS.students,
+        student({
+          id: 'h',
+          name: 'Divya Menon',
+          attended: true,
+          minutesIn: 30,
+          group: 'whole',
+          segments: [{ start: '2026-09-15T13:30:00.000Z', end: '2026-09-15T14:00:00.000Z' }],
+        }),
+      ],
+    } as unknown as Insights;
+
+    render(<ClassRegisterList insights={withShorterWhole} highlightStudentId={null} />);
+
+    fireEvent.click(screen.getByTestId('list-sort-button'));
+    fireEvent.click(screen.getByText('Least time first'));
+
+    // Ananya Iyer (70 min) and Divya Menon (30 min) are both in "Stayed the
+    // whole class"; sorted by least time first, the shorter one leads.
+    const names = screen.getAllByText(/Ananya Iyer|Divya Menon/).map((el) => el.textContent);
+    expect(names.indexOf('Divya Menon')).toBeLessThan(names.indexOf('Ananya Iyer'));
+  });
 });

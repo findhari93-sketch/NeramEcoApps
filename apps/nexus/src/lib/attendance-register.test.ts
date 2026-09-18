@@ -239,6 +239,18 @@ describe('describePresence', () => {
       describePresence({ minutesIn: 0, segments: [], lateByMin: 0, leftEarlyByMin: 0, outMin: 0, barelyThere: false, timesKnown: false }),
     ).toBe('Marked present by hand, no times.');
   });
+
+  it('mentions barely there on its own, since presenceOf computes it but nothing printed it', () => {
+    expect(
+      describePresence({ minutesIn: 8, segments: [], lateByMin: 0, leftEarlyByMin: 0, outMin: 0, barelyThere: true, timesKnown: true }),
+    ).toBe('Barely there.');
+  });
+
+  it('adds barely there after the other flags, not in place of them', () => {
+    expect(
+      describePresence({ minutesIn: 8, segments: [], lateByMin: 24, leftEarlyByMin: 0, outMin: 0, barelyThere: true, timesKnown: true }),
+    ).toBe('Joined 24 min late. Barely there.');
+  });
 });
 
 describe('the class-insights regression', () => {

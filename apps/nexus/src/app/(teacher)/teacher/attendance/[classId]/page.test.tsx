@@ -35,6 +35,7 @@ const INSIGHTS = {
     attendance_sync_message: null,
     has_meeting: true,
     teams_meeting_id: 'meeting-1',
+    measured: true,
   },
   summary: {
     held: { start: '2026-09-15T13:30:00.000Z', end: '2026-09-15T14:40:00.000Z', source: 'observed', minutes: 70 },
@@ -113,5 +114,64 @@ describe('ClassRegisterPage, neighbouring classes', () => {
     expect(screen.queryByText(/class \d+ of \d+/)).toBe(null);
     expect(screen.queryByRole('link', { name: 'Previous class' })).toBe(null);
     expect(screen.queryByRole('link', { name: 'Next class' })).toBe(null);
+  });
+});
+
+describe('ClassRegisterPage, a class attendance has not been read for', () => {
+  // Finding 1: the class screen used to compute a group for every roster
+  // member off an empty attendance table (everyone `attended: false`),
+  // rendering four tiles where everyone read as missed. The old warning Alert
+  // only fired when `attendance_sync_status` was set and not 'ok', so a
+  // class that simply had never synced (status null) fell straight through
+  // it. Gating on `measured` instead covers that class too.
+  it('says attendance has not been read, instead of every student, when nothing has synced', () => {
+    const unmeasured = {
+      ...INSIGHTS,
+      class: { ...INSIGHTS.class, measured: false, attendance_sync_message: null },
+    } as unknown as Insights;
+    mocks.authSWR.mockImplementation((key: string | null) => {
+      if (!key) return { data: undefined, error: undefined, isLoading: false };
+      if (key.includes('/api/timetable/class-insights')) {
+        return { data: unmeasured, error: undefined, isLoading: false };
+      }
+      if (key.includes('/api/attendance/register')) {
+        return { data: registerWith(['c2']), error: undefined, isLoading: false };
+      }
+      return { data: undefined, error: undefined, isLoading: true };
+    });
+
+    render(<ClassRegisterPage />);
+
+    expect(screen.getByText(/Attendance has not been read from Teams for this class yet/)).toBeTruthy();
+    // No group tile renders at all: this is not "everyone missed", it is
+    // "nothing is known yet".
+    expect(screen.queryByTestId('stat-tile-whole')).toBe(null);
+    expect(screen.queryByTestId('stat-tile-no_reason')).toBe(null);
+  });
+
+  it('shows the specific sync failure reason instead of the generic message, when one exists', () => {
+    const failed = {
+      ...INSIGHTS,
+      class: {
+        ...INSIGHTS.class,
+        measured: false,
+        attendance_sync_message: 'Teams has not published an attendance report for this class yet.',
+      },
+    } as unknown as Insights;
+    mocks.authSWR.mockImplementation((key: string | null) => {
+      if (!key) return { data: undefined, error: undefined, isLoading: false };
+      if (key.includes('/api/timetable/class-insights')) {
+        return { data: failed, error: undefined, isLoading: false };
+      }
+      if (key.includes('/api/attendance/register')) {
+        return { data: registerWith(['c2']), error: undefined, isLoading: false };
+      }
+      return { data: undefined, error: undefined, isLoading: true };
+    });
+
+    render(<ClassRegisterPage />);
+
+    expect(screen.getByText('Teams has not published an attendance report for this class yet.')).toBeTruthy();
+    expect(screen.queryByTestId('stat-tile-whole')).toBe(null);
   });
 });

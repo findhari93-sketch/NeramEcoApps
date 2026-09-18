@@ -277,5 +277,9 @@ export function describePresence(presence: Presence): string {
   if (presence.lateByMin > 0) parts.push(`Joined ${presence.lateByMin} min late`);
   if (presence.leftEarlyByMin > 0) parts.push(`Left ${presence.leftEarlyByMin} min early`);
   if (presence.outMin > 0) parts.push(`Stepped out ${presence.outMin} min`);
+  // Last, because it is a summary judgement about the total ("barely there"
+  // at all) rather than a fact about one edge of the window the way the three
+  // above are. Computed by the rules but never printed anywhere until now.
+  if (presence.barelyThere) parts.push('Barely there');
   return parts.length ? `${parts.join('. ')}.` : '';
 }

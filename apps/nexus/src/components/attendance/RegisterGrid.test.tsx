@@ -191,4 +191,70 @@ describe('RegisterGrid', () => {
     expect(screen.getByText('Nobody matches this filter.')).toBeTruthy();
     expect(screen.queryByRole('table')).toBe(null);
   });
+
+  it('draws an unmeasured class as a column of "?", not a column of X, and says why', () => {
+    // Finding 1: a class the register endpoint has not written any cells for
+    // (Teams attendance never read) must read as unknown, not as a class where
+    // everyone missed. No cell in data.cells for this class is the fixture
+    // that matches what route.ts now actually sends for one.
+    const unmeasured: RegisterResponse = {
+      ...DATA,
+      classes: [
+        {
+          id: 'class-unsynced',
+          title: 'Never Read From Teams',
+          scheduled_date: '2026-09-16',
+          start_time: '19:00:00',
+          end_time: '20:30:00',
+          held: null,
+          measured: false,
+          sync_status: null,
+          counts: { whole: 0, partly: 0, reason: 0, noReason: 0, joinedLater: 0 },
+        },
+      ],
+      cells: { 'class-unsynced': {} },
+    };
+    render(<RegisterGrid data={unmeasured} classHref={(id) => `/teacher/attendance/${id}`} />);
+
+    const grid = within(screen.getByRole('table'));
+    // Every one of the four students gets the "?" glyph, never the "missed,
+    // no reason" X a defaulted `attended: false` used to produce.
+    expect(grid.getAllByText('?').length).toBe(DATA.students.length);
+    expect(grid.queryByText('X')).toBe(null);
+    expect(
+      screen.getByLabelText(/Student A, Wed 16 Sep: attendance not read from Teams yet/i),
+    ).toBeTruthy();
+  });
+
+  it('gives a batch-excluded student different wording than an unmeasured class, for the same blank cell', () => {
+    // Finding 1's wording half: a measured class can still have no cell for
+    // one student because a batch-scoped class was never about them. That is
+    // a different fact from "Teams has not been read yet" and must not share
+    // its sentence.
+    const batchScoped: RegisterResponse = {
+      ...DATA,
+      classes: [
+        {
+          id: 'class-batch',
+          title: 'Batch Only Session',
+          scheduled_date: '2026-09-14',
+          start_time: '19:00:00',
+          end_time: '20:30:00',
+          held: { start: '2026-09-14T13:30:00.000Z', end: '2026-09-14T14:40:00.000Z', source: 'observed', minutes: 70 },
+          measured: true,
+          sync_status: 'ok',
+          counts: { whole: 1, partly: 0, reason: 0, noReason: 0, joinedLater: 0 },
+        },
+      ],
+      // Only s1 (Student A) belongs to this class's batch; s2-s4 get no cell
+      // even though the class itself was measured.
+      cells: { 'class-batch': { s1: { g: 'whole', min: 70 } } },
+    };
+    render(<RegisterGrid data={batchScoped} classHref={(id) => `/teacher/attendance/${id}`} />);
+
+    expect(
+      screen.getByLabelText(/Student B, Mon 14 Sep: not part of this class/i),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText(/Student B, Mon 14 Sep: attendance not read from Teams yet/i)).toBe(null);
+  });
 });

@@ -166,6 +166,9 @@ export interface Insights {
     attendance_sync_message?: string | null;
     has_meeting: boolean;
     teams_meeting_id: string | null;
+    /** Whether Teams attendance has been read for this class at all. False for
+     *  a class that ended but has not synced yet, or whose sync failed. */
+    measured: boolean;
   };
   summary: {
     rosterSize: number;
