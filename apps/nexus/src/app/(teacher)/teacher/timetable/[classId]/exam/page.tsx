@@ -23,6 +23,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ExamInvigilationRoster from '@/components/scheduled-exams/ExamInvigilationRoster';
 import ExamResultsSheet from '@/components/scheduled-exams/ExamResultsSheet';
+import { readSearch, patchQuery } from '@/lib/list-url-state';
 
 /**
  * One exam, from the teacher's side.
@@ -73,6 +74,15 @@ export default function TeacherExamPage() {
   const [makeupReason, setMakeupReason] = useState('');
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+
+  // Back from marking a drawing lands here with ?results=1, which reopens the
+  // results sheet the teacher left. The flag is removed so a refresh does not.
+  useEffect(() => {
+    if (new URLSearchParams(readSearch()).get('results') === '1') {
+      setPublishOpen(true);
+      patchQuery({ results: null });
+    }
+  }, []);
 
   const authFetch = useCallback(
     async (url: string, init?: RequestInit) => {
@@ -298,6 +308,7 @@ export default function TeacherExamPage() {
         open={publishOpen}
         onClose={() => setPublishOpen(false)}
         examId={exam.id}
+        classId={String(params.classId)}
         onPublished={load}
       />
 

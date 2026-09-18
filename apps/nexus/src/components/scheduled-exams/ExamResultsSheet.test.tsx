@@ -5,6 +5,7 @@ import ExamResultsSheet from './ExamResultsSheet';
 vi.mock('@/hooks/useNexusAuth', () => ({
   useNexusAuthContext: () => ({ getTeacherToken: async () => 'test_token' }),
 }));
+vi.mock('./ExamDrawingsToMark', () => ({ default: () => null }));
 
 const PAYLOAD = {
   data: {

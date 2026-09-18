@@ -20,6 +20,7 @@ import {
 } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import ExamDrawingsToMark from './ExamDrawingsToMark';
 
 /**
  * A teacher's results screen for one exam: two sittings, ranked separately.
@@ -42,6 +43,9 @@ import StudentAvatar from '@/components/students/StudentAvatar';
  * The channel hears about an exam once. A republish exists to add the second
  * sitting, and that sitting is deliberately never announced, so once the exam
  * has been announced the whole Teams half of the sheet disappears.
+ *
+ * Drawings to mark sits at the top: a results screen is where a teacher finds
+ * out a drawing is still unmarked.
  */
 
 interface PreviewSection {
@@ -129,11 +133,13 @@ export default function ExamResultsSheet({
   open,
   onClose,
   examId,
+  classId = null,
   onPublished,
 }: {
   open: boolean;
   onClose: () => void;
   examId: string;
+  classId?: string | null;
   onPublished?: () => void;
 }) {
   const theme = useTheme();
@@ -350,6 +356,7 @@ export default function ExamResultsSheet({
       </DialogTitle>
 
       <DialogContent dividers>
+        <ExamDrawingsToMark examId={examId} classId={classId} open={open} />
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
             <CircularProgress size={28} />
