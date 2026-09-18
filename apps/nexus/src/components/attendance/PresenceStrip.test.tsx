@@ -39,4 +39,39 @@ describe('PresenceStrip', () => {
     render(<PresenceStrip held={HELD} segments={[]} tone="warning" label="No time recorded" />);
     expect(screen.getByLabelText('No time recorded')).toBeTruthy();
   });
+
+  it('handles malformed dates gracefully', () => {
+    const { container } = render(
+      <PresenceStrip
+        held={{ start: 'invalid-date', end: 'also-invalid' }}
+        segments={[{ start: '2026-09-15T14:05:00.000Z', end: '2026-09-15T14:40:00.000Z' }]}
+        tone="warning"
+        label="Date parsing failed"
+      />,
+    );
+    expect(container.querySelectorAll('[data-segment]').length).toBe(0);
+    const segments = container.querySelectorAll('[data-segment]');
+    segments.forEach((seg) => {
+      const style = (seg as HTMLElement).style;
+      expect(style.left).not.toContain('NaN');
+      expect(style.width).not.toContain('NaN');
+    });
+  });
+
+  it('renders very short segments with minimum width', () => {
+    const { container } = render(
+      <PresenceStrip
+        held={HELD}
+        segments={[
+          { start: '2026-09-15T13:30:30.000Z', end: '2026-09-15T13:32:00.000Z' },
+        ]}
+        tone="success"
+        label="90 seconds in 70 minute class"
+      />,
+    );
+    const seg = container.querySelector('[data-segment]') as HTMLElement;
+    const width = parseFloat(seg.style.width);
+    expect(width).toBeGreaterThan(0);
+    expect(width).toBeGreaterThanOrEqual(2);
+  });
 });

@@ -24,10 +24,23 @@ export default function PresenceStrip({
   const theme = useTheme();
   const startMs = Date.parse(held.start);
   const endMs = Date.parse(held.end);
-  const span = Math.max(1, endMs - startMs);
+
+  const isValidWindow = !isNaN(startMs) && !isNaN(endMs);
+  const span = isValidWindow ? Math.max(1, endMs - startMs) : 1;
   const color = tone === 'success' ? theme.palette.success.main : theme.palette.warning.main;
 
-  const pct = (ms: number) => `${Math.max(0, Math.min(100, ((ms - startMs) / span) * 100))}%`;
+  const pct = (ms: number) => {
+    if (isNaN(ms)) return '0%';
+    return `${Math.max(0, Math.min(100, ((ms - startMs) / span) * 100))}%`;
+  };
+
+  const validSegments = isValidWindow
+    ? segments.filter((s) => {
+        const sStart = Date.parse(s.start);
+        const sEnd = Date.parse(s.end);
+        return !isNaN(sStart) && !isNaN(sEnd);
+      })
+    : [];
 
   return (
     <Box
@@ -42,16 +55,22 @@ export default function PresenceStrip({
         overflow: 'hidden',
       }}
     >
-      {segments.map((s) => {
+      {validSegments.map((s) => {
         const left = pct(Date.parse(s.start));
         const right = pct(Date.parse(s.end));
+        const leftVal = parseFloat(left);
+        const rightVal = parseFloat(right);
+        let width = rightVal - leftVal;
+        if (width > 0 && width < 2) {
+          width = 2;
+        }
         return (
           <Box
             key={`${s.start}-${s.end}`}
             data-segment
             style={{
               left,
-              width: `${parseFloat(right) - parseFloat(left)}%`,
+              width: `${width}%`,
             }}
             sx={{ position: 'absolute', top: 0, bottom: 0, bgcolor: color }}
           />
