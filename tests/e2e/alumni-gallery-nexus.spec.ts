@@ -53,20 +53,5 @@ test.describe('Nexus — Alumni Hall of Fame gallery', () => {
     for (const p of alumniPosts) expect(p.student?.is_alumni).toBe(true);
   });
 
-  test('gallery UI shows the Current / Hall of Fame audience toggle', async ({ page }) => {
-    await page.goto(`${NEXUS}/login`, { waitUntil: 'domcontentloaded' });
-    await page.evaluate((t) => localStorage.setItem('nexus_test_token', t), teacherToken);
-    await page.goto(`${NEXUS}/teacher/drawing-reviews`, { waitUntil: 'domcontentloaded' });
-
-    // The Gallery tab hosts the GalleryFeed with the audience toggle.
-    const galleryTab = page.getByRole('tab', { name: /gallery/i });
-    if (await galleryTab.count()) {
-      await galleryTab.first().click();
-    }
-
-    const hof = page.getByRole('button', { name: /hall of fame/i });
-    await expect(hof).toBeVisible({ timeout: 15000 });
-    await hof.click();
-    await expect(page.getByRole('button', { name: /current students/i })).toBeVisible();
-  });
+  // The teacher Gallery tab left with the Drawing Reviews queue (retired September 2026). Inspiration replaces it.
 });

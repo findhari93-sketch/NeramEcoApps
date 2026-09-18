@@ -8,9 +8,9 @@
  * stacking history) the detail's Back landed on the submission page instead of
  * the list. It now does an explicit router.push('/teacher/assignments').
  *
- * To prove the fix we seed history with a NON-list page (drawing-reviews) before
- * opening the detail: a history-based Back would return there, an explicit push
- * lands on the list.
+ * To prove the fix we seed history with a NON-list page (the teacher's
+ * Sketchbooks hub) before opening the detail: a history-based Back would
+ * return there, an explicit push lands on the list.
  *
  * Auth: shared test-login helpers (Microsoft OAuth bypass). Self-skips when the
  * Nexus dev server / test-login is unavailable or the teacher has no classroom.
@@ -82,6 +82,10 @@ test.describe('Nexus — Assignment detail Back navigation', () => {
   });
 
   test('Back returns to the Assignments list even after visiting another page', async ({ page }) => {
+    // Two cold routes in one test (the sketchbook seed page, then the
+    // assignment detail), each able to take 26-36s to compile on a first hit;
+    // the 30s default budget is tight for both back to back.
+    test.setTimeout(90_000);
     test.skip(!token || !classroomId, 'Nexus test-login / classroom unavailable');
     test.skip(!assignmentId, 'No assignment available to open');
 
@@ -89,19 +93,22 @@ test.describe('Nexus — Assignment detail Back navigation', () => {
     test.skip(!ok, 'Teacher auth injection failed (credentials likely missing)');
 
     // Seed history with a NON-list page. A history-based back() would return here.
-    await page.goto(`${NEXUS}/teacher/drawing-reviews`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${NEXUS}/teacher/sketchbook`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
 
-    // Open the assignment detail (history is now [..., drawing-reviews, detail]).
+    // Open the assignment detail (history is now [..., sketchbook, detail]).
     await page.goto(`${NEXUS}/teacher/assignments/${assignmentId}`, { waitUntil: 'domcontentloaded' });
 
+    // This fixture assignment's own detail page is slow to answer on staging
+    // (observed ~20s for its data fetch alone, precompiled or not), so the
+    // 15s Playwright default is too tight here even with the compile paid for.
     const backBtn = page.getByRole('button', { name: /^back$/i });
-    await expect(backBtn).toBeVisible({ timeout: 15000 });
+    await expect(backBtn).toBeVisible({ timeout: 45000 });
     await backBtn.click();
 
-    // Must land on the list, NOT the drawing-reviews page we seeded.
+    // Must land on the list, NOT the sketchbook page we seeded.
     await page.waitForURL('**/teacher/assignments', { timeout: 15000 });
-    expect(page.url()).not.toContain('drawing-reviews');
+    expect(page.url()).not.toContain('sketchbook');
     expect(page.url()).not.toContain(assignmentId);
   });
 

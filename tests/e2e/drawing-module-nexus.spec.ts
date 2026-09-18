@@ -348,14 +348,17 @@ test.describe('Drawing Module API', () => {
   // Nav Badges
   // ============================================================
   test.describe('Nav Badges', () => {
-    test('GET /api/nav-badges includes drawing_reviews count for teacher', async ({ request }) => {
+    // drawing_reviews left with the Drawing Reviews queue (retired September
+    // 2026); owed drawings now badge Assignments and Exams. See
+    // apps/nexus/src/app/api/nav-badges/route.ts and NavBadgeProvider.tsx.
+    test('GET /api/nav-badges includes assignment_drawings count for teacher', async ({ request }) => {
       const res = await request.get(`${BASE}/api/nav-badges`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(res.status()).toBe(200);
       const body = await res.json();
       expect(body.badges).toBeDefined();
-      expect(typeof body.badges.drawing_reviews).toBe('number');
+      expect(typeof body.badges.assignment_drawings).toBe('number');
     });
   });
 

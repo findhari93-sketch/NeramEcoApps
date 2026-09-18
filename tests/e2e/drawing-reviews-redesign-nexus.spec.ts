@@ -12,7 +12,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { getTestAuthToken, injectAuthForPage, APP_URLS } from '../utils/credentials';
+import { getTestAuthToken, APP_URLS } from '../utils/credentials';
 
 test.describe('Drawing Reviews redesign', () => {
   test.describe.configure({ mode: 'serial' });
@@ -71,24 +71,10 @@ test.describe('Drawing Reviews redesign', () => {
     expect(body.error).toMatch(/submission_id/);
   });
 
-  test('Teacher drawing-reviews page hides the classroom chip', async ({ page }) => {
-    const ok = await injectAuthForPage(page, 'teacher');
-    test.skip(!ok, 'Teacher auth injection failed (credentials likely missing)');
-
-    await page.goto(`${APP_URLS.nexus}/teacher/drawing-reviews`, { waitUntil: 'domcontentloaded' });
-    // Allow the client auth hydration + nav to settle.
-    await page.waitForTimeout(3000);
-
-    const heading = page.getByRole('heading', { name: /drawing reviews/i });
-    await expect(heading).toBeVisible({ timeout: 15000 });
-
-    // The classroom chip reads "<classroom-name> · <type> · <role>".
-    // If the selector is shown it would contain an inner SchoolOutlinedIcon.
-    // We assert absence by looking for the swap/class-chip label elements.
-    const classroomChip = page
-      .locator('header')
-      .locator('button:has-text("·")')
-      .first();
-    await expect(classroomChip).toHaveCount(0);
-  });
+  // The teacher Gallery tab left with the Drawing Reviews queue (retired September 2026). Inspiration replaces it.
+  //
+  // (This case checked the classroom chip was hidden on the queue page's header.
+  // The file seeds no submission id to repoint it at a review screen with, so it
+  // is retired rather than adapted; the review screen's own header is covered by
+  // tests/e2e/sketchbook-hub-nexus-mobile.spec.ts.)
 });
