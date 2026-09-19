@@ -64,7 +64,7 @@ describe('paperWorkStage', () => {
     expect(row.stage).toBe('needsSolutions');
   });
 
-  it('skips solutions for a paper of drawings, which have none to write', () => {
+  it('skips solutions for a paper with nothing solvable', () => {
     const [row] = toWorkRows([
       finished({ solvable_count: 0, solution_count: 0 }),
     ]);

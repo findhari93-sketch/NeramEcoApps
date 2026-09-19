@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { assessApplication, getSupabaseAdminClient } from '@neram/database';
+import {
+  getLiveDetailRequestForUser,
+  markDetailRequestAnswered,
+} from '@neram/database/queries';
 
 /**
  * GET /api/student/profile-completion
@@ -40,16 +44,18 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    // Determine which fields are missing
-    const missingFields: string[] = [];
-    if (!user.phone) missingFields.push('phone');
-    if (!user.date_of_birth) missingFields.push('date_of_birth');
-    if (!user.gender) missingFields.push('gender');
-    if (!leadProfile?.father_name) missingFields.push('father_name');
-    if (!leadProfile?.applicant_category) missingFields.push('applicant_category');
-    if (!leadProfile?.city) missingFields.push('city');
-    if (!leadProfile?.state) missingFields.push('state');
-    if (!leadProfile?.pincode) missingFields.push('pincode');
+    // What the record is actually short of, using the one shared rule so this page,
+    // the Admin chip and the Nexus students sheet cannot disagree about whether a
+    // student has given us their details. Before this they each had their own list.
+    const assessment = assessApplication({ lead: leadProfile, user });
+    const missingFields: string[] = [...assessment.missing];
+
+    // Kept alongside the shared set: these are useful to have and are asked for on
+    // this page, but a record without them is not incomplete.
+    const niceToHave: string[] = [];
+    if (!user.phone) niceToHave.push('phone');
+    if (!user.gender) niceToHave.push('gender');
+    if (!leadProfile?.pincode) niceToHave.push('pincode');
 
     return NextResponse.json({
       user: {
@@ -83,7 +89,9 @@ export async function GET(request: NextRequest) {
         fee_due: studentProfile.fee_due,
       } : null,
       missingFields,
-      isComplete: missingFields.length === 0,
+      niceToHave,
+      applicationState: assessment.state,
+      isComplete: assessment.state === 'complete',
     });
   } catch (error: any) {
     console.error('Profile completion GET error:', error);
@@ -178,6 +186,28 @@ export async function PATCH(request: NextRequest) {
           });
         if (insertError) throw insertError;
       }
+    }
+
+    // A student who filled this in inside Nexus has answered whatever ask was
+    // outstanding, so staff stop chasing them. Without this the Students sheet would
+    // still read "Asked 4 days ago, not opened" after the student had already done
+    // it, which is worse than not tracking the ask at all.
+    try {
+      const live = await getLiveDetailRequestForUser(user.id, supabase);
+      if (live) {
+        const { data: lead } = await supabase
+          .from('lead_profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        await markDetailRequestAnswered(live, lead?.id ?? null, supabase);
+      }
+    } catch (requestError: any) {
+      // Closing the ask is bookkeeping. It must never fail the student's save.
+      console.warn('[profile-completion] could not close the detail request:', requestError?.message);
     }
 
     return NextResponse.json({ success: true });

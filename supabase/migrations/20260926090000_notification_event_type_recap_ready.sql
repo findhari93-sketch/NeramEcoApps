@@ -1,0 +1,27 @@
+-- ============================================
+-- THE CATCH-UP FOR A CLASS YOU MISSED IS NOW OPEN
+--
+-- Recaps have been generated and published automatically for months, and in all
+-- that time no student was ever told. The only automatic messages about a missed
+-- class were the chase messages, `catchup_behind_pace` and `catchup_overdue`,
+-- which arrive days or weeks later and open by telling a teenager they are
+-- behind. The thing that would actually have let them not be behind, "the
+-- material is ready now", was never sent at all.
+--
+-- That gap is the reason this event exists. Publishing within minutes of a class
+-- is only worth building if somebody finds out it happened.
+--
+-- Sent once per recap, to the students who have an OPEN absence for that class,
+-- and to nobody else. Not the whole classroom: a student who attended owes
+-- nothing, and messaging them teaches the room to mute the channel that the
+-- chase messages depend on.
+--
+-- Its own file because ALTER TYPE ... ADD VALUE cannot run in the same
+-- transaction that created the type.
+--
+-- CHECK IT LANDED ON PRODUCTION. `catchup_digest` was missing from the prod enum
+-- for months, so the staff digest silently never delivered, and an insert
+-- against a missing enum value fails at the last step of the send.
+-- ============================================
+
+ALTER TYPE notification_event_type ADD VALUE IF NOT EXISTS 'recap_ready';

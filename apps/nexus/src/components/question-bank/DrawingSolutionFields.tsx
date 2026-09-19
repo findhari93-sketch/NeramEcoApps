@@ -237,8 +237,12 @@ export default function DrawingSolutionFields({
 }
 
 /**
- * "Solution image added" or "No solution yet", for the line that heads a
+ * "Solution image added" or "Solution image needed", for the line that heads a
  * collapsed solution.
+ *
+ * "Needed" rather than the older "No solution yet": a drawing owes one, and in
+ * an "attempt any one" question every option owes its own, because a student
+ * may answer either.
  *
  * Shared so a part and a single-task question say the same words. The glyph
  * carries the state as well as the colour, since a tick and an empty circle
@@ -253,7 +257,7 @@ export function SolutionStatus({ hasSolution }: { hasSolution: boolean }) {
         <RadioButtonUncheckedIcon sx={{ fontSize: 16, color: 'text.disabled' }} aria-hidden />
       )}
       <Typography variant="caption" color="text.secondary">
-        {hasSolution ? 'Solution image added' : 'No solution yet'}
+        {hasSolution ? 'Solution image added' : 'Solution image needed'}
       </Typography>
     </Stack>
   );

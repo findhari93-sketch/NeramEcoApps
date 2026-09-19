@@ -15,6 +15,7 @@ import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import DifficultyChip from '@/components/drawings/DifficultyChip';
+import { readDrawingParts } from '@/lib/drawing-parts';
 
 interface DrawingQBQuestion {
   id: string;
@@ -23,12 +24,83 @@ interface DrawingQBQuestion {
   categories: string[];
   solution_image_url: string | null;
   solution_video_url: string | null;
+  /** Raw JSONB. Read through readDrawingParts, never trusted by shape. */
+  drawing_parts: unknown;
   objects_to_include: Array<{ name: string }> | null;
   colour_constraint: string | null;
   design_principle_tested: string | null;
   drawing_question_id: string | null;
   year: number | null;
   question_number: number | null;
+}
+
+/**
+ * Whether this question's solutions are in, counting parts.
+ *
+ * A question split into parts keeps a solution image per part, and its own
+ * solution_image_url column is only a mirror of the first part that has one. A
+ * two-part question answered once used to show a green tick here.
+ */
+function solutionProgressOf(q: DrawingQBQuestion): {
+  done: number;
+  total: number;
+  hasParts: boolean;
+} {
+  const parts = readDrawingParts(q.drawing_parts);
+  if (!parts) return { done: q.solution_image_url ? 1 : 0, total: 1, hasParts: false };
+  return {
+    done: parts.items.filter((part) => !!part.solution_image_url).length,
+    total: parts.items.length,
+    hasParts: true,
+  };
+}
+
+/**
+ * The tick, or the way to fix it.
+ *
+ * A parts question is sent to the editor rather than the URL dialog: the dialog
+ * writes the mirrored column, which the next save in the editor rebuilds from
+ * the parts and throws away.
+ */
+function SolutionStatusCell({
+  question,
+  onAddUrl,
+  onOpenEditor,
+}: {
+  question: DrawingQBQuestion;
+  onAddUrl: () => void;
+  onOpenEditor: () => void;
+}) {
+  const { done, total, hasParts } = solutionProgressOf(question);
+  const complete = done === total;
+  const caption = complete ? 'Solution' : hasParts ? `${done} of ${total} parts` : 'No solution';
+
+  return (
+    <Box
+      sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}
+    >
+      {complete ? (
+        <CheckCircleIcon sx={{ fontSize: 20, color: 'success.main' }} />
+      ) : (
+        <IconButton
+          size="small"
+          color="primary"
+          onClick={hasParts ? onOpenEditor : onAddUrl}
+          title={hasParts ? 'Add a solution image for each part' : 'Add solution image'}
+          aria-label={hasParts ? 'Add a solution image for each part' : 'Add solution image'}
+          sx={{ minWidth: 44, minHeight: 44 }}
+        >
+          <ImageOutlinedIcon sx={{ fontSize: 20 }} />
+        </IconButton>
+      )}
+      <Typography
+        variant="caption"
+        sx={{ fontSize: '0.55rem', color: complete ? 'success.main' : 'text.disabled' }}
+      >
+        {caption}
+      </Typography>
+    </Box>
+  );
 }
 
 export default function DrawingManagementPage() {
@@ -191,26 +263,14 @@ export default function DrawingManagementPage() {
             </Box>
 
             {/* Solution status + action */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-              {q.solution_image_url ? (
-                <CheckCircleIcon sx={{ fontSize: 20, color: 'success.main' }} />
-              ) : (
-                <IconButton
-                  size="small"
-                  color="primary"
-                  onClick={() => {
-                    setSolutionDialog({ open: true, questionId: q.id, currentUrl: q.solution_image_url || '' });
-                    setSolutionUrl(q.solution_image_url || '');
-                  }}
-                  title="Add solution image"
-                >
-                  <ImageOutlinedIcon sx={{ fontSize: 20 }} />
-                </IconButton>
-              )}
-              <Typography variant="caption" sx={{ fontSize: '0.55rem', color: q.solution_image_url ? 'success.main' : 'text.disabled' }}>
-                {q.solution_image_url ? 'Solution' : 'No solution'}
-              </Typography>
-            </Box>
+            <SolutionStatusCell
+              question={q}
+              onAddUrl={() => {
+                setSolutionDialog({ open: true, questionId: q.id, currentUrl: q.solution_image_url || '' });
+                setSolutionUrl(q.solution_image_url || '');
+              }}
+              onOpenEditor={() => router.push(`/teacher/question-bank/questions/${q.id}/edit`)}
+            />
           </Paper>
         ))
       )}

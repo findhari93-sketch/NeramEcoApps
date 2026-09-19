@@ -1,27 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTeacher } from '@/lib/verify-teacher';
 import { getSupabaseAdminClient, listRecapsNeedingReview } from '@neram/database';
-import { THRESHOLDS } from '@/lib/recap-quality';
 
 /**
  * GET /api/class-recaps/review-queue
  *
- * Two lists, and the difference between them is the whole point.
+ * ONE list: recaps that are HELD. Generated, failed a hard check, and invisible
+ * to students until something changes. Every row is a class somebody cannot
+ * catch up on, which is the only reason a teacher should ever be asked to look.
  *
- * `items` are HELD: generated, failed a hard check, and invisible to students
- * until a teacher acts. Every row is a class somebody cannot catch up on.
+ * There used to be a second list, `flagged`: recaps that are LIVE and working
+ * but scored under 0.8 on the soft checks, shown as "worth a look when you have
+ * a minute". It is gone, and its absence is the point.
  *
- * `flagged` are LIVE: they cleared every hard check and went out to students,
- * but a soft check failed, so they are worth a look when there is time. These
- * used to be held too, at a score threshold of 0.8, which meant one duplicated
- * question or a run of answers on the same letter could keep a correct and
- * complete recap away from a student for as long as it took someone to notice.
- * Blocking a teenager over a cosmetic flaw is the wrong trade; telling a teacher
- * about it is the right one.
+ * Nobody was reading it, and they were right not to. Every row was a recap that
+ * had already reached its students and was doing its job, headed by a green
+ * "Live for students" chip; the only action it offered was reading questions
+ * that had already been asked. Worse, the list was actively misleading. A recap
+ * held on a hard check and then published by hand keeps its stale
+ * `quality_report`, because `setRecapReadiness` clears `hold_reason` and
+ * `hold_detail` and leaves the report alone, so a live working recap could carry
+ * the line "Covers 24% of the class (needs 85%)" under a chip saying it was
+ * fine. A queue that cries wolf about healthy rows trains people to ignore the
+ * rows that matter, and the rows that matter are students who cannot catch up.
  *
- * Each row carries the reason in plain words, taken from the measurements the
- * quality bar actually made, so a tutor reads "Covers 62% of the class (needs
- * 85%)" rather than "quality too low".
+ * `failed_checks` is filtered to HARD failures for the same reason: the only
+ * checks worth naming here are the ones that actually caused the hold.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -31,16 +35,11 @@ export async function GET(request: NextRequest) {
     const { data: rooms } = await supabase.from('nexus_classrooms').select('id');
     const classroomIds = (rooms || []).map((r: any) => r.id);
 
-    const [held, flaggedRows] = await Promise.all([
-      listRecapsNeedingReview(classroomIds, supabase),
-      listFlaggedPublished(supabase, classroomIds),
-    ]);
+    const held = await listRecapsNeedingReview(classroomIds, supabase);
 
     return NextResponse.json({
       items: held.map(shape),
       count: held.length,
-      flagged: flaggedRows.map(shape),
-      flaggedCount: flaggedRows.length,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load the review queue';
@@ -49,31 +48,13 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * Published recaps that a soft check marked down.
- *
- * Bounded and ordered like the held list. Anything without a score predates the
- * quality bar and is excluded on purpose: those were published by a human, and
- * listing every one of them would bury the rows that mean something.
- */
-async function listFlaggedPublished(supabase: any, classroomIds: string[]): Promise<any[]> {
-  if (!classroomIds.length) return [];
-  const { data, error } = await supabase
-    .from('nexus_class_recaps')
-    .select('*')
-    .in('classroom_id', classroomIds)
-    .eq('status', 'published')
-    .not('quality_score', 'is', null)
-    .lt('quality_score', THRESHOLDS.publishScore)
-    .order('updated_at', { ascending: false })
-    .limit(50);
-  if (error) throw error;
-  return (data as any[]) || [];
-}
-
-/** One row of either list, with the reason a person can read. */
+/** One held recap, with the reason a person can read. */
 function shape(r: any) {
-  const failed = ((r.quality_report?.checks as any[]) || []).filter((c) => !c.passed);
+  const checks = (r.quality_report?.checks as any[]) || [];
+  // Hard only. A soft note ("3 of 6 segments hold fewer than the 10 configured
+  // questions") explains nothing about why this row is here, and printing it
+  // beside the real reason is how the old queue read as noise.
+  const failed = checks.filter((c) => !c.passed && c.hard);
   return {
     id: r.id,
     title: r.title,

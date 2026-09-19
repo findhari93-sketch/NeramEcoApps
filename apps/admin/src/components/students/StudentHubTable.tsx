@@ -66,6 +66,38 @@ export interface StudentRow {
   application_complete: boolean;
   application_status: string | null;
   application_missing: 'no_application' | 'incomplete' | null;
+  /** The shared three-state answer from assessApplication in @neram/database. */
+  application_state?: 'complete' | 'partial' | 'missing';
+  application_missing_fields?: string[];
+  /** "Missing class and exam year." Empty when nothing is missing. */
+  application_summary?: string;
+}
+
+const APPLICATION_STATE_LABEL = {
+  complete: 'Complete',
+  partial: 'Partly filled',
+  missing: 'Not started',
+} as const;
+
+const APPLICATION_STATE_STYLE = {
+  complete: { bg: 'rgba(22,163,74,0.10)', fg: '#15803D' },
+  partial: { bg: 'rgba(217,119,6,0.12)', fg: '#B45309' },
+  // Grey, not red. A record nobody has filled in yet is a job to do, not a failure,
+  // and colouring 28 rows red makes the screen look broken.
+  missing: { bg: 'rgba(100,116,139,0.14)', fg: '#475569' },
+} as const;
+
+/**
+ * The row's three-state answer, falling back to the old boolean pair.
+ *
+ * The fallback matters because this grid is also fed by screens that have not been
+ * moved onto the shared rule yet, and a row arriving without application_state must
+ * not silently read as "Not started".
+ */
+function stateOf(row: StudentRow): 'complete' | 'partial' | 'missing' {
+  if (row.application_state) return row.application_state;
+  if (row.application_complete) return 'complete';
+  return row.application_missing === 'no_application' ? 'missing' : 'partial';
 }
 
 interface StudentHubTableProps {
@@ -264,37 +296,42 @@ export default function StudentHubTable({
         id: 'application',
         header: 'Application',
         size: 150,
-        accessorFn: (row) => (row.application_complete ? 'Complete' : 'Incomplete'),
+        // Three states, not two. "Partly filled" is the normal condition of most
+        // records and must read as information rather than as a fault; "Not started"
+        // is the list actually worth chasing. Collapsing them into one orange
+        // "Incomplete" is what made this column unreadable.
+        accessorFn: (row) => APPLICATION_STATE_LABEL[stateOf(row)],
         filterVariant: 'select',
         filterSelectOptions: [
           { value: 'Complete', text: 'Complete' },
-          { value: 'Incomplete', text: 'Incomplete' },
+          { value: 'Partly filled', text: 'Partly filled' },
+          { value: 'Not started', text: 'Not started' },
         ],
         Cell: ({ row }) => {
           const s = row.original;
-          if (s.application_complete) {
-            return (
-              <Chip
-                icon={<CheckCircleIcon sx={{ fontSize: '14px !important' }} />}
-                label="Complete"
-                size="small"
-                sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: 'rgba(22,163,74,0.10)', color: '#15803D' }}
-              />
-            );
-          }
-          const tip = s.application_missing === 'no_application'
-            ? 'No application form filled, basic details and course are missing'
-            : 'Basic application form not fully filled';
-          return (
-            <Tooltip title={tip} arrow>
-              <Chip
-                icon={<ErrorOutlineIcon sx={{ fontSize: '14px !important' }} />}
-                label="Incomplete"
-                size="small"
-                sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: 'rgba(217,119,6,0.12)', color: '#B45309' }}
-              />
-            </Tooltip>
+          const state = stateOf(s);
+          const style = APPLICATION_STATE_STYLE[state];
+          const tip =
+            state === 'complete'
+              ? 'Every detail we ask for is on file'
+              : state === 'missing'
+                ? 'No application form at all. Send them a link to fill it in.'
+                : s.application_summary || 'Some details are still missing';
+          const chip = (
+            <Chip
+              icon={
+                state === 'complete' ? (
+                  <CheckCircleIcon sx={{ fontSize: '14px !important' }} />
+                ) : (
+                  <ErrorOutlineIcon sx={{ fontSize: '14px !important' }} />
+                )
+              }
+              label={APPLICATION_STATE_LABEL[state]}
+              size="small"
+              sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: style.bg, color: style.fg }}
+            />
           );
+          return state === 'complete' ? chip : <Tooltip title={tip} arrow>{chip}</Tooltip>;
         },
       },
       {

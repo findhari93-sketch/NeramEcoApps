@@ -12,6 +12,7 @@ import {
 import { syncClassRecordingLinks, type RecordingSyncSummary } from '@/lib/recording-backfill';
 import { syncClassTranscripts, type TranscriptSyncSummary } from '@/lib/transcript-sync';
 import { runRecapAutodraft } from '@/lib/recap-autodraft';
+import { announcePublishedRecaps } from '@/lib/recap-announce';
 import { runWrapUpAutodraft } from '@/lib/wrapup-autodraft';
 
 /**
@@ -43,10 +44,19 @@ import { runWrapUpAutodraft } from '@/lib/wrapup-autodraft';
  * second in the same request also means the transcript step sees the
  * `online_meeting_id` the attendance step just cached.
  *
- * Scheduled twice daily (see apps/nexus/vercel.json). The 8:50 pm IST pass runs
- * ten minutes BEFORE class-followups, which computes absences from whatever
- * attendance is already recorded; that ordering is the whole point. The late pass
- * picks up reports Graph had not published yet and classes that ended after 9 pm.
+ * Scheduled at 8:50 pm IST and then every fifteen minutes until 00:15 (see
+ * apps/nexus/vercel.json). The 8:50 pass is fixed where it is because it runs ten
+ * minutes BEFORE class-followups, which computes absences from whatever
+ * attendance is recorded by then; that ordering is the whole point.
+ *
+ * The quarter-hourly passes after it exist for the RECAP stage. A recap needs a
+ * transcript and a recording, and those arrive at different times: the transcript
+ * about twenty minutes after the class, the recording whenever Teams finishes
+ * publishing it, which is somewhere between the two. Two fixed passes a night
+ * meant whichever one held the second half found the first half stale, and every
+ * recap fell through to the 06:00 sweep the next morning. Polling closes that
+ * gap: each pass is a no-op costing three reads unless a class became complete
+ * since the last one.
  *
  * Doubles as the backfill tool: `?days=400&limit=100`, repeat until both
  * `due` counts are 0. Every class it cannot resolve settles to `unavailable`
@@ -69,6 +79,21 @@ const MAX_ATTEMPTS = 6;
  * 23:30 pass or the nightly sweeps.
  */
 const GEMINI_CALLS_PER_RUN = 6;
+
+/**
+ * Recaps this pass may draft.
+ *
+ * Two, not the sweep's own six, because this route now runs sixteen times a day
+ * rather than twice. A normal evening has one class, so two covers it with room
+ * to spare; six per pass would let a backlog spend the whole of
+ * `nexus.recap-questions-cron`'s 60-call daily allowance before midnight and
+ * leave nothing for wrap-ups or for the other three apps sharing the key.
+ *
+ * A backlog is not urgent anyway. It drains two per pass through the evening,
+ * and whatever is left is picked up by the 06:00 sweep, which keeps the larger
+ * cap precisely because it runs once at a quiet hour.
+ */
+const RECAP_DRAFTS_PER_PASS = 2;
 
 export async function GET(request: NextRequest) {
   const unauthorized = assertCronRequest(request);
@@ -178,26 +203,44 @@ export async function GET(request: NextRequest) {
     // difference between a student who missed tonight being able to catch up
     // tonight, and being told to come back tomorrow.
     //
-    // Scoped to the classes whose transcripts arrived in THIS pass, so it never
-    // re-scans, and never allowed to fail the request: attendance is the
-    // schedule-critical half of this cron and recaps must not jeopardise it.
-    let recaps: unknown = { skipped: 'no transcripts stored' };
+    // UNSCOPED, deliberately, and this is the fix for the defect that made every
+    // recap late.
+    //
+    // It used to run only over the classes whose transcripts arrived in THIS
+    // pass. A recap needs two things, a transcript and a recording, and on a
+    // normal evening they arrive in DIFFERENT passes: the transcript twenty
+    // minutes after the class, the recording whenever Teams finishes publishing
+    // it. So the pass holding the transcript found no recording and generated
+    // nothing, and the pass that got the recording had an empty storedClassIds
+    // and returned before looking at anything. Neither half could ever see the
+    // other, and every class fell through to the 06:00 sweep nine and a half
+    // hours later. Scoping to an event is only safe when one event is sufficient.
+    //
+    // The candidate query is cheap, batched and capped, so sweeping each pass
+    // costs three reads and picks the class up in whichever pass completes it.
+    // Never allowed to fail the request: attendance is the schedule-critical
+    // half of this cron and recaps must not jeopardise it.
+    // Still the trigger for WRAP-UPS below, which genuinely are event-shaped: a
+    // wrap-up is written from the transcript alone, so the pass that stored it
+    // has everything it needs. Recaps also need a recording, which is why they
+    // could not use this and now sweep instead.
     const storedClassIds = (transcripts as TranscriptSyncSummary)?.storedClassIds;
-    if (Array.isArray(storedClassIds) && storedClassIds.length > 0) {
-      try {
-        const run = await runRecapAutodraft(supabase, { classIds: storedClassIds });
-        recaps = {
-          scanned: run.scanned,
-          generated: run.drafted,
-          skipped: run.skipped,
-          rateLimited: run.rateLimited,
-          published: run.outcomes.filter((o) => o.ok && o.published).length,
-          held: run.outcomes.filter((o) => o.ok && o.held).length,
-        };
-      } catch (err) {
-        console.error('[cron sync-attendance] recap pipeline failed:', err);
-        recaps = { error: err instanceof Error ? err.message : 'recap pipeline failed' };
-      }
+
+    let recaps: unknown = { skipped: 'nothing eligible' };
+    try {
+      const run = await runRecapAutodraft(supabase, { limit: RECAP_DRAFTS_PER_PASS });
+      recaps = {
+        scanned: run.scanned,
+        generated: run.drafted,
+        skipped: run.skipped,
+        rateLimited: run.rateLimited,
+        published: run.outcomes.filter((o) => o.ok && o.published).length,
+        held: run.outcomes.filter((o) => o.ok && o.held).length,
+        told: await announcePublishedRecaps(supabase, run.outcomes),
+      };
+    } catch (err) {
+      console.error('[cron sync-attendance] recap pipeline failed:', err);
+      recaps = { error: err instanceof Error ? err.message : 'recap pipeline failed' };
     }
 
     // Wrap-ups, fifth and last.

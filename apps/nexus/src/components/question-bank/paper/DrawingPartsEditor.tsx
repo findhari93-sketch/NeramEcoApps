@@ -316,6 +316,11 @@ export default function DrawingPartsEditor({
   const anyOne = value.mode === 'any_one';
   const total = partsFormTotalMarks(value);
   const noun = anyOne ? 'Option' : 'Part';
+  // Every part owes its own worked answer, including in "attempt any one",
+  // where the student may answer either option. Counted here so the gap is
+  // stated once in the footer as well as per part, since the per-part status
+  // sits inside a collapsed accordion.
+  const solutionsDone = value.items.filter((item) => Boolean(item.solution_image)).length;
 
   const patchItem = (index: number, patch: Partial<DrawingPartForm>) =>
     onChange({
@@ -543,6 +548,11 @@ export default function DrawingPartsEditor({
         {!anyOne && (
           <Typography variant="body2" color="text.secondary">
             {total != null ? `Total: ${total} marks` : 'Give every part its marks to total them'}
+          </Typography>
+        )}
+        {solutionsDone < value.items.length && (
+          <Typography variant="body2" color="warning.main" fontWeight={600}>
+            {`Solutions: ${solutionsDone} of ${value.items.length} ${noun.toLowerCase()}s. Each one needs its own image.`}
           </Typography>
         )}
         <Box sx={{ flex: 1 }} />

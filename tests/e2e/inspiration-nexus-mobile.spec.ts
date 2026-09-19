@@ -265,4 +265,46 @@ test.describe('Inspiration on a phone', () => {
     // 5s even on a warm route (seen: the results had painted, the URL lagged).
     await expect(page).toHaveURL(/\/student\/inspiration\?q=/, { timeout: 30_000 });
   });
+
+  /**
+   * The heart on a tile, seen from the Saved list.
+   *
+   * Saved is opened FIRST on purpose. The list keeps its answer in a cache that
+   * outlives the page (lib/swr-cache.ts), and the bug this guards was a Saved
+   * list that replayed the answer from before the heart was tapped: the drawing
+   * was in the database and on no screen the student could see.
+   */
+  test('a drawing saved from the grid is on the Saved list straight away', async ({ page }) => {
+    test.setTimeout(150_000);
+    test.skip(!phoneReady, 'could not create the phone fixture exemplar');
+
+    const first = await open(page, '/student/inspiration/saved');
+    test.skip(first !== 'ok', 'Nexus not running or flag off');
+    await expect(page.getByRole('heading', { name: 'Saved', exact: true })).toBeVisible({ timeout: 90_000 });
+    // The cache is written on a debounce and flushed as the page is left, so the
+    // answer has to have arrived before we navigate away from it.
+    await page.waitForLoadState('networkidle').catch(() => {});
+
+    await page.goto(`${NEXUS}/student/inspiration?q=${encodeURIComponent(PHONE_FIXTURE_TITLE)}`, {
+      waitUntil: 'domcontentloaded',
+    });
+    const tile = page.getByTestId('inspiration-tile').first();
+    await expect(tile).toBeVisible({ timeout: 90_000 });
+
+    const heart = tile.getByRole('button', { name: `Save ${PHONE_FIXTURE_TITLE}` });
+    await heart.click();
+    const filled = page.getByRole('button', { name: `Remove ${PHONE_FIXTURE_TITLE} from saved` });
+    await expect(filled).toBeVisible();
+
+    await page.getByRole('link', { name: 'Saved' }).click();
+    await expect(page).toHaveURL(/\/student\/inspiration\/saved/, { timeout: 60_000 });
+    await expect(page.getByRole('button', { name: `Remove ${PHONE_FIXTURE_TITLE} from saved` })).toBeVisible({
+      timeout: 60_000,
+    });
+    // Never the empty state over a drawing that is saved.
+    await expect(page.getByText('Nothing saved yet').first()).toBeHidden();
+
+    // Leave the student's Saved list as it was found.
+    await page.getByRole('button', { name: `Remove ${PHONE_FIXTURE_TITLE} from saved` }).click();
+  });
 });

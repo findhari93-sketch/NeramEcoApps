@@ -1782,7 +1782,7 @@ export async function listStudentsByYear(
     .select(
       `
       id, name, first_name, last_name, email, personal_email, linked_classroom_email,
-      phone, avatar_url, academic_year, is_alumni, last_login_at,
+      phone, avatar_url, academic_year, is_alumni, last_login_at, date_of_birth,
       nexus_first_login_at, nexus_last_login_at, ms_oid,
       student_profiles!student_profiles_user_id_fkey (
         id, student_id, enrollment_date, total_fee, fee_paid, fee_due,

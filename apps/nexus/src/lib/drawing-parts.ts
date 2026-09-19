@@ -172,6 +172,28 @@ export function composeDrawingPartsText(
 export type ApplyPartsResult = { ok: true } | { ok: false; error: string };
 
 /**
+ * The question-level solution columns a parts question mirrors: the first part
+ * that has one.
+ *
+ * A mirror, never a verdict. "Has this question got its solutions?" is answered
+ * per part by qb-image-needs, because a two-part question whose part B is empty
+ * still fills this column from part A and would otherwise read as solved.
+ *
+ * Its own function because two writers now apply it: the full question PATCH
+ * through applyDrawingPartsToWrite, and the lightweight images PATCH through
+ * applyPartSolutionImages.
+ */
+export function mirroredPartSolution(parts: QBDrawingParts): {
+  solution_image_url: string | null;
+  solution_video_url: string | null;
+} {
+  return {
+    solution_image_url: parts.items.find((p) => p.solution_image_url)?.solution_image_url ?? null,
+    solution_video_url: parts.items.find((p) => p.solution_video_url)?.solution_video_url ?? null,
+  };
+}
+
+/**
  * Fold drawing_parts into a question write, in place.
  *
  * - No drawing_parts key: nothing to do.
@@ -210,10 +232,48 @@ export function applyDrawingPartsToWrite(
     body.drawing_marks = parts.items.reduce((sum, p) => sum + (p.marks ?? 0), 0);
   }
 
-  body.solution_image_url = parts.items.find((p) => p.solution_image_url)?.solution_image_url ?? null;
-  body.solution_video_url = parts.items.find((p) => p.solution_video_url)?.solution_video_url ?? null;
+  const mirrored = mirroredPartSolution(parts);
+  body.solution_image_url = mirrored.solution_image_url;
+  body.solution_video_url = mirrored.solution_video_url;
 
   return { ok: true };
+}
+
+/**
+ * Fold per-part solution images into the stored parts, for the images PATCH.
+ *
+ * Deliberately not applyDrawingPartsToWrite: that one rebuilds question_text,
+ * question_text_hi and drawing_marks from the parts, and pasting a picture has
+ * no business touching a teacher's wording. Only the images move, and the
+ * mirrored columns follow.
+ *
+ * An id the question does not have is ignored rather than refused: a teacher
+ * who re-split the question in another tab should not lose the paste they just
+ * made into the parts that survived.
+ */
+export function applyPartSolutionImages(
+  stored: unknown,
+  images: Record<string, string | null>,
+):
+  | { ok: true; drawing_parts: QBDrawingParts; solution_image_url: string | null }
+  | { ok: false; error: string } {
+  const parts = readDrawingParts(stored);
+  if (!parts) return { ok: false, error: 'This question is not split into parts.' };
+
+  const next: QBDrawingParts = {
+    ...parts,
+    items: parts.items.map((item) =>
+      item.id in images
+        ? { ...item, solution_image_url: cleanText(images[item.id]) }
+        : item,
+    ),
+  };
+
+  return {
+    ok: true,
+    drawing_parts: next,
+    solution_image_url: mirroredPartSolution(next).solution_image_url,
+  };
 }
 
 /**

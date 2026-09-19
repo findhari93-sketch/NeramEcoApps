@@ -118,6 +118,37 @@ export {
 } from './utils/academic-year';
 export type { YearTier, PairStatus } from './utils/academic-year';
 
+// How complete a student's application form is. One rule for the Admin grid, the
+// Nexus students sheet and the student's own form, so the three stop disagreeing.
+export {
+  REQUIRED_APPLICATION_FIELDS,
+  assessApplication,
+  isApplicationComplete,
+} from './utils/application-completeness';
+export type {
+  ApplicationField,
+  ApplicationState,
+  ApplicationAssessment,
+  ApplicationLeadLike,
+  ApplicationUserLike,
+} from './utils/application-completeness';
+
+// The application form's vocabulary and validation, shared so the marketing apply
+// wizard, the Nexus complete-profile page and the student-link form stop drifting.
+export {
+  APPLICATION_GENDER_OPTIONS,
+  APPLICATION_CATEGORY_OPTIONS,
+  APPLICATION_CLASS_OPTIONS,
+  APPLICATION_SCHOOL_TYPE_OPTIONS,
+  APPLICATION_COURSE_OPTIONS,
+  ALLOWED_ANSWER_KEYS,
+  examYearOptions,
+  validateApplicationAnswers,
+  toUserUpdates,
+  toLeadUpdates,
+} from './utils/application-fields';
+export type { FieldOption, FieldError, ApplicationAnswers } from './utils/application-fields';
+
 // Utils
 export { log, createLogger } from './utils/logger';
 export type { Logger } from './utils/logger';

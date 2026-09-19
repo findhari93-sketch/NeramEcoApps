@@ -43,7 +43,7 @@ export const NEXT_STEP_LABELS: Record<WorkStage, string> = {
 
 /** The papers route adds these when asked for `?solutions=1`. */
 export interface WorkPaper extends PaperWithBreakdown {
-  /** Questions that could carry a solution (everything but drawing prompts). */
+  /** Questions that owe a solution. Drawings included, one per part. */
   solvable_count?: number;
   /** Of those, the ones that have one. */
   solution_count?: number;
@@ -62,8 +62,10 @@ export interface WorkRow {
 /**
  * Exactly one stage, first unmet requirement wins.
  *
- * A drawing-only paper has nothing to solve, so it skips "Needs solutions"
- * rather than sitting there forever.
+ * A paper with nothing solvable skips "Needs solutions" rather than sitting
+ * there forever. Drawings used to fall in that hole by construction; they now
+ * owe a solution image per part like everything else, so a paper of drawings
+ * stays in "Needs solutions" until they are written.
  */
 export function paperWorkStage(
   paper: Pick<WorkPaper, 'is_student_visible'>,

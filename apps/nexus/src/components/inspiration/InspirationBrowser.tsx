@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSWRConfig } from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { Alert, Box, Button, EmptyState, Typography } from '@neram/ui';
 import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
@@ -53,6 +54,8 @@ export interface InspirationBrowserProps {
 export default function InspirationBrowser({ mode, savedOnly = false }: InspirationBrowserProps) {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
+  // Reaches a page's own cache entry, which the hook's own mutate cannot. See toggleSave.
+  const { mutate: mutateKey } = useSWRConfig();
   const base = inspirationBase(mode);
   const sentinel = useRef<HTMLDivElement>(null);
 
@@ -98,8 +101,18 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
   const { data, error, size, setSize, isLoading, isValidating, mutate } = useSWRInfinite<SearchPage>(
     getKey,
     (url: string) => fetchWithToken<SearchPage>(url, getToken),
-    // A new search or filter changes page 0's key, so SWR starts again from one page.
-    { revalidateFirstPage: false, persistSize: false },
+    {
+      // A new search or filter changes page 0's key, so SWR starts again from one page.
+      persistSize: false,
+      // Which drawings are saved is the student's own state and it changes from
+      // three places: this grid, the drawing's own page, and the Saved list. So
+      // page 0 is re-read every time a list is opened (SWR's default), and the
+      // app-wide 15s dedupe window is off here, because inside that window a
+      // Saved list opened right after a heart was tapped is answered by the
+      // request that ran before the tap. Pages past the first still come from
+      // the cache, so reopening a deep list is one request, not one per page.
+      dedupingInterval: 0,
+    },
   );
 
   const cards = useMemo(() => (data ?? []).flatMap((page) => page.items), [data]);
@@ -142,25 +155,45 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
     };
   }, [mode, getToken, mutate]);
 
+  const patchPage = useCallback(
+    (page: SearchPage, id: string, saved: boolean): SearchPage => ({
+      ...page,
+      items:
+        savedOnly && !saved
+          ? page.items.filter((c) => c.id !== id)
+          : page.items.map((c) => (c.id === id ? { ...c, saved } : c)),
+    }),
+    [savedOnly],
+  );
+
+  /**
+   * Fill or empty the heart, then tell the server.
+   *
+   * The patch is written to each page's own cache entry as well as to the array
+   * this hook renders. useSWRInfinite rebuilds that array from the page entries
+   * on every read, so a heart written only to the array (all `mutate` can reach)
+   * survives until the next read and then quietly un-fills itself.
+   */
   const toggleSave = useCallback(
     async (card: InspirationCard) => {
       const next = !card.saved;
-      const apply = (pages?: SearchPage[]) =>
-        pages?.map((page) => ({
-          ...page,
-          items:
-            savedOnly && !next
-              ? page.items.filter((c) => c.id !== card.id)
-              : page.items.map((c) => (c.id === card.id ? { ...c, saved: next } : c)),
-        }));
-      await mutate(apply(data), { revalidate: false });
+      const pages = data ?? [];
+      const keys = pages.map((_, i) => getKey(i, i === 0 ? null : pages[i - 1]));
+      const writePages = (list: SearchPage[]) =>
+        Promise.all(keys.map((key, i) => (key ? mutateKey(key, list[i], { revalidate: false }) : null)));
+
+      const patched = pages.map((page) => patchPage(page, card.id, next));
+      await writePages(patched);
+      await mutate(patched, { revalidate: false });
       try {
         await setSaved(getToken, card.id, next);
       } catch {
+        // Put back what the server still believes, then go and ask it.
+        await writePages(pages);
         await mutate();
       }
     },
-    [data, getToken, mutate, savedOnly],
+    [data, getKey, getToken, mutate, mutateKey, patchPage],
   );
 
   const clearAll = () => {
@@ -169,7 +202,12 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
   };
 
   const filtered = hasActiveFilters(state) || scope === 'hidden';
-  const empty = ready && !error && !isLoading && cards.length === 0;
+  // Nothing on screen with a read in flight means "not known yet", not "nothing".
+  // Otherwise the Saved list shows "Nothing saved yet" over the empty page it had
+  // cached before the heart was tapped, while the answer carrying that drawing is
+  // still on its way.
+  const settling = cards.length === 0 && (isLoading || isValidating);
+  const empty = ready && !error && !settling && cards.length === 0;
 
   // The one line a screen reader hears: the result count/fuzzy note when there are
   // cards, the empty-state title when there are none, or nothing while still loading.
@@ -302,7 +340,7 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
         ) : (
           <InspirationMasonry
             cards={cards}
-            loading={!ready || isLoading || loadingMore}
+            loading={!ready || isLoading || loadingMore || settling}
             renderTile={(card) => (
               <InspirationTile card={card} href={`${base}/${card.id}`} onOpen={rememberListUrl} onToggleSave={toggleSave} />
             )}

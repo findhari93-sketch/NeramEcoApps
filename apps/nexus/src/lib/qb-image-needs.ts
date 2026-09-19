@@ -1,4 +1,10 @@
-import type { NexusQBQuestion, NexusQBQuestionOption, QBQuestionSection } from '@neram/database';
+import type {
+  NexusQBQuestion,
+  NexusQBQuestionOption,
+  QBDrawingParts,
+  QBQuestionSection,
+} from '@neram/database';
+import { readDrawingParts } from './drawing-parts';
 
 /**
  * Which questions are still waiting for a picture, and which slots that means.
@@ -12,14 +18,30 @@ import type { NexusQBQuestion, NexusQBQuestionOption, QBQuestionSection } from '
  * Two jobs live here, and they are deliberately kept apart by `kind`. A figure
  * is what makes a question *readable*, guessed from its wording and overridable
  * per question. A solution image is what makes the answer *explainable*, and it
- * is a flat rule: every maths question needs one. Mixing them would make the
- * figure backlog jump by forty overnight and stop meaning anything.
+ * is a flat rule: every maths question needs one, and so does every drawing,
+ * one per part. Mixing them would make the figure backlog jump by forty
+ * overnight and stop meaning anything.
  *
  * Everything here is derived from `questionImageSlots`. Add a caller, do not add
  * a predicate.
  */
 
-export type SlotType = 'question' | 'a' | 'b' | 'c' | 'd' | 'solution';
+/**
+ * One part's own worked solution. A drawing split into parts has one of these
+ * per part and no bare 'solution' slot, because the question-level column is
+ * only a mirror of the first part (drawing-parts.ts) and a second dropzone
+ * writing it would be overwritten by the next parts save.
+ */
+export type PartSolutionSlot = `solution-${'a' | 'b' | 'c' | 'd'}`;
+
+export type SlotType = 'question' | 'a' | 'b' | 'c' | 'd' | 'solution' | PartSolutionSlot;
+
+const PART_SOLUTION_PREFIX = 'solution-';
+
+/** 'solution-b' gives 'b'. Null for every other slot, so no caller parses the string. */
+export function partIdOfSolutionSlot(slot: SlotType): string | null {
+  return slot.startsWith(PART_SOLUTION_PREFIX) ? slot.slice(PART_SOLUTION_PREFIX.length) : null;
+}
 
 export interface ImageSlot {
   slot: SlotType;
@@ -85,25 +107,60 @@ function optionMentionsFigure(option: NexusQBQuestionOption): boolean {
   return FIGURE_NOUN.test(text);
 }
 
-function filledOnServer(question: NexusQBQuestion, slot: SlotType): boolean {
+/**
+ * This question's parts, or null when it is a single task.
+ *
+ * Guarded on the format so a two-thousand-question maths paper never runs the
+ * parts validator: questionImageSlots is called several times per question on
+ * every render of the paper list.
+ */
+function drawingPartsOf(question: NexusQBQuestion): QBDrawingParts | null {
+  if (question.question_format !== 'DRAWING_PROMPT') return null;
+  return readDrawingParts(question.drawing_parts);
+}
+
+/** One part's own solution image, or null. Malformed parts read as no parts. */
+export function partSolutionUrl(question: NexusQBQuestion, partId: string): string | null {
+  return drawingPartsOf(question)?.items.find((p) => p.id === partId)?.solution_image_url ?? null;
+}
+
+/**
+ * Is this slot filled on the saved row? The one slot-to-column map.
+ *
+ * Exported because the paste flow needs the same answer for its unsaved buffer
+ * and used to keep a second copy of this map, which is how a slot type can be
+ * added in one place and silently ignored in the other.
+ */
+export function slotFilledOnServer(question: NexusQBQuestion, slot: SlotType): boolean {
   if (slot === 'question') return !!question.question_image_url;
   if (slot === 'solution') return !!question.solution_image_url;
+  const partId = partIdOfSolutionSlot(slot);
+  if (partId) return !!partSolutionUrl(question, partId);
   return !!optionsOf(question).find((o) => o.id === slot)?.image_url;
 }
 
 /**
  * Must this question carry a worked solution image?
  *
- * Read off the stored section, never guessed from the question number: that
- * guess has one home in qb-section-inference.ts, and a paper that does not
- * follow the current JEE numbering would be mislabelled by a second copy.
+ * A drawing always owes one. It used to be excluded here, so a drawing landed
+ * at status 'complete' the moment it was imported and never appeared in any
+ * solution queue: JEE Paper 2 2014 read "Solution missing 0" with neither of
+ * its two drawings answered. A drawing is the one format where the worked
+ * answer is the whole teaching.
  *
- * A question with no section yet is not nagged. The paper header already has an
- * "unsectioned" warning for those, and nagging twice for one missing field is
- * how a teacher learns to ignore both.
+ * Judged on format rather than section on purpose. `section` is a guess that
+ * may not have been run yet (prod holds papers with NULL sections), while
+ * `question_format` is never null and never guessed.
+ *
+ * For everything else it is read off the stored section, never guessed from the
+ * question number: that guess has one home in qb-section-inference.ts, and a
+ * paper that does not follow the current JEE numbering would be mislabelled by
+ * a second copy. A question with no section yet is not nagged. The paper header
+ * already has an "unsectioned" warning for those, and nagging twice for one
+ * missing field is how a teacher learns to ignore both.
  */
 export function questionNeedsSolutionImage(question: NexusQBQuestion): boolean {
-  if (question.question_format === 'DRAWING_PROMPT') return false;
+  if (question.question_format === 'DRAWING_PROMPT') return true;
   return !!question.section && QB_MATH_SECTIONS.includes(question.section);
 }
 
@@ -144,7 +201,7 @@ export function questionImageSlots(
   question: NexusQBQuestion,
   isFilled?: (slot: SlotType) => boolean,
 ): ImageSlot[] {
-  const filled = (slot: SlotType) => (isFilled ? isFilled(slot) : filledOnServer(question, slot));
+  const filled = (slot: SlotType) => (isFilled ? isFilled(slot) : slotFilledOnServer(question, slot));
   const ruledOut = question.needs_image === false;
   const ruledIn = question.needs_image === true;
 
@@ -188,15 +245,35 @@ export function questionImageSlots(
   // `needs_image` deliberately does not gate this: that toggle is the teacher's
   // verdict on the *figure*, and "no figure needed" is a common and correct
   // thing to say about a maths question that still owes its working.
-  const solutionExpected = questionNeedsSolutionImage(question);
-  if (solutionExpected || question.solution_image_url) {
-    slots.push({
-      slot: 'solution',
-      label: 'Solution',
-      expected: solutionExpected,
-      filled: filled('solution'),
-      kind: 'solution',
-    });
+  //
+  // A drawing split into parts has one solution per part, not one per question.
+  // In 'any_one' the student may answer either option, so each option owes its
+  // own worked answer; in 'all' both are compulsory. The question-level column
+  // is only a mirror of the first part, so it is deliberately not offered as a
+  // slot here even when it is set.
+  const parts = drawingPartsOf(question);
+  if (parts) {
+    for (const part of parts.items) {
+      const slot = (PART_SOLUTION_PREFIX + part.id) as SlotType;
+      slots.push({
+        slot,
+        label: `Solution ${part.label}`,
+        expected: true,
+        filled: filled(slot),
+        kind: 'solution',
+      });
+    }
+  } else {
+    const solutionExpected = questionNeedsSolutionImage(question);
+    if (solutionExpected || question.solution_image_url) {
+      slots.push({
+        slot: 'solution',
+        label: 'Solution',
+        expected: solutionExpected,
+        filled: filled('solution'),
+        kind: 'solution',
+      });
+    }
   }
 
   return slots;
@@ -253,4 +330,32 @@ export function questionMissingSolutionImage(
   return questionImageSlots(question, isFilled).some(
     (s) => s.kind === 'solution' && s.expected && !s.filled,
   );
+}
+
+/**
+ * How far this question's worked solutions got: { done: 1, total: 2 } for a
+ * half-solved split, { done: 0, total: 0 } for a question that owes none.
+ */
+export function solutionSlotProgress(question: NexusQBQuestion): { done: number; total: number } {
+  const wanted = questionImageSlots(question).filter((s) => s.kind === 'solution' && s.expected);
+  return { done: wanted.filter((s) => s.filled).length, total: wanted.length };
+}
+
+/**
+ * The sentence a teacher reads when a solution is missing, or null when none is.
+ *
+ * One home for the wording, so the paper row, the Questions list and the
+ * Drawing management page cannot drift the way the three figure rules once did.
+ */
+export function solutionGapMessage(question: NexusQBQuestion): string | null {
+  const { done, total } = solutionSlotProgress(question);
+  if (total === 0 || done === total) return null;
+  if (total > 1) {
+    return done === 0
+      ? `No solution images yet. Each of the ${total} parts needs its own.`
+      : `Solution images: ${done} of ${total} parts. Each part needs its own.`;
+  }
+  return question.question_format === 'DRAWING_PROMPT'
+    ? 'No solution image yet. Drawing questions need one.'
+    : 'No solution image yet. Maths questions need one.';
 }

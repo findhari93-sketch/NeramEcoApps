@@ -45,6 +45,10 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   study_material_nudge: '#0ea5e9',
   catchup_digest: '#7c3aed',
   catchup_behind_pace: '#ed6c02',
+  // Green, not amber. This one is good news arriving early, and colouring it
+  // like the chase messages beside it would make an offer of help read as
+  // another reminder that they are behind.
+  recap_ready: '#2E7D32',
   test_result_message: '#0ea5e9',
   test_reopened: '#2E7D32',
   // Amber, deliberately louder than the other two: a score that moved is the
@@ -206,6 +210,13 @@ function getNavigationUrl(
     }
     case 'test_scheduled':
       return `/${nexusRole || 'student'}/tests`;
+    case 'recap_ready': {
+      // Straight into the catch-up workspace for that class, which is where the
+      // recap plays. Landing them on the timetable instead would mean the
+      // message said "it is ready" and then made them go and find it.
+      const classId = notification.metadata?.scheduled_class_id as string | undefined;
+      return classId ? `/student/timetable/${classId}/catch-up` : '/student/catch-up';
+    }
     case 'assignment_published':
     case 'assignment_linked': {
       const assignmentId = notification.metadata?.assignment_id as string | undefined;
@@ -218,6 +229,11 @@ function getNavigationUrl(
       if (!testId) return '/student/tests';
       return `/student/tests/take?test_id=${testId}${placementId ? `&placement_id=${encodeURIComponent(placementId)}` : ''}`;
     }
+    case 'application_details_needed':
+      // The whole point of the ping is getting them to the form, so an unmapped
+      // event type (a non-clickable row) would waste the one message that reaches
+      // a student who barely opens Nexus.
+      return '/student/complete-profile';
     case 'catchup_overdue':
     case 'prework_reason_needed':
     case 'recap_needs_review': {

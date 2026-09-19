@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { NexusQBQuestion } from '@neram/database';
-import PaperWorkspace from './PaperWorkspace';
+import PaperWorkspace, { imagesPatchBody } from './PaperWorkspace';
 
 const questions = [1, 2, 3].map((n) => ({
   id: `q${n}`, question_text: `Question ${n}`, question_format: 'MCQ',
@@ -216,5 +216,72 @@ describe('PaperWorkspace solution images', () => {
     render(<PaperWorkspace {...base} mode="images" questions={aptitude} />);
     fireEvent.click(screen.getByRole('button', { name: 'Open question 1' }));
     expect(screen.queryByText('Solution Image')).toBeNull();
+  });
+
+  it('offers one paste slot per part on a split drawing', () => {
+    // One dropzone for a two-part question would put part B's paste into part
+    // A's column, because the question's own solution_image_url is only a
+    // mirror of the first part that has one.
+    const drawings = [
+      {
+        ...questions[0],
+        question_format: 'DRAWING_PROMPT',
+        section: 'drawing',
+        options: null,
+        correct_answer: null,
+        drawing_parts: {
+          mode: 'any_one',
+          items: [
+            { id: 'a', label: 'A', text: 'Draw a balloon seller.', solution_image_url: null },
+            { id: 'b', label: 'B', text: 'Draw women at a handpump.', solution_image_url: null },
+          ],
+        },
+      },
+    ] as unknown as NexusQBQuestion[];
+
+    render(<PaperWorkspace {...base} mode="images" questions={drawings} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open question 1' }));
+    expect(screen.getByText('Solution for A')).not.toBeNull();
+    expect(screen.getByText('Solution for B')).not.toBeNull();
+    expect(screen.queryByText('Solution Image')).toBeNull();
+  });
+});
+
+/**
+ * The routing, pinned. Every slot the builder does not name falls through to
+ * option_images, and the route merges that by option id, so a part solution
+ * sent there is dropped on the floor while the toast still says it saved.
+ */
+describe('imagesPatchBody', () => {
+  const img = (url: string) => ({ url, uploaded: true });
+
+  it('sends a part solution as part_solution_images, never as an option image', () => {
+    const body = imagesPatchBody([{ slot: 'solution-b', image: img('https://x/b.png') }]);
+    expect(body).toEqual({ part_solution_images: { b: 'https://x/b.png' } });
+    expect(body.option_images).toBeUndefined();
+  });
+
+  it('keeps the three older slots exactly where they were', () => {
+    expect(
+      imagesPatchBody([
+        { slot: 'question', image: img('https://x/q.png') },
+        { slot: 'solution', image: img('https://x/s.png') },
+        { slot: 'a', image: img('https://x/a.png') },
+      ]),
+    ).toEqual({
+      question_image_url: 'https://x/q.png',
+      solution_image_url: 'https://x/s.png',
+      option_images: { a: 'https://x/a.png' },
+    });
+  });
+
+  it('sends null for a removed image so the column is cleared', () => {
+    expect(imagesPatchBody([{ slot: 'solution-a', image: null }])).toEqual({
+      part_solution_images: { a: null },
+    });
+  });
+
+  it('omits the keys nothing was pasted into', () => {
+    expect(imagesPatchBody([])).toEqual({});
   });
 });

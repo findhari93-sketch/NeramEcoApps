@@ -197,12 +197,30 @@ export interface FormCandidateView {
   blocked: FormLinkBlock | null;
 }
 
+/**
+ * Where the "please fill in your details" link has got to for one student.
+ *
+ * Staff need this to know whom they have already chased. Without it the sheet says
+ * the same thing on day one and day twelve, and two teachers ask the same student
+ * twice while nobody asks the next one at all.
+ */
+export interface DetailRequestView {
+  progress: 'not_asked' | 'asked' | 'opened' | 'answered';
+  askedAt: string | null;
+  askedByName: string | null;
+  openedAt: string | null;
+  answeredAt: string | null;
+  expiresAt: string | null;
+}
+
 /** A student whose own record holds no application form, with what may be theirs. */
 export interface StudentFormReview {
   id: string;
   name: string;
   email: string | null;
   candidates: FormCandidateView[];
+  /** Null when the screen could not read the request state, never a guessed 'not_asked'. */
+  detailRequest: DetailRequestView | null;
 }
 
 /** What linking a form did, for the confirmation line. */

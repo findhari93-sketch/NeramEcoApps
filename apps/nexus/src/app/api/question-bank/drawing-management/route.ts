@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // Fetch DRAWING_PROMPT questions from QB with their sources
     let query = supabase
       .from('nexus_qb_questions')
-      .select('id, question_text, difficulty, categories, solution_image_url, solution_video_url, objects_to_include, colour_constraint, design_principle_tested, is_active, created_at')
+      .select('id, question_text, difficulty, categories, solution_image_url, solution_video_url, drawing_parts, objects_to_include, colour_constraint, design_principle_tested, is_active, created_at')
       .eq('question_format', 'DRAWING_PROMPT')
       .eq('is_active', true)
       .order('created_at', { ascending: false });
@@ -77,6 +77,9 @@ export async function GET(request: NextRequest) {
         categories: q.categories,
         solution_image_url: q.solution_image_url,
         solution_video_url: q.solution_video_url,
+        // The column above is only a mirror of the first part that has one, so
+        // the page needs the parts themselves to say whether every part is done.
+        drawing_parts: q.drawing_parts ?? null,
         objects_to_include: q.objects_to_include,
         colour_constraint: q.colour_constraint,
         design_principle_tested: q.design_principle_tested,

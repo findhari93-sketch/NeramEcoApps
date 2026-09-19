@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { detailRequestProgress, listLiveDetailRequests } from '@neram/database/queries';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { canUser } from '@/lib/staff-capabilities';
@@ -170,6 +171,26 @@ export async function GET(request: NextRequest) {
     if (dismissalError) console.warn('[application-forms] dismissals unavailable:', dismissalError.message);
     for (const row of (dismissals || []) as any[]) dismissed.add(`${row.student_id}:${row.form_user_id}`);
 
+    // Where the "please fill in your details" link has got to for each of them, in
+    // one query rather than a fetch per card. Read best-effort for the same reason
+    // as the dismissals above: a missing table must not blank the whole screen, and
+    // a null tells the sheet to say nothing rather than claim nobody has been asked.
+    const requestByUser: Record<string, any> = {};
+    const askedByName: Record<string, string | null> = {};
+    try {
+      const live = await listLiveDetailRequests(missingIds, supabase);
+      Object.assign(requestByUser, live);
+      const askerIds = Array.from(
+        new Set(Object.values(live).map((row: any) => row.created_by).filter(Boolean)),
+      ) as string[];
+      if (askerIds.length) {
+        const { data: askers } = await supabase.from('users').select('id, name').in('id', askerIds);
+        for (const asker of (askers || []) as any[]) askedByName[asker.id] = asker.name || null;
+      }
+    } catch (requestError: any) {
+      console.warn('[application-forms] detail requests unavailable:', requestError?.message);
+    }
+
     const matchesByStudent = new Map<string, FormMatch[]>();
     const candidateIds = new Set<string>();
     for (const row of missing) {
@@ -225,11 +246,29 @@ export async function GET(request: NextRequest) {
           blocked,
         };
       });
+      const live = requestByUser[row.user_id];
       return {
         id: row.user_id,
         name: user.name || 'Student',
         email: user.linked_classroom_email || user.email || user.personal_email || null,
         candidates,
+        detailRequest: live
+          ? {
+              progress: detailRequestProgress(live),
+              askedAt: live.sent_at || live.created_at || null,
+              askedByName: askedByName[live.created_by] ?? null,
+              openedAt: live.opened_at || null,
+              answeredAt: live.answered_at || null,
+              expiresAt: live.expires_at || null,
+            }
+          : {
+              progress: 'not_asked' as const,
+              askedAt: null,
+              askedByName: null,
+              openedAt: null,
+              answeredAt: null,
+              expiresAt: null,
+            },
       };
     });
 

@@ -2,10 +2,13 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { NexusQBQuestion, NexusQBQuestionOption } from '@neram/database';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import {
+  partIdOfSolutionSlot,
+  partSolutionUrl,
   questionImageSlots,
   questionImagesComplete,
   questionMissingSolutionImage,
   questionNeedsSolutionImage,
+  slotFilledOnServer,
   type SlotType,
 } from '@/lib/qb-image-needs';
 
@@ -27,15 +30,16 @@ export type PendingImages = Record<string, Partial<Record<SlotType, ImageState |
  * Bound per question so it can be handed straight to questionImageSlots, which
  * is what keeps the progress bar and the card border reading from one rule
  * instead of three.
+ *
+ * The saved answer comes from slotFilledOnServer rather than a copy of the
+ * slot-to-column map kept here. The copy is how a new slot type gets read in
+ * one place and ignored in the other.
  */
 function filledWithPending(question: NexusQBQuestion, pending: PendingImages) {
   return (slot: SlotType): boolean => {
     const pendingImg = pending[question.id]?.[slot];
     if (pendingImg !== undefined) return pendingImg !== null; // null means explicitly removed
-    if (slot === 'question') return !!question.question_image_url;
-    if (slot === 'solution') return !!question.solution_image_url;
-    const options = question.options as NexusQBQuestionOption[] | null;
-    return !!options?.find((o) => o.id === slot)?.image_url;
+    return slotFilledOnServer(question, slot);
   };
 }
 
@@ -76,6 +80,12 @@ export function getEffectiveImage(
     return question.solution_image_url
       ? { url: question.solution_image_url, uploaded: true }
       : undefined;
+  }
+  // A part's solution lives inside the drawing_parts JSONB, not in a column.
+  const partId = partIdOfSolutionSlot(slot);
+  if (partId) {
+    const url = partSolutionUrl(question, partId);
+    return url ? { url, uploaded: true } : undefined;
   }
   const options = question.options as NexusQBQuestionOption[] | null;
   if (!options) return undefined;

@@ -23,6 +23,17 @@ const MATHS = [1, 2, 3].map((n) => q(n, 'math_mcq'));
 const APT = [4, 5, 6].map((n) => q(n, 'aptitude'));
 const ALL = [...MATHS, ...APT];
 
+/** A drawing prompt, which JEE Paper 2 prints last and in its own section. */
+function drawing(n: number, section: QBQuestionSection | null = 'drawing'): NexusQBQuestion {
+  return {
+    ...q(n, 'drawing'),
+    question_format: 'DRAWING_PROMPT',
+    options: null,
+    correct_answer: null,
+    section,
+  } as unknown as NexusQBQuestion;
+}
+
 const IMAGE_STATS = { total: 0, withImages: 0, solutionTotal: 3, solutionWithImages: 0 };
 const SAVE_PROGRESS = { done: 0, total: 0 };
 
@@ -236,12 +247,58 @@ describe('PaperQuestionList', () => {
     expect(screen.getByRole('button', { name: 'Solution missing 0' })).not.toBeNull();
   });
 
-  it('hides the solution filter on a paper with no maths at all', () => {
+  it('hides the solution filter on a paper that owes none at all', () => {
     renderList({
       questions: APT,
       imageStats: { total: 0, withImages: 0, solutionTotal: 0, solutionWithImages: 0 },
     });
     expect(screen.queryByRole('button', { name: /^Solution missing/ })).toBeNull();
+  });
+
+  it('shows the solution filter on an aptitude paper that has drawings', () => {
+    // A NATA paper is aptitude plus two drawings. The drawings owe a solution
+    // image each, so the queue is not empty even with no maths on the paper.
+    renderList({
+      questions: [...APT, drawing(7)],
+      imageStats: { total: 0, withImages: 0, solutionTotal: 1, solutionWithImages: 0 },
+    });
+    expect(screen.queryByRole('button', { name: /^Solution missing/ })).not.toBeNull();
+  });
+
+  /**
+   * The drawings of a paper are worked through on their own, usually by a
+   * different person, so they get a lens of their own next to the queues.
+   */
+  it('hides the drawing filter on a paper with no drawings', () => {
+    renderList();
+    expect(screen.queryByRole('button', { name: /^Drawing/ })).toBeNull();
+  });
+
+  it('counts the drawings of the paper', () => {
+    renderList({ questions: [...APT, drawing(7), drawing(8)] });
+    expect(screen.getByRole('button', { name: 'Drawing 2' })).not.toBeNull();
+  });
+
+  it('narrows to the drawings when the chip is on', () => {
+    renderList({ questions: [...APT, drawing(7), drawing(8)], needsFilter: 'drawing' });
+    expect(screen.getByText('2 of 5 questions')).not.toBeNull();
+    expect(screen.queryByText('Aptitude (Q4 to Q6)')).toBeNull();
+  });
+
+  it('sets the drawing filter when its chip is clicked', () => {
+    const onNeedsFilterChange = vi.fn();
+    renderList({ questions: [...APT, drawing(7)], onNeedsFilterChange });
+    fireEvent.click(screen.getByRole('button', { name: /^Drawing/ }));
+    expect(onNeedsFilterChange).toHaveBeenCalledWith('drawing');
+  });
+
+  it('finds a drawing whose section was never filled in', () => {
+    // This is what the chip is for. The Section select is built from stored
+    // sections, so on a paper nobody ran "Fill in missing sections" on there is
+    // no Drawing option to pick, and the drawing hides under Unsectioned.
+    renderList({ questions: [...APT, drawing(7, null)], needsFilter: 'drawing' });
+    expect(screen.getByText('1 of 4 questions')).not.toBeNull();
+    expect(screen.getByText('Unsectioned (Q7 to Q7)')).not.toBeNull();
   });
 
   /**

@@ -336,16 +336,21 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           />
         )}
         <Box sx={{ flex: 1 }} />
-        {/* The backlog button. Everything it prepares would eventually be done
-            by the nightly sweep; this is for the teacher who has students
-            waiting today. */}
+        {/* An escape hatch, not a chore.
+            Outlined rather than contained on purpose. The sweep now runs every
+            fifteen minutes from 20:45 IST and picks a class up in whichever pass
+            completes it, so there is normally nothing here to prepare. A filled
+            primary button reads as the thing a teacher is supposed to press, and
+            pressing it was exactly the manual step this pipeline exists to
+            remove. Kept because a Teams outage or a spent Gemini budget is still
+            worth being able to retry by hand. */}
         <Button
           size="small"
-          variant="contained"
+          variant="outlined"
           startIcon={<AutoAwesomeIcon />}
           onClick={prepareMissing}
           disabled={!!prep && !prep.finished}
-          sx={{ minHeight: 40, textTransform: 'none', fontWeight: 700 }}
+          sx={{ minHeight: 44, textTransform: 'none' }}
         >
           {prep && !prep.finished ? 'Preparing...' : 'Prepare missing classes'}
         </Button>
@@ -355,7 +360,7 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           startIcon={<AddIcon />}
           onClick={() => setManualOpen(true)}
           disabled={!data.classroomId}
-          sx={{ minHeight: 40, textTransform: 'none' }}
+          sx={{ minHeight: 44, textTransform: 'none' }}
         >
           Recap from a link
         </Button>

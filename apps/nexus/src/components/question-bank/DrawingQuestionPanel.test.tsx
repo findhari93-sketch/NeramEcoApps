@@ -121,7 +121,7 @@ describe('with parts', () => {
 
   it('heads the single solution with whether there is one yet', () => {
     setup();
-    expect(screen.getByText('No solution yet')).toBeTruthy();
+    expect(screen.getByText('Solution image needed')).toBeTruthy();
     expect(screen.getByRole('button', { name: /copy prompt/i })).toBeTruthy();
   });
 
