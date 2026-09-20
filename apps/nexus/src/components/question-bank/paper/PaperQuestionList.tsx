@@ -52,8 +52,16 @@ export type PaperQuestionMode = 'edit' | 'images';
  * still needs doing" is not a thing a teacher only wants while pasting.
  * `'inactive'` narrows to questions hidden from students, so a teacher can
  * find the handful that got deactivated without scanning the whole paper.
+ * `'drawing'` is a lens rather than a backlog: the two or three drawings of a
+ * paper, which are worked through on their own and by a different person.
  */
-export type NeedsFilter = 'all' | 'figures' | 'missing-figure' | 'missing-solution' | 'inactive';
+export type NeedsFilter =
+  | 'all'
+  | 'figures'
+  | 'missing-figure'
+  | 'missing-solution'
+  | 'drawing'
+  | 'inactive';
 
 /** A section the list can be narrowed to, or '__none__' for unsectioned rows. */
 export type PaperSectionFilter = QBQuestionSection | '__none__';
@@ -332,6 +340,29 @@ export default function PaperQuestionList({
   const inactiveCount = useMemo(() => bySection.filter((q) => !q.is_active).length, [bySection]);
 
   /**
+   * The drawings of this paper.
+   *
+   * On `question_format`, never on `section`. The Section select below is built
+   * from stored sections, and prod holds papers nobody has run "Fill in missing
+   * sections" on, where a drawing sits under Unsectioned and the select offers
+   * no Drawing option at all. The format is never null and never guessed, so
+   * this chip finds them either way, which is what earns it its place next to
+   * a select that mostly does the same job.
+   *
+   * Visibility off the whole paper so narrowing to Aptitude does not make the
+   * chip vanish; the count off the section in view so the number describes what
+   * is on screen. Same split the Solution missing chip already uses.
+   */
+  const paperHasDrawings = useMemo(
+    () => questions.some((q) => q.question_format === 'DRAWING_PROMPT'),
+    [questions],
+  );
+  const drawingCount = useMemo(
+    () => bySection.filter((q) => q.question_format === 'DRAWING_PROMPT').length,
+    [bySection],
+  );
+
+  /**
    * Every section actually present on this paper, for the Section select.
    *
    * In QB_SECTIONS order, not first-seen order, so the menu reads in the order
@@ -355,9 +386,11 @@ export default function PaperQuestionList({
         ? (q) => questionMissingImages(q)
         : needsFilter === 'missing-solution'
           ? (q) => questionMissingSolutionImage(q)
-          : needsFilter === 'inactive'
-            ? (q) => !q.is_active
-            : questionReferencesFigure;
+          : needsFilter === 'drawing'
+            ? (q) => q.question_format === 'DRAWING_PROMPT'
+            : needsFilter === 'inactive'
+              ? (q) => !q.is_active
+              : questionReferencesFigure;
     return bySection.filter(predicate);
   }, [bySection, needsFilter]);
 
@@ -390,8 +423,9 @@ export default function PaperQuestionList({
    * The work queues, in the order a paper is actually worked through: see
    * everything, then the figures, then the solutions.
    *
-   * "Solution missing" is hidden on a paper with no maths at all (a NATA
-   * aptitude paper), rather than sitting there permanently reading 0.
+   * "Solution missing" is hidden on a paper that owes none at all, and
+   * "Drawing" on a paper that has none, rather than sitting there permanently
+   * reading 0.
    */
   const needsChips: {
     value: NeedsFilter;
@@ -409,6 +443,16 @@ export default function PaperQuestionList({
             label: 'Solution missing',
             count: missingSolutionCount,
             color: 'secondary' as const,
+          },
+        ])
+      : []),
+    ...(paperHasDrawings || needsFilter === 'drawing'
+      ? ([
+          {
+            value: 'drawing' as const,
+            label: 'Drawing',
+            count: drawingCount,
+            color: 'primary' as const,
           },
         ])
       : []),

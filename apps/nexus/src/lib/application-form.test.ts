@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { assessApplication } from '@neram/database';
 import {
   formClassLabel,
   formExamYear,
@@ -181,5 +182,43 @@ describe('masking contact detail', () => {
 
   it('leaves the domain readable, because that is the recognisable part', () => {
     expect(maskEmail('ayana.khan@gmail.com')).toBe('aXXX@gmail.com');
+  });
+});
+
+/**
+ * The boundary between the two questions, which look alike and are not.
+ *
+ * isApplicationForm asks "is this a real form, worth proposing as a merge candidate
+ * and trusting for class and exam year". assessApplication asks "do we have the
+ * facts". They are allowed to disagree, and they MUST keep disagreeing about a thin
+ * row: counting one as a form once hid a student's real form sitting on their other
+ * record, and then won as the newest after linking.
+ *
+ * This test exists so a future refactor cannot quietly merge the two rules.
+ */
+describe('isApplicationForm and assessApplication answer different questions', () => {
+  const thin: ApplicationForm = {
+    user_id: 'u1',
+    father_name: 'Velmurugan',
+    target_exam_year: 2027,
+    created_at: '2026-09-01T00:00:00Z',
+  };
+
+  it('does not count a row holding only a father name and an exam year as a form', () => {
+    expect(isApplicationForm(thin)).toBe(false);
+  });
+
+  it('still grades that row, because grading is a different question', () => {
+    expect(assessApplication({ lead: thin as any, user: { name: 'Ooveya' } }).state).toBe('partial');
+  });
+
+  it('counts a row as a form once it says what the student is studying', () => {
+    expect(isApplicationForm({ ...thin, applicant_category: 'school_student' })).toBe(true);
+    expect(isApplicationForm({ ...thin, academic_data: { current_class: '12' } })).toBe(true);
+    expect(isApplicationForm({ ...thin, application_number: 'NRM-1' })).toBe(true);
+  });
+
+  it('reports a student with no row at all as missing, not partial', () => {
+    expect(assessApplication({ lead: null }).state).toBe('missing');
   });
 });

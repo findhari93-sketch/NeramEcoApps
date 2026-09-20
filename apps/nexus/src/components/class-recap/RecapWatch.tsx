@@ -252,6 +252,27 @@ export default function RecapWatch({
     [authFetch, recap, recapId, passedIds, flushNow, loadingQuiz, watchMode, activeIdx, quizError],
   );
 
+  /**
+   * The student says a question is broken.
+   *
+   * The server files the report and takes the question out of the paper they
+   * are sitting, which drops the pass mark with it. Nothing is re-fetched: the
+   * draw has already been minted for this attempt, and swapping the questions
+   * under someone who has answered two of them would be worse than leaving the
+   * reported card on screen, greyed and uncounted.
+   */
+  const reportQuestion = useCallback(
+    async (questionId: string, reason: string, note: string) => {
+      const section = recap?.sections[activeIdx ?? -1];
+      if (!section) throw new Error('No active checkpoint');
+      await authFetch(
+        `/api/student/class-recaps/${recapId}/sections/${section.id}/questions/${questionId}/report`,
+        { method: 'POST', body: JSON.stringify({ reportType: reason, description: note }) },
+      );
+    },
+    [authFetch, recap, recapId, activeIdx],
+  );
+
   const submitQuiz = useCallback(
     async (answers: Record<string, string>) => {
       const section = recap?.sections[activeIdx ?? -1];
@@ -508,6 +529,7 @@ export default function RecapWatch({
           loadingQuestions={loadingQuiz}
           loadError={quizError}
           onRetryLoad={() => openQuiz(activeIdx!)}
+          onReportQuestion={reportQuestion}
         />
       )}
     </Box>

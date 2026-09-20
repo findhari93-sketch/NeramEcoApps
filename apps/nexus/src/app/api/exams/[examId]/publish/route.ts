@@ -8,8 +8,12 @@ import {
   awardBadge,
   recomputeExamScores,
   getSupabaseAdminClient,
+  loadExamEligibilityFacts,
+  removePaperlessExamResults,
 } from '@neram/database';
 import { requireExamStaff, loadExamRoster } from '@/lib/exam-access';
+import { buildExamEligibilityRoster } from '@/lib/exam-eligibility-roster';
+import { excusedReasons, setAsideExcused, summariseExcused } from '@/lib/exam-excused';
 import { extractBearerToken } from '@/lib/ms-verify';
 import { buildExamResultSections } from '@/lib/exam-results-model';
 import { snapshotRows } from '@/lib/exam-snapshot-rows';
@@ -40,15 +44,33 @@ async function buildModel(examId: string, classroomId: string) {
     console.error('[Exam Publish] could not refresh drawing scores:', err);
   });
 
-  const everyone = await loadExamRoster(classroomId);
+  // Loud on purpose: publishing without eligibility is exactly what told
+  // students who joined weeks later that they had been marked absent.
+  const [everyone, eligibility] = await Promise.all([
+    loadExamRoster(classroomId),
+    loadExamEligibilityFacts(examId, classroomId),
+  ]);
   const raw = await getExamResults(examId, everyone);
   // Paused students count only if they really sat it (founder rule, 2026-09-13):
   // a paused absentee must not appear in the results or inflate "absent".
   const dormant = new Set(everyone.filter((s) => s.dormant).map((s) => s.id));
-  const rows = raw.rows.filter((r) => !dormant.has(r.student_id) || Boolean(r.attempt_id));
+  const tracked = raw.rows.filter((r) => !dormant.has(r.student_id) || Boolean(r.attempt_id));
+  // Students the exam was never set for (joined after the covered classes,
+  // still catching up, or excused by a teacher) who have no paper and no open
+  // window are not results. See lib/exam-excused.ts: the four buckets keep
+  // summing to the roster because they are not on it.
+  const { kept: rows, excused } = setAsideExcused(
+    tracked,
+    excusedReasons(buildExamEligibilityRoster(eligibility)),
+  );
   const results = { ...raw, rows, stats: { ...raw.stats, roster: rows.length, absent: rows.filter((r) => r.absent).length } };
   const roster = everyone.filter((s) => !dormant.has(s.id) || rows.some((r) => r.student_id === s.id));
-  return { roster, results };
+  return {
+    roster,
+    results,
+    excused: summariseExcused(excused),
+    excusedIds: excused.map((e) => e.student_id),
+  };
 }
 
 export async function GET(
@@ -67,7 +89,7 @@ export async function GET(
       .eq('id', exam.classroom_id)
       .maybeSingle();
 
-    const { results } = await buildModel(params.examId, exam.classroom_id);
+    const { results, excused } = await buildModel(params.examId, exam.classroom_id);
 
     const blockers: string[] = [];
     const warnings: string[] = [];
@@ -119,6 +141,9 @@ export async function GET(
             second: results.second,
             podium: results.podium,
             drawings_ungraded: results.drawings_ungraded,
+            // Not in any bucket, not in the roster, never messaged. Counted here
+            // so the sheet can say who is missing from the numbers and why.
+            excused,
             rows: results.rows.map((r) => ({
               student_id: r.student_id,
               student_name: r.student_name,
@@ -227,7 +252,7 @@ export async function POST(
     }
 
     // Re-derived server side. The client only chose which sections to show.
-    const { results } = await buildModel(params.examId, exam.classroom_id);
+    const { results, excusedIds } = await buildModel(params.examId, exam.classroom_id);
     // Both sittings. A teacher who never published on the day and comes back
     // once the catch-up group has sat does have results to publish.
     const anySat = results.rows.some((r) => r.bucket === 'exam_day' || r.bucket === 'second_sitting');
@@ -280,6 +305,11 @@ export async function POST(
         absent: row.absent,
       })),
     );
+    // An earlier publish may have written a paperless absent row for somebody
+    // who has since been excused (a teacher override after results went out).
+    // Left there, their card would keep saying they were marked absent. Only
+    // rows with no paper go; a result somebody earned is never removed.
+    await removePaperlessExamResults(params.examId, excusedIds);
 
     // ── 2. Stamp the exam ───────────────────────────────────────────────────
     await setExamResultsState(

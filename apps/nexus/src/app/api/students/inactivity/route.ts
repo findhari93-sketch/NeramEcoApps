@@ -79,6 +79,12 @@ export async function GET(request: NextRequest) {
         .select('student_id, scheduled_class_id')
         .eq('classroom_id', classroomId)
         .eq('kind', 'no_show')
+        // A class a student told us in advance they would miss is not a no-show,
+        // and counting it here would raise the inactivity tier of the person who
+        // did exactly the right thing. Filtered on the machine-owned column
+        // rather than on kind alone, because kind is also set by the RSVP path
+        // and a row written before the window existed may not have caught up.
+        .is('away_window_id', null)
         .gte('detected_at', windowStart),
       // Which classes actually HAVE attendance data. Attendance sync runs on a
       // delegated Microsoft token, so a class nobody synced looks like the whole

@@ -262,6 +262,36 @@ export async function GET(request: NextRequest) {
         doorStats.set(placementId, { attempts, best_percentage: best, last_submitted_at: last });
       }
     }
+    /**
+     * What this student already told their teacher about a test they did not
+     * sit, per door, so the card can say "You told your teacher: Didn't know"
+     * rather than asking again. One read for every door on the page. A nicety:
+     * losing it costs the line, never the page.
+     */
+    const skipReasonByPlacement = new Map<
+      string,
+      { reason_code: string; reason_note: string | null; updated_at: string | null }
+    >();
+    if (doorPlacements.length > 0) {
+      try {
+        const { data: skips, error: skipErr } = await supabase
+          .from('nexus_test_skip_reasons')
+          .select('placement_id, reason_code, reason_note, updated_at')
+          .eq('student_id', studentId)
+          .in('placement_id', doorPlacements.map((p: any) => p.id));
+        if (skipErr) throw skipErr;
+        for (const s of (skips || []) as any[]) {
+          skipReasonByPlacement.set(s.placement_id, {
+            reason_code: s.reason_code,
+            reason_note: s.reason_note ?? null,
+            updated_at: s.updated_at ?? null,
+          });
+        }
+      } catch (err) {
+        console.warn('[student tests overview] skip reasons skipped:', (err as Error)?.message);
+      }
+    }
+
     const folderNames = new Map<string, string>();
     try {
       const { tree } = await listTestFolderTree({ scope: 'staff' }, supabase);
@@ -349,6 +379,7 @@ export async function GET(request: NextRequest) {
             ? { attempts: paper!.attempts, best_percentage: paper!.best_percentage ?? null }
             : null,
         status,
+        skip_reason: placement?.id ? (skipReasonByPlacement.get(placement.id) ?? null) : null,
         // Class-test fields, null on everything else so the page never has to
         // check which kind of item it is holding.
         due_at: null as string | null,

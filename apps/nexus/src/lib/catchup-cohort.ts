@@ -53,10 +53,49 @@ export interface AllClearStudent {
  * they are not being counted at all, and putting them on a wall their classmates
  * read would announce a status decision that is nobody else's business.
  */
-export async function loadAllClearStudents(
+export interface StudentBacklog {
+  studentId: string;
+  /** The users row, for screens that name people. */
+  user: any;
+  /** Their raw absence rows, oldest class first. */
+  items: any[];
+  /** The resolved item for each row above, index for index. */
+  resolved: any[];
+  /**
+   * Work the student can act on. Already EXCLUDES anything blocked on us:
+   * summariseMissedClasses skips `blocked` and `pending_teacher` outright, and
+   * summariseCatchupBacklog counts only items that `countsTowardPace`. Nothing
+   * downstream should subtract `blockedOnUs` from this again.
+   */
+  openCount: number;
+  /** No recording, or a recap we never published. Nobody can clear these. */
+  blockedOnUs: number;
+  /** Alias of `openCount`, named for readers who want the contrast explicit. */
+  ownOpen: number;
+  clock: ReturnType<typeof summariseCatchupClock>;
+}
+
+/**
+ * Resolve the whole classroom catch-up backlog, once.
+ *
+ * Extracted because two screens needed the same answer, and a second
+ * hand-written copy of this pipeline is exactly how the last two bugs in this
+ * area happened. The wall, the Teams celebration post and the attendance
+ * standing view all have to name the same people, and the only way to guarantee
+ * that is for the verdict to come from one function rather than from three that
+ * agree today.
+ *
+ * Every tracked student gets an entry, including those with no absence rows at
+ * all. A missing key is indistinguishable from a failed read at the caller, and
+ * "we could not tell" and "they owe nothing" are opposite answers.
+ */
+export async function loadClassroomBacklog(
   supabase: any,
   classroomId: string,
-): Promise<AllClearStudent[]> {
+  today: string,
+): Promise<Map<string, StudentBacklog>> {
+  const out = new Map<string, StudentBacklog>();
+
   const roster = await loadClassroomRoster<any>(classroomId, {
     includeDormant: true,
     client: supabase,
@@ -66,7 +105,7 @@ export async function loadAllClearStudents(
   for (const member of roster.members) {
     if (isTracked(member)) tracked.set(member.user_id, member.user);
   }
-  if (tracked.size === 0) return [];
+  if (tracked.size === 0) return out;
 
   const { data: rows } = await supabase
     .from('nexus_class_absences')
@@ -89,7 +128,6 @@ export async function loadAllClearStudents(
   }
 
   const windows = await readCatchupWindows(supabase, classroomId);
-  const today = istTodayYmd();
 
   const classIdsByStudent = new Map<string, string[]>();
   for (const [studentId, list] of byStudent) {
@@ -99,8 +137,6 @@ export async function loadAllClearStudents(
     );
   }
   const factsByStudent = await loadClassFactsForStudents(supabase, classIdsByStudent);
-
-  const out: AllClearStudent[] = [];
 
   for (const [studentId, user] of tracked) {
     const studentItems = (byStudent.get(studentId) || []).sort((a: any, b: any) => {
@@ -121,30 +157,60 @@ export async function loadAllClearStudents(
     const missedTotals = summariseMissedClasses(resolved);
     const openCount = missedTotals.open + (totals.total - totals.completed);
     const blockedOnUs = resolved.filter(
-      (r) => r.status === 'blocked' || r.status === 'pending_teacher',
+      (r: any) => r.status === 'blocked' || r.status === 'pending_teacher',
     ).length;
 
+    out.set(studentId, {
+      studentId,
+      user,
+      items: studentItems,
+      resolved,
+      openCount,
+      blockedOnUs,
+      // NOT `openCount - blockedOnUs`. Both summaries above have already
+      // dropped blocked and pending_teacher items, so subtracting again would
+      // report a student with three of their own items and two of ours as
+      // owing one, and catchupBucket's own `openCount` is documented the same
+      // way. The two numbers are disjoint, not nested.
+      ownOpen: openCount,
+      clock: summariseCatchupClock(resolved),
+    });
+  }
+
+  return out;
+}
+
+export async function loadAllClearStudents(
+  supabase: any,
+  classroomId: string,
+): Promise<AllClearStudent[]> {
+  const today = istTodayYmd();
+  const backlog = await loadClassroomBacklog(supabase, classroomId, today);
+
+  const out: AllClearStudent[] = [];
+
+  for (const b of backlog.values()) {
     // `pace` and `clock` cannot change this answer: `all_clear` is the first
     // test in catchupBucket and depends only on the two counts above. They are
     // passed honestly anyway rather than faked, so that if the order of those
     // tests ever changes this call does not quietly start lying.
     const bucket = catchupBucket({
-      openCount,
-      blockedOnUs,
-      clock: summariseCatchupClock(resolved),
-      pace: { state: openCount === 0 ? 'done' : 'on_track' },
+      openCount: b.openCount,
+      blockedOnUs: b.blockedOnUs,
+      clock: b.clock,
+      pace: { state: b.openCount === 0 ? 'done' : 'on_track' },
     });
     if (bucket !== 'all_clear') continue;
 
     out.push({
-      id: studentId,
-      name: user?.name ?? null,
-      email: user?.email ?? null,
-      avatar_url: user?.avatar_url ?? null,
+      id: b.studentId,
+      name: b.user?.name ?? null,
+      email: b.user?.email ?? null,
+      avatar_url: b.user?.avatar_url ?? null,
       standing: catchupStanding(
-        studentItems.map((i: any, idx: number) => ({
+        b.items.map((i: any, idx: number) => ({
           kind: i.kind ?? null,
-          status: resolved[idx].status,
+          status: b.resolved[idx].status,
           scheduledDate: String(i.class.scheduled_date),
           caughtUpAt: i.caught_up_at ?? null,
           followupSentAt: i.followup_sent_at ?? null,

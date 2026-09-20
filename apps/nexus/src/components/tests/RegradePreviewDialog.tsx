@@ -232,7 +232,7 @@ export default function RegradePreviewDialog({
                           flexWrap: 'wrap',
                         }}
                       >
-                        {/* The face, with its cohort ring, in front of the name.
+                        {/* The face, with its info ring, in front of the name.
                             A teacher about to change somebody's recorded score
                             should recognise who, not read who. */}
                         <StudentAvatar

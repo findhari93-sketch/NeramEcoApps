@@ -36,6 +36,10 @@ export interface ProfileStudent {
   ms_oid: string | null;
   linked_classroom_email: string | null;
   academic_year: string | null;
+  /** users.home_language. Null reads as English. */
+  home_language: string | null;
+  /** users.limited_english: they cannot follow a class taught in English. */
+  limited_english: boolean;
   student_program: string | null;
   lifecycle_status: string | null;
   is_alumni: boolean | null;

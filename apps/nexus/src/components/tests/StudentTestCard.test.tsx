@@ -254,3 +254,57 @@ describe('examResultChip', () => {
     ).toBeNull();
   });
 });
+
+/** "Tell your teacher why", at the DOM. The rule itself is pinned in the resolver's tests. */
+describe('StudentTestCard, Tell your teacher why', () => {
+  const missedExam = {
+    is_exam: true,
+    placement_context: 'exam',
+    required: true,
+    available_until: new Date(NOW - 30 * DAY).toISOString(),
+    eligibility_bucket: 'mandatory_attended',
+  } as Partial<StudentTest> & StudentTestFacts;
+
+  it('offers it beside the reopen request, and both do their own thing', () => {
+    const onExplain = vi.fn();
+    const onAskTeacher = vi.fn();
+    const { test } = renderCard(missedExam, { onExplain, onAskTeacher });
+
+    fireEvent.click(screen.getByTestId('test-card-why'));
+    expect(onExplain).toHaveBeenCalledWith(test);
+    expect(onAskTeacher).not.toHaveBeenCalled();
+
+    fireEvent.click(cta()!);
+    expect(onAskTeacher).toHaveBeenCalledWith(test);
+  });
+
+  it('says what they told their teacher, with a way to change it', () => {
+    const onExplain = vi.fn();
+    renderCard(
+      { ...missedExam, skip_reason: { reason_code: 'did_not_know', reason_note: null, updated_at: null } },
+      { onExplain },
+    );
+    expect(screen.getByTestId('test-card-why-given').textContent).toContain("You told your teacher: Didn't know");
+    expect(screen.queryByTestId('test-card-why')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Change what you told your teacher/ }));
+    expect(onExplain).toHaveBeenCalled();
+  });
+
+  it('renders nothing when the page did not wire it, rather than a button that goes nowhere', () => {
+    renderCard(missedExam);
+    expect(screen.queryByTestId('test-card-why')).toBeNull();
+  });
+
+  it('is absent on a test they sat', () => {
+    renderCard({ ...missedExam, attempts: 1, last_submitted_at: new Date(NOW - 31 * DAY).toISOString() }, { onExplain: vi.fn() });
+    expect(screen.queryByTestId('test-card-why')).toBeNull();
+    expect(screen.queryByTestId('test-card-why-given')).toBeNull();
+  });
+
+  it('adds no disabled control', () => {
+    const { container } = render(
+      <StudentTestCard test={make(missedExam)} onStart={vi.fn()} onAskTeacher={vi.fn()} onExplain={vi.fn()} />,
+    );
+    expect(container.querySelectorAll('[disabled], [aria-disabled="true"]')).toHaveLength(0);
+  });
+});

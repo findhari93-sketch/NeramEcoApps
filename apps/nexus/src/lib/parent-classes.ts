@@ -45,9 +45,11 @@ import {
   type ClassAttendanceView,
   type ScheduledClassRow,
 } from '@/lib/parent-attendance';
+import { loadAwayWindows } from '@/lib/away-windows';
 import { CLASS_IMAGES_EMBED, sortClassImages } from '@/lib/class-cover';
 import type { ClassScope } from '@/lib/parent-data';
 import { istToday } from '@/lib/parent-data';
+import { sessionWindow } from '@/lib/attendance-register';
 import type {
   ParentClass,
   ParentClassPhase,
@@ -369,17 +371,23 @@ export async function loadParentClassWindow(
   // the others. Handing several Supabase builders straight to Promise.all makes
   // TypeScript unify deep generic result types and give up with "type
   // instantiation is excessively deep". Same pattern as lib/parent-data.ts.
-  const [measuredRows, mineRows, absenceRows, holidays] = await Promise.all([
-    (async (): Promise<{ scheduled_class_id: string }[]> => {
+  const [measuredRows, mineRows, absenceRows, holidays, awayWindows] = await Promise.all([
+    (async (): Promise<{ scheduled_class_id: string; attended: boolean | null; left_at: string | null }[]> => {
       if (!settledIds.length) return [];
       // Roster-wide, deliberately. One row from ANY student proves the class was
       // synced, which is what lets this child's missing row mean "absent"
-      // instead of "unknown". See lib/parent-attendance.ts.
+      // instead of "unknown". See lib/parent-attendance.ts. attended and left_at
+      // cost nothing extra here and are what tell us when each class actually
+      // ended, which no single student's row can say.
       const { data } = await supabase
         .from('nexus_attendance')
-        .select('scheduled_class_id')
+        .select('scheduled_class_id, attended, left_at')
         .in('scheduled_class_id', settledIds);
-      return (data || []) as { scheduled_class_id: string }[];
+      return (data || []) as {
+        scheduled_class_id: string;
+        attended: boolean | null;
+        left_at: string | null;
+      }[];
     })(),
     (async (): Promise<AttendanceRow[]> => {
       if (!settledIds.length) return [];
@@ -405,14 +413,28 @@ export async function loadParentClassWindow(
       return (data || []) as ParentAbsenceRow[];
     })(),
     loadHolidays(classroomId, start, end),
+    // This child's declared away windows, so a class inside a fortnight of
+    // school exams reads as "Away" rather than a bare "Missed".
+    loadAwayWindows(supabase, { studentIds: [studentId] }),
   ]);
 
   const measuredClassIds = new Set(measuredRows.map((r) => r.scheduled_class_id));
+  const rowsByClass = new Map<string, { attended: boolean | null; left_at: string | null }[]>();
+  for (const r of measuredRows) {
+    const list = rowsByClass.get(r.scheduled_class_id) || [];
+    list.push({ attended: r.attended, left_at: r.left_at });
+    rowsByClass.set(r.scheduled_class_id, list);
+  }
+  const sessionWindows = new Map(
+    settled.map((c) => [c.id, sessionWindow(c, rowsByClass.get(c.id) || [])])
+  );
   const attendanceViews = buildClassAttendanceViews(
     settled,
     mineRows,
     measuredClassIds,
-    absenceRows as AbsenceRow[]
+    absenceRows as AbsenceRow[],
+    sessionWindows,
+    awayWindows
   );
   const viewByClass = new Map(attendanceViews.map((v) => [v.classId, v]));
   const absenceByClass = new Map(absenceRows.map((a) => [a.scheduled_class_id, a]));
@@ -690,14 +712,21 @@ export async function loadParentClassDetail(
   const phase = classPhase(row, nowMs);
   const settled = phase === 'past';
 
-  const [measuredRows, mineRows, absenceRows, tagRows] = await Promise.all([
-    (async (): Promise<{ scheduled_class_id: string }[]> => {
+  const [measuredRows, mineRows, absenceRows, tagRows, awayWindows] = await Promise.all([
+    (async (): Promise<{ scheduled_class_id: string; attended: boolean | null; left_at: string | null }[]> => {
       if (!settled) return [];
+      // Not filtered by student_id, so this is already roster-wide: attended and
+      // left_at are what tell us when the class actually ended, which no single
+      // student's row can say. See lib/parent-attendance.ts.
       const { data } = await supabase
         .from('nexus_attendance')
-        .select('scheduled_class_id')
+        .select('scheduled_class_id, attended, left_at')
         .eq('scheduled_class_id', classId);
-      return (data || []) as { scheduled_class_id: string }[];
+      return (data || []) as {
+        scheduled_class_id: string;
+        attended: boolean | null;
+        left_at: string | null;
+      }[];
     })(),
     (async (): Promise<AttendanceRow[]> => {
       if (!settled) return [];
@@ -730,6 +759,9 @@ export async function loadParentClassDetail(
         .filter(Boolean)
         .map((t: any) => ({ id: t.id, label: t.label }));
     })(),
+    // This child's declared away windows, so a class inside a fortnight of
+    // school exams reads as "Away" rather than a bare "Missed".
+    loadAwayWindows(supabase, { studentIds: [studentId] }),
   ]);
 
   const absence = absenceRows[0] ?? null;
@@ -746,7 +778,17 @@ export async function loadParentClassDetail(
         [row as unknown as ScheduledClassRow],
         mineRows,
         new Set(measuredRows.map((r) => r.scheduled_class_id)),
-        absenceRows as AbsenceRow[]
+        absenceRows as AbsenceRow[],
+        new Map([
+          [
+            classId,
+            sessionWindow(
+              row as unknown as ScheduledClassRow,
+              measuredRows.map((r) => ({ attended: r.attended, left_at: r.left_at }))
+            ),
+          ],
+        ]),
+        awayWindows
       )
     : [];
 

@@ -3,15 +3,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Button, Paper, Typography, TextField, MenuItem, Alert,
-  Stepper, Step, StepLabel, CircularProgress, Divider, Chip,
-  ImageUploadField,
+  Stepper, Step, StepLabel, CircularProgress,
 } from '@neram/ui';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
-const STEPS = ['Personal', 'Academic', 'Location', 'Fee Status'];
+/**
+ * Money is deliberately absent from this wizard.
+ *
+ * A student does not know their own fee. It is agreed per student by the office
+ * and differs between students, so asking them to confirm or report it invites a
+ * wrong number into the only figure every balance in every app derives from.
+ * Fees are set by staff in Admin, and read there.
+ *
+ * These three steps are exactly what the no-login WhatsApp form at /s/<token>
+ * collects, so a student who fills in either one produces the same record.
+ */
+const STEPS = ['Personal', 'Academic', 'Location'];
+const LAST_STEP = STEPS.length - 1;
 
 const APPLICANT_CATEGORIES = [
   { value: 'school_student', label: 'School Student' },
@@ -73,11 +84,6 @@ interface ProfileData {
   isComplete: boolean;
 }
 
-interface FeeData {
-  feeSummary: { total_fee: number; fee_paid: number; fee_due: number } | null;
-  payments: any[];
-}
-
 export default function CompleteProfilePage() {
   const router = useRouter();
   const { getToken, loading: authLoading } = useNexusAuthContext();
@@ -86,7 +92,6 @@ export default function CompleteProfilePage() {
   const isMandatory = false;
   const [activeStep, setActiveStep] = useState(0);
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
-  const [feeData, setFeeData] = useState<FeeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -113,28 +118,6 @@ export default function CompleteProfilePage() {
   const [state, setState] = useState('');
   const [pincode, setPincode] = useState('');
   const [pincodeLoading, setPincodeLoading] = useState(false);
-
-  // Fee report state
-  const [reportAmount, setReportAmount] = useState('');
-  const [reportNotes, setReportNotes] = useState('');
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [proofPreview, setProofPreview] = useState<string | null>(null);
-  const [reportingPayment, setReportingPayment] = useState(false);
-  const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
-
-  // The shared field only PICKS the receipt (paste / drop / choose). The file is
-  // uploaded to /api/student/fee-report on submit; here we just capture the File
-  // and return a data URL so the field can show a preview (image thumb or PDF icon).
-  const pickProof = useCallback(async (f: File): Promise<{ url: string }> => {
-    setProofFile(f);
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(f);
-    });
-    return { url: dataUrl };
-  }, []);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -187,30 +170,21 @@ export default function CompleteProfilePage() {
     }
   }, []);
 
-  const fetchFees = useCallback(async () => {
-    try {
-      const token = await getToken();
-      const res = await fetch('/api/student/fee-report', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      setFeeData(await res.json());
-    } catch { /* ignore */ }
-  }, [getToken]);
-
   useEffect(() => {
     if (!authLoading) {
       fetchProfile();
-      fetchFees();
     }
-  }, [authLoading, fetchProfile, fetchFees]);
+  }, [authLoading, fetchProfile]);
 
   // Restore last saved step from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('nexus_profile_step');
     if (saved) {
       const step = parseInt(saved, 10);
-      if (step >= 0 && step <= 3) setActiveStep(step);
+      // Clamped to the CURRENT step list. A returning student whose device still
+      // remembers the old fourth step would otherwise land on a step that no
+      // longer renders, and see an empty card with no way forward.
+      if (step >= 0 && step <= LAST_STEP) setActiveStep(step);
     }
   }, []);
 
@@ -284,45 +258,6 @@ export default function CompleteProfilePage() {
       setError(err.message);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleReportPayment = async () => {
-    if (!reportAmount || parseFloat(reportAmount) <= 0) {
-      setError('Enter a valid amount');
-      return;
-    }
-    setReportingPayment(true);
-    setError('');
-    try {
-      const token = await getToken();
-      const formData = new FormData();
-      formData.append('amount', reportAmount);
-      formData.append('payment_date', reportDate);
-      if (reportNotes) formData.append('notes', reportNotes);
-      if (proofFile) formData.append('proof', proofFile);
-
-      const res = await fetch('/api/student/fee-report', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to report payment');
-      }
-
-      setSuccess('Payment reported! Admin will verify it shortly.');
-      setReportAmount('');
-      setReportNotes('');
-      setProofFile(null);
-      setProofPreview(null);
-      fetchFees();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setReportingPayment(false);
     }
   };
 
@@ -483,107 +418,6 @@ export default function CompleteProfilePage() {
           </Box>
         )}
 
-        {/* Step 3: Fee Status */}
-        {activeStep === 3 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="subtitle2" fontWeight={700}>Fee Status</Typography>
-
-            {feeData?.feeSummary ? (
-              <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
-                <Paper variant="outlined" sx={{ flex: 1, p: 2, textAlign: 'center', borderRadius: 2 }}>
-                  <Typography variant="caption" color="text.secondary">Total Fee</Typography>
-                  <Typography variant="h6" fontWeight={700}>{'\u20B9'}{feeData.feeSummary.total_fee.toLocaleString('en-IN')}</Typography>
-                </Paper>
-                <Paper variant="outlined" sx={{ flex: 1, p: 2, textAlign: 'center', borderRadius: 2 }}>
-                  <Typography variant="caption" color="text.secondary">Paid</Typography>
-                  <Typography variant="h6" fontWeight={700} color="success.main">{'\u20B9'}{feeData.feeSummary.fee_paid.toLocaleString('en-IN')}</Typography>
-                </Paper>
-                <Paper variant="outlined" sx={{ flex: 1, p: 2, textAlign: 'center', borderRadius: 2 }}>
-                  <Typography variant="caption" color="text.secondary">Due</Typography>
-                  <Typography variant="h6" fontWeight={700} color={feeData.feeSummary.fee_due > 0 ? 'error.main' : 'text.primary'}>
-                    {'\u20B9'}{feeData.feeSummary.fee_due.toLocaleString('en-IN')}
-                  </Typography>
-                </Paper>
-              </Box>
-            ) : (
-              <Alert severity="info" sx={{ borderRadius: 1.5 }}>
-                Fee details will be updated by admin. Check back later.
-              </Alert>
-            )}
-
-            {/* Report Payment */}
-            {(
-              <>
-                <Divider sx={{ my: 1 }} />
-                <Typography variant="subtitle2" fontWeight={600}>Report a Payment</Typography>
-                <TextField
-                  label="Payment Date" type="date" value={reportDate}
-                  onChange={(e) => setReportDate(e.target.value)}
-                  fullWidth size="small"
-                  InputLabelProps={{ shrink: true }}
-                />
-                <TextField
-                  label="Amount Paid (₹)" type="number" value={reportAmount}
-                  onChange={(e) => setReportAmount(e.target.value)}
-                  fullWidth size="small"
-                />
-                <TextField
-                  label="Notes (optional)" value={reportNotes}
-                  onChange={(e) => setReportNotes(e.target.value)}
-                  fullWidth size="small" placeholder="e.g. UPI transaction ID, bank reference"
-                />
-                <ImageUploadField
-                  value={proofPreview}
-                  onChange={(url) => {
-                    setProofPreview(url);
-                    if (!url) setProofFile(null);
-                  }}
-                  upload={pickProof}
-                  accept="image/*,.pdf"
-                  helperText="Upload Payment Proof"
-                  maxSizeMB={10}
-                />
-                <Button
-                  variant="contained"
-                  onClick={handleReportPayment}
-                  disabled={reportingPayment || !reportAmount}
-                  sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 600 }}
-                >
-                  {reportingPayment ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
-                  Submit Payment Report
-                </Button>
-              </>
-            )}
-
-            {/* Payment History */}
-            {feeData?.payments && feeData.payments.length > 0 && (
-              <>
-                <Divider sx={{ my: 1 }} />
-                <Typography variant="subtitle2" fontWeight={600}>Payment History</Typography>
-                {feeData.payments.map((p: any) => (
-                  <Box key={p.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'grey.100' }}>
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2" fontWeight={600}>{'\u20B9'}{p.amount.toLocaleString('en-IN')}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(p.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </Typography>
-                    </Box>
-                    <Chip
-                      label={p.status}
-                      size="small"
-                      sx={{
-                        textTransform: 'capitalize', fontWeight: 600, fontSize: 11,
-                        bgcolor: p.status === 'paid' ? '#4CAF5014' : p.status === 'pending' ? '#F57C0014' : '#D32F2F14',
-                        color: p.status === 'paid' ? '#2E7D32' : p.status === 'pending' ? '#F57C00' : '#D32F2F',
-                      }}
-                    />
-                  </Box>
-                ))}
-              </>
-            )}
-          </Box>
-        )}
-
         {/* Save / Navigation */}
         {error && <Alert severity="error" sx={{ mt: 2, borderRadius: 1.5 }}>{error}</Alert>}
         {success && <Alert severity="success" icon={<CheckCircleIcon />} sx={{ mt: 2, borderRadius: 1.5 }}>{success}</Alert>}
@@ -597,7 +431,7 @@ export default function CompleteProfilePage() {
             Back
           </Button>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            {activeStep < 3 ? (
+            {activeStep < LAST_STEP ? (
               <Button
                 variant="contained"
                 onClick={handleSaveStep}

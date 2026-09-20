@@ -160,3 +160,125 @@ describe('labels and URL values', () => {
     expect(isResultFilter(undefined)).toBe(false);
   });
 });
+
+/**
+ * 2026-09-17, the 18 Aug exam. "Everyone 37" and a Not done tile the teacher
+ * could not trust: five students who joined weeks after the exam were in it.
+ * Excused is now a group of its own, and "who has not told me why" is one press.
+ */
+describe('Excused and Not said why', () => {
+  const lateJoiner: FilterableRow = { status: 'excused', passed: null };
+  const toldUs: FilterableRow = {
+    status: 'missed',
+    passed: null,
+    why: { code: 'did_not_know' },
+  };
+  const askedWithANote: FilterableRow = { status: 'missed', passed: null, request_note: 'I was at a wedding' };
+  const askedWithoutANote: FilterableRow = { status: 'missed', passed: null, request_note: '   ' };
+  const silent: FilterableRow = { status: 'missed', passed: null };
+  const stillOpen: FilterableRow = { status: 'not_started', passed: null };
+
+  it('puts an excused student under Excused and nowhere that chases them', () => {
+    expect(matchesResultFilter(lateJoiner, 'excused')).toBe(true);
+    for (const f of ['did', 'not_done', 'no_reason', 'passed', 'below_pass', 'below_avg'] as const) {
+      expect(matchesResultFilter(lateJoiner, f, { average: 70, scoreShown: 'first' })).toBe(false);
+    }
+  });
+
+  it('holds only the Not done students who have said nothing under Not said why', () => {
+    expect(matchesResultFilter(silent, 'no_reason')).toBe(true);
+    expect(matchesResultFilter(stillOpen, 'no_reason')).toBe(true);
+    expect(matchesResultFilter(toldUs, 'no_reason')).toBe(false);
+    expect(matchesResultFilter(askedWithANote, 'no_reason')).toBe(false);
+    // Asking to reopen with an empty note is not a reason.
+    expect(matchesResultFilter(askedWithoutANote, 'no_reason')).toBe(true);
+    // Never somebody who sat it, however quiet.
+    expect(matchesResultFilter(failedStudent, 'no_reason')).toBe(false);
+  });
+
+  it('makes Everyone the sum of Done, Not done, Excused and in progress', () => {
+    const rows = [passedStudent, failedStudent, neverStarted, missedIt, notRequired, lateJoiner, midway, toldUs];
+    const counts = countByResultFilter(rows);
+    const inProgress = rows.filter((r) => r.status === 'in_progress').length;
+    expect(counts.all).toBe(counts.did + counts.not_done + counts.excused + inProgress);
+  });
+
+  it('keeps Not said why inside Not done, so no student is counted as two different kinds of absent', () => {
+    const rows = [silent, toldUs, askedWithANote, stillOpen, lateJoiner, passedStudent];
+    const counts = countByResultFilter(rows);
+    expect(counts.no_reason).toBeLessThanOrEqual(counts.not_done);
+    for (const r of rows) {
+      if (matchesResultFilter(r, 'no_reason')) expect(matchesResultFilter(r, 'not_done')).toBe(true);
+    }
+  });
+
+  it('calls the new groups what a teacher would', () => {
+    expect(RESULT_FILTER_LABELS.excused).toBe('Excused');
+    expect(RESULT_FILTER_LABELS.no_reason).toBe('Not said why');
+    expect(isResultFilter('excused')).toBe(true);
+    expect(isResultFilter('no_reason')).toBe(true);
+  });
+
+  it('says why somebody is excused in words, never as a bucket slug', async () => {
+    const { excusedLabel } = await import('./test-result-filters');
+    expect(excusedLabel('excused_new_joiner', null)).toBe('Joined after this class');
+    expect(excusedLabel('excused_pending_catchup', null)).toBe('Still catching up');
+    expect(excusedLabel('teacher_override_excused', null)).toBe('Excused by you');
+    // The teacher's own words, when they wrote some.
+    expect(excusedLabel('teacher_override_excused', 'Away at the state meet')).toBe('Away at the state meet');
+    expect(excusedLabel(null, null)).toBe('Not required');
+  });
+
+  it('knows whether a student has said why', async () => {
+    const { hasSaidWhy } = await import('./test-result-filters');
+    expect(hasSaidWhy(toldUs)).toBe(true);
+    expect(hasSaidWhy(askedWithANote)).toBe(true);
+    expect(hasSaidWhy(askedWithoutANote)).toBe(false);
+    expect(hasSaidWhy(silent)).toBe(false);
+  });
+});
+
+describe('the behind filter', () => {
+  const row = (over: Partial<FilterableRow> = {}): FilterableRow => ({
+    status: 'excused',
+    passed: null,
+    catchup: { state: 'behind' },
+    ...over,
+  });
+
+  it('holds an excused new joiner who still owes catch-up', () => {
+    // The whole point: these students are not required to sit it, and they are
+    // exactly who a teacher chases, because catching up opens the door.
+    expect(matchesResultFilter(row(), 'behind')).toBe(true);
+    expect(matchesResultFilter(row({ status: 'missed' }), 'behind')).toBe(true);
+    expect(matchesResultFilter(row({ status: 'not_started' }), 'behind')).toBe(true);
+  });
+
+  it('leaves out anybody who has already sat it', () => {
+    expect(matchesResultFilter(row({ status: 'submitted', passed: true }), 'behind')).toBe(false);
+  });
+
+  it('leaves out somebody mid-paper, who has nothing to be chased about', () => {
+    expect(matchesResultFilter(row({ status: 'in_progress' }), 'behind')).toBe(false);
+  });
+
+  it('leaves out every other catch-up state, including an unknown one', () => {
+    for (const state of ['attended', 'caught_up', 'unknown'] as const) {
+      expect(matchesResultFilter(row({ catchup: { state } }), 'behind')).toBe(false);
+    }
+    expect(matchesResultFilter(row({ catchup: null }), 'behind')).toBe(false);
+    expect(matchesResultFilter({ status: 'missed', passed: null }, 'behind')).toBe(false);
+  });
+
+  it('is counted beside the groups it crosses', () => {
+    const counts = countByResultFilter([
+      row({ status: 'excused' }),
+      row({ status: 'missed' }),
+      row({ status: 'submitted', passed: true, catchup: { state: 'caught_up' } }),
+    ]);
+    expect(counts.behind).toBe(2);
+    expect(counts.excused).toBe(1);
+    expect(counts.not_done).toBe(1);
+    expect(counts.did).toBe(1);
+  });
+});

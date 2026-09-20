@@ -265,4 +265,91 @@ test.describe('Inspiration on a phone', () => {
     // 5s even on a warm route (seen: the results had painted, the URL lagged).
     await expect(page).toHaveURL(/\/student\/inspiration\?q=/, { timeout: 30_000 });
   });
+
+  /**
+   * The heart on a tile, seen from the Saved list.
+   *
+   * Saved is opened FIRST on purpose. The list keeps its answer in a cache that
+   * outlives the page (lib/swr-cache.ts), and the bug this guards was a Saved
+   * list that replayed the answer from before the heart was tapped: the drawing
+   * was in the database and on no screen the student could see.
+   */
+  test('a drawing saved from the grid is on the Saved list straight away', async ({ page }) => {
+    test.setTimeout(150_000);
+    test.skip(!phoneReady, 'could not create the phone fixture exemplar');
+
+    const first = await open(page, '/student/inspiration/saved');
+    test.skip(first !== 'ok', 'Nexus not running or flag off');
+    await expect(page.getByRole('heading', { name: 'Saved', exact: true })).toBeVisible({ timeout: 90_000 });
+    // The cache is written on a debounce and flushed as the page is left, so the
+    // answer has to have arrived before we navigate away from it.
+    await page.waitForLoadState('networkidle').catch(() => {});
+
+    await page.goto(`${NEXUS}/student/inspiration?q=${encodeURIComponent(PHONE_FIXTURE_TITLE)}`, {
+      waitUntil: 'domcontentloaded',
+    });
+    const tile = page.getByTestId('inspiration-tile').first();
+    await expect(tile).toBeVisible({ timeout: 90_000 });
+
+    const heart = tile.getByRole('button', { name: `Save ${PHONE_FIXTURE_TITLE}` });
+    await heart.click();
+    const filled = page.getByRole('button', { name: `Remove ${PHONE_FIXTURE_TITLE} from saved` });
+    await expect(filled).toBeVisible();
+
+    await page.getByRole('link', { name: 'Saved' }).click();
+    await expect(page).toHaveURL(/\/student\/inspiration\/saved/, { timeout: 60_000 });
+    await expect(page.getByRole('button', { name: `Remove ${PHONE_FIXTURE_TITLE} from saved` })).toBeVisible({
+      timeout: 60_000,
+    });
+    // Never the empty state over a drawing that is saved.
+    await expect(page.getByText('Nothing saved yet').first()).toBeHidden();
+
+    // Leave the student's Saved list as it was found.
+    await page.getByRole('button', { name: `Remove ${PHONE_FIXTURE_TITLE} from saved` }).click();
+  });
+
+  /**
+   * Whose drawing it is, on the grid itself.
+   *
+   * The grid used to be anonymous: the credit line existed but only the detail
+   * page rendered it, which is a strange way to celebrate somebody. The line is
+   * safe to show because nexus_inspiration_base nulls the author for a student
+   * who keeps their drawings out of the library, and the credit collapses to
+   * "Neram student" for them.
+   */
+  test('a tile says who drew it', async ({ page }) => {
+    test.setTimeout(120_000);
+    test.skip(!phoneReady, 'could not create the phone fixture exemplar');
+    const state = await open(page, `/student/inspiration?q=${encodeURIComponent(PHONE_FIXTURE_TITLE)}`);
+    test.skip(state === 'down', 'Nexus not running');
+    test.skip(state === 'off', 'student.inspiration is off in this environment');
+
+    const tile = page.getByTestId('inspiration-tile').first();
+    await expect(tile).toBeVisible({ timeout: 90_000 });
+    // The fixture is a teacher exemplar, so its credit is the reference line.
+    // A student's own drawing reads "Anuvika S. · 2027 batch" through the same
+    // element, which is what inspiration-present.test.ts pins down per case.
+    await expect(tile.getByText(/Neram reference|Neram student|batch|Alumni/).first()).toBeVisible();
+  });
+
+  /**
+   * The current-batch versus alumni split the teacher asked for. It already
+   * existed as a filter; this is the check that it is reachable with a thumb.
+   */
+  test('current students and alumni are one tap apart', async ({ page }) => {
+    test.setTimeout(120_000);
+    const state = await open(page, '/student/inspiration');
+    test.skip(state === 'down', 'Nexus not running');
+    test.skip(state === 'off', 'student.inspiration is off in this environment');
+
+    const alumni = page.getByRole('button', { name: /^Alumni/ }).first();
+    await expect(alumni).toBeVisible({ timeout: 90_000 });
+    const box = await alumni.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+
+    await alumni.click();
+    await expect(page).toHaveURL(/by=alumni/, { timeout: 30_000 });
+    await expect(page.getByRole('button', { name: /^Current students/ }).first()).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+  });
 });

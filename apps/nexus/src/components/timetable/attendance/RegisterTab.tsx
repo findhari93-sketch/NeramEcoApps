@@ -7,7 +7,7 @@ import TroubleshootIcon from '@mui/icons-material/Troubleshoot';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DiagnosticsStepList from '../DiagnosticsStepList';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
-import { stageKeyOf } from '@/lib/student-stage';
+import { knownStageKey } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
 import type { AttendanceRecord, AttendanceTabProps, DiagnosticsResult } from './types';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
@@ -186,7 +186,8 @@ export default function RegisterTab({
               }}
             >
               <StudentStageAvatar
-                stage={stageKeyOf(record.study_stage)}
+                stage={knownStageKey(record.study_stage)}
+                userId={record.student_id}
                 src={record.student?.avatar_url}
                 name={record.student?.name}
                 size={32}

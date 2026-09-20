@@ -26,6 +26,7 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
 import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
+import TranscriptHelp from './TranscriptHelp';
 import type {
   FlowAction,
   FlowActionKind,
@@ -225,6 +226,10 @@ export default function RecordingSteps({
   const checkpoints = track.section_count || 0;
   const questions = track.question_count || 0;
   const preparingHere = busy === 'preparing';
+  // Microsoft Stream cannot transcribe Tamil, so on a Tamil recording there is
+  // nothing for Nexus to have found and no point looking again.
+  const tamilTrack = track.language === 'ta' || track.language === 'ta_en';
+  const durationSeconds = track.recording?.duration_seconds || track.video_duration_seconds || 0;
   const copyingHere = busy === 'copying';
 
   const progress = (
@@ -310,14 +315,17 @@ export default function RecordingSteps({
           ) : (
             <>
               <Detail>
-                Nexus looked in the Teams class this recording came from and beside the video in SharePoint, and found
-                none. Upload the transcript to create checkpoints.
+                {tamilTrack
+                  ? 'Microsoft Stream cannot write a transcript for a Tamil class. Make one in English for free with Google AI Studio, then upload it to create checkpoints.'
+                  : 'Nexus looked in the Teams class this recording came from and beside the video in SharePoint, and found none. Upload the transcript to create checkpoints.'}
               </Detail>
               <Actions>
-                {actionButton('upload_transcript', 'Upload transcript (.vtt)', <UploadFileRoundedIcon />)}
-                <Button variant="text" onClick={onLookAgain} disabled={isBusy} sx={{ minHeight: 44, textTransform: 'none' }}>
-                  Look again
-                </Button>
+                {actionButton('upload_transcript', 'Upload transcript', <UploadFileRoundedIcon />)}
+                {!tamilTrack && (
+                  <Button variant="text" onClick={onLookAgain} disabled={isBusy} sx={{ minHeight: 44, textTransform: 'none' }}>
+                    Look again
+                  </Button>
+                )}
                 <Button
                   variant="text"
                   onClick={() => setShowHelp((v) => !v)}
@@ -328,13 +336,8 @@ export default function RecordingSteps({
                   Where do I get one?
                 </Button>
               </Actions>
-              <Collapse in={showHelp}>
-                <Box component="ol" sx={{ m: 0, mt: 1, pl: 2.5, color: 'text.secondary', typography: 'body2', lineHeight: 1.6 }}>
-                  <li>Open the video in SharePoint (use the link beside the video).</li>
-                  <li>Open the Transcript panel. If there is none, create one there and choose the language spoken.</li>
-                  <li>Choose Download and pick the .vtt format.</li>
-                  <li>Upload that file here. It stays with this recording only.</li>
-                </Box>
+              <Collapse in={showHelp} unmountOnExit>
+                <TranscriptHelp language={track.language} durationSeconds={durationSeconds} />
               </Collapse>
             </>
           )}

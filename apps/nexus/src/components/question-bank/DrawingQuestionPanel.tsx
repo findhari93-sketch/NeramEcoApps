@@ -1,16 +1,32 @@
 'use client';
 
-import { Stack, TextField, Typography } from '@neram/ui';
-import DrawingSolutionFields from './DrawingSolutionFields';
+import { useState } from 'react';
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Button,
+  Stack,
+  TextField,
+  Typography,
+} from '@neram/ui';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import DrawingSolutionFields, { SolutionStatus } from './DrawingSolutionFields';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 
 /**
- * Everything that makes a drawing question answerable and markable.
+ * What a drawing question needs beyond its text: the solution, and the marks.
  *
  * The solution itself (image, video, Copy prompt) lives in
- * DrawingSolutionFields. A single-task question renders it here once. A
- * question split into parts renders it once per part, beside that part's text
- * in DrawingPartsEditor, so this panel keeps only the question's marks.
+ * DrawingSolutionFields. A single-task question renders it here once, under a
+ * "Solution" line that says whether there is one yet. A question split into
+ * parts renders it once per part, beside that part's text in
+ * DrawingPartsEditor, so this panel is then only the marks line.
+ *
+ * Marks are a sentence, not a field. Every drawing question in the bank is
+ * worth 50, so a labelled input asking for a number the teacher already knows
+ * is a control that only ever gets skipped. Press Change on the rare paper
+ * that says otherwise.
  *
  * Colour rule, design principle, objects to include and focus points used to
  * live here too. Nobody was filling them in, so they are gone from
@@ -44,7 +60,7 @@ interface Props {
   hasParts?: boolean;
   /**
    * The marks the parts add up to, when every part of an "answer all parts"
-   * question has marks. The save sets drawing_marks to this, so the field shows
+   * question has marks. The save sets drawing_marks to this, so the line reads
    * it rather than inviting a number the server would overwrite.
    */
   derivedMarks?: number | null;
@@ -59,37 +75,65 @@ export default function DrawingQuestionPanel({
   hasParts = false,
   derivedMarks = null,
 }: Props) {
+  const [editingMarks, setEditingMarks] = useState(false);
+  const fixed = derivedMarks != null;
+
   return (
-    <Stack spacing={2.5}>
-      {hasParts ? (
-        <Typography variant="body2" color="text.secondary">
-          Each part has its own solution image and Copy prompt, under its text above.
-        </Typography>
-      ) : (
-        <DrawingSolutionFields
-          value={value}
-          onChange={onChange}
-          getToken={getToken}
-          promptText={questionText}
-          marks={value.drawing_marks ? Number(value.drawing_marks) : null}
-          categories={categories}
-        />
+    <Stack spacing={2}>
+      {!hasParts && (
+        <Accordion defaultExpanded disableGutters variant="outlined">
+          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 48 }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Solution
+              </Typography>
+              <SolutionStatus hasSolution={Boolean(value.solution_image)} />
+            </Stack>
+          </AccordionSummary>
+          <AccordionDetails>
+            <DrawingSolutionFields
+              value={value}
+              onChange={onChange}
+              getToken={getToken}
+              promptText={questionText}
+              marks={value.drawing_marks ? Number(value.drawing_marks) : null}
+              categories={categories}
+            />
+          </AccordionDetails>
+        </Accordion>
       )}
 
-      <TextField
-        label="Marks in the exam"
-        value={derivedMarks != null ? String(derivedMarks) : value.drawing_marks}
-        onChange={(e) => onChange({ drawing_marks: e.target.value.replace(/[^0-9]/g, '') })}
-        size="small"
-        inputMode="numeric"
-        disabled={derivedMarks != null}
-        helperText={
-          derivedMarks != null
-            ? 'The total of the part marks'
-            : 'Leave blank if the paper does not say'
-        }
-        sx={{ width: { xs: '100%', sm: 200 } }}
-      />
+      {editingMarks && !fixed ? (
+        <TextField
+          label="Marks in the exam"
+          value={value.drawing_marks}
+          onChange={(e) => onChange({ drawing_marks: e.target.value.replace(/[^0-9]/g, '') })}
+          size="small"
+          inputMode="numeric"
+          autoFocus
+          helperText="Leave blank if the paper does not say"
+          sx={{ width: { xs: '100%', sm: 200 } }}
+        />
+      ) : (
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
+          <Typography variant="body2" color="text.secondary">
+            {fixed
+              ? `Worth ${derivedMarks} marks in the exam, the total of the parts.`
+              : value.drawing_marks
+                ? `Worth ${value.drawing_marks} marks in the exam.`
+                : 'No marks recorded for the exam.'}
+          </Typography>
+          {!fixed && (
+            <Button
+              size="small"
+              onClick={() => setEditingMarks(true)}
+              sx={{ textTransform: 'none', minHeight: 44 }}
+            >
+              Change
+            </Button>
+          )}
+        </Stack>
+      )}
     </Stack>
   );
 }

@@ -39,6 +39,8 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import GradingOutlinedIcon from '@mui/icons-material/GradingOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import StudentAttemptSheet from '@/components/tests/StudentAttemptSheet';
 import TestResultsStudents, {
   type StudentResultRow,
@@ -53,8 +55,9 @@ import QuestionEditDialog from '@/components/tests/QuestionEditDialog';
 import RegradePreviewDialog from '@/components/tests/RegradePreviewDialog';
 import TestMessageDialog, { type MessageRecipient } from '@/components/tests/TestMessageDialog';
 import CountAttemptSheet from '@/components/tests/CountAttemptSheet';
+import ExamResultsSheet from '@/components/scheduled-exams/ExamResultsSheet';
 import StudentAvatar from '@/components/students/StudentAvatar';
-import { isResultFilter, type ResultFilter } from '@/lib/test-result-filters';
+import { excusedLabel, isResultFilter, type ResultFilter } from '@/lib/test-result-filters';
 import {
   DEFAULT_QUESTION_FILTERS,
   QUESTION_FILTER_PARAMS,
@@ -64,6 +67,20 @@ import {
 } from '@/lib/question-filters';
 import { formatReopenUntil } from '@/lib/reopen-deadline';
 import type { TestMessageTemplate } from '@/lib/test-message-templates';
+
+/**
+ * The exam a run belongs to, and the only thing on this screen that decides
+ * whether students can see anything at all. Null on every other door: a class
+ * test and an assigned paper show a student their answers the moment they
+ * submit, and only an exam holds them back.
+ */
+interface RunExam {
+  id: string;
+  title: string | null;
+  results_state: string;
+  results_published_at: string | null;
+  closes_at: string | null;
+}
 
 interface RunSummary {
   placement_id: string | null;
@@ -121,6 +138,7 @@ export default function TestResultsPanel({
   view: controlledView,
   runId: controlledRunId,
   onRunIdChange,
+  onRunLabelChange,
   initialRunId = '',
   initialFilter,
   testTitle,
@@ -143,6 +161,12 @@ export default function TestResultsPanel({
   /** The run both tabs report on, when the page owns it. Empty means all time. */
   runId?: string;
   onRunIdChange?: (runId: string) => void;
+  /**
+   * How the run picker names the selected run, lifted for anything outside the
+   * panel that has to say which run it means. The health banner sits above the
+   * tabs, and a problem copied out of it is much harder to act on without it.
+   */
+  onRunLabelChange?: (label: string | null) => void;
   /** The run to start on when the panel owns the run itself. */
   initialRunId?: string;
   /** Open straight onto one group of students, from a shared or bookmarked link. */
@@ -177,6 +201,8 @@ export default function TestResultsPanel({
   const [questions, setQuestions] = useState<QuestionAnalysisRow[]>([]);
   const [stats, setStats] = useState<StudentResultStats | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [runExam, setRunExam] = useState<RunExam | null>(null);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -234,6 +260,7 @@ export default function TestResultsPanel({
       setQuestions(json.data?.questions || []);
       setStats(json.data?.stats || null);
       setRuns(json.data?.runs || []);
+      setRunExam(json.data?.run?.exam ?? null);
       setError(null);
       // A dated run is about what the class knew on the day, so it leads with
       // the first sitting. An always-open practice pool has no such day. Set
@@ -285,6 +312,10 @@ export default function TestResultsPanel({
 
   const isRunScoped = Boolean(stats?.roster_total);
   const currentRun = useMemo(() => runs.find((r) => r.placement_id === runId) || null, [runs, runId]);
+
+  useEffect(() => {
+    onRunLabelChange?.(currentRun?.label ?? null);
+  }, [currentRun, onRunLabelChange]);
 
   async function setAccess(studentId: string, action: 'open' | 'close') {
     if (!runId) return;
@@ -384,7 +415,10 @@ export default function TestResultsPanel({
       'Last attempt at',
       'Self-study attempts',
       'Self-study best %',
+      'Reason given',
+      'Their note',
     ];
+    const quote = (s: string | null | undefined) => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const marks = (score: number | null, total: number | null) =>
       score == null || total == null ? '' : `${score}/${total}`;
     const lines = [header.join(',')];
@@ -395,7 +429,7 @@ export default function TestResultsPanel({
         [
           `"${(r.student_name || 'Unknown').replace(/"/g, '""')}"`,
           `"${BUCKET_LABELS[r.bucket || ''] || ''}"`,
-          `"${r.status === 'submitted' ? 'Done' : STATUS_TEXT[r.status]}"`,
+          `"${r.status === 'submitted' ? 'Done' : r.status === 'excused' ? excusedLabel(r.bucket, r.excused_note) : STATUS_TEXT[r.status]}"`,
           r.attempts,
           r.first_percentage ?? '',
           marks(r.first_score, r.first_total_marks),
@@ -406,6 +440,8 @@ export default function TestResultsPanel({
           r.last_submitted_at ?? '',
           r.elsewhere?.attempts ?? 0,
           r.elsewhere?.best_percentage == null ? '' : Math.round(r.elsewhere.best_percentage),
+          quote(r.why?.label ?? (r.request_note ? 'Asked to reopen' : '')),
+          quote([r.why?.note, r.request_note].filter(Boolean).join(' / ')),
         ].join(','),
       );
     }
@@ -425,7 +461,11 @@ export default function TestResultsPanel({
   }
 
   const toRecipients = (list: StudentResultRow[]): MessageRecipient[] =>
-    list.map((r) => ({ id: r.student_id, name: r.student_name }));
+    list.map((r) => ({
+      id: r.student_id,
+      name: r.student_name,
+      behind: r.catchup?.state === 'behind',
+    }));
 
   const waiting = (rows || []).filter((r) => r.access_request_pending);
   const sheetRow = sheet ? (sheet.list[sheet.index] ?? null) : null;
@@ -515,14 +555,19 @@ export default function TestResultsPanel({
               // they mean to say, so the sheet opens on that template rather than
               // making them pick it again.
               template:
-                filter === 'not_done' || list.every((r) => r.attempts === 0) ? 'missed' : 'redo',
+                filter === 'not_done' || filter === 'no_reason' || list.every((r) => r.attempts === 0)
+                  ? 'missed'
+                  : 'redo',
               mode: 'reopen',
             })
           }
           onMessage={(list) =>
             setMessage({
               recipients: toRecipients(list),
-              template: filter === 'not_done' ? 'missed' : 'redo',
+              // "Not said why" is the group a teacher filters to in order to
+              // ask, so the sheet opens on the message that asks, with its link
+              // to the student's "Tell your teacher why".
+              template: filter === 'no_reason' ? 'why' : filter === 'not_done' ? 'missed' : 'redo',
               mode: 'message',
             })
           }
@@ -554,6 +599,88 @@ export default function TestResultsPanel({
             </option>
           ))}
         </TextField>
+      )}
+
+      {/* Publishing, on the screen a teacher actually lands on.
+          The Conducted card says "Results not published" and links here, and
+          until now the only publish button in the product was on the timetable
+          exam page, which nothing here linked to. The sheet is unchanged: it
+          already knows about exam day, the second sitting and finalising. What
+          is new is reaching it, and saying in words what pressing it does. */}
+      {runExam && (
+        <Alert
+          severity={
+            runExam.results_state === 'unpublished'
+              ? 'warning'
+              : runExam.results_state === 'provisional'
+                ? 'info'
+                : 'success'
+          }
+          icon={runExam.results_state === 'unpublished' ? <VisibilityOffOutlinedIcon /> : undefined}
+          sx={{
+            mb: 1.5,
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            '& .MuiAlert-message': { width: '100%' },
+          }}
+          data-testid="exam-results-state"
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { xs: 'stretch', sm: 'center' },
+              gap: 1.5,
+            }}
+          >
+            <Box sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {runExam.results_state === 'unpublished'
+                  ? 'Results not published'
+                  : runExam.results_state === 'provisional'
+                    ? 'Results are out, marked provisional'
+                    : 'Results are final'}
+              </Typography>
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.25 }}>
+                {runExam.results_state === 'unpublished'
+                  ? 'Nobody can see their score, their rank or their answers yet. Publishing gives every student their own marks and opens the answers and solutions, and puts one summary card in the class Teams channel.'
+                  : runExam.results_state === 'provisional'
+                    ? 'Students can see their marks. They stay provisional until the drawings are marked, then press again to finalise.'
+                    : `Students have their marks and their answers${
+                        runExam.results_published_at ? ` since ${formatDay(runExam.results_published_at)}` : ''
+                      }.`}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Anyone who sits it late, through a reopen or after catching up, is ranked in a separate
+                second sitting list. Press the same button again once they are in. The channel is told
+                about the exam only once, so nobody is named there for missing the class.
+              </Typography>
+            </Box>
+            <Button
+              variant={runExam.results_state === 'unpublished' ? 'contained' : 'outlined'}
+              onClick={() => setPublishOpen(true)}
+              startIcon={<CampaignOutlinedIcon />}
+              data-testid="open-exam-results"
+              sx={{
+                minHeight: 48,
+                flexShrink: 0,
+                textTransform: 'none',
+                fontWeight: 700,
+                width: { xs: '100%', sm: 'auto' },
+              }}
+            >
+              {runExam.results_state === 'unpublished' ? 'Publish results' : 'Review results'}
+            </Button>
+          </Box>
+        </Alert>
+      )}
+
+      {runExam && (
+        <ExamResultsSheet
+          open={publishOpen}
+          onClose={() => setPublishOpen(false)}
+          examId={runExam.id}
+          onPublished={load}
+        />
       )}
 
       {notice && (

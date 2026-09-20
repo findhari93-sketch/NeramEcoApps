@@ -18,6 +18,7 @@ import {
   BUCKET_ORDER,
   catchupBucket,
   emptyTally,
+  isObligationClosed,
   tallyBuckets,
   type BucketInput,
   type CatchupBucket,
@@ -197,5 +198,36 @@ describe('tallyBuckets', () => {
     // A missing key renders as "NaN need attention" rather than "0".
     expect(Object.values(emptyTally()).every((n) => n === 0)).toBe(true);
     expect(Object.keys(emptyTally()).sort()).toEqual([...ALL_BUCKETS].sort());
+  });
+});
+
+/**
+ * The rule that was written twice.
+ *
+ * api/timetable/my-schedule drew "You missed N classes" from one copy and the
+ * catch-up count from another, and only the second checked `excused_at`. A
+ * teacher could excuse a student and the student kept the red banner. It was
+ * invisible because the Excuse button had never been pressed on production, so
+ * no row had ever carried the column that made the two disagree.
+ */
+describe('whether a student still owes a class', () => {
+  it('is open when neither thing has happened', () => {
+    expect(isObligationClosed({ excused_at: null, caught_up_at: null })).toBe(false);
+  });
+
+  it('is closed once they have caught up', () => {
+    expect(isObligationClosed({ excused_at: null, caught_up_at: '2026-09-19T05:00:00Z' })).toBe(true);
+  });
+
+  it('is closed once somebody excused it', () => {
+    // A teacher pressing Excuse, or a class that turned out never to have been
+    // taught. Different reasons, same column, and nothing left to ask for.
+    expect(isObligationClosed({ excused_at: '2026-09-19T05:00:00Z', caught_up_at: null })).toBe(true);
+  });
+
+  it('treats a missing column as open, not closed', () => {
+    // A row written before the column existed. Reading undefined as "closed"
+    // would silently clear a real backlog.
+    expect(isObligationClosed({})).toBe(false);
   });
 });

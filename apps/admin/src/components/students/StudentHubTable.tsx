@@ -23,6 +23,8 @@ import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
+import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
 import CopyablePhone from '@/components/CopyablePhone';
 
 export interface StudentRow {
@@ -66,6 +68,59 @@ export interface StudentRow {
   application_complete: boolean;
   application_status: string | null;
   application_missing: 'no_application' | 'incomplete' | null;
+  /** The shared three-state answer from assessApplication in @neram/database. */
+  application_state?: 'complete' | 'partial' | 'missing';
+  application_missing_fields?: string[];
+  /** "Missing class and exam year." Empty when nothing is missing. */
+  application_summary?: string;
+  /** How far the ask has got: nobody asked, link sent, opened, answered. */
+  detail_request_progress?: 'not_asked' | 'asked' | 'opened' | 'answered';
+  detail_request_sent_at?: string | null;
+  detail_request_opened_at?: string | null;
+  detail_request_expires_at?: string | null;
+}
+
+const APPLICATION_STATE_LABEL = {
+  complete: 'Complete',
+  partial: 'Partly filled',
+  missing: 'Not started',
+} as const;
+
+const APPLICATION_STATE_STYLE = {
+  complete: { bg: 'rgba(22,163,74,0.10)', fg: '#15803D' },
+  partial: { bg: 'rgba(217,119,6,0.12)', fg: '#B45309' },
+  // Grey, not red. A record nobody has filled in yet is a job to do, not a failure,
+  // and colouring 28 rows red makes the screen look broken.
+  missing: { bg: 'rgba(100,116,139,0.14)', fg: '#475569' },
+} as const;
+
+const ASKED_LABEL = {
+  not_asked: 'Not asked',
+  asked: 'Link sent',
+  opened: 'Opened',
+  answered: 'Answered',
+} as const;
+
+const ASKED_STYLE = {
+  not_asked: { bg: 'transparent', fg: '#94A3B8' },
+  asked: { bg: 'rgba(37,99,235,0.10)', fg: '#1D4ED8' },
+  // Amber, because an opened link that was never finished is the one state that
+  // needs a human to follow up rather than simply wait.
+  opened: { bg: 'rgba(217,119,6,0.12)', fg: '#B45309' },
+  answered: { bg: 'rgba(22,163,74,0.10)', fg: '#15803D' },
+} as const;
+
+/**
+ * The row's three-state answer, falling back to the old boolean pair.
+ *
+ * The fallback matters because this grid is also fed by screens that have not been
+ * moved onto the shared rule yet, and a row arriving without application_state must
+ * not silently read as "Not started".
+ */
+function stateOf(row: StudentRow): 'complete' | 'partial' | 'missing' {
+  if (row.application_state) return row.application_state;
+  if (row.application_complete) return 'complete';
+  return row.application_missing === 'no_application' ? 'missing' : 'partial';
 }
 
 interface StudentHubTableProps {
@@ -83,9 +138,65 @@ interface StudentHubTableProps {
   onGraduate: (rows: StudentRow[]) => void;
   /** Promote past-batch students to the current batch (also restores Nexus access). */
   onPromote?: (rows: StudentRow[]) => void;
+  /** Make a fill-in-your-details link for each selected student. */
+  onAskDetails?: (rows: StudentRow[]) => void;
+  /** Open the fee editor for one student. Fees are never asked of the student. */
+  onSetFees?: (row: StudentRow) => void;
 }
 
 const ACCENT = '#B45309';
+
+/**
+ * How each record arrived, named rather than lumped into "Application".
+ *
+ * This matters because the three routes are not equivalent. A website form
+ * carries a phone verified by OTP. A link sent to a student carries a phone they
+ * simply typed. A record staff filled in carries whatever staff were told. Until
+ * these were told apart, a student-filled link showed as "Application" and read
+ * as though it had been verified, and 'student_link' appeared raw in the CRM
+ * because nothing mapped it to a label at all.
+ */
+const JOIN_METHOD: Record<string, { label: string; hint: string; bg: string; fg: string }> = {
+  direct_link: {
+    label: 'Direct',
+    hint: 'Enrolled through an admin link, with the fee set by staff up front.',
+    bg: 'rgba(37,99,235,0.10)', fg: '#1D4ED8',
+  },
+  website_form: {
+    label: 'Application',
+    hint: 'Applied on the website. Phone verified by OTP.',
+    bg: 'rgba(100,116,139,0.12)', fg: '#475569',
+  },
+  app: {
+    label: 'Application',
+    hint: 'Applied in the student app. Phone verified by OTP.',
+    bg: 'rgba(100,116,139,0.12)', fg: '#475569',
+  },
+  student_link: {
+    label: 'Student link',
+    hint: 'The student filled in their own details from a link we sent. No OTP, so the phone is unverified.',
+    bg: 'rgba(217,119,6,0.12)', fg: '#B45309',
+  },
+  manual: {
+    label: 'Added by staff',
+    hint: 'Typed in by staff. The student never filled in a form.',
+    bg: 'rgba(100,116,139,0.12)', fg: '#475569',
+  },
+  referral: {
+    label: 'Referral',
+    hint: 'Came through a referral.',
+    bg: 'rgba(100,116,139,0.12)', fg: '#475569',
+  },
+  __default: {
+    label: 'Application',
+    hint: 'Applied through a form.',
+    bg: 'rgba(100,116,139,0.12)', fg: '#475569',
+  },
+};
+
+const JOIN_METHOD_OPTIONS = Array.from(
+  new Set(Object.entries(JOIN_METHOD).filter(([k]) => k !== '__default').map(([, v]) => v.label)),
+).map((label) => ({ value: label, text: label }));
 
 const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA',
@@ -131,6 +242,8 @@ export default function StudentHubTable({
   onMarkStaff,
   onGraduate,
   onPromote,
+  onAskDetails,
+  onSetFees,
 }: StudentHubTableProps) {
   const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
 
@@ -264,34 +377,84 @@ export default function StudentHubTable({
         id: 'application',
         header: 'Application',
         size: 150,
-        accessorFn: (row) => (row.application_complete ? 'Complete' : 'Incomplete'),
+        // Three states, not two. "Partly filled" is the normal condition of most
+        // records and must read as information rather than as a fault; "Not started"
+        // is the list actually worth chasing. Collapsing them into one orange
+        // "Incomplete" is what made this column unreadable.
+        accessorFn: (row) => APPLICATION_STATE_LABEL[stateOf(row)],
         filterVariant: 'select',
         filterSelectOptions: [
           { value: 'Complete', text: 'Complete' },
-          { value: 'Incomplete', text: 'Incomplete' },
+          { value: 'Partly filled', text: 'Partly filled' },
+          { value: 'Not started', text: 'Not started' },
         ],
         Cell: ({ row }) => {
           const s = row.original;
-          if (s.application_complete) {
+          const state = stateOf(s);
+          const style = APPLICATION_STATE_STYLE[state];
+          const tip =
+            state === 'complete'
+              ? 'Every detail we ask for is on file'
+              : state === 'missing'
+                ? 'No application form at all. Send them a link to fill it in.'
+                : s.application_summary || 'Some details are still missing';
+          const chip = (
+            <Chip
+              icon={
+                state === 'complete' ? (
+                  <CheckCircleIcon sx={{ fontSize: '14px !important' }} />
+                ) : (
+                  <ErrorOutlineIcon sx={{ fontSize: '14px !important' }} />
+                )
+              }
+              label={APPLICATION_STATE_LABEL[state]}
+              size="small"
+              sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: style.bg, color: style.fg }}
+            />
+          );
+          return state === 'complete' ? chip : <Tooltip title={tip} arrow>{chip}</Tooltip>;
+        },
+      },
+      {
+        id: 'asked',
+        header: 'Asked',
+        size: 120,
+        // Sits next to Application on purpose: "not started" and "nobody has asked
+        // them" are two different jobs, and staff were previously chasing the same
+        // student twice because the page could not tell them apart.
+        accessorFn: (row) => ASKED_LABEL[row.detail_request_progress || 'not_asked'],
+        filterVariant: 'select',
+        filterSelectOptions: [
+          { value: 'Not asked', text: 'Not asked' },
+          { value: 'Link sent', text: 'Link sent' },
+          { value: 'Opened', text: 'Opened' },
+          { value: 'Answered', text: 'Answered' },
+        ],
+        Cell: ({ row }) => {
+          const s = row.original;
+          const progress = s.detail_request_progress || 'not_asked';
+          // A complete form with nobody ever asked is the ordinary case for students
+          // who applied through the website. Printing "Not asked" against them would
+          // add 100 rows of noise to a column that exists to show a chase list.
+          if (progress === 'not_asked' && stateOf(s) === 'complete') return null;
+          if (progress === 'not_asked') {
             return (
-              <Chip
-                icon={<CheckCircleIcon sx={{ fontSize: '14px !important' }} />}
-                label="Complete"
-                size="small"
-                sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: 'rgba(22,163,74,0.10)', color: '#15803D' }}
-              />
+              <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                Not asked
+              </Typography>
             );
           }
-          const tip = s.application_missing === 'no_application'
-            ? 'No application form filled, basic details and course are missing'
-            : 'Basic application form not fully filled';
+          const style = ASKED_STYLE[progress];
+          const when = s.detail_request_opened_at || s.detail_request_sent_at;
           return (
-            <Tooltip title={tip} arrow>
+            <Tooltip
+              title={when ? `${ASKED_LABEL[progress]} on ${formatDate(when)}` : ASKED_LABEL[progress]}
+              arrow
+            >
               <Chip
-                icon={<ErrorOutlineIcon sx={{ fontSize: '14px !important' }} />}
-                label="Incomplete"
+                label={ASKED_LABEL[progress]}
                 size="small"
-                sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: 'rgba(217,119,6,0.12)', color: '#B45309' }}
+                sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: style.bg, color: style.fg }}
               />
             </Tooltip>
           );
@@ -300,27 +463,28 @@ export default function StudentHubTable({
       {
         id: 'join_method',
         header: 'Join method',
-        size: 120,
-        accessorFn: (row) => (row.source === 'direct_link' ? 'Direct' : 'Application'),
+        size: 130,
+        // The LABEL, not the object: this value is what the select filter and
+        // the CSV export compare against.
+        accessorFn: (row) => (JOIN_METHOD[row.source || ''] ?? JOIN_METHOD.__default).label,
         filterVariant: 'select',
-        filterSelectOptions: [
-          { value: 'Direct', text: 'Direct' },
-          { value: 'Application', text: 'Application' },
-        ],
+        filterSelectOptions: JOIN_METHOD_OPTIONS,
         Cell: ({ row }) => {
-          const direct = row.original.source === 'direct_link';
+          const method = JOIN_METHOD[row.original.source || ''] ?? JOIN_METHOD.__default;
           return (
-            <Chip
-              label={direct ? 'Direct' : 'Application'}
-              size="small"
-              sx={{
-                height: 22,
-                fontSize: 11,
-                fontWeight: 600,
-                bgcolor: direct ? 'rgba(37,99,235,0.10)' : 'rgba(100,116,139,0.12)',
-                color: direct ? '#1D4ED8' : '#475569',
-              }}
-            />
+            <Tooltip title={method.hint}>
+              <Chip
+                label={method.label}
+                size="small"
+                sx={{
+                  height: 22,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  bgcolor: method.bg,
+                  color: method.fg,
+                }}
+              />
+            </Tooltip>
           );
         },
       },
@@ -557,6 +721,30 @@ export default function StudentHubTable({
     },
 
     renderRowActions: ({ row }) => (
+      <Box sx={{ display: 'flex', gap: 0.25 }}>
+        {onSetFees && (
+          <Tooltip
+            title={
+              row.original.final_fee
+                ? `Fees: ${'₹'}${Number(row.original.final_fee).toLocaleString('en-IN')}`
+                : 'No fee set. Click to set it.'
+            }
+          >
+            <IconButton
+              size="small"
+              data-row-action
+              // Amber when nothing is on record, so a roster of students with no
+              // fee reads at a glance instead of needing a column of its own.
+              color={row.original.final_fee ? 'default' : 'warning'}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSetFees(row.original);
+              }}
+            >
+              <CurrencyRupeeIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
       <Tooltip title="Delete student">
         <IconButton
           size="small"
@@ -570,9 +758,10 @@ export default function StudentHubTable({
           <DeleteOutlineIcon fontSize="small" />
         </IconButton>
       </Tooltip>
+      </Box>
     ),
     displayColumnDefOptions: {
-      'mrt-row-actions': { header: '', size: 50 },
+      'mrt-row-actions': { header: '', size: 88 },
     },
 
     positionToolbarAlertBanner: 'top',
@@ -586,6 +775,20 @@ export default function StudentHubTable({
             {count} selected
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
+          {/* Offered only when the selection contains someone it would help. Alumni
+              are excluded here as well as server-side, so the button never appears
+              for a past cohort and then refuses the whole batch. */}
+          {onAskDetails && rows.some((r) => !r.is_alumni && stateOf(r) !== 'complete') && (
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<LinkOutlinedIcon sx={{ fontSize: 18 }} />}
+              onClick={() => onAskDetails(rows.filter((r) => !r.is_alumni && stateOf(r) !== 'complete'))}
+              sx={{ textTransform: 'none', borderRadius: 0.75 }}
+            >
+              Ask for details
+            </Button>
+          )}
           {onPromote && rows.some((r) => r.past_batch) && (
             <Button size="small" variant="contained" color="warning" startIcon={<EventIcon sx={{ fontSize: 18 }} />} onClick={() => onPromote(rows)} sx={{ textTransform: 'none', borderRadius: 0.75 }}>
               Promote to current

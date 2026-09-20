@@ -21,9 +21,30 @@ export function reactionMessage(teacherFirstName: string, reaction: SketchbookRe
   };
 }
 
-export function featuredMessage(teacherFirstName: string, classroomName: string): { subject: string; plain: string } {
+/**
+ * What a student is told when their drawing is featured.
+ *
+ * This is the only message the app sends a teenager purely to say they did
+ * something well, so it says the thing plainly and stops. No "keep it up", which
+ * turns praise into an instruction, and no claim we cannot back, such as best of
+ * the week, because a student who reads that and then sees four others featured
+ * the same day learns the app exaggerates.
+ *
+ * `onShelf` is false when the student has asked for their drawings to stay out
+ * of the shared library. They were still featured to their class, so they are
+ * still told, just without a promise of a shelf they will not appear on.
+ */
+export function featuredMessage(
+  teacherFirstName: string,
+  classroomName: string,
+  onShelf = true,
+): { subject: string; plain: string; teamsText: string } {
+  const where = onShelf
+    ? ' It is on the Inspiration shelf now, where the whole class can look at it.'
+    : '';
   return {
-    subject: `Your sketch was featured in ${classroomName}`,
-    plain: `${teacherFirstName} featured one of your sketches for the whole class to see. Open your sketchbook to find it.`,
+    subject: `Your drawing is featured in ${classroomName}`,
+    plain: `{firstName}, ${teacherFirstName} chose your drawing to show the class.${where} Well done.`,
+    teamsText: 'Your drawing is featured',
   };
 }

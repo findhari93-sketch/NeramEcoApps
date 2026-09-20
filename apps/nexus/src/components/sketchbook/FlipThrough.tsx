@@ -87,7 +87,7 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
   return (
     <Paper elevation={0} sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 'min(70vh, 640px)' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5 }}>
-        <StudentStageAvatar stage={stage} dormant={!!fact?.dormant} name={current.student.name} msOid={current.student.ms_oid} fallbackSrc={current.student.avatar_url} size={40} />
+        <StudentStageAvatar stage={stage} dormant={!!fact?.dormant} userId={current.student.id} name={current.student.name} msOid={current.student.ms_oid} fallbackSrc={current.student.avatar_url} size={40} />
         <Box sx={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center' }}>
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.2 }} noWrap>{current.student.name || 'Student'}</Typography>
@@ -112,7 +112,7 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
           sketchId={current.id}
           reaction={(state.reaction as never) ?? current.reaction}
           featured={state.featured ?? current.featured}
-          selfNote={current.self_note}
+          studentName={current.student.name}
           onChanged={(c) => setLocal((m) => ({ ...m, [current.id]: { ...m[current.id], ...c } }))}
         />
         <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>

@@ -34,7 +34,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
-import { TEST_REASONS, testReasonRequiresNote, type TestReasonCode } from '@/lib/test-reasons';
+import { ABANDON_TEST_REASONS, testReasonRequiresNote, type TestReasonCode } from '@/lib/test-reasons';
 
 export interface UnfinishedAttempt {
   attempt_id: string;
@@ -106,7 +106,7 @@ export default function UnfinishedTestSheet({
       </Typography>
 
       <Box role="radiogroup" aria-label="What happened" sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        {TEST_REASONS.map((r) => {
+        {ABANDON_TEST_REASONS.map((r) => {
           const selected = code === r.code;
           return (
             <Box

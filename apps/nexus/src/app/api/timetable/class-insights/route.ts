@@ -10,8 +10,7 @@ import {
 } from '@neram/database';
 import { loadClassFactsForStudents } from '@/lib/catchup-facts';
 import { turnaround } from '@/lib/catchup-turnaround';
-import { LATE_THRESHOLD_MINUTES } from '@/lib/class-absences';
-import { tallyReasons } from '@/lib/rsvp-reasons';
+import { describeReason, tallyReasons } from '@/lib/rsvp-reasons';
 import { ATTENDANCE_FAILURE_MESSAGES, type AttendanceSyncFailure } from '@/lib/attendance-sync';
 import {
   barelyAttendedCutoff,
@@ -20,6 +19,19 @@ import {
   scheduledMinutes as spanMinutes,
   tallyBuckets,
 } from '@/lib/attendance-quality';
+import {
+  attendanceFlags,
+  presenceOf,
+  registerGroupOf,
+  sessionWindow,
+} from '@/lib/attendance-register';
+import {
+  AWAY_COLUMNS,
+  coveringWindow,
+  describeWindow,
+  groupByStudent,
+  type AwayWindow,
+} from '@/lib/away-windows';
 
 /**
  * GET /api/timetable/class-insights?class_id={id}&classroom_id={id}  (teacher)
@@ -77,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     // Dormant students are excluded, so the attendance rate on this panel counts
     // only the students who are actually expected in the room.
-    const [{ members }, { data: attendance }, { data: optOuts }, { data: absenceRows }] =
+    const [{ members }, { data: attendance }, { data: optOuts }, { data: absenceRows }, { data: awayRows }] =
       await Promise.all([
         // `phone` is not in the roster's base columns, and it is asked for here
         // so a teacher can ring somebody straight off the missed list instead of
@@ -107,13 +119,34 @@ export async function GET(request: NextRequest) {
               'activated_on, days_used, test_passed_at',
           )
           .eq('scheduled_class_id', classId),
+        // Declared away windows covering the day this class ran. Read live
+        // rather than taken from a flag on the absence row, so a class moved
+        // into or out of a window gets the current answer. The register endpoint
+        // reads the same table the same way, which is what stops this screen and
+        // that one describing the same night differently.
+        supabase
+          .from('nexus_student_away_windows')
+          .select(AWAY_COLUMNS)
+          .is('cancelled_at', null)
+          .lte('starts_on', cls.scheduled_date)
+          .or(`ends_on.is.null,ends_on.gte.${cls.scheduled_date}`),
       ]);
 
-    const startMs = new Date(`${cls.scheduled_date}T${cls.start_time}+05:30`).getTime();
-    const endMs = new Date(`${cls.scheduled_date}T${cls.end_time}+05:30`).getTime();
-    const graceMs = LATE_THRESHOLD_MINUTES * 60 * 1000;
+    const awayByStudent = groupByStudent((awayRows || []) as AwayWindow[]);
+
+    // Whether Teams attendance has been read for this class at all, the same
+    // test the register endpoint uses. A class with zero attendance rows has
+    // nothing to say about any student, and without this the class screen
+    // computed a group for every roster member anyway (everyone `attended:
+    // false`, defaulting most of them into "missed, no reason"), rendering a
+    // class that simply had not synced yet as its whole roster missing.
+    const measured = (attendance || []).length > 0;
+
+    // How long the class was booked for, and how long it actually ran. The
+    // second is what every flag below is measured against.
+    const held = sessionWindow(cls, attendance || []);
     const lengthMinutes = spanMinutes(cls.start_time, cls.end_time);
-    const barelyCutoff = barelyAttendedCutoff(lengthMinutes);
+    const barelyCutoff = barelyAttendedCutoff(held.minutes);
 
     const attById = new Map<string, any>((attendance || []).map((a: any) => [a.student_id, a]));
     const optById = new Map<string, any>((optOuts || []).map((o: any) => [o.student_id, o]));
@@ -173,10 +206,10 @@ export async function GET(request: NextRequest) {
       const a = attById.get(r.user_id);
       const opt = optById.get(r.user_id);
       const abs = absenceById.get(r.user_id) ?? null;
+      const awayWindow = coveringWindow(awayByStudent.get(r.user_id) || [], cls.scheduled_date);
       const attended = !!a?.attended;
-      const joinedMs = a?.joined_at ? new Date(a.joined_at).getTime() : null;
-      const leftMs = a?.left_at ? new Date(a.left_at).getTime() : null;
-      const segments = Array.isArray(a?.attendance_intervals) ? a.attendance_intervals.length : (attended ? 1 : 0);
+      const presence = presenceOf(a || {}, held);
+      const flags = attendanceFlags(presence);
       const durationMinutes = a?.duration_minutes ?? null;
       const row = {
         id: r.user_id,
@@ -186,31 +219,43 @@ export async function GET(request: NextRequest) {
         // rather than going to the student page for a number.
         phone: r.user?.phone || null,
         // The classification, carried so every avatar on this panel can wear the
-        // stage ring. It costs nothing: the roster already selects both columns.
+        // info ring. It costs nothing: the roster already selects both columns.
         study_stage: r.current_standard ?? null,
         dormant: r.participation_status === 'dormant',
         enrolled_at: r.enrolled_at ?? null,
         // Enrolled after this class ran, so there was never anything for them to
         // explain. Read by bucketFor below, which is why it is set before it.
         joinedAfterClass: joinedAfterClass(r.enrolled_at, cls.scheduled_date),
+        // A declared away window covers this class's date. Same reasoning: read
+        // by bucketFor below, so it is set before it.
+        away: !!awayWindow,
+        // Described against the class's own date, not today, so a class reviewed
+        // in December still reads "Away until 20 Oct" rather than describing a
+        // window that has long since closed as if it were upcoming.
+        away_window: awayWindow
+          ? `${describeWindow(awayWindow, cls.scheduled_date)}: ${describeReason(
+              awayWindow.reason_code,
+              awayWindow.reason_note,
+            )}`
+          : null,
         rsvp: opt ? 'not_attending' : 'attending',
         reason: opt ? (opt.reason_code || opt.reason || null) : null,
         attended,
         joined_at: a?.joined_at || null,
         left_at: a?.left_at || null,
         duration_minutes: durationMinutes,
-        joinedLate: attended && joinedMs != null && Number.isFinite(joinedMs) && joinedMs - startMs > graceMs,
-        // Left more than the grace window before the scheduled end.
-        leftEarly: attended && leftMs != null && Number.isFinite(leftMs) && Number.isFinite(endMs) && endMs - leftMs > graceMs,
-        // More than one join/leave segment means they dropped and rejoined.
-        droppedMidClass: segments > 1,
-        // Flagged, never reclassified. They stay `attended` so the register
-        // never argues with what Teams reported; the flag just floats them to
-        // the top of the list a teacher reads.
-        barelyAttended:
-          attended && durationMinutes != null && Number.isFinite(durationMinutes)
-            ? durationMinutes < barelyCutoff
-            : false,
+        joinedLate: attended && flags.joinedLate,
+        leftEarly: attended && flags.leftEarly,
+        droppedMidClass: attended && flags.droppedMidClass,
+        barelyAttended: attended && flags.barelyAttended,
+        minutesIn: attended ? presence.minutesIn : 0,
+        lateByMin: presence.lateByMin,
+        leftEarlyByMin: presence.leftEarlyByMin,
+        outMin: presence.outMin,
+        segments: presence.segments.map((s) => ({
+          start: new Date(s.startMs).toISOString(),
+          end: new Date(s.endMs).toISOString(),
+        })),
         absence: abs
           ? {
               id: abs.id,
@@ -227,7 +272,18 @@ export async function GET(request: NextRequest) {
           : null,
         catchup: catchupFor(r.user_id, abs),
       };
-      return { ...row, bucket: bucketFor(row) };
+      return {
+        ...row,
+        bucket: bucketFor(row),
+        group: registerGroupOf({
+          attended,
+          presence,
+          joinedAfterClass: row.joinedAfterClass,
+          away: row.away,
+          rsvp: row.rsvp,
+          absence: row.absence,
+        }),
+      };
     });
 
     const rosterSize = students.length;
@@ -235,7 +291,7 @@ export async function GET(request: NextRequest) {
     const durations = students.filter((s: any) => s.attended && s.duration_minutes != null).map((s: any) => s.duration_minutes);
     const avgDuration = durations.length ? Math.round(durations.reduce((x: number, y: number) => x + y, 0) / durations.length) : 0;
 
-    // The five states, counted once each. Named stateTally only because `buckets`
+    // The seven states, counted once each. Named stateTally only because `buckets`
     // below is the older RSVP-vs-actual matrix, which answers a different
     // question (did the RSVP predict the room) and is still shown.
     const stateTally = tallyBuckets(students);
@@ -263,6 +319,10 @@ export async function GET(request: NextRequest) {
             ? ATTENDANCE_FAILURE_MESSAGES[cls.attendance_sync_status as AttendanceSyncFailure] ?? null
             : null,
         has_meeting: !!cls.teams_meeting_id,
+        // The id itself, not just whether one exists: the class screen mounts
+        // ClassAttendanceDialog, whose Sync button needs the real meeting id.
+        teams_meeting_id: cls.teams_meeting_id ?? null,
+        measured,
       },
       summary: {
         rosterSize,
@@ -278,6 +338,15 @@ export async function GET(request: NextRequest) {
         // 90" rather than a bare number, and so it can explain the flag.
         scheduledMinutes: lengthMinutes,
         barelyAttendedCutoff: barelyCutoff,
+        // When the class really ran, so the screen can say "held 7:00 to 8:10 PM
+        // (booked to 8:30)" instead of measuring everyone against a time the
+        // teacher never taught to.
+        held: {
+          start: new Date(held.startMs).toISOString(),
+          end: new Date(held.endMs).toISOString(),
+          source: held.source,
+          minutes: held.minutes,
+        },
         // The follow-up picture. missedNoReason is the number this whole panel
         // exists to make visible: away, silent, and nothing done about it.
         missedNoReason: stateTally.missed_no_reason,
@@ -288,8 +357,19 @@ export async function GET(request: NextRequest) {
         // is genuinely still owed, but held apart everywhere it is labelled: a
         // late joiner needs the recording, not a phone call asking where they were.
         lateJoiners: stateTally.late_joiner,
+        // Missed because they told us in advance they would be away for a
+        // stretch. Held apart from missedWithReason for the same reason late
+        // joiners are held apart: the number is actionable in a different way.
+        // A fortnight of declared exam leave is not eight separate incidents.
+        away: stateTally.away,
+        // Away is counted here, exactly like late joiners and for the same
+        // reason: the work is genuinely still owed. Declaring a window explains
+        // the empty seat, it does not cancel the class or the catch-up behind it.
         notCaughtUp:
-          stateTally.missed_no_reason + stateTally.missed_with_reason + stateTally.late_joiner,
+          stateTally.missed_no_reason +
+          stateTally.missed_with_reason +
+          stateTally.away +
+          stateTally.late_joiner,
       },
       buckets,
       reasonTally: tallyReasons(optOuts || []),

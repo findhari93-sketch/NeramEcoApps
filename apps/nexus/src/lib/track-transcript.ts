@@ -201,6 +201,9 @@ export async function findClassTranscriptVtt(
   return null;
 }
 
+/** Track languages whose Microsoft transcripts are not worth reading. */
+const MICROSOFT_CANNOT_TRANSCRIBE = new Set(['ta', 'ta_en']);
+
 export async function resolveTrackTranscript(input: {
   trackId: string;
   recordingUrl: string | null;
@@ -217,6 +220,15 @@ export async function resolveTrackTranscript(input: {
    * step simply does not apply.
    */
   videoSource?: string | null;
+  /**
+   * The track's language. A Tamil track skips rungs 3 and 4: Microsoft Stream
+   * cannot transcribe Tamil (it is not on Stream's language list, checked
+   * 2026-09-17) and a Teams class taught in Tamil comes back the same way, as
+   * English-sounding words the tutor never said. Checkpoints cut from that are
+   * wrong, so a Tamil track waits for an English transcript from AI Studio or a
+   * teacher instead.
+   */
+  language?: string | null;
 }): Promise<TrackTranscript> {
   // 1. The upload in front of them.
   if (input.vttContent) {
@@ -230,6 +242,10 @@ export async function resolveTrackTranscript(input: {
   // 2. What we already have.
   const stored = await readStored(input.trackId);
   if (stored) return { entries: stored, source: 'stored' };
+
+  if (input.language && MICROSOFT_CANNOT_TRANSCRIBE.has(input.language)) {
+    return { entries: [], source: 'none', sharepointError: 'NO_TRANSCRIPT' };
+  }
 
   // 3. The Teams class this recording came from, when the nightly sync already
   //    stored that class's transcript. No Graph call and no token needed.

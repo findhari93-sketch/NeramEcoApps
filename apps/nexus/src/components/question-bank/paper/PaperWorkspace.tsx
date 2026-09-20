@@ -14,8 +14,40 @@ import type { PaperFallback } from './QuestionEditForm';
 import { useBulkImageFlow, type SlotType } from '@/hooks/useBulkImageFlow';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import { activationMessage } from '@/lib/qb-activation';
+import { partIdOfSolutionSlot } from '@/lib/qb-image-needs';
 
 export type { PaperQuestionMode, NeedsFilter, PaperSectionFilter };
+
+/**
+ * One question's pasted slots, as the images PATCH wants them.
+ *
+ * Exported because the routing is the whole risk here: every slot the loop does
+ * not name falls through to option_images, and the route merges that by option
+ * id, so a part solution sent there is dropped while the toast still reports it
+ * saved. A test can pin the shape; a paste cannot.
+ */
+export function imagesPatchBody(
+  slots: { slot: SlotType; image: ImageState | null }[],
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  const optionImages: Record<string, string | null> = {};
+  const partSolutions: Record<string, string | null> = {};
+
+  for (const { slot, image } of slots) {
+    const url = image?.uploaded ? image.url : null;
+    if (slot === 'question') body.question_image_url = url;
+    else if (slot === 'solution') body.solution_image_url = url;
+    else {
+      const partId = partIdOfSolutionSlot(slot);
+      if (partId) partSolutions[partId] = url;
+      else optionImages[slot] = url;
+    }
+  }
+
+  if (Object.keys(optionImages).length > 0) body.option_images = optionImages;
+  if (Object.keys(partSolutions).length > 0) body.part_solution_images = partSolutions;
+  return body;
+}
 
 export interface PaperWorkspaceProps {
   /** Already in paper order. Position is counted from this order, not display_order. */
@@ -193,14 +225,7 @@ export default function PaperWorkspace({
       if (!token) throw new Error('Auth failed');
 
       for (const [questionId, slots] of byQuestion) {
-        const body: Record<string, unknown> = {};
-        const optionImages: Record<string, string | null> = {};
-        for (const { slot, image } of slots) {
-          if (slot === 'question') body.question_image_url = image?.uploaded ? image.url : null;
-          else if (slot === 'solution') body.solution_image_url = image?.uploaded ? image.url : null;
-          else optionImages[slot] = image?.uploaded ? image.url : null;
-        }
-        if (Object.keys(optionImages).length > 0) body.option_images = optionImages;
+        const body = imagesPatchBody(slots);
 
         try {
           const res = await fetch(`/api/question-bank/questions/${questionId}/images`, {

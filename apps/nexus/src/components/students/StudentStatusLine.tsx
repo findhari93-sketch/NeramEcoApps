@@ -36,7 +36,7 @@ const TEXT = { fontSize: '0.75rem', lineHeight: 1.4 } as const;
  * then the place is simply absent: "No application form" further along the same
  * line already says why, so a second placeholder would only add noise.
  *
- * Deliberately not an avatar ring. The ring already carries the study stage
+ * Deliberately not an info ring. The ring already carries the study stage
  * (solid), "not set" (dotted) and dormant (dashed); a fourth meaning would make
  * every one of them ambiguous.
  */

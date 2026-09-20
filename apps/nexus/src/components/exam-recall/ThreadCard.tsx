@@ -5,8 +5,6 @@ import {
   CardContent,
   CardActions,
   Chip,
-  AvatarGroup,
-  Avatar,
   Typography,
   IconButton,
   Stack,
@@ -16,6 +14,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import ImageIcon from '@mui/icons-material/Image';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import type { ExamRecallThreadListItem, ExamRecallQuestionType, ExamRecallSection, ExamRecallClarity, ExamRecallThreadStatus, ExamRecallTopicCategory } from '@neram/database';
 import ConfirmButton from './ConfirmButton';
 import VouchButton from './VouchButton';
@@ -174,27 +173,34 @@ export default function ThreadCard({ thread, onConfirm, onThreadClick, compact }
 
           <Box sx={{ flexGrow: 1 }} />
 
-          {/* Contributor avatars */}
+          {/*
+            Contributors, each wearing the info ring. The same people are
+            already drawn ringed on the thread page itself, so a stacked strip
+            of bare faces here was the one place the card disagreed with what it
+            opens. Two shown rather than three: a ring reserves size + 8, and
+            this row also carries a clarity label and a topic chip at 375px.
+          */}
           {thread.contributors.length > 0 && (
-            <AvatarGroup
-              max={3}
-              sx={{
-                '& .MuiAvatar-root': {
-                  width: 24,
-                  height: 24,
-                  fontSize: '0.7rem',
-                  borderWidth: 1,
-                },
-              }}
-            >
-              {thread.contributors.map((c) => (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+              {thread.contributors.slice(0, 2).map((c) => (
                 <Tooltip key={c.id} title={c.name || 'Unknown'} arrow>
-                  <Avatar src={c.avatar_url || undefined} alt={c.name || 'User'}>
-                    {c.name?.[0] || '?'}
-                  </Avatar>
+                  <Box component="span" sx={{ display: 'inline-flex' }}>
+                    <StudentAvatar
+                      userId={c.id}
+                      name={c.name}
+                      src={c.avatar_url}
+                      size={28}
+                      tapToView={false}
+                    />
+                  </Box>
                 </Tooltip>
               ))}
-            </AvatarGroup>
+              {thread.contributors.length > 2 && (
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 0.25 }}>
+                  +{thread.contributors.length - 2}
+                </Typography>
+              )}
+            </Box>
           )}
         </Stack>
 

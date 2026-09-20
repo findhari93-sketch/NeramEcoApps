@@ -11,6 +11,7 @@
  */
 
 import { loadClassroomRoster } from '@neram/database';
+import { coveringWindow, groupByStudent, loadAwayWindows } from './away-windows';
 
 /** A student who joins this many minutes after the start is "late", not absent. */
 export const LATE_THRESHOLD_MINUTES = 10;
@@ -58,7 +59,7 @@ export async function computeAbsencesForClass(
   // A cancelled class has no absences: nobody missed something that did not run.
   if (cls.status === 'cancelled') return empty;
 
-  const [{ members: roster }, { data: attendance }, { data: optOuts }] = await Promise.all([
+  const [{ members: roster }, { data: attendance }, { data: optOuts }, awayWindows] = await Promise.all([
     // `asOf` makes the roster who was in the class THAT DAY, not who is in it
     // now. Without it, a student who joined in July is marked a no-show for
     // every class held in June: work they could not possibly have attended,
@@ -81,6 +82,9 @@ export async function computeAbsencesForClass(
       .select('student_id, reason, reason_code')
       .eq('scheduled_class_id', cls.id)
       .eq('response', 'not_attending'),
+    // Declared away windows covering this class's day. Read for every student,
+    // then narrowed against the roster below.
+    loadAwayWindows(supabase, { from: cls.scheduled_date, to: cls.scheduled_date }),
   ]);
 
   const rosterIds: string[] = roster.map((r) => r.user_id);
@@ -112,13 +116,25 @@ export async function computeAbsencesForClass(
     };
   }
 
+  const awayByStudent = groupByStudent(awayWindows);
+  const awayWindowFor = (studentId: string) =>
+    coveringWindow(awayByStudent.get(studentId) || [], cls.scheduled_date);
+
   const rows = missing.map((studentId) => {
     const opt = optOutById.get(studentId);
+    const away = awayWindowFor(studentId);
     return {
       scheduled_class_id: cls.id,
       student_id: studentId,
       classroom_id: cls.classroom_id,
-      kind: opt ? 'opted_out' : 'no_show',
+      kind: opt || away ? 'opted_out' : 'no_show',
+      // Which window explains this, or null. MACHINE owned, unlike reason_code
+      // and reason_note beside it: those are what a person typed and every
+      // writer here guards them with ignoreDuplicates, while this one is
+      // re-derived on every run. That difference is what lets a class moved
+      // into, or out of, a window correct itself instead of carrying a stamp
+      // asserting a student was away on a day they were not.
+      away_window_id: away?.id ?? null,
       // A reason given in advance is carried across, so the teacher sees one
       // list with reasons filled in rather than two lists to cross-reference.
       ...(opt
@@ -148,6 +164,33 @@ export async function computeAbsencesForClass(
       .eq('student_id', row.student_id)
       .is('reason_submitted_at', null);
   }
+
+  // Re-derive away_window_id on rows that already existed.
+  //
+  // The upsert above uses ignoreDuplicates, so it cannot touch a row another
+  // writer got to first, and deriveNoShows in attendance-sync.ts usually does:
+  // it runs inside the Teams sync, BEFORE this function is called. Without this
+  // pass the stamp would land only on classes nobody had synced yet, which is
+  // the same way the RSVP reason copy above quietly stopped working.
+  const awayRows = rows.filter((r) => r.away_window_id);
+  for (const row of awayRows) {
+    await supabase
+      .from('nexus_class_absences')
+      .update({ away_window_id: row.away_window_id, kind: 'opted_out' })
+      .eq('scheduled_class_id', cls.id)
+      .eq('student_id', row.student_id);
+  }
+
+  // And clear it from anyone no longer covered. This is the half that makes a
+  // reschedule OUT of a window self-heal: without it the row would keep
+  // asserting a window that no longer explains this date.
+  const stillAway = awayRows.map((r) => r.student_id);
+  const clear = supabase
+    .from('nexus_class_absences')
+    .update({ away_window_id: null })
+    .eq('scheduled_class_id', cls.id)
+    .not('away_window_id', 'is', null);
+  await (stillAway.length ? clear.not('student_id', 'in', `(${stillAway.join(',')})`) : clear);
 
   const optedOut = rows.filter((r) => r.kind === 'opted_out').length;
   return {

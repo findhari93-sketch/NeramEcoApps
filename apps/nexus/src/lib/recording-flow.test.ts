@@ -105,7 +105,7 @@ describe('planRecording', () => {
     const plan = planRecording(track(), 'தமிழ்');
     expect(plan.stage).toBe('needs_transcript');
     expect(plan.tabStatus).toBe('Draft');
-    expect(plan.primary).toMatchObject({ kind: 'upload_transcript', label: 'Upload transcript (.vtt)' });
+    expect(plan.primary).toMatchObject({ kind: 'upload_transcript', label: 'Upload transcript' });
     expect(plan.secondary.map((a) => a.kind)).toContain('publish_open');
     expect(plan.steps).toEqual({
       video: 'done',

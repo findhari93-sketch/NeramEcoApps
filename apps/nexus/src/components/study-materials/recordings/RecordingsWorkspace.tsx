@@ -38,6 +38,8 @@ import {
 } from '@/lib/recordings-nav';
 import { FALLBACK_TRACK_LANGUAGES } from '@/lib/track-languages';
 import { detectTranscriptScript, transcriptLanguageConflict } from '@/lib/transcript-language';
+import { MAX_TRANSCRIPT_BYTES, coverageWarning, mergeTranscriptFiles } from '@/lib/transcript-file';
+import { planAiStudioParts } from '@/lib/transcript-prompt';
 import { copyFailureMessage, libraryDestinationPath } from '@/lib/library-copy';
 import AddVideoPanel from './AddVideoPanel';
 import ConfirmVideoSheet from './ConfirmVideoSheet';
@@ -85,6 +87,7 @@ type Confirm =
   | { kind: 'redo'; row: TrackRow }
   | { kind: 'reset_progress'; row: TrackRow; attempts: number; vtt: string | null; redo: boolean }
   | { kind: 'script'; row: TrackRow; text: string; message: string; moveTo: { code: string; label: string } | null }
+  | { kind: 'coverage'; row: TrackRow; text: string; message: string }
   | null;
 
 /**
@@ -266,36 +269,76 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
     [call, fileId, refresh, rows],
   );
 
-  const uploadTranscript = (row: TrackRow) => {
+  /** The last check before a transcript is used: is it in the right language row? */
+  const applyTranscript = async (row: TrackRow, text: string) => {
     const track = row.track;
+    if (!track) return;
+    // A Tamil transcript on the English recording makes Tamil-script questions on
+    // a video labelled English, and nothing downstream can notice. Asked, not refused.
+    const script = detectTranscriptScript(text);
+    if (transcriptLanguageConflict(script, row.code)) {
+      const target = languages.find((l) => l.code === script.likelyLanguage) ?? null;
+      const free = target && !tracks.some((t) => t.language === target.code);
+      setConfirm({
+        kind: 'script',
+        row,
+        text,
+        message:
+          script.kind === 'tamil'
+            ? `This transcript is ${script.tamilPct}% Tamil script, and you are adding it to the ${row.label} recording.`
+            : `This transcript is ${script.latinPct}% Latin script, and you are adding it to the ${row.label} recording.`,
+        moveTo: free && target ? { code: target.code, label: target.label } : null,
+      });
+      return;
+    }
+    await prepareTrack(row.code, row.label, track.id, { vtt: text });
+  };
+
+  /**
+   * Pick one or more transcript files and use them.
+   *
+   * More than one because a long class is made in Google AI Studio in parts, and
+   * the teacher uploads every part together. .srt and .txt as well as .vtt,
+   * because an AI Studio answer is saved from Notepad and a Whisper app writes SRT.
+   * Whatever arrives is merged into canonical WEBVTT here, so the server only
+   * ever sees one clean file.
+   */
+  const uploadTranscript = (row: TrackRow) => {
+    const track = row.track as RecordingTrackView | null;
     if (!track) return;
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.vtt,text/vtt';
+    input.multiple = true;
+    input.accept = '.vtt,.srt,.txt,text/vtt,text/plain,application/x-subrip';
     input.onchange = async () => {
-      const chosen = input.files?.[0];
-      if (!chosen) return;
-      const text = await chosen.text();
+      const chosen = Array.from(input.files || []);
+      if (!chosen.length) return;
+      const files = await Promise.all(chosen.map(async (f) => ({ name: f.name, text: await f.text() })));
 
-      // A Tamil transcript on the English recording makes Tamil checkpoints on a
-      // video labelled English, and nothing downstream can notice. Asked, not refused.
-      const script = detectTranscriptScript(text);
-      if (transcriptLanguageConflict(script, row.code)) {
-        const target = languages.find((l) => l.code === script.likelyLanguage) ?? null;
-        const free = target && !tracks.some((t) => t.language === target.code);
-        setConfirm({
-          kind: 'script',
-          row,
-          text,
-          message:
-            script.kind === 'tamil'
-              ? `This transcript is ${script.tamilPct}% Tamil script, and you are adding it to the ${row.label} recording.`
-              : `This transcript is ${script.latinPct}% Latin script, and you are adding it to the ${row.label} recording.`,
-          moveTo: free && target ? { code: target.code, label: target.label } : null,
-        });
+      const duration = track.recording?.duration_seconds || track.video_duration_seconds || 0;
+      const parts = planAiStudioParts(duration);
+      const merged = mergeTranscriptFiles(files, { durationSeconds: duration, parts });
+
+      if (!merged.entries.length) {
+        notify(
+          chosen.length > 1
+            ? 'None of those files has timestamps. Save the AI Studio answer exactly as it came, then upload it again.'
+            : 'That file has no timestamps. Save the AI Studio answer exactly as it came, then upload it again.',
+          'error',
+        );
         return;
       }
-      await prepareTrack(row.code, row.label, track.id, { vtt: text });
+      if (new Blob([merged.vtt]).size > MAX_TRANSCRIPT_BYTES) {
+        notify('That transcript is too large to upload. Check you chose the transcript and not the video.', 'error');
+        return;
+      }
+
+      const warning = coverageWarning(merged, duration, parts.length);
+      if (warning) {
+        setConfirm({ kind: 'coverage', row, text: merged.vtt, message: warning });
+        return;
+      }
+      await applyTranscript(row, merged.vtt);
     };
     input.click();
   };
@@ -1149,7 +1192,7 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
         title="Is this the right transcript?"
         description={
           confirm?.kind === 'script'
-            ? `${confirm.message} The checkpoints will be in the same language as the transcript.`
+            ? `${confirm.message} Check it belongs to this recording.`
             : ''
         }
         actions={
@@ -1183,6 +1226,40 @@ export default function RecordingsWorkspace({ fileId, lang, from }: Props) {
                 sx={{ textTransform: 'none', fontWeight: 700 }}
               >
                 Use it for {confirm.row.label}
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
+
+      <ResponsiveSheet
+        open={confirm?.kind === 'coverage'}
+        onClose={() => setConfirm(null)}
+        title="Is this the whole transcript?"
+        description={confirm?.kind === 'coverage' ? confirm.message : ''}
+        actions={
+          confirm?.kind === 'coverage' ? (
+            <>
+              <Button
+                onClick={() => {
+                  const { row } = confirm;
+                  setConfirm(null);
+                  uploadTranscript(row);
+                }}
+                sx={{ textTransform: 'none', minHeight: 44 }}
+              >
+                Choose files again
+              </Button>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  const { row, text } = confirm;
+                  setConfirm(null);
+                  void applyTranscript(row, text);
+                }}
+                sx={{ textTransform: 'none', fontWeight: 700, minHeight: 44 }}
+              >
+                Use it anyway
               </Button>
             </>
           ) : undefined

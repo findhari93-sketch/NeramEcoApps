@@ -47,6 +47,13 @@ import {
   safeReturnLabel,
   safeReturnPath,
 } from '@/lib/test-return';
+import {
+  failureCodeOf,
+  isExpectedRefusal,
+  nextAutoRetryDelay,
+  submitFailureKind,
+  type SubmitFailureKind,
+} from '@/lib/test-error-classify';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -96,6 +103,48 @@ const PROCTORING_VIOLATION_COPY: Record<ProctoringViolationKind, string> = {
   window_blur: 'This window lost focus.',
   fullscreen_exit: 'You exited fullscreen.',
 };
+
+/** What POST /api/tests/attempt answered, as the submit flow needs it. */
+type SaveOutcome =
+  | { ok: true; payload: Record<string, any> }
+  | {
+      ok: false;
+      /** null when no answer came back at all. */
+      status: number | null;
+      code: string | null;
+      /** The server's own sentence, when it sent one. */
+      error: string | null;
+      /** On a closed attempt: what that attempt actually is. */
+      attempt_status: string | null;
+      /** Why no answer came back, for the report. */
+      thrown: string | null;
+    };
+
+/**
+ * A submit that did not go through, as the student sees it.
+ *
+ * Before this existed a failed submit showed nothing at all: the button stopped
+ * spinning and the paper sat there. "When I click submit it is not getting
+ * submitted. It just shows the same screen."
+ */
+interface SubmitProblem {
+  kind: SubmitFailureKind;
+  message: string;
+  /** Seconds until the automatic retry, when one is scheduled. Static on purpose: see the alert. */
+  retryInSeconds: number | null;
+  /** Move focus to the alert's action. Only after the student's own press, never mid-paper. */
+  focus: boolean;
+}
+
+const SUBMIT_FALLBACK = 'Your paper did not submit. Check your connection and try again.';
+const ATTEMPT_CLOSED_COPY = 'This attempt was closed, so it could not be submitted.';
+/**
+ * The same fact, reached thirty seconds in rather than at Submit.
+ *
+ * Worded for a student who has not pressed anything: nothing they write from
+ * here is being kept, and no amount of carrying on will change that.
+ */
+const SITTING_CLOSED_COPY = 'This sitting was closed, so your answers are no longer being saved.';
 
 
 // ---------------------------------------------------------------------------
@@ -189,6 +238,35 @@ export default function TakeTestPage() {
   const [reviewOpen, setReviewOpen] = useState(false);
   /** Which go this is. Shown so an unlimited retake reads as progress. */
   const [attemptNumber, setAttemptNumber] = useState<number | null>(null);
+  /**
+   * How many more sittings this door allows once this one is submitted. null is
+   * unlimited or unknown. 0 hides "Try again", which on a one-shot exam could
+   * only ever be refused.
+   */
+  const [attemptsLeftAfterThis, setAttemptsLeftAfterThis] = useState<number | null>(null);
+  /** The submit that did not go through, shown beside the submit action. */
+  const [submitProblem, setSubmitProblem] = useState<SubmitProblem | null>(null);
+  /** The attempt was closed under the student (or the exam shut). The paper is dead. */
+  const [attemptClosed, setAttemptClosed] = useState(false);
+  /** Submitted earlier (a double tap, the timer racing a press) and found to be in. */
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+
+  /**
+   * Refs, not state, for everything a timer or an event listener reads. The
+   * timer's automatic submit and the proctoring limit both call handleSubmit from
+   * a closure made renders ago, where `submitting` was still false. That stale
+   * read is how a manual press and an automatic one both went out.
+   */
+  const submittingRef = useRef(false);
+  const submittedRef = useRef(false);
+  /** An automatic submit (timer or proctoring) is in play, so failures retry by themselves. */
+  const autoSubmitRef = useRef(false);
+  /** Automatic retries made so far in this run of failures. */
+  const autoRetriesRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const submitActionRef = useRef<HTMLButtonElement | null>(null);
+  /** The current render's handleSubmit, for callers holding an old closure. Assigned below. */
+  const handleSubmitRef = useRef<(autoSubmit?: boolean) => Promise<void>>(async () => {});
 
   // UI state
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -210,8 +288,21 @@ export default function TakeTestPage() {
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const answersRef = useRef(answers);
   answersRef.current = answers;
+  const attemptRef = useRef(attempt);
+  attemptRef.current = attempt;
+  /** For the autosave, which fires from a closure made before the sitting closed. */
+  const attemptClosedRef = useRef(attemptClosed);
+  attemptClosedRef.current = attemptClosed;
 
-  // Auth token ref for abandon-on-leave
+  /** The paper itself, for the unload handler, which cannot wait for a render. */
+  const testRef = useRef(test);
+  testRef.current = test;
+
+  /**
+   * The latest token, for the one request that cannot wait for getToken: the
+   * final save as the page goes away. Refreshed on every save so a three-hour
+   * exam does not leave with the token it opened with.
+   */
   const tokenRef = useRef<string | null>(null);
 
   // Swipe tracking
@@ -228,13 +319,29 @@ export default function TakeTestPage() {
     fetchTestData();
   }, [testId, placementId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * Forget the paper on screen. Called whenever a load fails, so the error screen
+   * shows instead of whatever was loaded before: "Try again" on an exam result
+   * was refused (attempts used up) and dropped the student back on their
+   * finished paper with its answers blanked, because the old test and attempt
+   * were still in state.
+   */
+  function clearPaper() {
+    setTest(null);
+    setAttempt(null);
+    setQuestions([]);
+  }
+
   async function fetchTestData() {
     setLoading(true);
     setLoadError(null);
     setLiveRun(null);
     try {
       const token = await getToken();
-      if (!token) return;
+      if (!token) {
+        clearPaper();
+        return;
+      }
       tokenRef.current = token;
 
       const res = await fetch(`/api/tests/attempt?test_id=${testId}${placementId ? `&placement_id=${placementId}` : ''}`, {
@@ -243,6 +350,7 @@ export default function TakeTestPage() {
 
       if (!res.ok) {
         console.error('Failed to load test:', res.status);
+        clearPaper();
         const j = await res.json().catch(() => ({}));
         if (j?.error) setLoadError(j.error);
         // A closed class test is not a dead link: the student can ask their
@@ -261,12 +369,16 @@ export default function TakeTestPage() {
         // A paper that will not open never creates an attempt row, so this
         // failure was previously invisible to everyone: the student saw an
         // error, walked away, and the teacher's screen said "0 attempts".
-        // Being sent to a live exam is the door working, not a failure.
-        if (j?.code !== 'LIVE_RUN') {
+        // The door refusing on purpose (attempts used up, sent to the live
+        // exam, closed) is the door working, and reporting it is what put
+        // "12 students failed to open the paper" on acf8084d.
+        const loadMessage = j?.error || `Test failed to load (HTTP ${res.status})`;
+        const loadCode = typeof j?.code === 'string' ? j.code : null;
+        if (!isExpectedRefusal({ phase: 'load', code: loadCode, status: res.status, message: loadMessage })) {
           reportTestError({
             phase: 'load',
-            message: j?.error || `Test failed to load (HTTP ${res.status})`,
-            detail: { status: res.status, placement_id: placementId },
+            message: loadMessage,
+            detail: { status: res.status, code: loadCode, placement_id: placementId },
           });
         }
         return;
@@ -275,6 +387,9 @@ export default function TakeTestPage() {
       const data = await res.json();
       setTest(data.test);
       setAttemptNumber(data.attempt_number ?? null);
+      setAttemptsLeftAfterThis(
+        typeof data.attempts_left_after_this === 'number' ? data.attempts_left_after_this : null,
+      );
       setQuestions((data.questions || []).filter((q: any) => q.question != null));
       setAttempt(data.attempt);
       setAnswers(data.attempt?.answers || {});
@@ -289,9 +404,11 @@ export default function TakeTestPage() {
       }
     } catch (err) {
       console.error('Failed to load test:', err);
+      clearPaper();
       reportTestError({
         phase: 'load',
         message: err instanceof Error ? err.message : 'Test failed to load',
+        detail: { status: null, code: null },
       });
     } finally {
       setLoading(false);
@@ -303,13 +420,15 @@ export default function TakeTestPage() {
   // -------------------------------------------------------------------------
 
   useEffect(() => {
-    if (timeLeftSeconds === null || timeLeftSeconds <= 0 || submitted) return;
+    if (timeLeftSeconds === null || timeLeftSeconds <= 0 || submitted || attemptClosed) return;
 
     timerRef.current = setInterval(() => {
       setTimeLeftSeconds((prev) => {
         if (prev === null || prev <= 1) {
           if (timerRef.current) clearInterval(timerRef.current);
-          handleSubmit(true);
+          // Through the ref: this closure is from the render the clock started
+          // in. If this submit fails it retries by itself (see handleSubmit).
+          void handleSubmitRef.current(true);
           return 0;
         }
         return prev - 1;
@@ -319,14 +438,14 @@ export default function TakeTestPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [timeLeftSeconds !== null, submitted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [timeLeftSeconds !== null, submitted, attemptClosed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -------------------------------------------------------------------------
   // Per-question timer countdown
   // -------------------------------------------------------------------------
 
   useEffect(() => {
-    if (!test?.per_question_seconds || test.test_type !== 'per_question_timer' || submitted) return;
+    if (!test?.per_question_seconds || test.test_type !== 'per_question_timer' || submitted || attemptClosed) return;
 
     setQuestionTimeLeft(test.per_question_seconds);
 
@@ -339,7 +458,7 @@ export default function TakeTestPage() {
           if (currentIndex < questions.length - 1) {
             setCurrentIndex((i) => i + 1);
           } else {
-            handleSubmit(true);
+            void handleSubmitRef.current(true);
           }
           return 0;
         }
@@ -350,69 +469,112 @@ export default function TakeTestPage() {
     return () => {
       if (questionTimerRef.current) clearInterval(questionTimerRef.current);
     };
-  }, [currentIndex, test?.per_question_seconds, test?.test_type, submitted, questions.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentIndex, test?.per_question_seconds, test?.test_type, submitted, attemptClosed, questions.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -------------------------------------------------------------------------
   // Auto-save every 30 seconds
   // -------------------------------------------------------------------------
 
   useEffect(() => {
-    if (!attempt || submitted) return;
+    if (!attempt || submitted || attemptClosed) return;
 
     autoSaveRef.current = setInterval(() => {
-      saveAnswers(answersRef.current, 'save');
+      void autoSave();
     }, 30000);
 
     return () => {
       if (autoSaveRef.current) clearInterval(autoSaveRef.current);
     };
-  }, [attempt, submitted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [attempt, submitted, attemptClosed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -------------------------------------------------------------------------
-  // Prevent back navigation + abandon on leave
+  // Prevent back navigation, warn on leave, save on the way out
   // -------------------------------------------------------------------------
 
-  const attemptRef = useRef(attempt);
-  attemptRef.current = attempt;
+  const hasAttempt = Boolean(attempt);
 
   useEffect(() => {
-    if (submitted || loading) return;
+    if (submitted || loading || attemptClosed || !hasAttempt) return;
 
-    // Warn before leaving
+    /**
+     * Warn, and do nothing else.
+     *
+     * This used to abandon the attempt right here, before the student had chosen
+     * Leave or Stay. So pressing Stay, refreshing, a pull-to-refresh or a
+     * Microsoft sign-in redirect all closed the live attempt. Every submit after
+     * that got a silent 409, and a reload handed the student a NEW EMPTY attempt
+     * (with a different draw on a pool paper). Now a reload simply resumes:
+     * startOrResumeAttempt returns the open attempt through the same door, with
+     * whatever was saved.
+     */
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = '';
-
-      // Fire-and-forget abandon call (keepalive allows it to survive page unload)
-      const aid = attemptRef.current?.id;
-      const tok = tokenRef.current;
-      if (aid && tok) {
-        fetch('/api/tests/attempt/abandon', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attempt_id: aid }),
-          keepalive: true,
-        }).catch(() => {});
-      }
     };
 
-    // Note: we intentionally do NOT abandon on visibilitychange (tab switch).
-    // Students may briefly switch to a calculator app. Abandoning only happens
-    // on actual page unload (close tab, navigate away, refresh).
+    /**
+     * One last save as the page goes, so a reload resumes with the answers the
+     * student actually gave rather than the ones from up to 30 seconds ago.
+     * keepalive lets it finish after the page is gone. pagehide fires whether or
+     * not a beforeunload prompt was shown, and never while the student is still
+     * choosing.
+     */
+    const handlePageHide = () => {
+      if (submittedRef.current || submittingRef.current) return;
+      const aid = attemptRef.current?.id;
+      const tok = tokenRef.current;
+      if (!aid || !tok) return;
+      try {
+        fetch('/api/tests/attempt', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attempt_id: aid, answers: answersRef.current, action: 'save' }),
+          keepalive: true,
+        }).catch(() => {});
+      } catch {
+        // A body over the keepalive size limit throws synchronously. The last
+        // autosave still stands.
+      }
+
+      /**
+       * A one-question-at-a-time paper closes when the page does.
+       *
+       * Its clock is per question and lives only in this tab: on resume the
+       * page starts at question 1 with a full timer, and "you cannot go back"
+       * is enforced here rather than on the server. So resuming one of these
+       * would hand out a fresh clock on every question and let earlier answers
+       * be changed. Every other paper resumes, which is the point of not
+       * abandoning on unload; this one shuts, exactly as it did before.
+       */
+      if (testRef.current?.test_type === 'per_question_timer') {
+        try {
+          fetch('/api/tests/attempt/abandon', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ attempt_id: aid }),
+            keepalive: true,
+          }).catch(() => {});
+        } catch {
+          // Same keepalive limit. The stale-attempt check still retires it.
+        }
+      }
+    };
 
     const handlePopState = () => {
       window.history.pushState(null, '', window.location.href);
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
     window.addEventListener('popstate', handlePopState);
     window.history.pushState(null, '', window.location.href);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [submitted, loading]);
+  }, [submitted, loading, attemptClosed, hasAttempt]);
 
   // -------------------------------------------------------------------------
   // Proctoring (only active when the GET response's proctoring.enabled is
@@ -424,17 +586,19 @@ export default function TakeTestPage() {
     attemptId: attempt?.id ?? null,
     enabled: Boolean(proctoringInfo?.enabled),
     getToken,
-    active: !loading && !submitted,
+    active: !loading && !submitted && !attemptClosed,
     onViolation: (kind, count, limit) => {
       setSnackSeverity('warning');
       setSnackMessage(
-        `${PROCTORING_VIOLATION_COPY[kind]} Warning ${count}${limit ? ` of ${limit}` : ''} — the test submits automatically if this continues.`,
+        `${PROCTORING_VIOLATION_COPY[kind]} Warning ${count}${limit ? ` of ${limit}` : ''}. The test submits automatically if this continues.`,
       );
     },
     onThresholdReached: () => {
       setSnackSeverity('warning');
-      setSnackMessage('Too many warnings — submitting your test now.');
-      handleSubmit(true);
+      setSnackMessage('Too many warnings. Submitting your test now.');
+      // Through the ref, and guarded inside: if the student's own press is
+      // already in flight this does not send a second one.
+      void handleSubmitRef.current(true);
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     },
   });
@@ -443,12 +607,29 @@ export default function TakeTestPage() {
   // Actions
   // -------------------------------------------------------------------------
 
+  /**
+   * Send the answers. Never throws; says exactly what came back.
+   *
+   * It reports nothing itself. Whether a failed submit is worth a teacher's
+   * attention depends on what the attempt turns out to be (see handleSubmit), so
+   * the decision is made there, once, with the shared classifier.
+   */
   const saveAnswers = useCallback(
-    async (currentAnswers: Record<string, string>, action: 'save' | 'submit') => {
-      if (!attempt) return null;
+    async (currentAnswers: Record<string, string>, action: 'save' | 'submit'): Promise<SaveOutcome> => {
+      const current = attemptRef.current;
+      const noAnswer = (thrown: string): SaveOutcome => ({
+        ok: false,
+        status: null,
+        code: null,
+        error: null,
+        attempt_status: null,
+        thrown,
+      });
+      if (!current) return noAnswer('No attempt is open');
       try {
         const token = await getToken();
-        if (!token) return null;
+        if (!token) return noAnswer('Could not get a sign-in token');
+        tokenRef.current = token;
 
         const res = await fetch('/api/tests/attempt', {
           method: 'POST',
@@ -457,45 +638,134 @@ export default function TakeTestPage() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            attempt_id: attempt.id,
+            attempt_id: current.id,
             answers: currentAnswers,
             action,
           }),
         });
+        const json = (await res.json().catch(() => ({}))) as Record<string, any>;
         if (!res.ok) {
-          // A failed SUBMIT is the worst failure in the product: the student did
-          // the work and the answers did not land. Reported even though the UI
-          // also surfaces it, because the teacher needs to see it on the paper.
-          // A failed autosave is noisier and less severe, so only submits are
-          // recorded here.
-          if (action === 'submit') {
-            const j = await res.json().catch(() => ({}));
-            reportTestError({
-              phase: 'submit',
-              attempt_id: attempt.id,
-              message: j?.error || `Submit failed (HTTP ${res.status})`,
-              detail: { status: res.status, answered: Object.keys(currentAnswers).length },
-            });
-          }
-          return null;
+          return {
+            ok: false,
+            status: res.status,
+            code: typeof json?.code === 'string' ? json.code : null,
+            error: typeof json?.error === 'string' && json.error.trim() ? json.error : null,
+            attempt_status: typeof json?.attempt_status === 'string' ? json.attempt_status : null,
+            thrown: null,
+          };
         }
         // The submit response carries the graded result and the per-question
         // review, which is what the result screen renders.
-        return (await res.json().catch(() => ({}))) as Record<string, any>;
+        return { ok: true, payload: json };
       } catch (err) {
         console.error('Failed to save answers:', err);
-        if (action === 'submit') {
-          reportTestError({
-            phase: 'submit',
-            attempt_id: attempt.id,
-            message: err instanceof Error ? err.message : 'Submit failed',
-          });
-        }
-        return null;
+        return noAnswer(err instanceof Error ? err.message : 'Network request failed');
       }
     },
-    [attempt, getToken, reportTestError],
+    [getToken],
   );
+
+  /**
+   * Is this closed attempt in fact submitted, and if so what did it score?
+   *
+   * The attempt route says which it is on the 409 itself. The student attempts
+   * history supplies the result where one may be shown, and answers "was it
+   * submitted" when the route could not. For an exam whose results are not
+   * published it returns nothing, and the paper is shown as in without a score.
+   */
+  async function confirmClosedAttempt(
+    statusFromServer: string | null,
+  ): Promise<{ submitted: boolean; status: string | null; result: GradedResult | null }> {
+    const current = attemptRef.current;
+    if (!current || (statusFromServer && statusFromServer !== 'submitted')) {
+      return { submitted: false, status: statusFromServer, result: null };
+    }
+
+    let result: GradedResult | null = null;
+    try {
+      const token = await getToken();
+      if (token && testId) {
+        const qs = placementId ? `?placement_id=${encodeURIComponent(placementId)}` : '';
+        const res = await fetch(`/api/student/tests/${encodeURIComponent(testId)}/attempts${qs}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = res.ok ? await res.json().catch(() => ({})) : {};
+        const row = (json?.data?.attempts || []).find((a: any) => a?.attempt_id === current.id);
+        if (row) {
+          result = {
+            attempt_id: row.attempt_id,
+            attempt_number: Number(row.attempt_number) || 1,
+            score: Number(row.score) || 0,
+            total_marks: Number(row.total_marks) || 0,
+            percentage: Number(row.percentage) || 0,
+            passed: Boolean(row.passed),
+            passing_pct: json?.data?.test?.passing_pct ?? null,
+            review: Array.isArray(row.review) ? row.review : [],
+          };
+        }
+      }
+    } catch {
+      // The history is a nicety here. The server's own answer still stands.
+    }
+
+    if (statusFromServer === 'submitted' || result) return { submitted: true, status: 'submitted', result };
+    return { submitted: false, status: null, result: null };
+  }
+
+  /**
+   * The 30-second autosave, and what to do when the server refuses it.
+   *
+   * The outcome used to be dropped on the floor. So once the server stopped
+   * accepting writes for a sitting, the student was told nothing: they carried
+   * on answering into a paper that no longer existed, and found out at Submit,
+   * by which point everything since the last accepted save was gone. Karthik
+   * Gregory lost all fifty answers and twenty-eight minutes that way on 18 Aug
+   * 2026; Samruddhi wani lost thirty. The trigger that closed their attempts
+   * (the old abandon-on-unload) is gone, but the ways a sitting can still shut
+   * under a student are not: the close sweep submitting their paper, a
+   * one-question-at-a-time paper closing on pagehide, the same paper opened
+   * through another door, a second tab, a second device.
+   *
+   * ONLY a closed attempt ends the sitting here. A dropped request, a 5xx or an
+   * expired token is worth another go in thirty seconds, and throwing a student
+   * out of a live exam over one bad response would be far worse than the bug
+   * this fixes.
+   */
+  async function autoSave() {
+    const answersNow = answersRef.current;
+    const outcome = await saveAnswers(answersNow, 'save');
+    if (outcome.ok) return;
+    // Submit owns the failure once the student has pressed it, and says so
+    // itself. Two voices about one dead attempt would only confuse.
+    if (submittedRef.current || submittingRef.current || attemptClosedRef.current) return;
+    if (submitFailureKind({ code: outcome.code, status: outcome.status, message: outcome.error }) !== 'attempt_closed') {
+      return;
+    }
+
+    const closed = await confirmClosedAttempt(outcome.attempt_status);
+    // Always reported. A refused save is the app losing a student's work in
+    // real time, and the whole point of reaching it here is that the teacher
+    // hears about it without waiting for a submit that may never come.
+    reportTestError({
+      phase: 'save',
+      attempt_id: attemptRef.current?.id ?? null,
+      message: outcome.error || `Save refused (HTTP ${outcome.status ?? 'no response'})`,
+      detail: {
+        status: outcome.status,
+        code: outcome.code ?? failureCodeOf({ message: outcome.error }),
+        attempt_status: closed.status,
+        answered: Object.keys(answersNow).length,
+      },
+    });
+
+    // Something else filed the paper while they were writing: the close sweep,
+    // or their own submit from another tab. It is in, so show them that.
+    if (closed.submitted) {
+      finishSubmitted(closed.result, true);
+      return;
+    }
+    closeSitting({ kind: 'attempt_closed', message: SITTING_CLOSED_COPY, retryInSeconds: null, focus: false });
+  }
 
   function handleAnswer(questionId: string, value: string) {
     // Per-question timer: can't answer past questions
@@ -537,22 +807,200 @@ export default function TakeTestPage() {
     [getToken],
   );
 
+  function clearRetryTimer() {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }
+
+  function stopClocks() {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (questionTimerRef.current) clearInterval(questionTimerRef.current);
+    if (autoSaveRef.current) clearInterval(autoSaveRef.current);
+  }
+
+  function finishSubmitted(graded: GradedResult | null, foundAlreadyIn: boolean) {
+    submittedRef.current = true;
+    autoSubmitRef.current = false;
+    autoRetriesRef.current = 0;
+    clearRetryTimer();
+    stopClocks();
+    setSubmitProblem(null);
+    setAlreadySubmitted(foundAlreadyIn);
+    setResult(graded);
+    setSubmitted(true);
+  }
+
+  /** The attempt cannot take a submit any more. Stop everything that would try. */
+  function closeSitting(problem: SubmitProblem) {
+    autoSubmitRef.current = false;
+    clearRetryTimer();
+    stopClocks();
+    setAttemptClosed(true);
+    setSubmitProblem(problem);
+  }
+
+  /**
+   * Submit the paper.
+   *
+   * THE GUARD IS THE REF AT THE TOP, not the button's disabled prop. The timer
+   * and the proctoring limit call in from old closures, and a double tap lands
+   * before React re-renders the button, so `disabled` alone let two submits out.
+   * An automatic call that arrives while one is in flight is not dropped
+   * entirely: it marks the run as automatic, so if the in-flight submit fails it
+   * still retries by itself.
+   */
   async function handleSubmit(autoSubmit = false) {
-    if (submitting) return;
+    if (autoSubmit) autoSubmitRef.current = true;
+    if (submittingRef.current || submittedRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setSubmitSheetOpen(false);
+    clearRetryTimer();
+    // Pressed from the alert while a retry was counting down: stop promising one.
+    setSubmitProblem((p) => (p ? { ...p, retryInSeconds: null, focus: false } : p));
 
-    const payload = await saveAnswers(answersRef.current, 'submit');
-    if (payload) {
-      setResult(payload.result || null);
-      setSubmitted(true);
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (questionTimerRef.current) clearInterval(questionTimerRef.current);
-      if (autoSaveRef.current) clearInterval(autoSaveRef.current);
+    const answersNow = answersRef.current;
+    try {
+      const outcome = await saveAnswers(answersNow, 'submit');
+      if (outcome.ok) {
+        finishSubmitted((outcome.payload.result as GradedResult) || null, false);
+        return;
+      }
+      await handleSubmitFailure(outcome, answersNow, autoSubmit);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+  handleSubmitRef.current = handleSubmit;
+
+  async function handleSubmitFailure(
+    outcome: Extract<SaveOutcome, { ok: false }>,
+    answersNow: Record<string, string>,
+    /** This call came from the timer, the proctoring limit or a scheduled retry. */
+    automaticCall: boolean,
+  ) {
+    const current = attemptRef.current;
+    const kind = submitFailureKind({ code: outcome.code, status: outcome.status, message: outcome.error });
+    const reportMessage =
+      outcome.error || outcome.thrown || `Submit failed (HTTP ${outcome.status ?? 'no response'})`;
+    const report = (attemptStatus: string | null) => {
+      const facts = {
+        phase: 'submit',
+        code: outcome.code ?? failureCodeOf({ message: outcome.error }),
+        status: outcome.status,
+        message: reportMessage,
+        attemptStatus,
+      };
+      // A failed submit is the worst failure in the product, so a real one is
+      // always reported. A paper that turned out to be in already is not one.
+      if (isExpectedRefusal(facts)) return;
+      reportTestError({
+        phase: 'submit',
+        attempt_id: current?.id ?? null,
+        message: reportMessage,
+        detail: {
+          status: outcome.status,
+          code: facts.code,
+          attempt_status: attemptStatus,
+          answered: Object.keys(answersNow).length,
+          automatic: autoSubmitRef.current,
+        },
+      });
+    };
+    // Focus moves to the alert's action only after the student's own press.
+    const focus = !automaticCall;
+
+    if (kind === 'attempt_closed') {
+      const closed = await confirmClosedAttempt(outcome.attempt_status);
+      report(closed.status);
+      if (closed.submitted) {
+        finishSubmitted(closed.result, true);
+        return;
+      }
+      closeSitting({ kind, message: ATTEMPT_CLOSED_COPY, retryInSeconds: null, focus });
+      return;
     }
 
-    setSubmitting(false);
+    report(null);
+
+    if (kind === 'exam_closed') {
+      // The close sweep (api/cron/exam-close) submits an open exam paper with
+      // whatever was last SAVED. Autosave runs every 30 seconds, so the answers
+      // given since would be lost; a save is still accepted after the close.
+      void saveAnswers(answersNow, 'save');
+      closeSitting({
+        kind,
+        message: outcome.error || 'This exam has closed, so your paper could not be submitted.',
+        retryInSeconds: null,
+        focus,
+      });
+      return;
+    }
+
+    // Worth trying again. An automatic submit does so by itself, backing off,
+    // because the student may not be looking: the clock ran out on them.
+    let retryInSeconds: number | null = null;
+    if (autoSubmitRef.current) {
+      const delay = nextAutoRetryDelay(autoRetriesRef.current);
+      if (delay === null) {
+        // Used up. From here it is the student's Try again.
+        autoSubmitRef.current = false;
+        autoRetriesRef.current = 0;
+      } else {
+        autoRetriesRef.current += 1;
+        retryInSeconds = Math.round(delay / 1000);
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          void handleSubmitRef.current(true);
+        }, delay);
+      }
+    }
+
+    // A 5xx or no response carries no sentence meant for a student (an unknown
+    // server error is sent back raw), so those get the plain explanation.
+    // 401 is excluded with the 5xx: the attempt route answers an expired sign-in
+    // (and anything it did not expect) with the raw message, and "Invalid
+    // Microsoft token: 401" is not a sentence to show a student mid-paper.
+    const serverSentence =
+      outcome.status !== null && outcome.status < 500 && outcome.status !== 401 ? outcome.error : null;
+    setSubmitProblem({ kind, message: serverSentence || SUBMIT_FALLBACK, retryInSeconds, focus });
   }
+
+  /** "Try again" on a result: a fresh sitting, or the refusal if there is none. */
+  function startAnotherAttempt() {
+    submittedRef.current = false;
+    autoSubmitRef.current = false;
+    autoRetriesRef.current = 0;
+    clearRetryTimer();
+    setSubmitProblem(null);
+    setAttemptClosed(false);
+    setAlreadySubmitted(false);
+    setSubmitted(false);
+    setResult(null);
+    setReviewOpen(false);
+    setAnswers({});
+    setCurrentIndex(0);
+    setTimeLeftSeconds(null);
+    fetchTestData();
+  }
+
+  // Keyboard and screen reader users land on the way forward after their own
+  // press fails. Never mid-paper for an automatic one: that would yank focus
+  // away from the question they are reading.
+  useEffect(() => {
+    if (submitProblem?.focus) submitActionRef.current?.focus();
+  }, [submitProblem]);
+
+  // No retry may fire after the page is gone.
+  useEffect(() => {
+    const timers = retryTimerRef;
+    return () => {
+      if (timers.current) clearTimeout(timers.current);
+    };
+  }, []);
 
   // -------------------------------------------------------------------------
   // Swipe navigation (mobile only)
@@ -627,6 +1075,73 @@ export default function TakeTestPage() {
     const gradableCount = review.filter((r: GradedReviewItem) => r.is_gradable).length;
     const timeSpent = (attempt as any)?.time_spent_seconds as number | undefined;
     const thisAttempt = attemptNumber ?? (attempt as any)?.attempt_number ?? 1;
+
+    /**
+     * "Try again" only where another sitting can actually start. On a one-shot
+     * exam it could only be refused, and before the refusal cleared the screen
+     * it put the student back on their finished paper with blank answers.
+     */
+    const canTryAgain = attemptsLeftAfterThis !== 0;
+    const resultActions = (
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        {canTryAgain && (
+          <Button
+            variant="contained"
+            fullWidth={false}
+            sx={{ textTransform: 'none', minHeight: 48, flex: 1 }}
+            // A fresh attempt, not a resumed one: the previous attempt is
+            // submitted, so the engine simply issues the next number.
+            onClick={startAnotherAttempt}
+          >
+            Try again
+          </Button>
+        )}
+        <Button
+          variant={canTryAgain ? 'outlined' : 'contained'}
+          sx={{ textTransform: 'none', minHeight: 48, flex: 1 }}
+          onClick={() => router.push(returnTo)}
+        >
+          {returnLabel}
+        </Button>
+      </Box>
+    );
+
+    // In, but with no score to show: found submitted after a refused second
+    // submit on an exam whose results are not published yet.
+    if (!result) {
+      return (
+        <Box
+          sx={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1200,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            p: 3,
+            bgcolor: 'background.default',
+            overflowY: 'auto',
+          }}
+        >
+          <Box sx={{ width: '100%', maxWidth: 560, pb: 6, textAlign: 'center', pt: 2 }}>
+            <CheckCircleOutlinedIcon sx={{ fontSize: 64, color: 'success.main', mb: 1 }} />
+            <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 0.5 }}>
+              Your paper is in
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {test?.title}
+            </Typography>
+            <Typography variant="body1" sx={{ mb: 3 }}>
+              {alreadySubmitted
+                ? 'It had already been submitted, so your answers are safe.'
+                : 'Your answers were submitted.'}{' '}
+              Your result shows in My Performance once it is ready.
+            </Typography>
+            {resultActions}
+          </Box>
+        </Box>
+      );
+    }
 
     return (
       <Box
@@ -741,32 +1256,7 @@ export default function TakeTestPage() {
             </>
           )}
 
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Button
-              variant="contained"
-              fullWidth={false}
-              sx={{ textTransform: 'none', minHeight: 48, flex: 1 }}
-              onClick={() => {
-                // A fresh attempt, not a resumed one: the previous attempt is
-                // submitted, so the engine simply issues the next number.
-                setSubmitted(false);
-                setResult(null);
-                setReviewOpen(false);
-                setAnswers({});
-                setCurrentIndex(0);
-                fetchTestData();
-              }}
-            >
-              Try again
-            </Button>
-            <Button
-              variant="outlined"
-              sx={{ textTransform: 'none', minHeight: 48, flex: 1 }}
-              onClick={() => router.push(returnTo)}
-            >
-              {returnLabel}
-            </Button>
-          </Box>
+          {resultActions}
 
           {/* Pressing Try again used to lose this review for good. It no longer
               does, but a student has no way to know that unless told. */}
@@ -1217,6 +1707,68 @@ export default function TakeTestPage() {
     </Box>
   );
 
+  // ----- A submit that did not go through -----
+  //
+  // Sits directly above Prev/Submit, on every width, so it is beside the button
+  // the student just pressed (or would press). role="alert" announces it. The
+  // retry countdown is a static "in N seconds" rather than a ticking one on
+  // purpose: a live region that changes every second is read out every second.
+  const problemAction = submitProblem
+    ? submitProblem.kind === 'retry'
+      ? { label: submitting ? 'Submitting...' : 'Try again', onClick: () => void handleSubmit(false) }
+      : submitProblem.kind === 'exam_closed'
+        ? // The tests list is where "Ask my teacher" for another sitting lives.
+          { label: DEFAULT_TEST_RETURN_LABEL, onClick: () => router.push(DEFAULT_TEST_RETURN) }
+        : { label: returnLabel, onClick: () => router.push(returnTo) }
+    : null;
+
+  const submitProblemAlert =
+    submitProblem && problemAction ? (
+      <Alert
+        severity="error"
+        role="alert"
+        sx={{
+          mb: 1,
+          alignItems: 'flex-start',
+          '& .MuiAlert-message': { width: '100%', minWidth: 0 },
+        }}
+      >
+        <Typography variant="body2" sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
+          {submitProblem.message}
+        </Typography>
+        {submitProblem.kind === 'retry' && (
+          <Typography variant="body2" sx={{ mt: 0.5 }}>
+            {submitting
+              ? 'Sending your answers again now.'
+              : submitProblem.retryInSeconds
+                ? `Your answers are still here. Trying again by itself in ${submitProblem.retryInSeconds} seconds.`
+                : 'Your answers are still here.'}
+          </Typography>
+        )}
+        <Button
+          ref={submitActionRef}
+          variant="contained"
+          // Primary, not the success green the Submit buttons use: white on the
+          // Nexus success.main is about 3.3:1, under the 4.5:1 text needs.
+          color="primary"
+          onClick={problemAction.onClick}
+          // Shown busy while the resend is in flight. handleSubmit's own guard
+          // is what actually stops a second send.
+          disabled={submitProblem.kind === 'retry' && submitting}
+          aria-busy={submitProblem.kind === 'retry' && submitting}
+          sx={{
+            mt: 1,
+            textTransform: 'none',
+            minHeight: 48,
+            minWidth: 140,
+            '&.Mui-focusVisible': { outline: '3px solid', outlineColor: 'text.primary', outlineOffset: 2 },
+          }}
+        >
+          {problemAction.label}
+        </Button>
+      </Alert>
+    ) : null;
+
   // ----- Timer chip (shared) -----
   const timerChip = (() => {
     if (test.test_type === 'timed' && timeLeftSeconds !== null) {
@@ -1466,6 +2018,7 @@ export default function TakeTestPage() {
               flexShrink: 0,
             }}
           >
+            {submitProblemAlert}
             {navButtons}
           </Box>
         </Box>

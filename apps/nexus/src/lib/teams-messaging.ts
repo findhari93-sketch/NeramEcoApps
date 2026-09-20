@@ -66,6 +66,63 @@ async function postWithRetry(url: string, token: string, payload: unknown): Prom
   return send();
 }
 
+/** Cached by a fingerprint of the token, never the token itself. */
+const selfIds = new Map<string, string>();
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Enough of the token to tell two apart, without holding the token in memory. */
+function tokenKey(token: string): string {
+  let hash = 5381;
+  for (let i = 0; i < token.length; i += 1) hash = ((hash << 5) + hash + token.charCodeAt(i)) | 0;
+  return `${token.length}:${hash}`;
+}
+
+/**
+ * The sending teacher's Entra object id, for binding them as a chat member.
+ *
+ * Read from the token's own `oid` claim when it carries one (no network call),
+ * else asked of Graph once per token. A batch send to forty students reuses one
+ * token, so the lookup happens once, not forty times.
+ */
+async function teacherAccountId(token: string): Promise<string | null> {
+  const key = tokenKey(token);
+  const cached = selfIds.get(key);
+  if (cached) return cached;
+
+  let id: string | null = null;
+  const payload = token.split('.')[1];
+  if (payload) {
+    try {
+      const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+      // Checked against the shape of an object id before it is interpolated
+      // into a Graph URL. The claim is not verified here, only trusted to name
+      // the caller of the token Graph is about to check anyway.
+      if (typeof claims?.oid === 'string' && GUID.test(claims.oid)) id = claims.oid;
+    } catch {
+      // Not a readable JWT. Graph can still say who it belongs to.
+    }
+  }
+  if (!id) {
+    try {
+      const res = await fetch(`${GRAPH}/me?$select=id`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const me = await res.json().catch(() => null);
+        if (typeof me?.id === 'string' && GUID.test(me.id)) id = me.id;
+      } else {
+        console.error(`Teams chat could not identify the sender: ${await graphReason(res)}`);
+      }
+    } catch (err) {
+      console.error('Teams chat could not identify the sender:', err);
+    }
+  }
+  if (id) {
+    if (selfIds.size > 200) selfIds.clear();
+    selfIds.set(key, id);
+  }
+  return id;
+}
+
 /**
  * Send one chat message.
  *
@@ -94,14 +151,26 @@ export async function sendTeamsChatMessage(
   options: TeamsChatOptions = {},
 ): Promise<TeamsChatResult> {
   try {
-    // Create (or resolve) a one-on-one chat between the teacher (me) and the student.
+    // Graph refuses `/me` in user@odata.bind ("'user@odata.bind' field is
+    // missing"), which failed every chat from 14 to 17 Sept. The teacher has to
+    // be named by their account id like the student is.
+    const teacherId = await teacherAccountId(userAccessToken);
+    if (!teacherId) {
+      return {
+        ok: false,
+        status: 0,
+        reason: 'Could not tell which teacher is sending, so no chat was started. Signing in again usually fixes this.',
+      };
+    }
+
+    // Create (or resolve) a one-on-one chat between the teacher and the student.
     const chatRes = await postWithRetry(`${GRAPH}/chats`, userAccessToken, {
       chatType: 'oneOnOne',
       members: [
         {
           '@odata.type': '#microsoft.graph.aadUserConversationMember',
           roles: ['owner'],
-          'user@odata.bind': `${GRAPH}/me`,
+          'user@odata.bind': `${GRAPH}/users('${teacherId}')`,
         },
         {
           '@odata.type': '#microsoft.graph.aadUserConversationMember',

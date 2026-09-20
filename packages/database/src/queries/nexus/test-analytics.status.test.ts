@@ -91,3 +91,39 @@ describe('resolveResultStatus', () => {
     expect(resolveResultStatus({ ...base, isMandatory: null, closesAt: YESTERDAY })).toBe('not_started');
   });
 });
+
+/**
+ * A paper left open does not stay "sitting it now" for ever.
+ *
+ * The take page no longer abandons an attempt when the student closes the tab,
+ * so a paper they walked away from stays `in_progress` in the database. Read
+ * literally, that student sat outside both Done and Not done on the teacher's
+ * list, was never chased, and was never asked why. Once their own door has
+ * shut, an unfinished paper is a missed one.
+ */
+describe('resolveResultStatus: an attempt left open past the deadline', () => {
+  it('still reads as in progress while their door is open', () => {
+    expect(resolveResultStatus({ ...base, hasInProgress: true, closesAt: TOMORROW })).toBe('in_progress');
+  });
+
+  it('reads as missed once the run has closed on them', () => {
+    expect(resolveResultStatus({ ...base, hasInProgress: true, closesAt: YESTERDAY })).toBe('missed');
+  });
+
+  it('follows the student\'s own window rather than the run\'s close', () => {
+    expect(
+      resolveResultStatus({ ...base, hasInProgress: true, closesAt: YESTERDAY, windowOpenUntil: TOMORROW }),
+    ).toBe('in_progress');
+    expect(
+      resolveResultStatus({ ...base, hasInProgress: true, closesAt: TOMORROW, windowOpenUntil: YESTERDAY }),
+    ).toBe('missed');
+  });
+
+  it('keeps an always-open practice run as in progress, because no door ever shuts', () => {
+    expect(resolveResultStatus({ ...base, hasInProgress: true, closesAt: null })).toBe('in_progress');
+  });
+
+  it('does not chase a student who was never required to sit it', () => {
+    expect(resolveResultStatus({ ...base, hasInProgress: true, closesAt: YESTERDAY, isMandatory: false })).toBe('excused');
+  });
+});

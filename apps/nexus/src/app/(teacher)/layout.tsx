@@ -62,7 +62,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       <PanelProvider>
         <NavBadgeProvider>
           {/* Staff only, and only here. Every student avatar under this layout can
-              wear its cohort ring; the student layout never mounts this, so the
+              wear its info ring; the student layout never mounts this, so the
               same components render plain faces there. */}
           <StudentStageFactsProvider>
             <TeacherLayoutInner>{children}</TeacherLayoutInner>

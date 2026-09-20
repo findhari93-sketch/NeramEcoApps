@@ -26,11 +26,11 @@
       },
       {
         "selector": "JSXOpeningElement[name.name='UserAvatar']",
-        "message": "Show a person through StudentAvatar (src/components/students/StudentAvatar). It resolves the cohort ring from the user id, and falls back to exactly this plain avatar for staff, alumni and anyone else it does not recognise, so it is safe in a mixed list. Two adoption passes were lost to hunting for screens one at a time; if this face genuinely must stay plain, add the file to the allowlist in the overrides block below and say why."
+        "message": "Show a person through StudentAvatar (src/components/students/StudentAvatar). It resolves the student info ring from the user id, and falls back to exactly this plain avatar for staff, alumni and anyone else it does not recognise, so it is safe in a mixed list. Two adoption passes were lost to hunting for screens one at a time; if this face genuinely must stay plain, add the file to the allowlist in the overrides block below and say why."
       },
       {
         "selector": "JSXOpeningElement[name.name='GraphAvatar']",
-        "message": "Show a person through StudentAvatar (src/components/students/StudentAvatar) and pass msOid to keep the live Microsoft Graph photo. Calling GraphAvatar directly is how a screen ends up with faces that carry no cohort."
+        "message": "Show a person through StudentAvatar (src/components/students/StudentAvatar) and pass msOid to keep the live Microsoft Graph photo. Calling GraphAvatar directly is how a screen ends up with faces that carry no info ring."
       },
       {
         "selector": "JSXOpeningElement[name.name='Avatar']:has(JSXAttribute[name.name='src'])",
@@ -117,17 +117,6 @@
         "src/components/NoClassroomWelcome.tsx",
         "src/components/AlumniAccessEnded.tsx",
         "src/app/(teacher)/teacher/course-plans/page.tsx"
-      ],
-      "rules": { "no-restricted-syntax": "off" }
-    },
-    // Stacked AvatarGroup strips. MUI needs bare Avatar children for its
-    // overlap margins, and StudentAvatar's size + 8 wrapper breaks them. A ring
-    // is illegible at 24px under a stack anyway.
-    {
-      "files": [
-        "src/components/exam-schedule/RecentlyCompletedStrip.tsx",
-        "src/components/question-bank/ContributorAvatars.tsx",
-        "src/components/exam-recall/ThreadCard.tsx"
       ],
       "rules": { "no-restricted-syntax": "off" }
     },

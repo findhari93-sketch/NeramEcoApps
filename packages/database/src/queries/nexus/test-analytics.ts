@@ -590,17 +590,29 @@ export function resolveResultStatus(input: {
   now: number;
 }): NexusTestResultStatus {
   if (input.hasSubmitted) return 'submitted';
-  if (input.hasInProgress) return 'in_progress';
-  // Not required means nothing is outstanding. Listing them in the chase list is
-  // how a teacher learns to stop trusting the chase list.
-  if (input.isMandatory === false) return 'excused';
 
   // A student let back in is sitting their own window, so the run's shared close
   // time has stopped describing them.
   const deadline = input.windowOpenUntil ?? input.closesAt;
-  if (!deadline) return 'not_started';
-  const shut = Date.parse(deadline);
-  if (Number.isNaN(shut) || shut > input.now) return 'not_started';
+  const shut = deadline ? Date.parse(deadline) : NaN;
+  const doorOpen = !deadline || Number.isNaN(shut) || shut > input.now;
+
+  /**
+   * An open attempt only means "sitting it now" while their door is open.
+   *
+   * Nothing marks a paper abandoned when a student closes the tab any more (the
+   * take page used to, and did it before they had even chosen to leave). Read
+   * literally, a paper walked away from last month would report as in progress
+   * for ever: counted under neither Done nor Not done, never chased, never
+   * asked about. Past their deadline it is a missed paper like any other.
+   */
+  if (input.hasInProgress && doorOpen) return 'in_progress';
+
+  // Not required means nothing is outstanding. Listing them in the chase list is
+  // how a teacher learns to stop trusting the chase list.
+  if (input.isMandatory === false) return 'excused';
+
+  if (doorOpen) return 'not_started';
   // No roster means no opinion about who owed this paper, so nobody can be
   // missing from a list that was never drawn up.
   return input.isMandatory === true ? 'missed' : 'not_started';

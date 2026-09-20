@@ -12,7 +12,7 @@ import { generateSectionsAndQuestions } from '@/lib/ai-generate';
 import { resolveTranscript } from '@/lib/transcript-resolver';
 import { preflight, scoreRecapGeneration } from '@/lib/recap-quality';
 import { readRecapDefaults, questionsToPass } from '@/lib/recap-defaults';
-import { isUsableSection } from '@/lib/recap-autodraft';
+import { dropStarvedSections, isUsableSection } from '@/lib/recap-autodraft';
 
 /**
  * POST /api/class-recaps/[recapId]/autopublish
@@ -95,6 +95,9 @@ export async function POST(
       targetSegmentSeconds,
       poolPerSegment,
       durationSeconds,
+      // Same top-up as the sweep. This route publishes straight to students, so
+      // a checkpoint left at three questions goes live at three.
+      minPerSegment: questionsToServe,
     });
 
     const planned = generated.sections || [];
@@ -110,10 +113,16 @@ export async function POST(
       );
     }
 
+    // The same rule the sweep applies: one checkpoint too thin to gate anything
+    // is dropped so the rest can go live, and nothing is dropped when too few
+    // would survive. Shared so the teacher's one press and the cron cannot
+    // disagree about what is publishable.
+    const kept = dropStarvedSections(usable, questionsToServe);
+
     // Stamp the gate onto every checkpoint. NULL is not "unset" here: a NULL
     // questions_to_serve serves the whole bank of fifteen, and a NULL
     // min_questions_to_pass then demands all fifteen correct.
-    const graded = usable.map((s) => ({
+    const graded = kept.map((s) => ({
       ...s,
       questions_to_serve: Math.min(questionsToServe, (s.questions || []).length),
       min_questions_to_pass: questionsToPass(
@@ -124,11 +133,13 @@ export async function POST(
 
     await replaceRecapSections(recapId, graded, supabase);
 
-    // Graded against every PLANNED segment rather than the ones that survived,
-    // so a thin generation reports "3 of 5 checkpoints have too few questions"
-    // instead of the coverage failure it used to invent.
+    // Coverage and boundaries against every PLANNED segment rather than the ones
+    // that survived, so a thin generation reports "3 of 5 checkpoints have too
+    // few questions" instead of the coverage failure it used to invent. The
+    // questions themselves are judged on what was actually saved.
     const verdict = scoreRecapGeneration({
       sections: planned,
+      gradedSections: kept,
       transcript,
       durationSeconds,
       targetSegmentSeconds,
@@ -176,7 +187,7 @@ export async function POST(
       holdReason: verdict.holdReason,
       summary: verdict.summary,
       score: verdict.score,
-      sections: usable.length,
+      sections: kept.length,
       questions: usable.reduce((n, s) => n + (s.questions || []).length, 0),
       classTest,
       classTestWarning,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { preflight, scoreRecapGeneration, THRESHOLDS } from './recap-quality';
+import { minUsableQuestions, preflight, scoreRecapGeneration, THRESHOLDS } from './recap-quality';
 
 const DURATION = 1800;
 const TARGET = 300;
@@ -48,6 +48,35 @@ function score(sections: any[], duration = DURATION) {
     targetSegmentSeconds: TARGET,
     questionsToServe: SERVE,
   });
+}
+
+/**
+ * Score a plan against the checkpoints that will actually be saved.
+ *
+ * `serve` defaults to ten, production's configured value, because the split
+ * between "thinner than configured" and "too thin to be a gate" only exists
+ * above the floor and the suite's usual SERVE of three sits on it.
+ */
+function scoreSplit(
+  sections: any[],
+  gradedSections: any[],
+  serve = 10,
+  duration = DURATION,
+) {
+  return scoreRecapGeneration({
+    sections,
+    gradedSections,
+    transcript: transcript(duration),
+    durationSeconds: duration,
+    targetSegmentSeconds: TARGET,
+    questionsToServe: serve,
+  });
+}
+
+/** `count` distinct, grounded questions, letters rotated so balance passes. */
+function questions(count: number, offset = 0) {
+  const letters: Array<'a' | 'b' | 'c' | 'd'> = ['a', 'b', 'c', 'd'];
+  return Array.from({ length: count }, (_, i) => question(offset + i, letters[i % 4]));
 }
 
 describe('preflight refuses to spend a Gemini call on nothing', () => {
@@ -107,10 +136,11 @@ describe('hard checks hold the recap whatever the score', () => {
     expect(v.publish).toBe(false);
   });
 
-  it('holds when a segment cannot serve enough questions', () => {
+  it('holds when a segment falls under the floor of what a gate can be', () => {
     const sections = goodSections();
-    sections[3].questions = [question(99)]; // 1 question, 3 must be served
+    sections[3].questions = [question(99)]; // 1 question, the floor here is 3
     const v = score(sections);
+    expect(v.checks.find((c) => c.id === 'question_floor')?.hard).toBe(true);
     expect(v.publish).toBe(false);
     expect(v.holdReason).toBe('thin_questions');
   });
@@ -130,12 +160,13 @@ describe('hard checks hold the recap whatever the score', () => {
   });
 
   it('holds even when every soft check passes', () => {
-    const sections = goodSections();
-    sections[0].questions = []; // hard failure only
-    const v = score(sections);
+    // Two good checkpoints on a thirty minute class: the questions are fine,
+    // the coverage is not.
+    const v = score(goodSections().slice(0, 2));
     const softAllPassed = v.checks.filter((c) => !c.hard).every((c) => c.passed);
     expect(softAllPassed).toBe(true);
     expect(v.publish).toBe(false);
+    expect(v.holdReason).toBe('low_coverage');
   });
 });
 
@@ -259,6 +290,73 @@ describe('a soft failure publishes and is flagged, rather than holding', () => {
     const severe = score(invented);
     expect(severe.checks.find((c) => c.id === 'grounding_floor')?.passed).toBe(false);
     expect(severe.publish).toBe(false);
+  });
+});
+
+describe('a checkpoint thinner than configured does not hold the recap', () => {
+  // The production regression this suite exists to pin down. The pipeline clamps
+  // every checkpoint's gate down to the questions it actually holds, so a
+  // segment with nine of a configured ten serves nine and passes at seven: it is
+  // completely playable. Scoring against the unclamped ten held five classes
+  // between 3 and 33 days, and every one of them was fine.
+
+  it('publishes a segment holding nine of a configured ten', () => {
+    const plan = goodSections().map((s, i) => ({ ...s, questions: questions(10, i * 10) }));
+    plan[4].questions = questions(9, 400); // the 2026-09-15 shape
+    const v = scoreSplit(plan, plan);
+
+    const volume = v.checks.find((c) => c.id === 'question_volume');
+    expect(volume?.hard).toBe(false);
+    expect(volume?.passed).toBe(false);
+    expect(v.publish).toBe(true);
+    expect(v.holdReason).toBeNull();
+    // Reported, but not a teacher's problem: it goes live without a nag.
+    expect(volume?.informational).toBe(true);
+    expect(v.score).toBe(1);
+    expect(v.flagged).toBe(false);
+  });
+
+  it('keeps depth out of the score, so the other soft checks keep their weight', () => {
+    // Guards the re-weighting trap. Four scored soft checks means one failure
+    // lands at 0.75 and trips the 0.8 bar; a fifth would put it at exactly 0.8
+    // and silently stop flagging anything that fails only once.
+    const v = score(goodSections());
+    const scored = v.checks.filter((c) => !c.hard && !c.informational);
+    expect(scored).toHaveLength(4);
+  });
+
+  it('never demands more of a segment than it would serve', () => {
+    expect(minUsableQuestions(10)).toBe(THRESHOLDS.minQuestionsPerSegment);
+    // A teacher who configured a three question checkpoint gets a three
+    // question floor, not the default four, or nothing could ever publish.
+    expect(minUsableQuestions(3)).toBe(3);
+    expect(minUsableQuestions(0)).toBe(1);
+  });
+
+  it('holds only once too few checkpoints survive the drop', () => {
+    const plan = goodSections().map((s, i) => ({ ...s, questions: questions(10, i * 10) }));
+    const v = scoreSplit(plan, plan.slice(0, 1));
+
+    expect(v.checks.find((c) => c.id === 'segment_count')?.passed).toBe(false);
+    expect(v.publish).toBe(false);
+  });
+
+  it('judges coverage on the plan and the questions on what students get', () => {
+    // A dropped checkpoint is still watched, it is just not quizzed, so the
+    // class is still covered. Scoring coverage on the kept set instead would
+    // report a hole that does not exist and hold for it.
+    const plan = goodSections().map((s, i) => ({ ...s, questions: questions(10, i * 10) }));
+    const v = scoreSplit(plan, plan.slice(0, 4));
+
+    expect(v.checks.find((c) => c.id === 'coverage')?.passed).toBe(true);
+    expect(v.checks.find((c) => c.id === 'segment_count')?.passed).toBe(true);
+    expect(v.publish).toBe(true);
+  });
+
+  it('defaults the graded set to the plan, so old callers are unchanged', () => {
+    const v = score(goodSections());
+    expect(v.publish).toBe(true);
+    expect(v.checks.find((c) => c.id === 'segment_count')?.measured).toBe(6);
   });
 });
 

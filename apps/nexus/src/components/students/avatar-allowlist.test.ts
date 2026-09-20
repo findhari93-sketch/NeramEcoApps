@@ -8,7 +8,7 @@ import { stripLineComments } from './allowlist-jsonc';
  *
  * An entry naming a file that no longer exists is a dead exception. It does not
  * fail lint, it does not fail the build, and it quietly makes the list look
- * considered when it is stale. Two adoption passes of the cohort ring were lost
+ * considered when it is stale. Two adoption passes of the info ring were lost
  * to exactly that kind of silent drift, so the list gets a test.
  */
 

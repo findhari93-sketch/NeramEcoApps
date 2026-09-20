@@ -2,19 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
 import {
+  getExamByClass,
   getQuestionAnalysis,
   getSupabaseAdminClient,
   getTestResults,
+  listExamMakeups,
   listPlacementsForTest,
   listRunCoveredClasses,
   loadAccessRequestsForRun,
   loadEligibilityFactsForPreview,
+  loadExamEligibilityFacts,
   loadQuestionAiStatus,
   loadRunEligibilityOverrides,
   resolvePlacementLabels,
   type NexusTestResultsOptions,
+  type TestAccessRequest,
 } from '@neram/database';
 import { buildExamEligibilityRoster } from '@/lib/exam-eligibility-roster';
+import { buildExamRunRoster } from '@/lib/exam-run-roster';
+import { buildRunCatchup, type RunCatchup } from '@/lib/run-catchup';
+import { pickRunReasons, requestNotesByStudent, type RowReason, type SkipReasonRow } from '@/lib/test-result-reasons';
 import {
   CLASSROOM_ANCHORED_CONTEXTS,
   CLASS_ANCHORED_CONTEXTS,
@@ -68,9 +75,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: 'That run is not on this paper' }, { status: 404 });
     }
 
-    const opts = selected ? await buildRunOptions(selected, supabase) : undefined;
+    const scope = selected ? await buildRunOptions(selected, supabase) : undefined;
+    const opts = scope?.opts;
 
-    const [results, questions, runs, elsewhere] = await Promise.all([
+    const [results, questions, runs, elsewhere, reasons] = await Promise.all([
       getTestResults(params.id, opts, supabase),
       getQuestionAnalysis(
         params.id,
@@ -92,9 +100,27 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       selected
         ? loadElsewhereAttempts(params.id, (selected as any).id, supabase)
         : Promise.resolve({} as ElsewhereByStudent),
+      selected && opts?.roster?.length
+        ? loadRunReasons(params.id, (selected as any).id, supabase)
+        : Promise.resolve(new Map<string, RowReason>()),
     ]);
 
-    const rows = results.rows.map((r: any) => ({ ...r, elsewhere: elsewhere[r.student_id] ?? null }));
+    const extras = scope?.extras;
+    const rows = results.rows.map((r: any) => ({
+      ...r,
+      elsewhere: elsewhere[r.student_id] ?? null,
+      // What the student told the teacher. Only for somebody who has not sat it:
+      // a reason beside a score answers a question nobody is asking.
+      why: r.attempts > 0 ? null : (reasons.get(r.student_id) ?? null),
+      request_note: extras?.requestNotes[r.student_id] ?? null,
+      // A make-up is closed from the exam screen, not with the reopen control,
+      // so the row needs to know which kind of window it is looking at.
+      window_source: r.window_open_until ? (extras?.windowSources[r.student_id] ?? 'reopen') : null,
+      excused_note: extras?.overrideNotes[r.student_id] ?? null,
+      // Why they may not have sat it. The same gate api/tests/attempt enforces,
+      // so the chip on the row and the refusal at the door cannot disagree.
+      catchup: extras?.catchup[r.student_id] ?? null,
+    }));
 
     // What an AI already said about each question, from any paper. Decoration:
     // loadQuestionAiStatus never throws, so a missing table costs the markers
@@ -126,6 +152,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
                 context_type: (selected as any).context_type,
                 closes_at: (selected as any).available_until ?? null,
                 passing_pct: (selected as any).passing_pct ?? null,
+                exam: scope?.exam ?? null,
               }
             : null,
         },
@@ -139,6 +166,35 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
+/** The exam a run belongs to, for the publish control. Null on every other door. */
+interface RunExam {
+  id: string;
+  title: string | null;
+  results_state: string;
+  results_published_at: string | null;
+  closes_at: string | null;
+}
+
+/** What the rows need beyond getTestResults, decided while the roster is built. */
+interface RunExtras {
+  /** reopen or makeup, per student holding a window of their own. */
+  windowSources: Record<string, 'reopen' | 'makeup'>;
+  /** The teacher's note on an excusing override. */
+  overrideNotes: Record<string, string>;
+  /** What a student wrote when asking to be let back in. */
+  requestNotes: Record<string, string>;
+  /**
+   * Per student, whether the catch-up this run depends on is done.
+   *
+   * Empty for a run that covers no class (a practice pool, a paper assigned to
+   * the whole classroom): there is no lecture to be behind on, so the row says
+   * nothing rather than guessing.
+   */
+  catchup: Record<string, RunCatchup>;
+}
+
+const NO_EXTRAS: RunExtras = { windowSources: {}, overrideNotes: {}, requestNotes: {}, catchup: {} };
+
 /**
  * Turn one placement into the roster and window that scope the results.
  *
@@ -149,7 +205,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 async function buildRunOptions(
   placement: any,
   supabase: ReturnType<typeof getSupabaseAdminClient>,
-): Promise<NexusTestResultsOptions> {
+): Promise<{ opts: NexusTestResultsOptions; extras: RunExtras; exam?: RunExam | null }> {
   const contextType = String(placement.context_type);
   const base: NexusTestResultsOptions = {
     placementId: placement.id,
@@ -160,7 +216,32 @@ async function buildRunOptions(
     runWindow: { opensAt: placement.available_from ?? null, closesAt: placement.available_until ?? null },
   };
 
-  if (!canBuildRoster(contextType)) return base;
+  if (!canBuildRoster(contextType)) return { opts: base, extras: NO_EXTRAS };
+
+  // An exam is decided by the exam's OWN eligibility, through the engine the
+  // invigilation roster uses. See lib/exam-run-roster.ts for what this fixed.
+  if (contextType === 'exam') {
+    const exam = await getExamByClass(placement.context_id, supabase);
+    if (exam) {
+      const built = await buildExamRunOptions(exam, placement, base, supabase);
+      // Publication state lives on the exam, never on the placement, and this
+      // is the only read of it the screen gets. Without it the Conducted card
+      // could say "Results not published" and send a teacher to a page with no
+      // way to publish, which is exactly what it did.
+      return {
+        ...built,
+        exam: {
+          id: (exam as any).id,
+          title: (exam as any).title ?? null,
+          results_state: (exam as any).results_state ?? 'unpublished',
+          results_published_at: (exam as any).results_published_at ?? null,
+          closes_at: (exam as any).closes_at ?? null,
+        },
+      };
+    }
+    // An exam placement whose exam row is gone: the generic reading below is
+    // still a correct roster, just without exam overrides and make-ups.
+  }
 
   let classroomId: string | null = null;
   let coveredClassIds: string[] = [];
@@ -187,7 +268,7 @@ async function buildRunOptions(
   // still waiting on an answer. Without these the roster would report a
   // reopened student as "missed", which is the opposite of what happened.
   const [access, overrides] = await Promise.all([
-    loadAccessRequestsForRun(placement.id, supabase).catch(() => []),
+    loadAccessRequestsForRun(placement.id, supabase).catch(() => [] as TestAccessRequest[]),
     loadRunEligibilityOverrides(placement.id, supabase).catch(() => new Map()),
   ]);
   const windowsByStudent: Record<string, string | null> = {};
@@ -197,8 +278,9 @@ async function buildRunOptions(
     else if (a.status === 'pending') pendingRequestStudentIds.push(a.student_id);
   }
   const withAccess = { ...base, windowsByStudent, pendingRequestStudentIds };
+  const extras: RunExtras = { ...NO_EXTRAS, requestNotes: requestNotesByStudent(access) };
 
-  if (!classroomId) return withAccess;
+  if (!classroomId) return { opts: withAccess, extras };
 
   // The run's own covered classes when it has them, falling back to the host
   // class. A run created before nexus_test_run_covered_classes existed has no
@@ -222,20 +304,104 @@ async function buildRunOptions(
   });
 
   return {
-    ...withAccess,
-    // Paused students stay on the roster only so an attempt they really made
-    // is still found; getTestResults drops the rest and keeps them out of stats.
-    pausedStudentIds: (facts.students as Array<{ student_id: string; dormant?: boolean }>)
-      .filter((s) => s.dormant)
-      .map((s) => s.student_id),
-    roster: roster.map((r) => ({
-      student_id: r.student_id,
-      name: r.name,
-      avatar_url: r.avatar_url,
-      bucket: r.bucket,
-      is_mandatory: r.is_mandatory,
-    })),
+    opts: {
+      ...withAccess,
+      // Paused students stay on the roster only so an attempt they really made
+      // is still found; getTestResults drops the rest and keeps them out of stats.
+      pausedStudentIds: (facts.students as Array<{ student_id: string; dormant?: boolean }>)
+        .filter((s) => s.dormant)
+        .map((s) => s.student_id),
+      roster: roster.map((r) => ({
+        student_id: r.student_id,
+        name: r.name,
+        avatar_url: r.avatar_url,
+        bucket: r.bucket,
+        is_mandatory: r.is_mandatory,
+      })),
+    },
+    extras: {
+      ...extras,
+      overrideNotes: Object.fromEntries(
+        roster.filter((r) => r.override?.note?.trim()).map((r) => [r.student_id, r.override!.note!.trim()]),
+      ),
+      catchup: buildRunCatchup({
+        studentIds: roster.map((r) => r.student_id),
+        coveredClasses: facts.coveredClasses as any,
+        attendance: facts.attendance as any,
+        absences: facts.absences as any,
+      }),
+    },
   };
+}
+
+/**
+ * An exam run: the exam's covered classes, per-exam overrides and make-ups, the
+ * same facts the invigilation roster reads. Loud on a failed read, like the
+ * class lookup above: a silently empty roster reads as "nobody owed this".
+ */
+async function buildExamRunOptions(
+  exam: { id: string; classroom_id: string; opens_at: string; closes_at: string },
+  placement: any,
+  base: NexusTestResultsOptions,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+): Promise<{ opts: NexusTestResultsOptions; extras: RunExtras }> {
+  const [facts, makeups, access, runOverrides] = await Promise.all([
+    loadExamEligibilityFacts(exam.id, exam.classroom_id, supabase),
+    listExamMakeups(exam.id, supabase),
+    loadAccessRequestsForRun(placement.id, supabase).catch(() => [] as TestAccessRequest[]),
+    loadRunEligibilityOverrides(placement.id, supabase).catch(() => new Map()),
+  ]);
+
+  const built = buildExamRunRoster({
+    exam,
+    facts: facts as any,
+    runOverrides: runOverrides as any,
+    makeups,
+    access,
+    now: Date.now(),
+  });
+
+  return {
+    opts: {
+      ...base,
+      windowsByStudent: built.windowsByStudent,
+      pendingRequestStudentIds: built.pendingRequestStudentIds,
+      pausedStudentIds: built.pausedStudentIds,
+      roster: built.roster,
+    },
+    extras: {
+      windowSources: built.windowSources,
+      overrideNotes: built.overrideNotes,
+      requestNotes: requestNotesByStudent(access),
+      catchup: built.catchupByStudent,
+    },
+  };
+}
+
+/**
+ * Why each student on this run said they did not sit it.
+ *
+ * The run's own reasons plus any given against the paper alone, in one read.
+ * Context, never the report: a missing table (an environment the reasons
+ * migration has not reached) costs the chips and never the roster.
+ */
+async function loadRunReasons(
+  testId: string,
+  placementId: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+): Promise<Map<string, RowReason>> {
+  try {
+    const { data, error } = await (supabase as any)
+      .from('nexus_test_skip_reasons')
+      .select('student_id, placement_id, reason_code, reason_note, updated_at')
+      .eq('test_id', testId)
+      .or(`placement_id.eq.${placementId},placement_id.is.null`);
+    if (error) throw error;
+    return pickRunReasons((data || []) as SkipReasonRow[], placementId);
+  } catch (err) {
+    console.warn('[test results] skip reasons skipped:', (err as Error)?.message);
+    return new Map();
+  }
 }
 
 /**

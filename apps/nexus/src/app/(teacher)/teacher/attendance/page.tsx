@@ -1,371 +1,191 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  Box,
-  Typography,
-  Paper,
-  Skeleton,
-  TextField,
-  Button,
-  Checkbox,
-  Chip,
-} from '@neram/ui';
-import StudentAvatar from '@/components/students/StudentAvatar';
+/**
+ * The attendance register: a screen staff open only to look.
+ *
+ * It replaces a page that could not work (it called /api/attendance with
+ * parameters that route never accepted, so expanding a class and saving both
+ * 400'd) and, with it, the idea that this is where attendance gets marked.
+ * Marking and chasing live where they already worked; this is the register.
+ */
+import { Suspense, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Alert, Box, Skeleton, Tab, Tabs, Typography } from '@neram/ui';
+import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
+import ClassAttendanceCard from '@/components/attendance/ClassAttendanceCard';
+import RegisterGrid from '@/components/attendance/RegisterGrid';
+import StandingList from '@/components/attendance/StandingList';
+import RangeToggle, { toRangeKey, type RangeKey } from '@/components/attendance/RangeToggle';
+import { InfoRingLegendButton } from '@/components/students/InfoRingLegend';
+import { istRange } from '@/components/attendance/attendance-format';
+import { patchQuery } from '@/lib/list-url-state';
+import type { RegisterResponse } from '@/app/api/attendance/register/route';
+import type { StandingResponse } from '@/app/api/attendance/standing/route';
 
-interface ScheduledClass {
-  id: string;
-  title: string;
-  start_time: string;
-  end_time: string;
-  status: string;
-  topic: { title: string } | null;
-}
+type ViewKey = 'classes' | 'register' | 'students';
 
-interface StudentAttendance {
-  id: string;
-  name: string;
-  avatar_url: string | null;
-  present: boolean;
-}
+function AttendanceRegisterWorkspace() {
+  const searchParams = useSearchParams();
+  const { activeClassroom } = useNexusAuthContext();
 
-interface ClassAttendanceState {
-  students: StudentAttendance[];
-  expanded: boolean;
-  submitting: boolean;
-  submitted: boolean;
-}
+  const viewParam = searchParams.get('view');
+  const initialView: ViewKey =
+    viewParam === 'register' || viewParam === 'students' ? viewParam : 'classes';
+  const [view, setViewState] = useState<ViewKey>(initialView);
+  const [range, setRangeState] = useState<RangeKey>(toRangeKey(searchParams.get('range')));
 
-export default function TeacherAttendance() {
-  const router = useRouter();
-  const { activeClassroom, getToken } = useNexusAuthContext();
-  const [selectedDate, setSelectedDate] = useState(() => {
-    return new Date().toISOString().split('T')[0];
-  });
-  const [classes, setClasses] = useState<ScheduledClass[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [attendanceMap, setAttendanceMap] = useState<Record<string, ClassAttendanceState>>({});
-
-  const formatTime = (time: string) => {
-    const [h, m] = time.split(':');
-    const hour = parseInt(h);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    return `${hour % 12 || 12}:${m} ${ampm}`;
+  /**
+   * The URL is kept in step with replaceState rather than router.replace: this
+   * page is entirely client rendered, and router.replace would fetch an RSC
+   * payload on every tab press. Same reasoning as the catch-up page.
+   *
+   * Through patchQuery, which does the same replaceState but carries
+   * history.state forward (Next's router keeps its own state there, and writing
+   * null over it is how a Back press ends up on a page that has forgotten where
+   * it was). It also touches only these two keys, so a ?student= deep link
+   * survives a tab press instead of being wiped by a rebuilt query string.
+   */
+  const setView = (next: ViewKey) => {
+    setViewState(next);
+    patchQuery({ view: next, range: String(range) });
+  };
+  const setRange = (next: RangeKey) => {
+    setRangeState(next);
+    patchQuery({ view, range: String(next) });
   };
 
-
-  // Fetch classes for selected date
-  useEffect(() => {
-    if (!activeClassroom || !selectedDate) return;
-
-    async function fetchSchedule() {
-      setLoading(true);
-      setAttendanceMap({});
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        const res = await fetch(
-          `/api/timetable?classroom=${activeClassroom!.id}&start=${selectedDate}&end=${selectedDate}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        if (res.ok) {
-          const data = await res.json();
-          setClasses(data.classes || []);
-        }
-      } catch (err) {
-        console.error('Failed to load schedule:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchSchedule();
-  }, [activeClassroom, selectedDate, getToken]);
-
-  // Fetch attendance for a specific class when expanded
-  const fetchAttendance = useCallback(
-    async (classId: string) => {
-      if (!activeClassroom) return;
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        const res = await fetch(
-          `/api/attendance?classroom=${activeClassroom.id}&class_id=${classId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        if (res.ok) {
-          const data = await res.json();
-          setAttendanceMap((prev) => ({
-            ...prev,
-            [classId]: {
-              students: data.students || [],
-              expanded: true,
-              submitting: false,
-              submitted: false,
-            },
-          }));
-        }
-      } catch (err) {
-        console.error('Failed to load attendance:', err);
-      }
-    },
-    [activeClassroom, getToken]
+  const { from, to } = useMemo(() => istRange(range), [range]);
+  const { data, error, isLoading } = useAuthSWR<RegisterResponse>(
+    activeClassroom
+      ? `/api/attendance/register?classroom_id=${activeClassroom.id}&from=${from}&to=${to}`
+      : null,
   );
 
-  const toggleExpand = (classId: string) => {
-    const current = attendanceMap[classId];
-    if (current?.expanded) {
-      setAttendanceMap((prev) => ({
-        ...prev,
-        [classId]: { ...current, expanded: false },
-      }));
-    } else if (current?.students) {
-      setAttendanceMap((prev) => ({
-        ...prev,
-        [classId]: { ...current, expanded: true },
-      }));
-    } else {
-      fetchAttendance(classId);
-    }
-  };
+  const { data: standing, error: standingError } = useAuthSWR<StandingResponse>(
+    activeClassroom && view === 'students'
+      ? `/api/attendance/standing?classroom_id=${activeClassroom.id}&from=${from}&to=${to}`
+      : null,
+  );
 
-  const toggleStudentPresence = (classId: string, studentId: string) => {
-    setAttendanceMap((prev) => {
-      const current = prev[classId];
-      if (!current) return prev;
-      return {
-        ...prev,
-        [classId]: {
-          ...current,
-          students: current.students.map((s) =>
-            s.id === studentId ? { ...s, present: !s.present } : s
-          ),
-        },
-      };
-    });
-  };
-
-  const submitAttendance = async (classId: string) => {
-    if (!activeClassroom) return;
-    const state = attendanceMap[classId];
-    if (!state) return;
-
-    setAttendanceMap((prev) => ({
-      ...prev,
-      [classId]: { ...state, submitting: true },
-    }));
-
-    try {
-      const token = await getToken();
-      if (!token) return;
-
-      const presentStudentIds = state.students
-        .filter((s) => s.present)
-        .map((s) => s.id);
-
-      const res = await fetch('/api/attendance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          class_id: classId,
-          classroom_id: activeClassroom.id,
-          student_ids: presentStudentIds,
-        }),
-      });
-
-      if (res.ok) {
-        setAttendanceMap((prev) => ({
-          ...prev,
-          [classId]: { ...state, submitting: false, submitted: true },
-        }));
-      }
-    } catch (err) {
-      console.error('Failed to submit attendance:', err);
-      setAttendanceMap((prev) => ({
-        ...prev,
-        [classId]: { ...state, submitting: false },
-      }));
-    }
-  };
+  const classHref = (classId: string) => `/teacher/attendance/${classId}?view=${view}&range=${range}`;
 
   return (
     <Box>
-      <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 2 }}>
-        Attendance
-      </Typography>
-
-      {/* Date Picker */}
-      <TextField
-        type="date"
-        fullWidth
-        value={selectedDate}
-        onChange={(e) => setSelectedDate(e.target.value)}
-        size="small"
-        sx={{ mb: 2 }}
-        InputLabelProps={{ shrink: true }}
-        label="Select Date"
+      {/*
+        The range rides in the header's action slot, which leaves exactly one
+        row of tabs on this page. Picking a window of time is a setting on the
+        view you are already in, not a second place to navigate to, and stacking
+        two tab rows said the opposite.
+      */}
+      <PageHeader
+        title="Attendance"
+        subtitle={activeClassroom?.name || 'Classes that have happened'}
+        action={
+          /* gap 1, not 0.5: two adjacent touch targets want 8px between them. */
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <RangeToggle value={range} onChange={setRange} />
+            {/*
+              Every list under these tabs is a list of faces wearing the info
+              ring, and this is the screen where a ring that reads as absent
+              (the dotted grey "Not set") gets noticed. The key lives here.
+            */}
+            <InfoRingLegendButton label="What the rings on these photos mean" />
+          </Box>
+        }
       />
 
-      {/* Classes for the Day */}
-      {loading ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {[1, 2].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={80} sx={{ borderRadius: 1 }} />
+      <Tabs
+        value={view}
+        onChange={(_, v) => setView(v as ViewKey)}
+        sx={{ minHeight: 48, mb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
+        aria-label="Attendance views"
+      >
+        <Tab value="classes" label="Classes" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }} />
+        <Tab value="register" label="Register" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }} />
+        <Tab value="students" label="Students" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }} />
+      </Tabs>
+
+      {error && (
+        <Alert severity="error" sx={{ borderRadius: 2 }}>
+          {error.message || 'Could not load the register.'}
+        </Alert>
+      )}
+
+      {isLoading && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} variant="rectangular" height={104} sx={{ borderRadius: 2 }} />
           ))}
         </Box>
-      ) : classes.length === 0 ? (
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            No classes scheduled for this date.
-          </Typography>
-        </Paper>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {classes.map((cls) => {
-            const state = attendanceMap[cls.id];
-            const isExpanded = state?.expanded;
-
-            return (
-              <Paper key={cls.id} variant="outlined" sx={{ overflow: 'hidden' }}>
-                {/* Class Header - Expandable */}
-                <Box
-                  onClick={() => toggleExpand(cls.id)}
-                  sx={{
-                    p: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    cursor: 'pointer',
-                    minHeight: 48,
-                    '&:hover': { backgroundColor: 'action.hover' },
-                    '&:active': { backgroundColor: 'action.selected' },
-                  }}
-                >
-                  <Box>
-                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                      {cls.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
-                      {cls.topic && ` · ${cls.topic.title}`}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {state?.submitted && (
-                      <Chip label="Saved" size="small" color="success" />
-                    )}
-                    {/* Marking a register by hand and reconciling against Teams
-                        are different jobs. This is the second one. */}
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/teacher/attendance/${cls.id}`);
-                      }}
-                      sx={{ textTransform: 'none', minHeight: 40, whiteSpace: 'nowrap' }}
-                    >
-                      Reconcile
-                    </Button>
-                    <Typography variant="body2" color="text.secondary">
-                      {isExpanded ? '▲' : '▼'}
-                    </Typography>
-                  </Box>
-                </Box>
-
-                {/* Student List */}
-                {isExpanded && state && (
-                  <Box sx={{ px: 2, pb: 2 }}>
-                    {state.students.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-                        No students enrolled.
-                      </Typography>
-                    ) : (
-                      <>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            mb: 1,
-                            pt: 1,
-                            borderTop: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          <Typography variant="caption" color="text.secondary">
-                            {state.students.filter((s) => s.present).length} /{' '}
-                            {state.students.length} present
-                          </Typography>
-                        </Box>
-
-                        {state.students.map((student) => (
-                          <Box
-                            key={student.id}
-                            onClick={() => toggleStudentPresence(cls.id, student.id)}
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1.5,
-                              py: 1,
-                              px: 0.5,
-                              cursor: 'pointer',
-                              minHeight: 48,
-                              borderRadius: 1,
-                              '&:hover': { backgroundColor: 'action.hover' },
-                              '&:active': { backgroundColor: 'action.selected' },
-                            }}
-                          >
-                            <Checkbox
-                              checked={student.present}
-                              onChange={() => toggleStudentPresence(cls.id, student.id)}
-                              sx={{ p: 0.5, '& .MuiSvgIcon-root': { fontSize: 28 } }}
-                            />
-                            <StudentAvatar
-                              userId={student.id}
-                              src={student.avatar_url}
-                              name={student.name}
-                              size={36}
-                              tapToView={false}
-                              sx={{ fontSize: '0.875rem' }}
-                            />
-                            <Typography variant="body2" sx={{ flex: 1 }}>
-                              {student.name}
-                            </Typography>
-                          </Box>
-                        ))}
-
-                        <Button
-                          variant="contained"
-                          fullWidth
-                          onClick={() => submitAttendance(cls.id)}
-                          disabled={state.submitting}
-                          sx={{ mt: 2, minHeight: 48 }}
-                        >
-                          {state.submitting
-                            ? 'Saving...'
-                            : state.submitted
-                              ? 'Update Attendance'
-                              : 'Save Attendance'}
-                        </Button>
-                      </>
-                    )}
-                  </Box>
-                )}
-              </Paper>
-            );
-          })}
-        </Box>
       )}
+
+      {data && view === 'classes' && (
+        data.classes.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+            No classes have finished in this range.
+          </Typography>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {data.classes.map((cls) => (
+              <ClassAttendanceCard key={cls.id} cls={cls} href={classHref(cls.id)} />
+            ))}
+          </Box>
+        )
+      )}
+
+      {data && view === 'register' && (
+        <RegisterGrid data={data} classHref={classHref} />
+      )}
+
+      {/*
+        The standing read resolves the whole catch-up backlog and reads the
+        sign-in log, so its SWR key stays null until this view is actually
+        opened: the two tabs that already shipped do not get slower because a
+        third exists.
+
+        An if/else chain, not three independent conditions.
+
+        As three conditions this rendered NOTHING in the gap before the request
+        starts: useAuthSWR reports `isLoading: false` while it is still waiting
+        for the token, so error, data and loading were all falsy at once and the
+        tab was simply blank. Skeletons are the honest default for "we have not
+        got an answer yet", whatever the reason we have not got one.
+      */}
+      {view === 'students' &&
+        (standingError ? (
+          <Alert severity="error" sx={{ borderRadius: 2 }}>
+            {standingError.message || 'Could not work out where students stand.'}
+          </Alert>
+        ) : standing ? (
+          <StandingList data={standing} />
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} variant="rectangular" height={92} sx={{ borderRadius: 2 }} />
+            ))}
+          </Box>
+        ))}
     </Box>
+  );
+}
+
+/**
+ * useSearchParams needs a Suspense boundary or the whole route opts out of
+ * static generation and the build warns. Same reasoning as the catch-up page.
+ */
+export default function AttendanceRegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <Box>
+          <Skeleton variant="rounded" height={44} sx={{ borderRadius: 2, mb: 2, maxWidth: 260 }} />
+          <Skeleton variant="rounded" height={280} sx={{ borderRadius: 3 }} />
+        </Box>
+      }
+    >
+      <AttendanceRegisterWorkspace />
+    </Suspense>
   );
 }

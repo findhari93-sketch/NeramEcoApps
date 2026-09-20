@@ -142,7 +142,7 @@ export default function GalleryCard({
           userId={post.student?.id}
           src={post.student?.avatar_url}
           name={post.student?.name}
-          size={isCompact ? 26 : 32}
+          size={isCompact ? 28 : 32}
         />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>

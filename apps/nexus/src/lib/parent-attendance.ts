@@ -18,13 +18,16 @@
  *
  * Pure and DB-free on purpose, so all of the above is unit-testable.
  *
- * The `late` / `leftEarly` / `droppedMidClass` derivations are ported verbatim
- * from api/timetable/class-insights/route.ts so the parent and the teacher can
- * never see a different verdict about the same class, and the grace window is
- * imported from lib/class-absences.ts rather than redeclared.
+ * The `late` / `leftEarly` / `droppedMidClass` derivations call `sessionWindow`
+ * and `presenceOf` from lib/attendance-register.ts, the same functions
+ * api/timetable/class-insights/route.ts calls, so the parent and the teacher
+ * can never see a different verdict about the same class. When the caller
+ * does not pass a `sessionWindows` map (see `buildClassAttendanceViews`
+ * below), the class's booked end time is used instead of its real one.
  */
 
-import { LATE_THRESHOLD_MINUTES } from './class-absences';
+import { presenceOf, sessionWindow, type SessionWindow } from './attendance-register';
+import { coveringWindow, type AwayWindow } from './away-windows';
 
 export type ClassMeasurement = 'measured' | 'not_measured';
 
@@ -40,6 +43,7 @@ export type AttendanceLabel =
   | 'partly_attended'
   | 'missed'
   | 'missed_with_reason'
+  | 'missed_away'
   | 'not_recorded';
 
 export const ATTENDANCE_LABEL_TEXT: Record<AttendanceLabel, string> = {
@@ -49,6 +53,7 @@ export const ATTENDANCE_LABEL_TEXT: Record<AttendanceLabel, string> = {
   partly_attended: 'Partly attended',
   missed: 'Missed',
   missed_with_reason: 'Missed (reason given)',
+  missed_away: 'Away (told us in advance)',
   not_recorded: 'Not recorded',
 };
 
@@ -188,8 +193,18 @@ function pickLabel(args: {
   leftEarly: boolean;
   droppedMidClass: boolean;
   hasReason: boolean;
+  away: boolean;
 }): AttendanceLabel {
-  if (!args.attended) return args.hasReason ? 'missed_with_reason' : 'missed';
+  // Away is read before the reason, matching registerGroupOf. It matters most
+  // here of all the places that grouping is done: a declared window usually
+  // leaves no absence row at all, so without this a parent opening the portal
+  // sees a bare "Missed" for the fortnight of exams they themselves arranged,
+  // while the teacher's register says "Away". Of everyone who reads these
+  // screens, the parent is the one who already knows the answer.
+  if (!args.attended) {
+    if (args.away) return 'missed_away';
+    return args.hasReason ? 'missed_with_reason' : 'missed';
+  }
   // Dropping out and rejoining, or both arriving late and leaving early, is
   // better summarised as partial presence than as either single fact.
   if (args.droppedMidClass || (args.late && args.leftEarly)) return 'partly_attended';
@@ -214,7 +229,19 @@ export function buildClassAttendanceViews(
   classes: ScheduledClassRow[],
   attendanceRows: AttendanceRow[],
   measuredClassIds: Set<string> | string[],
-  absenceRows: AbsenceRow[] = []
+  absenceRows: AbsenceRow[] = [],
+  /**
+   * When each class really ended, keyed by class id, built by the caller from
+   * the whole room's leave times. Without it the booked end is used, which is
+   * what every caller did before and what flagged a whole cohort as leaving
+   * early on a class that simply finished 20 minutes ahead of its booking.
+   */
+  sessionWindows?: Map<string, SessionWindow>,
+  /**
+   * This student's declared away windows. Optional, and a caller that omits it
+   * simply gets the old labels: no caller is made wrong by not passing it.
+   */
+  awayWindows?: AwayWindow[]
 ): ClassAttendanceView[] {
   const measured =
     measuredClassIds instanceof Set ? measuredClassIds : new Set(measuredClassIds);
@@ -271,22 +298,24 @@ export function buildClassAttendanceViews(
     }
 
     const attended = !!att?.attended;
-    const joinedMs = toMs(att?.joined_at);
-    const leftMs = toMs(att?.left_at);
-    const graceMs = LATE_THRESHOLD_MINUTES * 60 * 1000;
     const segments = parseSegments(att?.attendance_intervals);
 
-    const late =
-      attended && joinedMs !== null && Number.isFinite(startMs)
-        ? joinedMs - startMs > graceMs
-        : false;
-    const leftEarly =
-      attended && leftMs !== null && Number.isFinite(endMs)
-        ? endMs - leftMs > graceMs
-        : false;
-    // More than one join/leave segment means they dropped out and came back.
-    const segmentCount = segments.length || (attended ? 1 : 0);
-    const droppedMidClass = segmentCount > 1;
+    const window: SessionWindow =
+      sessionWindows?.get(cls.id) ??
+      sessionWindow(cls, [{ attended: true, left_at: null }]);
+    const presence = presenceOf(
+      {
+        attended,
+        joined_at: att?.joined_at ?? null,
+        left_at: att?.left_at ?? null,
+        attendance_intervals: (att?.attendance_intervals as never) ?? null,
+      },
+      window
+    );
+
+    const late = attended && presence.lateByMin > 0;
+    const leftEarly = attended && presence.leftEarlyByMin > 0;
+    const droppedMidClass = attended && presence.outMin > 0;
 
     return {
       ...base,
@@ -297,6 +326,7 @@ export function buildClassAttendanceViews(
         leftEarly,
         droppedMidClass,
         hasReason: !!(abs?.reason_code || abs?.reason_note),
+        away: !!coveringWindow(awayWindows || [], cls.scheduled_date),
       }),
       attended,
       joinedAt: att?.joined_at ?? null,

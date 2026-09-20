@@ -14,11 +14,13 @@ import {
   STAGE_ORDER,
   STAGE_RING_STYLE,
   STAGE_TOOLTIP,
+  describeClassificationChange,
   isExamThisYear,
   matchesSegment,
   segmentCounts,
   stageCounts,
   stageKeyOf,
+  knownStageKey,
   type StageFacts,
   type StageKey,
   type StudentSegment,
@@ -38,6 +40,27 @@ describe('stageKeyOf', () => {
     expect(stageKeyOf('')).toBe('unset');
     expect(stageKeyOf('9th')).toBe('unset');
     expect(stageKeyOf('GAP_YEAR')).toBe('unset');
+  });
+});
+
+describe('knownStageKey', () => {
+  it('passes a stage the payload actually carries, so the ring paints at once', () => {
+    expect(knownStageKey('12th')).toBe('12th');
+    expect(knownStageKey('gap_year')).toBe('gap_year');
+  });
+
+  it('defers to the lookup instead of asserting "Not set" over it', () => {
+    // This is the whole difference from stageKeyOf. An explicit 'unset' would
+    // OUTRANK the session lookup on StudentStageAvatar, so a screen whose
+    // payload does not carry the class would draw a grey dotted ring on a
+    // student whose class the app already knows. Undefined lets the ring ask.
+    expect(knownStageKey(null)).toBeUndefined();
+    expect(knownStageKey(undefined)).toBeUndefined();
+    expect(knownStageKey('')).toBeUndefined();
+  });
+
+  it('still refuses a value it does not recognise, rather than inventing one', () => {
+    expect(knownStageKey('9th')).toBe('unset');
   });
 });
 
@@ -188,5 +211,65 @@ describe('counts over the live production shape', () => {
   it('returns a zeroed record for an empty classroom', () => {
     const counts = segmentCounts([]);
     for (const segment of SEGMENT_ORDER) expect(counts[segment]).toBe(0);
+  });
+});
+
+describe('describeClassificationChange', () => {
+  it('names a single class edit', () => {
+    expect(describeClassificationChange({ studyStage: '11th' })).toBe('Class set');
+    expect(describeClassificationChange({ studyStage: null })).toBe('Cleared class');
+  });
+
+  it('names a single exam year edit', () => {
+    expect(describeClassificationChange({ academicYear: '2027-28' })).toBe('Exam year set');
+    expect(describeClassificationChange({ academicYear: null })).toBe('Cleared exam year');
+  });
+
+  it('names a single language edit by what it now says', () => {
+    expect(describeClassificationChange({ homeLanguage: 'tamil' })).toBe('Marked Tamil');
+    expect(describeClassificationChange({ homeLanguage: 'kannada' })).toBe('Marked Kannada');
+    expect(describeClassificationChange({ homeLanguage: 'english' })).toBe('Marked English');
+    // Only Undo sends null, because the sheet offers no way to clear a language.
+    expect(describeClassificationChange({ homeLanguage: null })).toBe('Cleared language');
+  });
+
+  it('names the English fluency tick on its own', () => {
+    expect(describeClassificationChange({ limitedEnglish: true })).toBe('Marked limited English');
+    expect(describeClassificationChange({ limitedEnglish: false })).toBe('Cleared limited English');
+  });
+
+  it('calls both halves of the language one field, because they are one gesture', () => {
+    expect(describeClassificationChange({ homeLanguage: 'hindi', limitedEnglish: true })).toBe(
+      'Language set',
+    );
+  });
+
+  it('lists every field when several changed at once', () => {
+    expect(describeClassificationChange({ studyStage: '12th', academicYear: '2026-27' })).toBe(
+      'Class and exam year set',
+    );
+    expect(describeClassificationChange({ studyStage: '12th', homeLanguage: 'tamil' })).toBe(
+      'Class and language set',
+    );
+    expect(describeClassificationChange({ academicYear: null, limitedEnglish: true })).toBe(
+      'Exam year and language set',
+    );
+    expect(
+      describeClassificationChange({
+        studyStage: '10th',
+        academicYear: '2028-29',
+        homeLanguage: 'malayalam',
+      }),
+    ).toBe('Class, exam year and language set');
+  });
+
+  it('treats a key that is present but undefined as untouched', () => {
+    expect(describeClassificationChange({ studyStage: '11th', homeLanguage: undefined })).toBe(
+      'Class set',
+    );
+  });
+
+  it('falls back to a neutral word when nothing was touched', () => {
+    expect(describeClassificationChange({})).toBe('Updated');
   });
 });

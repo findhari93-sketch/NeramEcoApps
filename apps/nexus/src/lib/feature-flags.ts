@@ -104,12 +104,17 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.tests', label: 'Tests', surface: 'student', group: 'Practice', paths: ['/student/tests'], defaultEnabled: false },
   { id: 'student.drawings', label: 'Drawings', surface: 'student', group: 'Practice', paths: ['/student/drawings'], defaultEnabled: false },
   { id: 'student.sketchbook', label: 'Sketchbook', surface: 'student', group: 'Practice', paths: ['/student/sketchbook'], defaultEnabled: false },
-  // Peer-visible: classmates see featured sketches on the Sketchbook home. A
-  // behaviour switch, not a page, and enforced server side in /api/sketchbook/featured.
-  { id: 'student.sketchbook-featured-shelf', label: 'Show featured sketches to classmates', surface: 'student', group: 'Practice', paths: [], defaultEnabled: false },
-  // Peer-visible drawing library: teacher references, and student work rated 4
-  // stars and above, credited by name unless the student opted out. Enforced
-  // server side in /api/inspiration/*, which answers 404 while this is off.
+  // 'student.sketchbook-featured-shelf' was removed on 2026-09-19. It promised a
+  // shelf of featured sketches on the Sketchbook home, enforced in
+  // /api/sketchbook/featured. Neither the shelf nor that route was ever built,
+  // so the switch read to staff as the place featured work appears and answered
+  // for nothing. Featuring now puts the drawing on Inspiration instead, which is
+  // a real page students already have. Do not reintroduce a second shelf.
+  //
+  // Peer-visible drawing library: teacher references, student work rated 4
+  // stars and above, and anything a teacher features, credited by name unless
+  // the student opted out. Enforced server side in /api/inspiration/*, which
+  // answers 404 while this is off.
   { id: 'student.inspiration', label: 'Inspiration', surface: 'student', group: 'Practice', paths: ['/student/inspiration'], defaultEnabled: false },
   { id: 'student.exam-recall', label: 'Recall', surface: 'student', group: 'Practice', paths: ['/student/exam-recall'], defaultEnabled: false },
 
@@ -176,6 +181,7 @@ export const FEATURES: FeatureDef[] = [
   // Behaviour switch, not a page. Messages Not started students (never entered
   // Nexus) on day 1, 3 and 7. OFF until each live classroom has a connected Teams
   // sender, because a student stuck at the photo gate cannot see the Nexus bell.
+  { id: 'staff.test-chase', label: 'Automatic chase for students whose catch-up is holding up a test', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   { id: 'staff.join-reminders', label: 'Automatic reminders to students who have not entered Nexus (day 1, 3, 7)', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   // Longer path wins in featureForPath, so this correctly beats staff.students
   // for the sub-route and can be switched off independently of the roster.

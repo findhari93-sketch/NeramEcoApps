@@ -23,7 +23,6 @@ import DensitySmallOutlinedIcon from '@mui/icons-material/DensitySmallOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
@@ -44,7 +43,9 @@ import ApplicationFormSheet from '@/components/students/ApplicationFormSheet';
 import CreateAccountForm, { type AccountPrefill } from '@/components/students/CreateAccountForm';
 import ResetPasswordSheet, { type ResetPasswordTarget } from '@/components/students/ResetPasswordSheet';
 import BulkSelectBar from '@/components/students/BulkSelectBar';
-import ClassifyDrawer, { type ClassifyMode } from '@/components/students/ClassifyDrawer';
+import { InfoRingLegendButton } from '@/components/students/InfoRingLegend';
+import ClassifyDrawer, { type ClassifyMode, type ClassifyPayload } from '@/components/students/ClassifyDrawer';
+import LanguageFilterBar from '@/components/students/LanguageFilterBar';
 import NeedsAttentionCard from '@/components/students/NeedsAttentionCard';
 import PrefillReviewSheet, {
   type PrefillSuggestion,
@@ -66,6 +67,7 @@ import {
   DEFAULT_SEGMENT,
   SEGMENT_LABEL,
   SEGMENT_STORAGE_KEY,
+  describeClassificationChange,
   matchesSegment,
   segmentCounts,
   stageCounts,
@@ -95,6 +97,14 @@ import {
   type DormantView,
 } from '@/lib/not-started';
 import { patchQuery, readSearch } from '@/lib/list-url-state';
+import {
+  countLanguages,
+  languageParamOf,
+  matchesLanguages,
+  parseLanguageParam,
+  type LanguageKey,
+} from '@/lib/student-language';
+import { refreshStudentStageFacts } from '@/lib/stage-facts-cache';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { usePresence } from '@/hooks/usePresence';
 import { rankPeople, suggestPeople } from '@/lib/people-search';
@@ -134,18 +144,6 @@ interface StudentCounts {
   notStartedNeedsDecision: number;
   /** Paused by staff, but opened Nexus since. */
   backInNexus: number;
-}
-
-/** Snackbar verb for a class and/or exam year edit, naming what actually changed. */
-function describeFieldChange(payload: {
-  studyStage?: string | null;
-  academicYear?: string | null;
-}): string {
-  const touchedStage = 'studyStage' in payload;
-  const touchedYear = 'academicYear' in payload;
-  if (touchedStage && touchedYear) return 'Class and exam year set';
-  if (touchedYear) return payload.academicYear === null ? 'Cleared exam year' : 'Exam year set';
-  return payload.studyStage === null ? 'Cleared class' : 'Class set';
 }
 
 /** What an empty Dormant list means, per narrowing. Good news, said plainly. */
@@ -236,6 +234,11 @@ export default function TeacherStudents() {
    * same narrowing. See lib/not-started.ts.
    */
   const [dormantView, setDormantView] = useState<DormantView>('all');
+  // Language narrowing. URL only, never localStorage: a remembered language would
+  // quietly hide students on a later visit with nothing on screen saying why.
+  const [languages, setLanguages] = useState<LanguageKey[]>([]);
+  /** The separate "cannot follow English" narrowing. It ANDs with the languages. */
+  const [limitedOnly, setLimitedOnly] = useState(false);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -288,11 +291,28 @@ export default function TeacherStudents() {
     }
     // A dormant narrowing in the URL wins over the remembered segment, so a shared
     // "Back in Nexus" link opens exactly that list.
-    const dv = new URLSearchParams(readSearch()).get('dv');
+    const params = new URLSearchParams(readSearch());
+    const dv = params.get('dv');
     if (dv && (DORMANT_VIEWS as readonly string[]).includes(dv)) {
       setDormantView(dv as DormantView);
       setSegment('dormant');
     }
+    setLanguages(parseLanguageParam(params.get('lang')));
+    setLimitedOnly(params.get('limited') === '1');
+  }, []);
+
+  const handleLanguagesChange = useCallback((next: LanguageKey[]) => {
+    setLanguages(next);
+    // Same rule as a segment change: a selection made under one narrowing must not
+    // be applied to rows the teacher can no longer see.
+    setSelectedIds(new Set());
+    patchQuery({ lang: languageParamOf(next) });
+  }, []);
+
+  const handleLimitedOnlyChange = useCallback((next: boolean) => {
+    setLimitedOnly(next);
+    setSelectedIds(new Set());
+    patchQuery({ limited: next ? '1' : null });
   }, []);
 
   const handleDormantViewChange = useCallback((next: DormantView) => {
@@ -447,7 +467,7 @@ export default function TeacherStudents() {
   // relevance order. Browsing uses the chosen sort. The sign-in and account
   // filters apply either way, and always show as chips, so a narrowed list is
   // never a mystery.
-  const visibleStudents = useMemo(() => {
+  const { visibleStudents, languageCounts, limitedCount } = useMemo(() => {
     let rows: EnrolledStudent[];
     if (trimmedQuery && !mismatchOnly) {
       rows = rankPeople(students, trimmedQuery);
@@ -463,8 +483,31 @@ export default function TeacherStudents() {
       if (trimmedQuery) rows = rankPeople(rows, trimmedQuery);
     }
     rows = rows.filter((s) => matchesFilters(s, filters, now));
-    return trimmedQuery ? rows : sortStudents(rows, sort);
-  }, [students, segment, dormantView, trimmedQuery, mismatchOnly, filters, sort, now]);
+    // Counted BEFORE the language narrowing, so each chip's number is what pressing
+    // it alone would show.
+    const byLanguage = countLanguages(rows, (s) => s.home_language);
+    const limitedTotal = rows.filter((s) => s.limited_english === true).length;
+    rows = rows.filter((s) => matchesLanguages(s.home_language, languages));
+    // A different question from "which language", so it narrows what is left
+    // rather than widening it.
+    if (limitedOnly) rows = rows.filter((s) => s.limited_english === true);
+    return {
+      visibleStudents: trimmedQuery ? rows : sortStudents(rows, sort),
+      languageCounts: byLanguage,
+      limitedCount: limitedTotal,
+    };
+  }, [
+    students,
+    segment,
+    dormantView,
+    trimmedQuery,
+    mismatchOnly,
+    filters,
+    languages,
+    limitedOnly,
+    sort,
+    now,
+  ]);
 
   /** The Dormant segment's own counts, over the same rows the list filters. */
   const dormantCounts = useMemo(() => dormantViewCounts(students, now), [students, now]);
@@ -482,6 +525,8 @@ export default function TeacherStudents() {
     [students],
   );
   const filtersActive = activeFilterCount(filters) > 0;
+  /** Any narrowing a "Clear filters" button should undo, language included. */
+  const narrowingActive = filtersActive || languages.length > 0 || limitedOnly;
 
   const headerCaption = [
     `${counts.tracked} tracked`,
@@ -662,17 +707,12 @@ export default function TeacherStudents() {
     setAutoSelectPending(false);
   }, [autoSelectPending, loading, visibleStudents]);
 
-  interface ClassifyPayload {
-    studyStage?: StageKey | null;
-    academicYear?: string | null;
-    participationStatus?: 'active' | 'dormant';
-    reason?: string;
-  }
-
   interface Assignment {
     studentId: string;
     studyStage?: string | null;
     academicYear?: string | null;
+    homeLanguage?: string | null;
+    limitedEnglish?: boolean;
   }
 
   /**
@@ -725,6 +765,9 @@ export default function TeacherStudents() {
         setPrefill({ open: false, loading: false, suggestions: [] });
         exitSelectMode();
         await fetchStudents();
+        // Every other screen reads stage and language from the session lookup,
+        // which otherwise holds its answer for an hour.
+        void refreshStudentStageFacts();
 
         if (silent) return;
 
@@ -739,7 +782,7 @@ export default function TeacherStudents() {
               ? touchedNotStarted
                 ? 'Counted in class numbers'
                 : 'Brought back'
-              : describeFieldChange(payload);
+              : describeClassificationChange(payload);
         const message = skipped
           ? `${what} for ${data.updated}. ${skipped} skipped (not in this classroom).`
           : `${what} for ${data.updated} student${data.updated === 1 ? '' : 's'}.`;
@@ -776,10 +819,22 @@ export default function TeacherStudents() {
               ...('academic_year' in (r.previous || {})
                 ? { academicYear: (r.previous.academic_year as string | null) ?? null }
                 : {}),
+              ...('home_language' in (r.previous || {})
+                ? { homeLanguage: (r.previous.home_language as string | null) ?? null }
+                : {}),
+              ...('limited_english' in (r.previous || {})
+                ? { limitedEnglish: r.previous.limited_english === true }
+                : {}),
             }));
             // The API rejects an assignment with no fields, so drop any student
             // whose previous state held nothing we touched.
-            const usable = revertAssignments.filter((a) => 'studyStage' in a || 'academicYear' in a);
+            const usable = revertAssignments.filter(
+              (a) =>
+                'studyStage' in a ||
+                'academicYear' in a ||
+                'homeLanguage' in a ||
+                'limitedEnglish' in a,
+            );
             if (usable.length) undo = () => applyClassification({}, undefined, true, usable);
           }
         }
@@ -799,6 +854,15 @@ export default function TeacherStudents() {
   const drawerNames = useMemo(() => {
     const ids = new Set(drawerTargetIds ?? Array.from(selectedIds));
     return students.filter((s) => ids.has(s.id)).map((s) => s.name);
+  }, [students, selectedIds, drawerTargetIds]);
+
+  /** One student's language for the sheet's "Now:" line. Undefined for a bulk edit. */
+  const drawerCurrentLanguage = useMemo(() => {
+    const ids = drawerTargetIds ?? Array.from(selectedIds);
+    if (ids.length !== 1) return undefined;
+    const student = students.find((s) => s.id === ids[0]);
+    if (!student) return undefined;
+    return { language: student.home_language ?? null, limitedEnglish: student.limited_english === true };
   }, [students, selectedIds, drawerTargetIds]);
 
   /**
@@ -822,6 +886,8 @@ export default function TeacherStudents() {
   const handleAttentionAction = useCallback(
     (key: AttentionActionKey) => {
       setSearchQuery('');
+      handleLanguagesChange([]);
+      handleLimitedOnlyChange(false);
       switch (key) {
         case 'review_mismatches':
           handleFiltersChange({ ...DEFAULT_FILTERS });
@@ -869,6 +935,8 @@ export default function TeacherStudents() {
       loadSuggestions,
       handleSegmentChange,
       handleDormantViewChange,
+      handleLanguagesChange,
+      handleLimitedOnlyChange,
     ],
   );
 
@@ -1037,7 +1105,7 @@ export default function TeacherStudents() {
 
   const emptyTitle = trimmedQuery
     ? `No student matches "${trimmedQuery}"`
-    : filtersActive
+    : narrowingActive
       ? 'No students match these filters'
       : segment === 'dormant'
         ? DORMANT_EMPTY_TITLE[dormantView]
@@ -1054,19 +1122,19 @@ export default function TeacherStudents() {
           <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
             {loading && !students.length ? 'Loading students' : headerCaption}
           </Typography>
-          <Tooltip
-            title="Tracked students count in attendance, submissions, prep readiness and the watchlist. Not started students (never entered Nexus) and students paused by staff are left out of all of those. Not started students join the numbers on their own once they add a photo and get in. A student without a Microsoft account cannot sign in to Nexus yet."
-            arrow
-            enterTouchDelay={0}
-            leaveTouchDelay={5000}
-          >
-            <IconButton
-              aria-label="What these numbers mean"
-              sx={{ width: 48, height: 48, flexShrink: 0, color: 'text.secondary' }}
-            >
-              <InfoOutlinedIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
+          {/*
+            One info button for the whole page. It used to be a long tooltip
+            about the counts, which nobody could read on a phone and which said
+            nothing about the rings the list is full of. Both live in the legend
+            sheet now.
+          */}
+          <InfoRingLegendButton
+            label="What these numbers and rings mean"
+            intro={{
+              title: 'What these numbers count',
+              body: 'Tracked students count in attendance, submissions, prep readiness and the watchlist. Not started students (never entered Nexus) and students paused by staff are left out of all of those. Not started students join the numbers on their own once they add a photo and get in. A student without a Microsoft account cannot sign in to Nexus yet.',
+            }}
+          />
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
           {canSetStage && !selectMode && (
@@ -1127,6 +1195,19 @@ export default function TeacherStudents() {
         <Box sx={{ mb: 1 }}>
           <StudentSegmentBar value={segment} counts={segmentTotals} onChange={handleSegmentChange} />
         </Box>
+
+        {!mismatchOnly && (
+          <Box sx={{ mb: 1 }}>
+            <LanguageFilterBar
+              value={languages}
+              counts={languageCounts}
+              limitedOnly={limitedOnly}
+              limitedCount={limitedCount}
+              onChange={handleLanguagesChange}
+              onLimitedChange={handleLimitedOnlyChange}
+            />
+          </Box>
+        )}
 
         {segment === 'dormant' && !trimmedQuery && !mismatchOnly && (
           <Box sx={{ mb: 1 }}>
@@ -1266,7 +1347,7 @@ export default function TeacherStudents() {
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {trimmedQuery
                 ? 'Try part of the first name, or the email.'
-                : filtersActive
+                : narrowingActive
                   ? 'Clear the filters to see everyone in this category.'
                   : segment === 'exam_this_year'
                     ? 'Break Year and Class 12 students appear here once their stage is set.'
@@ -1279,8 +1360,15 @@ export default function TeacherStudents() {
                 Search every exam year
               </Button>
             )}
-            {filtersActive && (
-              <Button onClick={() => handleFiltersChange({ ...DEFAULT_FILTERS })} sx={{ minHeight: 48, fontWeight: 700 }}>
+            {narrowingActive && (
+              <Button
+                onClick={() => {
+                  handleFiltersChange({ ...DEFAULT_FILTERS });
+                  handleLanguagesChange([]);
+                  handleLimitedOnlyChange(false);
+                }}
+                sx={{ minHeight: 48, fontWeight: 700 }}
+              >
                 Clear filters
               </Button>
             )}
@@ -1382,6 +1470,8 @@ export default function TeacherStudents() {
         busy={saving}
         examYears={examYears}
         currentBatch={currentBatch}
+        currentLanguage={drawerCurrentLanguage?.language}
+        currentLimitedEnglish={drawerCurrentLanguage?.limitedEnglish}
         onClose={closeDrawer}
         onApply={(payload) => applyClassification(payload, drawerTargetIds ?? undefined)}
       />

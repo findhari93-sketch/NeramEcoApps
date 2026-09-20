@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import type { NexusQBQuestionOption } from '@neram/database';
 
 import { describeError } from '@/lib/api-errors';
+import { applyPartSolutionImages } from '@/lib/drawing-parts';
 
 /**
  * Lightweight endpoint for updating only image fields on a question.
@@ -33,11 +34,14 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { question_image_url, option_images, solution_image_url } = body as {
-      question_image_url?: string | null;
-      option_images?: Record<string, string | null>;
-      solution_image_url?: string | null;
-    };
+    const { question_image_url, option_images, solution_image_url, part_solution_images } =
+      body as {
+        question_image_url?: string | null;
+        option_images?: Record<string, string | null>;
+        solution_image_url?: string | null;
+        /** Per part, keyed by part id ('a', 'b', ...). Drawings only. */
+        part_solution_images?: Record<string, string | null>;
+      };
 
     // Fetch current question
     const { data: existing, error: fetchError } = await supabase
@@ -78,6 +82,20 @@ export async function PATCH(
         });
         updates.options = updatedOptions;
       }
+    }
+
+    // A drawing split into parts keeps its solutions inside drawing_parts, and
+    // the question-level column is only their mirror. Applied after the plain
+    // solution_image_url above so the parts win when a body carries both: a
+    // full parts save would overwrite that column on the next edit anyway.
+    if (part_solution_images && typeof part_solution_images === 'object') {
+      const applied = applyPartSolutionImages(
+        (existing as { drawing_parts?: unknown }).drawing_parts,
+        part_solution_images,
+      );
+      if (!applied.ok) return NextResponse.json({ error: applied.error }, { status: 400 });
+      updates.drawing_parts = applied.drawing_parts;
+      updates.solution_image_url = applied.solution_image_url;
     }
 
     const { data: updated, error: updateError } = await supabase

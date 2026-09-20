@@ -164,7 +164,7 @@ export default function MeetingRecap({ classId, classroomId, getToken, role }: M
           <List dense disablePadding>
             {data.reviews.map((review, idx) => (
               <ListItem key={idx} sx={{ px: 0, alignItems: 'flex-start' }}>
-                {/* 36 fits a bare 28px face. The cohort ring makes the box 36,
+                {/* 36 fits a bare 28px face. The info ring makes the box 36,
                     so the slot needs 44 or the name loses its gap. */}
                 {review.student && (
                   <ListItemAvatar sx={{ minWidth: 44 }}>

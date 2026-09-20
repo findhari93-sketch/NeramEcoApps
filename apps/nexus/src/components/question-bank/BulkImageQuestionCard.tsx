@@ -21,7 +21,7 @@ import ImageUploadZone from './ImageUploadZone';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import type { SlotType, PendingImages } from '@/hooks/useBulkImageFlow';
 import { getEffectiveImage } from '@/hooks/useBulkImageFlow';
-import { questionImageSlots } from '@/lib/qb-image-needs';
+import { partIdOfSolutionSlot, questionImageSlots } from '@/lib/qb-image-needs';
 import MathText from '@/components/common/MathText';
 
 interface BulkImageQuestionCardProps {
@@ -51,6 +51,7 @@ export default function BulkImageQuestionCard({
 }: BulkImageQuestionCardProps) {
   const theme = useTheme();
   const isMCQ = question.question_format === 'MCQ';
+  const isDrawing = question.question_format === 'DRAWING_PROMPT';
 
   /**
    * The one place this card decides what it is waiting for.
@@ -70,7 +71,10 @@ export default function BulkImageQuestionCard({
   const someDone = wanted.some((s) => s.filled) && !allDone;
 
   const optionSlots = slots.filter((s) => s.kind === 'figure' && s.slot !== 'question');
-  const solutionSlot = slots.find((s) => s.kind === 'solution');
+  // Plural: a drawing split into parts owes one worked answer per part, and
+  // each is its own dropzone. One find() here is what would put part B's paste
+  // into part A's column.
+  const solutionSlots = slots.filter((s) => s.kind === 'solution');
   /**
    * Show the option grid when a picture is expected in one, or when one is
    * already there. A teacher can still open it by hand for the case the guess
@@ -320,37 +324,51 @@ export default function BulkImageQuestionCard({
           in the Edit form. Forty maths questions is forty screenshots of a
           worked answer, which is the same paste-Tab-paste job the figures
           above already are. */}
-      {solutionSlot && (
-        <Box sx={{ mt: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-            <Typography variant="caption" color="text.secondary">
-              Solution Image
-            </Typography>
-            {solutionSlot.expected && !solutionSlot.filled && (
-              <Typography variant="caption" color="warning.main" fontWeight={600}>
-                required for maths
+      {solutionSlots.map((s) => {
+        const partId = partIdOfSolutionSlot(s.slot);
+        const partLabel = partId ? partId.toUpperCase() : null;
+        const heading = partLabel ? `Solution for ${partLabel}` : 'Solution Image';
+        const requiredNote = partLabel
+          ? 'required'
+          : isDrawing
+            ? 'required for drawings'
+            : 'required for maths';
+        return (
+          <Box key={s.slot} sx={{ mt: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+              <Typography variant="caption" color="text.secondary">
+                {heading}
               </Typography>
-            )}
+              {s.expected && !s.filled && (
+                <Typography variant="caption" color="warning.main" fontWeight={600}>
+                  {requiredNote}
+                </Typography>
+              )}
+            </Box>
+            <SlotWrapper
+              questionId={question.id}
+              slot={s.slot}
+              isActive={activeSlot === s.slot}
+              registerRef={registerSlotRef}
+              label={heading}
+            >
+              <ImageUploadZone
+                image={getEffectiveImage(question, s.slot, pending)}
+                onChange={handleChange(s.slot)}
+                label={
+                  partLabel
+                    ? `Paste or drop the solution for ${partLabel}`
+                    : 'Paste or drop the worked solution'
+                }
+                height={120}
+                getToken={getToken}
+                enableGlobalPaste={activeSlot === s.slot}
+                subfolder={partId ? 'drawing-solutions' : 'solutions'}
+              />
+            </SlotWrapper>
           </Box>
-          <SlotWrapper
-            questionId={question.id}
-            slot="solution"
-            isActive={activeSlot === 'solution'}
-            registerRef={registerSlotRef}
-            label="Solution Image"
-          >
-            <ImageUploadZone
-              image={getEffectiveImage(question, 'solution', pending)}
-              onChange={handleChange('solution')}
-              label="Paste or drop the worked solution"
-              height={120}
-              getToken={getToken}
-              enableGlobalPaste={activeSlot === 'solution'}
-              subfolder="solutions"
-            />
-          </SlotWrapper>
-        </Box>
-      )}
+        );
+      })}
     </Paper>
   );
 }

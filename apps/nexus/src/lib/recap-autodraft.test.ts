@@ -139,6 +139,7 @@ function fakeSupabase(tables: Record<string, any[]>) {
         neq: () => builder,
         not: () => builder,
         lt: () => builder,
+        lte: () => builder,
         in: () => builder,
         or: () => builder,
         order: () => builder,
@@ -164,10 +165,29 @@ function classRow(over: Record<string, unknown> = {}) {
     title: 'Class by Ar. Hari Babu',
     scheduled_date: '2026-07-22',
     start_time: '19:00:00',
+    end_time: '20:30:00',
     recording_url: 'https://sharepoint/rec.mp4',
     youtube_url: null,
     ...over,
   };
+}
+
+/** Today in IST, the format `scheduled_date` is stored in. */
+function istToday(offsetDays = 0): string {
+  const d = new Date(Date.now() + offsetDays * 24 * HOUR);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
+}
+
+/** "HH:MM:SS" in IST, `minutes` from now. */
+function istClock(minutesFromNow: number): string {
+  const d = new Date(Date.now() + minutesFromNow * 60_000);
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(d);
 }
 
 beforeEach(() => {
@@ -229,6 +249,33 @@ describe('findAutodraftCandidates', () => {
     expect(found).toHaveLength(1);
     expect(found[0].id).toBe('class-1');
     expect(found[0].existing_recap_id).toBeNull();
+  });
+
+  it('never looks at a class again once it decided nothing was taught', async () => {
+    // The expensive one. closeUntaughtClass returns BEFORE
+    // replaceRecapSections, so the row it leaves has generated_at null and
+    // status 'draft': the exact shape of a recap nobody has started. Without
+    // the not_applicable guard the sweep would pick this class up on its next
+    // pass, spend Gemini calls reaching the same verdict, and re-excuse
+    // students a teacher had restored. Every fifteen minutes, forever.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          readiness: 'not_applicable',
+          generated_at: null,
+          created_at: '2026-07-20T00:00:00Z',
+        },
+      ],
+      nexus_class_recap_sections: [],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
   });
 
   it('skips a class with no stored transcript', async () => {
@@ -494,6 +541,156 @@ describe('findAutodraftCandidates', () => {
     expect(await findAutodraftCandidates(supabase)).toHaveLength(1);
   });
 
+  it('takes a class that ended this evening, without waiting for tomorrow', async () => {
+    // The timing defect. The sweep used to require `scheduled_date < today`, so
+    // a class that finished at 20:30 IST could not be drafted until the 06:00
+    // run the next morning, nine and a half hours later, even though its
+    // transcript is reliably stored twenty minutes after the last word.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [
+        classRow({ scheduled_date: istToday(), end_time: istClock(-45) }),
+      ],
+      nexus_class_recaps: [],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(1);
+  });
+
+  it('leaves a class alone until its end time plus the grace has passed', async () => {
+    // Mid-class, or inside the grace window: Teams has not finished with it, and
+    // drafting from a partial transcript spends a Gemini call on half a lesson.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [
+        classRow({ scheduled_date: istToday(), end_time: istClock(+30) }),
+      ],
+      nexus_class_recaps: [],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
+  });
+
+  it('does not treat a class that ended one minute ago as settled', async () => {
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [
+        classRow({ scheduled_date: istToday(), end_time: istClock(-1) }),
+      ],
+      nexus_class_recaps: [],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
+  });
+
+  it('still takes a past class whose end time was never recorded', async () => {
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow({ end_time: null })],
+      nexus_class_recaps: [],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(1);
+  });
+
+  it('retries a held recap once it has sat out the cool-off', async () => {
+    // The dead end. `if (recap.generated_at) continue` meant a recap held by the
+    // quality bar was skipped forever, so its only exit was a teacher pressing
+    // Publish anyway. On production that left one class unavailable for 33 days.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          readiness: 'held',
+          generated_at: new Date(Date.now() - 40 * HOUR).toISOString(),
+          created_at: new Date(Date.now() - 48 * HOUR).toISOString(),
+          generation_attempts: 1,
+        },
+      ],
+      nexus_class_recap_sections: sectionRows('recap-1', 4),
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    const found = await findAutodraftCandidates(supabase);
+    expect(found).toHaveLength(1);
+    expect(found[0].existing_recap_id).toBe('recap-1');
+  });
+
+  it('gives a freshly held recap time before retrying it', async () => {
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          readiness: 'held',
+          generated_at: new Date(Date.now() - 1 * HOUR).toISOString(),
+          created_at: new Date(Date.now() - 2 * HOUR).toISOString(),
+          generation_attempts: 1,
+        },
+      ],
+      nexus_class_recap_sections: sectionRows('recap-1', 4),
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
+  });
+
+  it('never retries a held recap a student has already worked through', async () => {
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          readiness: 'held',
+          generated_at: new Date(Date.now() - 40 * HOUR).toISOString(),
+          created_at: new Date(Date.now() - 48 * HOUR).toISOString(),
+          generation_attempts: 1,
+        },
+      ],
+      nexus_class_recap_sections: sectionRows('recap-1', 4),
+      nexus_class_recap_attempts: [{ section_id: 'sec-recap-1-0' }],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
+  });
+
+  it('leaves a held recap alone once it is out of attempts', async () => {
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          readiness: 'held',
+          generated_at: new Date(Date.now() - 40 * HOUR).toISOString(),
+          created_at: new Date(Date.now() - 48 * HOUR).toISOString(),
+          generation_attempts: MAX_GENERATION_ATTEMPTS,
+        },
+      ],
+      nexus_class_recap_sections: sectionRows('recap-1', 4),
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
+  });
+
   it('never returns more than the run cap', async () => {
     const classes = Array.from({ length: 10 }, (_, i) =>
       classRow({ id: `class-${i}`, scheduled_date: `2026-07-${10 + i}` }),
@@ -580,6 +777,79 @@ describe('autodraftRecapForClass', () => {
 
     const out = await autodraftRecapForClass({} as any, candidate);
     expect(out).toMatchObject({ ok: true, sections: 1 });
+  });
+
+  it('publishes a segment that is thinner than configured but still a gate', async () => {
+    // The 2026-09-15 production recap, reduced. Nine questions against a
+    // configured ten: the gate is clamped to nine, seven of them must be right,
+    // and the checkpoint works. It was held for three days.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    const sections = publishableSections();
+    sections[4].questions = sections[4].questions.slice(0, 9);
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({ sections } as any);
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: true, published: true, held: false, sections: 6 });
+    expect(vi.mocked(setRecapReadiness).mock.calls[0][1]).toMatchObject({
+      readiness: 'ready',
+      publish: true,
+      hold_reason: null,
+    });
+  });
+
+  it('drops a starved checkpoint and publishes the rest', async () => {
+    // Two questions cannot gate a segment, so that one checkpoint goes. The
+    // student still watches those five minutes, they are just not quizzed on
+    // them, which beats holding the whole class back over one weak segment.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    const sections = publishableSections();
+    sections[3].questions = sections[3].questions.slice(0, 2);
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({ sections } as any);
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: true, published: true, sections: 5 });
+    const saved = vi.mocked(replaceRecapSections).mock.calls[0][1] as any[];
+    expect(saved).toHaveLength(5);
+  });
+
+  it('keeps every checkpoint when dropping would leave too few to gate', async () => {
+    // Saving nothing would throw away the generation a teacher could still
+    // rescue, so the content is kept and the recap is held instead.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    const sections = publishableSections().map((s) => ({
+      ...s,
+      questions: s.questions.slice(0, 2),
+    }));
+    vi.mocked(generateSectionsAndQuestions).mockResolvedValue({ sections } as any);
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: true, held: true, sections: 6 });
+    expect(vi.mocked(replaceRecapSections).mock.calls[0][1]).toHaveLength(6);
+    expect(vi.mocked(setRecapReadiness).mock.calls[0][1]).toMatchObject({
+      readiness: 'held',
+      publish: false,
+      hold_reason: 'thin_questions',
+    });
+  });
+
+  it('treats a budget refusal like a rate limit, not like a bad class', async () => {
+    // checkBudget throws AiBlockedError when the monthly cap, the daily cap or
+    // the per-feature call cap is reached. None of that says anything about this
+    // class, so holding it and spending an attempt would punish the wrong thing
+    // and page a teacher over an accounting ceiling.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    const blocked = Object.assign(new Error('Daily AI spend cap reached.'), {
+      name: 'AiBlockedError',
+    });
+    vi.mocked(generateSectionsAndQuestions).mockRejectedValue(blocked);
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: false, reason: 'rate_limited' });
+    expect(setRecapReadiness).not.toHaveBeenCalled();
   });
 
   it('gives up before spending a Gemini call when there is no transcript', async () => {

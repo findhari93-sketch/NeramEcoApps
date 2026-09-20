@@ -173,6 +173,41 @@ export function createFakeDb(seed: FakeTables, defaults: FakeDefaults = {}): Fak
         filters.push((r) => r[col] != null && r[col] >= val);
         return chain;
       },
+      lt(col: string, val: any) {
+        filters.push((r) => r[col] != null && r[col] < val);
+        return chain;
+      },
+      lte(col: string, val: any) {
+        filters.push((r) => r[col] != null && r[col] <= val);
+        return chain;
+      },
+      /**
+       * Only the one shape the callers actually write: a comma separated list
+       * of `col.is.null` and `col.eq.value` terms, ORed together. Anything
+       * richer is a PostgREST grammar this fake has no business parsing, and a
+       * silent wrong answer would be worse than not supporting it.
+       */
+      or(expr: string) {
+        const terms = String(expr)
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .map((t) => {
+            const [col, op, ...rest] = t.split('.');
+            const val = rest.join('.');
+            if (op !== 'is' && op !== 'eq') {
+              throw new Error(`fake-supabase .or() does not understand "${t}"`);
+            }
+            return { col, op, val };
+          });
+        filters.push((r) =>
+          terms.some(({ col, op, val }) => {
+            if (op === 'is') return val === 'null' ? r[col] === null || r[col] === undefined : r[col] === val;
+            return String(r[col]) === val;
+          }),
+        );
+        return chain;
+      },
       /**
        * PostgREST's row window. Callers use it to lift the default 1000-row cap
        * on a tally query, so the honest fake is an inclusive slice.

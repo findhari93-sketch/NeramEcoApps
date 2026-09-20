@@ -37,7 +37,7 @@ import PaperFacePips from './PaperFacePips';
 
 /** Wide enough for three 24px pips plus their gaps, and no wider. */
 const CELL_W = 104;
-/** 180 for the name, plus the 8px the cohort ring adds to the avatar box. */
+/** 180 for the name, plus the 8px the info ring adds to the avatar box. */
 const NAME_W = 188;
 
 export interface PaperProgressMatrixProps {

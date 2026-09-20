@@ -50,6 +50,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
+import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import ReopenUntilPicker from '@/components/tests/ReopenUntilPicker';
 import DeliveryReceipt, { type DeliveryReceiptData } from '@/components/tests/DeliveryReceipt';
 import { useStudentStageFacts } from '@/components/students/StudentStageFactsProvider';
@@ -61,10 +62,12 @@ import {
   reopenUntilProblem,
 } from '@/lib/reopen-deadline';
 import {
+  TELL_WHY_LINK_LABEL,
   TEMPLATE_LABELS,
   TEST_MESSAGE_TEMPLATES,
   fillConstants,
   renderTestMessage,
+  templateLinksToWhy,
   type TestMessageContext,
   type TestMessageTemplate,
 } from '@/lib/test-message-templates';
@@ -72,6 +75,12 @@ import {
 export interface MessageRecipient {
   id: string;
   name: string | null;
+  /**
+   * Their catch-up for this run's classes is still open, so "Catch up first" is
+   * a message that says something true to them. Without at least one of these
+   * the template is not offered: it names classes the recipient does not owe.
+   */
+  behind?: boolean;
 }
 
 export interface MessageSentSummary {
@@ -193,7 +202,11 @@ export default function TestMessageDialog({
 
   // "No need to retake" only makes sense straight after a count, so it is not
   // offered as a starting point anywhere else.
-  const templates = TEST_MESSAGE_TEMPLATES.filter((t) => t !== 'counted' || initialTemplate === 'counted');
+  const templates = TEST_MESSAGE_TEMPLATES.filter((t) => {
+    if (t === 'counted') return initialTemplate === 'counted';
+    if (t === 'catchup') return initialTemplate === 'catchup' || recipients.some((r) => r.behind);
+    return true;
+  });
 
   /** Exactly what a student will read, so nothing is a surprise after sending. */
   const previewSubject = fillConstants(subject, ctx);
@@ -208,6 +221,23 @@ export default function TestMessageDialog({
 
   const deadlineProblem = reopening ? reopenUntilProblem(closesAt) : null;
   const canSend = Boolean(subject.trim() && body.trim() && goingTo.length > 0 && !deadlineProblem);
+
+  /**
+   * The link the route puts under a "Tell me why" chat message. Shown where the
+   * message is previewed, so the teacher knows students get something to press,
+   * and so an edit that turns the message into "Write my own" visibly drops it.
+   */
+  const whyLinkNote = templateLinksToWhy(template) ? (
+    <Box data-testid="why-link-note" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
+      <LinkOutlinedIcon aria-hidden sx={{ fontSize: 16, color: 'primary.main' }} />
+      <Typography variant="body2" sx={{ color: 'primary.main', fontWeight: 600 }}>
+        {TELL_WHY_LINK_LABEL}
+      </Typography>
+      <Typography variant="caption" color="text.secondary">
+        (a link to their card)
+      </Typography>
+    </Box>
+  ) : null;
 
   async function send() {
     setSending(true);
@@ -292,6 +322,7 @@ export default function TestMessageDialog({
               <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                 {previewBody}
               </Typography>
+              {whyLinkNote}
             </Paper>
 
             <Typography variant="body2" sx={sectionLabel}>
@@ -421,6 +452,7 @@ export default function TestMessageDialog({
                 <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                   {previewBody || 'Press Edit to write the message.'}
                 </Typography>
+                {whyLinkNote}
               </Paper>
             )}
 

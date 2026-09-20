@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import { assertCronRequest } from '@/lib/cron-auth';
 import { runRecapAutodraft, MAX_DRAFTS_PER_RUN } from '@/lib/recap-autodraft';
+import { announcePublishedRecaps } from '@/lib/recap-announce';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +18,11 @@ export const dynamic = 'force-dynamic';
  * at all. Anything short of the bar is held instead and raises an alert, so the
  * only material that reaches a student unread is material the checks vouched for.
  *
- * This is the straggler sweep. The main path is event-driven, off the back of
- * the transcript landing in /api/cron/sync-attendance, roughly twenty minutes
- * after a class ends. This catches whatever that missed: a late transcript, a
- * night Gemini refused, a class that failed under the retry cap.
+ * This is the straggler sweep. The main path runs inside /api/cron/sync-attendance,
+ * which now sweeps every fifteen minutes from 20:45 IST, so a class is normally
+ * published within a quarter of an hour of Teams handing over its recording.
+ * This catches whatever that missed: a recording Teams published overnight, a
+ * night Gemini refused, a recap held long enough to be worth retrying.
  *
  * Runs at 06:00 IST, well clear of the evening attendance and follow-up crons,
  * so a slow Gemini call cannot delay the work that has to finish before people
@@ -39,6 +41,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const run = await runRecapAutodraft(supabase, { limit: MAX_DRAFTS_PER_RUN });
+
+    // Tell the students who missed these classes, before telling anybody else.
+    // They are the reason the recap exists, and the claim inside means a class
+    // the fifteen-minute sweep already announced is skipped here.
+    const told = await announcePublishedRecaps(supabase, run.outcomes);
 
     // Tell the teachers, once per classroom. A row per recap would bury the
     // signal on a night that drafts three at once.
@@ -98,6 +105,7 @@ export async function GET(request: NextRequest) {
       drafted: run.drafted,
       skipped: run.skipped,
       rateLimited: run.rateLimited,
+      studentsTold: told,
       teachersNotified: notified,
       outcomes: run.outcomes,
       ms: Date.now() - startedAt,

@@ -119,29 +119,36 @@ test.describe('Catch-up loop', () => {
   test('AC2: the reconciliation view separates no reason from told us first', async ({ request }) => {
     test.skip(!classId, 'No class');
 
-    const res = await request.get(`${NEXUS}/api/timetable/${classId}/followup`, {
-      headers: { Authorization: `Bearer ${teacherToken}` },
-    });
+    // Re-pointed from the retired /followup route: class-insights is the
+    // surviving read for a class's roster, attendance and absence reasons.
+    const res = await request.get(
+      `${NEXUS}/api/timetable/class-insights?class_id=${classId}&classroom_id=${classroomId}`,
+      { headers: { Authorization: `Bearer ${teacherToken}` } },
+    );
     expect(res.ok()).toBe(true);
     const body = await res.json();
 
-    expect(body.stats.rosterSize).toBeGreaterThan(0);
+    expect(body.summary.rosterSize).toBeGreaterThan(0);
     // Nobody joined a class that ran for a minute at midnight.
-    expect(body.stats.present).toBe(0);
-    expect(body.stats.unexplained).toBeGreaterThan(0);
-    expect(body.stats.awaitingFollowup).toBeGreaterThan(0);
+    expect(body.summary.present).toBe(0);
+    expect(body.summary.missedNoReason).toBeGreaterThan(0);
 
     const me = (body.students || []).find((s: any) => s.id === studentId);
     expect(me, 'the test student must appear on the roster').toBeTruthy();
     expect(me.absence?.kind).toBe('no_show');
+    expect(me.absence?.followup_sent_at).toBeFalsy();
   });
 
   test('AC3: a student cannot send a follow-up', async ({ request }) => {
     test.skip(!classId || !studentId, 'No class');
 
-    const res = await request.post(`${NEXUS}/api/timetable/${classId}/followup`, {
+    // Re-pointed from the retired /followup route to catchup-nudge, the
+    // surviving "chase a student about this class" endpoint. Same guard:
+    // coord.nudge is a staff capability, so a student is refused before the
+    // body is even read.
+    const res = await request.post(`${NEXUS}/api/timetable/${classId}/catchup-nudge`, {
       headers: authed(studentToken),
-      data: { student_ids: [studentId] },
+      data: { classroom_id: classroomId, studentIds: [studentId] },
     });
     expect(res.status()).toBe(403);
   });
@@ -227,9 +234,12 @@ test.describe('Catch-up loop', () => {
   test('AC7: the reason reaches the teacher, moving the student out of unexplained', async ({ request }) => {
     test.skip(!classId, 'No class');
 
-    const res = await request.get(`${NEXUS}/api/timetable/${classId}/followup`, {
-      headers: { Authorization: `Bearer ${teacherToken}` },
-    });
+    // Re-pointed from the retired /followup route: class-insights carries the
+    // same reason_code on the absence it reads.
+    const res = await request.get(
+      `${NEXUS}/api/timetable/class-insights?class_id=${classId}&classroom_id=${classroomId}`,
+      { headers: { Authorization: `Bearer ${teacherToken}` } },
+    );
     const body = await res.json();
     const me = (body.students || []).find((s: any) => s.id === studentId);
     expect(me.absence?.reason_code).toBe('unwell');
@@ -238,30 +248,39 @@ test.describe('Catch-up loop', () => {
   test('AC8: sending the follow-up records it, so nobody is chased twice', async ({ request }) => {
     test.skip(!classId || !studentId, 'No class');
 
-    const send = await request.post(`${NEXUS}/api/timetable/${classId}/followup`, {
+    // Re-pointed from the retired /followup route to catchup-nudge, which
+    // stamps followup_sent_at the same way. postToTeams is left unset, so it
+    // defaults to 'none': the test asserts the bookkeeping, not Microsoft's
+    // delivery.
+    const send = await request.post(`${NEXUS}/api/timetable/${classId}/catchup-nudge`, {
       headers: authed(teacherToken),
-      // Teams off: the test asserts the bookkeeping, not Microsoft's delivery.
-      data: { student_ids: [studentId], teams: false },
+      data: { classroom_id: classroomId, studentIds: [studentId] },
     });
     expect(send.ok()).toBe(true);
-    expect((await send.json()).sent).toBe(1);
+    // counts.total is tally()'s count of NudgeResult rows, one per recipient
+    // sendNudge actually processed (lib/nudge-delivery.ts). One student was
+    // sent, so this pins the recipient count the way the old route's
+    // `sent === 1` did; `ok: true` alone would pass even if nobody was reached.
+    expect((await send.json()).counts.total).toBe(1);
 
-    const after = await request.get(`${NEXUS}/api/timetable/${classId}/followup`, {
-      headers: { Authorization: `Bearer ${teacherToken}` },
-    });
+    const after = await request.get(
+      `${NEXUS}/api/timetable/class-insights?class_id=${classId}&classroom_id=${classroomId}`,
+      { headers: { Authorization: `Bearer ${teacherToken}` } },
+    );
     const me = ((await after.json()).students || []).find((s: any) => s.id === studentId);
     expect(me.absence?.followup_sent_at).toBeTruthy();
   });
 
-  test('AC9: a follow-up to someone who was not absent is refused', async ({ request }) => {
-    test.skip(!classId, 'No class');
-
-    const res = await request.post(`${NEXUS}/api/timetable/${classId}/followup`, {
-      headers: authed(teacherToken),
-      data: { student_ids: ['00000000-0000-0000-0000-000000000000'], teams: false },
-    });
-    expect(res.status()).toBe(409);
-  });
+  // AC9 ("a follow-up to someone who was not absent is refused", 409) is
+  // deleted rather than re-pointed. It asserted the retired route's own
+  // validation: a join against nexus_class_absences that refused a target
+  // with no absence row. catchup-nudge does not carry that rule forward, it
+  // validates classroom enrollment instead (400 for an unenrolled id), which
+  // is a deliberately broader design: "remind an enrolled student about this
+  // class", not "only re-notify a confirmed absentee". There is no surviving
+  // endpoint that gates a nudge on an existing absence row to re-point this
+  // assertion at, so the coverage is not being moved, it is going with the
+  // route.
 
   test('AC10: the full gate opens once the steps are done', async ({ request }) => {
     test.skip(!classId, 'No class');

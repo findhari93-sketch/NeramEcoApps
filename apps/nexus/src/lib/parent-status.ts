@@ -49,6 +49,13 @@ export const ATTENDANCE_STATUS: Record<AttendanceLabel, StatusDescriptor> = {
   partly_attended: { label: 'Partly there', tone: 'warning' },
   missed: { label: 'Missed', tone: 'error' },
   missed_with_reason: { label: 'Missed, reason given', tone: 'primary' },
+  // Neutral, for the same reason 'not_recorded' is: nobody did anything wrong.
+  // The family told us in advance, which is the outcome these screens want.
+  missed_away: {
+    label: 'Away, told us in advance',
+    tone: 'neutral',
+    detail: 'This class fell inside a period you told us about in advance.',
+  },
   not_recorded: {
     label: 'Not recorded',
     tone: 'neutral',

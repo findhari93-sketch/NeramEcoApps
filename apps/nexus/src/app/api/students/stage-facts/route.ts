@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
-import { foldStudentFacts } from '@/lib/stage-facts';
+import { foldStudentFacts, type StageFactMember } from '@/lib/stage-facts';
 
 /**
  * GET /api/students/stage-facts   (staff)
@@ -9,7 +9,7 @@ import { foldStudentFacts } from '@/lib/stage-facts';
  * Who each student IS, keyed by user id, in one small payload: their cohort,
  * whether they have paused, their name and their face.
  *
- * WHY A LOOKUP TABLE RATHER THAN A FIELD ON EACH PAYLOAD. The stage ring is
+ * WHY A LOOKUP TABLE RATHER THAN A FIELD ON EACH PAYLOAD. The info ring is
  * meant to appear wherever a student's face does, and that is roughly thirty
  * screens fed by about twenty different routes: a drawing review, a leaderboard
  * row, a comment thread, an evaluation queue. Adding two columns to twenty
@@ -59,13 +59,15 @@ export async function GET(request: NextRequest) {
     // which is what this needs: an avatar on the drawing-review queue has no
     // classroom context to scope by. Dormant students are loaded rather than
     // filtered, because "paused" is one of the three states the ring reports.
-    const { members } = await loadClassroomRoster(null, {
+    // The language columns ride on the same users embed, for the avatar mark.
+    const { members } = await loadClassroomRoster<StageFactMember['user']>(null, {
       includeDormant: true,
+      userColumns: 'home_language, limited_english',
       client: supabase,
     });
 
     // One fact per student, not per enrolment. See lib/stage-facts.ts for why
-    // the four fields fold three different ways.
+    // the fields fold three different ways.
     const facts = foldStudentFacts(members);
 
     return NextResponse.json({ facts, count: Object.keys(facts).length });

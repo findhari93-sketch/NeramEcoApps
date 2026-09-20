@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyDrawingPartsToWrite,
+  applyPartSolutionImages,
+  mirroredPartSolution,
   composeDrawingPartsText,
   drawingPartsChipLabel,
   drawingPartsSummary,
@@ -89,12 +91,10 @@ describe('suggestDrawingParts', () => {
     expect(s.parts.items[2].text_hi?.startsWith('यादृच्छिक')).toBe(true);
   });
 
-  it('keeps the "attempt any ONE" instruction as the stem (2019 Session 2)', () => {
+  it('drops the "attempt any ONE" instruction, which the mode already says (2019 Session 2)', () => {
     const s = suggestDrawingParts(Q3_2019_S2)!;
     expect(s.parts.mode).toBe('any_one');
-    expect(s.parts.stem).toBe(
-      'In the space provided for the answer of this question attempt any ONE of the following:',
-    );
+    expect(s.parts.stem).toBeNull();
     expect(s.parts.items).toHaveLength(3);
     expect(s.parts.items[0].text.startsWith('Design and draw')).toBe(true);
     expect(s.parts.items[2].text).toBe('Draw from imagination a picture of an officer sitting in his office.');
@@ -164,11 +164,10 @@ describe('normalizeDrawingParts', () => {
 });
 
 describe('composeDrawingPartsText', () => {
-  it('rebuilds an either/or question with OR lines, and a stem', () => {
+  it('rebuilds an either/or question with OR lines', () => {
     const parts = suggestDrawingParts(Q3_2019_S2)!.parts;
     const text = composeDrawingPartsText(parts)!;
-    expect(text.startsWith('In the space provided')).toBe(true);
-    expect(text).toContain('(A) Design and draw');
+    expect(text.startsWith('(A) Design and draw')).toBe(true);
     expect(text.split('\n\nOR\n\n')).toHaveLength(3);
   });
 
@@ -250,5 +249,85 @@ describe('screen helpers', () => {
     expect(partNumberLabel(null, all.items[1])).toBe('B');
     expect(totalPartMarks(all)).toBe(40);
     expect(totalPartMarks(anyOne)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-part solution images
+// ---------------------------------------------------------------------------
+
+function twoParts(a: string | null, b: string | null) {
+  return {
+    mode: 'any_one' as const,
+    stem: null,
+    stem_hi: null,
+    items: [
+      { id: 'a', label: 'A', text: 'Draw a balloon seller.', text_hi: null, marks: null,
+        solution_image_url: a, solution_video_url: null },
+      { id: 'b', label: 'B', text: 'Draw women at a handpump.', text_hi: null, marks: null,
+        solution_image_url: b, solution_video_url: null },
+    ],
+  };
+}
+
+describe('mirroredPartSolution', () => {
+  it('takes the first part that has one', () => {
+    expect(mirroredPartSolution(twoParts(null, 'https://x/b.png'))).toEqual({
+      solution_image_url: 'https://x/b.png',
+      solution_video_url: null,
+    });
+  });
+
+  it('is null when no part has one', () => {
+    expect(mirroredPartSolution(twoParts(null, null)).solution_image_url).toBeNull();
+  });
+});
+
+describe('applyPartSolutionImages', () => {
+  it('merges one part and leaves the others alone', () => {
+    const result = applyPartSolutionImages(twoParts('https://x/a.png', null), {
+      b: 'https://x/b.png',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.drawing_parts.items.map((p) => p.solution_image_url)).toEqual([
+      'https://x/a.png',
+      'https://x/b.png',
+    ]);
+    // Part A's text is untouched: pasting a picture is not a rewrite.
+    expect(result.drawing_parts.items[0].text).toBe('Draw a balloon seller.');
+  });
+
+  it('re-applies the mirror so the question column follows the parts', () => {
+    const cleared = applyPartSolutionImages(twoParts('https://x/a.png', 'https://x/b.png'), {
+      a: null,
+    });
+    expect(cleared.ok).toBe(true);
+    if (!cleared.ok) return;
+    // A is gone, so the mirror moves to B rather than going stale on A.
+    expect(cleared.solution_image_url).toBe('https://x/b.png');
+
+    const emptied = applyPartSolutionImages(twoParts('https://x/a.png', null), { a: null });
+    expect(emptied.ok).toBe(true);
+    if (!emptied.ok) return;
+    expect(emptied.solution_image_url).toBeNull();
+  });
+
+  it('ignores a part id the question no longer has', () => {
+    // A teacher re-split the question in another tab. The paste into the parts
+    // that survived still lands.
+    const result = applyPartSolutionImages(twoParts(null, null), {
+      a: 'https://x/a.png',
+      d: 'https://x/d.png',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.drawing_parts.items).toHaveLength(2);
+    expect(result.drawing_parts.items[0].solution_image_url).toBe('https://x/a.png');
+  });
+
+  it('refuses a question that is not split into parts', () => {
+    const result = applyPartSolutionImages(null, { a: 'https://x/a.png' });
+    expect(result).toEqual({ ok: false, error: 'This question is not split into parts.' });
   });
 });

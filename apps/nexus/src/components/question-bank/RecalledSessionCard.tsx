@@ -100,7 +100,8 @@ export default function RecalledSessionCard({ session, onClick }: RecalledSessio
 
       {/* Row 2: Contributors */}
       <Box sx={{ mb: 1 }}>
-        <ContributorAvatars contributors={contributors} max={4} size={24} />
+        {/* 28, not 24: below that the info ring loses its glyph and language mark. */}
+        <ContributorAvatars contributors={contributors} max={4} size={28} />
       </Box>
 
       {/* Row 3: Tier counts */}

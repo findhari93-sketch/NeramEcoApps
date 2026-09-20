@@ -15,8 +15,14 @@ export type RecapStatus = 'draft' | 'published' | 'archived';
  * Why a recap is not servable yet. Separate from `status`, which is the
  * teacher-facing lifecycle. A student never sees the difference between these:
  * anything other than 'ready' reads as "your tutor is preparing this recording".
+ *
+ * 'not_applicable' is the odd one and the only one that is not a problem. It
+ * means the recording holds no teaching, so there is nothing to make a recap
+ * out of and nothing for a student to catch up on: a class that was postponed,
+ * rescheduled or called off on the call itself. It is deliberately NOT in
+ * listRecapsNeedingReview, because there is no decision for anyone to make.
  */
-export type RecapReadiness = 'pending' | 'ready' | 'held' | 'failed';
+export type RecapReadiness = 'pending' | 'ready' | 'held' | 'failed' | 'not_applicable';
 
 export interface NexusClassRecap {
   id: string;
@@ -1046,6 +1052,47 @@ export async function createRecapDraw(
     throw error;
   }
   return data as RecapDraw;
+}
+
+/**
+ * Take a question out of the paper a student is currently sitting.
+ *
+ * Used when they report it as broken. The grading path already scores only
+ * `draw.question_ids` and clamps the pass mark to what it served
+ * (`Math.min(gate.minToPass, totalCount)`), so dropping the id here is the
+ * whole of "this question no longer counts against you": one fewer question to
+ * answer, one fewer needed to pass. Nothing else has to know.
+ *
+ * Refuses to empty the paper. A checkpoint with no questions left cannot be
+ * passed OR failed, and assertUnlocked would hold every later checkpoint behind
+ * it forever.
+ */
+export async function dropQuestionFromDraw(
+  drawId: string,
+  questionId: string,
+  client?: TypedSupabaseClient,
+): Promise<{ remaining: number; dropped: boolean }> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const { data: draw, error } = await supabase
+    .from(DRAWS)
+    .select('id, question_ids')
+    .eq('id', drawId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!draw) return { remaining: 0, dropped: false };
+
+  const ids = (draw.question_ids as string[]) || [];
+  const kept = ids.filter((id) => id !== questionId);
+  if (kept.length === ids.length) return { remaining: ids.length, dropped: false };
+  if (kept.length === 0) return { remaining: ids.length, dropped: false };
+
+  const { error: upErr } = await supabase
+    .from(DRAWS)
+    .update({ question_ids: kept })
+    .eq('id', drawId)
+    .is('consumed_at', null);
+  if (upErr) throw upErr;
+  return { remaining: kept.length, dropped: true };
 }
 
 /** Mark a draw as spent once its attempt has been graded. */

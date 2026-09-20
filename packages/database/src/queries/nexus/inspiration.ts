@@ -251,6 +251,132 @@ export async function setDrawingSharingOptOut(
   return (data || []).length > 0;
 }
 
+/**
+ * Reads the same opt-out, for a caller about to widen a drawing's audience.
+ *
+ * `nexus_inspiration_base` already hides an opted-out student's originals from
+ * every read, so this is not the enforcement. It is here so the feature route
+ * can tell the teacher plainly that the work stays in Teams and off the shelf,
+ * instead of quietly writing a row that nobody will ever be shown.
+ */
+export async function getDrawingSharingOptOut(
+  userId: string,
+  client?: TypedSupabaseClient,
+): Promise<boolean> {
+  const { data, error } = await db(client)
+    .from('users')
+    .select('share_drawings_opt_out')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data?.share_drawings_opt_out;
+}
+
+/**
+ * The shelf item a submission already has, if it has one.
+ *
+ * Read before anything is posted, because the link in the Teams card has to
+ * point somewhere a STUDENT can open. It used to point at
+ * /teacher/sketchbook/..., posted into a group chat that is forty two students
+ * and six staff, so the people it was shown to were the people it locked out.
+ */
+export async function getSubmissionInspirationItemId(
+  submissionId: string,
+  client?: TypedSupabaseClient,
+): Promise<string | null> {
+  const { data, error } = await db(client)
+    .from('nexus_inspiration_items')
+    .select('id')
+    .eq('source_submission_id', submissionId)
+    .eq('source_kind', 'submission_original')
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.id as string | undefined) ?? null;
+}
+
+/**
+ * Puts a featured drawing on the shelf every student browses.
+ *
+ * Featuring used to end at Teams, so the one drawing a teacher singled out was
+ * the one drawing nobody could go back and look at. The row it needs already
+ * exists: the sync trigger writes a `submission_original` item for every
+ * submission, and a sketch's sits at `curation='auto'` with
+ * `auto_eligible=false` because a sketchbook page is never scored. `is_visible`
+ * is generated as `curation='shown' OR (curation='auto' AND auto_eligible)`, so
+ * flipping `curation` alone reveals it. No new table, no second copy of the
+ * image, and the credit and the alumni badge come free from the RPC.
+ *
+ * Scoped to `submission_original` on purpose: the teacher's corrected overlay of
+ * the same submission is a different item and is not what was praised.
+ *
+ * Idempotent, so featuring twice is one update that changes nothing, and
+ * resolves null when no item row exists (an exam drawing, which the sync
+ * deletes) so the caller can carry on rather than fail a feature that posted.
+ */
+export async function showFeaturedSubmission(
+  submissionId: string,
+  curatorId: string,
+  fallbackTitle?: string,
+  client?: TypedSupabaseClient,
+): Promise<ItemImageWork | null> {
+  const { data, error } = await db(client)
+    .from('nexus_inspiration_items')
+    .update({
+      curation: 'shown',
+      is_featured: true,
+      curated_by: curatorId,
+      curated_at: new Date().toISOString(),
+    })
+    .eq('source_submission_id', submissionId)
+    .eq('source_kind', 'submission_original')
+    .select('id, image_url, thumbnail_url, image_aspect')
+    .maybeSingle();
+  if (error) throw error;
+  const item = (data as ItemImageWork | null) ?? null;
+
+  // A sketch reaches the shelf with no question and no tags, so displayTitle
+  // falls all the way through to the word "Drawing" and the search vector has
+  // nothing in its highest-weighted field. One title fixes both. Only when the
+  // column is still null, so a title a teacher typed is never overwritten, and
+  // so featuring the same drawing twice does not undo their wording.
+  if (item && fallbackTitle) {
+    const { error: titleError } = await db(client)
+      .from('nexus_inspiration_items')
+      .update({ title_override: fallbackTitle })
+      .eq('id', item.id)
+      .is('title_override', null);
+    if (titleError) throw titleError;
+  }
+  return item;
+}
+
+/**
+ * The exact undo of showFeaturedSubmission, for un-featuring.
+ *
+ * Back to `auto`, never to `hidden`. A sketch has `auto_eligible=false` so
+ * `auto` means invisible again, while an assignment drawing rated four stars or
+ * more returns to being shown by the automatic rule that earned it its place
+ * before anyone featured it. `hidden` would suppress that drawing for good,
+ * which is a punishment nobody asked for.
+ */
+export async function hideFeaturedSubmission(
+  submissionId: string,
+  curatorId: string,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const { error } = await db(client)
+    .from('nexus_inspiration_items')
+    .update({
+      curation: 'auto',
+      is_featured: false,
+      curated_by: curatorId,
+      curated_at: new Date().toISOString(),
+    })
+    .eq('source_submission_id', submissionId)
+    .eq('source_kind', 'submission_original');
+  if (error) throw error;
+}
+
 export async function createExemplar(
   input: ExemplarInput,
   actorId: string,
@@ -378,9 +504,3 @@ export async function listInspirationAttempts(
   return { students: Number(body.students) || 0, shown: Number(body.shown) || 0, rows: body.rows ?? [] };
 }
 
-export async function getDrawingSharingOptOut(userId: string, client?: TypedSupabaseClient): Promise<boolean> {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await (supabase as any).from('users').select('share_drawings_opt_out').eq('id', userId).maybeSingle();
-  if (error) throw error;
-  return !!data?.share_drawings_opt_out;
-}

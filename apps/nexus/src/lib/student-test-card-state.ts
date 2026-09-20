@@ -28,6 +28,7 @@
  */
 
 import { describeCatchupGate, type CatchupGateDecision } from './catchup-test-gate';
+import { testReasonShortLabel } from './test-reasons';
 
 export type StudentTestCardState =
   /** Sit it now, inside the window everyone shares. */
@@ -81,6 +82,12 @@ export interface StudentTestCard {
   score_label: 'Your score' | 'Best' | null;
   /** Only when they have practised the SAME PAPER through a different door. */
   practice_elsewhere: { attempts: number; best_percentage: number | null } | null;
+  /**
+   * "Tell your teacher why", offered BESIDE the one action, never instead of it.
+   * Null when the question does not apply: the test was not theirs to owe, or
+   * they sat it, or the door is still open. `given` is what they already said.
+   */
+  why: { given: { code: string; short_label: string } | null } | null;
 }
 
 /** What the resolver needs. A subset of the overview route's item shape. */
@@ -124,6 +131,12 @@ export interface StudentTestFacts {
   catchup_gate?: CatchupGateDecision | null;
   practice_elsewhere?: { attempts: number; best_percentage: number | null } | null;
   placement_id?: string | null;
+  /** Which kind of door this is (exam, class_test, classroom_assignment, student_practice). */
+  placement_context?: string | null;
+  /** False only on a class test the teacher marked optional. */
+  required?: boolean | null;
+  /** What the student already told their teacher about not sitting it. */
+  skip_reason?: { reason_code: string; reason_note: string | null; updated_at: string | null } | null;
 }
 
 const IST = 'Asia/Kolkata';
@@ -185,7 +198,52 @@ const preSittingNote = (t: StudentTestFacts): string =>
     ? ' You will be ranked with the second sitting, because exam day has passed.'
     : '';
 
+/** Doors a teacher sets for the class, as opposed to a practice pool nobody owes. */
+const OWED_CONTEXTS = new Set(['class_test', 'classroom_assignment']);
+
+/** Buckets that mean the eligibility engine did not require this student to sit it. */
+const EXCUSED_BUCKETS = new Set(['excused_new_joiner', 'excused_pending_catchup', 'teacher_override_excused']);
+
+/**
+ * States where the door shut on a paper they have not sat, or where a door
+ * reopened for them is still unused. Nothing else is a missed test: an open
+ * window is still time, and a done card has nothing to explain.
+ */
+const WHY_STATES = new Set<StudentTestCardState>(['missed', 'closed', 'reopened', 'awaiting_teacher']);
+
+/**
+ * Whether to ask "why did you not sit it", and what they already answered.
+ *
+ * Owed means an exam the eligibility engine did not excuse them from, or a class
+ * test or class assignment that was not marked optional. A reason is not an
+ * excuse and changes no deadline (see api/student/tests/reasons), so offering
+ * it can never let a student out of work; it only tells the teacher.
+ */
+function resolveWhy(t: StudentTestFacts, state: StudentTestCardState): StudentTestCard['why'] {
+  if ((t.attempts ?? 0) > 0 || !WHY_STATES.has(state)) return null;
+  const owed = t.is_exam
+    ? !EXCUSED_BUCKETS.has(String(t.eligibility_bucket ?? ''))
+    : OWED_CONTEXTS.has(String(t.placement_context ?? '')) && t.required !== false;
+  if (!owed) return null;
+  const code = t.skip_reason?.reason_code;
+  return { given: code ? { code, short_label: testReasonShortLabel(code) } : null };
+}
+
+/**
+ * The card after a student has just told their teacher why, without asking the
+ * server to resolve it again. Only a card that offered the question changes.
+ */
+export function markWhyGiven(card: StudentTestCard, code: string): StudentTestCard {
+  if (!card.why) return card;
+  return { ...card, why: { given: { code, short_label: testReasonShortLabel(code) } } };
+}
+
 export function resolveStudentTestCard(t: StudentTestFacts, now: number): StudentTestCard {
+  const core = resolveCardCore(t, now);
+  return { ...core, why: resolveWhy(t, core.state) };
+}
+
+function resolveCardCore(t: StudentTestFacts, now: number): Omit<StudentTestCard, 'why'> {
   const attempts = t.attempts ?? 0;
   const limit = t.attempt_limit && t.attempt_limit > 0 ? t.attempt_limit : null;
   const attemptsLeft = limit == null ? null : Math.max(0, limit - attempts);
@@ -221,7 +279,7 @@ export function resolveStudentTestCard(t: StudentTestFacts, now: number): Studen
     reason: string,
     action: StudentTestAction,
     tone: StudentTestTone,
-  ): StudentTestCard => ({ state, reason, action, tone, ...base, ...scored });
+  ): Omit<StudentTestCard, 'why'> => ({ state, reason, action, tone, ...base, ...scored });
 
   const untilPhrase = closes != null ? ` You have until ${at(t.available_until)}.` : '';
 

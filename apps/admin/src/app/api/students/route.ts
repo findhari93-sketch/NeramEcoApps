@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, listStudentsByYear, getCurrentBatch, getUsersWithActiveNexusAccess, currentAcademicYear } from '@neram/database';
+import { getSupabaseAdminClient, listStudentsByYear, getCurrentBatch, getUsersWithActiveNexusAccess, currentAcademicYear, assessApplication, listLiveDetailRequests, detailRequestProgress } from '@neram/database';
 
 // A "classroom" account is the class-provided identity: @neramclasses.com or any
 // Microsoft tenant address (*.onmicrosoft.com, which also covers the misspelled
@@ -26,23 +26,22 @@ function classifyDomain(email: string | null | undefined): EmailDomainStatus {
   return 'personal';
 }
 
-// "Completed the basic application form" is driven by the lead status, not the apply
-// wizard's step counter (direct-enrolled students never touch the wizard, so their
-// form_step_completed stays 0 even though they are fully enrolled). A submitted /
-// reviewed / enrolled lead has the basics; draft or pending_verification does not;
-// no lead row at all means the student never started the form.
-const COMPLETE_APP_STATUSES = new Set(['submitted', 'under_review', 'approved', 'enrolled', 'partial_payment']);
-function appStatuses(status: string | null | undefined, hasLead: boolean) {
-  if (!hasLead) {
-    return { application_complete: false, application_status: null, application_missing: 'no_application' as const };
-  }
-  const complete = !!status && COMPLETE_APP_STATUSES.has(status);
-  return {
-    application_complete: complete,
-    application_status: status || null,
-    application_missing: complete ? null : ('incomplete' as const),
-  };
-}
+// Application completeness now comes from assessApplication in @neram/database, the
+// one rule the Nexus students sheet and the student's own form also read.
+//
+// What it replaced, and why: this route used to call a student Complete whenever a
+// lead_profiles row carried a submitted / reviewed / enrolled status. No field was
+// ever checked. But every write path stamps a status at insert time (direct
+// enrolment writes 'enrolled', the Admin dialog writes 'enrolled', the student's own
+// complete-profile page writes 'enrolled'), so the status recorded how the row was
+// born, not what was in it. A row with one value filled showed a green tick.
+//
+// EXPECT A VISIBLE SHIFT. On production data at the time of the change, of the 50
+// non-alumni students who had a form and all read "Complete", 12 stay Complete and
+// 38 become Partly filled, mostly for a missing class or exam year. Nobody's data
+// changed; the chip stopped overstating. That is why there are three states rather
+// than a green/orange pair: "Partly filled" must not read as a regression, and
+// "Not started" is the list actually worth chasing.
 
 // GET /api/students - List enrolled students for the academic-year working hub.
 // Population is users-based (so profile-less actives and past-year graduates appear),
@@ -91,23 +90,50 @@ export async function GET(request: NextRequest) {
       const { data: leads } = await supabase
         .from('lead_profiles')
         .select(
-          'user_id, interest_course, application_number, final_fee, full_payment_discount, discount_amount, source, status, form_step_completed'
+          'user_id, interest_course, application_number, final_fee, full_payment_discount, discount_amount, source, status, form_step_completed, first_name, father_name, date_of_birth, applicant_category, academic_data, target_exam_year, city, state, created_at'
         )
-        .in('user_id', userIds);
-      for (const l of leads || []) leadByUser[l.user_id] = l;
+        .in('user_id', userIds)
+        // Two bugs fixed here at once. Without the deleted_at filter a soft-deleted
+        // application still counted as the student's form. Without the ordering, a
+        // student with several rows got whichever one PostgREST happened to return
+        // last, so the same student could read differently on two page loads.
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+      // Newest first, so the first row seen for a user is the one that counts.
+      for (const l of leads || []) if (!leadByUser[l.user_id]) leadByUser[l.user_id] = l;
     }
 
     // Which of these students currently hold LIVE Nexus access (active enrollment
     // in an active classroom). Used to flag non-graduated past-batch students who
     // lost their enrollment (e.g. during the single-classroom consolidation).
     const accessIds = await getUsersWithActiveNexusAccess(userIds, supabase);
+
+    // Who has already been sent a link asking them to fill the form in, so staff do
+    // not chase the same student twice. One query for the whole cohort. A failure
+    // here must not empty the roster: the column degrades to "not asked" and the
+    // page still loads, because knowing who is on a past batch matters more than
+    // knowing who was chased.
+    let detailRequests: Record<string, any> = {};
+    if (userIds.length) {
+      try {
+        detailRequests = await listLiveDetailRequests(userIds, supabase);
+      } catch (e: any) {
+        console.warn('[students] could not read detail requests:', e?.message);
+      }
+    }
     // Compare code for the past-batch flag: registry current, else the calendar helper
     // (never undefined, so a past-batch row is never mis-read as current).
     const cmpCode = currentBatchCode || currentAcademicYear();
 
     const students = hub.map((s) => {
       const lead = leadByUser[s.id];
-      const app = appStatuses(lead?.status, !!lead);
+      const app = assessApplication({
+        lead: lead || null,
+        // Date of birth and first name live on users as well as on the lead row,
+        // and either satisfies the rule: the student's complete-profile page writes
+        // them to users while the apply wizard writes them to lead_profiles.
+        user: { first_name: s.first_name, name: s.name, date_of_birth: s.date_of_birth },
+      });
 
       // Split the class-provided "Classroom ID" from the personal Gmail.
       const classroom_email =
@@ -159,9 +185,22 @@ export async function GET(request: NextRequest) {
         full_payment_discount: lead?.full_payment_discount ?? null,
         discount_amount: lead?.discount_amount ?? null,
         source: lead?.source || null,
-        application_complete: app.application_complete,
-        application_status: app.application_status,
-        application_missing: app.application_missing,
+        // The three-state answer the chip reads, plus what is short and a sentence
+        // for the tooltip.
+        application_state: app.state,
+        application_missing_fields: app.missing,
+        application_summary: app.summary,
+        application_status: lead?.status || null,
+        // Kept for one release: other screens and saved grid filters still read the
+        // old boolean pair. 'partial' deliberately lands as not-complete-but-started.
+        application_complete: app.state === 'complete',
+        application_missing:
+          app.state === 'complete' ? null : app.state === 'missing' ? 'no_application' : 'incomplete',
+        // Where the ask stands: not_asked / asked / opened / answered.
+        detail_request_progress: detailRequestProgress(detailRequests[s.id]),
+        detail_request_sent_at: detailRequests[s.id]?.sent_at || null,
+        detail_request_opened_at: detailRequests[s.id]?.opened_at || null,
+        detail_request_expires_at: detailRequests[s.id]?.expires_at || null,
       };
     });
 
@@ -182,6 +221,13 @@ export async function GET(request: NextRequest) {
       personalOnlyEnrolled: students.filter((s) => !s.ms_oid && s.has_nexus_access).length,
       // Have Nexus access but have never opened the Nexus app, the ones to chase.
       accessNeverOpened: students.filter((s) => s.has_nexus_access && !s.nexus_first_login_at).length,
+      // Application form state across the visible set, and the subset nobody has
+      // asked yet, which is the number the "Ask them" banner acts on.
+      applicationMissing: students.filter((s) => s.application_state === 'missing').length,
+      applicationPartial: students.filter((s) => s.application_state === 'partial').length,
+      applicationNeverAsked: students.filter(
+        (s) => s.application_state !== 'complete' && s.detail_request_progress === 'not_asked'
+      ).length,
     };
 
     return NextResponse.json({ students, total: students.length, stats });

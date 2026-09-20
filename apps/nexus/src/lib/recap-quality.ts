@@ -8,10 +8,16 @@
  * said, covering the first ten minutes and calling it a class, or producing
  * eleven questions whose answer is always B.
  *
- * Structure: five HARD checks that hold the recap, and four SOFT checks that
- * contribute to a score. Hard checks are the ones where a failure means the
- * recap is not merely mediocre but broken as a gate. A student cannot be asked
- * to pass a checkpoint whose questions are unanswerable.
+ * Structure: five HARD checks that hold the recap, four SOFT checks that make up
+ * a score, and one INFORMATIONAL note that is reported and deliberately not
+ * scored. Hard checks are the ones where a failure means the recap is not merely
+ * mediocre but broken as a gate. A student cannot be asked to pass a checkpoint
+ * whose questions are unanswerable.
+ *
+ * Question depth appears twice for the same reason grounding does, once soft and
+ * once hard. A checkpoint thinner than the configured serve still works, because
+ * its gate is clamped to the bank it has; one under `minQuestionsPerSegment` does
+ * not. Treating the first as the second is what held five production classes.
  *
  * Only the hard checks decide whether it publishes. The score decides whether a
  * PUBLISHED recap is worth a teacher's eye. That split matters: gating on the
@@ -49,6 +55,18 @@ export interface QualityCheck {
   detail: string;
   measured?: number;
   threshold?: number;
+  /**
+   * Reported, but kept out of the score.
+   *
+   * For an observation that says something about the GENERATION without saying
+   * anything is wrong with the OUTPUT. A recap whose segments hold nine
+   * questions of a configured ten is worth being able to see in the report, and
+   * is not worth a teacher's time, so it must not drag the score toward the
+   * "worth a look" bar. Scoring it would also have silently re-weighted every
+   * existing soft check, which is how one more note turns into a different
+   * publishing policy.
+   */
+  informational?: boolean;
 }
 
 export interface QualityVerdict {
@@ -95,7 +113,36 @@ export const THRESHOLDS = {
   groundingWordOverlap: 3,
   minQuestionChars: 25,
   publishScore: 0.8,
+  /**
+   * Fewer usable questions than this and a checkpoint stops being a gate.
+   *
+   * Not the same thing as the configured `questionsToServe`, and the difference
+   * is the whole reason this constant exists. The pipeline clamps every
+   * checkpoint's gate down to the questions it actually holds, so a segment with
+   * nine of a configured ten serves nine and passes at seven: completely
+   * playable. Judging it against the ten the pipeline had already decided not to
+   * use held five production classes for between three and thirty-three days,
+   * every one of them fine, until somebody pressed Publish anyway.
+   *
+   * So thinness below the configured number is a soft note, and only thinness
+   * below THIS is structural. Four questions is the point where a checkpoint
+   * still asks something rather than merely gesturing at the segment.
+   */
+  minQuestionsPerSegment: 4,
 };
+
+/**
+ * The fewest questions a checkpoint may hold and still be worth serving.
+ *
+ * Capped by `questionsToServe`, because a teacher who configured a three
+ * question checkpoint has asked for three and the floor must not quietly
+ * out-rank them: demanding four of a bank that will only ever serve three would
+ * hold every recap in that classroom forever.
+ */
+export function minUsableQuestions(questionsToServe: number): number {
+  const wanted = Number.isFinite(questionsToServe) ? Math.round(questionsToServe) : 0;
+  return Math.max(1, Math.min(wanted || 1, THRESHOLDS.minQuestionsPerSegment));
+}
 
 const STOPWORDS = new Set([
   'the', 'and', 'that', 'this', 'with', 'from', 'have', 'will', 'your', 'they', 'them', 'then',
@@ -115,6 +162,18 @@ function contentWords(text: string): Set<string> {
  * mostly "can everyone hear me" cannot produce a real checkpoint quiz, and
  * finding that out after spending five calls of a shared quota is pure waste.
  */
+/**
+ * How much was actually said, in characters.
+ *
+ * One definition, because two things now judge a class by it: this file's
+ * preflight, which refuses to spend a Gemini call on a near-silent recording,
+ * and recap-autodraft's untaught verdict, which excuses students over one. Two
+ * separate sums would eventually disagree about the same transcript.
+ */
+export function transcriptChars(transcript: TranscriptEntry[]): number {
+  return (transcript || []).reduce((n, e) => n + (e.text?.length || 0), 0);
+}
+
 export function preflight(
   transcript: TranscriptEntry[],
   durationSeconds: number,
@@ -122,7 +181,7 @@ export function preflight(
   if (!transcript || transcript.length === 0) {
     return { ok: false, reason: 'no_transcript', detail: 'No transcript stored for this class.' };
   }
-  const chars = transcript.reduce((n, e) => n + (e.text?.length || 0), 0);
+  const chars = transcriptChars(transcript);
   const duration = durationSeconds || transcript[transcript.length - 1]?.end || 0;
 
   if (transcript.length < PREFLIGHT.minEntries) {
@@ -150,16 +209,33 @@ export function preflight(
 }
 
 export interface ScoreInput {
+  /**
+   * Every segment the planner laid out, including any that will be dropped.
+   *
+   * Coverage and boundaries are judged on this, not on what gets saved. A
+   * checkpoint dropped for having too few questions is still WATCHED, it is just
+   * not quizzed, so the class is still covered end to end. Scoring coverage on
+   * the kept set instead reports a hole that does not exist and holds for it,
+   * which is the same mistake in a different place.
+   */
   sections: GeneratedSection[];
+  /**
+   * The segments that will actually be saved and served. Defaults to `sections`.
+   *
+   * Everything about the QUESTIONS is judged on this, because these are the only
+   * ones a student ever meets.
+   */
+  gradedSections?: GeneratedSection[];
   transcript: TranscriptEntry[];
   durationSeconds: number;
   targetSegmentSeconds: number;
-  /** Questions each segment must be able to serve. */
+  /** Questions each segment is configured to serve. */
   questionsToServe: number;
 }
 
 export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
   const { sections, transcript, targetSegmentSeconds, questionsToServe } = input;
+  const graded = input.gradedSections ?? sections;
   const duration =
     input.durationSeconds || (transcript.length ? transcript[transcript.length - 1].end : 0);
   const checks: QualityCheck[] = [];
@@ -171,10 +247,15 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
     detail: string,
     measured?: number,
     threshold?: number,
-  ) => checks.push({ id, hard, passed, detail, measured, threshold });
+    informational?: boolean,
+  ) => checks.push({ id, hard, passed, detail, measured, threshold, informational });
 
   // ── Hard 1: coverage ──────────────────────────────────────────────────────
   const sorted = [...sections].sort(
+    (a, b) => a.start_timestamp_seconds - b.start_timestamp_seconds,
+  );
+  /** What students actually get quizzed on. Same list unless a caller dropped one. */
+  const sortedGraded = [...graded].sort(
     (a, b) => a.start_timestamp_seconds - b.start_timestamp_seconds,
   );
   const covered = sorted.reduce(
@@ -240,10 +321,17 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
     `${badLengths} segments outside ${THRESHOLDS.minSegmentRatio}x to ${THRESHOLDS.maxSegmentRatio}x the typical ${Math.round(typical)}s segment; starts on time: ${firstOk}; ends on time: ${lastOk}.`,
   );
 
-  // ── Hard 3: enough questions to actually serve a checkpoint ───────────────
+  // ── Question depth, soft, and the floor under it, hard ───────────────────
+  //
+  // Two checks over one measurement, the same shape as grounding above. Being
+  // thinner than the configured serve is a note for a teacher, because the gate
+  // is clamped to the bank and the checkpoint still works. Being under
+  // `minUsableQuestions` is structural: at that point the checkpoint is not
+  // asking a question so much as waving at the segment.
+  const floor = minUsableQuestions(questionsToServe);
   const allText = new Set<string>();
   let duplicateQuestions = 0;
-  const thin = sorted.filter((s) => {
+  const usableCounts = sortedGraded.map((s) => {
     const usable = (s.questions || []).filter((q) => {
       if (!q.question_text || q.question_text.trim().length < THRESHOLDS.minQuestionChars) {
         return false;
@@ -256,29 +344,44 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
       allText.add(key);
       return true;
     });
-    return usable.length < questionsToServe;
-  }).length;
+    return usable.length;
+  });
+
+  const thin = usableCounts.filter((n) => n < questionsToServe).length;
+  const starved = usableCounts.filter((n) => n < floor).length;
 
   add(
     'question_volume',
-    true,
-    thin === 0 && sorted.length > 0,
-    `${thin} of ${sorted.length} segments have fewer than ${questionsToServe} usable questions${
+    false,
+    thin === 0 && sortedGraded.length > 0,
+    `${thin} of ${sortedGraded.length} segments hold fewer than the ${questionsToServe} configured questions${
       duplicateQuestions ? `, ${duplicateQuestions} duplicates dropped` : ''
-    }.`,
+    }. Each serves what it has.`,
+    thin,
+    0,
+    true,
   );
 
-  // ── Hard 4: at least two segments ────────────────────────────────────────
+  add(
+    'question_floor',
+    true,
+    starved === 0 && sortedGraded.length > 0,
+    `${starved} of ${sortedGraded.length} segments hold fewer than ${floor} usable questions, too few to ask anything.`,
+    starved,
+    0,
+  );
+
+  // ── Hard: at least two segments, counted on what survives ────────────────
   add(
     'segment_count',
     true,
-    sorted.length >= 2,
-    `${sorted.length} segments (needs at least 2).`,
-    sorted.length,
+    sortedGraded.length >= 2,
+    `${sortedGraded.length} segments (needs at least 2).`,
+    sortedGraded.length,
     2,
   );
 
-  const questions = sorted.flatMap((s) => s.questions || []);
+  const questions = sortedGraded.flatMap((s) => s.questions || []);
   const total = questions.length || 1;
 
   // ── Soft 1: answer-position balance ──────────────────────────────────────
@@ -317,7 +420,7 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
   // share vocabulary with the transcript of the segment it claims to test.
   let grounded = 0;
   let considered = 0;
-  for (const s of sorted) {
+  for (const s of sortedGraded) {
     const segmentWords = contentWords(
       transcript
         .filter(
@@ -377,7 +480,7 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
     `${duplicateQuestions} duplicate questions across the recap.`,
   );
 
-  const soft = checks.filter((c) => !c.hard);
+  const soft = checks.filter((c) => !c.hard && !c.informational);
   const score = soft.length ? soft.filter((c) => c.passed).length / soft.length : 1;
   const failedHard = checks.filter((c) => c.hard && !c.passed);
   const failedSoft = soft.filter((c) => !c.passed);
@@ -404,7 +507,7 @@ export function scoreRecapGeneration(input: ScoreInput): QualityVerdict {
   const HOLD_BY_CHECK: Record<string, HoldReason> = {
     coverage: 'low_coverage',
     boundaries: 'bad_boundaries',
-    question_volume: 'thin_questions',
+    question_floor: 'thin_questions',
     segment_count: 'bad_boundaries',
     grounding_floor: 'low_quality',
   };

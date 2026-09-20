@@ -47,6 +47,10 @@ export interface EnrolledStudent {
   batch: StudentBatch | null; // classroom section (nexus_batches)
   exam_batch: string | null; // exam-year cohort (users.academic_year)
   academic_year?: string | null; // same value, named after the column
+  /** users.home_language. Missing or null reads as English. */
+  home_language?: string | null;
+  /** users.limited_english: they cannot follow a class taught in English. */
+  limited_english?: boolean | null;
 
   // Classification, two orthogonal axes. See lib/student-stage.ts.
   study_stage: string | null; // nexus_enrollments.current_standard

@@ -167,7 +167,7 @@ export default function ChapterCompletionPanel({ fileId, classroomId, getToken }
 
   useEffect(() => { load(); }, [load]);
 
-  // The shared student list: ranked search, sorts, stage ring filter, the
+  // The shared student list: ranked search, sorts, info ring filter, the
   // status toggle, and paused students hidden. `rows` is what the teacher sees,
   // so select all and the response sheet's prev/next walk the same list.
   const view = useStudentListView<Row, SortKey, Status>({

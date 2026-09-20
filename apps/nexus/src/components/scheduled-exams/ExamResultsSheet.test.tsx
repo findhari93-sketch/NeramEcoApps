@@ -355,3 +355,58 @@ describe('ExamResultsSheet', () => {
     );
   });
 });
+
+/**
+ * 2026-09-17. Students who joined after the covered classes are set aside by
+ * the publish route, so they are in none of the four groups. The sheet says so
+ * in one line, or "16 of 30 sat" on a class of 37 reads as seven lost students.
+ */
+describe('ExamResultsSheet, students the exam was never set for', () => {
+  const withExcused = (excused: Record<string, number> | undefined) => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: { ...PAYLOAD.data, results: { ...PAYLOAD.data.results, excused } },
+      }),
+    })) as never;
+  };
+
+  it('says how many joined after the covered classes and are not part of this exam', async () => {
+    withExcused({ total: 5, new_joiner: 5, catching_up: 0, by_teacher: 0 });
+    open();
+    await waitFor(() => expect(screen.getByTestId('exam-excused-line')).toBeTruthy());
+    expect(screen.getByTestId('exam-excused-line').textContent).toBe(
+      '5 joined after the covered classes and are not part of this exam.',
+    );
+  });
+
+  it('never lists an excused student under any of the four groups', async () => {
+    withExcused({ total: 5, new_joiner: 5, catching_up: 0, by_teacher: 0 });
+    open();
+    await waitFor(() => expect(screen.getByText('Arun')).toBeTruthy());
+    const total = ['exam_day', 'second_sitting', 'still_to_sit', 'absent']
+      .map((b) => Number(screen.getByTestId(`bucket-${b}`).textContent?.match(/\d+/)?.[0] ?? 0))
+      .reduce((a, b) => a + b, 0);
+    expect(total).toBe(PAYLOAD.data.results.rows.length);
+  });
+
+  it('says nothing when nobody is excused, or when an older server sends no count', async () => {
+    withExcused({ total: 0, new_joiner: 0, catching_up: 0, by_teacher: 0 });
+    const first = open();
+    await waitFor(() => expect(screen.getByText('Arun')).toBeTruthy());
+    expect(screen.queryByTestId('exam-excused-line')).toBeNull();
+    first.unmount();
+
+    withExcused(undefined);
+    open();
+    await waitFor(() => expect(screen.getByText('Arun')).toBeTruthy());
+    expect(screen.queryByTestId('exam-excused-line')).toBeNull();
+  });
+
+  it('adds no disabled control while saying it', async () => {
+    withExcused({ total: 2, new_joiner: 1, catching_up: 1, by_teacher: 0 });
+    const { container } = open();
+    await waitFor(() => expect(screen.getByTestId('exam-excused-line')).toBeTruthy());
+    expect(container.querySelectorAll('[disabled], [aria-disabled="true"]')).toHaveLength(0);
+  });
+});

@@ -50,7 +50,13 @@ export default function InspirationItemView({ mode, itemId }: { mode: Inspiratio
   const [zoom, setZoom] = useState(false);
   const [practising, setPractising] = useState(false);
   const [added, setAdded] = useState(false);
-  const { data, error, isLoading, mutate } = useAuthSWR<ItemResponse>(`/api/inspiration/items/${itemId}`);
+  // dedupingInterval 0 for the same reason the lists carry it: this answer holds
+  // whether the student has saved the drawing, so a drawing opened again seconds
+  // after its heart was tapped in the grid must not be answered by the request
+  // that ran before the tap.
+  const { data, error, isLoading, mutate } = useAuthSWR<ItemResponse>(`/api/inspiration/items/${itemId}`, {
+    dedupingInterval: 0,
+  });
 
   useEffect(() => setBackHref(backHrefFor(mode)), [mode]);
   useEffect(() => {

@@ -4,6 +4,7 @@ import { Box, Typography, Chip, Alert } from '@neram/ui';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { Field, SectionCard } from './uiPrimitives';
 import { academicYearFromExamYear } from '../crm/academic-years';
+import { assessApplication } from '@neram/database';
 
 interface ApplicationDetailsPanelProps {
   leadProfile: any;
@@ -28,17 +29,21 @@ function titleCase(v?: string | null): string {
   return v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const COMPLETE_APP_STATUSES = new Set(['submitted', 'under_review', 'approved', 'enrolled', 'partial_payment']);
-
 /**
- * Whether the student completed the basic application form. Mirrors the rule the
- * /api/students route uses for the grid badge: driven by the lead status (a
- * submitted / reviewed / enrolled lead has the basics), not the wizard step counter
- * (direct-enrolled students never touch it). No lead row means they never started.
+ * Whether the student completed the basic application form.
+ *
+ * This used to hold its own copy of the /api/students rule, a set of "complete"
+ * lead statuses, and the two copies could drift. Both now read assessApplication in
+ * @neram/database, which checks the fields rather than the status. The signature is
+ * kept so the existing callers do not change.
+ *
+ * Note it cannot see the users row from here, so a date of birth held only on users
+ * reads as missing in this panel. That makes the banner slightly pessimistic and
+ * never falsely reassuring, which is the right way round for a panel whose job is to
+ * tell staff what still needs collecting.
  */
 export function isApplicationComplete(lead: any): boolean {
-  if (!lead) return false;
-  return !!lead.status && COMPLETE_APP_STATUSES.has(lead.status);
+  return assessApplication({ lead }).state === 'complete';
 }
 
 /**
@@ -48,7 +53,8 @@ export function isApplicationComplete(lead: any): boolean {
  * the student still needs to finish the form. Mounted in the student / alumni drawer.
  */
 export default function ApplicationDetailsPanel({ leadProfile: lead }: ApplicationDetailsPanelProps) {
-  const complete = isApplicationComplete(lead);
+  const assessment = assessApplication({ lead });
+  const complete = assessment.state === 'complete';
   const academic = lead?.academic_data || {};
 
   // academic_data is category-specific; surface the common fields generically.
@@ -63,13 +69,13 @@ export default function ApplicationDetailsPanel({ leadProfile: lead }: Applicati
     <SectionCard title="Application form">
       {complete ? (
         <Alert icon={<CheckCircleOutlineIcon fontSize="inherit" />} severity="success" sx={{ mb: 2, py: 0.25 }}>
-          Application complete. All basic details were submitted.
+          Application complete. Every detail we ask for is on file.
         </Alert>
       ) : (
-        <Alert severity="warning" sx={{ mb: 2, py: 0.25 }}>
+        <Alert severity={lead ? 'warning' : 'info'} sx={{ mb: 2, py: 0.25 }}>
           {lead
-            ? 'Application incomplete. The student started the form but has not filled all the basic details.'
-            : 'No application form. The student never filled the basic application form, so contact details and course are missing.'}
+            ? `Partly filled. ${assessment.summary}`
+            : 'No application form yet. Send the student a link to fill it in, or fill it in for them below.'}
         </Alert>
       )}
 

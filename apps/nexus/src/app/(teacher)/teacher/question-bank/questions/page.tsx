@@ -54,6 +54,7 @@ import QBSearchStatus, { type QBMatchKind } from '@/components/question-bank/QBS
 import PageHeader from '@/components/PageHeader';
 import TeacherFilterBar from '@/components/question-bank/TeacherFilterBar';
 import TagPicker from '@/components/question-bank/TagPicker';
+import { solutionGapMessage, solutionSlotProgress } from '@/lib/qb-image-needs';
 
 function QuestionsListContent() {
   const router = useRouter();
@@ -639,6 +640,11 @@ function QuestionsListContent() {
             const isSelected = selectedIds.has(q.id);
             const isActive = q.is_active && q.status === 'active';
             const hasAnswer = ['answer_keyed', 'complete', 'active'].includes(q.status);
+            // A drawing split into parts owes one image per part, and the
+            // question's own solution_image_url is only a mirror of the first
+            // part that has one, so the three columns below cannot answer this.
+            const solutionGap = solutionGapMessage(q);
+            const solutionParts = solutionSlotProgress(q);
 
             return (
               <Paper
@@ -748,7 +754,14 @@ function QuestionsListContent() {
                         </Tooltip>
                       ) : null}
                       {q.solution_image_url ? (
-                        <Tooltip title="Has image solution" arrow>
+                        <Tooltip
+                          title={
+                            solutionParts.total > 1
+                              ? `Solution images: ${solutionParts.done} of ${solutionParts.total} parts`
+                              : 'Has image solution'
+                          }
+                          arrow
+                        >
                           <ImageOutlinedIcon sx={{ fontSize: 18, color: 'info.main' }} />
                         </Tooltip>
                       ) : null}
@@ -757,7 +770,16 @@ function QuestionsListContent() {
                           <DescriptionOutlinedIcon sx={{ fontSize: 18, color: 'warning.main' }} />
                         </Tooltip>
                       ) : null}
-                      {!q.solution_video_url && !q.solution_image_url && !q.explanation_brief ? (
+                      {/* One warning, not two. A real gap (a maths question or
+                          a drawing part with no image) is amber and says what is
+                          missing; the older "nobody has written anything yet"
+                          case stays quiet for an aptitude question, whose answer
+                          is the reasoning. */}
+                      {solutionGap ? (
+                        <Tooltip title={solutionGap} arrow>
+                          <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: 'warning.main' }} />
+                        </Tooltip>
+                      ) : !q.solution_video_url && !q.solution_image_url && !q.explanation_brief ? (
                         <Tooltip title="No solution" arrow>
                           <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
                         </Tooltip>

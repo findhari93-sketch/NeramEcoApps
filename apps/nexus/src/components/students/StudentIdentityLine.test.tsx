@@ -4,7 +4,7 @@ import StudentIdentityLine from './StudentIdentityLine';
 import * as facts from './StudentStageFactsProvider';
 
 /**
- * The line was left plain in the first two adoption passes of the cohort ring,
+ * The line was left plain in the first two adoption passes of the info ring,
  * on the reasoning that its chip already prints the stage so a ring would state
  * the same fact twice. It does, and that is the point: a chip is a label you
  * read, a ring is a shape you scan, and a teacher looking down a list of thirty
@@ -21,7 +21,9 @@ describe('StudentIdentityLine', () => {
     vi.spyOn(facts, 'useStudentStageFacts').mockReturnValue({
       ready: true,
       factsFor: (id) =>
-        id === 's1' ? { stage: '11th', dormant: false, photo: null, name: null } : null,
+        id === 's1'
+          ? { stage: '11th', dormant: false, photo: null, name: null, language: 'english', limitedEnglish: false }
+          : null,
     });
 
     render(

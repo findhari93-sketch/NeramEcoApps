@@ -61,6 +61,8 @@ export interface TestCardHandlers {
   onAskTeacher?: (t: StudentTest) => void;
   onReview?: (t: StudentTest) => void;
   onCatchUp?: (href: string) => void;
+  /** "Tell your teacher why" on a test they owed and did not sit. */
+  onExplain?: (t: StudentTest) => void;
 }
 
 export default function ClassTestsTab({

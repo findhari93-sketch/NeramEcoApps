@@ -17,6 +17,9 @@ export default function robots(): MetadataRoute.Robots {
           '/sso',
           '/my-enrollment',
           '/enroll',
+          // The student detail link. The URL is itself the credential, so it must
+          // never be crawled, archived or listed anywhere.
+          '/s/',
           // Legacy WordPress paths (old site)
           '/wp-admin/',
           '/wp-content/',

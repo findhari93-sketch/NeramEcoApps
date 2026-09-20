@@ -29,6 +29,7 @@ import ClassReviewForm from '@/components/timetable/ClassReviewForm';
 import { ClassPanel, type PanelAssignment } from '@/components/timetable/class-panel';
 import type { ClassPrepSummaryClient } from '@/components/timetable/PrepGateCard';
 import RsvpReasonDialog, { type RsvpDeclinePayload } from '@/components/timetable/RsvpReasonDialog';
+import AwayBanner from '@/components/timetable/AwayBanner';
 import PreworkReasonDialog, { type PreworkReasonPayload } from '@/components/timetable/PreworkReasonDialog';
 import { preworkStripCopy, preworkDueLabel, formatIstTime, type PreworkState } from '@/lib/prework';
 
@@ -158,6 +159,9 @@ export default function StudentTimetable() {
     classId: string;
     classTitle: string;
     classSubtitle?: string;
+    /** YYYY-MM-DD, the start of an away window declared from this class. */
+    classDate?: string;
+    classroomId?: string | null;
   } | null>(null);
   const [rsvpSubmitting, setRsvpSubmitting] = useState(false);
   // Below xl there is no rail, so the classroom filter and the missed-classes
@@ -475,13 +479,63 @@ export default function StudentTimetable() {
       classId: cls.id,
       classTitle: cls.title,
       classSubtitle: `${formatDayLabel(cls.scheduled_date)}, ${formatTime(cls.start_time)}`,
+      classDate: cls.scheduled_date,
+      classroomId: cls.classroom?.id || activeClassroom?.id || null,
     });
+  };
+
+  /**
+   * "I will be away for a while", which is a different thing from declining one
+   * class and goes to a different table.
+   *
+   * No per-class RSVP row is written alongside it. The window explains every
+   * class it covers on its own, and writing both would leave two records of one
+   * decision that a later edit could put out of step.
+   */
+  const submitAwayWindow = async (payload: RsvpDeclinePayload) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/student/away-windows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          starts_on: rsvpReasonTarget?.classDate,
+          ends_on: payload.endsOn,
+          reason_code: payload.reasonCode,
+          reason_note: payload.note || null,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSnackbar({
+          open: true,
+          message: body?.error || 'Could not save your away dates',
+          severity: 'error',
+        });
+        return;
+      }
+      setSnackbar({
+        open: true,
+        message: `Saved. ${body?.window?.summary || 'Your teacher has been told.'}`,
+        severity: 'success',
+      });
+      // The schedule carries the banner's window, so it has to be refetched
+      // rather than left to the cached range.
+      fetchSchedule(true);
+    } catch {
+      setSnackbar({ open: true, message: 'Could not save your away dates', severity: 'error' });
+    }
   };
 
   const handleRsvpReasonSubmit = async (payload: RsvpDeclinePayload) => {
     if (!rsvpReasonTarget) return;
     setRsvpSubmitting(true);
-    await submitRsvp(rsvpReasonTarget.classId, 'not_attending', payload);
+    if (payload.scope === 'window') {
+      await submitAwayWindow(payload);
+    } else {
+      await submitRsvp(rsvpReasonTarget.classId, 'not_attending', payload);
+    }
     setRsvpSubmitting(false);
     setRsvpReasonTarget(null);
   };
@@ -923,6 +977,12 @@ export default function StudentTimetable() {
 
   return (
     <Box>
+      {/*
+        Above the calendar, not inside it: while a window is live it is the most
+        important thing on this screen, and it is the only place the student can
+        take the declaration back.
+      */}
+      <AwayBanner onChanged={() => fetchSchedule(true)} />
       <CalendarShell
         state={viewState}
         railSubtitle="You are attending everything unless you say otherwise."
@@ -1029,6 +1089,7 @@ export default function StudentTimetable() {
         onClose={() => setRsvpReasonTarget(null)}
         classTitle={rsvpReasonTarget?.classTitle || ''}
         classSubtitle={rsvpReasonTarget?.classSubtitle}
+        classDate={rsvpReasonTarget?.classDate}
         onSubmit={handleRsvpReasonSubmit}
         submitting={rsvpSubmitting}
       />

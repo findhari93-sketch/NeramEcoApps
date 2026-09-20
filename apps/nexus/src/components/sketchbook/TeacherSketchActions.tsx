@@ -25,14 +25,15 @@ interface TeacherSketchActionsProps {
   sketchId: string;
   reaction: SketchbookReaction | null;
   featured: SketchbookFeatureFact[];
-  selfNote: string | null;
+  /** Whose work it is, so the confirm sheet can say who gets told. */
+  studentName?: string | null;
   /** Called after any change so the parent can refetch. */
   onChanged: (change: { reaction?: SketchbookReaction | null; featured?: SketchbookFeatureFact[] }) => void;
   /** Compact: the comment box starts collapsed behind a "Comment" toggle (used inside the flip card). */
   compact?: boolean;
 }
 
-export default function TeacherSketchActions({ sketchId, reaction, featured, selfNote, onChanged, compact = false }: TeacherSketchActionsProps) {
+export default function TeacherSketchActions({ sketchId, reaction, featured, studentName, onChanged, compact = false }: TeacherSketchActionsProps) {
   const { getToken } = useNexusAuthContext();
   const [busy, setBusy] = useState<string | null>(null);
   const [comment, setComment] = useState('');
@@ -88,7 +89,7 @@ export default function TeacherSketchActions({ sketchId, reaction, featured, sel
           fullWidth size="small" sx={{ mt: 1.5 }} inputProps={{ 'aria-label': 'Comment' }} />
       )}
       {error && <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>{error}</Typography>}
-      <FeatureSheet open={featureOpen} onClose={() => setFeatureOpen(false)} sketchId={sketchId} defaultCaption={selfNote || ''}
+      <FeatureSheet open={featureOpen} onClose={() => setFeatureOpen(false)} sketchId={sketchId} studentName={studentName}
         onFeatured={(fact) => onChanged({ featured: [fact] })} />
     </Box>
   );

@@ -204,4 +204,47 @@ describe('resolveTrackTranscript', () => {
     });
     expect(transcript.source).toBe('upload');
   });
+
+  /**
+   * Microsoft Stream cannot transcribe Tamil, and a Teams class taught in Tamil
+   * gets the same English-sounding nonsense. Borrowing either would cut a Tamil
+   * recording into checkpoints about words the tutor never said, so a Tamil
+   * track only takes a transcript a teacher (or Nexus's AI) wrote in English.
+   */
+  it('does not borrow a Microsoft transcript for a Tamil track', async () => {
+    db.tables = {
+      nexus_class_recap_transcripts: [],
+      nexus_scheduled_classes: [
+        { id: 'class-1', recording_url: RECORDING_URL, scheduled_date: '2026-07-20', start_time: '19:00:00' },
+      ],
+      nexus_class_transcripts: [{ class_id: 'class-1', vtt: VTT, status: 'ok' }],
+    };
+    fetchTranscriptFromSharePoint.mockResolvedValue(VTT);
+
+    const transcript = await resolveTrackTranscript({
+      trackId: 'track-1',
+      recordingUrl: RECORDING_URL,
+      recordingFileName: TEAMS_NAME,
+      msToken: 'token',
+      videoSource: 'sharepoint',
+      language: 'ta',
+    });
+
+    expect(transcript).toEqual({ entries: [], source: 'none', sharepointError: 'NO_TRANSCRIPT' });
+    expect(fetchTranscriptFromSharePoint).not.toHaveBeenCalled();
+    expect(db.upserts).toEqual([]);
+  });
+
+  it('still serves a Tamil track the transcript already stored for it', async () => {
+    db.tables = {
+      nexus_class_recap_transcripts: [{ recap_id: 'track-1', vtt: VTT, status: 'ok' }],
+    };
+    const transcript = await resolveTrackTranscript({
+      trackId: 'track-1',
+      recordingUrl: RECORDING_URL,
+      videoSource: 'sharepoint',
+      language: 'ta',
+    });
+    expect(transcript.source).toBe('stored');
+  });
 });

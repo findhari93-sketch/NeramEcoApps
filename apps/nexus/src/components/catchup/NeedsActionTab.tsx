@@ -111,7 +111,7 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
     [data.students],
   );
 
-  // The shared student list: ranked name search, the stage ring filter, and
+  // The shared student list: ranked name search, the info ring filter, and
   // paused students hidden. The bucket pills stay this screen's own filter.
   const inBucket = useCallback((s: Row) => bucketFilter === null || s.bucket === bucketFilter, [bucketFilter]);
   const listView = useStudentListView<Row, 'suggested'>({

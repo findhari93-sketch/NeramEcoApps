@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useMemo } from 'react';
 import { useAuthSWR } from '@/lib/nexus-swr';
+import { STAGE_FACTS_KEY } from '@/lib/stage-facts-cache';
+import { languageKeyOf, type LanguageKey } from '@/lib/student-language';
 import { stageKeyOf, type StageKey } from '@/lib/student-stage';
 
 /**
@@ -38,6 +40,10 @@ export interface StudentStageFacts {
   photo: string | null;
   /** users.name, so a screen holding only an id still shows the real name. */
   name: string | null;
+  /** users.home_language, already resolved. NULL and unknown words read as English. */
+  language: LanguageKey;
+  /** users.limited_english. Flips the avatar mark to its outlined form. */
+  limitedEnglish: boolean;
 }
 
 interface StageFactsContextValue {
@@ -59,7 +65,14 @@ export function useStudentStageFacts(): StageFactsContextValue {
 interface Payload {
   facts: Record<
     string,
-    { stage: string | null; dormant: boolean; photo: string | null; name: string | null }
+    {
+      stage: string | null;
+      dormant: boolean;
+      photo: string | null;
+      name: string | null;
+      language?: string | null;
+      limitedEnglish?: boolean;
+    }
   >;
 }
 
@@ -72,7 +85,7 @@ export default function StudentStageFactsProvider({ children }: { children: Reac
    * a function invocation each time a teacher alt-tabs back. An hour of
    * deduping means walking between eight screens costs one request in total.
    */
-  const { data } = useAuthSWR<Payload>('/api/students/stage-facts', {
+  const { data } = useAuthSWR<Payload>(STAGE_FACTS_KEY, {
     revalidateOnFocus: false,
     revalidateIfStale: false,
     dedupingInterval: 3_600_000,
@@ -96,6 +109,9 @@ export default function StudentStageFactsProvider({ children }: { children: Reac
         dormant: !!row.dormant,
         photo: row.photo ?? null,
         name: row.name ?? null,
+        // Anything unrecorded reads as English, which is what the UI shows.
+        language: languageKeyOf(row.language),
+        limitedEnglish: row.limitedEnglish === true,
       });
     }
 

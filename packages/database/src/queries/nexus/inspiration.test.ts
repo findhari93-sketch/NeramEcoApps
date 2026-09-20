@@ -3,10 +3,12 @@ import {
   getDrawingSharingOptOut,
   getInspirationItem,
   getInspirationItemsForSubmission,
+  hideFeaturedSubmission,
   listInspirationAttempts,
   searchInspiration,
   setDrawingSharingOptOut,
   setInspirationSave,
+  showFeaturedSubmission,
   toSearchArgs,
   type InspirationRow,
 } from './inspiration';
@@ -134,6 +136,62 @@ describe('setDrawingSharingOptOut', () => {
   it('throws the database error', async () => {
     const { client } = fakeClient({ data: null, error: new Error('boom') });
     await expect(setDrawingSharingOptOut('u1', false, client)).rejects.toThrow('boom');
+  });
+});
+
+
+/**
+ * Putting a featured drawing on the shelf, and taking it back off.
+ *
+ * `is_visible` is a generated column, `curation='shown' OR (curation='auto' AND
+ * auto_eligible)`, so these two functions are the whole mechanism: there is no
+ * separate visibility flag to set and no second copy of the image to make.
+ */
+describe('showFeaturedSubmission', () => {
+  it('shows and pins the drawing the student made, stamping who did it', () => {
+    const { client, calls } = fakeClient({ data: { id: 'item-1', image_url: 'https://x/1.jpg', thumbnail_url: null, image_aspect: null }, error: null });
+    return showFeaturedSubmission('sub-1', 'teacher-1', undefined, client).then((item) => {
+      expect(item?.id).toBe('item-1');
+      const update = calls.find(([m]) => m === 'update')![1][0] as Record<string, unknown>;
+      expect(update.curation).toBe('shown');
+      expect(update.is_featured).toBe(true);
+      expect(update.curated_by).toBe('teacher-1');
+      expect(update.curated_at).toEqual(expect.any(String));
+      // Never the teacher's corrected overlay: that is a different drawing and
+      // it is not the one that was praised.
+      expect(calls).toContainEqual(['eq', ['source_kind', 'submission_original']]);
+      expect(calls).toContainEqual(['eq', ['source_submission_id', 'sub-1']]);
+    });
+  });
+
+  it('titles an untitled drawing, and only an untitled one', () => {
+    const { client, calls } = fakeClient({ data: { id: 'item-1', image_url: 'https://x/1.jpg', thumbnail_url: null, image_aspect: null }, error: null });
+    return showFeaturedSubmission('sub-1', 'teacher-1', 'Sketchbook drawing', client).then(() => {
+      const titleWrite = calls.filter(([m, args]) => m === 'update' && (args[0] as any).title_override);
+      expect(titleWrite).toHaveLength(1);
+      // The `.is(null)` guard is what stops it overwriting a teacher's wording.
+      expect(calls).toContainEqual(['is', ['title_override', null]]);
+    });
+  });
+
+  it('resolves null when the sync never made an item, so a feature that posted is not failed', () => {
+    const { client } = fakeClient({ data: null, error: null });
+    return expect(showFeaturedSubmission('sub-1', 'teacher-1', 'Sketchbook drawing', client)).resolves.toBeNull();
+  });
+});
+
+describe('hideFeaturedSubmission', () => {
+  it('returns the drawing to the automatic rule rather than hiding it', () => {
+    const { client, calls } = fakeClient({ data: null, error: null });
+    return hideFeaturedSubmission('sub-1', 'teacher-1', client).then(() => {
+      const update = calls.find(([m]) => m === 'update')![1][0] as Record<string, unknown>;
+      // 'auto' and never 'hidden'. A sketch is invisible under the automatic
+      // rule anyway, while an assignment drawing rated four stars or more goes
+      // back to being shown by the rule that put it there in the first place.
+      // 'hidden' would suppress that drawing for good, which nobody asked for.
+      expect(update.curation).toBe('auto');
+      expect(update.is_featured).toBe(false);
+    });
   });
 });
 

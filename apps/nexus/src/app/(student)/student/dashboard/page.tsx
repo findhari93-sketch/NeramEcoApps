@@ -36,6 +36,7 @@ import ExamCountdown from '@/components/ExamCountdown';
 import type { ExamCountdownTarget } from '@/lib/exam-countdown';
 import type { NexusFoundationChapterWithProgress } from '@neram/database/types';
 import SketchbookHomeCard from '@/components/sketchbook/SketchbookHomeCard';
+import AwayBanner from '@/components/timetable/AwayBanner';
 
 interface UpcomingClass {
   id: string;
@@ -245,6 +246,12 @@ export default function StudentDashboard() {
 
   return (
     <Box>
+      {/*
+        Above the greeting, because while a window is live it changes what every
+        other card on this page means. It renders nothing on all the other days.
+      */}
+      <AwayBanner />
+
       {/* ── Compact Greeting ── */}
       <Box
         sx={{

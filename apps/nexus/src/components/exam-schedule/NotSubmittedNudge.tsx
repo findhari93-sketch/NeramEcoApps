@@ -100,7 +100,7 @@ export default function NotSubmittedNudge({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 2 }}>
           {students.map((s) => (
             <Box key={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-              <StudentAvatar userId={s.id} name={s.name} size={24} />
+              <StudentAvatar userId={s.id} name={s.name} size={28} />
               <Typography variant="body2" noWrap>
                 {s.name}
               </Typography>

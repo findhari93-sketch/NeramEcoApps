@@ -10,7 +10,7 @@ import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
-import { questionImageSlots, questionMissingSolutionImage } from '@/lib/qb-image-needs';
+import { questionImageSlots, solutionGapMessage } from '@/lib/qb-image-needs';
 import MathText from '@/components/common/MathText';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
 import ChecklistIcon from '@mui/icons-material/Checklist';
@@ -73,7 +73,9 @@ export default function PaperQuestionRow({
   const wantedSlots = questionImageSlots(question).filter((s) => s.kind === 'figure' && s.expected);
   const imageState: 'none' | 'complete' | 'missing' =
     wantedSlots.length === 0 ? 'none' : wantedSlots.every((s) => s.filled) ? 'complete' : 'missing';
-  const solutionMissing = questionMissingSolutionImage(question);
+  // The glyph and its sentence come from one place, so the row cannot tell a
+  // teacher that "maths questions need one" about a drawing.
+  const solutionGap = solutionGapMessage(question);
 
   const handleRowClick = (e: React.MouseEvent) => {
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -227,12 +229,12 @@ export default function PaperQuestionRow({
           </Tooltip>
         )}
 
-        {/* A maths question with no worked solution. Its own glyph rather than
-            folded into the figure warning above: they are two different jobs,
-            and one amber triangle meaning either is a triangle you stop
-            reading. */}
-        {solutionMissing ? (
-          <Tooltip title="No solution image yet, and maths questions need one" arrow>
+        {/* A question with no worked solution: a maths one, or a drawing with a
+            part still unanswered. Its own glyph rather than folded into the
+            figure warning above: they are two different jobs, and one amber
+            triangle meaning either is a triangle you stop reading. */}
+        {solutionGap ? (
+          <Tooltip title={solutionGap} arrow>
             <Box sx={{ flexShrink: 0, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <LightbulbOutlinedIcon
                 aria-label="Solution image missing"

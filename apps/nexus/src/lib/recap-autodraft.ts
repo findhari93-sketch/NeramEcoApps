@@ -52,10 +52,17 @@ import {
   type GeneratedRecapSection,
   type NexusClassRecap,
 } from '@neram/database';
-import { generateSectionsAndQuestions } from './ai-generate';
+import { generateSectionsAndQuestions, type GeneratedSection } from './ai-generate';
 import { readStoredTranscript } from './transcript-resolver';
-import { preflight, scoreRecapGeneration } from './recap-quality';
+import {
+  minUsableQuestions,
+  preflight,
+  scoreRecapGeneration,
+  transcriptChars,
+} from './recap-quality';
 import { readRecapDefaults, questionsToPass } from './recap-defaults';
+import { classEndMs } from './class-share-model';
+import { excuseClassObligations } from './class-not-taught';
 import { sendNudge } from './nudge-delivery';
 
 /**
@@ -102,7 +109,18 @@ export const STALLED_DRAFT_HOURS = 24;
 export const MAX_GENERATION_ATTEMPTS = 4;
 
 const CLASS_COLUMNS =
-  'id, classroom_id, title, scheduled_date, start_time, recording_url, youtube_url';
+  'id, classroom_id, title, scheduled_date, start_time, end_time, recording_url, youtube_url';
+
+/**
+ * Minutes after a class ends before the sweep will look at it.
+ *
+ * The same figure `sync-attendance` waits before asking Graph for a report, and
+ * for the same reason: Teams is still closing the session off. Measured on
+ * production the stored transcript lands 20 to 21 minutes after the last word,
+ * on every one of the last nineteen classes, so this is the earliest honest
+ * moment rather than a guess.
+ */
+export const END_GRACE_MINUTES = 20;
 
 export interface AutodraftCandidate {
   id: string;
@@ -139,6 +157,12 @@ export type AutodraftOutcome =
       score?: number;
       /** Published, but a soft check failed. Live to students, and worth a look. */
       flagged?: boolean;
+      /**
+       * The recording taught nothing, so no recap was made and everyone who
+       * missed the class has been excused. `ok` because the sweep did exactly
+       * the right thing: this is not a failure and nobody needs to hear about it.
+       */
+      notApplicable?: boolean;
       /** Questions on the class test built alongside it. Null when held. */
       classTestQuestions?: number | null;
     }
@@ -173,6 +197,48 @@ export function isRateLimited(message: string): boolean {
 }
 
 /**
+ * The spend ceiling in `@neram/ai` saying no, which is not this class's fault.
+ *
+ * `checkBudget` throws `AiBlockedError` when the monthly cap, the daily cap or
+ * the feature's own call cap is reached. Its message mentions none of the words
+ * `isRateLimited` looks for, so without this a budget ceiling would hold the
+ * recap, burn one of its four attempts and alert every teacher, over an
+ * accounting limit that resets by itself. It matters more now that the sweep
+ * runs every fifteen minutes after class rather than twice a night.
+ *
+ * Matched on `name` rather than `instanceof` because the error crosses a package
+ * boundary, and a second copy of the class in the graph would make `instanceof`
+ * quietly false.
+ */
+export function isAiBlocked(err: unknown): boolean {
+  return (err as { name?: string } | null)?.name === 'AiBlockedError';
+}
+
+/**
+ * Checkpoints too thin to gate anything, removed so the rest can go live.
+ *
+ * A checkpoint under `minUsableQuestions` cannot ask a student anything, but the
+ * segment behind it is still watched: dropping it costs a quiz, holding the
+ * recap costs the student the whole class. Five production recaps were held over
+ * exactly this, one of them for 33 days, and every one of them was otherwise
+ * fine.
+ *
+ * Returns the input untouched when dropping would leave fewer than
+ * MIN_USABLE_SECTIONS. That case is a generation that mostly failed rather than
+ * one weak segment, and the recap is going to be held either way, so the
+ * checkpoints are kept where a teacher can see and rescue them instead of being
+ * thrown away.
+ */
+export function dropStarvedSections<T extends { questions?: unknown[] | null }>(
+  sections: T[],
+  questionsToServe: number,
+): T[] {
+  const floor = minUsableQuestions(questionsToServe);
+  const kept = sections.filter((s) => (s.questions || []).length >= floor);
+  return kept.length >= MIN_USABLE_SECTIONS ? kept : sections;
+}
+
+/**
  * A checkpoint the gated player could not run.
  *
  * Same rule the teacher's own save path enforces in
@@ -188,6 +254,29 @@ export function isUsableSection(s: GeneratedRecapSection): boolean {
     s.end_timestamp_seconds > s.start_timestamp_seconds &&
     (s.questions || []).length > 0
   );
+}
+
+/**
+ * Has this class finished, and had its grace period?
+ *
+ * Time, not the `status` column: nothing in this stack ever flips a class to
+ * 'completed'. That transition was meant to come from a Teams sync which lags or
+ * never runs, so `resolveClassState` treats the clock as the honest signal and
+ * so does this.
+ *
+ * A class with no `end_time` at all falls back to the old date rule rather than
+ * being skipped, because a missing column is a data gap and must not quietly
+ * cost that class its recap forever.
+ */
+function hasSettled(
+  cls: { scheduled_date: string; end_time?: string | null },
+  settledBefore: number,
+  today: string,
+): boolean {
+  if (!cls.end_time) return cls.scheduled_date < today;
+  const endMs = classEndMs(cls.scheduled_date, cls.end_time);
+  if (Number.isNaN(endMs)) return cls.scheduled_date < today;
+  return endMs < settledBefore;
 }
 
 /**
@@ -231,7 +320,15 @@ export async function findAutodraftCandidates(
     // thing we were told about.
     query = query.in('id', only);
   } else {
-    query = query.lt('scheduled_date', istToday());
+    // Today INCLUDED, then filtered by end time below.
+    //
+    // This used to be `.lt`, which meant a class finishing at 20:30 IST was
+    // invisible to the sweep until the following day, so every recap waited for
+    // the 06:00 run: nine and a half hours after a transcript that is reliably
+    // stored twenty minutes after the last word. Excluding today by date was
+    // standing in for "the class has not finished yet", and the clock says that
+    // properly.
+    query = query.lte('scheduled_date', istToday());
   }
 
   const { data: classes, error } = await query
@@ -275,9 +372,13 @@ export async function findAutodraftCandidates(
     (recaps || []).map((r: any) => r.id),
   );
 
+  const settledBefore = Date.now() - END_GRACE_MINUTES * 60_000;
+  const today = istToday();
+
   const eligible: AutodraftCandidate[] = [];
   for (const cls of rows) {
     if (!hasTranscript.has(cls.id)) continue;
+    if (!only && !hasSettled(cls, settledBefore, today)) continue;
 
     const recap = recapByClass.get(cls.id);
     let repair = false;
@@ -310,7 +411,40 @@ export async function findAutodraftCandidates(
         (recap.status === 'published' ||
           (!!recap.generated_at && Date.parse(recap.generated_at) < stalledBefore));
 
-      if (!repair) {
+      // Nothing was taught on this recording, and that verdict is final.
+      //
+      // MUST come before every other branch here. The not_applicable path
+      // returns before replaceRecapSections, so `generated_at` is still null
+      // and `status` is still 'draft', which is exactly the shape of an
+      // unstarted recap: without this line the sweep would pick the class up
+      // again on its next pass, spend Gemini calls reaching the same verdict,
+      // and re-excuse students a teacher had deliberately restored. Every
+      // fifteen minutes, forever.
+      //
+      // Re-running it would also be pointless. The transcript cannot change,
+      // so a second look at the same recording reaches the same answer.
+      if (recap.readiness === 'not_applicable') continue;
+
+      // Held by the quality bar, and nothing will ever come back for it.
+      //
+      // `generated_at` below means "a teacher has something here, leave it
+      // alone", which is right for a draft somebody is working on and wrong for
+      // a recap the machine held: that one has no owner, and its only exit was a
+      // human noticing the review queue and pressing Publish anyway. Nobody was
+      // noticing. On production this left five classes unpublished, one of them
+      // for 33 days, every one of which turned out to be fine.
+      //
+      // Retried on the same terms as any other draft: never past the attempts
+      // cap, never over student work, and never before the stall window, so a
+      // tutor who is mid-edit on a held recap is not overwritten under them.
+      const heldAndAbandoned =
+        recap.readiness === 'held' &&
+        recap.status !== 'published' &&
+        !hasStudentWork &&
+        !!recap.generated_at &&
+        Date.parse(recap.generated_at) < stalledBefore;
+
+      if (!repair && !heldAndAbandoned) {
         // Anything with content, or on its way to being published, is a
         // teacher's work and is left alone.
         if (recap.generated_at) continue;
@@ -410,10 +544,121 @@ async function unpublishForRepair(supabase: any, recapId: string): Promise<void>
 }
 
 /**
+ * Too little speech for a class to have happened in it.
+ *
+ * Measured, not guessed. Across every class on production with a stored
+ * transcript, counting the characters actually spoken:
+ *
+ *   2026-09-18, the postponement announcement      2,167
+ *   2026-08-19, the thinnest class ever taught    24,811
+ *   2026-09-07                                    25,440
+ *   every other class                    29,000 to 60,000
+ *
+ * An eleven-fold gap with nothing in between. This floor sits 3.7x above the
+ * announcement and 3.1x below the thinnest real class, so it takes a very large
+ * change in how classes are run before it means anything different.
+ */
+export const NOT_TAUGHT_MAX_CHARS = 8000;
+
+/**
+ * Did this recording teach anything at all?
+ *
+ * The question count is the GATE, and it is never optional. Fewer questions in
+ * the whole class than a single checkpoint would have served. Measured on real
+ * classes the two populations are nowhere near each other: the nine taught
+ * classes between 2026-08-21 and 2026-09-15 produced 28 to 90 questions each,
+ * the postponement produced five, and the gate serves ten. This is what stops
+ * one mislabelled segment, or one short recording, from cancelling a class that
+ * was really taught.
+ *
+ * Past that gate, either of two independent signals is enough, because each one
+ * alone fails in a different direction:
+ *
+ *   - The model's own verdict. It already reasons about this to obey rule 8
+ *     ("greetings, waiting for students, an audio check, timetable admin"), so
+ *     `taught` costs no extra call. But it is one model's opinion, it defaults
+ *     to true when absent, and on 2026-09-18 the model broke rule 8 outright by
+ *     writing five questions about a postponement announcement. Requiring it
+ *     would have meant the sweep held that class again and spent three more of
+ *     its four attempts reaching the same wrong answer.
+ *   - How much was said. Deterministic, needs nobody's opinion, and separates
+ *     the two populations by eleven times (see NOT_TAUGHT_MAX_CHARS). But a
+ *     transcript can also be short because transcription broke halfway, which is
+ *     a data gap rather than a decision, so on its own it would eventually
+ *     cancel a class that really happened.
+ *
+ * Neither can fire without the question gate, and the gate cannot fire without
+ * one of them. This verdict excuses students, so it is the one place in this
+ * file where a false positive costs more than a false negative.
+ */
+export function isNothingTaught(
+  sections: GeneratedSection[],
+  questionsToServe: number,
+  transcriptChars: number,
+): boolean {
+  if (sections.length === 0) return false;
+
+  const total = sections.reduce((n, s) => n + (s.questions || []).length, 0);
+  if (total >= Math.max(1, questionsToServe)) return false;
+
+  const modelSaysUntaught = sections.every((s) => s.taught === false);
+  // Zero means "we were not told", not "nobody spoke", and an unknown must
+  // never be enough to excuse a class.
+  const tooLittleSpeech = transcriptChars > 0 && transcriptChars < NOT_TAUGHT_MAX_CHARS;
+
+  return modelSaysUntaught || tooLittleSpeech;
+}
+
+/**
+ * Record that a class taught nothing, and stop asking students to catch up on it.
+ *
+ * `excused_at` rather than `caught_up_at`: catching up is something a student
+ * did, and markCatchupItemCaughtUp is the single writer of that column
+ * (catchup-grant). Excusing is something we did to them, and it is the same
+ * column, and the same undo, as a teacher pressing Excuse on the catch-up
+ * screen. `excused_by` stays NULL, which is what distinguishes a machine
+ * excuse from a person's: nobody signed this one.
+ *
+ * Never throws. A class with no teaching in it is not worth taking the sweep
+ * down over, and the next pass will not revisit it because the readiness is
+ * already set.
+ */
+async function closeUntaughtClass(
+  supabase: any,
+  recapId: string,
+  classId: string,
+): Promise<void> {
+  const detail = 'No class was taught on this recording, so there is no catch-up to do.';
+  try {
+    await setRecapReadiness(
+      recapId,
+      { readiness: 'not_applicable', hold_reason: null, hold_detail: detail },
+      supabase,
+    );
+  } catch (err) {
+    console.error('[recap] could not mark not_applicable:', err instanceof Error ? err.message : err);
+    // Without the readiness the excuse below would be re-applied every sweep,
+    // and a student who was restored by a teacher would be re-excused within
+    // fifteen minutes. Stop here instead.
+    return;
+  }
+
+  try {
+    // `null` is the signature: nobody signed this one. That is the whole
+    // difference between this and a teacher pressing "No class was taught",
+    // which runs the same helper with their own id.
+    await excuseClassObligations(supabase, classId, null);
+  } catch (err) {
+    console.error('[recap] could not excuse an untaught class:', err instanceof Error ? err.message : err);
+  }
+}
+
+/**
  * Park a recap for the tutor. Best-effort: failing to WRITE the hold is not a
  * reason to throw out of a sweep, and the recap stays a draft either way, which
  * is already invisible to students.
  */
+
 async function holdRecap(
   supabase: any,
   recap: { id: string; generation_attempts?: number | null },
@@ -541,17 +786,50 @@ export async function autodraftRecapForClass(
       // meeting subject. The generator writes checkpoints about this topic, so
       // handing it "Class by Ar Hari Babu" costs real quality.
       cls.title || recap.title || 'Class recap',
-      // The nightly sweep is metered separately from a teacher pressing
-      // Generate: same work, very different thing to see on the usage panel.
-      { targetSegmentSeconds, poolPerSegment, durationSeconds, feature: 'nexus.recap-questions-cron' },
+      {
+        targetSegmentSeconds,
+        poolPerSegment,
+        durationSeconds,
+        // Ask again for any checkpoint that came back under what the gate will
+        // serve. Bounded by MAX_CALLS_PER_RECAP, so a four-checkpoint class
+        // spends four calls on the first pass and has six left for this.
+        minPerSegment: questionsToServe,
+        // The nightly sweep is metered separately from a teacher pressing
+        // Generate: same work, very different thing to see on the usage panel.
+        feature: 'nexus.recap-questions-cron',
+      },
     );
 
     const planned = generated.sections || [];
-    const sections = planned.filter(isUsableSection);
-    if (sections.length === 0) {
+    const usable = planned.filter(isUsableSection);
+
+    // Nothing was taught on this recording.
+    //
+    // Checked BEFORE the empty-segments hold, because the two look identical
+    // from the question count and mean opposite things. A class that was
+    // announced as postponed produced five questions about the announcement on
+    // 2026-09-18, was held for low grounding, and left seventeen students owing
+    // a catch-up for a class that never happened.
+    //
+    // Judged AFTER generating rather than on the transcript alone, which would
+    // have saved the two to four calls spent on a class that turns out to be
+    // nothing. The question count is the safety net over both signals and it
+    // does not exist until the model has answered, so a handful of calls is the
+    // cheaper of the two mistakes.
+    if (isNothingTaught(planned, questionsToServe, transcriptChars(transcript))) {
+      await closeUntaughtClass(supabase, recap.id, cls.id);
+      return { ok: true, classId: cls.id, recapId: recap.id, sections: 0, questions: 0, notApplicable: true };
+    }
+
+    if (usable.length === 0) {
       await holdRecap(supabase, recap, 'generation_failed', 'The model returned no usable segments.');
       return { ok: false, classId: cls.id, reason: 'no_sections' };
     }
+
+    // One weak segment must not cost a student the whole class. See
+    // dropStarvedSections: this is a no-op unless a checkpoint is under the
+    // floor, and it declines to drop when too few would survive.
+    const sections = dropStarvedSections(usable, questionsToServe);
 
     // Stamp the gate onto every checkpoint. Both of these were being left NULL,
     // and NULL is not "unset" here: a NULL questions_to_serve serves the whole
@@ -580,6 +858,9 @@ export async function autodraftRecapForClass(
     // coverage passes and question_volume names what actually went wrong.
     const verdict = scoreRecapGeneration({
       sections: planned,
+      // What was actually saved, which is what the question checks must judge.
+      // Coverage and boundaries still read `planned`, for the reason above.
+      gradedSections: sections,
       transcript,
       durationSeconds,
       targetSegmentSeconds,
@@ -652,7 +933,7 @@ export async function autodraftRecapForClass(
     // spend the attempts counter and alert every teacher over a queue that will
     // drain by itself. The row stays 'pending', which the candidate query treats
     // as retryable on the next run.
-    if (isRateLimited(detail)) {
+    if (isRateLimited(detail) || isAiBlocked(err)) {
       return { ok: false, classId: cls.id, reason: 'rate_limited', detail };
     }
 

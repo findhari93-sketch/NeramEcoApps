@@ -15,6 +15,7 @@ import {
   isTracked,
 } from '@neram/database';
 import { canUser } from '@/lib/staff-capabilities';
+import { CLASS_KIND_LECTURE } from '@/lib/class-kind';
 import { BUCKET_ORDER, catchupBucket, emptyTally, tallyBuckets } from '@/lib/catchup-buckets';
 import { catchupStanding } from '@/lib/catchup-standing';
 import { celebrationInfo, latestCelebrationByStudent } from '@/lib/catchup-celebration';
@@ -139,7 +140,14 @@ export async function GET(request: NextRequest) {
       .eq('classroom_id', classroomId)
       .limit(MAX_ITEMS);
 
-    const allItems = (rows || []).filter((r: any) => r.class);
+    // A cancelled class asks nobody for anything. The class list below filters
+    // on exactly this, so without the same rule here one screen showed a
+    // cancelled class gone from "Classes and recaps" while its obligations were
+    // still being counted on "Needs action", which is the same screen telling a
+    // teacher two different things.
+    const allItems = (rows || []).filter(
+      (r: any) => r.class && r.class.status !== 'cancelled',
+    );
 
     // ── Who counts towards this classroom's numbers ─────────────────────────
     //
@@ -200,6 +208,11 @@ export async function GET(request: NextRequest) {
           'id, title, scheduled_date, start_time, recording_url, youtube_url, transcript_url, teams_meeting_id',
         )
         .eq('classroom_id', classroomId)
+        // Taught classes only. A scheduled exam is a timetable row too, and it
+        // has no meeting, no recording and no recap, so it rendered here as a
+        // class permanently owing one: "No recording" above "4 students are
+        // waiting on this", with nothing anybody could press to clear it.
+        .eq('kind', CLASS_KIND_LECTURE)
         .eq('publish_state', 'published')
         .neq('status', 'cancelled')
         .order('scheduled_date', { ascending: true }),

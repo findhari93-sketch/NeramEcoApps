@@ -586,7 +586,7 @@ function StudentProfileDrawerContent({
             initials, which no ESLint selector can see: the rule looks for an
             Avatar, and this was a Box. The gold border rides through sx, which
             StudentStageAvatar merges BEFORE its dormant treatment, so the
-            hall-of-fame look survives and the cohort ring is now the only ring. */}
+            hall-of-fame look survives and the info ring is now the only ring. */}
         <StudentAvatar
           userId={entry.student_id}
           name={entry.student_name}

@@ -1,581 +1,250 @@
 'use client';
 
 /**
- * Reconciling one class: who was expected, who actually joined, who to chase.
+ * One class, read only.
  *
- * Everyone is attending by default, so the interesting number is not "how many
- * came" but "how many were down as coming and did not, without saying why".
- * That is the only group that needs a person to do something, so it is the one
- * the screen leads with.
- *
- * Sending is deliberately a button a teacher presses. The 9 PM cron draws up
- * the list and stops there.
+ * This replaces the Reconcile page, which had two faults beyond its looks: its
+ * GET wrote absence rows, so opening a class changed the data, and its follow up
+ * sent messages outside sendNudge. Correcting the register and chasing students
+ * both live on, one menu item away, on the surfaces that already do them right.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useParams, useSearchParams } from 'next/navigation';
 import {
   Alert,
   Box,
   Button,
-  Checkbox,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Snackbar,
+  IconButton,
+  Menu,
+  MenuItem,
+  Skeleton,
   Stack,
-  Switch,
-  TextField,
   Typography,
-  alpha,
-  useMediaQuery,
-  useTheme,
 } from '@neram/ui';
-import StudentAvatar from '@/components/students/StudentAvatar';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import SyncIcon from '@mui/icons-material/Sync';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { RSVP_REASONS } from '@/lib/rsvp-reasons';
-import { RADIUS, SHADOW, tagSx } from '@/components/timetable/timetable-theme';
-import { formatTime } from '@/components/timetable/date-utils';
-import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
-import { useStudentListView } from '@/components/students/list/useStudentListView';
-import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
+import { useAuthSWR } from '@/lib/nexus-swr';
+import ClassAttendanceDialog from '@/components/timetable/attendance/ClassAttendanceDialog';
+import ClassRegisterList from '@/components/attendance/ClassRegisterList';
+import { formatClassDate, formatClock, formatWallClock, istRange } from '@/components/attendance/attendance-format';
+import type { Insights } from '@/components/timetable/attendance/types';
+import type { RegisterResponse } from '@/app/api/attendance/register/route';
 
-const STUDENT_ACCESSORS: ListAccessors<StudentRow> = { id: (s) => s.id, name: (s) => s.name, email: (s) => s.email };
-const SUGGESTED = [suggestedOrder<StudentRow>('Class order')];
-
-interface StudentRow {
-  id: string;
-  name: string;
-  email: string | null;
-  avatar_url: string | null;
-  present: boolean;
-  joined_at: string | null;
-  late_by_minutes: number | null;
-  absence: {
-    kind: 'no_show' | 'opted_out';
-    reason_code: string | null;
-    reason_note: string | null;
-    followup_sent_at: string | null;
-    caught_up_at: string | null;
-    recording_watched_at: string | null;
-  } | null;
-}
-
-interface FollowupData {
-  class: {
-    id: string;
-    classroom_id: string;
-    title: string;
-    scheduled_date: string;
-    start_time: string;
-    end_time: string;
-  };
-  students: StudentRow[];
-  stats: {
-    rosterSize: number;
-    present: number;
-    lateJoiners: number;
-    optedOut: number;
-    unexplained: number;
-    awaitingFollowup: number;
-  };
-  attachments: { hasRecording: boolean; assignments: Array<{ id: string; title: string }> };
-}
-
-function reasonLabel(code: string | null): string {
-  return RSVP_REASONS.find((r) => r.code === code)?.shortLabel || 'Reason given';
-}
-
-export default function ClassReconciliationPage() {
+function ClassRegisterPageContent() {
   const { classId } = useParams<{ classId: string }>();
-  const router = useRouter();
-  const theme = useTheme();
-  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
-  const { getToken, getTeacherToken } = useNexusAuthContext();
+  const searchParams = useSearchParams();
+  const { activeClassroom, getToken } = useNexusAuthContext();
 
-  const [data, setData] = useState<FollowupData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [message, setMessage] = useState('');
-  const [viaTeams, setViaTeams] = useState(true);
-  const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
+  const view = searchParams.get('view') === 'register' ? 'register' : 'classes';
+  const range = searchParams.get('range') || '30';
+  const highlight = searchParams.get('student');
+  const backHref = `/teacher/attendance?view=${view}&range=${range}`;
 
-  const load = useCallback(async () => {
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(`/api/timetable/${classId}/followup`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.error || 'Could not load this class.');
-        return;
-      }
-      setData(body);
-      setError(null);
-    } catch {
-      setError('Could not load this class.');
-    } finally {
-      setLoading(false);
-    }
-  }, [classId, getToken]);
+  // The same window the teacher was just looking at, not the register API's own
+  // default. Without this, a class between 31 and 90 days old reached from the
+  // 90-day view falls outside the (always 30-day) neighbour list, index comes
+  // back -1, and prev/next silently go dead.
+  const rangeDays = Number(range) || 30;
+  const { from, to } = useMemo(() => istRange(rangeDays), [rangeDays]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
 
-  /**
-   * Pull fresh attendance on demand.
-   *
-   * The token is sent because it is an accelerator, not a requirement: if this
-   * teacher happens to be the meeting's organizer, the server prefers their own
-   * delegated token, which needs no Teams application access policy. Everyone
-   * else is served app-only on the organizer's behalf, which is also how the
-   * nightly cron reads attendance with nobody signed in at all.
-   */
-  const syncTeams = async () => {
-    if (!data) return;
-    setSyncing(true);
-    try {
-      const token = await getTeacherToken();
-      if (!token) {
-        setSnack({ msg: 'Sign in again to read the Teams attendance report.', sev: 'error' });
-        return;
-      }
-      const res = await fetch('/api/timetable/attendance-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          class_id: classId,
-          classroom_id: data.class.classroom_id,
-          action: 'sync_teams',
-        }),
-      });
-      const body = await res.json().catch(() => ({}));
-      setSnack({
-        msg: res.ok ? body.message || 'Synced from Teams.' : body.error || 'Could not sync',
-        sev: res.ok ? 'success' : 'error',
-      });
-      if (res.ok) await load();
-    } catch {
-      setSnack({ msg: 'Could not sync from Teams', sev: 'error' });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const noShows = useMemo(
-    () => (data?.students || []).filter((s) => s.absence?.kind === 'no_show'),
-    [data],
+  const { data, error, isLoading } = useAuthSWR<Insights>(
+    activeClassroom
+      ? `/api/timetable/class-insights?class_id=${classId}&classroom_id=${activeClassroom.id}`
+      : null,
   );
 
-  // The shared student list: ranked search, sort, stage filter, paused students hidden.
-  const studentView = useStudentListView<StudentRow, 'suggested'>({
-    rows: data?.students,
-    accessors: STUDENT_ACCESSORS,
-    extraSorts: SUGGESTED,
-    defaultSort: 'suggested',
-    storageKey: 'nexus:class-attendance:sort',
-  });
+  // The same key the register page uses for this range, so arriving from it
+  // costs nothing and a cold open (a shared link) fetches it once.
+  const { data: register } = useAuthSWR<RegisterResponse>(
+    activeClassroom
+      ? `/api/attendance/register?classroom_id=${activeClassroom.id}&from=${from}&to=${to}`
+      : null,
+  );
 
-  const openDialog = (ids: string[]) => {
-    if (!data) return;
-    setSelected(ids);
-    setMessage(
-      `We missed you in "${data.class.title}". Tap to tell us why, then watch the recording and finish the assignment.`,
-    );
-    setDialogOpen(true);
-  };
+  const neighbours = useMemo(() => {
+    const list = register?.classes || [];
+    const index = list.findIndex((c) => c.id === classId);
+    if (index < 0) return { prev: null as string | null, next: null as string | null, index: -1, total: list.length };
+    return {
+      // Newest first, so "previous" is the class before this one in time.
+      prev: list[index + 1]?.id ?? null,
+      next: list[index - 1]?.id ?? null,
+      index,
+      total: list.length,
+    };
+  }, [register, classId]);
 
-  const send = async () => {
-    setSending(true);
-    try {
-      const token = await getToken();
-      const res = await fetch(`/api/timetable/${classId}/followup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ student_ids: selected, message, teams: viaTeams }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setSnack({
-          msg:
-            body.teamsDelivered > 0
-              ? `Sent to ${body.sent}. ${body.teamsDelivered} reached on Teams.`
-              : `Sent to ${body.sent}, in the app.`,
-          sev: 'success',
-        });
-        setDialogOpen(false);
-        await load();
-      } else {
-        setSnack({ msg: body.error || 'Could not send', sev: 'error' });
-      }
-    } catch {
-      setSnack({ msg: 'Could not send', sev: 'error' });
-    } finally {
-      setSending(false);
-    }
-  };
+  const stepHref = (id: string) => `/teacher/attendance/${id}?view=${view}&range=${range}`;
 
-  if (loading) {
+  if (isLoading || !data) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-        <CircularProgress />
+      <Box>
+        <Skeleton variant="text" width={180} height={32} />
+        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2, mt: 2 }} />
       </Box>
     );
   }
 
-  if (error || !data) {
+  if (error) {
     return (
-      <Box sx={{ p: 3, maxWidth: 860, mx: 'auto' }}>
-        <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>
-      </Box>
+      <Alert severity="error" sx={{ borderRadius: 2 }}>
+        {error.message || 'Could not load this class.'}
+      </Alert>
     );
   }
 
-  const { stats, students } = data;
-
-  const statCard = (label: string, value: number, alarming = false) => (
-    <Box
-      key={label}
-      sx={{
-        flex: '1 1 130px',
-        p: 1.75,
-        borderRadius: RADIUS.card,
-        border: `1px solid ${alarming && value > 0 ? theme.palette.error.main : theme.palette.divider}`,
-        bgcolor: 'background.paper',
-        textAlign: 'center',
-      }}
-    >
-      <Typography
-        variant="h5"
-        sx={{ fontWeight: 800, color: alarming && value > 0 ? 'error.main' : 'text.primary' }}
-      >
-        {value}
-      </Typography>
-      <Typography variant="caption" color="text.secondary">
-        {label}
-      </Typography>
-    </Box>
-  );
+  const cls = data.class;
+  const held = data.summary.held;
+  // Insights.class carries these as optional (the shape is shared with a
+  // stub used where a class has no schedule of its own). A class a teacher is
+  // reading attendance for always has one; the fallback only stops a crash if
+  // that ever stops being true, matching the ?? guard class-insights callers
+  // already use for start_time elsewhere.
+  const scheduledDate = cls.scheduled_date ?? '';
+  const startTime = cls.start_time ?? '00:00:00';
+  const endTime = cls.end_time ?? '00:00:00';
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 900, mx: 'auto', pb: 8 }}>
+    <Box sx={{ pb: 4 }}>
       <Button
+        component={Link}
+        href={backHref}
         startIcon={<ArrowBackIcon />}
-        onClick={() => router.push('/teacher/attendance')}
-        sx={{ textTransform: 'none', minHeight: 44, ml: -1, mb: 1 }}
+        sx={{ textTransform: 'none', minHeight: 44, ml: -1 }}
       >
-        Back to attendance
+        Attendance
       </Button>
 
-      <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ mb: 0.5 }}>
+      <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ mt: 0.5 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.25 }}>
-            {data.class.title}
+          <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.25 }}>
+            {cls.title}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {data.class.scheduled_date}, {formatTime(data.class.start_time)} to{' '}
-            {formatTime(data.class.end_time)}
+            {formatClassDate(scheduledDate)},{' '}
+            {held.source === 'observed'
+              ? `held ${formatClock(held.start)} to ${formatClock(held.end)} (booked to ${formatWallClock(endTime, scheduledDate)})`
+              : `booked ${formatWallClock(startTime, scheduledDate)} to ${formatWallClock(endTime, scheduledDate)}`}
           </Typography>
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<SyncIcon />}
-          onClick={syncTeams}
-          disabled={syncing}
-          sx={{ textTransform: 'none', minHeight: 44, whiteSpace: 'nowrap' }}
+        <IconButton
+          aria-label="More about this class"
+          onClick={(e) => setMenuAnchor(e.currentTarget)}
+          sx={{ width: 44, height: 44 }}
         >
-          {syncing ? 'Syncing...' : 'Sync from Teams'}
-        </Button>
+          <MoreVertIcon />
+        </IconButton>
       </Stack>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Teams marks who joined. Everyone is attending by default, so reconcile the gaps.
-      </Typography>
-
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
-        {statCard('Joined', stats.present)}
-        {statCard('Late', stats.lateJoiners)}
-        {statCard('Told you first', stats.optedOut)}
-        {statCard('No reason given', stats.unexplained, true)}
-      </Stack>
-
-      {stats.awaitingFollowup > 0 && (
-        <Box
-          sx={{
-            p: 2,
-            mb: 2,
-            borderRadius: RADIUS.card,
-            bgcolor: alpha(theme.palette.error.main, 0.06),
-            border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
+      <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={() => setMenuAnchor(null)}>
+        <MenuItem
+          onClick={() => {
+            setMenuAnchor(null);
+            setRegisterOpen(true);
           }}
+          sx={{ minHeight: 44 }}
         >
-          <Typography sx={{ fontWeight: 700, color: 'error.dark' }}>
-            {stats.awaitingFollowup === 1
-              ? '1 student was down as attending but never joined'
-              : `${stats.awaitingFollowup} students were down as attending but never joined`}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            A follow-up asks for their reason and points them at the recording and the assignment.
-          </Typography>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={() =>
-              openDialog(noShows.filter((s) => !s.absence?.followup_sent_at).map((s) => s.id))
-            }
-            sx={{ textTransform: 'none', minHeight: 44, fontWeight: 700 }}
+          Correct attendance
+        </MenuItem>
+        <MenuItem component={Link} href="/teacher/catch-up?tab=classes" sx={{ minHeight: 44 }}>
+          Follow up in Catch-up
+        </MenuItem>
+      </Menu>
+
+      {/* index < 0 means this class fell outside the fetched range (should not
+          happen now that the fetch uses the same range as the back link, but a
+          wrong count is worse than no caption, so this stays defensive). */}
+      {neighbours.total > 1 && neighbours.index >= 0 && (
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ my: 1.5 }}>
+          <IconButton
+            component={neighbours.prev ? Link : 'button'}
+            href={neighbours.prev ? stepHref(neighbours.prev) : undefined}
+            disabled={!neighbours.prev}
+            aria-label="Previous class"
+            sx={{ width: 44, height: 44 }}
           >
-            Follow up with {stats.awaitingFollowup}
-          </Button>
-        </Box>
+            <ChevronLeftIcon />
+          </IconButton>
+          <Typography variant="caption" color="text.secondary">
+            class {neighbours.index + 1} of {neighbours.total}
+          </Typography>
+          <IconButton
+            component={neighbours.next ? Link : 'button'}
+            href={neighbours.next ? stepHref(neighbours.next) : undefined}
+            disabled={!neighbours.next}
+            aria-label="Next class"
+            sx={{ width: 44, height: 44 }}
+          >
+            <ChevronRightIcon />
+          </IconButton>
+        </Stack>
       )}
 
-      <StudentListToolbar view={studentView} />
-
-      <Stack spacing={0.875}>
-        {studentView.shown.map((s) => {
-          const isNoShow = s.absence?.kind === 'no_show';
-          const explained = !!s.absence?.reason_code;
-          return (
-            <Box
-              key={s.id}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.25,
-                p: 1.5,
-                minHeight: 64,
-                borderRadius: RADIUS.card,
-                border: `1px solid ${theme.palette.divider}`,
-                bgcolor:
-                  isNoShow && !explained ? alpha(theme.palette.error.main, 0.04) : 'background.paper',
-                boxShadow: SHADOW.card,
-                flexWrap: 'wrap',
-              }}
-            >
-              <StudentAvatar
-                userId={s.id}
-                src={s.avatar_url}
-                name={s.name}
-                size={34}
-                tapToView={false}
-              />
-              <Box sx={{ flex: 1, minWidth: 140 }}>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }} noWrap>
-                  {s.name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {s.present
-                    ? s.late_by_minutes
-                      ? `Joined ${s.late_by_minutes} min late`
-                      : 'Joined on time'
-                    : s.absence?.kind === 'opted_out'
-                      ? `Said in advance, ${reasonLabel(s.absence.reason_code).toLowerCase()}`
-                      : explained
-                        ? `Answered, ${reasonLabel(s.absence!.reason_code).toLowerCase()}`
-                        : 'No reason given'}
-                </Typography>
-                {/* What they actually wrote. The API has always returned this
-                    and the screen has never shown it, so "Answered, other" was
-                    as far as a teacher could get. */}
-                {!s.present && s.absence?.reason_note && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: 'block',
-                      mt: 0.25,
-                      fontStyle: 'italic',
-                      color: 'text.primary',
-                      borderLeft: `2px solid ${alpha(theme.palette.primary.main, 0.35)}`,
-                      pl: 0.875,
-                    }}
-                  >
-                    &ldquo;{s.absence.reason_note}&rdquo;
-                  </Typography>
-                )}
-              </Box>
-
-              <Stack direction="row" spacing={0.625} alignItems="center" flexWrap="wrap">
-                {s.present && (
-                  <Box component="span" sx={tagSx(theme, 'success')}>
-                    Present
-                  </Box>
-                )}
-                {s.late_by_minutes !== null && (
-                  <Box component="span" sx={tagSx(theme, 'neutral')}>
-                    Late
-                  </Box>
-                )}
-                {explained && !s.present && (
-                  <Box component="span" sx={tagSx(theme, 'success')}>
-                    {reasonLabel(s.absence!.reason_code)}
-                  </Box>
-                )}
-                {s.absence?.caught_up_at ? (
-                  <Box component="span" sx={tagSx(theme, 'success')}>
-                    Caught up
-                  </Box>
-                ) : (
-                  // Started but not finished. Worth its own tag: chasing someone
-                  // who has already watched the recording is a different call
-                  // from chasing someone who has not opened it.
-                  s.absence?.recording_watched_at && (
-                    <Box component="span" sx={tagSx(theme, 'neutral')}>
-                      Watched
-                    </Box>
-                  )
-                )}
-                {isNoShow && !s.absence?.caught_up_at && (
-                  s.absence?.followup_sent_at ? (
-                    <Box component="span" sx={tagSx(theme, 'neutral')}>
-                      Notified
-                    </Box>
-                  ) : (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="error"
-                      onClick={() => openDialog([s.id])}
-                      sx={{ textTransform: 'none', minHeight: 40 }}
-                    >
-                      Follow up
-                    </Button>
-                  )
-                )}
-              </Stack>
-            </Box>
-          );
-        })}
-      </Stack>
-      <PausedFootnote count={studentView.pausedHidden} />
-
-      {/* Follow-up */}
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        fullWidth
-        maxWidth="sm"
-        fullScreen={!isDesktop}
-      >
-        <DialogTitle sx={{ pb: 0.5, fontWeight: 800 }}>
-          Follow up, {selected.length} {selected.length === 1 ? 'student' : 'students'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-            {data.class.title}, {data.class.scheduled_date}
-          </Typography>
-
-          <Stack direction="row" spacing={0.625} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
-            {students
-              .filter((s) => selected.includes(s.id))
-              .map((s) => (
-                <Box
-                  key={s.id}
-                  component="span"
-                  sx={{ ...tagSx(theme, 'neutral'), display: 'inline-flex', alignItems: 'center', gap: 0.5, pl: 0.25 }}
-                >
-                  {/* 20px: the glyph is suppressed below 28, but the ring itself
-                      still reads at pill size and that is the part being scanned. */}
-                  <StudentAvatar userId={s.id} name={s.name} size={20} />
-                  {s.name}
-                </Box>
-              ))}
-          </Stack>
-
-          <Stack
-            direction="row"
-            alignItems="center"
-            justifyContent="space-between"
-            sx={{ mb: 0.5 }}
-          >
-            <Box>
-              <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                Teams notification
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Through the Neram Assistant app
-              </Typography>
-            </Box>
-            <Switch checked={viaTeams} onChange={(e) => setViaTeams(e.target.checked)} />
-          </Stack>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-            <Box>
-              <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                In-app notification
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Always sent, it is the durable record
-              </Typography>
-            </Box>
-            <Checkbox checked disabled />
-          </Stack>
-
-          <TextField
-            label="Message"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            fullWidth
-            multiline
-            minRows={3}
-            size="small"
-          />
-
-          <Stack direction="row" spacing={0.625} sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
-            <Typography variant="caption" color="text.disabled" sx={{ width: '100%' }}>
-              Attached automatically
-            </Typography>
-            {data.attachments.hasRecording && (
-              <Box component="span" sx={tagSx(theme, 'primary')}>
-                Recording
-              </Box>
-            )}
-            {data.attachments.assignments.map((a) => (
-              <Box key={a.id} component="span" sx={tagSx(theme, 'primary')}>
-                {a.title}
-              </Box>
-            ))}
-            {!data.attachments.hasRecording && data.attachments.assignments.length === 0 && (
-              <Typography variant="caption" color="text.secondary">
-                Nothing yet. They will still be asked for a reason.
-              </Typography>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDialogOpen(false)} sx={{ minHeight: 44, textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={send}
-            disabled={sending || selected.length === 0}
-            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
-          >
-            {sending ? 'Sending...' : 'Send follow-up'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Snackbar
-        open={!!snack}
-        autoHideDuration={5000}
-        onClose={() => setSnack(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snack?.sev} onClose={() => setSnack(null)}>
-          {snack?.msg}
+      {/*
+        A class that has not been synced yet (or whose sync failed) has no
+        cell to draw. The `attendance_sync_message` Alert below only fires
+        when a sync was attempted and failed (`attendance_sync_status` set
+        and not 'ok'), so a never-synced class, whose status column is null,
+        used to fall straight through to ClassRegisterList and render every
+        roster member as missed with no reason. Gating on `measured` instead
+        covers both: never-synced (generic message here) and failed-sync
+        (the specific reason, still shown).
+      */}
+      {!data.class.measured ? (
+        <Alert severity="info" sx={{ borderRadius: 2, mb: 2 }}>
+          {data.class.attendance_sync_message ||
+            'Attendance has not been read from Teams for this class yet. Nobody here is marked present or missed until it has synced.'}
         </Alert>
-      </Snackbar>
+      ) : (
+        <>
+          {data.class.attendance_sync_message && (
+            <Alert severity="warning" sx={{ borderRadius: 2, mb: 2 }}>
+              {data.class.attendance_sync_message}
+            </Alert>
+          )}
+
+          <ClassRegisterList insights={data} highlightStudentId={highlight} />
+        </>
+      )}
+
+      {activeClassroom && (
+        <ClassAttendanceDialog
+          open={registerOpen}
+          onClose={() => setRegisterOpen(false)}
+          classId={classId}
+          classTitle={cls.title}
+          classroomId={activeClassroom.id}
+          teamsMeetingId={data.class.teams_meeting_id}
+          getToken={getToken}
+          initialTab="register"
+        />
+      )}
     </Box>
+  );
+}
+
+/**
+ * useSearchParams needs a Suspense boundary or the whole route opts out of
+ * static generation and the build warns. Same reasoning as the register page.
+ */
+export default function ClassRegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <Box>
+          <Skeleton variant="text" width={180} height={32} />
+          <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2, mt: 2 }} />
+        </Box>
+      }
+    >
+      <ClassRegisterPageContent />
+    </Suspense>
   );
 }

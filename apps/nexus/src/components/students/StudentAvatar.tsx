@@ -106,6 +106,8 @@ export default function StudentAvatar({
         presenceStatus={presenceStatus}
         src={resolvedSrc}
         largeSrc={largeSrc}
+        language={facts.language}
+        limitedEnglish={facts.limitedEnglish}
         clickable={clickable}
         tapToView={tapToView}
         showGlyph={showGlyph}

@@ -25,7 +25,12 @@ export interface InspirationCard {
   alt: string;
   brief: string | null;
   credit: string;
-  badge: 'reference' | 'alumni' | null;
+  /**
+   * The one thing worth saying on top of the image. 'featured' outranks
+   * 'alumni' because a teacher chose it and the credit line underneath already
+   * says Alumni, so nothing is lost by giving the slot to the rarer fact.
+   */
+  badge: 'reference' | 'featured' | 'alumni' | null;
   typeSlugs: string[];
   tagLabels: string[];
   examTypes: string[];
@@ -50,7 +55,13 @@ export function displayTitle(row: Pick<InspirationRow, 'title_override' | 'type_
 export function presentRow(row: InspirationRow, opts: { staff: boolean }): InspirationCard {
   const title = displayTitle(row);
   const isOriginal = row.source_kind === 'submission_original';
-  const badge: InspirationCard['badge'] = isOriginal ? (row.author_is_alumni ? 'alumni' : null) : 'reference';
+  const badge: InspirationCard['badge'] = !isOriginal
+    ? 'reference'
+    : row.is_featured
+      ? 'featured'
+      : row.author_is_alumni
+        ? 'alumni'
+        : null;
 
   const card: InspirationCard = {
     id: row.id,

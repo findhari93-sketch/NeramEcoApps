@@ -18,9 +18,11 @@ import {
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import ExamDrawingsToMark from './ExamDrawingsToMark';
+import { describeExcused, type ExcusedSummary } from '@/lib/exam-excused';
 
 /**
  * A teacher's results screen for one exam: two sittings, ranked separately.
@@ -84,6 +86,11 @@ interface PreviewData {
     podium: Array<{ student_name: string; percentage: number; rank: number | null }>;
     drawings_ungraded: number;
     rows: ResultRow[];
+    /**
+     * Students the exam was never set for, with no paper and no open window.
+     * In none of the four groups and never messaged. Absent from an older payload.
+     */
+    excused?: ExcusedSummary;
   };
   sections: PreviewSection[];
   provisional: boolean;
@@ -283,6 +290,7 @@ export default function ExamResultsSheet({
 
   const examDay = counts('exam_day');
   const secondSitting = counts('second_sitting');
+  const excusedLine = data?.results.excused ? describeExcused(data.results.excused) : null;
   const publishedBefore = Boolean(data?.last_published_at);
   const announced = data ? announcedIn(data) : false;
   const channelHere = data ? channelLinked(data) : false;
@@ -452,6 +460,19 @@ export default function ExamResultsSheet({
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                   Second sitting: average {Math.round(data.results.second.average)}%, highest{' '}
                   {Math.round(data.results.second.highest)}%
+                </Typography>
+              )}
+              {/* Who is missing from every number above, and why. Without it
+                  "16 of 30 sat" on a class of 37 reads as seven lost students. */}
+              {excusedLine && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  data-testid="exam-excused-line"
+                  sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, mt: 0.5 }}
+                >
+                  <InfoOutlinedIcon aria-hidden sx={{ fontSize: 14, mt: '2px' }} />
+                  <span>{excusedLine}</span>
                 </Typography>
               )}
             </Box>

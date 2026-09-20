@@ -20,6 +20,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useUserNotifications } from '@neram/ui';
 import { pickSeenNotifications, SEEN_DWELL_MS } from '@/lib/notification-seen';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { tellWhyPath } from '@/lib/tell-why-link';
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
   classroom_enrolled: '#2196f3',
@@ -44,6 +45,10 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   study_material_nudge: '#0ea5e9',
   catchup_digest: '#7c3aed',
   catchup_behind_pace: '#ed6c02',
+  // Green, not amber. This one is good news arriving early, and colouring it
+  // like the chase messages beside it would make an offer of help read as
+  // another reminder that they are behind.
+  recap_ready: '#2E7D32',
   test_result_message: '#0ea5e9',
   test_reopened: '#2E7D32',
   // Amber, deliberately louder than the other two: a score that moved is the
@@ -104,6 +109,17 @@ function getNavigationUrl(
     case 'test_regraded': {
       const testId = notification.metadata?.test_id as string | undefined;
       const placementId = notification.metadata?.placement_id as string | undefined;
+      // "Tell me why" asks a question the take page cannot answer. It opens the
+      // student's tests with the "Tell your teacher why" sheet on that run, the
+      // same address the Teams chat link carries.
+      if (
+        notification.event_type === 'test_result_message' &&
+        notification.metadata?.template === 'why' &&
+        placementId &&
+        nexusRole !== 'teacher'
+      ) {
+        return tellWhyPath(placementId);
+      }
       if (!testId) return `/${nexusRole || 'student'}/tests`;
       const run = placementId ? `&placement_id=${encodeURIComponent(placementId)}` : '';
       // A teacher lands on the results they were working from; a student lands
@@ -159,6 +175,13 @@ function getNavigationUrl(
     // teacher route for the same sketch.
     case 'sketch_reaction':
     case 'sketch_featured': {
+      // A featured drawing is now on the Inspiration shelf, so send the student
+      // to where it is being looked at rather than back to their own sketchbook.
+      // Only featuring writes this key, and only when the drawing actually
+      // reached the shelf, so a reaction and a private student's feature both
+      // fall through to the sketch itself.
+      const itemId = notification.metadata?.inspiration_item_id as string | undefined;
+      if (itemId && nexusRole === 'student') return `/student/inspiration/${itemId}`;
       const submissionId = notification.metadata?.submission_id as string | undefined;
       if (!submissionId) return '/student/sketchbook';
       return nexusRole === 'student' ? `/student/sketchbook/${submissionId}` : '/teacher/sketchbook';
@@ -194,6 +217,13 @@ function getNavigationUrl(
     }
     case 'test_scheduled':
       return `/${nexusRole || 'student'}/tests`;
+    case 'recap_ready': {
+      // Straight into the catch-up workspace for that class, which is where the
+      // recap plays. Landing them on the timetable instead would mean the
+      // message said "it is ready" and then made them go and find it.
+      const classId = notification.metadata?.scheduled_class_id as string | undefined;
+      return classId ? `/student/timetable/${classId}/catch-up` : '/student/catch-up';
+    }
     case 'assignment_published':
     case 'assignment_linked': {
       const assignmentId = notification.metadata?.assignment_id as string | undefined;
@@ -206,6 +236,11 @@ function getNavigationUrl(
       if (!testId) return '/student/tests';
       return `/student/tests/take?test_id=${testId}${placementId ? `&placement_id=${encodeURIComponent(placementId)}` : ''}`;
     }
+    case 'application_details_needed':
+      // The whole point of the ping is getting them to the form, so an unmapped
+      // event type (a non-clickable row) would waste the one message that reaches
+      // a student who barely opens Nexus.
+      return '/student/complete-profile';
     case 'catchup_overdue':
     case 'prework_reason_needed':
     case 'recap_needs_review': {

@@ -17,8 +17,10 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import QuizSurface from '@/components/video/QuizSurface';
 import QuizQuestion from './QuizQuestion';
+import ReportQuestionSheet, { type ReportReason } from '@/components/class-recap/ReportQuestionSheet';
 
 interface QuizQuestionData {
   id: string;
@@ -69,6 +71,20 @@ interface QuizModalProps {
   loadingQuestions?: boolean;
   loadError?: string | null;
   onRetryLoad?: () => void;
+  /**
+   * Let the student say a question is broken.
+   *
+   * Optional, and absent everywhere except the catch-up checkpoint player. This
+   * modal is also used for a voluntary redo, where the student can simply close
+   * it, so there is nothing to escape from and offering a report would be
+   * offering a way to skip practice.
+   *
+   * The caller is expected to drop the reported question from the paper. Until
+   * this existed, a question with a wrong answer key was a gate that could
+   * never be passed in a modal that could never be closed: the only buttons
+   * were Submit, Retry and Rewatch and Retry.
+   */
+  onReportQuestion?: (questionId: string, reason: ReportReason, note: string) => Promise<void>;
 }
 
 export default function QuizModal({
@@ -85,19 +101,31 @@ export default function QuizModal({
   loadingQuestions = false,
   loadError = null,
   onRetryLoad,
+  onReportQuestion,
 }: QuizModalProps) {
   const theme = useTheme();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<QuizResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // No auto-continue — student clicks "Continue" manually
+  /** The question whose report sheet is open, and the ones already reported. */
+  const [reporting, setReporting] = useState<QuizQuestionData | null>(null);
+  const [reported, setReported] = useState<Set<string>>(new Set());
+  // No auto-continue, student clicks "Continue" manually
 
   const handleAnswerChange = useCallback((questionId: string, answer: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: answer }));
   }, []);
 
+  /**
+   * Questions still in play. A reported one is out of the paper on the server
+   * (it is dropped from the draw), so counting it here would leave the student
+   * with a Submit button that never enables: the exact trap reporting exists to
+   * get them out of.
+   */
+  const answerable = questions.filter((q) => !reported.has(q.id));
+
   const handleSubmit = async () => {
-    if (Object.keys(answers).length < questions.length) return;
+    if (Object.keys(answers).length < answerable.length) return;
     setSubmitting(true);
     try {
       const quizResult = await onSubmit(answers);
@@ -133,7 +161,7 @@ export default function QuizModal({
     onClose();
   };
 
-  const allAnswered = Object.keys(answers).length >= questions.length;
+  const allAnswered = Object.keys(answers).length >= answerable.length;
 
   const header = (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2.5 }}>
@@ -239,16 +267,46 @@ export default function QuizModal({
         const matchedResult = result?.questions?.find(rq => rq.id === q.id);
         // Fallback to index-based matching if ID lookup fails
         const correctOption = matchedResult?.correct_option ?? result?.questions?.[i]?.correct_option;
+        const isReported = reported.has(q.id);
         return (
-          <QuizQuestion
-            key={q.id}
-            question={q}
-            selectedAnswer={answers[q.id]}
-            correctAnswer={correctOption}
-            showResult={!!result}
-            onChange={handleAnswerChange}
-            questionNumber={i + 1}
-          />
+          <Box key={q.id}>
+            <QuizQuestion
+              question={q}
+              selectedAnswer={answers[q.id]}
+              correctAnswer={correctOption}
+              showResult={!!result}
+              onChange={handleAnswerChange}
+              questionNumber={i + 1}
+            />
+            {/* Quiet on purpose. It has to be findable by someone who is stuck
+                and invisible to everyone else, so it reads as a footnote rather
+                than a fifth option. Hidden once the answers are on screen:
+                nothing can be done with a report at that point in the attempt. */}
+            {onReportQuestion && !result && (
+              <Box sx={{ mt: -1, mb: 1.5, display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  size="small"
+                  startIcon={<FlagOutlinedIcon sx={{ fontSize: '0.95rem' }} />}
+                  onClick={() => setReporting(q)}
+                  disabled={isReported}
+                  sx={{
+                    minHeight: 44,
+                    px: 1.25,
+                    color: 'text.secondary',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    '&:focus-visible': {
+                      outline: `2px solid ${theme.palette.primary.main}`,
+                      outlineOffset: 2,
+                    },
+                  }}
+                >
+                  {isReported ? 'Reported, it will not be counted' : 'Something looks wrong'}
+                </Button>
+              </Box>
+            )}
+          </Box>
         );
       })}
 
@@ -370,15 +428,41 @@ export default function QuizModal({
   );
 
   return (
-    <QuizSurface
-      open={open}
-      container={container}
-      dismissable={dismissable}
-      onDismiss={handleDismiss}
-      ariaLabel={dismissable ? `Redo quiz: ${sectionTitle}` : `Checkpoint quiz: ${sectionTitle}`}
-    >
-      {content}
-    </QuizSurface>
+    <>
+      <QuizSurface
+        open={open}
+        container={container}
+        dismissable={dismissable}
+        onDismiss={handleDismiss}
+        ariaLabel={dismissable ? `Redo quiz: ${sectionTitle}` : `Checkpoint quiz: ${sectionTitle}`}
+      >
+        {content}
+      </QuizSurface>
+
+      {onReportQuestion && (
+        <ReportQuestionSheet
+          open={!!reporting}
+          questionText={reporting?.question_text || ''}
+          onClose={() => setReporting(null)}
+          onSubmit={async (reason, note) => {
+            const q = reporting;
+            if (!q) return;
+            await onReportQuestion(q.id, reason, note);
+            // Marked locally as well as dropped from the paper upstream. The
+            // question stays on screen for this attempt, because removing a
+            // card mid-quiz would renumber every question under it, and an
+            // answer already typed into one of them would appear to move.
+            setReported((prev) => new Set(prev).add(q.id));
+            setAnswers((prev) => {
+              const next = { ...prev };
+              delete next[q.id];
+              return next;
+            });
+            setReporting(null);
+          }}
+        />
+      )}
+    </>
   );
 }
 

@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { loadPlanShapes } from '@/lib/plan-shape-query';
 import { classifyPrework, classEndIso } from '@/lib/prework';
 import { applyClassPrepGate } from '@/lib/class-prep-server';
+import { isObligationClosed } from '@/lib/catchup-buckets';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 
 /**
@@ -265,8 +266,15 @@ export async function GET(request: NextRequest) {
     // a late joiner owes every class taught before they arrived, and listing
     // seventeen of them here as "you missed this, tell us why" would be both
     // wrong and overwhelming. Those live on the catch-up screen instead.
+    //
+    // Closed items are excluded too, and that was missing. This list draws the
+    // "You missed N classes" banner and the "N missed" chip on the student's own
+    // timetable, so without the check a teacher could excuse somebody and the
+    // student would go on being told they had missed the class. The catch-up
+    // count below always checked it, so the two halves of this one route
+    // disagreed; they now share isObligationClosed so they cannot again.
     const openAbsences = absenceRows
-      .filter((a) => a.kind !== 'late_joiner')
+      .filter((a) => a.kind !== 'late_joiner' && !isObligationClosed(a))
       .map((a) => ({
         class_id: a.scheduled_class_id,
         title: a.class.title,
@@ -288,7 +296,7 @@ export async function GET(request: NextRequest) {
     const catchupPending = absenceRows.filter(
       (a) =>
         a.kind === 'late_joiner' &&
-        !a.excused_at &&
+        !isObligationClosed(a) &&
         !!(a.class.recording_url || a.class.youtube_url),
     ).length;
 

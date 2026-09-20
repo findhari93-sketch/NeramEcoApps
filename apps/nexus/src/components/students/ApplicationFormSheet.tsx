@@ -22,6 +22,7 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import FamilyRestroomOutlinedIcon from '@mui/icons-material/FamilyRestroomOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
+import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import PhoneIphoneOutlinedIcon from '@mui/icons-material/PhoneIphoneOutlined';
 import StudentAvatar from './StudentAvatar';
@@ -31,6 +32,7 @@ import { shortDate } from '@/lib/student-roster-view';
 import { STAGE_LABEL, stageKeyOf } from '@/lib/student-stage';
 import { useNexusSWR } from '@/lib/nexus-swr';
 import type {
+  DetailRequestView,
   FormCandidateView,
   FormDetailView,
   FormLinkResult,
@@ -98,7 +100,12 @@ interface Viewing {
   candidate: FormCandidateView;
 }
 
-/** A message to paste into WhatsApp when nothing was found. */
+/**
+ * A message to paste into WhatsApp when nothing was found.
+ *
+ * Kept as the fallback now that a link exists, for the student whose family shares
+ * one phone and answers in the chat rather than opening anything.
+ */
 function askMessage(name: string): string {
   const first = name.trim().split(/\s+/)[0] || 'there';
   return [
@@ -108,6 +115,43 @@ function askMessage(name: string): string {
     "3. Your father's name",
     '4. Your city',
   ].join('\n');
+}
+
+/**
+ * The message that carries the link, which is what staff send by default.
+ *
+ * The link leads, because that is the thing being asked for. The sentence after it
+ * exists so the message does not read like the spam a teenager has been taught to
+ * ignore: a bare shortlink from an unknown number gets deleted.
+ */
+function whatsappMessage(name: string, url: string): string {
+  const first = name.trim().split(/\s+/)[0] || 'there';
+  return [
+    `Hi ${first}, this is Neram Classes. Please fill in your details here:`,
+    url,
+    'It takes about a minute and the link works for two weeks.',
+  ].join('\n');
+}
+
+/** "3 days ago", for a line a teacher reads at a glance. */
+function agoLabel(iso: string | null, now: number): string {
+  if (!iso) return '';
+  const days = Math.floor((now - new Date(iso).getTime()) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${days} days ago`;
+}
+
+/** The one sentence describing where the ask has got to. */
+function progressLine(request: DetailRequestView | null, now: number): string | null {
+  if (!request || request.progress === 'not_asked') return null;
+  const asked = agoLabel(request.askedAt, now);
+  const by = request.askedByName ? ` by ${request.askedByName}` : '';
+  if (request.progress === 'answered') return `Answered ${agoLabel(request.answeredAt, now)}.`;
+  if (request.progress === 'opened') {
+    return `Asked ${asked}${by}. Opened ${agoLabel(request.openedAt, now)}, not finished.`;
+  }
+  return `Asked ${asked}${by}. Not opened yet.`;
 }
 
 function linkedMessage(result: FormLinkResult): string {
@@ -145,6 +189,18 @@ export default function ApplicationFormSheet({
   const [copiedFor, setCopiedFor] = useState<string | null>(null);
   const [viewing, setViewing] = useState<Viewing | null>(null);
   const [now] = useState(() => Date.now());
+  /**
+   * The link generated for a student while the sheet is open.
+   *
+   * Always shown as selectable text as well as copied. Clipboard writes fail
+   * silently inside some in-app browsers, and a member of staff who thinks they
+   * copied a link and pastes the previous one will not find out until the student
+   * says nothing for a week.
+   */
+  const [linkFor, setLinkFor] = useState<Record<string, string>>({});
+  const [linkBusy, setLinkBusy] = useState<string | null>(null);
+  /** Students the nudge has been sent to while the sheet is open. */
+  const [nudged, setNudged] = useState<Record<string, string>>({});
   /** The card button that opened the form, so focus can go back to it. */
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
@@ -237,6 +293,71 @@ export default function ApplicationFormSheet({
       setCopiedFor(student.id);
     } catch {
       setActionError({ key: student.id, message: 'Could not copy the message.' });
+    }
+  };
+
+  /**
+   * Make (or reuse) the student's link and put the WhatsApp message on the
+   * clipboard. The URL is also shown on the card, so a failed clipboard write is
+   * recoverable rather than invisible.
+   */
+  const getLink = async (student: StudentFormReview, regenerate = false) => {
+    setLinkBusy(student.id);
+    setActionError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Your session has ended. Sign in again.');
+      const res = await fetch('/api/students/detail-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ classroomId, studentId: student.id, regenerate }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not make a link.');
+
+      setLinkFor((prev) => ({ ...prev, [student.id]: data.url }));
+      try {
+        await navigator.clipboard.writeText(whatsappMessage(student.name, data.url));
+        setCopiedFor(student.id);
+      } catch {
+        // The link is on screen either way, so this is not an error worth shouting.
+      }
+      onChanged();
+    } catch (err) {
+      setActionError({ key: student.id, message: err instanceof Error ? err.message : 'Something went wrong.' });
+    } finally {
+      setLinkBusy(null);
+    }
+  };
+
+  /**
+   * Ask through Teams and the Nexus bell as well as by link.
+   *
+   * Worth doing alongside the link rather than instead of it: a student who already
+   * uses Nexus gets a message where they are and a form they can fill in without
+   * leaving the app, and one who has never signed in is unreachable this way and
+   * still needs the WhatsApp link. The route decides which channels actually
+   * landed and says so.
+   */
+  const sendNudge = async (student: StudentFormReview) => {
+    setLinkBusy(student.id);
+    setActionError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Your session has ended. Sign in again.');
+      const res = await fetch('/api/students/detail-request/nudge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ classroomId, studentId: student.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not send that.');
+      setNudged((prev) => ({ ...prev, [student.id]: data.summary || 'Sent.' }));
+      onChanged();
+    } catch (err) {
+      setActionError({ key: student.id, message: err instanceof Error ? err.message : 'Something went wrong.' });
+    } finally {
+      setLinkBusy(null);
     }
   };
 
@@ -394,23 +515,99 @@ export default function ApplicationFormSheet({
                   <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
                     <InfoOutlinedIcon aria-hidden sx={{ fontSize: 18, mt: '2px', color: 'text.secondary' }} />
                     <Typography variant="body2">
-                      {canLink
-                        ? 'No application form found. Ask the student or a parent for the details, then fill in the form in Admin.'
-                        : 'No application form found. Ask the student or a parent for the details and pass them to the office to fill in the form.'}
+                      No application form found. Send them a link to fill it in themselves, or
+                      {canLink ? ' fill it in for them in Admin.' : ' pass the details to the office.'}
                     </Typography>
                   </Box>
+
+                  {/* Where the ask has got to, so two teachers do not chase the same
+                      student while nobody chases the next one. */}
+                  {progressLine(student.detailRequest, now) && (
+                    <Typography
+                      variant="body2"
+                      role="status"
+                      sx={{
+                        mt: 1,
+                        fontWeight: 600,
+                        color:
+                          student.detailRequest?.progress === 'answered' ? 'success.main' : 'text.secondary',
+                      }}
+                    >
+                      {progressLine(student.detailRequest, now)}
+                    </Typography>
+                  )}
+
+                  {nudged[student.id] && (
+                    <Typography variant="body2" role="status" sx={{ mt: 0.75, color: 'success.main' }}>
+                      {nudged[student.id]}
+                    </Typography>
+                  )}
+
+                  {/* The link itself, always visible and selectable: a clipboard write
+                      can fail silently inside an in-app browser. */}
+                  {linkFor[student.id] && (
+                    <Box
+                      sx={{
+                        mt: 1,
+                        p: 1,
+                        borderRadius: 1,
+                        bgcolor: 'action.hover',
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        overflowWrap: 'anywhere',
+                        userSelect: 'all',
+                      }}
+                    >
+                      {linkFor[student.id]}
+                    </Box>
+                  )}
+
                   <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                     <Button
-                      variant="outlined"
+                      variant="contained"
+                      disabled={linkBusy === student.id}
                       startIcon={copiedFor === student.id ? <CheckCircleOutlineIcon /> : <ContentCopyOutlinedIcon />}
+                      onClick={() => getLink(student)}
+                      sx={{ minHeight: 48 }}
+                    >
+                      {linkBusy === student.id
+                        ? 'Working...'
+                        : copiedFor === student.id
+                          ? 'Copied'
+                          : student.detailRequest?.progress === 'not_asked'
+                            ? 'Get a link to ask'
+                            : 'Copy link again'}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      disabled={linkBusy === student.id}
+                      startIcon={<SendOutlinedIcon />}
+                      onClick={() => sendNudge(student)}
+                      sx={{ minHeight: 48 }}
+                    >
+                      Send in Teams and Nexus
+                    </Button>
+                    {student.detailRequest && student.detailRequest.progress !== 'not_asked' && (
+                      <Button
+                        variant="text"
+                        disabled={linkBusy === student.id}
+                        onClick={() => getLink(student, true)}
+                        sx={{ minHeight: 48 }}
+                      >
+                        Send a new link
+                      </Button>
+                    )}
+                    <Button
+                      variant="text"
+                      startIcon={<ContentCopyOutlinedIcon />}
                       onClick={() => copyAsk(student)}
                       sx={{ minHeight: 48 }}
                     >
-                      {copiedFor === student.id ? 'Copied' : 'Copy what to ask'}
+                      Copy the questions instead
                     </Button>
                     {canLink && (
                       <Button
-                        variant="outlined"
+                        variant="text"
                         component="a"
                         href={adminHref(student.id)}
                         target="_blank"

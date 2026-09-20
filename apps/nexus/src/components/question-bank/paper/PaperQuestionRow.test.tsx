@@ -121,6 +121,67 @@ describe('PaperQuestionRow', () => {
     expect(screen.queryByLabelText('Solution image missing')).toBeNull();
   });
 
+  /**
+   * A drawing used to be exempt, so JEE Paper 2 2014 showed no flag on either
+   * of its two unanswered drawings. Each part owes its own worked answer: in an
+   * "attempt any one" the student may answer either option.
+   */
+  it('flags a drawing whose parts are only half answered, and says how far it got', async () => {
+    const half = q({
+      question_format: 'DRAWING_PROMPT',
+      section: 'drawing',
+      correct_answer: null,
+      options: null,
+      // The question column is set, mirrored from part A, which is exactly the
+      // state that used to read as solved.
+      solution_image_url: 'https://x/a.png',
+      drawing_parts: {
+        mode: 'any_one',
+        items: [
+          { id: 'a', label: 'A', text: 'Draw a balloon seller.', solution_image_url: 'https://x/a.png' },
+          { id: 'b', label: 'B', text: 'Draw women at a handpump.', solution_image_url: null },
+        ],
+      },
+    });
+
+    render(
+      <PaperQuestionRow question={half} selected={false} active={false} tagCount={1}
+        onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    const glyph = screen.getByLabelText('Solution image missing');
+    expect(glyph).not.toBeNull();
+
+    // The sentence has to reach the teacher, not just the predicate. It used to
+    // read "maths questions need one" on every row, drawings included.
+    fireEvent.mouseOver(glyph);
+    expect(
+      await screen.findByText('Solution images: 1 of 2 parts. Each part needs its own.'),
+    ).not.toBeNull();
+  });
+
+  it('drops the flag once every part has its own solution', () => {
+    const done = q({
+      question_format: 'DRAWING_PROMPT',
+      section: 'drawing',
+      correct_answer: null,
+      options: null,
+      solution_image_url: 'https://x/a.png',
+      drawing_parts: {
+        mode: 'any_one',
+        items: [
+          { id: 'a', label: 'A', text: 'Draw a balloon seller.', solution_image_url: 'https://x/a.png' },
+          { id: 'b', label: 'B', text: 'Draw women at a handpump.', solution_image_url: 'https://x/b.png' },
+        ],
+      },
+    });
+
+    render(
+      <PaperQuestionRow question={done} selected={false} active={false} tagCount={1}
+        onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    expect(screen.queryByLabelText('Solution image missing')).toBeNull();
+  });
+
   it('the status is a colour, not a chip, but still has a name a screen reader can announce', () => {
     render(
       <PaperQuestionRow question={q({ status: 'active' })} selected={false} active={false} tagCount={1}

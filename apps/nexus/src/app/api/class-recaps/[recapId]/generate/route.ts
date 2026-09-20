@@ -85,12 +85,20 @@ export async function POST(
     // length and a bank of twenty got fifteen minutes and fifteen every time,
     // with no sign that the settings sheet had been ignored.
     const defaults = await readRecapDefaults(getSupabaseAdminClient());
+    const poolPerSegment = recap.question_pool_per_segment ?? defaults.question_pool_per_segment;
     const generated = await generateSectionsAndQuestions(transcript, recap.title, {
       feature: 'nexus.recap-questions',
       targetSegmentSeconds: recap.target_segment_seconds ?? defaults.target_segment_seconds,
-      poolPerSegment: recap.question_pool_per_segment ?? defaults.question_pool_per_segment,
+      poolPerSegment,
       durationSeconds:
         recap.video_duration_seconds ?? transcript[transcript.length - 1]?.end ?? 0,
+      // A preview is what the teacher will save, so it tops up like the sweep.
+      // Showing them a three-question checkpoint that the sweep would have
+      // filled in would make the manual path look worse than the automatic one.
+      minPerSegment: Math.min(
+        poolPerSegment,
+        recap.questions_per_segment ?? defaults.questions_per_segment,
+      ),
     });
 
     // Stamp the gate the same way the sweep does. Left NULL, questions_to_serve

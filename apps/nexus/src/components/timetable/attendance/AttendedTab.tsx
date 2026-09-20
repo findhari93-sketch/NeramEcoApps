@@ -12,7 +12,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
-import { stageKeyOf } from '@/lib/student-stage';
+import { knownStageKey } from '@/lib/student-stage';
 import { rankByTimeInRoom } from '@/lib/attendance-quality';
 import type { AttendanceTabProps, StudentInsight } from './types';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
@@ -117,8 +117,9 @@ function AttendedRow({
         inputProps={{ 'aria-label': `Select ${student.name}` }}
       />
       <StudentStageAvatar
-        stage={stageKeyOf(student.study_stage)}
+        stage={knownStageKey(student.study_stage)}
         dormant={student.dormant}
+        userId={student.id}
         name={student.name}
         src={student.avatar_url}
         size={32}

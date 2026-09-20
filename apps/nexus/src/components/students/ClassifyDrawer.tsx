@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type HTMLAttributes } from 'react';
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   Divider,
   Drawer,
+  FormControlLabel,
   MenuItem,
   TextField,
   Typography,
@@ -29,7 +31,21 @@ import {
   stageColor,
   type StageKey,
 } from '@/lib/student-stage';
+import {
+  LANGUAGES,
+  LANGUAGE_ORDER,
+  LANGUAGE_SCOPE_NOTE,
+  LANGUAGE_SECTION_HELP,
+  LANGUAGE_SECTION_TITLE,
+  LANGUAGE_UNCHANGED_LABEL,
+  LIMITED_ENGLISH_BULK_NOTE,
+  LIMITED_ENGLISH_HELP,
+  LIMITED_ENGLISH_LABEL,
+  languageLabel,
+  type LanguageKey,
+} from '@/lib/student-language';
 import { DormantIcon, stageIconFor } from './StageGlyph';
+import LanguageMark from './LanguageMark';
 
 /**
  * The one editor for both classification axes, used by the bulk bar on the
@@ -45,6 +61,24 @@ export type ClassifyMode = 'stage' | 'dormant' | 'reactivate';
 /** Sentinel for "clear the exam year", distinct from "leave it alone" (''). */
 const CLEAR_YEAR = '__clear__';
 
+/**
+ * The Language select values. '' leaves the language alone, like the exam year.
+ *
+ * There is no "clear" option on purpose: an unrecorded student reads as English
+ * everywhere, so clearing would be a change nobody could see. Undo still sends
+ * null through the API to put one back.
+ */
+type LanguageChoice = '' | LanguageKey;
+
+export interface ClassifyPayload {
+  studyStage?: StageKey | null;
+  academicYear?: string | null;
+  homeLanguage?: LanguageKey | null;
+  limitedEnglish?: boolean;
+  participationStatus?: 'active' | 'dormant';
+  reason?: string;
+}
+
 export interface ClassifyDrawerProps {
   open: boolean;
   mode: ClassifyMode;
@@ -55,13 +89,16 @@ export interface ClassifyDrawerProps {
   examYears?: readonly string[];
   /** The current cohort, used to name the expected pairing. */
   currentBatch?: string | null;
+  /** One student's current language, shown as "Now: ..." above the choices. */
+  currentLanguage?: string | null;
+  currentLimitedEnglish?: boolean;
+  /**
+   * Open already scrolled to the Language group, for the profile's language chip.
+   * The group sits below the exam year, off screen on a phone.
+   */
+  focus?: 'language';
   onClose: () => void;
-  onApply: (payload: {
-    studyStage?: StageKey | null;
-    academicYear?: string | null;
-    participationStatus?: 'active' | 'dormant';
-    reason?: string;
-  }) => void;
+  onApply: (payload: ClassifyPayload) => void;
 }
 
 export default function ClassifyDrawer({
@@ -71,6 +108,9 @@ export default function ClassifyDrawer({
   busy = false,
   examYears = [],
   currentBatch = null,
+  currentLanguage,
+  currentLimitedEnglish,
+  focus,
   onClose,
   onApply,
 }: ClassifyDrawerProps) {
@@ -78,7 +118,12 @@ export default function ClassifyDrawer({
   const paletteMode = theme.palette.mode === 'dark' ? 'dark' : 'light';
   const [stage, setStage] = useState<StageKey | null>(null);
   const [year, setYear] = useState('');
+  const [lang, setLang] = useState<LanguageChoice>('');
+  // Null means untouched, which is what a bulk edit needs: leave every student's
+  // tick exactly as it is. Any interaction commits a real boolean.
+  const [limited, setLimited] = useState<boolean | null>(null);
   const [reason, setReason] = useState('');
+  const languageRef = useRef<HTMLDivElement>(null);
 
   // Reset every time the sheet opens, so a previous selection can never be
   // applied by accident to a different set of students.
@@ -86,6 +131,8 @@ export default function ClassifyDrawer({
     if (open) {
       setStage(null);
       setYear('');
+      setLang('');
+      setLimited(null);
       setReason('');
     }
   }, [open, mode]);
@@ -93,11 +140,11 @@ export default function ClassifyDrawer({
   const count = names.length;
   const who = count === 1 ? names[0] : `${count} students`;
 
-  // The two fields are independent: either one alone is a valid edit. Requiring
-  // both would force a teacher who only knows the class to guess the year.
+  // The fields are independent: any one alone is a valid edit. Requiring them all
+  // would force a teacher who only knows the class to guess the year.
   const canApply =
     mode === 'stage'
-      ? stage !== null || year !== ''
+      ? stage !== null || year !== '' || lang !== '' || limited !== null
       : mode === 'dormant'
         ? reason.trim().length > 0
         : true;
@@ -111,14 +158,13 @@ export default function ClassifyDrawer({
 
   function handleApply() {
     if (mode === 'stage') {
-      const payload: {
-        studyStage?: StageKey | null;
-        academicYear?: string | null;
-      } = {};
+      const payload: ClassifyPayload = {};
       // Only send what was actually touched. An untouched field must stay
       // untouched: the API treats a present key as an instruction to write.
       if (stage !== null) payload.studyStage = stage === 'unset' ? null : stage;
       if (year !== '') payload.academicYear = year === CLEAR_YEAR ? null : year;
+      if (lang !== '') payload.homeLanguage = lang;
+      if (limited !== null) payload.limitedEnglish = limited;
       onApply(payload);
     } else if (mode === 'dormant') {
       onApply({ participationStatus: 'dormant', reason: reason.trim() });
@@ -140,6 +186,13 @@ export default function ClassifyDrawer({
       open={open}
       onClose={() => !busy && onClose()}
       PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '88dvh' } }}
+      // Scroll once the slide has finished, so the measurement is of the final
+      // layout. No timer, and a no-op in jsdom where scrollIntoView is absent.
+      SlideProps={{
+        onEntered: () => {
+          if (focus === 'language') languageRef.current?.scrollIntoView?.({ block: 'center' });
+        },
+      }}
     >
       <Box sx={{ p: 2, pb: 1, display: 'flex', flexDirection: 'column', gap: 1.5, overflowY: 'auto' }}>
         <Box>
@@ -273,6 +326,86 @@ export default function ClassifyDrawer({
                 {EXAM_YEAR_SCOPE_WARNING}
               </Typography>
             )}
+
+            {/* Language: a third independent field, below the exam year so the
+                class and year controls keep their place on a 375px screen. */}
+            <Divider sx={{ mt: 1 }} />
+
+            <Box ref={languageRef} sx={{ display: 'flex', flexDirection: 'column', gap: 1, scrollMarginTop: 16 }}>
+              {/* A select rather than tiles: five languages plus "leave
+                  unchanged" is six options, and the exam-year field directly
+                  above already solves that shape on a 375px sheet. Its own label
+                  heads the section, exactly as the exam year's does. */}
+              <TextField
+                select
+                size="small"
+                label={LANGUAGE_SECTION_TITLE}
+                value={lang}
+                onChange={(e) => setLang(e.target.value as LanguageChoice)}
+                helperText={LANGUAGE_SECTION_HELP}
+                SelectProps={{
+                  native: false,
+                  // On the display element, so a test can reach the field itself
+                  // rather than the menu, which shares its label while open. MUI
+                  // types this slot as bare HTMLAttributes, which has no data-*.
+                  SelectDisplayProps: { 'data-testid': 'language-select' } as HTMLAttributes<HTMLDivElement>,
+                }}
+                sx={{ mt: 0.5, '& .MuiInputBase-root': { minHeight: 48 } }}
+              >
+                <MenuItem value="">
+                  <em>{LANGUAGE_UNCHANGED_LABEL}</em>
+                </MenuItem>
+                {LANGUAGE_ORDER.map((key) => (
+                  <MenuItem key={key} value={key} sx={{ minHeight: 48, gap: 1 }}>
+                    {/* The mark beside the word is where a teacher learns which
+                        letter means which language. English has none, so it keeps
+                        the space rather than shuffling its label left. */}
+                    <Box
+                      component="span"
+                      sx={{ width: 20, flexShrink: 0, display: 'inline-flex', justifyContent: 'center' }}
+                    >
+                      <LanguageMark language={key} size={20} />
+                    </Box>
+                    {LANGUAGES[key].label}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              {count === 1 && currentLanguage !== undefined && (
+                <Typography variant="caption" sx={{ fontWeight: 600, mt: -1 }}>
+                  Now: {languageLabel(currentLanguage, currentLimitedEnglish)}
+                </Typography>
+              )}
+
+              <FormControlLabel
+                sx={{ m: 0, minHeight: 48 }}
+                control={
+                  <Checkbox
+                    checked={limited ?? currentLimitedEnglish ?? false}
+                    onChange={(e) => setLimited(e.target.checked)}
+                    inputProps={{ 'aria-label': LIMITED_ENGLISH_LABEL }}
+                  />
+                }
+                label={
+                  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                    <LanguageMark language="english" limitedEnglish size={18} />
+                    <Box component="span" sx={{ fontSize: '0.88rem', fontWeight: 700 }}>
+                      {LIMITED_ENGLISH_LABEL}
+                    </Box>
+                  </Box>
+                }
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+                {LIMITED_ENGLISH_HELP}
+                {count > 1 && limited === null ? ` ${LIMITED_ENGLISH_BULK_NOTE}` : ''}
+              </Typography>
+
+              {(lang !== '' || limited !== null) && (
+                <Typography variant="caption" color="text.secondary">
+                  {LANGUAGE_SCOPE_NOTE}
+                </Typography>
+              )}
+            </Box>
           </Box>
         )}
 

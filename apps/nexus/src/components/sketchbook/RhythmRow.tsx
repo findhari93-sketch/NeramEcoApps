@@ -79,7 +79,7 @@ export default function RhythmRow({ student: s }: { student: RhythmStudent }) {
           '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: -3 },
         }}
       >
-        <StudentStageAvatar stage={stage} name={s.name} msOid={s.msOid} fallbackSrc={s.avatarUrl} size={36} />
+        <StudentStageAvatar stage={stage} userId={s.userId} name={s.name} msOid={s.msOid} fallbackSrc={s.avatarUrl} size={36} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
             <Typography

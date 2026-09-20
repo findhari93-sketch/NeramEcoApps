@@ -37,7 +37,10 @@ export const maxDuration = 300;
  *   409 { code: 'HAS_ATTEMPTS', attempts, error }
  */
 
-function noTranscriptMessage(code: string | undefined): string {
+function noTranscriptMessage(code: string | undefined, language: string | null | undefined): string {
+  if (language === 'ta' || language === 'ta_en') {
+    return 'Microsoft Stream cannot write a transcript for a Tamil class. Make one in English with Google AI Studio (see Where do I get one?), then upload it.';
+  }
   switch (code) {
     case 'YOUTUBE_NO_FETCH':
       return 'This recording is on YouTube, so there is no transcript to find. Upload its .vtt file.';
@@ -103,11 +106,12 @@ export async function POST(
       vttContent,
       msToken: (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '') || null,
       videoSource: track.video_source,
+      language: track.language,
     });
 
     if (!transcript.entries.length) {
       const code = transcript.sharepointError || 'NO_TRANSCRIPT';
-      return NextResponse.json({ status: 'needs_transcript', code, message: noTranscriptMessage(code) });
+      return NextResponse.json({ status: 'needs_transcript', code, message: noTranscriptMessage(code, track.language) });
     }
 
     const generated = await generateSectionsAndQuestions(transcript.entries, track.title, {
@@ -115,6 +119,7 @@ export async function POST(
       targetSegmentSeconds: track.target_segment_seconds,
       poolPerSegment: track.question_pool_per_segment,
       durationSeconds: track.video_duration_seconds || 0,
+      spokenLanguage: track.language,
     });
 
     // A segment the generator left without a usable question could never be

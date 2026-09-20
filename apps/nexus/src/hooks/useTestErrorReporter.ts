@@ -23,7 +23,8 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 
-export type TestErrorPhase = 'load' | 'render' | 'image' | 'submit' | 'grade';
+/** 'save' is the 30-second autosave being refused, which loses work as it happens. */
+export type TestErrorPhase = 'load' | 'render' | 'image' | 'save' | 'submit' | 'grade';
 
 export interface TestErrorReport {
   phase: TestErrorPhase;

@@ -49,6 +49,11 @@ describe('feature-flags registry', () => {
     'staff.sketchbook-reminders',
     // Same: messages every Not started student the evening it deploys.
     'staff.join-reminders',
+    // Same again, and louder: the first run reaches every student whose
+    // catch-up is holding up a test they never sat, on every exam of the last
+    // sixty days at once. It waits until a teacher has sent the same message
+    // by hand from the Students tab and seen it land.
+    'staff.test-chase',
     // Not a meter but a classroom: a live session reaches every enrolled
     // student's pad at the first ASK. It ships dark until the Teams app, the bot
     // and the manual test run are signed off, then goes on for one pilot class.

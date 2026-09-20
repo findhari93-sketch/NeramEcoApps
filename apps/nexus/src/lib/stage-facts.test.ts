@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { foldStudentFacts } from './stage-facts';
 
 /**
- * The fold behind every cohort ring in the app.
+ * The fold behind every info ring in the app.
  *
  * A returning student holds one enrolment per academic year, so each of the four
  * fields has to pick a winner and each picks differently. Getting one wrong is
@@ -123,5 +123,43 @@ describe('foldStudentFacts', () => {
 
   it('returns an empty map for an empty roster', () => {
     expect(foldStudentFacts([])).toEqual({});
+  });
+
+  it('carries whether a student knows Tamil, keeping true, false and unrecorded apart', () => {
+    const facts = foldStudentFacts([
+      member({ user_id: 'ta', user: { home_language: 'tamil' } as Member['user'] }),
+      member({ user_id: 'kn', user: { home_language: 'kannada', limited_english: true } as Member['user'] }),
+      member({ user_id: 'en', user: { home_language: 'english' } as Member['user'] }),
+      member({ user_id: 'unset', user: { home_language: null } as Member['user'] }),
+    ]);
+    expect(facts.ta.language).toBe('tamil');
+    expect(facts.kn.language).toBe('kannada');
+    expect(facts.kn.limitedEnglish).toBe(true);
+    expect(facts.en.language).toBe('english');
+    // Never recorded reads as English, which is what the UI shows.
+    expect(facts.unset.language).toBe('english');
+    expect(facts.unset.limitedEnglish).toBe(false);
+  });
+
+  it('reads a roster loaded without the language column as English, like an unset one', () => {
+    const facts = foldStudentFacts([member({ user_id: 'u1' })]);
+    expect(facts.u1.language).toBe('english');
+  });
+
+  it('keeps the language from the users row across a second enrolment', () => {
+    // Language is per person, so every row for them carries the same users embed.
+    const facts = foldStudentFacts([
+      member({
+        user_id: 'u1',
+        enrolled_at: '2025-06-01T00:00:00+00:00',
+        user: { home_language: 'hindi' } as Member['user'],
+      }),
+      member({
+        user_id: 'u1',
+        enrolled_at: '2026-06-01T00:00:00+00:00',
+        user: { home_language: 'hindi' } as Member['user'],
+      }),
+    ]);
+    expect(facts.u1.language).toBe('hindi');
   });
 });

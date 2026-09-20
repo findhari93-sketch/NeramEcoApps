@@ -339,6 +339,33 @@ export async function getExamResults(
   };
 }
 
+/**
+ * Delete snapshot rows that hold no paper, for students who are no longer part
+ * of this exam.
+ *
+ * The publish route sets aside students the exam was never set for (joined
+ * after the covered classes, still catching up, excused by a teacher). A publish
+ * made BEFORE one of them was excused may already have written them an absent
+ * row, and their card would go on saying "You were marked absent" forever. Only
+ * rows with a null attempt_id are touched, so a result somebody earned can never
+ * be removed by this, whatever the caller passes.
+ */
+export async function removePaperlessExamResults(
+  examId: string,
+  studentIds: string[],
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  if (studentIds.length === 0) return;
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await (supabase as any)
+    .from('nexus_exam_results')
+    .delete()
+    .eq('exam_id', examId)
+    .in('student_id', studentIds)
+    .is('attempt_id', null);
+  if (error) throw error;
+}
+
 const EXAM_ATTEMPT_COLUMNS =
   'id, student_id, status, attempt_number, score, total_marks, percentage, final_score, final_total_marks, final_percentage, finalised_at, time_spent_seconds, started_at, submitted_at, answers';
 

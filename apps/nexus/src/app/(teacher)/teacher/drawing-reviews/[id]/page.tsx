@@ -1028,7 +1028,7 @@ export default function DrawingReviewDetailPage() {
                 sketchId={submission.id}
                 reaction={(['heart', 'fire', 'wow'] as const).includes(workspaceData.reaction as never) ? (workspaceData.reaction as 'heart' | 'fire' | 'wow') : null}
                 featured={featured}
-                selfNote={submission.self_note}
+                studentName={sub.student?.name ?? null}
                 onChanged={(change) => {
                   if (change.reaction !== undefined) {
                     const next = { ...workspaceRef.current, reaction: change.reaction as WorkspaceData['reaction'] };

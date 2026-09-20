@@ -18,9 +18,11 @@
  *     - lib/transcript-sync, lib/recording-backfill, lib/youtube-backup-sync
  *     - lib/teams-meeting-sync       keyed on a meeting that does not exist
  *
- *   PATCHED, because it selects on date and status alone and would otherwise
- *   chase a teacher for the wrap-up of a paper:
+ *   PATCHED, because they select on date and status alone and would otherwise
+ *   chase a teacher, or a student, over a paper:
  *     - api/cron/class-followups     .eq('kind', CLASS_KIND_LECTURE)
+ *     - api/catchup/overview         .eq('kind', CLASS_KIND_LECTURE)
+ *     - catchup-journey.ts           .eq('kind', 'lecture'), both queries
  *
  *   DELIBERATELY UNFILTERED, an exam SHOULD appear:
  *     - api/timetable (the calendar itself), my-schedule, the student and
@@ -28,9 +30,21 @@
  *       entire reason it is a timetable row. The class panel decides what to
  *       render from `kind`, rather than the query hiding it.
  *
- *   NOT REACHABLE. These are keyed on a class that has a prep test, a recap, a
- *   recording or an absence row, none of which an exam produces:
- *     - class-prep.ts, class-recaps.ts, catchup-journey.ts, catchup-test.ts
+ *   NOT REACHABLE. These are keyed on a class that has a prep test, a recap or
+ *   a recording, none of which an exam produces:
+ *     - class-prep.ts, class-recaps.ts, catchup-test.ts
+ *
+ * WHERE THE FIRST VERSION OF THIS AUDIT WAS WRONG, kept because the mistake is
+ * easy to make twice: it listed catchup-journey.ts as NOT REACHABLE on the
+ * grounds that an exam never has an absence row. That is backwards.
+ * ensureCatchupJourney does not READ absence rows, it WRITES them, by walking
+ * every published class taught before a student joined. An exam row is in that
+ * walk, so an exam does produce an absence row. Twelve of them reached
+ * production, four students against each of three test windows, and none could
+ * ever be cleared: a test has no recording and no recap, so the catch-up card
+ * offered nothing to watch. The rule is that "an exam never has X" is only safe
+ * when the code READS X. When it writes X, the class list is the input and the
+ * filter has to be on the class list.
  */
 
 /** The class kinds. */

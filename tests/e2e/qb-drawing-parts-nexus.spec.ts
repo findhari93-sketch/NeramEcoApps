@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { test, expect, type APIResponse, type APIRequestContext, type Page } from '@playwright/test';
 import { APP_URLS, getTestAuthToken, injectAuthForPage } from '../utils/credentials';
 import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
 
@@ -78,6 +78,37 @@ function seedQuestions() {
   ];
 }
 
+/**
+ * A dev server request that survives a compile crash.
+ *
+ * This machine runs Node 24, which Next 14.2 does not support: the first
+ * on-demand compile of a heavy route can kill the render worker, and the route
+ * answers with Next's HTML error page ("Jest worker encountered 2 child process
+ * exceptions") or a bare 404 instead of the handler's JSON. It is load related,
+ * so a run that shares the dev server with another suite hits it often, and it
+ * reads exactly like a code regression: expect(res.ok()) fails while the body
+ * is HTML the handler never produced. An HTML body is the tell, so retry on it
+ * and let a genuine JSON error through untouched. See the node24-jest-worker
+ * note in the project memory.
+ */
+async function resilient(
+  label: string,
+  send: () => Promise<APIResponse>,
+  attempts = 4,
+): Promise<APIResponse> {
+  let last: APIResponse | null = null;
+  for (let i = 0; i < attempts; i++) {
+    last = await send();
+    if (last.ok()) return last;
+    const body = await last.text();
+    if (!body.trimStart().startsWith('<')) return last;
+    if (i === attempts - 1) break;
+    console.warn(`${label}: dev server returned an HTML error page, retrying (${i + 1}/${attempts})`);
+    await new Promise((r) => setTimeout(r, 4000));
+  }
+  return last!;
+}
+
 async function headersFor(request: APIRequestContext, role: 'teacher' | 'student' = 'teacher') {
   const login = await getTestAuthToken(request, role);
   expect(login?.testToken, `${role} test-login did not return a token`).toBeTruthy();
@@ -92,10 +123,12 @@ async function deletePaper(request: APIRequestContext, paperId: string) {
 /** Question id by its number on the seeded paper. */
 async function questionIds(request: APIRequestContext, paperId: string): Promise<Record<number, string>> {
   const headers = await headersFor(request);
-  const res = await request.get(`${NEXUS}/api/question-bank/papers/${paperId}`, {
-    headers,
-    timeout: COLD_COMPILE_BUDGET,
-  });
+  const res = await resilient('paper fetch', () =>
+    request.get(`${NEXUS}/api/question-bank/papers/${paperId}`, {
+      headers,
+      timeout: COLD_COMPILE_BUDGET,
+    }),
+  );
   expect(res.ok(), `paper fetch failed: ${await res.text()}`).toBeTruthy();
   const { questions } = (await res.json()).data;
   const out: Record<number, string> = {};
@@ -117,22 +150,29 @@ test.describe('QB drawing parts', () => {
   let ids: Record<number, string>;
 
   test.beforeAll(async ({ request }) => {
+    // Hooks do not inherit the describe timeout, and seeding a paper on a cold
+    // dev server compiles four API routes before the first assertion runs.
+    test.setTimeout(240_000);
     const headers = await headersFor(request);
-    const existing = await request.get(`${NEXUS}/api/question-bank/papers`, {
-      headers,
-      timeout: COLD_COMPILE_BUDGET,
-    });
+    const existing = await resilient('paper list', () =>
+      request.get(`${NEXUS}/api/question-bank/papers`, {
+        headers,
+        timeout: COLD_COMPILE_BUDGET,
+      }),
+    );
     if (existing.ok()) {
       for (const paper of (await existing.json()).data || []) {
         if (paper.year === SEED_YEAR) await deletePaper(request, paper.id);
       }
     }
 
-    const res = await request.post(`${NEXUS}/api/question-bank/papers`, {
-      headers,
-      data: { exam_type: 'JEE_PAPER_2', year: SEED_YEAR, session: null, shift: null, parsed_questions: seedQuestions() },
-      timeout: COLD_COMPILE_BUDGET,
-    });
+    const res = await resilient('paper seed', () =>
+      request.post(`${NEXUS}/api/question-bank/papers`, {
+        headers,
+        data: { exam_type: 'JEE_PAPER_2', year: SEED_YEAR, session: null, shift: null, parsed_questions: seedQuestions() },
+        timeout: COLD_COMPILE_BUDGET,
+      }),
+    );
     expect(res.ok(), `seeding failed: ${await res.text()}`).toBeTruthy();
     paperId = (await res.json()).data.id;
     ids = await questionIds(request, paperId);
@@ -305,6 +345,56 @@ test.describe('QB drawing parts', () => {
           { timeout: 30_000 },
         )
         .toBe('any_one');
+    });
+
+    test('AC7: the pane holds the job and nothing else', async () => {
+      // Below md the pane is a full screen sheet over the list, so the previous
+      // test's question has to be closed before another row can be tapped.
+      await page.getByRole('button', { name: 'Close question' }).click();
+      await page.getByRole('button', { name: `Open question ${Q_ANY_ONE}` }).click();
+      await expect(page.getByRole('group', { name: 'How students answer' })).toBeVisible({
+        timeout: COLD_COMPILE_BUDGET,
+      });
+
+      // The sections a teacher never opened on a drawing.
+      for (const gone of ['Classification', 'Drawing setup', 'Source & Format']) {
+        await expect(page.getByText(gone, { exact: true })).toHaveCount(0);
+      }
+      for (const gone of ['Brief Explanation', 'Detailed Explanation', 'Sub-topic', 'Shared instruction']) {
+        await expect(page.getByLabel(gone, { exact: true })).toHaveCount(0);
+      }
+
+      await expect(page.getByText('Worth 50 marks in the exam.')).toBeVisible();
+      await expect(page.getByText('More settings', { exact: true })).toBeVisible();
+      await assertNoHorizontalOverflow(page);
+    });
+
+    test('AC8: a part solution asks for the prompt first and the image second', async () => {
+      await page.getByRole('button', { name: /Solution for A/ }).click();
+
+      // Every part's solution stays mounted while collapsed, so the headings
+      // exist once per part. Only the open one is visible.
+      const step1 = page.getByText('1. Make the image with Gemini').filter({ visible: true });
+      const step2 = page.getByText('2. Upload the image it gives you').filter({ visible: true });
+      await expect(step1).toBeVisible();
+      await expect(step2).toBeVisible();
+
+      // Order is the point: there is nothing to upload until Gemini has been
+      // asked, and the dropzone used to come first.
+      const top1 = (await step1.boundingBox())?.y ?? 0;
+      const top2 = (await step2.boundingBox())?.y ?? 0;
+      expect(top1).toBeLessThan(top2);
+
+      await expect(page.getByRole('button', { name: /Copy prompt for A/ })).toBeVisible();
+      // One video field per part is four fields nobody fills in, so it is a
+      // button until asked for.
+      await expect(page.getByLabel(/Solution video URL for A/)).toHaveCount(0);
+
+      for (const name of ['Add a video link', 'Merge into one question']) {
+        const box = await page.getByRole('button', { name }).first().boundingBox();
+        expect(box?.height ?? 0, `${name} must be tappable`).toBeGreaterThanOrEqual(44);
+      }
+      await assertNoHorizontalOverflow(page);
     });
   });
 });

@@ -30,7 +30,19 @@ export type UserType = 'lead' | 'student' | 'teacher' | 'admin' | 'parent';
 export type StaffRole = 'admin' | 'manager' | 'teacher';
 export type UserStatus = 'pending' | 'approved' | 'rejected' | 'active' | 'inactive';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
-export type ApplicationSource = 'website_form' | 'app' | 'referral' | 'manual' | 'direct_link';
+/**
+ * How an application record came to exist. Mirrors the application_source enum.
+ * 'student_link' is a student filling in their own details from a no-login link
+ * sent to them; unlike 'website_form' it carries NO phone OTP, so it must never
+ * be treated as verifying a phone number.
+ */
+export type ApplicationSource =
+  | 'website_form'
+  | 'app'
+  | 'referral'
+  | 'manual'
+  | 'direct_link'
+  | 'student_link';
 export type CourseType = 'nata' | 'jee_paper2' | 'both' | 'not_sure';
 export type ExamType = 'NATA' | 'JEE_PAPER_2' | 'BOTH';
 
@@ -175,6 +187,12 @@ export interface User extends Timestamps {
   // First time the student got PAST the photo gate (migration 20260919090000).
   // NULL means Not started. nexus_first_login_at is stamped even when the gate stopped them.
   nexus_entered_at: string | null;
+  /** Superseded by home_language. Kept until the column is retired. */
+  knows_tamil: boolean | null;
+  /** Staff recorded in Nexus: tamil, hindi, kannada, malayalam or english. Null reads as English. */
+  home_language: string | null;
+  /** Staff recorded in Nexus: they cannot follow a class taught in English. */
+  limited_english: boolean;
   metadata: Record<string, unknown> | null;
 
   // Lifecycle focus (reversible archive) + academic-year cohort + exam status

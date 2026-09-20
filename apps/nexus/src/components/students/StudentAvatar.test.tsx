@@ -36,7 +36,9 @@ function stub(map: Record<string, Partial<Fact> & Pick<Fact, 'stage'>>) {
   vi.spyOn(facts, 'useStudentStageFacts').mockReturnValue({
     ready: true,
     factsFor: (id) =>
-      id && map[id] ? { dormant: false, photo: null, name: null, ...map[id] } : null,
+      id && map[id]
+        ? { dormant: false, photo: null, name: null, language: 'english', limitedEnglish: false, ...map[id] }
+        : null,
   });
 }
 
@@ -50,6 +52,21 @@ describe('StudentAvatar', () => {
     render(<StudentAvatar userId="s1" name="Nithya Raman" />);
     // StudentStageAvatar labels the wrapper with the stage and its explanation.
     expect(screen.getByLabelText(/Class 11/)).toBeTruthy();
+  });
+
+  it('wears the த mark for a student the lookup says follows Tamil', () => {
+    // The whole point of carrying the language in the lookup: ~95 call sites that
+    // pass nothing but a user id get the badge without a payload change.
+    stub({ 's1': { stage: '11th', language: 'tamil' } });
+    render(<StudentAvatar userId="s1" name="Nithya Raman" />);
+    expect(screen.getByTestId('language-badge').textContent).toBe('த');
+    expect(screen.getByLabelText(/^Class 11:.* Tamil\.$/)).toBeTruthy();
+  });
+
+  it('keeps a bare corner for a student the lookup says is English', () => {
+    stub({ 's1': { stage: '11th', language: 'english' } });
+    render(<StudentAvatar userId="s1" name="Nithya Raman" />);
+    expect(screen.queryByTestId('language-badge')).toBeNull();
   });
 
   it('says dormant rather than a stage for a paused student', () => {

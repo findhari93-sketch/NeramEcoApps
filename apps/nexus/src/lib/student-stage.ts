@@ -22,6 +22,7 @@
  */
 
 import type { NexusStudyStage } from '@neram/database';
+import { languageLabelOf } from './student-language';
 
 /** The stage as the UI thinks of it: the four DB values plus the absence of one. */
 export type StageKey = 'gap_year' | '12th' | '11th' | '10th' | 'unset';
@@ -141,6 +142,14 @@ export const DORMANT_EXPLAINER =
   'checklist progress, leaderboards and every automatic reminder.';
 
 /**
+ * The same thing in one scannable line, for the info ring legend. Short and
+ * long live side by side here, exactly as STAGE_MEANING sits beside
+ * STAGE_TOOLTIP, so a summary can never quietly promise something the full
+ * explainer does not.
+ */
+export const DORMANT_MEANING = 'Paused by staff. Still enrolled, left out of every class number.';
+
+/**
  * Not started: dormant because the student has never entered Nexus (no photo).
  * Set and lifted automatically, see lib/not-started.ts.
  */
@@ -245,6 +254,49 @@ export function pairMismatchColor(mode: 'light' | 'dark'): string {
   return mode === 'dark' ? PAIR_MISMATCH_COLOR_DARK : PAIR_MISMATCH_COLOR;
 }
 
+/**
+ * Snackbar verb for a Set stage sheet edit, naming what actually changed.
+ *
+ * A key that is present but `undefined` counts as untouched, matching how the
+ * sheet builds its payload (only touched keys are sent) and how JSON.stringify
+ * drops undefined on the way to the API.
+ */
+export function describeClassificationChange(payload: {
+  studyStage?: string | null;
+  academicYear?: string | null;
+  homeLanguage?: string | null;
+  limitedEnglish?: boolean;
+}): string {
+  const touched = (key: keyof typeof payload) => key in payload && payload[key] !== undefined;
+  const language = touched('homeLanguage') || touched('limitedEnglish');
+  const fields = [
+    touched('studyStage') ? 'class' : null,
+    touched('academicYear') ? 'exam year' : null,
+    language ? 'language' : null,
+  ].filter((field): field is string => field !== null);
+
+  if (fields.length > 1) {
+    const list = `${fields.slice(0, -1).join(', ')} and ${fields[fields.length - 1]}`;
+    return `${list.charAt(0).toUpperCase()}${list.slice(1)} set`;
+  }
+  if (touched('studyStage')) return payload.studyStage === null ? 'Cleared class' : 'Class set';
+  if (touched('academicYear')) {
+    return payload.academicYear === null ? 'Cleared exam year' : 'Exam year set';
+  }
+  // Both halves of the language in one gesture: neither verb alone would be true.
+  if (touched('homeLanguage') && touched('limitedEnglish')) return 'Language set';
+  if (touched('homeLanguage')) {
+    // Only Undo sends null, so this reads as the reversal it is.
+    return payload.homeLanguage === null
+      ? 'Cleared language'
+      : `Marked ${languageLabelOf(payload.homeLanguage)}`;
+  }
+  if (touched('limitedEnglish')) {
+    return payload.limitedEnglish ? 'Marked limited English' : 'Cleared limited English';
+  }
+  return 'Updated';
+}
+
 /** '2027-28' -> 2028, the calendar year the cohort sits the exam. */
 export function examYearOf(academicYear: string | null | undefined): number | null {
   const match = /^([0-9]{4})-[0-9]{2}$/.exec(academicYear || '');
@@ -290,6 +342,23 @@ export function stageKeyOf(currentStandard: string | null | undefined): StageKey
     default:
       return 'unset';
   }
+}
+
+/**
+ * The stage to PASS to StudentStageAvatar out of a screen's own payload.
+ *
+ * `stageKeyOf` folds a missing value into 'unset', which is right for RENDERING
+ * (a chip has to say something) and wrong for a prop. An explicit 'unset'
+ * outranks the session-wide lookup, so a screen whose payload happens not to
+ * carry the class would assert "Not set" over a class the app already knows,
+ * and draw a grey dotted ring that reads as no ring at all.
+ *
+ * Undefined defers to the lookup instead. A stage the payload DOES carry is
+ * still passed, so the ring paints correctly on the first frame rather than
+ * waiting for /api/students/stage-facts to land.
+ */
+export function knownStageKey(currentStandard: string | null | undefined): StageKey | undefined {
+  return currentStandard ? stageKeyOf(currentStandard) : undefined;
 }
 
 /** True when this stage sits the exam in the current cycle. */

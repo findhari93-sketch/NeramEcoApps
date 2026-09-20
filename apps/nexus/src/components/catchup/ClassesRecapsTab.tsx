@@ -17,6 +17,19 @@
  *
  * Classes with full attendance are listed too. A class nobody missed can still
  * owe a recap, and finding that out should not require a second screen.
+ *
+ * WHAT THIS SCREEN IS FOR, since it changed. It was a work list: a queue of
+ * recaps to make and publish. It is a record now, because nothing here is made
+ * by hand any more, and the two bands above the list say so in order: what
+ * needs a person (normally nothing), then what the automation did. The list
+ * underneath is the receipt, and the one action on a row opens the editor for
+ * the evening a student says a question is wrong.
+ *
+ * Scheduled exams are not in it. They used to be: an exam is a timetable row,
+ * the overview query filtered on date and publish_state alone, and three test
+ * windows rendered here as classes owing a recap, each one reading "No
+ * recording" above "4 students are waiting on this" with nothing anybody could
+ * press. The filter is in api/catchup/overview; see lib/class-kind.ts.
  */
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -32,6 +45,11 @@ import {
   DialogTitle,
   Drawer,
   IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Snackbar,
   Stack,
   TextField,
   Typography,
@@ -42,7 +60,9 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CloseIcon from '@mui/icons-material/Close';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import VideocamOffOutlinedIcon from '@mui/icons-material/VideocamOffOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { RADIUS } from '@/components/timetable/timetable-theme';
@@ -51,7 +71,16 @@ import { SECTION_HEADING_SX, shortDate } from './shared';
 import type { ClassStat, RecapState, TabProps } from './types';
 import RecapReviewQueue from '@/components/class-recap/RecapReviewQueue';
 
-type Filter = 'all' | 'blocking' | 'needs_recap' | 'not_caught_up';
+/**
+ * `needs_recap` is gone.
+ *
+ * It selected classes whose recap was missing or still a draft, which was a
+ * work list back when a recap was made by pressing a button. The sweep now runs
+ * every fifteen minutes from 20:45 IST and publishes on its own, so that chip
+ * had become a list of things that were already in hand, and offering it
+ * invited a teacher to do work the machine was mid-way through.
+ */
+type Filter = 'all' | 'blocking' | 'not_caught_up';
 
 const RECAP_LABEL: Record<RecapState, string> = {
   no_recording: 'No recording',
@@ -81,9 +110,36 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
   const fullWidthDrawer = useMediaQuery(theme.breakpoints.down('lg'));
 
   const [filter, setFilter] = useState<Filter>('all');
+  /**
+   * How many rows the queue above found, reported up so the heading can be
+   * honest about what is in it. Null until it has loaded, which is what keeps
+   * the heading from flashing "0 things need you" on the way in.
+   */
+  const [needsYou, setNeedsYou] = useState<number | null>(null);
   const [busyClass, setBusyClass] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openClassId, setOpenClassId] = useState<string | null>(null);
+
+  /**
+   * The row overflow, and what it can ask for.
+   *
+   * An overflow rather than a third button on the row: "Follow up 17" and
+   * "Continue draft" already fill the width at 375px, and a session that was
+   * not a class is rare enough that it should not cost the two common actions
+   * their room.
+   */
+  const [menuFor, setMenuFor] = useState<{ el: HTMLElement; cls: ClassStat } | null>(null);
+  const [confirmNotTaught, setConfirmNotTaught] = useState<ClassStat | null>(null);
+  const [notTaughtBusy, setNotTaughtBusy] = useState(false);
+  /**
+   * The undo offer, which exists because the row LEAVES on success.
+   *
+   * Marking a session as not a class cancels it, and cancelled classes are
+   * filtered out of this list upstream, so the card a teacher just acted on
+   * disappears. Without an undo right here the only way back would be the
+   * timetable, two screens away, on a class they can no longer see.
+   */
+  const [undoOffer, setUndoOffer] = useState<{ classId: string; count: number } | null>(null);
 
   const [manualOpen, setManualOpen] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
@@ -131,8 +187,9 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
     () => data.classStats.filter((c) => c.blocked > 0).length,
     [data.classStats],
   );
-  const needsRecapCount = useMemo(
-    () => data.classStats.filter((c) => c.recap_state === 'recording_ready' || c.recap_state === 'draft').length,
+  /** Classes a student can already open and work through. The normal case. */
+  const liveCount = useMemo(
+    () => data.classStats.filter((c) => c.recap_state === 'published').length,
     [data.classStats],
   );
 
@@ -144,11 +201,6 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
   const rows = useMemo(() => {
     if (filter === 'blocking') return data.classStats.filter((c) => c.blocked > 0);
     if (filter === 'not_caught_up') return data.classStats.filter((c) => notCaughtUp(c) > 0);
-    if (filter === 'needs_recap') {
-      return data.classStats.filter(
-        (c) => c.recap_state === 'recording_ready' || c.recap_state === 'draft',
-      );
-    }
     return data.classStats;
   }, [data.classStats, filter]);
 
@@ -186,6 +238,42 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
       }
     },
     [router, teacherFetch, onReload],
+  );
+
+  /**
+   * "That was not a class."
+   *
+   * The 2026-09-18 session was the tutor opening the meeting to say the class
+   * was postponed because of school exams. Six minutes of speech, nothing
+   * taught, and seventeen students left owing a catch-up for it with nothing on
+   * this card that could clear them: Continue draft would have written a recap
+   * of an announcement, and Follow up 17 would have chased them over it.
+   *
+   * The attendance register is untouched by this, which is the point. Nineteen
+   * people were in that room.
+   */
+  const markNotTaught = useCallback(
+    async (c: ClassStat, undo: boolean) => {
+      setNotTaughtBusy(true);
+      setError(null);
+      try {
+        const body = await teacherFetch(`/api/timetable/${c.id}/not-taught`, {
+          method: 'POST',
+          body: JSON.stringify({ undo }),
+        });
+        setConfirmNotTaught(null);
+        // Offered only one way. After an undo the class is back in the list and
+        // the row itself is the confirmation, so a second offer to undo the
+        // undo would just be a loop with no end.
+        setUndoOffer(undo ? null : { classId: c.id, count: body?.excused ?? 0 });
+        onReload();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not update this class');
+      } finally {
+        setNotTaughtBusy(false);
+      }
+    },
+    [teacherFetch, onReload],
   );
 
   /**
@@ -289,12 +377,44 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
         </Alert>
       )}
 
-      {/* Recaps that generated automatically but did not clear the quality
-          checks, so students cannot open them yet. Sits above the class list
-          because it is the only part of this screen with something owed: every
-          row is a class somebody cannot catch up on until a teacher looks.
-          Renders nothing when the queue is empty. */}
-      <RecapReviewQueue compact />
+      {/* BAND 1: the only part of this screen that needs a person.
+          Questions a student reported as wrong, then recaps the pipeline could
+          not publish after retrying them across several nights. Renders nothing
+          at all when both are empty, which is the normal state. */}
+      {needsYou !== null && needsYou > 0 && (
+        <Typography sx={{ ...SECTION_HEADING_SX, mb: 1 }}>
+          {needsYou === 1 ? '1 thing needs you' : `${needsYou} things need you`}
+        </Typography>
+      )}
+      <RecapReviewQueue compact onCount={setNeedsYou} />
+
+      {/* BAND 2: what the automation has done, stated once and plainly.
+          This screen used to open with a list of work. It opens with a fact
+          now, because on a normal evening there is no work: the sweep has
+          already published, and the row below is the receipt. */}
+      <Box
+        sx={{
+          px: 1.75,
+          py: 1.25,
+          mb: 2,
+          borderRadius: RADIUS.card,
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        {/* Not gated on the queue above loading. These numbers came with the
+            page and are already true; holding them behind a second request
+            would put a skeleton over a fact we have. */}
+        <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
+          <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>
+            {liveCount} of {data.classStats.length} classes
+          </Box>{' '}
+          are live for students, published automatically after each class ended.
+          {outstandingCount > 0
+            ? ` ${outstandingCount} still have someone working through them.`
+            : ' Everyone who missed a class has caught up.'}
+        </Typography>
+      </Box>
 
       <Stack
         direction="row"
@@ -310,7 +430,7 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
         />
         {blockingCount > 0 && (
           <Chip
-            label={`Blocking students ${blockingCount}`}
+            label={`Blocked on us ${blockingCount}`}
             onClick={() => setFilter(filter === 'blocking' ? 'all' : 'blocking')}
             color={filter === 'blocking' ? 'error' : 'default'}
             variant={filter === 'blocking' ? 'filled' : 'outlined'}
@@ -319,33 +439,29 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
         )}
         {outstandingCount > 0 && (
           <Chip
-            label={`Not caught up ${outstandingCount}`}
+            label={`Still catching up ${outstandingCount}`}
             onClick={() => setFilter(filter === 'not_caught_up' ? 'all' : 'not_caught_up')}
             color={filter === 'not_caught_up' ? 'warning' : 'default'}
             variant={filter === 'not_caught_up' ? 'filled' : 'outlined'}
             sx={{ fontWeight: 700, height: 34 }}
           />
         )}
-        {needsRecapCount > 0 && (
-          <Chip
-            label={`Needs a recap ${needsRecapCount}`}
-            onClick={() => setFilter(filter === 'needs_recap' ? 'all' : 'needs_recap')}
-            color={filter === 'needs_recap' ? 'warning' : 'default'}
-            variant={filter === 'needs_recap' ? 'filled' : 'outlined'}
-            sx={{ fontWeight: 700, height: 34 }}
-          />
-        )}
         <Box sx={{ flex: 1 }} />
-        {/* The backlog button. Everything it prepares would eventually be done
-            by the nightly sweep; this is for the teacher who has students
-            waiting today. */}
+        {/* An escape hatch, not a chore.
+            Outlined rather than contained on purpose. The sweep now runs every
+            fifteen minutes from 20:45 IST and picks a class up in whichever pass
+            completes it, so there is normally nothing here to prepare. A filled
+            primary button reads as the thing a teacher is supposed to press, and
+            pressing it was exactly the manual step this pipeline exists to
+            remove. Kept because a Teams outage or a spent Gemini budget is still
+            worth being able to retry by hand. */}
         <Button
           size="small"
-          variant="contained"
+          variant="outlined"
           startIcon={<AutoAwesomeIcon />}
           onClick={prepareMissing}
           disabled={!!prep && !prep.finished}
-          sx={{ minHeight: 40, textTransform: 'none', fontWeight: 700 }}
+          sx={{ minHeight: 44, textTransform: 'none' }}
         >
           {prep && !prep.finished ? 'Preparing...' : 'Prepare missing classes'}
         </Button>
@@ -355,7 +471,7 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           startIcon={<AddIcon />}
           onClick={() => setManualOpen(true)}
           disabled={!data.classroomId}
-          sx={{ minHeight: 40, textTransform: 'none' }}
+          sx={{ minHeight: 44, textTransform: 'none' }}
         >
           Recap from a link
         </Button>
@@ -584,6 +700,14 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
                           : 'Create recap'}
                     </Button>
                   )}
+                  <IconButton
+                    size="small"
+                    aria-label={`More actions for ${c.title || 'this class'}`}
+                    onClick={(e) => setMenuFor({ el: e.currentTarget, cls: c })}
+                    sx={{ minWidth: 44, minHeight: 44 }}
+                  >
+                    <MoreVertIcon fontSize="small" />
+                  </IconButton>
                 </Stack>
               </Box>
             );
@@ -602,6 +726,123 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           </Alert>
         </Box>
       )}
+
+      {/* One item today, and still a menu. The row has room for two buttons at
+          375px and this is the rarer of the three actions, so it gives its
+          space to the two a teacher presses every week. */}
+      <Menu
+        anchorEl={menuFor?.el ?? null}
+        open={!!menuFor}
+        onClose={() => setMenuFor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          onClick={() => {
+            setConfirmNotTaught(menuFor?.cls ?? null);
+            setMenuFor(null);
+          }}
+          sx={{ minHeight: 48 }}
+        >
+          <ListItemIcon>
+            <EventBusyIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="No class was taught" />
+        </MenuItem>
+      </Menu>
+
+      {/* Confirmed rather than done on the tap, because it moves every student
+          on the class at once and the counts are the thing worth seeing first. */}
+      <Dialog
+        open={!!confirmNotTaught}
+        onClose={() => (notTaughtBusy ? undefined : setConfirmNotTaught(null))}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>No class was taught?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1.25 }}>
+            {`"${confirmNotTaught?.title || 'This class'}" on ${shortDate(confirmNotTaught?.scheduled_date || '')} will stop asking anyone to catch up.`}
+          </Typography>
+          {/* Attendance first. It is the thing a teacher is actually worried
+              about losing, and the only other lever on a finished class
+              (Delete Permanently) does destroy it. */}
+          <Typography variant="body2" component="ul" sx={{ pl: 2.5, m: 0 }}>
+            <li>The attendance register stays exactly as it is.</li>
+            <li>
+              {confirmNotTaught && notCaughtUp(confirmNotTaught) === 1
+                ? '1 student stops owing a catch-up for this date.'
+                : `${confirmNotTaught ? notCaughtUp(confirmNotTaught) : 0} students stop owing a catch-up for this date.`}
+            </li>
+            <li>The class shows as cancelled on the timetable.</li>
+            <li>You can undo this.</li>
+          </Typography>
+          {!!confirmNotTaught?.caughtUp && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.25 }}>
+              {confirmNotTaught.caughtUp === 1
+                ? '1 student has already worked through this. Their completion is kept.'
+                : `${confirmNotTaught.caughtUp} students have already worked through this. Their completion is kept.`}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setConfirmNotTaught(null)}
+            disabled={notTaughtBusy}
+            sx={{ minHeight: 44 }}
+          >
+            Go back
+          </Button>
+          {/* Not red. Every row it touches survives, and it reverses cleanly. */}
+          <Button
+            variant="contained"
+            disabled={notTaughtBusy}
+            startIcon={notTaughtBusy ? <CircularProgress size={16} color="inherit" /> : undefined}
+            onClick={() => confirmNotTaught && markNotTaught(confirmNotTaught, false)}
+            sx={{ minHeight: 44, textTransform: 'none' }}
+          >
+            Yes, it was not a class
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={!!undoOffer}
+        autoHideDuration={12000}
+        onClose={() => setUndoOffer(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setUndoOffer(null)}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              disabled={notTaughtBusy}
+              onClick={() => {
+                const target = data.classStats.find((c) => c.id === undoOffer?.classId);
+                setUndoOffer(null);
+                // The row has already gone from `classStats`, so rebuild the
+                // little the undo needs rather than depending on finding it.
+                markNotTaught(
+                  target || ({ id: undoOffer?.classId || '' } as ClassStat),
+                  true,
+                );
+              }}
+              sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}
+            >
+              Undo
+            </Button>
+          }
+          sx={{ width: '100%' }}
+        >
+          {undoOffer?.count === 1
+            ? 'Marked as not a class. 1 student no longer owes a catch-up.'
+            : `Marked as not a class. ${undoOffer?.count ?? 0} students no longer owe a catch-up.`}
+        </Alert>
+      </Snackbar>
 
       {/* The same panel the timetable opens in a dialog, in a drawer here, so a
           teacher reviewing the week meets one attendance surface rather than

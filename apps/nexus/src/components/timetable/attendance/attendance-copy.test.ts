@@ -20,6 +20,12 @@ function student(over: Partial<StudentInsight>): StudentInsight {
     barelyAttended: false,
     absence: null,
     bucket: 'missed_no_reason',
+    minutesIn: 0,
+    lateByMin: 0,
+    leftEarlyByMin: 0,
+    outMin: 0,
+    segments: [],
+    group: 'no_reason',
     ...over,
   };
 }
@@ -34,6 +40,8 @@ function insights(students: StudentInsight[]): Insights {
       end_time: '20:30:00',
       attendance_synced_at: null,
       has_meeting: true,
+      teams_meeting_id: null,
+      measured: true,
     },
     summary: {
       rosterSize: students.length,
@@ -47,6 +55,12 @@ function insights(students: StudentInsight[]): Insights {
       barelyAttendedCount: 0,
       scheduledMinutes: 90,
       barelyAttendedCutoff: 23,
+      held: {
+        start: new Date('2026-07-31T19:00:00+05:30').toISOString(),
+        end: new Date('2026-07-31T20:30:00+05:30').toISOString(),
+        source: 'booked',
+        minutes: 90,
+      },
       missedNoReason: 0,
       missedWithReason: 0,
       caughtUp: 0,

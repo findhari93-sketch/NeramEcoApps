@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
     // ambiguous and PostgREST rejects it.
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('id, user_id, enrolled_at, batch_id, is_active, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason, dormant_source, dormant_by, join_reminders_sent, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, is_alumni, nexus_first_login_at, nexus_last_login_at), batch:nexus_batches(id, name)')
+      .select('id, user_id, enrolled_at, batch_id, is_active, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason, dormant_source, dormant_by, join_reminders_sent, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, home_language, limited_english, is_alumni, nexus_first_login_at, nexus_last_login_at), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
       .eq('role', 'student')
       .eq('is_active', true)
@@ -369,6 +369,8 @@ export async function GET(request: NextRequest) {
         ms_oid: string | null;
         nexus_access_enabled: boolean | null;
         academic_year: string | null;
+        home_language: string | null;
+        limited_english: boolean | null;
         nexus_first_login_at: string | null;
         nexus_last_login_at: string | null;
       };
@@ -410,6 +412,9 @@ export async function GET(request: NextRequest) {
         // field the classification route writes.
         exam_batch: user.academic_year ?? null,
         academic_year: user.academic_year ?? null,
+        // Per user, not per enrolment. Null means unrecorded, which reads as English.
+        home_language: user.home_language ?? null,
+        limited_english: user.limited_english === true,
         // Does the class agree with the exam year? Computed server-side from the
         // current batch so the row badge, the banner count and the drawer's
         // warning can never disagree about the same student.

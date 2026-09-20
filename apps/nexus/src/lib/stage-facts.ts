@@ -1,4 +1,5 @@
-import type { RosterMember } from '@neram/database';
+import type { RosterMember, RosterMemberUser } from '@neram/database';
+import { languageKeyOf, type LanguageKey } from './student-language';
 
 /**
  * One fact per student, folded from however many enrolments they hold.
@@ -19,12 +20,24 @@ export interface StudentFact {
   photo: string | null;
   /** users.name, so a screen holding only an id can still show the real name. */
   name: string | null;
+  /**
+   * users.home_language, already resolved: NULL, an unknown word and a roster
+   * loaded without the column all read as English. Drives the avatar mark.
+   */
+  language: LanguageKey;
+  /** users.limited_english. Flips the mark to its outlined form. */
+  limitedEnglish: boolean;
 }
 
-export function foldStudentFacts(members: RosterMember[]): Record<string, StudentFact> {
+/** The roster row this fold reads: the base users embed plus the language columns. */
+export type StageFactMember = RosterMember<
+  RosterMemberUser & { home_language?: string | null; limited_english?: boolean | null }
+>;
+
+export function foldStudentFacts(members: StageFactMember[]): Record<string, StudentFact> {
   /**
    * Classroom-per-year means a returning student legitimately holds an enrolment
-   * in both the 2026 and the 2027 classroom, so the four fields fold three
+   * in both the 2026 and the 2027 classroom, so the five fields fold three
    * different ways:
    *
    *   stage        varies per enrolment  -> newest enrolled_at wins, because a
@@ -35,8 +48,8 @@ export function foldStudentFacts(members: RosterMember[]): Record<string, Studen
    *                                        matching pickTrackedIds. Dormant in
    *                                        last year's archived classroom and
    *                                        active in this year's is not a break.
-   *   photo, name  PER USER, not per enrolment -> first sight, and that is the
-   *                                        whole rule. loadClassroomRoster joins
+   *   photo, name, PER USER, not per enrolment -> first sight, and that is the
+   *   language, limitedEnglish             whole rule. loadClassroomRoster joins
    *                                        one `user:users!...` embed per query,
    *                                        so every row for a person carries the
    *                                        identical users row: "newest" and "all
@@ -57,6 +70,8 @@ export function foldStudentFacts(members: RosterMember[]): Record<string, Studen
         dormant: member.participation_status === 'dormant',
         photo: member.user?.avatar_url ?? null,
         name: member.user?.name ?? null,
+        language: languageKeyOf(member.user?.home_language),
+        limitedEnglish: member.user?.limited_english === true,
       };
       newest.set(member.user_id, at);
       continue;
