@@ -275,9 +275,13 @@ export async function PATCH(
     }
 
     // The voice note recorded for this attempt goes out with this decision, never
-    // on its own. Exam drawings cannot have one (the voice route refuses them).
+    // on its own. Test drawings cannot have one (the voice route refuses them).
+    //
+    // `kind`, not assignment_id: a sketch has none, so the note a teacher had just
+    // recorded over it stayed a draft for ever while the student was told their
+    // sketch had been reviewed and found nothing to play.
     let voice: { duration_ms: number } | null = null;
-    if (sub?.assignment_id && !sub?.exam_attempt_id) {
+    if (kind !== 'test') {
       try {
         voice = await markVoiceSent(id);
       } catch (err) {
@@ -295,7 +299,9 @@ export async function PATCH(
         action: reviewAction,
         previousStatus: sub?.status ?? null,
         hasAssignment: true,
-        isExam: !!sub?.exam_attempt_id,
+        // Never the raw column: staging does not have it, so every test drawing
+        // read as "not a test" there and could be messaged before results were out.
+        isExam: kind === 'test',
         voiceSentNow: !!voice,
       });
     if (notify && assignment) {

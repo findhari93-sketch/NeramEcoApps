@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   sendNudge: vi.fn(),
   recordFlip: vi.fn(),
   roster: vi.fn(),
+  markVoiceSent: vi.fn(),
 }));
 
 function chain(result: { data: unknown; error: unknown }) {
@@ -29,7 +30,7 @@ vi.mock('@neram/database/queries/nexus', () => ({
 vi.mock('@/lib/nudge-delivery', () => ({ sendNudge: (...a: unknown[]) => m.sendNudge(...a), plainToHtmlWithLink: () => '<p>html</p>' }));
 vi.mock('@/lib/teams-assignment-announcements', () => ({ canPostToGraph: () => false }));
 vi.mock('@/lib/class-share-links', () => ({ shareBaseUrl: () => 'https://nexus.test' }));
-vi.mock('@/lib/drawing-voice-feedback', () => ({ markVoiceSent: async () => null }));
+vi.mock('@/lib/drawing-voice-feedback', () => ({ markVoiceSent: (...a: unknown[]) => m.markVoiceSent(...a) }));
 vi.mock('@/lib/drawing-eval/db', () => ({ evalTables: () => ({}) }));
 vi.mock('@/lib/drawing-hold', () => ({ releaseModeFor: async () => 'immediate', heldSubmissionIds: async () => new Set(), holdReview: async () => ({}) }));
 vi.mock('@/lib/drawing-region-sync', () => ({ syncRegionMarks: async () => undefined }));
@@ -54,6 +55,7 @@ describe('PATCH review for practice', () => {
     m.sendNudge.mockResolvedValue({ results: [{ chat: true, teams: false, inapp: true }] });
     m.recordFlip.mockResolvedValue(undefined);
     m.roster.mockResolvedValue({ rows: [] });
+    m.markVoiceSent.mockResolvedValue(null);
   });
 
   it('tells the student about a first review of a sketch and marks it seen', async () => {
@@ -83,6 +85,22 @@ describe('PATCH review for practice', () => {
     const res = await PATCH(patch({ action: 'redo' }), ctx);
     expect(res.status).toBe(400);
     expect(m.save).not.toHaveBeenCalled();
+  });
+
+  it('sends the voice note recorded on a sketch', async () => {
+    // Recording one is now allowed (the voice route asks reviewKindOf), so the
+    // review has to hand it over. It used to require an assignment_id, which a
+    // sketch never has, so the note stayed a draft and the student, who was told
+    // their sketch had been reviewed, found nothing to play.
+    m.tables.drawing_submissions = { data: sketch, error: null };
+    await PATCH(patch({ tutor_rating: 4, tutor_feedback: 'Good lines', action: 'complete' }), ctx);
+    expect(m.markVoiceSent).toHaveBeenCalledWith('d1');
+  });
+
+  it('never sends a voice note on a test drawing', async () => {
+    m.tables.drawing_submissions = { data: { ...sketch, source_type: 'exam', status: 'submitted' }, error: null };
+    await PATCH(patch({ tutor_marks: 8, action: 'complete' }), ctx);
+    expect(m.markVoiceSent).not.toHaveBeenCalled();
   });
 
   it('keeps assignment drawings on the assignment message', async () => {

@@ -827,10 +827,10 @@ export default function DrawingReviewDetailPage() {
     <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#fff8e1' }}>
       <Typography variant="body2" color="warning.dark" fontWeight={600}>
         {submission.status === 'redo'
-          ? sub.assignment_id && !sub.exam_attempt_id
+          ? reviewKindOf(sub) !== 'test'
             ? 'Sent back for a redo. Complete it here to close it out, or send it back again. The student is messaged when the outcome changes or you send a new voice note.'
             : 'Sent back for a redo. Grade it here to close it out, or send it back again.'
-          : sub.assignment_id && !sub.exam_attempt_id
+          : reviewKindOf(sub) !== 'test'
             ? 'Editing a reviewed submission. The student is messaged only if the outcome changes or you send a new voice note.'
             : 'Editing a reviewed submission.'}
       </Typography>
@@ -855,9 +855,10 @@ export default function DrawingReviewDetailPage() {
     </Paper>
   ) : null;
 
-  // Voice notes are for assignment drawings only. An exam result is embargoed
-  // until it is published, and a practice drawing has no page to play one on.
-  const canUseVoice = !!sub.assignment_id && !sub.exam_attempt_id;
+  // Every drawing except a test, whose result is embargoed until it is published.
+  // This used to require an assignment_id, so the recorder was hidden on exactly
+  // the drawings a teacher most wants to talk over: the student's own practice.
+  const canUseVoice = reviewKindOf(sub) !== 'test';
   const voiceSection = canUseVoice ? (
     <VoiceFeedbackRecorder
       key={submission.id}

@@ -138,7 +138,11 @@ describe('getPendingAutoMessages', () => {
     expect(result).toHaveLength(1);
     expect(result[0].user_name).toBe('Alice');
     expect(result[0].user_phone).toBe('+919876543210');
-    expect(result[0].users).toBeUndefined(); // cleaned up
+    // The return type already says the join is gone, so reading `.users` off it
+    // does not compile. The assertion is still the point of the test: the row
+    // arrives from PostgREST carrying a nested `users` object, and this proves
+    // the query deletes the key rather than merely ignoring it.
+    expect((result[0] as unknown as Record<string, unknown>).users).toBeUndefined();
   });
 
   test('should return empty array when no pending messages', async () => {

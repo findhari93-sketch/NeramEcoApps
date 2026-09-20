@@ -49,7 +49,30 @@ const MAX_BYTES = 10 * 1024 * 1024;
 
 type Ctx = { params: Promise<{ id: string }> };
 
-async function authorise(request: NextRequest, submissionId: string) {
+/**
+ * Tagged, rather than "does it have a `fail` key".
+ *
+ * `{ fail } | { user, sub }` reads fine, but TypeScript gives the second member
+ * an implicit `fail?: undefined`, so `'fail' in auth` does not rule it out and
+ * `auth.fail` is `NextResponse | undefined`. Every handler here therefore
+ * returned `NextResponse | undefined`, which nothing noticed until a test tried
+ * to read `.status` off one.
+ */
+/** What this route reads off the drawing. The row is fetched whole; see below. */
+interface VoiceSubmission {
+  id: string;
+  student_id: string;
+  source_type: string | null;
+  assignment_id: string | null;
+  original_image_url: string | null;
+  [column: string]: unknown;
+}
+
+type Authorised =
+  | { ok: false; response: NextResponse }
+  | { ok: true; user: { id: string; user_type: string | null }; sub: VoiceSubmission };
+
+async function authorise(request: NextRequest, submissionId: string): Promise<Authorised> {
   const msUser = await verifyMsToken(request.headers.get('Authorization'));
   const supabase = getSupabaseAdminClient() as any;
 
@@ -59,7 +82,7 @@ async function authorise(request: NextRequest, submissionId: string) {
     .eq('ms_oid', msUser.oid)
     .single();
   if (!user || !['teacher', 'admin'].includes(user.user_type ?? '')) {
-    return { fail: NextResponse.json({ error: 'Not authorized' }, { status: 403 }) } as const;
+    return { ok: false, response: NextResponse.json({ error: 'Not authorized' }, { status: 403 }) };
   }
 
   // The whole row, not a column list. Staging has no exam_attempt_id column, and
@@ -75,17 +98,18 @@ async function authorise(request: NextRequest, submissionId: string) {
     throw new Error(`Could not load the drawing: ${subError.message}`);
   }
   if (!sub) {
-    return { fail: NextResponse.json({ error: 'Submission not found' }, { status: 404 }) } as const;
+    return { ok: false, response: NextResponse.json({ error: 'Submission not found' }, { status: 404 }) };
   }
   if (reviewKindOf(sub) === 'test') {
     return {
-      fail: NextResponse.json(
+      ok: false,
+      response: NextResponse.json(
         { error: 'Voice feedback is not available on test drawings.' },
         { status: 400 },
       ),
-    } as const;
+    };
   }
-  return { user, sub } as const;
+  return { ok: true, user, sub };
 }
 
 /**
@@ -105,11 +129,11 @@ function failure(err: unknown, fallback: string) {
   return NextResponse.json({ error: status === 500 ? fallback : messageOf(err, fallback) }, { status });
 }
 
-export async function POST(request: NextRequest, { params }: Ctx) {
+export async function POST(request: NextRequest, { params }: Ctx): Promise<NextResponse> {
   try {
     const { id } = await params;
     const auth = await authorise(request, id);
-    if ('fail' in auth) return auth.fail;
+    if (!auth.ok) return auth.response;
 
     const body = await request.json().catch(() => ({}) as any);
     const mime = String(body?.mime || '');
@@ -128,11 +152,11 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   }
 }
 
-export async function PUT(request: NextRequest, { params }: Ctx) {
+export async function PUT(request: NextRequest, { params }: Ctx): Promise<NextResponse> {
   try {
     const { id } = await params;
     const auth = await authorise(request, id);
-    if ('fail' in auth) return auth.fail;
+    if (!auth.ok) return auth.response;
 
     const body = await request.json().catch(() => ({}) as any);
     const path = String(body?.path || '');
@@ -183,11 +207,11 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: Ctx) {
+export async function DELETE(request: NextRequest, { params }: Ctx): Promise<NextResponse> {
   try {
     const { id } = await params;
     const auth = await authorise(request, id);
-    if ('fail' in auth) return auth.fail;
+    if (!auth.ok) return auth.response;
 
     const removed = await deleteVoiceFeedback(id);
     return NextResponse.json({ ok: true, removed });

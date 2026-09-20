@@ -9,10 +9,13 @@ import { deleteSketch } from '@/components/sketchbook/sketchbook-api';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { canDeleteOwnSketch, type SketchbookPayload } from '@/lib/sketchbook-payload';
+import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 
 interface SubmissionDetail {
   submission: { original_image_url: string; tutor_feedback: string | null; reviewed_image_url: string | null; corrected_image_url: string | null };
   practised_from: { item_id: string; title: string; image_url: string } | null;
+  /** Signed, and only ever a note the teacher actually sent (see the route). */
+  voice_feedback: VoiceFeedbackView | null;
 }
 
 export default function StudentSketchPage() {
@@ -40,7 +43,15 @@ export default function StudentSketchPage() {
         mode="own"
         backHref="/student/sketchbook"
         getToken={getToken}
-        review={<StudentDrawingReview entry={sketch} submission={detail?.submission ?? null} practisedFrom={detail?.practised_from ?? null} />}
+        review={(
+          <StudentDrawingReview
+            entry={sketch}
+            submission={detail?.submission ?? null}
+            practisedFrom={detail?.practised_from ?? null}
+            voice={detail?.voice_feedback ?? null}
+            getToken={getToken}
+          />
+        )}
         onDelete={canDeleteOwnSketch(sketch) ? async () => {
           await deleteSketch(getToken, sketch.id);
           router.push('/student/sketchbook');

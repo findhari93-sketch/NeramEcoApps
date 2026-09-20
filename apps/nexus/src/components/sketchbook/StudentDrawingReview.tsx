@@ -1,8 +1,9 @@
 'use client';
 
 /**
- * A student's own drawing, as their teacher left it: the stars or marks, the
- * words, the overlay and the teacher reference, and where the drawing came from.
+ * A student's own drawing, as their teacher left it: the spoken note, the stars
+ * or marks, the words, the overlay and the teacher reference, and where the
+ * drawing came from.
  * Only released reviews reach here (lib/sketchbook-payload, and the owner branch
  * of GET /api/drawing/submissions/[id]), so a held or draft review never shows.
  */
@@ -12,16 +13,31 @@ import { Alert, Box, Button, Paper, Rating, Typography } from '@neram/ui';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
+import VoiceNotePlayer from '@/components/drawings/voice/VoiceNotePlayer';
+import { useVoiceListenReporter } from '@/components/drawings/voice/useVoiceListenReporter';
+import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
 import type { SketchbookEntry } from '@/lib/sketchbook-payload';
+
+/**
+ * A stable identity on purpose. Written inline it would be a new function every
+ * render, and the reporter hook keyed on it would hand VoiceNotePlayer a new
+ * onProgress each time.
+ */
+const NO_TOKEN = async () => null;
 
 interface StudentDrawingReviewProps {
   entry: SketchbookEntry;
   submission: { original_image_url: string; tutor_feedback: string | null; reviewed_image_url: string | null; corrected_image_url: string | null } | null;
   practisedFrom: { item_id: string; title: string; image_url: string } | null;
+  /** The teacher's spoken note. The API only ever sends a released one. */
+  voice?: VoiceFeedbackView | null;
+  getToken?: () => Promise<string | null>;
 }
 
-export default function StudentDrawingReview({ entry, submission, practisedFrom }: StudentDrawingReviewProps) {
+export default function StudentDrawingReview({ entry, submission, practisedFrom, voice, getToken }: StudentDrawingReviewProps) {
   const r = entry.review;
+  // How "Heard" reaches the teacher. Best effort, and silent when it fails.
+  const reportListen = useVoiceListenReporter(getToken ?? NO_TOKEN, voice?.id);
   const maxMarks = entry.assignment?.max_marks ?? null;
   const shown = r.state === 'reviewed' || r.state === 'redo';
 
@@ -59,6 +75,20 @@ export default function StudentDrawingReview({ entry, submission, practisedFrom 
               <Typography variant="body1" sx={{ fontWeight: 600 }}>{r.rating} out of 5 stars</Typography>
             </Box>
           ) : null}
+          {voice && (
+            <Box sx={{ mt: 1.5 }}>
+              <VoiceNotePlayer
+                key={voice.id}
+                url={voice.url}
+                mime={voice.audio_mime}
+                durationMs={voice.duration_ms}
+                title="Voice note from your teacher"
+                sketch={voice.sketch}
+                imageUrl={voice.base_image_url}
+                onProgress={reportListen}
+              />
+            </Box>
+          )}
           {submission?.tutor_feedback && (
             <Typography variant="body1" sx={{ mt: 1.5, whiteSpace: 'pre-line', lineHeight: 1.6 }}>
               {submission.tutor_feedback}

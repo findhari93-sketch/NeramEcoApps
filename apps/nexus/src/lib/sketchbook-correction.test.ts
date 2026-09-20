@@ -106,8 +106,9 @@ describe('canCorrect', () => {
   });
 
   it('refuses a graduated student, who can no longer sign in to read it', () => {
-    const out = canCorrect({ source_type: 'sketchbook', assignment_id: null }, true);
-    expect(out.ok).toBe(false);
-    expect(out.reason).toContain('graduated');
+    expect(canCorrect({ source_type: 'sketchbook', assignment_id: null }, true)).toEqual({
+      ok: false,
+      reason: expect.stringContaining('graduated'),
+    });
   });
 });
