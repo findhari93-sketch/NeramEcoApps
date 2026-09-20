@@ -251,6 +251,33 @@ describe('findAutodraftCandidates', () => {
     expect(found[0].existing_recap_id).toBeNull();
   });
 
+  it('never looks at a class again once it decided nothing was taught', async () => {
+    // The expensive one. closeUntaughtClass returns BEFORE
+    // replaceRecapSections, so the row it leaves has generated_at null and
+    // status 'draft': the exact shape of a recap nobody has started. Without
+    // the not_applicable guard the sweep would pick this class up on its next
+    // pass, spend Gemini calls reaching the same verdict, and re-excuse
+    // students a teacher had restored. Every fifteen minutes, forever.
+    const supabase = fakeSupabase({
+      nexus_classrooms: [{ id: 'room-1' }],
+      nexus_scheduled_classes: [classRow()],
+      nexus_class_recaps: [
+        {
+          id: 'recap-1',
+          scheduled_class_id: 'class-1',
+          status: 'draft',
+          readiness: 'not_applicable',
+          generated_at: null,
+          created_at: '2026-07-20T00:00:00Z',
+        },
+      ],
+      nexus_class_recap_sections: [],
+      nexus_class_transcripts: [{ class_id: 'class-1' }],
+    });
+
+    expect(await findAutodraftCandidates(supabase)).toHaveLength(0);
+  });
+
   it('skips a class with no stored transcript', async () => {
     // The whole point of the stored-only rule: no transcript means this sweep
     // walks away rather than paying Graph and SharePoint to go looking.

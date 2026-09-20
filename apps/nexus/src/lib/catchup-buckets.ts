@@ -14,6 +14,33 @@
  * numbers by construction, not by agreement.
  */
 
+/**
+ * Is this obligation closed, from the student's point of view?
+ *
+ * Here for the same reason as everything else in this file: the rule was
+ * written twice and the two copies disagreed. Inside ONE route,
+ * api/timetable/my-schedule, the "You missed N classes" banner filtered on the
+ * absence kind alone while the catch-up count twelve lines below it also
+ * checked `excused_at`. So a teacher could excuse a student and the student
+ * would go on being told they had missed the class, with a red banner nothing
+ * could clear.
+ *
+ * Nothing on production had ever carried `excused_at` when this was found,
+ * which is exactly why nobody had noticed: the Excuse button existed, and had
+ * never once been pressed.
+ *
+ * Two ways to be closed, and they mean opposite things. `caught_up_at` is
+ * something the student did. `excused_at` is something we did to them, whether
+ * a teacher pressed Excuse or the class turned out never to have been taught.
+ * Either way there is nothing left to ask them for.
+ */
+export function isObligationClosed(a: {
+  excused_at?: string | null;
+  caught_up_at?: string | null;
+}): boolean {
+  return !!a.excused_at || !!a.caught_up_at;
+}
+
 /** Mutually exclusive and total: every student the screen shows has exactly one. */
 export type CatchupBucket =
   | 'waiting_on_us'

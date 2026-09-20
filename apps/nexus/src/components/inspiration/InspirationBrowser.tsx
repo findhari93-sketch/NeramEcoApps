@@ -28,7 +28,7 @@ import InspirationFilterChips from './InspirationFilterChips';
 import InspirationMasonry from './InspirationMasonry';
 import InspirationSearchBar from './InspirationSearchBar';
 import InspirationTile from './InspirationTile';
-import { prepareImages, setSaved } from './inspiration-api';
+import { patchItem, prepareImages, setSaved } from './inspiration-api';
 import { inspirationBase, rememberListUrl, type InspirationMode } from './inspiration-nav';
 
 const PAGE = 30;
@@ -196,6 +196,39 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
     [data, getKey, getToken, mutate, mutateKey, patchPage],
   );
 
+  /**
+   * Take a drawing off the shelf, from the grid.
+   *
+   * The curation bar on the item page could already do this, which meant
+   * noticing a drawing did not belong here, opening it, and then hiding it. A
+   * teacher scanning the grid is exactly where that judgement gets made.
+   *
+   * Hiding is the gallery decision and nothing more. It does not touch the
+   * Teams message that announced the work, because retracting praise in front
+   * of a class is a different and much heavier act, and it stays on the sketch
+   * screen where it is spelled out as un-featuring.
+   */
+  const hideCard = useCallback(
+    async (card: InspirationCard) => {
+      const pages = data ?? [];
+      const keys = pages.map((_, i) => getKey(i, i === 0 ? null : pages[i - 1]));
+      const write = (list: SearchPage[]) =>
+        Promise.all(keys.map((key, i) => (key ? mutateKey(key, list[i], { revalidate: false }) : null)));
+
+      const without = pages.map((page) => ({ ...page, items: page.items.filter((c) => c.id !== card.id) }));
+      await write(without);
+      await mutate(without, { revalidate: false });
+      try {
+        await patchItem(getToken, card.id, { curation: 'hidden' });
+      } catch {
+        await write(pages);
+      }
+      // Counts and facets moved, so read the truth back either way.
+      await mutate();
+    },
+    [data, getKey, getToken, mutate, mutateKey],
+  );
+
   const clearAll = () => {
     setInput('');
     setState(EMPTY_QUERY);
@@ -342,7 +375,21 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
             cards={cards}
             loading={!ready || isLoading || loadingMore || settling}
             renderTile={(card) => (
-              <InspirationTile card={card} href={`${base}/${card.id}`} onOpen={rememberListUrl} onToggleSave={toggleSave} />
+              /*
+               * One control in that corner, not two. At 375px a tile is about
+               * 165px wide, and a badge plus two 44px targets does not fit in
+               * it. The heart is the one to drop for staff: there is no teacher
+               * Saved list to read it back from, so a teacher's saves go
+               * nowhere, while taking a drawing off the shelf is the thing a
+               * teacher is actually here to do.
+               */
+              <InspirationTile
+                card={card}
+                href={`${base}/${card.id}`}
+                onOpen={rememberListUrl}
+                onToggleSave={mode === 'staff' ? undefined : toggleSave}
+                onHide={mode === 'staff' ? hideCard : undefined}
+              />
             )}
           />
         )}

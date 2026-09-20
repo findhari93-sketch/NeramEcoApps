@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, listStudentsByYear, getCurrentBatch, getUsersWithActiveNexusAccess, currentAcademicYear, assessApplication } from '@neram/database';
+import { getSupabaseAdminClient, listStudentsByYear, getCurrentBatch, getUsersWithActiveNexusAccess, currentAcademicYear, assessApplication, listLiveDetailRequests, detailRequestProgress } from '@neram/database';
 
 // A "classroom" account is the class-provided identity: @neramclasses.com or any
 // Microsoft tenant address (*.onmicrosoft.com, which also covers the misspelled
@@ -107,6 +107,20 @@ export async function GET(request: NextRequest) {
     // in an active classroom). Used to flag non-graduated past-batch students who
     // lost their enrollment (e.g. during the single-classroom consolidation).
     const accessIds = await getUsersWithActiveNexusAccess(userIds, supabase);
+
+    // Who has already been sent a link asking them to fill the form in, so staff do
+    // not chase the same student twice. One query for the whole cohort. A failure
+    // here must not empty the roster: the column degrades to "not asked" and the
+    // page still loads, because knowing who is on a past batch matters more than
+    // knowing who was chased.
+    let detailRequests: Record<string, any> = {};
+    if (userIds.length) {
+      try {
+        detailRequests = await listLiveDetailRequests(userIds, supabase);
+      } catch (e: any) {
+        console.warn('[students] could not read detail requests:', e?.message);
+      }
+    }
     // Compare code for the past-batch flag: registry current, else the calendar helper
     // (never undefined, so a past-batch row is never mis-read as current).
     const cmpCode = currentBatchCode || currentAcademicYear();
@@ -182,6 +196,11 @@ export async function GET(request: NextRequest) {
         application_complete: app.state === 'complete',
         application_missing:
           app.state === 'complete' ? null : app.state === 'missing' ? 'no_application' : 'incomplete',
+        // Where the ask stands: not_asked / asked / opened / answered.
+        detail_request_progress: detailRequestProgress(detailRequests[s.id]),
+        detail_request_sent_at: detailRequests[s.id]?.sent_at || null,
+        detail_request_opened_at: detailRequests[s.id]?.opened_at || null,
+        detail_request_expires_at: detailRequests[s.id]?.expires_at || null,
       };
     });
 
@@ -202,6 +221,13 @@ export async function GET(request: NextRequest) {
       personalOnlyEnrolled: students.filter((s) => !s.ms_oid && s.has_nexus_access).length,
       // Have Nexus access but have never opened the Nexus app, the ones to chase.
       accessNeverOpened: students.filter((s) => s.has_nexus_access && !s.nexus_first_login_at).length,
+      // Application form state across the visible set, and the subset nobody has
+      // asked yet, which is the number the "Ask them" banner acts on.
+      applicationMissing: students.filter((s) => s.application_state === 'missing').length,
+      applicationPartial: students.filter((s) => s.application_state === 'partial').length,
+      applicationNeverAsked: students.filter(
+        (s) => s.application_state !== 'complete' && s.detail_request_progress === 'not_asked'
+      ).length,
     };
 
     return NextResponse.json({ students, total: students.length, stats });

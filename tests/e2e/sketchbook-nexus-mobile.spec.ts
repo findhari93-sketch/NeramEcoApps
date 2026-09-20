@@ -111,9 +111,13 @@ test.describe('Sketchbook API', () => {
   test('featuring under a test token is refused with a clear reason', async ({ request }) => {
     // The route checks the token before looking up the sketch, so this runs
     // even without a real sketch: any UUID-shaped id reaches the same check.
+    //
+    // The empty body is the point. Featuring no longer takes a classroom or a
+    // caption, so a 400 about the Microsoft token, rather than about a missing
+    // field, is the proof that classroom_id really is optional now.
     const id = sketchId || '00000000-0000-0000-0000-000000000001';
     const res = await request.post(`${NEXUS}/api/sketchbook/entries/${id}/feature`, {
-      headers: { Authorization: `Bearer ${teacherToken}` }, data: { classroom_id: '00000000-0000-0000-0000-000000000000' }, failOnStatusCode: false,
+      headers: { Authorization: `Bearer ${teacherToken}` }, data: {}, failOnStatusCode: false,
     });
     expect(res.status()).toBe(400);
     expect((await res.json()).error).toContain('Microsoft sign-in');

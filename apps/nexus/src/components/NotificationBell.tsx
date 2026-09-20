@@ -175,6 +175,13 @@ function getNavigationUrl(
     // teacher route for the same sketch.
     case 'sketch_reaction':
     case 'sketch_featured': {
+      // A featured drawing is now on the Inspiration shelf, so send the student
+      // to where it is being looked at rather than back to their own sketchbook.
+      // Only featuring writes this key, and only when the drawing actually
+      // reached the shelf, so a reaction and a private student's feature both
+      // fall through to the sketch itself.
+      const itemId = notification.metadata?.inspiration_item_id as string | undefined;
+      if (itemId && nexusRole === 'student') return `/student/inspiration/${itemId}`;
       const submissionId = notification.metadata?.submission_id as string | undefined;
       if (!submissionId) return '/student/sketchbook';
       return nexusRole === 'student' ? `/student/sketchbook/${submissionId}` : '/teacher/sketchbook';

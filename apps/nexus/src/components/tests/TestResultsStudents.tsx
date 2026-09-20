@@ -310,7 +310,7 @@ export default function TestResultsStudents({
   const keepPaused = useMemo(() => (r: StudentResultRow) => r.paused === true, []);
   const hasPausedRows = useMemo(() => (rows || []).some((r) => r.paused), [rows]);
 
-  // The shared student list: ranked search, sort, the stage ring filter, and no
+  // The shared student list: ranked search, sort, the info ring filter, and no
   // dormant students. The result tiles stay this screen's own filter (prefilter).
   const prefilter = useMemo(
     () => (r: StudentResultRow) => {

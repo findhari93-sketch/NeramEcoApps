@@ -189,7 +189,7 @@ export default function StudentWatchlistPage() {
   );
   const tierStatus = useMemo(() => ({ of: (r: WatchRow) => r.tier, order: TIER_ORDER }), []);
 
-  // The shared student list: ranked search, sort, stage ring filter, paused
+  // The shared student list: ranked search, sort, info ring filter, paused
   // students hidden. The tier buttons are its status filter.
   const view = useStudentListView<WatchRow, WatchSort, InactivityTier>({
     rows: data?.rows,

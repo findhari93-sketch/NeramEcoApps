@@ -1,28 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import {
-  getFeatureOptOut, getLiveFeature, getSketchbookSketch, hasAnyLiveFeature, insertFeature,
-  listUserClassroomIds, markUnfeatured, recordFlip,
+  getDrawingSharingOptOut, getFeatureOptOut, getLiveFeature, getSketchbookSketch,
+  getSubmissionInspirationItemId, hasAnyLiveFeature, hideFeaturedSubmission, insertFeature,
+  markUnfeatured, recordFlip, showFeaturedSubmission,
 } from '@neram/database/queries/nexus';
 import { assertCapability, getRequestUser } from '@/lib/study-materials';
 import { ApiError, errorResponse } from '@/lib/api-errors';
-import { assertStaffSeesStudent, realGraphToken, staffClassroomIds } from '@/lib/sketchbook-access';
+import { assertStaffSeesStudent, realGraphToken, resolveSharedClassroom } from '@/lib/sketchbook-access';
 import { featuredMessage, firstName } from '@/lib/sketchbook-messages';
 import { sendNudge } from '@/lib/nudge-delivery';
+import { prepareItemImage } from '@/lib/inspiration-images';
 import {
   buildFeaturedSketchHtml, buildMentions, cardHash, isPostError, postChannelMessageDetailed,
   postChatMessageDetailed, removeTeamsAnnouncements, resolveMeetingChannelId,
 } from '@/lib/teams-class-announcements';
 
+// Two Graph posts, then an image fetch, a resize and a storage upload. The Next
+// default would cut the last of those off half way.
+export const maxDuration = 60;
+
 const NO_STORE = { 'Cache-Control': 'no-store' };
-const CAPTION_MAX = 120;
 
 function nexusBase(): string {
   return process.env.NEXT_PUBLIC_NEXUS_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://nexus.neramclasses.com';
 }
 
 /**
- * POST /api/sketchbook/entries/[id]/feature   body { classroom_id, caption? }
+ * POST /api/sketchbook/entries/[id]/feature   body { classroom_id? }
  *
  * The only public claim this feature makes about a student, so it follows the
  * celebrate route's rules: the teacher's own delegated token (an app-only token
@@ -31,6 +36,11 @@ function nexusBase(): string {
  * stored so a retry never posts twice. Goes to BOTH the group chat and the
  * class channel (assignment channel, else the meeting channel), as decided with
  * the user on 2026-09-12.
+ *
+ * It now also puts the drawing on the Inspiration shelf, which is the point of
+ * featuring and was the half that was missing: the work a teacher singled out
+ * was the one work no student could go back and find. That write happens AFTER
+ * Teams, with everything else, so a Graph failure still records nothing.
  *
  * `moderate.gallery` sits in SHARED_STAFF (staff-capabilities.ts), so a
  * visiting teacher already holds it; the enrollment overlap checks below are
@@ -43,23 +53,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const token = realGraphToken(request.headers.get('Authorization'));
 
     const body = await request.json().catch(() => ({}));
-    const classroomId = typeof body?.classroom_id === 'string' ? body.classroom_id : '';
-    if (!classroomId) throw new ApiError('Missing classroom_id', 400);
-    const caption = typeof body?.caption === 'string' ? body.caption.trim().slice(0, CAPTION_MAX) : '';
+    const requested = typeof body?.classroom_id === 'string' ? body.classroom_id : '';
 
     const sketch = await getSketchbookSketch(params.id);
     if (!sketch) throw new ApiError('Sketch not found', 404);
     await assertStaffSeesStudent(caller, sketch.student_id);
-    const [mine, theirs] = await Promise.all([staffClassroomIds(caller), listUserClassroomIds(sketch.student_id, 'student')]);
-    if (!mine.includes(classroomId) || !theirs.includes(classroomId)) {
-      throw new ApiError('That classroom does not hold both of you.', 403);
-    }
+    const classroomId = await resolveSharedClassroom(caller, sketch.student_id, requested);
     if (await getFeatureOptOut(sketch.student_id)) {
       throw new ApiError('This student has asked not to be featured.', 409);
     }
     if (await getLiveFeature(sketch.id, classroomId)) {
       throw new ApiError('Already featured in this classroom.', 409);
     }
+    // Two different opt-outs. The class Teams post is the audience the student
+    // already sits in; the Inspiration shelf is every student in Nexus, so only
+    // this second, wider step is gated by the drawing-sharing choice. The RPC
+    // would hide it anyway; refusing here is what lets the teacher be told.
+    const onShelf = !(await getDrawingSharingOptOut(sketch.student_id));
+    const itemId = onShelf ? await getSubmissionInspirationItemId(sketch.id) : null;
 
     const supabase = getSupabaseAdminClient();
     // `ms_assignment_channel_id` predates the generated types regenerating for
@@ -75,10 +86,26 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!classroom) throw new ApiError('Classroom not found', 404);
     const studentName = (student as { name?: string | null } | null)?.name || 'A student';
 
-    const nexusUrl = `${nexusBase()}/teacher/sketchbook/${sketch.student_id}/${sketch.id}`;
-    const body_html = buildFeaturedSketchHtml({ studentName, caption: caption || sketch.self_note, imageUrl: sketch.original_image_url, nexusUrl });
+    // The card is read in a group chat of forty two students and six staff, so
+    // the link goes where a student can follow it. It used to point at
+    // /teacher/sketchbook, which locked out almost everyone who was shown the
+    // message. When there is no shelf page to send them to, because the student
+    // keeps their drawings private or the sync never made an item, the card
+    // carries no link at all: the builder drops anything that is not https, and
+    // a link most readers cannot open is worse than none.
+    const nexusUrl = itemId ? `${nexusBase()}/student/inspiration/${itemId}` : '';
+    // No caption. It used to default to the student's self_note, which the
+    // teacher at least saw in the box before sending. With the box gone, that
+    // fallback would post a private reflection to forty two classmates with
+    // nobody reading it first. The sync function refuses to copy self_note for
+    // exactly this reason ("the student's private reflection",
+    // 20260920090100_nexus_inspiration_sync.sql), and so do we. The card says
+    // who drew it and shows the drawing, which is the whole point.
+    const body_html = buildFeaturedSketchHtml({ studentName, imageUrl: sketch.original_image_url, nexusUrl });
     const { html: mentionHtml, mentions } = buildMentions([{ oid: (student as { ms_oid?: string | null } | null)?.ms_oid, displayName: studentName }]);
-    const html = `${body_html}<p>Drawn by ${mentionHtml}</p>`;
+    // The @-mention is what actually pings the student in the channel, so it
+    // carries the congratulation rather than a second, flatter line.
+    const html = `${body_html}<p>Well done, ${mentionHtml}.</p>`;
 
     // Teams first, then the row, so a Graph failure never records a feature that never posted.
     const teams = { channel: false, chat: false, errors: [] as string[] };
@@ -104,7 +131,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       submission_id: sketch.id,
       classroom_id: classroomId,
       featured_by: caller.id,
-      caption: caption || null,
+      caption: null,
       teams_channel_id: channelId,
       teams_channel_message_id: channelMessageId,
       teams_group_chat_message_id: chatMessageId,
@@ -114,19 +141,54 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (visibleError) throw visibleError;
     await recordFlip(caller.id, sketch.id, 'seen');
 
-    const msg = featuredMessage(firstName(caller.name), (classroom as { name: string }).name);
+    // On to the shelf. Best effort on purpose: the drawing is featured and the
+    // class has already been told, so a failure here is a missing row to repair,
+    // never a reason to fail a post that has gone out and cannot be recalled.
+    let shelved = false;
+    if (onShelf) {
+      try {
+        const item = await showFeaturedSubmission(sketch.id, caller.id, 'Sketchbook drawing');
+        shelved = !!item;
+        // The grid sets each tile's aspect ratio before the image loads so it
+        // never jumps, and a sketch's item row is written by the sync trigger
+        // with neither shape nor thumbnail. Measure it here rather than copying
+        // the submission's: the sync migration leaves these null on purpose,
+        // because the submission's pair can predate a rotation and an item
+        // keeps its own only while image_url is unchanged.
+        //
+        // Inline, and last, because the student is being told right now to go
+        // and look. The maintenance route stays the safety net: this row is
+        // visible from here, so listItemsNeedingImages will pick it up if the
+        // measurement below fails.
+        if (item && (!item.thumbnail_url || !item.image_aspect)) {
+          await prepareItemImage(item);
+        }
+      } catch (err) {
+        console.error('[feature] could not put the drawing on the Inspiration shelf', err);
+      }
+    }
+
+    const msg = featuredMessage(firstName(caller.name), (classroom as { name: string }).name, shelved);
     await sendNudge({
       // The teacher's own Teams chat (their connected login if this token cannot chat).
       teacher: { authHeader: request.headers.get('Authorization'), userId: caller.id },
       studentIds: [sketch.student_id],
       subject: msg.subject,
       plain: msg.plain,
+      teamsText: msg.teamsText,
       eventType: 'sketch_featured',
-      metadata: { submission_id: sketch.id, classroom_id: classroomId, source: 'sketchbook' },
+      // inspiration_item_id sends the student to the shelf where their drawing
+      // is now being looked at, rather than back to their own sketchbook.
+      metadata: {
+        submission_id: sketch.id,
+        classroom_id: classroomId,
+        source: 'sketchbook',
+        ...(shelved && itemId ? { inspiration_item_id: itemId } : {}),
+      },
       respectDormancy: false,
     });
 
-    return NextResponse.json({ feature, teams }, { status: 201, headers: NO_STORE });
+    return NextResponse.json({ feature, teams, shelved }, { status: 201, headers: NO_STORE });
   } catch (err) {
     return errorResponse(err, 'Could not feature the sketch');
   }
@@ -159,6 +221,12 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     if (!(await hasAnyLiveFeature(sketch.id))) {
       const { error: hiddenError } = await getSupabaseAdminClient().from('drawing_submissions').update({ is_gallery_visible: false }).eq('id', sketch.id);
       if (hiddenError) throw hiddenError;
+      // Off the shelf too, but only once no classroom still features it.
+      // Back to 'auto', never 'hidden': a sketch is invisible under the
+      // automatic rule anyway, while an assignment drawing rated four stars or
+      // more returns to being shown by the rule that put it there before anyone
+      // featured it. See hideFeaturedSubmission.
+      await hideFeaturedSubmission(sketch.id, caller.id);
     }
     return NextResponse.json({ ok: true, failures }, { headers: NO_STORE });
   } catch (err) {

@@ -143,7 +143,7 @@ export async function syncClassroomToTeam(classroomId: string): Promise<SyncResu
   // Get all active Nexus enrollments with their ms_oid
   const { data: enrollments } = await supabase
     .from('nexus_enrollments')
-    .select('user_id, users!inner(ms_oid, name, email)')
+    .select('user_id, users!nexus_enrollments_user_id_fkey!inner(ms_oid, name, email)')
     .eq('classroom_id', classroomId)
     .eq('is_active', true);
 

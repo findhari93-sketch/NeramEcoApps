@@ -59,6 +59,7 @@ export * from './catchup-test';
 export * from './class-prep';
 export * from './class-test';
 export * from './class-recaps';
+export * from './class-recap-reports';
 export * from './assignments';
 export * from './assignment-questions';
 export * from './drawing-checklist';

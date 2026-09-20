@@ -14,7 +14,7 @@ import StudentStatFilters, { type StatFilterTile } from '@/components/tests/Stud
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
 import { useStudentListView } from '@/components/students/list/useStudentListView';
 import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
-import { stageKeyOf } from '@/lib/student-stage';
+import { knownStageKey } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
 import { RADIUS, REDUCED_MOTION_QUERY } from '@/components/timetable/timetable-theme';
 import { GROUP_LABEL, GROUP_ORDER, GROUP_TONE, describePresence, type RegisterGroup } from '@/lib/attendance-register';
@@ -248,9 +248,10 @@ export default function ClassRegisterList({
                     }}
                   >
                     <StudentStageAvatar
+                      userId={s.id}
                       name={s.name}
                       src={s.avatar_url}
-                      stage={stageKeyOf(s.study_stage)}
+                      stage={knownStageKey(s.study_stage)}
                       size={32}
                       tapToView={false}
                     />

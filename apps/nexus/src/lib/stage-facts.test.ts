@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { foldStudentFacts } from './stage-facts';
 
 /**
- * The fold behind every cohort ring in the app.
+ * The fold behind every info ring in the app.
  *
  * A returning student holds one enrolment per academic year, so each of the four
  * fields has to pick a winner and each picks differently. Getting one wrong is

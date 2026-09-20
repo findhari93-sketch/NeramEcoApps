@@ -392,7 +392,16 @@ export default function StudentProfilePage() {
 
       <SketchbookSection studentId={core.student.id} />
 
-      <ApplicationSection application={core.application} />
+      <ApplicationSection
+        application={core.application}
+        ask={{
+          studentId: core.student.id,
+          studentName: core.student.name ?? null,
+          firstName: (core.student as any).first_name ?? null,
+          classroomId: activeClassroom?.id ?? null,
+          getToken,
+        }}
+      />
 
       {/* Rendered only for a capable caller. The server-side assert is what
           actually protects the data; this keeps a teacher from seeing an

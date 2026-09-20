@@ -812,6 +812,51 @@ export default function TeacherTimetable() {
     }
   };
 
+  /**
+   * "That was not a class."
+   *
+   * Uses the ordinary token, not the teacher one: unlike cancel and delete
+   * beside it, this never touches the Teams calendar, so there is nothing here
+   * that needs Calendars.ReadWrite.
+   */
+  const handleNotTaught = async (classId: string, undo: boolean) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/timetable/${classId}/not-taught`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ undo }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setSnackbar({
+          open: true,
+          message: data.error || 'Could not update this class',
+          severity: 'error',
+        });
+        return;
+      }
+
+      // Counting is the whole confirmation. "Done" would leave a teacher
+      // wondering whether it reached the seventeen people it was for.
+      const n = undo ? data.restored ?? 0 : data.excused ?? 0;
+      setSnackbar({
+        open: true,
+        message: undo
+          ? `Back on the timetable. ${n} ${n === 1 ? 'student owes' : 'students owe'} the catch-up again.`
+          : `Marked as not a class. ${n} ${n === 1 ? 'student no longer owes' : 'students no longer owe'} a catch-up.`,
+        severity: 'success',
+      });
+      fetchClasses(true);
+    } catch (err) {
+      console.error('Failed to mark the class as not taught:', err);
+      setSnackbar({ open: true, message: 'Could not update this class', severity: 'error' });
+    }
+  };
+
   const handleDeletePermanent = async (classId: string) => {
     if (!activeClassroom) return;
     const classroomId = getClassroomIdForClass(classId);
@@ -1311,6 +1356,7 @@ export default function TeacherTimetable() {
     onEdit: handleEdit,
     onDelete: handleDelete,
     onDeletePermanent: handleDeletePermanent,
+    onNotTaught: handleNotTaught,
     onOpenAttendance: (cls: ClassCardData) => {
       setAttendanceTab('missed');
       setAttendanceClass(cls);

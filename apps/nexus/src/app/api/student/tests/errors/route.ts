@@ -4,7 +4,7 @@ import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { factsFromErrorRow, isExpectedRefusal } from '@/lib/test-error-classify';
 import { getSupabaseAdminClient } from '@neram/database';
 
-const PHASES = ['load', 'render', 'image', 'submit', 'grade'] as const;
+const PHASES = ['load', 'render', 'image', 'save', 'submit', 'grade'] as const;
 type Phase = (typeof PHASES)[number];
 
 const MAX_MESSAGE = 500;

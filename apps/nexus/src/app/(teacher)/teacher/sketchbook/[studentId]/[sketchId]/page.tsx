@@ -37,7 +37,7 @@ export default function TeacherSketchPage() {
         getToken={getToken}
         studentName={factsFor(studentId)?.name || null}
         actions={
-          <TeacherSketchActions sketchId={sketch.id} reaction={sketch.reaction} featured={sketch.featured} selfNote={sketch.self_note} onChanged={() => mutate()} />
+          <TeacherSketchActions sketchId={sketch.id} reaction={sketch.reaction} featured={sketch.featured} studentName={factsFor(studentId)?.name || null} onChanged={() => mutate()} />
         }
       />
     </Box>

@@ -31,7 +31,7 @@ describe('TeacherSketchActions', () => {
         sketchId="a"
         reaction={null}
         featured={[{ classroom_id: 'c1', classroom_name: 'Class 1', featured_at: '2026-09-01T00:00:00.000Z' }]}
-        selfNote={null}
+        studentName="Anuvika Stalin Prem"
         onChanged={onChanged}
       />,
     );
@@ -44,13 +44,13 @@ describe('TeacherSketchActions', () => {
   });
 
   it('shows Feature and no chip when not featured', () => {
-    render(<TeacherSketchActions sketchId="a" reaction={null} featured={[]} selfNote={null} onChanged={vi.fn()} />);
+    render(<TeacherSketchActions sketchId="a" reaction={null} featured={[]} studentName="Anuvika Stalin Prem" onChanged={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Feature' })).toBeTruthy();
     expect(screen.queryByText(/Featured in/)).toBeFalsy();
   });
 
   it('in compact mode hides the comment field until Comment is clicked, and reacting sends the trimmed comment', async () => {
-    render(<TeacherSketchActions sketchId="a" reaction={null} featured={[]} selfNote={null} onChanged={vi.fn()} compact />);
+    render(<TeacherSketchActions sketchId="a" reaction={null} featured={[]} studentName="Anuvika Stalin Prem" onChanged={vi.fn()} compact />);
     expect(screen.queryByLabelText('Comment')).toBeFalsy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Comment' }));

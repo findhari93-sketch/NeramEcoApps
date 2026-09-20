@@ -95,6 +95,9 @@ export async function POST(
       targetSegmentSeconds,
       poolPerSegment,
       durationSeconds,
+      // Same top-up as the sweep. This route publishes straight to students, so
+      // a checkpoint left at three questions goes live at three.
+      minPerSegment: questionsToServe,
     });
 
     const planned = generated.sections || [];

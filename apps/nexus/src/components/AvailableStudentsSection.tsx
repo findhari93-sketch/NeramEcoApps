@@ -158,7 +158,7 @@ export default function AvailableStudentsSection({ classroomId, getToken, onEnro
   };
 
   // A directory ACCOUNT, not yet a student of this classroom: it may have no users
-  // row, so it has no cohort ring to show. GraphAvatar still puts the Microsoft
+  // row, so it has no info ring to show. GraphAvatar still puts the Microsoft
   // photo beside the name, which is what the faceless-name guard exists to ensure.
   const renderRow = (account: DirectoryStudent, meta: string, actionLabel: string) => (
     <Box

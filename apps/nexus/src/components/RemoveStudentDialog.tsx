@@ -34,7 +34,7 @@ const REASON_LABELS: Record<RemovalReasonCategory, string> = {
 
 interface StudentToRemove {
   enrollmentId: string;
-  /** users.id, so the row can wear the student's cohort ring. */
+  /** users.id, so the row can wear the student's info ring. */
   userId?: string | null;
   name: string;
   email: string | null;

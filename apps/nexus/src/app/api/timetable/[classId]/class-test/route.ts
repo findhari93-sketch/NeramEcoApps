@@ -122,7 +122,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
 async function loadStaffRoster(supabase: any, classId: string, classroomId: string) {
   const { data: enrolments } = await supabase
     .from('nexus_enrollments')
-    .select('user_id, user:users(id, name, avatar_url)')
+    .select('user_id, user:users!nexus_enrollments_user_id_fkey(id, name, avatar_url)')
     .eq('classroom_id', classroomId)
     .eq('role', 'student')
     .eq('is_active', true);

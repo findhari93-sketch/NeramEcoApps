@@ -44,6 +44,20 @@ export interface GeneratedSection {
   start_timestamp_seconds: number;
   end_timestamp_seconds: number;
   questions: GeneratedQuestion[];
+  /**
+   * Did this stretch of the recording teach anything?
+   *
+   * The model already reasons about exactly this to obey rule 8, so asking it
+   * to say so outright costs no extra call. It answers a question the question
+   * count cannot: five questions about a class that was cancelled look, by the
+   * numbers, like five questions about a class that was taught badly.
+   *
+   * Defaults to TRUE when the field is missing. A response from an older
+   * prompt, a salvaged truncation, or a model that ignored the field must never
+   * read as "nothing was taught here", because that verdict closes the class
+   * for every student who missed it.
+   */
+  taught: boolean;
 }
 
 export interface GeneratedContent {
@@ -75,6 +89,23 @@ export interface GenerateOptions {
    * model what kind of transcript it is reading.
    */
   spokenLanguage?: string | null;
+  /**
+   * How many questions a checkpoint must hold before we stop asking for more.
+   *
+   * This is the SERVE count, not the pool: the number the gate will actually
+   * put in front of a student. One ask is a coin flip, and the transcript is
+   * not what decides it. On 2026-09-09 four thirteen-to-fifteen minute
+   * stretches of one 46,000 character transcript came back with 3, 7, 13 and 5
+   * questions, and the class the week before, from a SHORTER transcript,
+   * returned the full pool on every checkpoint. The prompt says "up to" and
+   * rule 8 tells the model not to pad, so a thin answer is a legitimate reply
+   * to the question we asked. Asking again is the fix, not rewording rule 8,
+   * which exists to stop it inventing teaching that never happened.
+   *
+   * Undefined means do not top up, which is what every caller did before this
+   * existed.
+   */
+  minPerSegment?: number;
 }
 
 import { dropTranscriptTrivia } from './recap-question-quality';
@@ -128,6 +159,7 @@ Rules:
 6. Questions must be distinct from one another. No rephrasings of the same fact.
 7. The title is 3 to 8 words naming what this stretch of the class covered. The description is one or two sentences. Both describe the segment you were given; do not comment on the split itself.
 8. Write UP TO the number of questions asked for, never more, and fewer whenever the segment does not carry that much teaching. If a segment is greetings, waiting for students, an audio check, timetable admin or small talk with nothing taught in it, return an EMPTY questions array and say so in the description. Do not pad.
+8a. Set "taught" to false for exactly those segments: no subject was taught, only talk about the class. Set it to true whenever any part of the segment teaches something, even briefly. A whole recording of someone announcing that the class is postponed, or rescheduling, or checking who is present, is "taught": false in every segment, and it is important to say so rather than writing questions about the announcement.
 9. Never ask about the mechanics of the recording. No questions about who was greeted, what was said first or last, how many times a phrase occurred, what time of day it was, or what words the tutor used. Every question must be about the subject being taught.
 10. Write every title, description, question, option and explanation in English, whatever language the transcript is in. The transcript may be in Tamil script, Tamil written in English letters, or a mix of Tamil and English: understand what was taught and write it in English. Keep technical, architectural and drawing terms in English as the tutor said them. Never write in Tamil script.`;
 
@@ -275,6 +307,7 @@ interface SegmentDraft {
   title: string;
   description: string;
   questions: GeneratedQuestion[];
+  taught: boolean;
 }
 
 /**
@@ -291,13 +324,32 @@ async function draftSegments(
   feature: AiFeatureId,
   actorId: string | null,
   spokenLanguage: string | null,
+  /**
+   * Questions this segment already holds, when this is a top-up call.
+   *
+   * Sent verbatim so the model can avoid them. Rule 6 forbids rephrasings
+   * within one response, which says nothing about a second response that
+   * never saw the first, and a top-up that returns the same three questions
+   * costs a call and adds nothing.
+   */
+  existing?: GeneratedQuestion[],
 ): Promise<Record<number, SegmentDraft>> {
   const taughtIn =
     spokenLanguage && TAMIL_TAUGHT.has(spokenLanguage)
       ? 'This class was taught in Tamil mixed with English.\n'
       : '';
+  const topUp =
+    existing && existing.length > 0
+      ? [
+          '',
+          `This segment already has these ${existing.length} questions:`,
+          ...existing.map((q, i) => `${i + 1}. ${q.question_text}`),
+          'Write NEW questions about other things taught in the same segment. Do not repeat or rephrase any of the above, and do not send them back to me. Return only the new ones.',
+          '',
+        ].join('\n')
+      : '';
   const prompt = `Class: "${itemTitle}"
-${taughtIn}
+${taughtIn}${topUp}
 For EACH segment below, write a title, a description, and up to ${poolPerSegment} questions, using only that segment's transcript. A segment with no teaching in it gets an empty questions array, which is the right answer and not a failure.
 
 ${batch
@@ -312,7 +364,7 @@ ${batch
   .join('\n\n')}
 
 Return JSON:
-{"segments":[{"index":${batch[0]?.index ?? 0},"title":"...","description":"...","questions":[{"question_text":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct_option":"a","explanation":"..."}]}]}`;
+{"segments":[{"index":${batch[0]?.index ?? 0},"title":"...","description":"...","taught":true,"questions":[{"question_text":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct_option":"a","explanation":"..."}]}]}`;
 
   const raw = await generateGeminiText({
     feature,
@@ -343,6 +395,8 @@ Return JSON:
     out[idx] = {
       title: typeof seg.title === 'string' ? seg.title.trim() : '',
       description: typeof seg.description === 'string' ? seg.description.trim() : '',
+      // Anything other than an explicit false is teaching. See GeneratedSection.
+      taught: seg.taught !== false,
       questions: dedupe(questions),
     };
   }
@@ -357,6 +411,10 @@ Return JSON:
       out[batch[0].index] = {
         title: salvageString(raw, 'title'),
         description: salvageString(raw, 'description'),
+        // A salvaged response is a truncated one. It got far enough to write
+        // questions, so there was teaching; and guessing otherwise here would
+        // cancel a real class on the strength of a response that fell over.
+        taught: true,
         questions,
       };
     }
@@ -395,6 +453,9 @@ export async function generateSectionsAndQuestions(
     start_timestamp_seconds: p.start,
     end_timestamp_seconds: p.end,
     questions: [],
+    // True until the model says otherwise, so a segment whose call never
+    // completed is never read as evidence that nothing was taught.
+    taught: true,
   }));
 
   let callsUsed = 0;
@@ -420,6 +481,16 @@ export async function generateSectionsAndQuestions(
    */
   const runBatch = async (
     batch: Array<{ index: number; start: number; end: number }>,
+    /**
+     * Add to what the segment already holds rather than replacing it.
+     *
+     * The distinction is load-bearing. The first pass assigns
+     * `sections[i].questions = draft.questions`, which is right when the
+     * segment is empty and catastrophic on a top-up: asking for seven more and
+     * assigning the reply would turn a checkpoint that had three questions into
+     * one that has seven, a net loss of every question the first call wrote.
+     */
+    topUp = false,
   ): Promise<boolean> => {
     callsUsed++;
     try {
@@ -431,11 +502,23 @@ export async function generateSectionsAndQuestions(
         feature,
         actorId,
         options.spokenLanguage ?? null,
+        topUp ? sections[batch[0].index].questions : undefined,
       );
       let got = false;
       for (const b of batch) {
         const draft = byIndex[b.index];
         if (!draft) continue;
+        if (topUp) {
+          // Titles and descriptions stay as the first pass wrote them: that
+          // call saw the whole segment, this one saw it plus an instruction to
+          // avoid most of it.
+          if (draft.questions.length === 0) continue;
+          const merged = dedupe([...sections[b.index].questions, ...draft.questions]);
+          got = merged.length > sections[b.index].questions.length;
+          sections[b.index].questions = merged;
+          continue;
+        }
+        sections[b.index].taught = draft.taught;
         if (draft.questions.length === 0) {
           // It answered for this segment and had nothing to ask. Keep the title
           // and description, which say why, and take it off the retry list.
@@ -493,6 +576,31 @@ export async function generateSectionsAndQuestions(
     await runBatch([
       { index: i, start: planned[i].start, end: planned[i].end },
     ]);
+  }
+
+  // Third pass: the segments that answered, but thinly.
+  //
+  // Until this existed, a checkpoint that came back with three questions was
+  // never asked again (`if (sections[i].questions.length > 0) continue` above),
+  // and three is what a student then had to pass. Nothing in the transcript
+  // caused it: the pass before this one produced 3, 7, 13 and 5 for four
+  // equally long stretches of the same class. One sample, one coin flip.
+  //
+  // Thinnest first, because the call budget can run out partway and a segment
+  // at 3 needs the call more than one at 9. `settledEmpty` is honoured: a
+  // segment the model declared empty is admin talk, not a thin answer, and
+  // re-asking it spends a metered call to be told the same thing.
+  const minPerSegment = options.minPerSegment ?? 0;
+  if (minPerSegment > 0) {
+    const thin = sections
+      .map((sec, i) => ({ i, have: sec.questions.length }))
+      .filter((x) => x.have > 0 && x.have < minPerSegment && !settledEmpty.has(x.i))
+      .sort((a, b) => a.have - b.have);
+
+    for (const { i } of thin) {
+      if (callsUsed >= MAX_CALLS_PER_RECAP) break;
+      await runBatch([{ index: i, start: planned[i].start, end: planned[i].end }], true);
+    }
   }
 
   return { sections };

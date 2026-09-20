@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   proctoring: null as null | { onThresholdReached: () => void },
   load: [] as Array<() => unknown>,
   submit: [] as Array<() => unknown>,
+  save: [] as Array<() => unknown>,
   attempts: null as null | (() => unknown),
   calls: [] as Array<{ url: string; init?: RequestInit; body: any }>,
 }));
@@ -115,7 +116,10 @@ function installFetch() {
       const next = mocks.submit.shift();
       return next ? next() : reply(200, graded);
     }
-    if (url === '/api/tests/attempt') return reply(200, { action: 'saved' });
+    if (url === '/api/tests/attempt') {
+      const next = mocks.save.shift();
+      return next ? next() : reply(200, { action: 'saved' });
+    }
     if (url.startsWith('/api/student/tests/test-1/attempts')) {
       return mocks.attempts ? mocks.attempts() : reply(200, { data: { attempts: [], test: null } });
     }
@@ -155,6 +159,7 @@ beforeEach(() => {
   mocks.proctoring = null;
   mocks.load = [];
   mocks.submit = [];
+  mocks.save = [];
   mocks.attempts = null;
   mocks.calls = [];
   installFetch();
@@ -349,6 +354,107 @@ describe('the automatic submit', () => {
       await vi.advanceTimersByTimeAsync(60000);
     });
     expect(submitCalls()).toHaveLength(3);
+  });
+});
+
+/**
+ * Karthik Gregory, 18 Aug 2026. His attempt was closed sixteen seconds after he
+ * opened the paper (the beforeunload abandon, since removed). He answered all
+ * fifty questions over the next twenty-eight minutes into a sitting the server
+ * had already shut, every autosave was refused and thrown away in silence, and
+ * only Submit told him. Samruddhi wani lost thirty answers the same way.
+ *
+ * The trigger is gone. The silence is what turned it into a whole paper.
+ */
+describe('an autosave the server refuses', () => {
+  it('tells the student the sitting is closed rather than letting them work on into it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mocks.save.push(() =>
+      reply(409, {
+        error: 'This attempt is already finished. Start a new one to try again.',
+        code: 'ATTEMPT_CLOSED',
+        attempt_status: 'abandoned',
+      }),
+    );
+    await openPaper();
+    fireEvent.click(screen.getByRole('radio', { name: /Ictinus/ }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+
+    const alert = await screen.findByRole('alert');
+    expect(
+      within(alert).getByText('This sitting was closed, so your answers are no longer being saved.'),
+    ).not.toBeNull();
+    fireEvent.click(within(alert).getByRole('button', { name: 'Back to tests' }));
+    expect(mocks.push).toHaveBeenCalledWith('/student/tests');
+  });
+
+  it('reports it as a save failure, so the teacher sees it without waiting for a submit', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mocks.save.push(() =>
+      reply(409, {
+        error: 'This attempt is already finished. Start a new one to try again.',
+        code: 'ATTEMPT_CLOSED',
+        attempt_status: 'abandoned',
+      }),
+    );
+    const view = await openPaper();
+    fireEvent.click(screen.getByRole('radio', { name: /Ictinus/ }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    await screen.findByRole('alert');
+    await flushReports(view.unmount);
+
+    expect(errorReports()).toEqual([
+      expect.objectContaining({
+        phase: 'save',
+        attempt_id: 'attempt-1',
+        detail: expect.objectContaining({ status: 409, code: 'ATTEMPT_CLOSED', attempt_status: 'abandoned', answered: 1 }),
+      }),
+    ]);
+  });
+
+  it('shows the result when the close sweep filed the paper while they were still writing', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mocks.save.push(() => reply(409, { code: 'ATTEMPT_CLOSED', attempt_status: 'submitted' }));
+    mocks.attempts = () =>
+      reply(200, {
+        data: {
+          test: { test_id: 'test-1', title: 'History of Architecture Test', passing_pct: 50 },
+          attempts: [
+            { attempt_id: 'attempt-1', attempt_number: 1, score: 3, total_marks: 4, percentage: 75, passed: true, review: [] },
+          ],
+        },
+      });
+    await openPaper();
+    fireEvent.click(screen.getByRole('radio', { name: /Ictinus/ }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+
+    expect(await screen.findByText('Passed')).not.toBeNull();
+    expect(screen.getByText('75%')).not.toBeNull();
+  });
+
+  it('rides out a dropped save, because one bad request must not end a paper', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mocks.save.push(() => reply(503, {}));
+    await openPaper();
+    fireEvent.click(screen.getByRole('radio', { name: /Ictinus/ }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    // Still theirs to finish.
+    await answerAndSubmit();
+    expect(await screen.findByText('Passed')).not.toBeNull();
   });
 });
 

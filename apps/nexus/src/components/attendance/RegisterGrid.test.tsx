@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NeramThemeProvider, nexusLightTheme } from '@neram/ui';
 import RegisterGrid from './RegisterGrid';
+import * as facts from '@/components/students/StudentStageFactsProvider';
 import type { RegisterResponse } from '@/app/api/attendance/register/route';
 
 const DATA: RegisterResponse = {
@@ -257,5 +258,38 @@ describe('RegisterGrid', () => {
       screen.getByLabelText(/Student B, Mon 14 Sep: not part of this class/i),
     ).toBeTruthy();
     expect(screen.queryByLabelText(/Student B, Mon 14 Sep: attendance not read from Teams yet/i)).toBe(null);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('draws the language mark on a student who speaks one', () => {
+    /**
+     * One assertion for a two-part regression, both parts silent.
+     *
+     * The grid passed no `userId`, so the lookup returned null, the language
+     * resolved to English and the mark drew nothing; and it rendered the face at
+     * 26px, below the 28px floor at which StudentStageAvatar gives up on BOTH
+     * corner marks whatever it is passed. Either one alone is enough to lose the
+     * mark, and neither shows up as an error, a warning or a broken layout, so
+     * nothing but a test that looks for the mark itself can hold them.
+     */
+    vi.spyOn(facts, 'useStudentStageFacts').mockReturnValue({
+      ready: true,
+      factsFor: (id) =>
+        id === 's1'
+          ? { stage: '12th', dormant: false, photo: null, name: null, language: 'tamil', limitedEnglish: false }
+          : null,
+    });
+
+    render(<RegisterGrid data={DATA} classHref={(id) => `/teacher/attendance/${id}`} />);
+
+    const marks = screen.getAllByTestId('language-badge');
+    // Exactly one: the other three students in the fixture are unknown to the
+    // lookup, and an unknown id must fall back to a plain face rather than
+    // inventing a language for somebody.
+    expect(marks).toHaveLength(1);
+    expect(marks[0].getAttribute('data-language')).toBe('tamil');
   });
 });

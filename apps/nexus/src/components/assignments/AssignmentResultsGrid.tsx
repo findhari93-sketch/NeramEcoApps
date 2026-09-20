@@ -235,7 +235,7 @@ export default function AssignmentResultsGrid({ questions, rows }: AssignmentRes
                     userId={row.student.id}
                     src={row.student.avatar_url}
                     name={row.student.name}
-                    size={24}
+                    size={28}
                     tapToView={false}
                     sx={{ fontSize: '0.7rem' }}
                   />

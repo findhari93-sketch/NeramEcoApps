@@ -30,6 +30,50 @@ export async function staffClassroomIds(caller: RequestUser): Promise<string[]> 
 }
 
 /**
+ * The one classroom this teacher and this student share.
+ *
+ * Featuring used to make the teacher pick from a dropdown of their own
+ * classrooms. There is one real teaching classroom, so the question had a single
+ * possible answer and the teacher still had to give it, on the way to praising a
+ * teenager for a drawing. The server already knew the answer: it re-checked the
+ * pick against exactly this intersection and rejected a wrong one.
+ *
+ * So resolve the overlap instead of asking. An explicit `requested` is still
+ * honoured and still checked, which keeps every existing caller working. More
+ * than one shared classroom is a 409, and only then does the sheet ask, from the
+ * classroom list it already holds.
+ */
+export function pickSharedClassroom(
+  teacherRoomIds: string[],
+  studentRoomIds: string[],
+  requested?: string | null,
+): string {
+  const shared = teacherRoomIds.filter((id) => studentRoomIds.includes(id));
+  // An explicit pick is still checked against the same intersection, with the
+  // same words, so the DELETE path and any older caller behave exactly as before.
+  if (requested) {
+    if (!shared.includes(requested)) throw new ApiError('That classroom does not hold both of you.', 403);
+    return requested;
+  }
+  if (shared.length === 0) throw new ApiError('That classroom does not hold both of you.', 403);
+  if (shared.length === 1) return shared[0];
+  throw new ApiError('You teach this student in more than one classroom. Choose which one to feature in.', 409);
+}
+
+/** The database half of pickSharedClassroom. */
+export async function resolveSharedClassroom(
+  caller: RequestUser,
+  studentId: string,
+  requested?: string | null,
+): Promise<string> {
+  const [mine, theirs] = await Promise.all([
+    staffClassroomIds(caller),
+    listUserClassroomIds(studentId, 'student'),
+  ]);
+  return pickSharedClassroom(mine, theirs, requested);
+}
+
+/**
  * The students whose sketchbooks this staff member flips through: every TRACKED
  * student in the classrooms they teach, or in the one classroom asked for.
  *

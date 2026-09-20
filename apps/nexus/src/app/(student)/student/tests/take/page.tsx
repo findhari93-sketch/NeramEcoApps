@@ -138,6 +138,13 @@ interface SubmitProblem {
 
 const SUBMIT_FALLBACK = 'Your paper did not submit. Check your connection and try again.';
 const ATTEMPT_CLOSED_COPY = 'This attempt was closed, so it could not be submitted.';
+/**
+ * The same fact, reached thirty seconds in rather than at Submit.
+ *
+ * Worded for a student who has not pressed anything: nothing they write from
+ * here is being kept, and no amount of carrying on will change that.
+ */
+const SITTING_CLOSED_COPY = 'This sitting was closed, so your answers are no longer being saved.';
 
 
 // ---------------------------------------------------------------------------
@@ -283,6 +290,9 @@ export default function TakeTestPage() {
   answersRef.current = answers;
   const attemptRef = useRef(attempt);
   attemptRef.current = attempt;
+  /** For the autosave, which fires from a closure made before the sitting closed. */
+  const attemptClosedRef = useRef(attemptClosed);
+  attemptClosedRef.current = attemptClosed;
 
   /** The paper itself, for the unload handler, which cannot wait for a render. */
   const testRef = useRef(test);
@@ -469,7 +479,7 @@ export default function TakeTestPage() {
     if (!attempt || submitted || attemptClosed) return;
 
     autoSaveRef.current = setInterval(() => {
-      saveAnswers(answersRef.current, 'save');
+      void autoSave();
     }, 30000);
 
     return () => {
@@ -700,6 +710,61 @@ export default function TakeTestPage() {
 
     if (statusFromServer === 'submitted' || result) return { submitted: true, status: 'submitted', result };
     return { submitted: false, status: null, result: null };
+  }
+
+  /**
+   * The 30-second autosave, and what to do when the server refuses it.
+   *
+   * The outcome used to be dropped on the floor. So once the server stopped
+   * accepting writes for a sitting, the student was told nothing: they carried
+   * on answering into a paper that no longer existed, and found out at Submit,
+   * by which point everything since the last accepted save was gone. Karthik
+   * Gregory lost all fifty answers and twenty-eight minutes that way on 18 Aug
+   * 2026; Samruddhi wani lost thirty. The trigger that closed their attempts
+   * (the old abandon-on-unload) is gone, but the ways a sitting can still shut
+   * under a student are not: the close sweep submitting their paper, a
+   * one-question-at-a-time paper closing on pagehide, the same paper opened
+   * through another door, a second tab, a second device.
+   *
+   * ONLY a closed attempt ends the sitting here. A dropped request, a 5xx or an
+   * expired token is worth another go in thirty seconds, and throwing a student
+   * out of a live exam over one bad response would be far worse than the bug
+   * this fixes.
+   */
+  async function autoSave() {
+    const answersNow = answersRef.current;
+    const outcome = await saveAnswers(answersNow, 'save');
+    if (outcome.ok) return;
+    // Submit owns the failure once the student has pressed it, and says so
+    // itself. Two voices about one dead attempt would only confuse.
+    if (submittedRef.current || submittingRef.current || attemptClosedRef.current) return;
+    if (submitFailureKind({ code: outcome.code, status: outcome.status, message: outcome.error }) !== 'attempt_closed') {
+      return;
+    }
+
+    const closed = await confirmClosedAttempt(outcome.attempt_status);
+    // Always reported. A refused save is the app losing a student's work in
+    // real time, and the whole point of reaching it here is that the teacher
+    // hears about it without waiting for a submit that may never come.
+    reportTestError({
+      phase: 'save',
+      attempt_id: attemptRef.current?.id ?? null,
+      message: outcome.error || `Save refused (HTTP ${outcome.status ?? 'no response'})`,
+      detail: {
+        status: outcome.status,
+        code: outcome.code ?? failureCodeOf({ message: outcome.error }),
+        attempt_status: closed.status,
+        answered: Object.keys(answersNow).length,
+      },
+    });
+
+    // Something else filed the paper while they were writing: the close sweep,
+    // or their own submit from another tab. It is in, so show them that.
+    if (closed.submitted) {
+      finishSubmitted(closed.result, true);
+      return;
+    }
+    closeSitting({ kind: 'attempt_closed', message: SITTING_CLOSED_COPY, retryInSeconds: null, focus: false });
   }
 
   function handleAnswer(questionId: string, value: string) {

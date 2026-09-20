@@ -14,7 +14,7 @@ import { Box, Typography, alpha, useTheme, type Theme } from '@neram/ui';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
 import { useStudentListView } from '@/components/students/list/useStudentListView';
-import { stageKeyOf } from '@/lib/student-stage';
+import { knownStageKey } from '@/lib/student-stage';
 import type { ListAccessors } from '@/lib/student-list-view';
 import { RADIUS } from '@/components/timetable/timetable-theme';
 import { GROUP_LABEL, GROUP_LETTER, GROUP_ORDER, type RegisterGroup } from '@/lib/attendance-register';
@@ -28,14 +28,41 @@ const ACCESSORS: ListAccessors<RegisterStudent> = {
 };
 
 /**
- * A plain px, not an MUI breakpoint object: this app reserves a 248px sidebar,
- * so the window's own breakpoints measure more room than the content actually
- * has. The name column is also pinned inside the grid's own horizontal scroll
- * container regardless of viewport, so it does not need to shrink at all: 160px
- * fits a 26px avatar plus a comfortably readable name at 375px.
+ * The two pinned columns, and the class cells that scroll between them.
+ *
+ * `NAME_COL` varies at `xs` alone, and that distinction is the whole reason it
+ * used to be a plain px: from `md` up this app reserves a 248px sidebar, so the
+ * window's own breakpoints measure more room than the content actually has, and
+ * a width keyed off them would shrink the column on a screen with room to
+ * spare. At `xs` there is no sidebar, so the breakpoint is honest, and `xs` is
+ * also the only place the room is genuinely scarce: both edges of this grid are
+ * pinned now, so 132 + 56 still leaves about 187px in the middle for roughly
+ * four class columns at 375px. 132 fits the 38px avatar (30, plus the 8px its
+ * ring is drawn in), the 8px gap, and about eleven characters of name.
  */
-const NAME_COL = 160;
+const NAME_COL = { xs: 132, sm: 168 };
 const CELL_W = 48;
+/** Fixed, so the pinned right edge lands in the same place on every row. */
+const RATE_COL = 56;
+
+/**
+ * Seams for the pinned columns and the pinned header, as inset shadows.
+ *
+ * Under `borderCollapse: collapse` a collapsed border is painted by the TABLE
+ * rather than by the cell, so a border on a cell that is being held in place is
+ * left behind the moment the table scrolls under it: the header's rule slides
+ * away as you scroll down, and the pinned columns read as floating with no edge
+ * at all. An inset shadow is painted by the cell, so it travels with it.
+ */
+const SEAM = {
+  right: 'inset -1px 0 0 0 ',
+  left: 'inset 1px 0 0 0 ',
+  bottom: 'inset 0 -1px 0 0 ',
+} as const;
+
+function seam(theme: Theme, ...sides: (keyof typeof SEAM)[]): string {
+  return sides.map((side) => `${SEAM[side]}${theme.palette.divider}`).join(', ');
+}
 
 /**
  * Round 1 tried making the letter itself carry the group, in colour:
@@ -170,7 +197,32 @@ export default function RegisterGrid({
       ) : (
         <Box
           sx={{
-            overflowX: 'auto',
+            /**
+             * Bounded on purpose. Left free to grow, this container puts its one
+             * horizontal scrollbar below every student row, so looking sideways
+             * at the student at the TOP of the list meant scrolling to the
+             * bottom of the page, dragging, and scrolling back up. Capping the
+             * height keeps that scrollbar on screen, and it is also what lets
+             * the date headers stay put: sticky needs a scrollport to stick to,
+             * and without one a header pinned at `top: 0` pins to a box that
+             * never scrolls.
+             *
+             * A share of the viewport rather than `calc(100dvh - chrome)`: the
+             * chrome above this grid differs by breakpoint, and again while the
+             * impersonation banner is showing, so any subtracted constant is
+             * wrong somewhere. No minHeight, so a classroom of four students
+             * still gets a short box that never scrolls at all.
+             */
+            maxHeight: { xs: '62vh', md: '70vh' },
+            '@supports (height: 1dvh)': {
+              maxHeight: '62dvh',
+              [theme.breakpoints.up('md')]: { maxHeight: '70dvh' },
+            },
+            overflow: 'auto',
+            // Without this, a sideways swipe that runs out of grid carries on
+            // into the browser's back gesture.
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
             border: `1px solid ${theme.palette.divider}`,
             borderRadius: RADIUS.card,
             bgcolor: 'background.paper',
@@ -178,15 +230,21 @@ export default function RegisterGrid({
         >
           <Box sx={{ display: 'table', borderCollapse: 'collapse', minWidth: '100%' }} role="table">
             <Box sx={{ display: 'table-row' }} role="row">
+              {/*
+                Pinned on both axes, so it outranks the columns that are pinned
+                on one. The ladder is corners 4, header row 3, pinned columns 2,
+                class cells unset.
+              */}
               <Box
                 role="columnheader"
                 sx={{
                   display: 'table-cell',
                   position: 'sticky',
+                  top: 0,
                   left: 0,
-                  zIndex: 2,
+                  zIndex: 4,
                   bgcolor: 'background.paper',
-                  borderBottom: `1px solid ${theme.palette.divider}`,
+                  boxShadow: seam(theme, 'right', 'bottom'),
                   p: 1,
                   width: NAME_COL,
                   minWidth: NAME_COL,
@@ -205,7 +263,12 @@ export default function RegisterGrid({
                     role="columnheader"
                     sx={{
                       display: 'table-cell',
-                      borderBottom: `1px solid ${theme.palette.divider}`,
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 3,
+                      // Opaque, or the rows scroll visibly through the dates.
+                      bgcolor: 'background.paper',
+                      boxShadow: seam(theme, 'bottom'),
                       p: 0.5,
                       width: CELL_W,
                       minWidth: CELL_W,
@@ -243,14 +306,27 @@ export default function RegisterGrid({
                   </Box>
                 );
               })}
+              {/*
+                The rate is pinned to the right edge rather than left to sit at
+                the end of the row. At a 90 day range this table runs to about
+                2000px, so the one number the default sort ORDERS BY was the one
+                number a teacher could not see without dragging the whole grid
+                sideways.
+              */}
               <Box
                 role="columnheader"
                 sx={{
                   display: 'table-cell',
-                  borderBottom: `1px solid ${theme.palette.divider}`,
+                  position: 'sticky',
+                  top: 0,
+                  right: 0,
+                  zIndex: 4,
+                  bgcolor: 'background.paper',
+                  boxShadow: seam(theme, 'left', 'bottom'),
                   p: 1,
                   textAlign: 'right',
-                  minWidth: 56,
+                  width: RATE_COL,
+                  minWidth: RATE_COL,
                 }}
               >
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
@@ -267,20 +343,33 @@ export default function RegisterGrid({
                     display: 'table-cell',
                     position: 'sticky',
                     left: 0,
-                    zIndex: 1,
+                    zIndex: 2,
                     bgcolor: 'background.paper',
                     borderTop: `1px solid ${theme.palette.divider}`,
+                    boxShadow: seam(theme, 'right'),
                     p: 1,
                     width: NAME_COL,
                     minWidth: NAME_COL,
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                    {/*
+                      `userId` is what draws the language mark: without it the
+                      lookup returns null, the language resolves to English and
+                      the mark renders nothing. It now also supplies the ring
+                      whenever this payload has no class, which is why the stage
+                      goes through knownStageKey rather than stageKeyOf: the
+                      latter would assert "Not set" over a class the app knows.
+                      30 rather than 26 because StudentStageAvatar suppresses
+                      BOTH corner marks below 28, so a smaller face here quietly
+                      dropped the stage glyph too.
+                    */}
                     <StudentStageAvatar
+                      userId={student.id}
                       name={student.name}
                       src={student.avatar_url}
-                      stage={stageKeyOf(student.study_stage)}
-                      size={26}
+                      stage={knownStageKey(student.study_stage)}
+                      size={30}
                       tapToView={false}
                     />
                     <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
@@ -338,9 +427,16 @@ export default function RegisterGrid({
                   role="cell"
                   sx={{
                     display: 'table-cell',
+                    position: 'sticky',
+                    right: 0,
+                    zIndex: 2,
+                    bgcolor: 'background.paper',
                     borderTop: `1px solid ${theme.palette.divider}`,
+                    boxShadow: seam(theme, 'left'),
                     p: 1,
                     textAlign: 'right',
+                    width: RATE_COL,
+                    minWidth: RATE_COL,
                     fontVariantNumeric: 'tabular-nums',
                   }}
                 >

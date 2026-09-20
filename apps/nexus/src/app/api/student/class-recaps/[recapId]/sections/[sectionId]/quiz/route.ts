@@ -16,6 +16,7 @@ import {
   getRecapDraw,
   createRecapDraw,
   consumeRecapDraw,
+  listReportedQuestionIdsForStudent,
 } from '@neram/database';
 import {
   pickDraw,
@@ -106,9 +107,33 @@ async function resolveDraw(studentId: string, sectionId: string, questionIds: st
   const existing = await getRecapDraw(studentId, sectionId, attemptNumber);
   if (existing) return { draw: existing, attemptNumber, section };
 
+  // Questions this student has already reported as broken are out of their pool
+  // for good, not just for the attempt they reported them on. Meeting the same
+  // unanswerable question on the next attempt would undo the point of letting
+  // them report it. Best effort: if the reports cannot be read, serving the
+  // full pool is the behaviour that existed before reporting did.
+  let pool = questionIds;
+  if (section?.recap_id) {
+    try {
+      const reported = new Set(
+        await listReportedQuestionIdsForStudent(section.recap_id, studentId),
+      );
+      const kept = questionIds.filter((id) => !reported.has(id));
+      // Never empty the paper: a checkpoint with nothing to answer can be
+      // neither passed nor failed, and assertUnlocked would hold every later
+      // checkpoint behind it forever.
+      if (kept.length > 0) pool = kept;
+    } catch (err) {
+      console.error(
+        '[recap] could not read the reports for this student:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   const seed = drawSeed(studentId, sectionId);
-  const { serve } = await gateFor(section as any, questionIds.length);
-  const chosen = pickDraw(questionIds, serve, attemptNumber, seed);
+  const { serve } = await gateFor(section as any, pool.length);
+  const chosen = pickDraw(pool, serve, attemptNumber, seed);
   const draw = await createRecapDraw({
     student_id: studentId,
     section_id: sectionId,

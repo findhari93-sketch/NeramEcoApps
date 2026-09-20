@@ -47,9 +47,13 @@ export async function POST(request: NextRequest) {
 
     // The student must really be in this classroom, and must really be a student.
     // Checked server side because the caller sends both ids.
+    //
+    // The FK hint is mandatory. nexus_enrollments references users four times, so a
+    // bare `users(...)` embed is rejected outright with PGRST201 and the button
+    // fails with a raw PostgREST sentence. enrollment-embed-guard.test.ts holds this.
     const { data: enrollment, error: enrollmentError } = await supabase
       .from('nexus_enrollments')
-      .select('id, user:users!inner(id, is_alumni)')
+      .select('id, user:users!nexus_enrollments_user_id_fkey!inner(id, is_alumni)')
       .eq('classroom_id', classroomId)
       .eq('user_id', studentId)
       .eq('role', 'student')

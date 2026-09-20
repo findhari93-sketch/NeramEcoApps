@@ -4,6 +4,7 @@ import { Box, Divider, Typography } from '@neram/ui';
 import { EmptyNote, Field, FieldGrid } from './FieldGrid';
 import ProfileSection from './ProfileSection';
 import AcademicDataBlock from './AcademicDataBlock';
+import AskForDetailsCard from './AskForDetailsCard';
 import {
   APPLICANT_CATEGORY_LABEL,
   EMPTY_SENTENCE,
@@ -24,10 +25,40 @@ import type { ProfileApplication } from '@/lib/student-profile-types';
  * a large share of the roster. That case renders one sentence, never a grid of
  * dashes: an absent form is a fact about how they enrolled, not a fault.
  */
+/**
+ * Whether the fields THIS SECTION shows still have gaps.
+ *
+ * Deliberately not assessApplication from @neram/database: that is the authoritative
+ * rule and it also reads first name, father's name and date of birth, which the
+ * ProfileApplication shape does not carry. Running it here would report those three
+ * as missing for every student and make the offer permanent. This subset decides one
+ * thing only, whether to offer the ask button, and the chips elsewhere still answer
+ * to the shared rule. Offering the button once too often costs nothing; claiming a
+ * form is complete when it is not is the failure that matters.
+ */
+function hasVisibleGaps(a: ProfileApplication): boolean {
+  const academic = (a.academic_data || {}) as Record<string, unknown>;
+  const hasAcademicDetail = Boolean(
+    academic.current_class || academic.college_name || a.applicant_category === 'working_professional',
+  );
+  return (
+    !a.applicant_category || !a.target_exam_year || !a.city || !a.state || !hasAcademicDetail
+  );
+}
+
 export default function ApplicationSection({
   application,
+  ask,
 }: {
   application: ProfileApplication | null;
+  /** Omit to render the section read-only, as the parent portal does. */
+  ask?: {
+    studentId: string;
+    studentName: string | null;
+    firstName: string | null;
+    classroomId: string | null;
+    getToken: () => Promise<string | null>;
+  };
 }) {
   if (!application) {
     return (
@@ -37,6 +68,18 @@ export default function ApplicationSection({
         headline="No application on file"
       >
         <EmptyNote>{EMPTY_SENTENCE.application}</EmptyNote>
+        {/* The whole point of naming the absence is being able to fix it. Without
+            this the section was a dead end, and staff went looking for the button
+            on a different screen. */}
+        {ask && (
+          <AskForDetailsCard
+            studentId={ask.studentId}
+            studentName={ask.studentName}
+            firstName={ask.firstName}
+            classroomId={ask.classroomId}
+            getToken={ask.getToken}
+          />
+        )}
       </ProfileSection>
     );
   }
@@ -147,6 +190,27 @@ export default function ApplicationSection({
         applicantCategory={application.applicant_category}
         academicData={application.academic_data}
       />
+
+      {/* A form with gaps is the common case, not the exception, so the offer sits
+          below the detail rather than shouting above it. */}
+      {ask && hasVisibleGaps(application) && (
+        <>
+          <Divider sx={{ my: 3 }} />
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+            Some details are still missing
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Send them a link and they can fill in the rest themselves, with no password.
+          </Typography>
+          <AskForDetailsCard
+            studentId={ask.studentId}
+            studentName={ask.studentName}
+            firstName={ask.firstName}
+            classroomId={ask.classroomId}
+            getToken={ask.getToken}
+          />
+        </>
+      )}
     </ProfileSection>
   );
 }

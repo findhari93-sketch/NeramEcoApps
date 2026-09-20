@@ -16,7 +16,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PhoneIcon from '@mui/icons-material/Phone';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
-import { stageKeyOf } from '@/lib/student-stage';
+import { knownStageKey } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
 import type { AttendanceTabProps, StudentInsight } from './types';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
@@ -178,7 +178,7 @@ function MissedRow({
         inputProps={{ 'aria-label': `Select ${student.name}` }}
       />
       <StudentStageAvatar
-        stage={stageKeyOf(student.study_stage)}
+        stage={knownStageKey(student.study_stage)}
         dormant={student.dormant}
         userId={student.id}
         name={student.name}

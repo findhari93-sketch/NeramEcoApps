@@ -125,10 +125,22 @@ describe('technicalIssues', () => {
   // figure, and the severities have to reflect that or the panel misleads.
   it('treats load, submit and grade as errors and image as a warning', () => {
     expect(technicalIssues([{ phase: 'load' }])[0].severity).toBe('error');
+    expect(technicalIssues([{ phase: 'save' }])[0].severity).toBe('error');
     expect(technicalIssues([{ phase: 'submit' }])[0].severity).toBe('error');
     expect(technicalIssues([{ phase: 'grade' }])[0].severity).toBe('error');
     expect(technicalIssues([{ phase: 'image' }])[0].severity).toBe('warning');
     expect(technicalIssues([{ phase: 'render' }])[0].severity).toBe('warning');
+  });
+
+  /**
+   * A refused autosave is work being lost as it happens, and it has to read as
+   * that. Without its own wording it fell through to "hit an unrecognised
+   * error", which is the one line a teacher cannot act on.
+   */
+  it('names a refused autosave for what it costs', () => {
+    expect(technicalIssues([{ phase: 'save', student_id: 'a' }])[0].title).toBe(
+      '1 student lost answers while sitting it, because the app stopped saving',
+    );
   });
 
   it('renders an unrecognised phase rather than dropping it', () => {

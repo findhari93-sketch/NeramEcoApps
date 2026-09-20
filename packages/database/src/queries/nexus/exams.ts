@@ -783,52 +783,77 @@ export async function createExamSeries(
     if (clsErr) throw clsErr;
     const cls = clsRow as any;
 
-    const { data: exam, error: examErr } = await supabase
-      .from(EXAMS)
-      .insert({
-        scheduled_class_id: cls.id,
-        series_id: seriesId,
-        classroom_id: classroomId,
-        test_id: input.testId,
-        title,
-        opens_at: input.opensAt,
-        closes_at: input.closesAt,
-        duration_minutes: duration,
-        timer_mode: timerMode,
-        passing_pct: passingPct,
-        mode,
-        proctoring_enabled: proctoringEnabled,
-        violation_limit: violationLimit,
-        created_by: input.createdBy ?? null,
-      })
-      .select('*')
-      .single();
-    if (examErr) throw examErr;
-    const examRow = exam as any;
+    // From here on the timetable row exists and there is no transaction around
+    // these writes. Every later step throwing used to leave the row behind
+    // forever: a `kind='exam'` class with no nexus_exams row, no meeting and no
+    // recording, which nothing can open, cancel (cancelExam starts from the
+    // exam) or clean up. Two of those reached production from one teacher
+    // retrying a failed schedule, and each one handed every joining student a
+    // catch-up obligation nobody could clear. So every step below runs inside
+    // a try that takes the class row back out on the way past.
+    try {
+      const { data: exam, error: examErr } = await supabase
+        .from(EXAMS)
+        .insert({
+          scheduled_class_id: cls.id,
+          series_id: seriesId,
+          classroom_id: classroomId,
+          test_id: input.testId,
+          title,
+          opens_at: input.opensAt,
+          closes_at: input.closesAt,
+          duration_minutes: duration,
+          timer_mode: timerMode,
+          passing_pct: passingPct,
+          mode,
+          proctoring_enabled: proctoringEnabled,
+          violation_limit: violationLimit,
+          created_by: input.createdBy ?? null,
+        })
+        .select('*')
+        .single();
+      if (examErr) throw examErr;
+      const examRow = exam as any;
 
-    await upsertExamPlacement(
-      {
-        scheduledClassId: cls.id,
-        examId: examRow.id,
-        testId: input.testId,
-        opensAt: input.opensAt,
-        closesAt: input.closesAt,
-        passingPct,
-        attemptLimit,
-        createdBy: input.createdBy ?? null,
-      },
-      supabase,
-    );
+      await upsertExamPlacement(
+        {
+          scheduledClassId: cls.id,
+          examId: examRow.id,
+          testId: input.testId,
+          opensAt: input.opensAt,
+          closesAt: input.closesAt,
+          passingPct,
+          attemptLimit,
+          createdBy: input.createdBy ?? null,
+        },
+        supabase,
+      );
 
-    // Only meaningful for a single-classroom schedule (the API route enforces
-    // this), but linkExamToClasses itself also only links classes that
-    // actually belong to `classroomId`, so a stray multi-classroom call would
-    // silently link nothing rather than cross-link the wrong classroom.
-    if (input.coveredClassIds && input.coveredClassIds.length > 0) {
-      await linkExamToClasses(examRow.id, classroomId, input.coveredClassIds, supabase);
+      // Only meaningful for a single-classroom schedule (the API route enforces
+      // this), but linkExamToClasses itself also only links classes that
+      // actually belong to `classroomId`, so a stray multi-classroom call would
+      // silently link nothing rather than cross-link the wrong classroom.
+      if (input.coveredClassIds && input.coveredClassIds.length > 0) {
+        await linkExamToClasses(examRow.id, classroomId, input.coveredClassIds, supabase);
+      }
+
+      exams.push(examRow as NexusExam);
+    } catch (err) {
+      // Best effort, and deliberately not awaited into a second failure: if the
+      // delete itself fails there is nothing further to try, and the original
+      // error is the one worth reporting. The exam row, if one was written,
+      // goes with the class: nexus_exams.scheduled_class_id is ON DELETE
+      // CASCADE.
+      await supabase
+        .from(CLASSES)
+        .delete()
+        .eq('id', cls.id)
+        .then(
+          () => undefined,
+          () => undefined,
+        );
+      throw err;
     }
-
-    exams.push(examRow as NexusExam);
   }
 
   return { series_id: seriesId, exams };

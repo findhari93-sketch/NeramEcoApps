@@ -1,0 +1,14 @@
+{
+  // Call sites of StudentStageAvatar that may draw a face with no identity, and why.
+  //
+  // Adding an entry is a decision, not a formality: write the reason above the
+  // path, and say what would have to change for the entry to go away. A path
+  // here that no longer exists is drift, and stage-avatar-identity.test.ts fails on it.
+  //
+  // Empty is the correct state, and it was empty on the day the guard was written.
+  // Every call site in the app already had a user id within reach: eleven passed
+  // one, two passed an explicit language, and the three attendance screens that
+  // did not were fixed rather than excused. If you are about to add the first
+  // entry here, check first whether the payload really has no users.id in it.
+  "files": []
+}

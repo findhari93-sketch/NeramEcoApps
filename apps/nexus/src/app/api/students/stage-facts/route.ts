@@ -9,7 +9,7 @@ import { foldStudentFacts, type StageFactMember } from '@/lib/stage-facts';
  * Who each student IS, keyed by user id, in one small payload: their cohort,
  * whether they have paused, their name and their face.
  *
- * WHY A LOOKUP TABLE RATHER THAN A FIELD ON EACH PAYLOAD. The stage ring is
+ * WHY A LOOKUP TABLE RATHER THAN A FIELD ON EACH PAYLOAD. The info ring is
  * meant to appear wherever a student's face does, and that is roughly thirty
  * screens fed by about twenty different routes: a drawing review, a leaderboard
  * row, a comment thread, an evaluation queue. Adding two columns to twenty

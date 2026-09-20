@@ -129,7 +129,7 @@ export default function ExamInvigilationRoster({
     return () => clearInterval(id);
   }, [isLive, load]);
 
-  // The shared student list: search, sort, stage ring filter. The counters are
+  // The shared student list: search, sort, info ring filter. The counters are
   // its status filter; paused students who never sat it are already gone.
   const view = useStudentListView<ExamRosterRow, 'suggested', ExamRosterStatus>({
     rows,
@@ -251,7 +251,7 @@ export default function ExamInvigilationRoster({
                       : 'divider',
                 }}
               >
-                {/* StudentAvatar, not a bare Avatar: it carries the cohort ring,
+                {/* StudentAvatar, not a bare Avatar: it carries the info ring,
                     the shared initials fallback and the long-press photo viewer
                     that hand-written initials do not. */}
                 <StudentAvatar

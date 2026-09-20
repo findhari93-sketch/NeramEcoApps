@@ -162,6 +162,18 @@ function contentWords(text: string): Set<string> {
  * mostly "can everyone hear me" cannot produce a real checkpoint quiz, and
  * finding that out after spending five calls of a shared quota is pure waste.
  */
+/**
+ * How much was actually said, in characters.
+ *
+ * One definition, because two things now judge a class by it: this file's
+ * preflight, which refuses to spend a Gemini call on a near-silent recording,
+ * and recap-autodraft's untaught verdict, which excuses students over one. Two
+ * separate sums would eventually disagree about the same transcript.
+ */
+export function transcriptChars(transcript: TranscriptEntry[]): number {
+  return (transcript || []).reduce((n, e) => n + (e.text?.length || 0), 0);
+}
+
 export function preflight(
   transcript: TranscriptEntry[],
   durationSeconds: number,
@@ -169,7 +181,7 @@ export function preflight(
   if (!transcript || transcript.length === 0) {
     return { ok: false, reason: 'no_transcript', detail: 'No transcript stored for this class.' };
   }
-  const chars = transcript.reduce((n, e) => n + (e.text?.length || 0), 0);
+  const chars = transcriptChars(transcript);
   const duration = durationSeconds || transcript[transcript.length - 1]?.end || 0;
 
   if (transcript.length < PREFLIGHT.minEntries) {

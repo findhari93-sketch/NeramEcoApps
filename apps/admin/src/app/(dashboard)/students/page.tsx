@@ -37,6 +37,8 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import StudentHubTable, { type StudentRow } from '@/components/students/StudentHubTable';
 import StudentDetailDrawer from '@/components/alumni/StudentDetailDrawer';
+import DetailLinksDialog from '@/components/students/DetailLinksDialog';
+import StudentFeesDialog from '@/components/students/StudentFeesDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import GraduateDialog from '@/components/crm/GraduateDialog';
 import SetAcademicYearDialog from '@/components/crm/SetAcademicYearDialog';
@@ -61,6 +63,11 @@ interface Stats {
   // and how many of those still hold a Nexus enrollment.
   personalOnly?: number;
   personalOnlyEnrolled?: number;
+  // Application form state across the visible set, plus the subset nobody has
+  // asked yet, which is what the "Ask them" banner acts on.
+  applicationMissing?: number;
+  applicationPartial?: number;
+  applicationNeverAsked?: number;
 }
 
 interface YearRevenue {
@@ -268,6 +275,9 @@ export default function StudentsPage() {
     pastBatchNoAccess: 0,
     personalOnly: 0,
     personalOnlyEnrolled: 0,
+    applicationMissing: 0,
+    applicationPartial: 0,
+    applicationNeverAsked: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -300,6 +310,10 @@ export default function StudentsPage() {
   // Client-side "show only personal-only accounts" filter (Gmail, no Microsoft org
   // identity). These are hidden from Nexus and need linking/merging in the drawer.
   const [personalOnlyFilter, setPersonalOnlyFilter] = useState(false);
+  // Students with no application form at all, the chase list the links exist for.
+  const [noFormFilter, setNoFormFilter] = useState(false);
+  const [askRows, setAskRows] = useState<StudentRow[] | null>(null);
+  const [feesRow, setFeesRow] = useState<StudentRow | null>(null);
 
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<StudentRow | null>(null);
@@ -457,8 +471,9 @@ export default function StudentsPage() {
     let rows = students;
     if (pastBatchFilter) rows = rows.filter((s) => s.past_batch);
     if (personalOnlyFilter) rows = rows.filter((s) => !s.ms_oid);
+    if (noFormFilter) rows = rows.filter((s) => s.application_state === 'missing' && !s.is_alumni);
     return rows;
-  }, [students, pastBatchFilter, personalOnlyFilter]);
+  }, [students, pastBatchFilter, personalOnlyFilter, noFormFilter]);
 
   // Bulk: move to the Software course program (leaves the architecture list).
   const moveToSoftware = useCallback(
@@ -968,6 +983,46 @@ export default function StudentsPage() {
         </Alert>
       )}
 
+      {/* No-application banner. Separate from the chip because "has no form" and
+          "nobody has asked them for one" are different jobs, and the second is the
+          one with an action attached. Admin carries this rather than Nexus alone
+          because the Nexus sheet is classroom-scoped and cannot see students who
+          are in no active classroom. */}
+      {(stats.applicationMissing ?? 0) > 0 && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2, borderRadius: 1 }}
+          action={
+            noFormFilter ? (
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button
+                  color="warning"
+                  size="small"
+                  variant="contained"
+                  onClick={() =>
+                    setAskRows(visibleStudents.filter((s) => s.application_state === 'missing' && !s.is_alumni))
+                  }
+                  sx={{ textTransform: 'none', fontWeight: 600 }}
+                >
+                  Get links for all
+                </Button>
+                <Button color="warning" size="small" variant="text" onClick={() => setNoFormFilter(false)} sx={{ textTransform: 'none', fontWeight: 600 }}>
+                  Show all
+                </Button>
+              </Box>
+            ) : (
+              <Button color="warning" size="small" variant="contained" onClick={() => setNoFormFilter(true)} sx={{ textTransform: 'none', fontWeight: 600 }}>
+                Show them
+              </Button>
+            )
+          }
+        >
+          <strong>{stats.applicationMissing} students</strong> have no application form at all.
+          Send them a link and they can fill it in themselves, with no password.
+          {(stats.applicationNeverAsked ?? 0) > 0 && ` ${stats.applicationNeverAsked} have never been asked.`}
+        </Alert>
+      )}
+
       {/* Active exam-batch scope. The switch is GLOBAL (profile menu, bottom-left);
           this chip just shows what you're viewing. Columns filter client-side. */}
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -995,6 +1050,15 @@ export default function StudentsPage() {
             onDelete={() => setPersonalOnlyFilter(false)}
           />
         )}
+        {noFormFilter && (
+          <Chip
+            label="Showing students with no application form"
+            color="warning"
+            variant="filled"
+            size="small"
+            onDelete={() => setNoFormFilter(false)}
+          />
+        )}
         <Typography variant="caption" color="text.secondary">
           Switch batch from the profile menu (bottom-left). Filter any column from the box under its header; click a student for full details.
         </Typography>
@@ -1013,6 +1077,8 @@ export default function StudentsPage() {
         onMarkStaff={(rows) => setMarkStaff(rows)}
         onGraduate={(rows) => { setBulkRows(rows); setGraduateOpen(true); }}
         onPromote={(rows) => handlePromoteToCurrent(rows)}
+        onAskDetails={(rows) => setAskRows(rows)}
+        onSetFees={(row) => setFeesRow(row)}
       />
         </>
       )}
@@ -1466,6 +1532,25 @@ export default function StudentsPage() {
       />
 
       {/* Row-click detail drawer: full application detail + editable personal fields */}
+      {/* Links dialog. Mounted with the rows it was opened for rather than reading
+          the selection, so closing the selection banner cannot empty it mid-copy. */}
+      <StudentFeesDialog
+        open={!!feesRow}
+        userId={feesRow?.id ?? null}
+        studentName={feesRow?.name ?? null}
+        adminId={supabaseUserId}
+        onClose={() => setFeesRow(null)}
+        onSaved={() => { fetchStudents(); fetchRevenue(); }}
+      />
+
+      <DetailLinksDialog
+        open={!!askRows && askRows.length > 0}
+        rows={askRows || []}
+        adminId={supabaseUserId}
+        onClose={() => setAskRows(null)}
+        onDone={() => fetchStudents()}
+      />
+
       <StudentDetailDrawer
         open={!!drawerStudent}
         student={

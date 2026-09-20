@@ -225,30 +225,34 @@ export function buildWrapUpHtml(
 }
 
 /**
- * The "Featured sketch" card a teacher posts to the class. The image is the
+ * The "Featured work" card a teacher posts to the class. The image is the
  * public drawing-uploads URL; anything that is not https is dropped rather than
  * embedded (the spike in the sketchbook plan decides whether Teams renders an
  * external image or needs hostedContents; this builder is the same either way).
+ *
+ * THERE IS NO CAPTION PARAMETER, and adding one back would be a mistake.
+ * Featuring used to carry a caption box that defaulted to the sketch's
+ * `self_note`. That column is the student's private reflection: the Inspiration
+ * sync refuses to copy it for exactly that reason. Once the box went away, any
+ * caption argument here would post a private note to a whole class with nobody
+ * reading it first, so the argument went away with it.
  */
 export function buildFeaturedSketchHtml(input: {
   studentName: string;
-  caption: string | null;
   imageUrl: string;
   nexusUrl: string;
 }): string {
   const name = escapeMessageHtml(input.studentName);
-  const caption = input.caption ? `<p><i>${escapeMessageHtml(input.caption)}</i></p>` : '';
   const img = /^https:\/\//.test(input.imageUrl)
     ? `<p><img src="${escapeMessageHtml(input.imageUrl)}" alt="Sketch by ${name}" width="480"></p>`
     : '';
   const link = /^https:\/\//.test(input.nexusUrl)
-    ? `<p><a href="${escapeMessageHtml(input.nexusUrl)}">Open in Nexus</a></p>`
+    ? `<p><a href="${escapeMessageHtml(input.nexusUrl)}">See it in Inspiration</a></p>`
     : '';
   return (
-    `<h3>Featured sketch</h3>` +
-    `<p><b>${name}</b> drew this in their sketchbook.</p>` +
+    `<h3>Featured work</h3>` +
+    `<p><b>${name}</b> drew this. It is in Inspiration now, for the whole class to learn from.</p>` +
     img +
-    caption +
     link
   );
 }

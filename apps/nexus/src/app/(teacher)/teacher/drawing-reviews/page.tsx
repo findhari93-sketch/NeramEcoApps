@@ -246,11 +246,12 @@ export default function DrawingReviewsPage() {
                   />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
+                      {/* 28 even when compact: below it the ring loses the stage glyph and the language mark. */}
                       <StudentAvatar
                         userId={s.student?.id}
                         src={s.student?.avatar_url}
                         name={s.student?.name}
-                        size={isCompact ? 20 : 24}
+                        size={28}
                         tapToView={false}
                         sx={{ fontSize: '0.7rem' }}
                       />

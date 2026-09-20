@@ -293,15 +293,16 @@ export function technicalIssues(
     load: 'failed to open the paper',
     render: 'could not display a question',
     image: 'could not load a question image',
+    save: 'lost answers while sitting it, because the app stopped saving',
     submit: 'could not submit their answers',
     grade: 'submitted but the paper failed to mark',
     unknown: 'hit an unrecognised error',
   };
 
-  // Submit and load failures cost a student their work or their attempt
+  // Submit, save and load failures cost a student their work or their attempt
   // outright. An image failure is severe too, but it degrades one question
   // rather than the sitting.
-  const HARD = new Set(['load', 'submit', 'grade']);
+  const HARD = new Set(['load', 'save', 'submit', 'grade']);
 
   return [...byPhase.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))

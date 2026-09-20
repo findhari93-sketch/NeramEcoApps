@@ -15,9 +15,28 @@ describe('sketchbook messages', () => {
     expect(m.plain).toBe('Hari said Great to a sketch in your sketchbook. Keep the rhythm going.');
     expect(m.plain).not.toContain('—');
   });
-  it('writes the featured message', () => {
+  it('appreciates the student by name and says where the drawing went', () => {
     const m = featuredMessage('Hari', 'JEE B.Arch Session 1');
-    expect(m.subject).toBe('Your sketch was featured in JEE B.Arch Session 1');
-    expect(m.plain).toBe('Hari featured one of your sketches for the whole class to see. Open your sketchbook to find it.');
+    expect(m.subject).toBe('Your drawing is featured in JEE B.Arch Session 1');
+    // sendNudge fills {firstName} per recipient, so the token must survive.
+    expect(m.plain).toContain('{firstName}');
+    expect(m.plain).toContain('Hari chose your drawing to show the class.');
+    expect(m.plain).toContain('Inspiration shelf');
+    expect(m.teamsText).toBe('Your drawing is featured');
+  });
+
+  it('promises no shelf to a student who keeps their drawings off it', () => {
+    const m = featuredMessage('Hari', 'JEE B.Arch Session 1', false);
+    expect(m.plain).not.toContain('Inspiration');
+    // Still praised: the class saw it, which is what was actually true.
+    expect(m.plain).toContain('chose your drawing to show the class.');
+    expect(m.plain).toContain('Well done.');
+  });
+
+  it('keeps every message clear of em dashes', () => {
+    for (const m of [featuredMessage('Hari', 'Class'), featuredMessage('Hari', 'Class', false)]) {
+      expect(m.subject).not.toContain('—');
+      expect(m.plain).not.toContain('—');
+    }
   });
 });

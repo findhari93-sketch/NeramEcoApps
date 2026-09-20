@@ -15,7 +15,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
-import { stageKeyOf } from '@/lib/student-stage';
+import { knownStageKey } from '@/lib/student-stage';
 import type { PrepRosterRow, PrepRosterSummary } from '@/lib/class-prep-roster';
 import { preworkReasonShortLabel } from '@/lib/prework-reasons';
 import { useNexusSWR, useRefreshKey } from '@/lib/nexus-swr';
@@ -250,7 +250,7 @@ export default function ClassPrepRoster({
                     is ready ten minutes before class can also see at a glance
                     that the two unprepared names are break-year students. */}
                 <StudentStageAvatar
-                  stage={stageKeyOf(r.study_stage)}
+                  stage={knownStageKey(r.study_stage)}
                   userId={r.student_id}
                   name={r.name}
                   src={r.avatar_url}

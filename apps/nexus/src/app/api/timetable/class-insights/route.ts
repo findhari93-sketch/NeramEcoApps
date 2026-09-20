@@ -219,7 +219,7 @@ export async function GET(request: NextRequest) {
         // rather than going to the student page for a number.
         phone: r.user?.phone || null,
         // The classification, carried so every avatar on this panel can wear the
-        // stage ring. It costs nothing: the roster already selects both columns.
+        // info ring. It costs nothing: the roster already selects both columns.
         study_stage: r.current_standard ?? null,
         dormant: r.participation_status === 'dormant',
         enrolled_at: r.enrolled_at ?? null,

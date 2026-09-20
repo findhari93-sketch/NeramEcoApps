@@ -2,11 +2,12 @@ import type { ComponentProps } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import LanguageFilterBar from './LanguageFilterBar';
+import { INFO_RING_LABEL_RE } from '@/lib/student-info-ring';
 
 const counts = { tamil: 12, hindi: 1, kannada: 1, malayalam: 0, english: 23 };
 
-/** The e2e ring selector. A filter chip must never be mistaken for a ring. */
-const RING = /(Class 10|Class 11|Class 12|Break Year|Not set|Dormant):/;
+/** A filter chip must never be mistaken for an info ring. */
+const RING = INFO_RING_LABEL_RE;
 
 function setup(overrides: Partial<ComponentProps<typeof LanguageFilterBar>> = {}) {
   const onChange = vi.fn();

@@ -109,8 +109,16 @@ export default function InspirationCurationBar({ card, base, onChanged }: Inspir
             Use the automatic rule
           </Button>
         )}
+        {/*
+          Called Pin, not Feature, and the distinction is load-bearing. This
+          button only sorts the drawing to the front of the grid. "Feature", on
+          the sketchbook screen, posts to the class Teams channel and group
+          chat, messages the student and puts the work on this shelf. Two
+          buttons with one name, doing very different amounts of public thing,
+          is the confusion that started this work.
+        */}
         <Button variant="outlined" color="inherit" startIcon={card.featured ? <StarIcon /> : <StarOutlineIcon />} disabled={busy} onClick={() => run(() => patchItem(getToken, card.id, { is_featured: !card.featured }))} sx={actionSx}>
-          {card.featured ? 'Unfeature' : 'Feature'}
+          {card.featured ? 'Unpin from the top' : 'Pin to the top'}
         </Button>
         <Button
           variant="outlined"

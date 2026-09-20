@@ -24,7 +24,7 @@ import StudentStatFilters, { type StatFilterTile } from '@/components/tests/Stud
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
 import { useStudentListView } from '@/components/students/list/useStudentListView';
 import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
-import { stageKeyOf } from '@/lib/student-stage';
+import { knownStageKey } from '@/lib/student-stage';
 import { RADIUS } from '@/components/timetable/timetable-theme';
 import {
   STANDING_META,
@@ -140,9 +140,10 @@ export default function StandingList({ data }: { data: StandingResponse }) {
               >
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
                   <StudentStageAvatar
+                    userId={s.id}
                     name={s.name}
                     src={s.avatar_url}
-                    stage={stageKeyOf(s.study_stage)}
+                    stage={knownStageKey(s.study_stage)}
                     size={40}
                   />
                   <Box sx={{ flex: 1, minWidth: 0 }}>

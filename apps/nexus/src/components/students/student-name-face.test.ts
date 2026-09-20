@@ -8,7 +8,7 @@ import { stripLineComments } from './allowlist-jsonc';
  * A student's name must never appear without their face.
  *
  * The ESLint rule in .eslintrc.json bans a plain UserAvatar, GraphAvatar or
- * Avatar-with-a-src, so no face can be drawn without its cohort ring. What it
+ * Avatar-with-a-src, so no face can be drawn without its info ring. What it
  * structurally cannot see is a screen that draws NO FACE AT ALL: the test
  * results tab listed "Hari Heera, 1 attempt, 76%" as bare text, and survived
  * three manual sweeps and the lint rule precisely because there was no avatar
@@ -184,7 +184,7 @@ describe('student names are never faceless', () => {
       offenders,
       offenders.length
         ? `These screens name a student with no face beside them:\n\n${report}\n\n` +
-            `  A name is something a teacher READS; a face wearing its cohort ring is\n` +
+            `  A name is something a teacher READS; a face wearing its info ring is\n` +
             `  something they SCAN. Put one in front of the name:\n\n` +
             `      <StudentAvatar userId={...} name={...} size={32} />\n\n` +
             `  The user id is all it needs. The photo, the name and the ring all come\n` +

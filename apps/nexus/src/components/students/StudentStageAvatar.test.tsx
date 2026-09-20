@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import StudentStageAvatar from './StudentStageAvatar';
 import * as facts from './StudentStageFactsProvider';
 import type { LanguageKey } from '@/lib/student-language';
+import { INFO_RING_LABEL_RE, INFO_RING_TESTID } from '@/lib/student-info-ring';
+import type { StageKey } from '@/lib/student-stage';
 
 /**
  * The language mark at bottom-left.
@@ -17,17 +19,28 @@ vi.mock('@/components/GraphAvatar', () => ({
   default: () => <span data-testid="graph-avatar" />,
 }));
 
-/** The e2e ring selector, copied from tests/e2e/avatar-ring-nexus-mobile.spec.ts. */
-const RING = /(Class 10|Class 11|Class 12|Break Year|Not set|Dormant):/;
+/**
+ * Built from the stage labels in student-info-ring.ts rather than written out
+ * here. It used to be a regex literal copied into four files, which is how a
+ * renamed stage would have left four stale copies behind.
+ */
+const RING = INFO_RING_LABEL_RE;
 
-function stubFacts(map: Record<string, { language: LanguageKey; limitedEnglish?: boolean }>) {
+interface StubFact {
+  language: LanguageKey;
+  limitedEnglish?: boolean;
+  stage?: StageKey;
+  dormant?: boolean;
+}
+
+function stubFacts(map: Record<string, StubFact>) {
   vi.spyOn(facts, 'useStudentStageFacts').mockReturnValue({
     ready: true,
     factsFor: (id) =>
       id && id in map
         ? {
-            stage: '11th',
-            dormant: false,
+            stage: map[id].stage ?? '11th',
+            dormant: map[id].dormant === true,
             photo: null,
             name: null,
             language: map[id].language,
@@ -146,5 +159,42 @@ describe('StudentStageAvatar language source', () => {
   it('shows nothing without a provider, which is every student-facing screen', () => {
     render(<StudentStageAvatar stage="11th" name="Nithya Raman" userId="s1" />);
     expect(badge()).toBeNull();
+  });
+});
+
+describe('StudentStageAvatar ring source', () => {
+  it('carries a test id, so a sweep does not have to find the ring by its words', () => {
+    render(<StudentStageAvatar stage="11th" name="Nithya Raman" language={null} />);
+    expect(screen.getByTestId(INFO_RING_TESTID)).toBeTruthy();
+    expect(screen.getByTestId(INFO_RING_TESTID).getAttribute('aria-label')).toMatch(RING);
+  });
+
+  it('reads the stage from the lookup when the screen does not carry one', () => {
+    stubFacts({ s1: { language: 'english', stage: '12th' } });
+    render(<StudentStageAvatar name="Nithya Raman" userId="s1" />);
+    expect(ring().getAttribute('aria-label')).toMatch(/^Class 12:/);
+  });
+
+  it('lets an explicit stage win, so a freshly reloaded payload beats the lookup', () => {
+    stubFacts({ s1: { language: 'english', stage: '12th' } });
+    render(<StudentStageAvatar stage="10th" name="Nithya Raman" userId="s1" />);
+    expect(ring().getAttribute('aria-label')).toMatch(/^Class 10:/);
+  });
+
+  it('reads paused from the lookup, which is what attendance never passed', () => {
+    stubFacts({ s1: { language: 'english', stage: '12th', dormant: true } });
+    render(<StudentStageAvatar name="Paused Person" userId="s1" />);
+    expect(ring().getAttribute('aria-label')).toMatch(/^Dormant:/);
+  });
+
+  it('lets an explicit dormant=false win over a paused lookup', () => {
+    stubFacts({ s1: { language: 'english', stage: '12th', dormant: true } });
+    render(<StudentStageAvatar name="Back Again" userId="s1" dormant={false} />);
+    expect(ring().getAttribute('aria-label')).toMatch(/^Class 12:/);
+  });
+
+  it('falls back to Not set when nothing identifies the student', () => {
+    render(<StudentStageAvatar name="Stranger" />);
+    expect(ring().getAttribute('aria-label')).toMatch(/^Not set:/);
   });
 });

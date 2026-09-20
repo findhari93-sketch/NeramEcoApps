@@ -23,7 +23,6 @@ import DensitySmallOutlinedIcon from '@mui/icons-material/DensitySmallOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
@@ -44,6 +43,7 @@ import ApplicationFormSheet from '@/components/students/ApplicationFormSheet';
 import CreateAccountForm, { type AccountPrefill } from '@/components/students/CreateAccountForm';
 import ResetPasswordSheet, { type ResetPasswordTarget } from '@/components/students/ResetPasswordSheet';
 import BulkSelectBar from '@/components/students/BulkSelectBar';
+import { InfoRingLegendButton } from '@/components/students/InfoRingLegend';
 import ClassifyDrawer, { type ClassifyMode, type ClassifyPayload } from '@/components/students/ClassifyDrawer';
 import LanguageFilterBar from '@/components/students/LanguageFilterBar';
 import NeedsAttentionCard from '@/components/students/NeedsAttentionCard';
@@ -1122,19 +1122,19 @@ export default function TeacherStudents() {
           <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
             {loading && !students.length ? 'Loading students' : headerCaption}
           </Typography>
-          <Tooltip
-            title="Tracked students count in attendance, submissions, prep readiness and the watchlist. Not started students (never entered Nexus) and students paused by staff are left out of all of those. Not started students join the numbers on their own once they add a photo and get in. A student without a Microsoft account cannot sign in to Nexus yet."
-            arrow
-            enterTouchDelay={0}
-            leaveTouchDelay={5000}
-          >
-            <IconButton
-              aria-label="What these numbers mean"
-              sx={{ width: 48, height: 48, flexShrink: 0, color: 'text.secondary' }}
-            >
-              <InfoOutlinedIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
+          {/*
+            One info button for the whole page. It used to be a long tooltip
+            about the counts, which nobody could read on a phone and which said
+            nothing about the rings the list is full of. Both live in the legend
+            sheet now.
+          */}
+          <InfoRingLegendButton
+            label="What these numbers and rings mean"
+            intro={{
+              title: 'What these numbers count',
+              body: 'Tracked students count in attendance, submissions, prep readiness and the watchlist. Not started students (never entered Nexus) and students paused by staff are left out of all of those. Not started students join the numbers on their own once they add a photo and get in. A student without a Microsoft account cannot sign in to Nexus yet.',
+            }}
+          />
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
           {canSetStage && !selectMode && (

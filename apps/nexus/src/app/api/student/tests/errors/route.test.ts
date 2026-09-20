@@ -57,6 +57,32 @@ describe('POST /api/student/tests/errors', () => {
     ]);
   });
 
+  /**
+   * The take page now reports a refused autosave the moment it happens, rather
+   * than letting the student work on into a dead sitting. A phase this route
+   * does not know is dropped in silence, so it has to know this one.
+   */
+  it('stores a refused autosave, which is work being lost in real time', async () => {
+    mocks.access.mockResolvedValue(student);
+    const res = await POST(
+      post({
+        test_id: 't1',
+        errors: [
+          {
+            phase: 'save',
+            attempt_id: 'a1',
+            message: 'This attempt is already finished. Start a new one to try again.',
+            detail: { status: 409, code: 'ATTEMPT_CLOSED', attempt_status: 'abandoned', answered: 50 },
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(mocks.insert).toHaveBeenCalledWith([
+      expect.objectContaining({ phase: 'save', detail: expect.objectContaining({ attempt_status: 'abandoned' }) }),
+    ]);
+  });
+
   // Kept, and marked. A paper that will not load for the teacher previewing it
   // will not load for the class either, and the health panel counts students by
   // its own staff list, so the row costs no accuracy.

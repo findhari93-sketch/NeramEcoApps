@@ -20,6 +20,7 @@ import {
   segmentCounts,
   stageCounts,
   stageKeyOf,
+  knownStageKey,
   type StageFacts,
   type StageKey,
   type StudentSegment,
@@ -39,6 +40,27 @@ describe('stageKeyOf', () => {
     expect(stageKeyOf('')).toBe('unset');
     expect(stageKeyOf('9th')).toBe('unset');
     expect(stageKeyOf('GAP_YEAR')).toBe('unset');
+  });
+});
+
+describe('knownStageKey', () => {
+  it('passes a stage the payload actually carries, so the ring paints at once', () => {
+    expect(knownStageKey('12th')).toBe('12th');
+    expect(knownStageKey('gap_year')).toBe('gap_year');
+  });
+
+  it('defers to the lookup instead of asserting "Not set" over it', () => {
+    // This is the whole difference from stageKeyOf. An explicit 'unset' would
+    // OUTRANK the session lookup on StudentStageAvatar, so a screen whose
+    // payload does not carry the class would draw a grey dotted ring on a
+    // student whose class the app already knows. Undefined lets the ring ask.
+    expect(knownStageKey(null)).toBeUndefined();
+    expect(knownStageKey(undefined)).toBeUndefined();
+    expect(knownStageKey('')).toBeUndefined();
+  });
+
+  it('still refuses a value it does not recognise, rather than inventing one', () => {
+    expect(knownStageKey('9th')).toBe('unset');
   });
 });
 

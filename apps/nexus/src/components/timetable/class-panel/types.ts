@@ -34,6 +34,16 @@ export interface PanelAssignment {
   prework_reason_code?: string | null;
 }
 
+/**
+ * Which confirmation the panel is asking for.
+ *
+ * 'not_taught' and 'undo_not_taught' are the pair for a session that was not a
+ * class. They are confirmations rather than straight actions because both move
+ * every student on the class at once, and a teacher should see the count before
+ * it happens.
+ */
+export type ClassPanelConfirmAction = 'cancel' | 'delete' | 'not_taught' | 'undo_not_taught';
+
 export interface ClassPanelProps {
   cls: ClassCardData | null;
   /**
@@ -118,6 +128,16 @@ export interface ClassPanelProps {
   onEdit?: (cls: ClassCardData) => void;
   onDelete?: (classId: string) => void;
   onDeletePermanent?: (classId: string) => void;
+  /**
+   * "I opened the meeting and told everyone the class was postponed."
+   *
+   * Separate from onDelete because the two differ in what they do to Teams and
+   * to the register. Cancelling announces and is only offered before the slot;
+   * this is only offered after it, says nothing to Teams, keeps every
+   * attendance row, and clears the catch-up the session should never have
+   * created. `undo` runs it backwards.
+   */
+  onNotTaught?: (classId: string, undo: boolean) => void;
   onRsvp?: (classId: string, response: 'attending' | 'not_attending') => void;
   onRate?: (cls: ClassCardData) => void;
   /** Open the merged register + analytics dialog for this class. */
@@ -148,8 +168,8 @@ export interface ClassPanelTabProps extends Omit<ClassPanelProps, 'cls' | 'open'
   onOpenRecording: () => void;
   /** Open the share sheet. Owned by the shell. */
   onOpenShare: () => void;
-  /** Ask for the cancel or the permanent-delete confirmation. */
-  onConfirm: (action: 'cancel' | 'delete') => void;
+  /** Ask for one of the four confirmations the panel can raise. */
+  onConfirm: (action: ClassPanelConfirmAction) => void;
 }
 
 /** A small uppercase caption above a block, as the planner rail uses. */

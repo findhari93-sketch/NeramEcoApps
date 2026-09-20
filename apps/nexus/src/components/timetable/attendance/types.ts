@@ -114,7 +114,7 @@ export interface StudentInsight {
   name: string;
   avatar_url: string | null;
   phone?: string | null;
-  /** nexus_enrollments.current_standard, for the avatar's stage ring. */
+  /** nexus_enrollments.current_standard, for the avatar's info ring. */
   study_stage?: string | null;
   /** nexus_enrollments.participation_status === 'dormant'. Display only. */
   dormant?: boolean;

@@ -16,7 +16,7 @@ const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
 
 const ALLOWED: Record<string, string> = {
   'apps/nexus/src/app/api/students/stage-facts/route.ts':
-    'The avatar ring must be able to show the paused state; it lists nobody.',
+    'The info ring must be able to show the paused state; it lists nobody.',
   'apps/nexus/src/app/api/catchup/overview/route.ts':
     'Loads everyone once, then splits with isTracked; dormant rows never reach the screen.',
   'apps/nexus/src/lib/catchup-cohort.ts':

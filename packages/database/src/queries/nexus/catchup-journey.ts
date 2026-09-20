@@ -195,11 +195,21 @@ export async function ensureCatchupJourney(
     journey = data || existing;
   }
 
-  // 2. Every published class taught before they joined.
+  // 2. Every published class TAUGHT before they joined.
+  //
+  // `kind` matters here and the class-kind audit said it did not. That audit
+  // reasoned that an exam row cannot reach this code because an exam never has
+  // an absence row, which has the causation backwards: this function does not
+  // read absence rows, it CREATES them from the class list. Without the filter
+  // a joining student is handed a catch-up obligation for every test window in
+  // the term, and those can never be cleared, because a test has no recording
+  // and no recap to watch. Twelve such rows were written against three exam
+  // rows on production before this filter existed.
   let query = supabase
     .from('nexus_scheduled_classes')
     .select('id, scheduled_date, batch_id')
     .eq('classroom_id', classroomId)
+    .eq('kind', 'lecture')
     .eq('publish_state', 'published')
     .neq('status', 'cancelled')
     .lt('scheduled_date', startedOn);
@@ -682,10 +692,14 @@ export async function loadNextClassDates(
     .eq('is_active', true)
     .maybeSingle();
 
+  // Lectures only, for the same reason as the backfill above: this builds the
+  // calendar of teaching days that due dates are counted against, and a test
+  // window is not a teaching day.
   const { data: classes } = await supabase
     .from('nexus_scheduled_classes')
     .select('scheduled_date, batch_id')
     .eq('classroom_id', classroomId)
+    .eq('kind', 'lecture')
     .eq('publish_state', 'published')
     .neq('status', 'cancelled')
     .order('scheduled_date', { ascending: true });

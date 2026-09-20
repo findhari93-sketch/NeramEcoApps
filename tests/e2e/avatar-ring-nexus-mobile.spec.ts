@@ -4,7 +4,7 @@ import { APP_URLS, injectAuthForPage } from '../utils/credentials';
 import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
 
 /**
- * The cohort ring, on the screens that kept losing it.
+ * The info ring, on the screens that kept losing it.
  *
  * WHAT IS WORTH PROVING IN A BROWSER
  *
@@ -59,6 +59,15 @@ const COLD_COMPILE_BUDGET = 120_000;
  * which announces the same words without one.
  */
 const RING = /(Class 10|Class 11|Class 12|Break Year|Not set|Dormant):/;
+
+/**
+ * The stable handle. The regex above stays for the one assertion that proves
+ * the ring still SAYS something; everything else finds it by this, so renaming
+ * a stage no longer breaks a sweep. Kept in sync by hand with
+ * INFO_RING_TESTID in apps/nexus/src/lib/student-info-ring.ts, because a
+ * Playwright spec cannot import from an app package.
+ */
+const RING_TESTID = 'info-ring';
 
 test.describe.configure({ mode: 'serial', timeout: COLD_COMPILE_BUDGET });
 
@@ -189,7 +198,7 @@ async function openOnPhone(page: Page, path: string) {
  */
 async function ringAppeared(page: Page): Promise<boolean> {
   try {
-    await page.getByLabel(RING).first().waitFor({ state: 'visible', timeout: 45_000 });
+    await page.getByTestId(RING_TESTID).first().waitFor({ state: 'visible', timeout: 45_000 });
     return true;
   } catch {
     return false;
@@ -211,7 +220,7 @@ async function ringAppeared(page: Page): Promise<boolean> {
  */
 async function noDataReason(page: Page): Promise<string | null> {
   const empty = page.getByText(
-    /No student has built their own test yet|All submissions have been reviewed|no submissions|nothing to review|No students/i
+    /No student has built their own test yet|All submissions have been reviewed|no submissions|nothing to review|No students|No classes have finished in this range/i
   );
   const failed = page.getByText(/Failed to load/i);
 
@@ -224,7 +233,7 @@ async function noDataReason(page: Page): Promise<string | null> {
   return null;
 }
 
-test.describe('cohort ring at 375px', () => {
+test.describe('info ring at 375px', () => {
   /**
    * The control. Every other result here is only meaningful if this passes,
    * because this screen has worn the ring since long before this change.
@@ -236,6 +245,58 @@ test.describe('cohort ring at 375px', () => {
       await ringAppeared(page),
       'no ring on /teacher/students, so this environment has no students and every other result in this file is meaningless'
     ).toBe(true);
+
+    // The one place the ring's WORDS are checked. Everywhere else finds it by
+    // its test id, so a renamed stage breaks this single assertion rather than
+    // silently turning five sweeps green on nothing.
+    await expect(page.getByTestId(RING_TESTID).first()).toHaveAttribute('aria-label', RING);
+
+    await assertNoHorizontalOverflow(page);
+  });
+
+  /**
+   * The screen that prompted the whole pass. It draws its faces through
+   * StudentStageAvatar directly rather than through StudentAvatar, which is the
+   * shape that had no test anywhere.
+   */
+  test('attendance register wears the ring', async ({ page }) => {
+    await openOnPhone(page, '/teacher/attendance');
+
+    const tab = page.getByRole('tab', { name: /^Register$/ });
+    await tab.waitFor({ state: 'visible', timeout: COLD_COMPILE_BUDGET });
+    await tab.click();
+
+    const appeared = await ringAppeared(page);
+    if (!appeared) {
+      const reason = await noDataReason(page);
+      test.skip(!!reason, `nothing to ring on /teacher/attendance, ${reason}`);
+    }
+
+    expect(appeared, 'no info ring on the attendance register').toBe(true);
+    await assertNoHorizontalOverflow(page);
+  });
+
+  /**
+   * The densest face in the app. It sat at 20px compact and 24px otherwise,
+   * both under the 28px floor where the stage glyph and the language mark are
+   * dropped, so the ring was there and said only half of what it knows.
+   */
+  test('drawing reviews list carries the corner marks, not just the ring', async ({ page }) => {
+    await openOnPhone(page, '/teacher/drawing-reviews');
+
+    const appeared = await ringAppeared(page);
+    if (!appeared) {
+      const reason = await noDataReason(page);
+      test.skip(!!reason, `nothing to ring on /teacher/drawing-reviews, ${reason}`);
+    }
+
+    expect(appeared, 'no info ring on the drawing reviews list').toBe(true);
+
+    // 28px or more, which is what makes the glyph and the letter render at all.
+    const box = await page.getByTestId(RING_TESTID).first().boundingBox();
+    expect(box, 'the ring has no box, so nothing was measured').not.toBeNull();
+    expect(box!.width, 'the face is under the 28px floor, so both corner marks are dropped')
+      .toBeGreaterThanOrEqual(36);
 
     await assertNoHorizontalOverflow(page);
   });
@@ -253,7 +314,7 @@ test.describe('cohort ring at 375px', () => {
 
     await openOnPhone(page, '/teacher/exam-recall');
 
-    expect(await ringAppeared(page), 'no cohort ring on the exam recall list').toBe(true);
+    expect(await ringAppeared(page), 'no info ring on the exam recall list').toBe(true);
 
     // The ring must be around a FACE. If the label selector ever started
     // matching a chip, the assertion above would pass on nothing at all.
@@ -275,7 +336,7 @@ test.describe('cohort ring at 375px', () => {
       test.skip(!!reason, `nothing to ring on /teacher/tests, ${reason}`);
     }
 
-    expect(appeared, 'no cohort ring on the student tests list').toBe(true);
+    expect(appeared, 'no info ring on the student tests list').toBe(true);
   });
 
   test('student tests list does not scroll sideways', async ({ page }) => {
@@ -299,7 +360,7 @@ test.describe('cohort ring at 375px', () => {
       test.skip(!!reason, `nothing to ring on /teacher/evaluate, ${reason}`);
     }
 
-    expect(appeared, 'no cohort ring on the evaluate queue').toBe(true);
+    expect(appeared, 'no info ring on the evaluate queue').toBe(true);
     await assertNoHorizontalOverflow(page);
   });
 
@@ -311,6 +372,6 @@ test.describe('cohort ring at 375px', () => {
 
     // Scoped to the header so a ringed student further down the page cannot
     // make this pass or fail for the wrong reason.
-    await expect(header.getByLabel(RING)).toHaveCount(0);
+    await expect(header.getByTestId(RING_TESTID)).toHaveCount(0);
   });
 });

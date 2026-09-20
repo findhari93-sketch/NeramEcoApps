@@ -46,9 +46,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient() as any;
 
+    // The FK hint is mandatory: nexus_enrollments references users four times, so a
+    // bare `users(...)` embed is rejected with PGRST201. See
+    // enrollment-embed-guard.test.ts.
     const { data: enrollment, error: enrollmentError } = await supabase
       .from('nexus_enrollments')
-      .select('id, user:users!inner(id, is_alumni)')
+      .select('id, user:users!nexus_enrollments_user_id_fkey!inner(id, is_alumni)')
       .eq('classroom_id', classroomId)
       .eq('user_id', studentId)
       .eq('role', 'student')

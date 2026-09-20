@@ -105,7 +105,7 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
           sketchId={current.id}
           reaction={(state.reaction as never) ?? current.reaction}
           featured={state.featured ?? current.featured}
-          selfNote={current.self_note}
+          studentName={current.student.name}
           onChanged={(c) => setLocal((m) => ({ ...m, [current.id]: { ...m[current.id], ...c } }))}
         />
         <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>

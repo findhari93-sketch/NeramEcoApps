@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     // Distinct students with an active enrollment and a Microsoft identity.
     const { data: enr } = await supabase
       .from('nexus_enrollments')
-      .select('user:users(id, ms_oid, name)')
+      .select('user:users!nexus_enrollments_user_id_fkey(id, ms_oid, name)')
       .eq('is_active', true);
 
     const seen = new Set<string>();

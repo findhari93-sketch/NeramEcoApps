@@ -2,7 +2,7 @@
 
 /**
  * The one hook behind every full list of students: hides dormant students,
- * filters by the stage ring and by the screen's own status, searches and sorts,
+ * filters by the info ring and by the screen's own status, searches and sorts,
  * and keeps all of it in the URL so Back and reload return to the same view.
  *
  * Pair it with <StudentListToolbar view={...} /> and render `view.shown`.

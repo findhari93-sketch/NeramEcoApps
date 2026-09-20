@@ -2,28 +2,21 @@
 
 import { Box, Tooltip, UserAvatar, alpha, useTheme, type SxProps, type Theme } from '@neram/ui';
 import GraphAvatar from '@/components/GraphAvatar';
-import {
-  DORMANT_EXPLAINER,
-  DORMANT_LABEL,
-  STAGE_LABEL,
-  STAGE_RING_STYLE,
-  STAGE_TOOLTIP,
-  dormantColor,
-  stageColor,
-  type StageKey,
-} from '@/lib/student-stage';
+import { STAGE_RING_STYLE, dormantColor, stageColor, type StageKey } from '@/lib/student-stage';
+import { INFO_RING_TESTID, infoRingSpeech } from '@/lib/student-info-ring';
 import { languageKeyOf, languageSentence, type LanguageKey } from '@/lib/student-language';
 import { DormantIcon, stageIconFor } from './StageGlyph';
 import { useStudentStageFacts } from './StudentStageFactsProvider';
 import LanguageMark from './LanguageMark';
 
 /**
- * A student avatar that carries their classification.
+ * A student avatar wearing the STUDENT INFO RING.
  *
- * This is the piece that makes the category readable on the roughly thirty
- * screens that show nothing but a photo and a name: an attendance sheet, a
- * submission review, a leaderboard row. A chip needs horizontal space and a
- * label; a ring needs neither and travels with the face.
+ * The info ring is the piece that makes a student readable on the roughly
+ * ninety screens that show nothing but a photo and a name: an attendance sheet,
+ * a submission review, a leaderboard row. A chip needs horizontal space and a
+ * label; a ring needs neither and travels with the face. InfoRingLegend.tsx is
+ * the key that teaches it, and lib/student-info-ring.ts holds its vocabulary.
  *
  *   ring        the study stage. Solid for a recorded stage, DOTTED for "not
  *               set", DASHED for dormant. Dotted versus dashed is what keeps
@@ -51,7 +44,14 @@ import LanguageMark from './LanguageMark';
 const MIN_GLYPH_SIZE = 28;
 
 export interface StudentStageAvatarProps {
-  stage: StageKey;
+  /**
+   * nexus_enrollments.current_standard, as a StageKey. An explicit value wins.
+   * Leave it undefined on a screen that does not carry the stage in its own
+   * payload and the ring reads it from the session lookup by `userId`, which is
+   * how every face in the staff app ends up telling the same story.
+   */
+  stage?: StageKey;
+  /** Paused by staff. Same rule as `stage`: explicit wins, else the lookup. */
   dormant?: boolean;
   size?: number;
   name?: string | null;
@@ -74,7 +74,12 @@ export interface StudentStageAvatarProps {
   language?: LanguageKey | string | null;
   /** users.limited_english. Read with `language`, and ignored without it. */
   limitedEnglish?: boolean | null;
-  /** users.id, used only to look up the language when `language` is not passed. */
+  /**
+   * users.id. The handle for the session-wide lookup, which supplies whichever
+   * of stage, dormant and language the caller did not pass. Without it a face
+   * with no explicit stage falls back to "Not set", so pass it wherever you have
+   * it; stage-avatar-identity.test.ts enforces that.
+   */
   userId?: string | null;
 
   clickable?: boolean;
@@ -94,7 +99,7 @@ export interface StudentStageAvatarProps {
 
 export default function StudentStageAvatar({
   stage,
-  dormant = false,
+  dormant,
   size = 40,
   name,
   msOid,
@@ -114,28 +119,38 @@ export default function StudentStageAvatar({
   const theme = useTheme();
   // One context read, no effect. Without a provider (student pages) it is null.
   const { factsFor } = useStudentStageFacts();
-  const facts = language === undefined ? factsFor(userId) : null;
+  const facts = factsFor(userId);
+  // Every field follows ONE rule: an explicit prop wins, INCLUDING an explicit
+  // null, so a screen that has just reloaded its own payload is never overruled
+  // by the session lookup. Otherwise the lookup, so a screen cannot show a
+  // duller ring than the students list shows for the same person just by
+  // forgetting to pass a field. Otherwise "Not set", which is the honest answer
+  // for an alumni or anyone else the lookup has never heard of.
+  const ringStage = stage !== undefined ? stage : facts?.stage ?? 'unset';
+  const isDormant = dormant !== undefined ? dormant : !!facts?.dormant;
   const spoken = language === undefined ? (facts?.language ?? 'english') : languageKeyOf(language);
   const limited = language === undefined ? !!facts?.limitedEnglish : !!limitedEnglish;
   const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
 
-  const ringColor = dormant ? dormantColor(mode) : stageColor(stage, mode);
-  const ringStyle = dormant ? 'dashed' : STAGE_RING_STYLE[stage];
+  const ringColor = isDormant ? dormantColor(mode) : stageColor(ringStage, mode);
+  const ringStyle = isDormant ? 'dashed' : STAGE_RING_STYLE[ringStage];
 
-  const label = dormant ? DORMANT_LABEL : STAGE_LABEL[stage];
-  // The language sentence goes AFTER "label: tooltip", never before it: the ring's
-  // spoken name must keep starting with the stage, which is how tests find rings.
-  const sentence = languageSentence(spoken, limited);
-  const tooltip = `${dormant ? DORMANT_EXPLAINER : STAGE_TOOLTIP[stage]}${sentence ? ` ${sentence}` : ''}`;
+  // Both strings are built in student-info-ring.ts, which is also where the
+  // regex that finds a ring by its words is built, so the two cannot drift.
+  const speech = infoRingSpeech({
+    stage: ringStage,
+    dormant: isDormant,
+    languageSentence: languageSentence(spoken, limited),
+  });
 
   const withGlyph = showGlyph && size >= MIN_GLYPH_SIZE;
-  const Glyph = dormant ? DormantIcon : stageIconFor(stage);
+  const Glyph = isDormant ? DormantIcon : stageIconFor(ringStage);
 
   // Dormant reads as switched off before you have parsed a single word. The
   // caller's own styles come first so the filter always has the last word.
   const avatarSx = {
     ...((sx as object) || {}),
-    ...(dormant ? { filter: 'grayscale(1)', opacity: 0.75 } : {}),
+    ...(isDormant ? { filter: 'grayscale(1)', opacity: 0.75 } : {}),
   };
 
   const graph = useGraph ?? msOid !== undefined;
@@ -169,9 +184,10 @@ export default function StudentStageAvatar({
   const markSize = Math.max(14, Math.round(size * 0.36));
 
   return (
-    <Tooltip title={`${label}. ${tooltip}`} arrow enterTouchDelay={0} leaveTouchDelay={4000}>
+    <Tooltip title={speech.title} arrow enterTouchDelay={0} leaveTouchDelay={4000}>
       <Box
-        aria-label={`${label}: ${tooltip}`}
+        data-testid={INFO_RING_TESTID}
+        aria-label={speech.ariaLabel}
         sx={{
           position: 'relative',
           flexShrink: 0,

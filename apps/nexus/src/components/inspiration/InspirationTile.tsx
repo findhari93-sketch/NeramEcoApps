@@ -1,16 +1,30 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Box, IconButton, Skeleton, Typography } from '@neram/ui';
+import { Box, IconButton, Menu, MenuItem, Skeleton, Typography } from '@neram/ui';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import type { InspirationCard } from '@/lib/inspiration-present';
+
+const BADGE_LABEL: Record<NonNullable<InspirationCard['badge']>, string> = {
+  reference: 'Reference',
+  featured: "Teacher's pick",
+  alumni: 'Alumni',
+};
 
 export interface InspirationTileProps {
   card: InspirationCard;
   href: string;
   onOpen?: () => void;
   onToggleSave?: (card: InspirationCard) => void;
+  /**
+   * Staff only. Takes the drawing off the shelf from the grid itself, which is
+   * where a teacher notices it does not belong there. Never touches the Teams
+   * message that announced it: a student is not un-praised in front of a class.
+   */
+  onHide?: (card: InspirationCard) => void;
 }
 
 /**
@@ -18,7 +32,8 @@ export interface InspirationTileProps {
  * image arrives (aspect-ratio), so the grid never jumps while it loads. The
  * heart is a 44px target sitting on a light disc so it reads on any drawing.
  */
-export default function InspirationTile({ card, href, onOpen, onToggleSave }: InspirationTileProps) {
+export default function InspirationTile({ card, href, onOpen, onToggleSave, onHide }: InspirationTileProps) {
+  const [menuAt, setMenuAt] = useState<HTMLElement | null>(null);
   return (
     <Box component="article" data-testid="inspiration-tile" sx={{ position: 'relative', minWidth: 0 }}>
       <Box
@@ -70,7 +85,7 @@ export default function InspirationTile({ card, href, onOpen, onToggleSave }: In
             pointerEvents: 'none',
           }}
         >
-          {card.badge === 'reference' ? 'Reference' : 'Alumni'}
+          {BADGE_LABEL[card.badge]}
         </Box>
       )}
 
@@ -94,8 +109,43 @@ export default function InspirationTile({ card, href, onOpen, onToggleSave }: In
         </IconButton>
       )}
 
+      {onHide && (
+        <>
+          <IconButton
+            aria-label={`More actions for ${card.title}`}
+            onClick={(e) => setMenuAt(e.currentTarget)}
+            sx={{
+              position: 'absolute',
+              top: 4,
+              right: onToggleSave ? 52 : 4,
+              width: 44,
+              height: 44,
+              bgcolor: 'rgba(255, 255, 255, 0.92)',
+              '&:hover': { bgcolor: 'common.white' },
+              '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main' },
+            }}
+          >
+            <MoreVertIcon />
+          </IconButton>
+          <Menu anchorEl={menuAt} open={!!menuAt} onClose={() => setMenuAt(null)}>
+            <MenuItem
+              sx={{ minHeight: 48 }}
+              onClick={() => { setMenuAt(null); onHide(card); }}
+            >
+              Hide from students
+            </MenuItem>
+          </Menu>
+        </>
+      )}
+
       <Typography variant="body2" noWrap title={card.title} sx={{ mt: 0.75, fontWeight: 600 }}>
         {card.title}
+      </Typography>
+      {/* Whose drawing it is. The grid was anonymous, which is a strange way to
+          celebrate somebody. formatInspirationCredit has already collapsed this
+          to "Neram student" when the author asked not to be named. */}
+      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+        {card.credit}
       </Typography>
       {card.staff && !card.staff.visible && card.staff.hiddenReason && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>

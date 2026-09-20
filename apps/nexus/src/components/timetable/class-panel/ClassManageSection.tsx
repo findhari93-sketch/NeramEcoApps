@@ -6,6 +6,8 @@ import EventRepeatIcon from '@mui/icons-material/EventRepeat';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import UndoIcon from '@mui/icons-material/Undo';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import type { ClassPanelTabProps } from './types';
 
@@ -26,6 +28,7 @@ export default function ClassManageSection({
   onDeletePermanent,
   onReschedule,
   onRepairMeeting,
+  onNotTaught,
   onConfirm,
 }: ClassPanelTabProps) {
   if (role !== 'teacher') return null;
@@ -77,6 +80,45 @@ export default function ClassManageSection({
               </Button>
             )}
           </Box>
+        )}
+
+        {/* The session where the tutor joined only to say the class was
+            postponed. Until this existed a teacher's only lever on a finished
+            class was Delete Permanently, which takes the attendance register,
+            the recording and the transcript with it, so the honest answer to
+            "nineteen people were in that room but nothing was taught" was that
+            there was no answer.
+
+            Outlined and NOT error-coloured, unlike the two beside it: this is
+            reversible and it destroys nothing. Placed above Delete Permanently
+            so the recoverable option is met first. */}
+        {isPast && !isCancelled && onNotTaught && (
+          <Button
+            variant="outlined"
+            fullWidth
+            startIcon={<EventBusyIcon />}
+            onClick={() => onConfirm('not_taught')}
+            sx={{ minHeight: 48, textTransform: 'none' }}
+          >
+            No class was taught
+          </Button>
+        )}
+
+        {/* Offered on any cancelled past class, because the panel cannot tell
+            from `cls` alone which ones we marked. The route decides, and
+            refuses a class that was cancelled some other way: un-cancelling one
+            that genuinely never ran would let the nightly cron derive a fresh
+            set of obligations for a session nobody attended. */}
+        {isPast && isCancelled && onNotTaught && (
+          <Button
+            variant="outlined"
+            fullWidth
+            startIcon={<UndoIcon />}
+            onClick={() => onConfirm('undo_not_taught')}
+            sx={{ minHeight: 48, textTransform: 'none' }}
+          >
+            This was a class after all
+          </Button>
         )}
 
         {isCancelled && onDeletePermanent && (

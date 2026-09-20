@@ -32,8 +32,22 @@ export const reactToSketch = (getToken: GetToken, id: string, reaction: Sketchbo
 export const flipSketch = (getToken: GetToken, id: string, action: 'seen' | 'skipped') =>
   call<{ ok: true }>(getToken, `/api/sketchbook/entries/${id}/flip`, { method: 'POST', body: JSON.stringify({ action }) });
 
-export const featureSketch = (getToken: GetToken, id: string, classroomId: string, caption: string) =>
-  call<{ teams: { channel: boolean; chat: boolean; errors: string[] } }>(getToken, `/api/sketchbook/entries/${id}/feature`, { method: 'POST', body: JSON.stringify({ classroom_id: classroomId, caption }) });
+/**
+ * Feature a drawing. The classroom is optional: the server resolves the one
+ * this teacher and this student share, and only answers 409 when there really
+ * is a choice to make. `shelved` says whether it also reached the Inspiration
+ * shelf, which a student who keeps their drawings private never does.
+ */
+export const featureSketch = (getToken: GetToken, id: string, classroomId?: string) =>
+  call<{
+    feature: { classroom_id: string; featured_at: string };
+    teams: { channel: boolean; chat: boolean; errors: string[] };
+    shelved: boolean;
+  }>(
+    getToken,
+    `/api/sketchbook/entries/${id}/feature`,
+    { method: 'POST', body: JSON.stringify(classroomId ? { classroom_id: classroomId } : {}) },
+  );
 
 export const unfeatureSketch = (getToken: GetToken, id: string, classroomId: string) =>
   call<{ ok: true; failures: string[] }>(getToken, `/api/sketchbook/entries/${id}/feature?classroom=${encodeURIComponent(classroomId)}`, { method: 'DELETE' });

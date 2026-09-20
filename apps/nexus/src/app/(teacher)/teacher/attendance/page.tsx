@@ -17,13 +17,14 @@ import { useAuthSWR } from '@/lib/nexus-swr';
 import ClassAttendanceCard from '@/components/attendance/ClassAttendanceCard';
 import RegisterGrid from '@/components/attendance/RegisterGrid';
 import StandingList from '@/components/attendance/StandingList';
+import RangeToggle, { toRangeKey, type RangeKey } from '@/components/attendance/RangeToggle';
+import { InfoRingLegendButton } from '@/components/students/InfoRingLegend';
 import { istRange } from '@/components/attendance/attendance-format';
+import { patchQuery } from '@/lib/list-url-state';
 import type { RegisterResponse } from '@/app/api/attendance/register/route';
 import type { StandingResponse } from '@/app/api/attendance/standing/route';
 
 type ViewKey = 'classes' | 'register' | 'students';
-const RANGES = [14, 30, 90] as const;
-type RangeKey = (typeof RANGES)[number];
 
 function AttendanceRegisterWorkspace() {
   const searchParams = useSearchParams();
@@ -32,28 +33,27 @@ function AttendanceRegisterWorkspace() {
   const viewParam = searchParams.get('view');
   const initialView: ViewKey =
     viewParam === 'register' || viewParam === 'students' ? viewParam : 'classes';
-  const initialRange = (RANGES as readonly number[]).includes(Number(searchParams.get('range')))
-    ? (Number(searchParams.get('range')) as RangeKey)
-    : 30;
   const [view, setViewState] = useState<ViewKey>(initialView);
-  const [range, setRangeState] = useState<RangeKey>(initialRange);
+  const [range, setRangeState] = useState<RangeKey>(toRangeKey(searchParams.get('range')));
 
   /**
    * The URL is kept in step with replaceState rather than router.replace: this
    * page is entirely client rendered, and router.replace would fetch an RSC
    * payload on every tab press. Same reasoning as the catch-up page.
+   *
+   * Through patchQuery, which does the same replaceState but carries
+   * history.state forward (Next's router keeps its own state there, and writing
+   * null over it is how a Back press ends up on a page that has forgotten where
+   * it was). It also touches only these two keys, so a ?student= deep link
+   * survives a tab press instead of being wiped by a rebuilt query string.
    */
-  const syncUrl = (nextView: ViewKey, nextRange: RangeKey) => {
-    if (typeof window === 'undefined') return;
-    window.history.replaceState(null, '', `?view=${nextView}&range=${nextRange}`);
-  };
   const setView = (next: ViewKey) => {
     setViewState(next);
-    syncUrl(next, range);
+    patchQuery({ view: next, range: String(range) });
   };
   const setRange = (next: RangeKey) => {
     setRangeState(next);
-    syncUrl(view, next);
+    patchQuery({ view, range: String(next) });
   };
 
   const { from, to } = useMemo(() => istRange(range), [range]);
@@ -73,18 +73,28 @@ function AttendanceRegisterWorkspace() {
 
   return (
     <Box>
-      <PageHeader title="Attendance" subtitle={activeClassroom?.name || 'Classes that have happened'} />
-
-      <Tabs
-        value={range}
-        onChange={(_, v) => setRange(v as RangeKey)}
-        sx={{ minHeight: 44, mb: 1 }}
-        aria-label="How far back to look"
-      >
-        {RANGES.map((r) => (
-          <Tab key={r} value={r} label={r === 14 ? '2 weeks' : `${r} days`} sx={{ minHeight: 44, textTransform: 'none' }} />
-        ))}
-      </Tabs>
+      {/*
+        The range rides in the header's action slot, which leaves exactly one
+        row of tabs on this page. Picking a window of time is a setting on the
+        view you are already in, not a second place to navigate to, and stacking
+        two tab rows said the opposite.
+      */}
+      <PageHeader
+        title="Attendance"
+        subtitle={activeClassroom?.name || 'Classes that have happened'}
+        action={
+          /* gap 1, not 0.5: two adjacent touch targets want 8px between them. */
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <RangeToggle value={range} onChange={setRange} />
+            {/*
+              Every list under these tabs is a list of faces wearing the info
+              ring, and this is the screen where a ring that reads as absent
+              (the dotted grey "Not set") gets noticed. The key lives here.
+            */}
+            <InfoRingLegendButton label="What the rings on these photos mean" />
+          </Box>
+        }
+      />
 
       <Tabs
         value={view}

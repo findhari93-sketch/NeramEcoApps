@@ -18,11 +18,12 @@
  * See StudentStageChip for the full reasoning, and student-stage.ts for why the
  * axes are stored separately in the first place.
  *
- * The avatar carries the same two facts as a ring, which is deliberate
- * duplication. A chip is a label you read; a ring is a shape you scan, and on a
- * list of thirty students a teacher scans. Both densities here (24px and 30px)
- * sit below the size where the ring's glyph is legible, so the chip is what
- * makes the state readable once you stop scanning and start reading.
+ * The avatar carries the same two facts as the student info ring, which is
+ * deliberate duplication. A chip is a label you read; a ring is a shape you
+ * scan, and on a list of thirty students a teacher scans. Both densities sit at
+ * or above the 28px floor where the ring's glyph and language mark stay legible
+ * (compact used to be 24px, which quietly lost both), and the chip is what makes
+ * the state readable once you stop scanning and start reading.
  *
  * This is a thin composition over what already exists rather than new chip work,
  * so a change to how a stage reads lands everywhere at once.
@@ -68,11 +69,13 @@ export default function StudentIdentityLine({
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, width: '100%' }}>
+      {/* Compact was 24, under StudentStageAvatar's 28px floor, so the densest
+          list in the app was the one place the marks never showed. */}
       <StudentAvatar
         userId={student.id}
         name={name}
         src={student.avatar_url || undefined}
-        size={density === 'compact' ? 24 : 30}
+        size={density === 'compact' ? 28 : 30}
       />
 
       <Typography

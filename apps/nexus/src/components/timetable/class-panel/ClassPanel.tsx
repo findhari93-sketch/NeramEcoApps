@@ -11,7 +11,11 @@ import AfterTab from './AfterTab';
 import { RADIUS } from '../timetable-theme';
 import { deriveClassState, defaultTab, getTimeIndicator, visibleTabs } from './class-state';
 import type { ClassPanelTabKey } from './class-state';
-import type { ClassPanelProps, ClassPanelTabProps } from './types';
+import type {
+  ClassPanelConfirmAction,
+  ClassPanelProps,
+  ClassPanelTabProps,
+} from './types';
 
 /**
  * Everything about one class, in one component, in every view.
@@ -38,7 +42,7 @@ export default function ClassPanel({
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [tab, setTab] = useState<ClassPanelTabKey>('class');
-  const [confirmAction, setConfirmAction] = useState<'cancel' | 'delete' | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ClassPanelConfirmAction | null>(null);
   const [recordingOpen, setRecordingOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -123,6 +127,7 @@ export default function ClassPanel({
       onCloseConfirm={() => setConfirmAction(null)}
       onDelete={rest.onDelete}
       onDeletePermanent={rest.onDeletePermanent}
+      onNotTaught={rest.onNotTaught}
       recordingOpen={recordingOpen}
       onCloseRecording={() => setRecordingOpen(false)}
       shareOpen={shareOpen}

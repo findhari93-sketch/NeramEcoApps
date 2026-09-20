@@ -1,26 +1,30 @@
 'use client';
 
-import { Box, Typography, Avatar, AvatarGroup, Button, alpha, useTheme } from '@neram/ui';
+import { Box, Typography, Button, alpha, useTheme } from '@neram/ui';
 import ArrowForwardOutlinedIcon from '@mui/icons-material/ArrowForwardOutlined';
 import { useRouter } from 'next/navigation';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import type { RecentlyCompletedStudent } from '@/types/exam-schedule';
+
+/**
+ * Who has just sat the exam, as faces.
+ *
+ * Was a stacked AvatarGroup of hand-coloured initials, which overlapped the one
+ * thing worth seeing here. Each face now wears the info ring, so a glance says
+ * which of them is a Break Year student and which is still in Class 11.
+ *
+ * Three faces rather than four: a ring reserves size + 8, so an un-stacked row
+ * is about twice the width of an overlapped one, and the strip has to survive
+ * 375px alongside its caption and its button. The rest go to the "+N more".
+ *
+ * On the student route there is no facts provider, so every face here falls back
+ * to a plain avatar. That is deliberate: a classmate must not read dormancy.
+ */
+const FACES_SHOWN = 3;
 
 interface RecentlyCompletedStripProps {
   students: RecentlyCompletedStudent[];
   isTeacher: boolean;
-}
-
-function getInitials(name: string): string {
-  const parts = name.split(' ').filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return (name[0] || '?').toUpperCase();
-}
-
-function getColor(name: string): string {
-  const colors = ['#6C63FF', '#FF6584', '#43AA8B', '#F9C74F', '#4CC9F0', '#F77F00', '#9B5DE5', '#00BBF9'];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
 }
 
 export default function RecentlyCompletedStrip({ students, isTeacher }: RecentlyCompletedStripProps) {
@@ -36,7 +40,9 @@ export default function RecentlyCompletedStrip({ students, isTeacher }: Recently
       sx={{
         display: 'flex',
         alignItems: 'center',
+        flexWrap: 'wrap',
         gap: 1.5,
+        rowGap: 0.5,
         px: 2,
         py: 1,
         borderRadius: 2,
@@ -46,16 +52,20 @@ export default function RecentlyCompletedStrip({ students, isTeacher }: Recently
       <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ flexShrink: 0 }}>
         Recently completed
       </Typography>
-      <AvatarGroup max={4} sx={{ '& .MuiAvatar-root': { width: 24, height: 24, fontSize: '0.6rem' } }}>
-        {students.map((s) => (
-          <Avatar key={s.student_id} sx={{ bgcolor: getColor(s.name) }}>
-            {getInitials(s.name)}
-          </Avatar>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+        {students.slice(0, FACES_SHOWN).map((s) => (
+          <StudentAvatar
+            key={s.student_id}
+            userId={s.student_id}
+            name={s.name}
+            size={28}
+            tapToView={false}
+          />
         ))}
-      </AvatarGroup>
-      {students.length > 4 && (
-        <Typography variant="caption" color="text.secondary">
-          +{students.length - 4} more
+      </Box>
+      {students.length > FACES_SHOWN && (
+        <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+          +{students.length - FACES_SHOWN} more
         </Typography>
       )}
       <Button
