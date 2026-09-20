@@ -598,10 +598,23 @@ export default function DrawingReviewDetailPage() {
   // Which round of the thread is on screen. The header used to label every round
   // with the thread total, so an older attempt still read as the newest one.
   const attemptIndex = attempts.findIndex((a) => a.id === submission.id) + 1;
+  // wasReviewedBefore, not the raw status: a sketch is stored 'completed' the
+  // moment it is uploaded (drawing-source.ts), so a raw-status check paints a
+  // never-reviewed sketch's header chip green, the same bug already fixed for
+  // the re-review banner and the action bar's button below.
   const statusChipColor: 'warning' | 'success' | 'info' =
     submission.status === 'redo' ? 'warning'
-      : ['reviewed', 'completed'].includes(submission.status) ? 'success'
+      : wasReviewedBefore(sub) ? 'success'
       : 'info';
+  // attemptStatusLabel(status) reads "Completed" for that same never-reviewed
+  // sketch (status is frozen at 'completed' from upload; only reviewed_at
+  // moves). Every other case's own status label is already correct off the
+  // raw column (Submitted, Under review, Redo requested, Reviewed for
+  // assignments and test drawings, whose status genuinely tracks grading), so
+  // only the sketchbook case is overridden.
+  const statusLabel = sub.source_type === 'sketchbook' && !wasReviewedBefore(sub)
+    ? 'Not reviewed yet'
+    : attemptStatusLabel(submission.status);
 
   // Where this drawing sits: its assignment, the student's sketchbook, the exam
   // or the Inspiration drawing it was opened from (lib/review-context).
@@ -927,7 +940,7 @@ export default function DrawingReviewDetailPage() {
             category={submission.question?.category}
             attemptIndex={attemptIndex}
             attemptTotal={attempts.length}
-            statusLabel={attemptStatusLabel(submission.status)}
+            statusLabel={statusLabel}
             statusColor={statusChipColor}
             onOpenMenu={setMenuAnchor}
             compact={isMobile}
@@ -1042,7 +1055,7 @@ export default function DrawingReviewDetailPage() {
             isSuperseded={isSuperseded}
             attemptIndex={attemptIndex}
             attemptTotal={attempts.length}
-            statusLabel={attemptStatusLabel(submission.status)}
+            statusLabel={statusLabel}
             alreadyReviewed={wasReviewedBefore(sub)}
             onEvaluate={() => setIsEditMode(true)}
             onOpenLatest={latestAttempt ? () => openAttempt(latestAttempt.id) : null}
