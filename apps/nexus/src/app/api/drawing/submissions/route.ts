@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { describeError, errorResponse } from '@/lib/api-errors';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, getAssignment, getUserEnrollment, recordPointEvent } from '@neram/database';
 import {
@@ -164,8 +165,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ submission, attemptNumber }, { status: 201 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to create submission';
-    console.error('Drawing submission POST error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Drawing submission POST error:', describeError(err));
+    return errorResponse(err, 'Failed to create submission');
   }
 }

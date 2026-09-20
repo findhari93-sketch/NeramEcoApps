@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { describeError, errorResponse } from '@/lib/api-errors';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 
@@ -34,11 +35,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ notifications: notifications || [] });
   } catch (err: any) {
-    console.error('Drawing notifications GET error:', err);
-    return NextResponse.json(
-      { error: 'Failed to load notifications' },
-      { status: 500 }
-    );
+    console.error('Drawing notifications GET error:', describeError(err));
+    return errorResponse(err, 'Failed to load notifications');
   }
 }
 
@@ -77,10 +75,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    console.error('Drawing notifications PATCH error:', err);
-    return NextResponse.json(
-      { error: 'Failed to mark notification read' },
-      { status: 500 }
-    );
+    console.error('Drawing notifications PATCH error:', describeError(err));
+    return errorResponse(err, 'Failed to mark notification read');
   }
 }

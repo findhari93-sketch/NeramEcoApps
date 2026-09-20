@@ -23,6 +23,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { errorResponse } from '@/lib/api-errors';
 import { requireDrawingStaff, isNotMigrated } from '@/lib/drawing-staff-auth';
 import {
   criteriaForBrief,
@@ -153,10 +154,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       assignment_id: submission.assignment_id ?? null,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Could not load the rubric' },
-      { status: 500 },
-    );
+    return errorResponse(err, 'Could not load the rubric');
   }
 }
 
@@ -248,6 +246,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not save the rubric';
     if (isNotMigrated(message)) return notMigrated(message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, message);
   }
 }

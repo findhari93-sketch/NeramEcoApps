@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { describeError, errorResponse } from '@/lib/api-errors';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { deleteDrawingThread, replaceSubmissionImage } from '@neram/database/queries/nexus';
@@ -48,9 +49,8 @@ export async function DELETE(request: NextRequest) {
     await deleteDrawingThread(targetStudentId, questionId);
     return NextResponse.json({ success: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to delete thread';
-    console.error('Thread delete error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Thread delete error:', describeError(err));
+    return errorResponse(err, 'Failed to delete thread');
   }
 }
 
@@ -102,8 +102,7 @@ export async function PATCH(request: NextRequest) {
     const submission = await replaceSubmissionImage(submission_id, new_image_url);
     return NextResponse.json({ submission });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to replace image';
-    console.error('Replace image error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Replace image error:', describeError(err));
+    return errorResponse(err, 'Failed to replace image');
   }
 }

@@ -10,6 +10,8 @@ import {
   voiceNotePath,
 } from '@/lib/voice-recording';
 import { validateTimeline } from '@/lib/sketch-timeline';
+import { reviewKindOf } from '@/lib/drawing-source';
+import { describeError, httpStatusForError, messageOf } from '@/lib/api-errors';
 import {
   createVoiceUploadUrl,
   deleteVoiceFeedback,
@@ -33,8 +35,14 @@ import {
  * A saved note is a draft. It reaches the student with the next Redo or Complete
  * (see the review route), so recording never messages anybody on its own.
  *
- * Assignment drawings only, never exam drawings: an exam result is embargoed until
- * it is published, and practice drawings have no page the student plays it on.
+ * Every drawing except a test. A test result is embargoed until it is published,
+ * so a note recorded against one could reach a student before their marks do.
+ *
+ * Assignment drawings AND practice (a sketch, question bank, free practice): the
+ * gate used to read `!sub.assignment_id`, which refused every sketch, so the one
+ * thing a drawing teacher most wants to do, talk over a student's practice, was
+ * the one thing the app would not let them do. The kind is decided by
+ * reviewKindOf, never by reading exam_attempt_id: staging has no such column.
  */
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -69,10 +77,10 @@ async function authorise(request: NextRequest, submissionId: string) {
   if (!sub) {
     return { fail: NextResponse.json({ error: 'Submission not found' }, { status: 404 }) } as const;
   }
-  if (!sub.assignment_id || sub.exam_attempt_id) {
+  if (reviewKindOf(sub) === 'test') {
     return {
       fail: NextResponse.json(
-        { error: 'Voice feedback is only available on assignment drawings.' },
+        { error: 'Voice feedback is not available on test drawings.' },
         { status: 400 },
       ),
     } as const;
@@ -80,11 +88,21 @@ async function authorise(request: NextRequest, submissionId: string) {
   return { user, sub } as const;
 }
 
+/**
+ * A caught error, with the status it deserves.
+ *
+ * The test was `/authorization|token|auth/i` against the message, so a Postgres
+ * complaint about a column named `authored_by` answered 401 and sent the teacher
+ * to the login screen over a schema problem. httpStatusForError classifies the
+ * auth helpers' own messages instead of guessing from a substring.
+ *
+ * A 500 still answers with the fallback, not the raw message: what breaks in here
+ * is storage, and its errors name buckets and paths.
+ */
 function failure(err: unknown, fallback: string) {
-  const message = err instanceof Error ? err.message : fallback;
-  console.error(`Voice feedback: ${fallback}:`, message);
-  const isAuth = /authorization|token|auth/i.test(message);
-  return NextResponse.json({ error: isAuth ? message : fallback }, { status: isAuth ? 401 : 500 });
+  console.error(`Voice feedback: ${fallback}:`, describeError(err));
+  const status = httpStatusForError(err);
+  return NextResponse.json({ error: status === 500 ? fallback : messageOf(err, fallback) }, { status });
 }
 
 export async function POST(request: NextRequest, { params }: Ctx) {

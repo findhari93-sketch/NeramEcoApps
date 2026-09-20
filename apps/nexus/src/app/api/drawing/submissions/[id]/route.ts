@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { describeError, errorResponse } from '@/lib/api-errors';
 import { verifyMsToken } from '@/lib/ms-verify';
 import {
   getDrawingSubmissionById,
@@ -126,10 +127,8 @@ export async function GET(
       exam_max_marks: examMaxMarks,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load submission';
-    console.error('Submission GET error:', message);
-    const isAuthError = message.toLowerCase().includes('unauthorized') || message.toLowerCase().includes('token') || message.toLowerCase().includes('auth');
-    return NextResponse.json({ error: message }, { status: isAuthError ? 401 : 500 });
+    console.error('Submission GET error:', describeError(err));
+    return errorResponse(err, 'Failed to load submission');
   }
 }
 
@@ -194,8 +193,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Delete failed';
-    console.error('Submission DELETE error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Submission DELETE error:', describeError(err));
+    return errorResponse(err, 'Delete failed');
   }
 }

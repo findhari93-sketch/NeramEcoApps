@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { describeError, errorResponse } from '@/lib/api-errors';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getDrawingThread } from '@neram/database/queries/nexus';
@@ -26,8 +27,7 @@ export async function GET(request: NextRequest) {
     const thread = await getDrawingThread(user.id, questionId);
     return NextResponse.json({ thread });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load thread';
-    console.error('Thread GET error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Thread GET error:', describeError(err));
+    return errorResponse(err, 'Failed to load thread');
   }
 }

@@ -15,6 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { errorResponse } from '@/lib/api-errors';
 import { requireDrawingStaff, isNotMigrated } from '@/lib/drawing-staff-auth';
 import { parseCorrection, ruleTextFor } from '@/lib/drawing-teaching-moment';
 import { ensureManualEvaluation } from '@/lib/drawing-reference-server';
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (isNotMigrated(message)) {
       return NextResponse.json({ error: 'Correction capture is not migrated here', detail: message }, { status: 503 });
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, message);
   }
 }
 

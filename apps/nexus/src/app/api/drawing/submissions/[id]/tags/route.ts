@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorResponse } from '@/lib/api-errors';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getSubmissionTags, setSubmissionTags } from '@neram/database/queries/nexus';
@@ -13,7 +14,7 @@ export async function GET(
     const tags = await getSubmissionTags(params.id);
     return NextResponse.json({ tags });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    return errorResponse(err, 'Failed');
   }
 }
 
@@ -40,6 +41,6 @@ export async function PUT(
     const tags = await setSubmissionTags(params.id, labels, user.id);
     return NextResponse.json({ tags });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    return errorResponse(err, 'Failed');
   }
 }

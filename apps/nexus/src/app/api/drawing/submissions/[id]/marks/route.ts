@@ -22,6 +22,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { errorResponse } from '@/lib/api-errors';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { evalTables } from '@/lib/drawing-eval/db';
@@ -167,7 +168,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (/does not exist|schema cache/i.test(message)) {
       return NextResponse.json({ error: 'Drawing marks are not migrated here', detail: message }, { status: 503 });
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, message);
   }
 }
 
@@ -233,6 +234,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (/does not exist|schema cache/i.test(message)) {
       return NextResponse.json({ error: 'Drawing marks are not migrated here', detail: message }, { status: 503 });
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, message);
   }
 }

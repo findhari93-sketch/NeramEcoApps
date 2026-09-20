@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { describeError, errorResponse } from '@/lib/api-errors';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, getAssignmentDrawingRoster } from '@neram/database';
 import {
@@ -436,8 +437,7 @@ export async function PATCH(
       remaining: next.remaining,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to save review';
-    console.error('Drawing review PATCH error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Drawing review PATCH error:', describeError(err));
+    return errorResponse(err, 'Failed to save review');
   }
 }

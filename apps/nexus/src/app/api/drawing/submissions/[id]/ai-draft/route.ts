@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { errorResponse } from '@/lib/api-errors';
 import { requireDrawingStaff } from '@/lib/drawing-staff-auth';
 import { loadAiDraft } from '@/lib/drawing-ai-draft-server';
 
@@ -14,6 +15,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     return NextResponse.json({ draft: await loadAiDraft(auth.supabase, id) });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Could not load the draft' }, { status: 500 });
+    return errorResponse(err, 'Could not load the draft');
   }
 }
