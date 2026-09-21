@@ -54,6 +54,7 @@ jobs:
       nexus: ${{ steps.filter.outputs.nexus }}
       admin: ${{ steps.filter.outputs.admin }}
       shared: ${{ steps.filter.outputs.shared }}
+      worker: ${{ steps.filter.outputs.worker }}
       is_manual: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout
@@ -77,6 +78,8 @@ jobs:
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'turbo.json'
+            worker:
+              - 'cloudflare/**'
 
   # ===========================================
   # DATABASE MIGRATIONS (Staging)
@@ -482,11 +485,62 @@ jobs:
   # ===========================================
   # DEPLOYMENT SUMMARY
   # ===========================================
+  # ===========================================
+  # CLOUDFLARE WORKER: Supabase proxy
+  # The worker is NOT in the pnpm workspace and was previously deployed only by
+  # a manual `wrangler deploy`. A committed fix therefore shipped to main and
+  # never reached production: that is how the Realtime WebSocket passthrough
+  # (5b5a0109, 2026-09-17) sat undeployed while the Answer Pad fell back to
+  # 2-second polling. Deploying it here removes that gap.
+  # ===========================================
+  deploy-worker:
+    name: Deploy Supabase Proxy Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [detect-changes]
+    # A manual dispatch names one app. Deploying the Worker on every dispatch
+    # would re-version the proxy that carries all Supabase traffic for all four
+    # apps, for a run that asked for one Next.js app, so only 'all' includes it.
+    if: |
+      always() &&
+      (needs.detect-changes.result == 'success') &&
+      (
+        (
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.apps == 'all'
+        ) ||
+        (
+          github.event_name != 'workflow_dispatch' &&
+          needs.detect-changes.outputs.worker == 'true'
+        )
+      )
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # wrangler.toml defines both [env.staging] and [env.production]; pick the
+      # one matching the branch (or the manual input), never both.
+      - name: Pick Cloudflare environment
+        id: cfenv
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            echo "name=production" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=staging" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: cloudflare/supabase-proxy
+          command: deploy --env ${{ steps.cfenv.outputs.name }}
+
   summary:
     name: Deployment Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [detect-changes, deploy-marketing, deploy-app, deploy-nexus, deploy-admin]
+    needs: [detect-changes, deploy-marketing, deploy-app, deploy-nexus, deploy-admin, deploy-worker]
     if: always()
     steps:
       - name: Post summary
@@ -505,3 +559,4 @@ jobs:
           echo "| App | ${{ needs.deploy-app.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Nexus | ${{ needs.deploy-nexus.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Admin | ${{ needs.deploy-admin.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Supabase proxy Worker | ${{ needs.deploy-worker.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
