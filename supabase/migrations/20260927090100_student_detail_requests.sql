@@ -12,14 +12,24 @@
 -- authority: cancelling it must kill the link immediately. Same reasoning, and the
 -- same shape, as direct_enrollment_links (20260308000000).
 
-CREATE TYPE public.student_detail_request_status AS ENUM (
-  'active',     -- open and usable
-  'answered',   -- the student submitted at least once; still editable until it expires
-  'expired',    -- past expires_at; set lazily on read, never by a cron
-  'cancelled'   -- withdrawn by staff, or superseded by a regenerated link
-);
+-- Written to re-run safely. This table reached production out of band, before its
+-- version was ever recorded in schema_migrations, so `supabase db push` still counts
+-- it as pending and replays it on every deploy. Unguarded, the replay raises
+-- "relation already exists", and because the CLI stops at the first failure, every
+-- LATER migration is skipped too. Guarding it costs nothing and keeps one stale row
+-- in a bookkeeping table from silently holding back the rest of the queue.
+DO $$
+BEGIN
+  CREATE TYPE public.student_detail_request_status AS ENUM (
+    'active',     -- open and usable
+    'answered',   -- the student submitted at least once; still editable until it expires
+    'expired',    -- past expires_at; set lazily on read, never by a cron
+    'cancelled'   -- withdrawn by staff, or superseded by a regenerated link
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE public.student_detail_requests (
+CREATE TABLE IF NOT EXISTS public.student_detail_requests (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   -- 32 random bytes, base64url. Longer than the direct-enrollment link's 16 because
@@ -42,10 +52,10 @@ CREATE TABLE public.student_detail_requests (
   cancelled_at     timestamptz
 );
 
-CREATE UNIQUE INDEX student_detail_requests_token_key
+CREATE UNIQUE INDEX IF NOT EXISTS student_detail_requests_token_key
   ON public.student_detail_requests (token);
 
-CREATE INDEX student_detail_requests_user_idx
+CREATE INDEX IF NOT EXISTS student_detail_requests_user_idx
   ON public.student_detail_requests (user_id, status);
 
 -- At most one live request per student, so a student never holds two working links
@@ -55,7 +65,7 @@ CREATE INDEX student_detail_requests_user_idx
 -- Deliberately the only uniqueness rule on this table. A partial and a plain unique
 -- index over the same column fight each other, which is how the placement tables
 -- came to refuse legitimate writes.
-CREATE UNIQUE INDEX student_detail_requests_one_active
+CREATE UNIQUE INDEX IF NOT EXISTS student_detail_requests_one_active
   ON public.student_detail_requests (user_id)
   WHERE status = 'active';
 
