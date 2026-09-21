@@ -10,7 +10,11 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const ACCESS_TOKEN = 'sbp_e5079eeb22db99c56a8619959ab4c7c5640a6e0b';
+const ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
+if (!ACCESS_TOKEN) {
+  console.error('SUPABASE_ACCESS_TOKEN is not set. Export it before running this script.');
+  process.exit(1);
+}
 const PROJECT_REF = 'zdnypksjqnhtiblwdaic';
 const API_BASE = 'https://api.supabase.com';
 

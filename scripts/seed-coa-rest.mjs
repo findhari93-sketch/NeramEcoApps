@@ -12,15 +12,22 @@ const csvPath = join(__dirname, '..', 'docs', 'COA_Approved_Institutions_UG.csv'
 
 const ENV = process.argv[2] || 'staging';
 
+// A service_role key bypasses every RLS policy, so it is never committed.
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SERVICE_ROLE_KEY) {
+  console.error(`SUPABASE_SERVICE_ROLE_KEY is not set. Export the ${ENV} key before running this script.`);
+  process.exit(1);
+}
+
 const CONFIGS = {
   staging: {
     url: 'https://db-staging.neramclasses.com',
-    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhneGphdnJzcnZwaWhxcnBlemRoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjQ1ODAxMywiZXhwIjoyMDcyMDM0MDEzfQ.MIkaZs1OcWheSleFmX_KB3UlZycIEAd0nlQWZB5jSWA',
+    key: SERVICE_ROLE_KEY,
     ref: 'hgxjavrsrvpihqrpezdh',
   },
   prod: {
     url: 'https://db.neramclasses.com',
-    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpkbnlwa3NqcW5odGlibHdkYWljIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjE1MDE5OCwiZXhwIjoyMDgxNzI2MTk4fQ.Ud6nd2pIDLxwmR0JoV_f2wZ3YMLD-9NFPkqc9btQnFs',
+    key: SERVICE_ROLE_KEY,
     ref: 'zdnypksjqnhtiblwdaic',
   },
 };

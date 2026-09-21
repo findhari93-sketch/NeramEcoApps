@@ -99,3 +99,7 @@ scripts/data/nirf-unmatched.csv
 
 # Stray markdown artifacts at repo doc level
 apps/app/Docs/compass_artifact_*.md
+
+# One-off API response captures from debugging sessions. _tmp/auth.json once
+# published a live Supabase refresh token on this public repo.
+_tmp/
