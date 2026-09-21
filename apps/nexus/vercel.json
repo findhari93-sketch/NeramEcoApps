@@ -5,6 +5,10 @@
   "regions": ["sin1"],
   "crons": [
     {
+      "path": "/api/cron/auto-close-issues",
+      "schedule": "0 2 * * *"
+    },
+    {
       "path": "/api/cron/sync-teams-meetings",
       "schedule": "45 15 * * *"
     },

@@ -177,7 +177,23 @@ describe('StudentTestCard', () => {
   it('labels an exam number a score and a practice number a best', () => {
     const { unmount } = render(
       <StudentTestCard
-        test={make({ is_exam: true, attempts: 1, best_percentage: 82, results_state: 'final' })}
+        test={make({
+          is_exam: true,
+          attempts: 1,
+          best_percentage: 82,
+          results_state: 'final',
+          // The number comes off the PUBLISHED row now, not off the best
+          // attempt, so the card cannot disagree with its own rank chip.
+          exam_result: {
+            rank: 4,
+            total_ranked: 18,
+            score: 41,
+            total_marks: 50,
+            percentage: 82,
+            is_provisional: false,
+            absent: false,
+          },
+        })}
         onStart={vi.fn()}
       />,
     );

@@ -56,6 +56,13 @@ export const ATTENDANCE_STATUS: Record<AttendanceLabel, StatusDescriptor> = {
     tone: 'neutral',
     detail: 'This class fell inside a period you told us about in advance.',
   },
+  // Neutral for the same reason away is: the teacher waived this one on
+  // purpose, and it leaves the backlog and the pace denominator with it.
+  missed_excused: {
+    label: 'Excused',
+    tone: 'neutral',
+    detail: 'A teacher excused this class, so it is not counted as missed.',
+  },
   not_recorded: {
     label: 'Not recorded',
     tone: 'neutral',

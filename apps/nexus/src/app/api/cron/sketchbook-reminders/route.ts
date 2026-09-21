@@ -137,9 +137,10 @@ export async function GET(request: NextRequest) {
         teamsText: msg.subject,
         eventType: 'sketch_rhythm_nudge',
         metadata: { source: 'sketchbook_reminder', step: first.step },
-        // No teacher connected for this class: the activity feed and bell still run,
-        // and the receipt says why there was no chat.
-        ...(sender ? { sendAs: { senderUserId: sender.userId, link: { url, label: msg.buttonLabel } } } : {}),
+        // Neram Assistant, with the classroom's connected teacher as the
+        // fallback while it is switched off. With neither, the activity feed and
+        // the bell still run and the receipt says why there was no chat.
+        assistant: { link: { url, label: msg.buttonLabel }, fallbackSenderUserId: sender?.userId ?? null },
         source: { kind: 'sketchbook_reminder', refId: first.classroomId },
       });
       viaChat += results.filter((r) => r.chat).length;

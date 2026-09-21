@@ -163,13 +163,23 @@ test.describe('Timetable Redesign API Tests', () => {
     );
     expect(res.status()).toBe(200);
     const body = await res.json();
+    // `no_response` went when the default-attending model landed: a student
+    // with no RSVP row is attending, not unanswered. This block still asserted
+    // it was a number long after that, and contradicted
+    // timetable-rsvp-default-nexus.spec.ts about the very same endpoint.
     expect(body.summary).toBeDefined();
     expect(typeof body.summary.attending).toBe('number');
     expect(typeof body.summary.not_attending).toBe('number');
-    expect(typeof body.summary.no_response).toBe('number');
+    expect(typeof body.summary.on_roll).toBe('number');
+    expect(typeof body.summary.away).toBe('number');
+    expect(body.summary.no_response).toBeUndefined();
     expect(body.attending).toBeDefined();
     expect(body.not_attending).toBeDefined();
-    expect(body.no_response).toBeDefined();
+    expect(body.away).toBeDefined();
+
+    // The two invariants the headcount rests on.
+    expect(body.summary.attending + body.summary.not_attending).toBe(body.summary.total);
+    expect(body.summary.total + body.summary.away).toBe(body.summary.on_roll);
   });
 
   test('GET /api/timetable/rsvp-dashboard — date range mode works', async ({ request }) => {
@@ -181,6 +191,15 @@ test.describe('Timetable Redesign API Tests', () => {
     const body = await res.json();
     expect(body.classes).toBeDefined();
     expect(Array.isArray(body.classes)).toBe(true);
+    // Range mode names each student once at the top and sends ids per class.
+    expect(Array.isArray(body.away_students)).toBe(true);
+    expect(Array.isArray(body.declined_students)).toBe(true);
+    for (const c of body.classes) {
+      expect(Array.isArray(c.away_ids)).toBe(true);
+      expect(c.attending).toBeUndefined();
+      expect(c.summary.attending + c.summary.not_attending).toBe(c.summary.total);
+      expect(c.summary.total + c.summary.away).toBe(c.summary.on_roll);
+    }
   });
 
   // ============================================================

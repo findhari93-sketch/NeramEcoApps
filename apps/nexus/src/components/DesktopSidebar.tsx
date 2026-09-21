@@ -450,23 +450,33 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
         {groups.map((group, gi) => {
           const isGroupCollapsed = collapsedGroups.has(group.label);
           const groupHasActive = group.items.some(item => isActive(item.path));
+          const listId = `nav-group-${group.label.replace(/\s+/g, '-').toLowerCase()}`;
 
           return (
             <Box key={group.label} sx={{ mb: 0.5 }}>
-              {/* Group header */}
-              <Box
+              {/* Group header. A ListItemButton rather than a Box so it is
+                  reachable by keyboard and announces its own expanded state;
+                  staff now navigate by these headings, not just students. */}
+              <ListItemButton
                 onClick={() => toggleGroup(group.label)}
+                aria-expanded={!isGroupCollapsed}
+                aria-controls={listId}
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   px: 1,
                   py: 0.75,
+                  minHeight: 44,
                   mt: gi > 0 ? 1 : 0,
-                  cursor: 'pointer',
                   borderRadius: 1.5,
                   userSelect: 'none',
                   '&:hover': { bgcolor: alpha('#fff', 0.06) },
+                  '&.Mui-focusVisible': {
+                    outline: `2px solid ${alpha('#fff', 0.7)}`,
+                    outlineOffset: 2,
+                    bgcolor: alpha('#fff', 0.08),
+                  },
                 }}
               >
                 <Typography
@@ -489,13 +499,19 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
                     transition: 'transform 200ms ease',
                   }}
                 />
-              </Box>
+              </ListItemButton>
 
-              {/* Group items */}
+              {/* Group items. Course Plans keeps its own sub-nav here too; the
+                  flat branch above special-cases it, and a group heading is no
+                  reason for staff to lose Schedule, Class Day and Health. */}
               <Collapse in={!isGroupCollapsed} timeout={200}>
-                <List disablePadding>
+                <List disablePadding id={listId}>
                   {group.items.map((item) =>
-                    item.children?.length ? renderNavFolder(item) : renderNavItem(item),
+                    item.path === COURSE_PLANS_PATH
+                      ? renderCoursePlans(item.icon)
+                      : item.children?.length
+                        ? renderNavFolder(item)
+                        : renderNavItem(item),
                   )}
                 </List>
               </Collapse>

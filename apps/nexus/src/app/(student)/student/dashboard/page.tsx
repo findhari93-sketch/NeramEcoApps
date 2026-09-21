@@ -75,7 +75,15 @@ interface DashboardData {
    */
   prep?: Record<string, { gated: boolean; open: boolean }>;
   completedClasses: CompletedClass[];
-  attendanceSummary: { total: number; attended: number; percentage: number };
+  attendanceSummary: {
+    /** Classes actually MEASURED, not every completed class. */
+    total: number;
+    attended: number;
+    /** null, never 0, when nothing was measured. Render `sentence` instead. */
+    percentage: number | null;
+    notMeasured: number;
+    sentence: string;
+  };
   checklistProgress: { completed: number; total: number };
   topicProgress: { completed: number; total: number };
   /** The exam this classroom's active plan targets, or null. */
@@ -206,7 +214,18 @@ export default function StudentDashboard() {
     return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   };
 
-  const attendancePct = data?.attendanceSummary.percentage ?? 0;
+  /**
+   * null means nobody recorded it, and it must stay null all the way to the
+   * screen. The old `?? 0` here is precisely how a student whose classes were
+   * never synced was shown "0%" on their own dashboard.
+   */
+  const attendancePct = data?.attendanceSummary.percentage ?? null;
+  const attendanceValue = attendancePct === null ? 'Not yet' : `${attendancePct}%`;
+  // Only a door when there is a room behind it: the Attendance page is off by
+  // default, and an inert card is worse than a plain one.
+  const attendanceOpens = isFeatureEnabled('student.attendance')
+    ? () => router.push('/student/attendance')
+    : undefined;
 
   if (noClassrooms) {
     return (
@@ -534,11 +553,12 @@ export default function StudentDashboard() {
               <Box sx={{ minWidth: 140, flexShrink: 0, scrollSnapAlign: 'start' }}>
                 <StatCard
                   title="Attendance"
-                  value={`${attendancePct}%`}
+                  value={attendanceValue}
                   icon={<SchoolOutlinedIcon />}
                   variant="surface"
                   size="compact"
                   delay={0}
+                  onClick={attendanceOpens}
                 />
               </Box>
               <Box sx={{ minWidth: 140, flexShrink: 0, scrollSnapAlign: 'start' }}>
@@ -586,11 +606,16 @@ export default function StudentDashboard() {
             ) : (
               <StatCard
                 title="Attendance"
-                value={`${attendancePct}%`}
+                value={attendanceValue}
                 icon={<SchoolOutlinedIcon />}
                 variant="surface"
-                subtitle={`${data?.attendanceSummary.attended ?? 0} of ${data?.attendanceSummary.total ?? 0} classes`}
+                subtitle={
+                  attendancePct === null
+                    ? (data?.attendanceSummary.sentence ?? 'Not recorded yet')
+                    : `${data?.attendanceSummary.attended ?? 0} of ${data?.attendanceSummary.total ?? 0} classes`
+                }
                 delay={0}
+                onClick={attendanceOpens}
               />
             )}
           </Grid>

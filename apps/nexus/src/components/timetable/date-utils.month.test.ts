@@ -21,6 +21,8 @@ import {
   isSameMonth,
   isoWeekday,
   monthGridRangeFor,
+  planningRangeFor,
+  relativeDayLabel,
   startOfDay,
   startOfMonth,
 } from './date-utils';
@@ -324,6 +326,82 @@ describe('formatRangeLabel', () => {
 
   it('survives an empty range', () => {
     expect(formatRangeLabel('week', [])).toEqual({ label: '', shortLabel: '' });
+  });
+});
+
+describe('planningRangeFor', () => {
+  // July 2026's grid runs Mon 29 Jun to Sun 2 Aug: 35 cells.
+  const grid = getMonthGrid(JUL_2026);
+  const visible = { start: '2026-07-01', end: '2026-07-31' };
+
+  it('leaves the grid alone when the horizon already fits inside it', () => {
+    // 1 July + 29 days is 30 July, comfortably inside a grid ending 2 August.
+    expect(planningRangeFor(JUL_2026, visible.start, visible.end, '2026-07-01')).toEqual({
+      start: grid.start,
+      end: grid.end,
+    });
+  });
+
+  it('widens the end when the horizon runs past the grid', () => {
+    const range = planningRangeFor(JUL_2026, visible.start, visible.end, '2026-07-28');
+    expect(range.start).toBe(grid.start);
+    expect(range.end).toBe('2026-08-26'); // 28 July + 29 days
+  });
+
+  it('never widens the start, so no past month is pulled in', () => {
+    expect(planningRangeFor(JUL_2026, visible.start, visible.end, '2026-07-28').start).toBe(
+      grid.start,
+    );
+  });
+
+  it('returns the grid untouched when today is nowhere near it', () => {
+    // Browsing July from December must not union five months into one request.
+    expect(planningRangeFor(JUL_2026, visible.start, visible.end, '2026-12-05')).toEqual({
+      start: grid.start,
+      end: grid.end,
+    });
+    expect(planningRangeFor(JUL_2026, visible.start, visible.end, '2026-01-05')).toEqual({
+      start: grid.start,
+      end: grid.end,
+    });
+  });
+
+  it('stays inside the route day-row cap at its widest', () => {
+    // The worst case is today on the grid's last cell. The route caps day rows
+    // at 75, and this is what that number was chosen against.
+    const range = planningRangeFor(JUL_2026, visible.start, visible.end, grid.end);
+    const span =
+      (Date.parse(`${range.end}T00:00:00Z`) - Date.parse(`${range.start}T00:00:00Z`)) / 86_400_000;
+    expect(span + 1).toBeLessThanOrEqual(75);
+  });
+
+  it('honours a narrower horizon', () => {
+    const range = planningRangeFor(JUL_2026, visible.start, visible.end, '2026-07-28', 7);
+    expect(range.end).toBe('2026-08-03'); // 28 July + 6 days
+  });
+});
+
+describe('relativeDayLabel', () => {
+  it('names today and tomorrow rather than dating them', () => {
+    expect(relativeDayLabel('2026-09-20', '2026-09-20')).toBe('Today');
+    expect(relativeDayLabel('2026-09-21', '2026-09-20')).toBe('Tomorrow');
+  });
+
+  it('carries the weekday on every other day', () => {
+    expect(relativeDayLabel('2026-09-24', '2026-09-20')).toBe('Thu 24 Sep');
+  });
+
+  it('rolls over a month and a year boundary', () => {
+    expect(relativeDayLabel('2026-10-01', '2026-09-30')).toBe('Tomorrow');
+    expect(relativeDayLabel('2027-01-01', '2026-12-31')).toBe('Tomorrow');
+  });
+
+  it('dates a day in the past rather than calling it Today', () => {
+    expect(relativeDayLabel('2026-09-19', '2026-09-20')).toBe('Sat 19 Sep');
+  });
+
+  it('returns unparseable input unchanged rather than printing Invalid Date', () => {
+    expect(relativeDayLabel('later', '2026-09-20')).toBe('later');
   });
 });
 

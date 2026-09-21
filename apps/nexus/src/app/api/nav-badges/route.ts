@@ -9,6 +9,30 @@ import { getSupabaseAdminClient } from '@neram/database';
 const CATCHUP_BADGE_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /**
+ * One number from the two the issue RPC returns.
+ *
+ * A ticket can be both in play and unread, so the two overlap and the sum can
+ * exceed the ticket count. That is deliberate: the badge answers "how much is
+ * there to do", and a reply sitting unread on an open ticket is a second thing
+ * to do, not the same one counted twice.
+ *
+ * Returns 0 rather than throwing when the RPC is missing, so a Nexus deployed
+ * ahead of its migration loses a badge instead of the whole sidebar.
+ */
+function issueBadgeTotal(data: unknown): number {
+  // Accepts the array a set-returning RPC gives back, and the bare object
+  // PostgREST answers with when a function is registered as returning one row.
+  // Getting this wrong shows as a badge stuck at zero rather than as an error,
+  // which is the kind of bug nobody reports.
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { inbox?: number | null; unread?: number | null }
+    | null
+    | undefined;
+  if (!row || typeof row !== 'object') return 0;
+  return (row.inbox ?? 0) + (row.unread ?? 0);
+}
+
+/**
  * GET /api/nav-badges
  * Returns lightweight badge counts for sidebar navigation items.
  * Students: count of their own open+in_progress issues.
@@ -45,11 +69,16 @@ export async function GET(request: NextRequest) {
       const since = new Date(Date.now() - CATCHUP_BADGE_WINDOW_MS).toISOString();
 
       const [issues, owed, photoCount, freshReasons, sketchInbox] = await Promise.all([
-        // Count all open + in_progress issues
-        supabase
-          .from('nexus_foundation_issues')
-          .select('id', { count: 'exact', head: true })
-          .in('status', ['open', 'in_progress']),
+        // Tickets in play, plus tickets carrying a reply nobody on the team has
+        // read yet. One RPC rather than two head counts because PostgREST
+        // cannot compare two columns, so `staff_seen_at < last_reply_at` has no
+        // .filter() form. Same shape as count_pending_photo_reviews below.
+        //
+        // The seen stamp is shared across staff on purpose: this is a shared
+        // inbox, so one person reading a reply clears the dot for everyone.
+        // Making it per person means a reads table and a join on every poll,
+        // which is the cost this route's header comment exists to avoid.
+        supabase.rpc('nexus_issue_badge_counts', { p_user_id: user.id, p_is_staff: true }),
 
         // Owed drawing work in the classrooms this teacher teaches: assignment
         // drawings (Assignments badge) and test drawings (Exams badge). Practice
@@ -117,7 +146,7 @@ export async function GET(request: NextRequest) {
         })(),
       ]);
 
-      badges.issues = issues.count ?? 0;
+      badges.issues = issueBadgeTotal(issues.data);
       badges.assignment_drawings = owed.assignment;
       badges.test_drawings = owed.test;
       badges.photo_review = typeof photoCount.data === 'number' ? photoCount.data : 0;
@@ -125,12 +154,14 @@ export async function GET(request: NextRequest) {
       badges.sketchbook_inbox = sketchInbox;
     } else {
       const [issues, catchup] = await Promise.all([
-        // Student: count their own open + in_progress issues
-        supabase
-          .from('nexus_foundation_issues')
-          .select('id', { count: 'exact', head: true })
-          .eq('student_id', user.id)
-          .in('status', ['open', 'in_progress']),
+        // The student's own tickets in play, plus any carrying a staff reply
+        // they have not opened.
+        //
+        // `inbox` now includes awaiting_confirmation, which the old head count
+        // left out. That is the one state actually waiting on the student, so a
+        // ticket asking them to confirm a fix used to produce no badge at all:
+        // the number went quiet at exactly the moment it had something to say.
+        supabase.rpc('nexus_issue_badge_counts', { p_user_id: user.id, p_is_staff: false }),
 
         // Classes this student still owes. Not a rolling window like the staff
         // count above: this is a debt, and it does not stop being one because it
@@ -150,7 +181,7 @@ export async function GET(request: NextRequest) {
           .is('excused_at', null),
       ]);
 
-      badges.issues = issues.count ?? 0;
+      badges.issues = issueBadgeTotal(issues.data);
       badges.catchup = catchup.count ?? 0;
     }
 

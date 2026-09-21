@@ -33,7 +33,6 @@ interface AgendaViewProps {
   myRsvps?: Record<string, 'attending' | 'not_attending'>;
   myRsvpReasons?: Record<string, string | null>;
   myAttendance?: Record<string, boolean>;
-  rsvpData?: Record<string, { attending: number; total: number }>;
   /**
    * Class ids whose prep gate is shut for this student. Only used by the hero,
    * which is the one place that renders a Join button, and empty for every class
@@ -65,7 +64,6 @@ export default function AgendaView({
   myRsvps,
   myRsvpReasons,
   myAttendance,
-  rsvpData,
   prepShutIds,
   onClassClick,
   onDecline,
@@ -217,7 +215,6 @@ export default function AgendaView({
           return dayClasses.map((cls, i) => {
             const kind = rowKind(cls);
             const reason = myRsvpReasons?.[cls.id];
-            const rsvp = rsvpData?.[cls.id];
             const last = isLastDay && i === dayClasses.length - 1;
 
             const stateLabel =
@@ -311,11 +308,13 @@ export default function AgendaView({
                     </Box>
                   )}
 
-                  {role === 'teacher' && rsvp && (
-                    <Box component="span" sx={tagSx(theme, 'neutral')}>
-                      {rsvp.attending} of {rsvp.total}
-                    </Box>
-                  )}
+                  {/* The teacher headcount used to render here from an
+                      `rsvpData` prop that nothing ever passed: this component's
+                      only mount site is the student timetable. A teacher-shaped
+                      prop hanging off a student view is how the two drift, so
+                      both the prop and this branch are gone. The teacher's
+                      headcount lives in PlannerWeekList, GridView and MonthView,
+                      which teachers actually open. */}
                 </Box>
               </LedgerRow>
             );

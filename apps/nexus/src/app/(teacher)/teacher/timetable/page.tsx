@@ -15,6 +15,7 @@ import DateRangeIcon from '@mui/icons-material/DateRange';
 import LinkIcon from '@mui/icons-material/Link';
 import PublishIcon from '@mui/icons-material/Publish';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import { Dialog, DialogContent, DialogActions } from '@neram/ui';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -27,6 +28,12 @@ import CalendarShell from '@/components/timetable/CalendarShell';
 import LinkPrepTestDialog from '@/components/timetable/LinkPrepTestDialog';
 import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 import { useAuthFetch } from '@/components/curriculum/shared';
+import { useAuthSWR } from '@/lib/nexus-swr';
+import { mutate } from 'swr';
+import type { RsvpDashboardRangeResponse, RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
+import type { StandingResponse } from '@/app/api/attendance/standing/route';
+import { buildForecast } from '@/lib/class-forecast';
+import { istRange } from '@/components/attendance/attendance-format';
 import ClassCreateDialog from '@/components/timetable/ClassCreateDialog';
 import BackfillFromTeamsDialog from '@/components/timetable/BackfillFromTeamsDialog';
 import ClassAttendanceDialog from '@/components/timetable/attendance/ClassAttendanceDialog';
@@ -34,14 +41,16 @@ import type { AttendanceTabKey } from '@/components/timetable/attendance/types';
 import { ClassPanel } from '@/components/timetable/class-panel';
 import RescheduleDialog, { type ReschedulePayload } from '@/components/timetable/RescheduleDialog';
 import HolidayManager from '@/components/timetable/HolidayManager';
-import RsvpDashboard from '@/components/timetable/RsvpDashboard';
+import AvailabilitySheet, {
+  type AvailabilityScope,
+} from '@/components/timetable/AvailabilitySheet';
 import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
 import { type ClassCardData } from '@/components/timetable/ClassCard';
 import { LAYOUT } from '@/components/timetable/timetable-theme';
 import {
   formatDateISO,
   formatRangeLabel,
-  monthGridRangeFor,
+  planningRangeFor,
   type HolidayInfo,
 } from '@/components/timetable/date-utils';
 import { type PlanShape } from '@/lib/plan-shape';
@@ -164,8 +173,12 @@ export default function TeacherTimetable() {
   const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   const [holidayManagerOpen, setHolidayManagerOpen] = useState(false);
-  const [rsvpDashboardOpen, setRsvpDashboardOpen] = useState(false);
-  const [rsvpDashboardClassId, setRsvpDashboardClassId] = useState<string | undefined>();
+  /**
+   * What the availability sheet is answering for: one class, one day, or the
+   * period on screen. Null means closed. One piece of state for all three,
+   * because they are one question asked at three widths.
+   */
+  const [availabilityScope, setAvailabilityScope] = useState<AvailabilityScope | null>(null);
 
   // Holidays
   const [holidays, setHolidays] = useState<Record<string, HolidayInfo>>({});
@@ -174,8 +187,6 @@ export default function TeacherTimetable() {
   const markedDates = useMemo(() => new Set(classes.map((c) => c.scheduled_date)), [classes]);
   const holidayDates = useMemo(() => new Set(Object.keys(holidays)), [holidays]);
 
-  // RSVP data
-  const [rsvpData, setRsvpData] = useState<Record<string, { attending: number; total: number }>>({});
   // Real Teams/manual attendance, for past classes only (cheap DB-only read, no Graph call).
   const [attendanceData, setAttendanceData] = useState<Record<string, AttendanceSummary>>({});
   // Rating data
@@ -210,10 +221,122 @@ export default function TeacherTimetable() {
    * into zero requests. Given the per-class fan-out below, that is a large net
    * reduction in function invocations, not an increase.
    */
+  //
+  // Widened once more to cover the forward planner's horizon. "Who is coming"
+  // asks about the days AHEAD, including days with nothing on them, which a
+  // month grid does not always reach: on the 28th the grid ends in days and the
+  // planner is still asking about the 27th of next month. Widening this one
+  // request keeps the planner free rather than making the sheet fetch on open.
+  /**
+   * The window the attendance record is judged over.
+   *
+   * Fixed, and independent of wherever the calendar is parked: "does this
+   * student turn up" is a fact about the last month, not about the month being
+   * looked at. Keeping it out of the key is what stops paging through the year
+   * refetching the heaviest request on the page.
+   */
+  const standingRange = useMemo(() => istRange(30), []);
+
   const fetchRange = useMemo(
-    () => monthGridRangeFor(anchorDate, range.start, range.end),
+    () => planningRangeFor(anchorDate, range.start, range.end, formatDateISO(new Date())),
     [anchorDate, range.start, range.end],
   );
+
+  /**
+   * Who is expected at every class in the loaded month, in one request.
+   *
+   * Keyed on `fetchRange` and not on `range`, which is the whole point: a month
+   * grid produces the same range in Day, Week and Month view, so paging days or
+   * switching views inside one month costs nothing at all. It also sits OUTSIDE
+   * the per-class fan-out's `view === 'month'` guard below, which is what
+   * finally puts numbers on the month view: this is one call whether the month
+   * holds six classes or twenty-six.
+   *
+   * This replaced one /api/timetable/rsvp request per class. That fan-out was
+   * also wrong, not just expensive: it never read away windows, so a student on
+   * declared exam leave counted as attending.
+   */
+  const availabilityKey = activeClassroom
+    ? `/api/timetable/rsvp-dashboard?classroom_id=${activeClassroom.id}` +
+      `&start=${fetchRange.start}&end=${fetchRange.end}`
+    : null;
+  const { data: availability, isLoading: availabilityLoading } =
+    useAuthSWR<RsvpDashboardRangeResponse>(availabilityKey, {
+      revalidateOnFocus: false,
+      dedupingInterval: 60_000,
+    });
+
+  /**
+   * Per class, for the inline number. Derived, never stored.
+   *
+   * Keeps the field names `attending` and `total` that four surfaces already
+   * render, so every one of them stays true under the new meaning of `total`
+   * (the roll minus the away) without a code change.
+   */
+  const rsvpData = useMemo(() => {
+    const map: Record<string, RsvpSummary> = {};
+    for (const c of availability?.classes ?? []) map[c.class_id] = c.summary;
+    return map;
+  }, [availability]);
+
+  /**
+   * How reliably each student actually turns up.
+   *
+   * A SECOND request, and deliberately so. /api/attendance/standing says in its
+   * own header that it resolves the whole catch-up backlog and reads sign-in
+   * events, which is several times the work of the register, and that callers
+   * should leave its key null until the view that needs it is open. So this is
+   * gated on the month view, where the forecast is actually drawn.
+   *
+   * istRange(30) rather than a hand-rolled window: it produces a key identical
+   * to the one /teacher/attendance builds, so arriving from that page costs no
+   * request at all, and it carries its own fixed history of the IST rollback
+   * bug that a hand-rolled `today - N` walks straight into.
+   *
+   * Keyed on the classroom and nothing else, so paging through months never
+   * refetches it. Attendance history does not change when the calendar moves.
+   */
+  const standingKey =
+    activeClassroom && (view === 'month' || availabilityScope !== null)
+      ? `/api/attendance/standing?classroom_id=${activeClassroom.id}` +
+        `&from=${standingRange.from}&to=${standingRange.to}`
+      : null;
+  const { data: standing } = useAuthSWR<StandingResponse>(standingKey, {
+    revalidateOnFocus: false,
+    dedupingInterval: 300_000,
+  });
+
+  /**
+   * How many students are realistically coming, per date. Drives the month cell.
+   *
+   * Read off the server's per-date rows rather than unioned from the day's
+   * classes. The union was the sum of what each class could see, so on a date
+   * with only a b1 class a b2 student away was invisible here while the sheet,
+   * which scanned the raw windows, counted them: two numbers for one night.
+   *
+   * `standing` is passed only when it answers for THIS classroom. SWR serves
+   * the previous key's data while a new one loads, so during a classroom switch
+   * the two payloads describe different rooms; buildForecast would then find a
+   * roll that does not match and silently drop every tilde. Checking the id the
+   * response echoes is cheaper and clearer than letting the guard absorb it.
+   */
+  const standingForForecast = useMemo(
+    () =>
+      standing && activeClassroom && standing.classroom_id === activeClassroom.id
+        ? standing.students
+        : null,
+    [standing, activeClassroom],
+  );
+
+  const forecastByDate = useMemo(() => {
+    const map = buildForecast({
+      days: availability?.days ?? [],
+      classes: availability?.classes ?? [],
+      students: standingForForecast,
+      today: formatDateISO(new Date()),
+    });
+    return Object.fromEntries(map);
+  }, [availability, standingForForecast]);
 
   /**
    * What is already in `classes`. Guards the refetch on navigation.
@@ -225,6 +348,13 @@ export default function TeacherTimetable() {
 
   const fetchClasses = useCallback(async (force = false) => {
     if (!activeClassroom) return;
+
+    // A forced refetch means something changed, and the availability payload
+    // describes the same classes. Left alone it would serve the pre-change
+    // answer for up to its 60s dedupe window, so "Who is coming" could still
+    // list a class the teacher had just cancelled, and the month view's away
+    // pill could still count a date that no longer has one.
+    if (force && availabilityKey) void mutate(availabilityKey);
 
     const have = loadedRange.current;
     const covered =
@@ -261,7 +391,7 @@ export default function TeacherTimetable() {
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, fetchRange.start, fetchRange.end, getToken]);
+  }, [activeClassroom, fetchRange.start, fetchRange.end, getToken, availabilityKey]);
 
   const loadedHolidayRange = useRef<{ classroomId: string; start: string; end: string } | null>(null);
 
@@ -306,7 +436,7 @@ export default function TeacherTimetable() {
     }
   }, [activeClassroom, fetchRange.start, fetchRange.end, getToken]);
 
-  const fetchRsvpAndRatings = async (fetchedClasses: ClassCardData[], token: string) => {
+  const fetchRatingsAndAttendance = async (fetchedClasses: ClassCardData[], token: string) => {
     if (!activeClassroom || fetchedClasses.length === 0) return;
 
     // Use the fetched classes directly to get classroom_id (state may not be updated yet)
@@ -317,15 +447,9 @@ export default function TeacherTimetable() {
 
     const classIds = fetchedClasses.map((c) => c.id);
 
-    const rsvpPromises = classIds.map((id) => {
-      const cid = getClassroomId(id);
-      return fetch(`/api/timetable/rsvp?class_id=${id}&classroom_id=${cid}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.ok ? r.json() : null)
-        .catch(() => null);
-    });
-
+    // No RSVP request here any more. The expected headcount for the whole month
+    // arrives in one call above, and this fan-out is now only the two things
+    // that genuinely have no range endpoint.
     const ratingPromises = classIds.map((id) => {
       const cid = getClassroomId(id);
       return fetch(`/api/timetable/reviews?class_id=${id}&classroom_id=${cid}`, {
@@ -354,20 +478,15 @@ export default function TeacherTimetable() {
         .catch(() => null);
     });
 
-    const [rsvpResults, ratingResults, attendanceResults] = await Promise.all([
-      Promise.all(rsvpPromises),
+    const [ratingResults, attendanceResults] = await Promise.all([
       Promise.all(ratingPromises),
       Promise.all(attendancePromises),
     ]);
 
-    const rsvpMap: Record<string, { attending: number; total: number }> = {};
     const ratingMap: Record<string, number> = {};
     const attendanceMap: Record<string, AttendanceSummary> = {};
 
     classIds.forEach((id, i) => {
-      if (rsvpResults[i]?.summary) {
-        rsvpMap[id] = rsvpResults[i].summary;
-      }
       if (ratingResults[i]?.summary?.average) {
         ratingMap[id] = ratingResults[i].summary.average;
       }
@@ -379,7 +498,6 @@ export default function TeacherTimetable() {
       }
     });
 
-    setRsvpData(rsvpMap);
     setAverageRatings(ratingMap);
     setAttendanceData(attendanceMap);
   };
@@ -427,23 +545,33 @@ export default function TeacherTimetable() {
   /**
    * The per-class fan-out, deliberately kept off the month.
    *
-   * This is three to four requests per class. Over a week that is fine; over a
-   * month it would be ninety-odd function invocations for numbers no month chip
-   * has room to show anyway.
+   * Ratings and the attendance report still have no range endpoint, so this is
+   * two requests per class. Over a week that is fine; over a month it would be
+   * sixty-odd function invocations for numbers no month chip has room to show
+   * anyway. The expected headcount used to be in here and is not any more: it
+   * arrives for the whole month in one request, which is why Month can now show
+   * a number while this effect stays switched off there.
+   *
+   * Keyed on the ids rather than on `visibleClasses`, which is a fresh array on
+   * every range change and refired this whole fan-out on every view switch.
    */
+  const visibleClassKey = useMemo(
+    () => visibleClasses.map((c) => c.id).join(','),
+    [visibleClasses],
+  );
   useEffect(() => {
     if (view === 'month' || visibleClasses.length === 0) return;
     let cancelled = false;
     (async () => {
       const token = await getToken();
       if (!token || cancelled) return;
-      fetchRsvpAndRatings(visibleClasses, token);
+      fetchRatingsAndAttendance(visibleClasses, token);
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, visibleClasses, getToken]);
+  }, [view, visibleClassKey, getToken]);
 
   /** Re-pull one class's attendance summary, so the detail panel reflects a sync/manual-mark made in the Attendance sheet without re-fetching the whole week. */
   const refreshAttendanceSummary = async (classId: string, classroomId: string) => {
@@ -925,9 +1053,24 @@ export default function TeacherTimetable() {
     }
   };
 
+  // A pure state set. The month's answer is already in hand, so opening this
+  // from the class panel costs no request.
   const handleViewRsvpDashboard = (classId: string) => {
-    setRsvpDashboardClassId(classId);
-    setRsvpDashboardOpen(true);
+    const cls = classes.find((c) => c.id === classId);
+    setAvailabilityScope({ kind: 'class', classId, date: cls?.scheduled_date || '' });
+  };
+
+  /** From a day card in the planner: close the sheet, open Add Class on that date. */
+  const handleScheduleForDate = (date: string) => {
+    setAvailabilityScope(null);
+    openCreateDialog(date);
+  };
+
+  /** From a day card in the planner: close the sheet, open that class's panel. */
+  const handleOpenClassFromPlanner = (classId: string) => {
+    setAvailabilityScope(null);
+    setSelectedClassId(classId);
+    setPanelOpen(true);
   };
 
   const handleSyncMembers = async () => {
@@ -1190,13 +1333,27 @@ export default function TeacherTimetable() {
       <ListItemIcon><EventBusyIcon fontSize="small" /></ListItemIcon>
       <ListItemText primary="Mark a holiday" secondary="Or tap an empty day" />
     </MenuItem>,
-    <MenuItem key="rsvp" onClick={() => { close(); setRsvpDashboardClassId(undefined); setRsvpDashboardOpen(true); }} sx={{ minHeight: 48 }}>
+    <MenuItem
+      key="rsvp"
+      onClick={() => { close(); setAvailabilityScope({ kind: 'period' }); }}
+      sx={{ minHeight: 48 }}
+    >
       <ListItemIcon><AssessmentIcon fontSize="small" /></ListItemIcon>
-      <ListItemText primary="Who is attending" secondary="Opt-outs across the week" />
+      {/* Retitled: it reports away windows now, so "opt-outs" was no longer the
+          whole of what it answers. */}
+      <ListItemText primary="Who is coming" secondary="The days ahead, and who is out" />
     </MenuItem>,
     <MenuItem key="recordings" onClick={() => { close(); router.push('/teacher/recordings'); }} sx={{ minHeight: 48 }}>
       <ListItemIcon><SmartDisplayOutlinedIcon fontSize="small" /></ListItemIcon>
       <ListItemText primary="Recordings" secondary="Search past classes by tag" />
+    </MenuItem>,
+    /* Period level on purpose. AfterTab deliberately dropped its own per-class
+       link out of here, because the jump lost the class the teacher was looking
+       at; "View details" there opens the same roster in place. This is the other
+       question: the record across classes, which the calendar cannot answer. */
+    <MenuItem key="attendance" onClick={() => { close(); router.push('/teacher/attendance'); }} sx={{ minHeight: 48 }}>
+      <ListItemIcon><EventNoteOutlinedIcon fontSize="small" /></ListItemIcon>
+      <ListItemText primary="Attendance across classes" secondary="The record, and who is falling behind" />
     </MenuItem>,
     activeClassroom?.ms_team_id ? (
       <ListSubheader key="teams-head" sx={{ lineHeight: '32px', fontSize: '0.6875rem', letterSpacing: '.08em' }}>
@@ -1412,6 +1569,10 @@ export default function TeacherTimetable() {
               viewState.setView('day');
             }}
             onDayMenu={(iso, e) => handleSlotClick(iso, configuredWindow.start, e)}
+            availability={rsvpData}
+            forecastByDate={forecastByDate}
+            todayISO={formatDateISO(new Date())}
+            onOpenDayAvailability={(iso) => setAvailabilityScope({ kind: 'day', date: iso })}
           />
         ) : view === 'week' ? (
           <GridView
@@ -1470,6 +1631,7 @@ export default function TeacherTimetable() {
               onSelect={handleClassClick}
               onAssignmentClick={openAssignmentMenu}
               onAddClass={(date) => openCreateDialog(date)}
+              availability={rsvpData}
             />
             {/* The rail only exists at lg+. Below that the sheet is the panel,
                 and rendering both would double every self-fetching section
@@ -1541,6 +1703,8 @@ export default function TeacherTimetable() {
         defaultClassroomId={activeClassroom?.id || ''}
         getToken={getToken}
         getTeacherToken={getTeacherToken}
+        availability={availability}
+        forecastByDate={forecastByDate}
         onSaved={(created) => {
           // Offer the follow-up rather than adding an assignment field to a
           // dialog that already carries thirteen. One extra tap, no new form,
@@ -1588,20 +1752,21 @@ export default function TeacherTimetable() {
         prefillDate={prefillDate}
       />
 
-      {/* RSVP Dashboard */}
-      {/* The range follows what is on screen: asked from Month view, "who is
-          attending" should answer for the month, not for one week of it. */}
-      <RsvpDashboard
-        open={rsvpDashboardOpen}
-        onClose={() => {
-          setRsvpDashboardOpen(false);
-          setRsvpDashboardClassId(undefined);
-        }}
-        classroomId={activeClassroom?.id || ''}
-        getToken={getToken}
-        classId={rsvpDashboardClassId}
-        startDate={range.start}
-        endDate={range.end}
+      {/* Who is coming: one class, one day, or the days ahead. The horizon is
+          anchored on today rather than on what the calendar happens to show, so
+          it never reports on meetings that are already over. It normally
+          fetches nothing, because fetchRange above already covers the horizon. */}
+      <AvailabilitySheet
+        open={!!availabilityScope}
+        onClose={() => setAvailabilityScope(null)}
+        scope={availabilityScope}
+        data={availability}
+        loading={availabilityLoading}
+        classroomId={activeClassroom?.id ?? null}
+        forecastByDate={forecastByDate}
+        standingStudents={standingForForecast}
+        onOpenClass={handleOpenClassFromPlanner}
+        onSchedule={handleScheduleForDate}
       />
 
       {/* The register and what it adds up to, in one dialog. These were two

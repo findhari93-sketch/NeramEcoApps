@@ -7,12 +7,16 @@
  * one route HTTP-calling another).
  *
  * Delivery per recipient (founder decisions 2026-09-10, 2026-09-13, 2026-09-14):
- *   0. A Teams 1:1 chat, from a teacher. Either the signed-in teacher, when the
- *      caller passes `chat` with their delegated token (they pressed Send), or,
- *      for an automatic message, the teacher who connected their Teams once,
- *      when the caller passes `sendAs` (lib/teams-sender.ts). Both post through
- *      sendTeamsChatMessage: an automatic reminder is the same chat, from the same
- *      person, that a manual message is.
+ *   0. A Teams 1:1 chat, from ONE of two identities, never both.
+ *      Neram Assistant (`assistant`, lib/teams-assistant.ts) when the SYSTEM is
+ *      speaking: results are out, a form needs filling, a cron fired. Nobody
+ *      typed those, and sending them from a teacher's own chat is what put exam
+ *      results in the founder's personal thread with a student.
+ *      A teacher otherwise: the signed-in one when the caller passes `chat` with
+ *      their delegated token (they pressed Send), or the teacher who connected
+ *      their Teams once when the caller passes `sendAs` (lib/teams-sender.ts),
+ *      so a student who wants to answer has somebody to answer.
+ *      Which one a call site may use is fixed by lib/sender-classification.test.ts.
  *   1. A Microsoft Teams Activity-feed ping ("Neram Assistant"), ONLY when no
  *      chat landed. Chat first: a chat already raises a Teams alert, and two
  *      alerts for one message is how students learn to mute the app.
@@ -59,12 +63,15 @@ import { sendTeamsChatMessage } from './teams-messaging';
 import { postGroupMessage, type GroupPostResult } from './teams-group-post';
 import type { TeamsMention } from './teams-class-announcements';
 import { getSenderAccessToken, touchSender } from './teams-sender';
+import { assistantEnabled, sendAssistantMessage } from './teams-assistant';
 
 export interface NudgeResult {
   studentId: string;
   name: string | null;
-  /** A Teams 1:1 chat from a teacher (pressed Send, or connected for automatic sends). */
+  /** A Teams 1:1 chat landed, from a teacher or from Neram Assistant. */
   chat: boolean;
+  /** Who it came from, when a chat landed. Teachers reply; the Assistant does not. */
+  chatSender?: 'teacher' | 'assistant';
   teams: boolean;
   inapp: boolean;
   ok: boolean;
@@ -134,6 +141,28 @@ export interface SendNudgeInput {
    * `sendAs` win.
    */
   teacher?: { authHeader: string | null; userId: string };
+
+  /**
+   * Send as Neram Assistant instead of as a person.
+   *
+   * For anything the SYSTEM decided: a result that is out, a form that needs
+   * filling, a cron that fired. Those are not conversations, and sending them
+   * from a teacher's own chat is what put exam results in the founder's personal
+   * thread with a student. A teacher talking to a student passes `teacher`
+   * instead, so the student can reply to somebody.
+   *
+   * Wins over `chat` and `sendAs`: a message cannot come from two identities,
+   * and a caller that sets both has misclassified itself. See
+   * lib/sender-classification.test.ts.
+   *
+   * `fallbackSenderUserId` is the ONE sanctioned way back to a person, and it
+   * exists so switching the Assistant on is a decision rather than an outage.
+   * While the flag is off, a caller that names one behaves exactly as it did
+   * before. The two flows the founder named (exam results, the application form
+   * request) deliberately name none: arriving in somebody's personal chat is
+   * the thing they were changed to stop, so they fall to the feed and the bell.
+   */
+  assistant?: { link?: { url: string; label: string }; fallbackSenderUserId?: string | null };
 
   /** The Nexus bell only: no Teams chat, no activity feed. For a caller that offers "do not ping". */
   bellOnly?: boolean;
@@ -250,9 +279,19 @@ export async function sendNudge(
         sendAs: rawInput.sendAs ?? { senderUserId: rawInput.teacher.userId },
       }
     : rawInput;
-  const input: SendNudgeInput = rawInput.bellOnly
-    ? { ...withTeacher, chat: undefined, sendAs: undefined, group: undefined }
+  // One message, one sender. A caller that asked for both has misclassified
+  // itself, so say so loudly rather than quietly picking one.
+  const assistantWins: SendNudgeInput = rawInput.assistant
+    ? { ...rawInput, chat: undefined, sendAs: undefined, teacher: undefined }
     : withTeacher;
+  if (rawInput.assistant && (rawInput.chat || rawInput.sendAs || rawInput.teacher)) {
+    console.warn(
+      `${rawInput.eventType}: sent as Neram Assistant, ignoring the teacher sender it also passed`,
+    );
+  }
+  const input: SendNudgeInput = rawInput.bellOnly
+    ? { ...assistantWins, chat: undefined, sendAs: undefined, group: undefined, assistant: undefined }
+    : assistantWins;
   const { studentIds: requestedIds, subject, plain, eventType } = input;
   const teamsText = input.teamsText || subject;
   const metadata = input.metadata || {};
@@ -306,8 +345,8 @@ export async function sendNudge(
 
   // 0) The chats. A person's own token when they pressed Send; otherwise, or when
   //    that token cannot send chats, the connected teacher's login (`sendAs`).
-  const chatBy = new Map<string, { ok: boolean; reason?: string }>();
-  const chatWanted = Boolean(input.chat || input.sendAs);
+  const chatBy = new Map<string, { ok: boolean; reason?: string; sender?: 'teacher' | 'assistant' }>();
+  const chatWanted = Boolean(input.chat || input.sendAs || input.assistant);
 
   /**
    * Send one chat to each id with this token. Graph throttles chat creation, and
@@ -345,12 +384,59 @@ export async function sendNudge(
           if (!r.ok && (r.status === 401 || r.status === 403) && !refusal) {
             refusal = r.reason || `Microsoft refused the chat (${r.status})`;
           }
-          chatBy.set(sid, r.ok ? { ok: true } : { ok: false, reason: r.reason });
+          chatBy.set(sid, r.ok ? { ok: true, sender: 'teacher' } : { ok: false, reason: r.reason });
         }),
       );
     }
     return refusal;
   };
+
+  /**
+   * Neram Assistant, when the system is speaking.
+   *
+   * A link becomes an Adaptive Card carrying the whole message and one button,
+   * and the activity text is left empty so the words are not printed twice. With
+   * no link there is no card and the text carries it, because a card whose only
+   * content is a sentence is a worse sentence.
+   */
+  if (input.assistant) {
+    const link = input.assistant.link;
+    // Switched off, or the Teams manifest is not approved yet: say so once on
+    // every receipt and let the feed and the bell carry the message. That is the
+    // same place these messages landed before the Assistant existed.
+    const allowed = await assistantEnabled(supabase);
+    const fallbackSender = input.assistant.fallbackSenderUserId;
+    if (!allowed && fallbackSender) {
+      // Named a person to fall back to, so behave exactly as before the
+      // Assistant existed. Handled by the sendAs pass below.
+      input.sendAs = { senderUserId: fallbackSender, link };
+    } else if (!allowed) {
+      for (const sid of studentIds) {
+        chatBy.set(sid, { ok: false, reason: 'Neram Assistant is switched off' });
+      }
+    }
+    for (let i = 0; allowed && i < studentIds.length; i += CHAT_CONCURRENCY) {
+      const batch = studentIds.slice(i, i + CHAT_CONCURRENCY);
+      await Promise.all(
+        batch.map(async (sid) => {
+          const u = usersBy.get(sid);
+          if (!u) return;
+          const tokens = tokensFor(sid);
+          const subjectFor = applyTokens(subject, tokens);
+          const plainFor = applyTokens(plain, tokens);
+          const r = await sendAssistantMessage(
+            { id: sid, ms_oid: u.ms_oid },
+            link
+              ? { text: '', card: { title: subjectFor, body: plainFor, buttonLabel: link.label, url: link.url } }
+              : { text: `${subjectFor}
+
+${plainFor}` },
+          );
+          chatBy.set(sid, r.ok ? { ok: true, sender: 'assistant' } : { ok: false, reason: r.reason });
+        }),
+      );
+    }
+  }
 
   let ownRefusal: string | null = null;
   if (input.chat) ownRefusal = await runChats(studentIds, input.chat);
@@ -389,7 +475,10 @@ export async function sendNudge(
 
       const chatResult = chatBy.get(sid);
       const chat = chatResult?.ok === true;
-      if (chatWanted && !chat) reasons.chat = chatResult?.reason || 'Teams chat did not send';
+      if (chatWanted && !chat) {
+        reasons.chat =
+          chatResult?.reason || (input.assistant ? 'Neram Assistant did not send' : 'Teams chat did not send');
+      }
 
       // 1) Teams Activity-feed ping, only when no chat landed (chat first).
       let teams = false;
@@ -430,11 +519,16 @@ export async function sendNudge(
         console.error(`${eventType} notification insert threw:`, e);
       }
 
-      const parts = [chat ? 'chat' : '', teams ? 'teams' : '', inapp ? 'inapp' : ''].filter(Boolean);
+      const parts = [
+        chat ? (chatResult?.sender === 'assistant' ? 'assistant' : 'chat') : '',
+        teams ? 'teams' : '',
+        inapp ? 'inapp' : '',
+      ].filter(Boolean);
       return {
         studentId: sid,
         name: u.name,
         chat,
+        ...(chat && chatResult?.sender ? { chatSender: chatResult.sender } : {}),
         teams,
         inapp,
         ok: parts.length > 0,
@@ -488,7 +582,20 @@ export async function sendNudge(
  */
 export async function notifyUser(
   n: { user_id: string; event_type: string; title: string; message: string; metadata?: Record<string, unknown> | null },
-  opts: { teacher?: SendNudgeInput['teacher']; audience?: SendNudgeInput['audience'] } = {},
+  opts: {
+    teacher?: SendNudgeInput['teacher'];
+    audience?: SendNudgeInput['audience'];
+    /**
+     * The chat body, when the notice needs a clickable link.
+     *
+     * Without this, sendNudge's teacher branch falls back to
+     * automaticChatHtml(subject, plain), which has NO anchor, and plainToHtml
+     * escapes any URL pasted into `message` into inert characters. So a notice
+     * sent through this door could not carry a link at all until this option
+     * existed. Build it with plainToHtmlWithLink.
+     */
+    html?: string;
+  } = {},
 ): Promise<NudgeResult | null> {
   try {
     const { results } = await sendNudge({
@@ -498,6 +605,7 @@ export async function notifyUser(
       plain: n.message,
       eventType: n.event_type,
       metadata: n.metadata || undefined,
+      ...(opts.html ? { html: opts.html } : {}),
       ...(opts.teacher ? { teacher: opts.teacher } : {}),
       ...(opts.audience ? { audience: opts.audience } : {}),
       source: { kind: n.event_type },
@@ -525,6 +633,7 @@ async function writeReceipts(supabase: any, input: SendNudgeInput, results: Nudg
         ref_id: input.source?.refId ?? null,
         recipient_id: r.studentId,
         chat: r.chat,
+        bot: r.chatSender === 'assistant',
         teams: r.teams,
         inapp: r.inapp,
         channel: r.channel,

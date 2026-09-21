@@ -29,8 +29,6 @@ function round1(n: number): number {
   return Math.round(Number(n) * 10) / 10;
 }
 
-const MEDALS = ['1st', '2nd', '3rd'];
-
 export interface ExamPostInput {
   examTitle: string;
   classroomName: string | null;
@@ -100,10 +98,14 @@ export function buildExamResultSections(input: ExamPostInput): ShareSection[] {
     sections.push({
       id: 'exam_podium',
       heading: { emoji: '🏆', text: 'Top performers' },
-      lines: results.podium.map((row, i) => ({
-        text: `${MEDALS[i] ?? `${row.rank}th`}  ${row.student_name}  ${marks(row.score, row.total_marks)} (${pct(row.percentage)})`,
+      // Labelled from the RANK, never from the position in the list. Two
+      // students on the same percentage share a rank, so the podium reads
+      // "3rd" twice and the next one is 5th. Indexing by position printed
+      // "3th" for the fourth row and quietly promoted a joint third to second.
+      lines: results.podium.map((row) => ({
+        text: `${ordinal(row.rank)}  ${row.student_name}  ${marks(row.score, row.total_marks)} (${pct(row.percentage)})`,
         bullet: false,
-        strong: i === 0,
+        strong: row.rank === 1,
       })),
       toggleable: true,
       checkboxLabel: `Top ${results.podium.length}`,
@@ -141,31 +143,35 @@ export function buildExamResultSections(input: ExamPostInput): ShareSection[] {
 /**
  * The private message one student gets.
  *
- * Carries their rank, which the channel card never does for anyone outside the
- * top three. Plain text, because sendNudge fans out to a Teams activity ping,
- * an in-app row and an email, and the lowest common denominator has to read
- * well in all three.
+ * CARRIES NO NUMBERS, deliberately (founder, 2026-09-20). It used to spell out
+ * the score and the rank in the chat itself and link to nothing, so a student
+ * who wanted their section breakdown, the solutions, or somebody to ask had
+ * nowhere to go, while their marks sat in a Teams notification preview that
+ * anybody holding the phone could read. The message now says the result is
+ * ready and the link opens the page that already shows all of it.
  *
- * A second-sitting student is told their rank inside their own sitting and is
- * never told where they would have placed on exam day. That comparison turns
- * into "I would have come second" and undoes the reason for separating the
- * lists at all.
+ * The provisional warning stays in the chat. A student who opens a total that
+ * moves later deserves to know before they see it, not after.
+ *
+ * A second-sitting student is told they were in the second sitting and is never
+ * told where they would have placed on exam day. That comparison turns into "I
+ * would have come second" and undoes the reason for separating the lists.
  */
 export function buildStudentResultMessage(input: {
   examTitle: string;
-  row: RankedCandidate;
-  totalSat: number;
-  provisional: boolean;
-  passingPct: number | null;
+  /** False when no paper was recorded: still to sit it, or marked absent. */
+  hasPaper: boolean;
+  absent: boolean;
   /** Which sitting they were in. Null when they have no paper. */
   sitting: 'main' | 'second' | null;
+  provisional: boolean;
 }): { subject: string; plain: string } {
-  const { row, examTitle } = input;
+  const { examTitle } = input;
 
-  if (!row.attempt_id) {
+  if (!input.hasPaper) {
     // Two different situations, and conflating them is why this split exists:
     // a student whose window is still open has not missed anything yet.
-    if (!row.absent) {
+    if (!input.absent) {
       return {
         subject: `${examTitle}: results are out`,
         plain: `Results for ${examTitle} are out. Your window is still open, so your result is not in this list yet. Sit the paper and you will be ranked with the second sitting.`,
@@ -179,30 +185,10 @@ export function buildStudentResultMessage(input: {
 
   const lines: string[] = [
     `Results for ${examTitle} are out.`,
-    ...(input.sitting === 'second'
-      ? ['', 'You sat this in the second sitting, after your catch-up.']
-      : []),
+    ...(input.sitting === 'second' ? ['', 'You sat this in the second sitting, after your catch-up.'] : []),
     '',
-    `Your score: ${marks(row.score, row.total_marks)} (${pct(row.percentage)})`,
-    input.sitting === 'second'
-      ? `Your rank: ${ordinal(row.rank)} of ${input.totalSat} in the second sitting`
-      : `Your rank: ${ordinal(row.rank)} of ${input.totalSat}`,
+    'Your score, your rank and the answers are ready in Nexus.',
   ];
-
-  if (input.passingPct != null) {
-    lines.push(row.percentage >= input.passingPct ? 'You cleared the pass mark.' : 'You did not clear the pass mark this time.');
-  }
-
-  if (row.section_scores.length > 1) {
-    lines.push('', 'Section by section:');
-    for (const s of row.section_scores) {
-      lines.push(
-        s.ungraded > 0 && s.total_marks === 0
-          ? `  ${s.label}: still being marked`
-          : `  ${s.label}: ${marks(s.score, s.total_marks)}`,
-      );
-    }
-  }
 
   if (input.provisional) {
     lines.push('', 'This is provisional. Your drawing is still being marked, so your total can still change.');
@@ -211,6 +197,7 @@ export function buildStudentResultMessage(input: {
   return { subject: `${examTitle}: your result`, plain: lines.join('\n') };
 }
 
+/** "1st", "2nd", "3rd", "11th". Shared by the podium and the student message. */
 function ordinal(n: number | null): string {
   if (n == null) return 'unranked';
   const s = ['th', 'st', 'nd', 'rd'];

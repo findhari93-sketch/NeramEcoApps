@@ -16,6 +16,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   ui_ux: 'UI/UX',
   feature_request: 'Feature',
   class_schedule: 'Class/Schedule',
+  result_dispute: 'Result query',
   other: 'Other',
 };
 

@@ -4,7 +4,7 @@ import { Box, Typography, Paper, LinearProgress, Skeleton } from '@neram/ui';
 import ClassIcon from '@mui/icons-material/Class';
 
 interface DashboardData {
-  attendanceSummary: { total: number; attended: number; percentage: number };
+  attendanceSummary: { total: number; attended: number; percentage: number | null; sentence?: string };
   checklistProgress: { completed: number; total: number };
   topicProgress: { completed: number; total: number };
 }
@@ -53,11 +53,21 @@ export default function AcademicInfoSection({
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           {/* Attendance */}
+          {/* A null rate means nobody recorded it. Rendering 0% here would tell
+              a student they attended nothing because an admin never synced. */}
           <ProgressRow
             label="Attendance"
-            value={dashboardData.attendanceSummary.percentage}
-            displayValue={`${dashboardData.attendanceSummary.percentage}%`}
-            subtitle={`${dashboardData.attendanceSummary.attended} of ${dashboardData.attendanceSummary.total} classes`}
+            value={dashboardData.attendanceSummary.percentage ?? 0}
+            displayValue={
+              dashboardData.attendanceSummary.percentage === null
+                ? 'Not yet'
+                : `${dashboardData.attendanceSummary.percentage}%`
+            }
+            subtitle={
+              dashboardData.attendanceSummary.percentage === null
+                ? (dashboardData.attendanceSummary.sentence ?? 'Attendance has not been recorded yet')
+                : `${dashboardData.attendanceSummary.attended} of ${dashboardData.attendanceSummary.total} classes`
+            }
             color="primary"
           />
 

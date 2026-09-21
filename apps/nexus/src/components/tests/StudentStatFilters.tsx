@@ -44,6 +44,7 @@ export default function StudentStatFilters<K extends string = ResultFilter>({
   onChange,
   allKey = 'all' as K,
   phoneLayout = 'scroll',
+  ariaLabel = 'Filter students',
 }: {
   tiles: StatFilterTile<K>[];
   active: K;
@@ -52,12 +53,18 @@ export default function StudentStatFilters<K extends string = ResultFilter>({
   allKey?: K;
   /** 'scroll' is one snapping row; 'grid' wraps into two columns, for four or fewer tiles. */
   phoneLayout?: 'scroll' | 'grid';
+  /**
+   * What the tiles filter, for screen readers. Defaults to students because
+   * that is where this started, but the same tiles now filter a student's own
+   * classes, and announcing those as "Filter students" is simply wrong.
+   */
+  ariaLabel?: string;
 }) {
   const grid = phoneLayout === 'grid';
   return (
     <Box
       role="group"
-      aria-label="Filter students"
+      aria-label={ariaLabel}
       sx={{
         display: grid ? 'grid' : { xs: 'flex', md: 'grid' },
         gridTemplateColumns: grid

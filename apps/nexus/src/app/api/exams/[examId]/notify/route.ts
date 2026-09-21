@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getExamResultRows, markExamResultsNotified, isRankedResultRow } from '@neram/database';
+import { getExamResultRows, markExamResultsNotified } from '@neram/database';
 import { requireExamStaff } from '@/lib/exam-access';
 import { sendNudge } from '@/lib/nudge-delivery';
 import { buildStudentResultMessage } from '@/lib/exam-results-model';
+import { shareBaseUrl } from '@/lib/class-share-links';
 
 /**
  * Tell each student their own rank and marks.
@@ -14,8 +15,15 @@ import { buildStudentResultMessage } from '@/lib/exam-results-model';
  * made, so the two are separate calls and the dialog fires this immediately
  * after publish returns.
  *
- * Reads the SNAPSHOT rather than recomputing, so the rank a student is told
- * privately is byte-identical to the one the channel card was built from.
+ * Reads the SNAPSHOT rather than recomputing, so what a student is shown when
+ * they follow the link is the same row the channel card was built from.
+ *
+ * SENT BY NERAM ASSISTANT, not by whoever pressed Publish (founder, 2026-09-20).
+ * Nobody wrote this message, and sending it from a teacher's own Teams chat put
+ * exam results in the founder's personal thread with a student. The Assistant
+ * carries a link instead of the marks, so the numbers live on the page that can
+ * also explain them. While staff.assistant-sender is off, or the Teams manifest
+ * is not approved yet, this lands in the activity feed and the bell.
  *
  * The notified_at filter is also what makes the second sitting safe to publish
  * later: the exam day students are not messaged twice.
@@ -48,12 +56,16 @@ export async function POST(
       return NextResponse.json({ data: { notified: 0, already: rows.length } }, { status: 200 });
     }
 
-    // isRankedResultRow, not a predicate written out here, because the student's
-    // own card has to reach the same number and once did not: it said "Rank 3
-    // of 44" about the very result this message calls "3rd of 16".
-    const sizeOf = (sitting: 'main' | 'second') =>
-      rows.filter((r) => isRankedResultRow(r) && (r.sitting ?? 'main') === sitting).length;
-    const sittingSize = { main: sizeOf('main'), second: sizeOf('second') };
+    // The sitting sizes this used to compute are gone with the numbers: the
+    // rank now comes off the snapshot on the page itself, which is the only
+    // place it was ever safe to read it from. That also retires a real bug,
+    // where this message said "3rd of 16" and the student's own card said
+    // "Rank 3 of 44" about the same result.
+    //
+    // The page shows the caller their own result and nobody else's, so one url
+    // serves the whole batch.
+    const base = shareBaseUrl(request.nextUrl?.origin ?? null);
+    const resultUrl = exam.scheduled_class_id ? `${base}/student/timetable/${exam.scheduled_class_id}/exam` : '';
     const notified: string[] = [];
     const failed: string[] = [];
 
@@ -63,42 +75,16 @@ export async function POST(
         batch.map(async (row) => {
           try {
             const sitting = (row.sitting ?? 'main') as 'main' | 'second';
-            const size = sittingSize[sitting];
             const { subject, plain } = buildStudentResultMessage({
               examTitle: exam.title || 'Exam',
-              row: {
-                student_id: row.student_id,
-                student_name: '',
-                avatar_url: null,
-                attempt_id: row.attempt_id,
-                score: Number(row.score) || 0,
-                total_marks: Number(row.total_marks) || 0,
-                percentage: Number(row.percentage) || 0,
-                provisional: row.is_provisional,
-                absent: row.absent,
-                time_spent_seconds: null,
-                section_scores: Array.isArray(row.section_scores) ? (row.section_scores as any) : [],
-                rank: row.rank,
-                sitting: row.attempt_id ? sitting : null,
-                sitting_size: row.attempt_id ? size : 0,
-                bucket: row.attempt_id
-                  ? sitting === 'second'
-                    ? 'second_sitting'
-                    : 'exam_day'
-                  : row.absent
-                    ? 'absent'
-                    : 'still_to_sit',
-                window_closes_at: null,
-              },
-              totalSat: size,
-              provisional: row.is_provisional,
-              passingPct: exam.passing_pct == null ? null : Number(exam.passing_pct),
+              hasPaper: Boolean(row.attempt_id),
+              absent: row.absent,
               sitting: row.attempt_id ? sitting : null,
+              provisional: row.is_provisional,
             });
 
             await sendNudge({
-              // The teacher's own Teams chat (their connected login if this token cannot chat).
-              teacher: { authHeader: request.headers.get('Authorization'), userId: access.caller.id },
+              assistant: { ...(resultUrl ? { link: { url: resultUrl, label: 'See my result' } } : {}) },
               studentIds: [row.student_id],
               subject,
               plain,
@@ -108,6 +94,7 @@ export async function POST(
                 class_id: exam.scheduled_class_id,
                 rank: row.rank,
               },
+              source: { kind: 'exam_result', refId: params.examId },
             });
             notified.push(row.student_id);
           } catch (err) {

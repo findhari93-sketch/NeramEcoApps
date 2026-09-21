@@ -4,7 +4,10 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { Box, Skeleton, Typography, alpha, useTheme } from '@neram/ui';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import VideocamIcon from '@mui/icons-material/Videocam';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { type ClassCardData } from '../ClassCard';
+import { announce, compactLabel } from '@/lib/class-availability';
+import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
 import {
   type HolidayInfo,
   BREAK_HEIGHT,
@@ -48,7 +51,8 @@ interface GridViewProps {
   /** Teacher only: tapping an empty slot offers "schedule a class" / "mark holiday". */
   onSlotClick?: (date: string, startTime: string, event?: React.MouseEvent) => void;
   /** Teacher only: attending counts shown under the block title. */
-  rsvpData?: Record<string, { attending: number; total: number }>;
+  /** Expected headcount per class id. `total` is the roll minus the away. */
+  rsvpData?: Record<string, RsvpSummary>;
   /**
    * Where to park the scroll when the visible range holds no class, as "HH:MM".
    * Pass the configured window start: on a full-day band an empty week would
@@ -418,7 +422,12 @@ export default function GridView({
                     data-testid="grid-class-block"
                     role="button"
                     tabIndex={0}
-                    aria-label={`${cls.title}, ${formatTime(cls.start_time)} to ${formatTime(cls.end_time)}`}
+                    // A 116px column can only afford "18 of 22", and the away
+                    // count is carried by a 12px glyph that no screen reader
+                    // sees. The whole sentence goes here instead.
+                    aria-label={`${cls.title}, ${formatTime(cls.start_time)} to ${formatTime(cls.end_time)}${
+                      role === 'teacher' && rsvp ? `, ${announce(rsvp)}` : ''
+                    }`}
                     onClick={() => onClassClick?.(cls)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
@@ -524,9 +533,20 @@ export default function GridView({
                         }}
                       >
                         {role === 'teacher' && rsvp
-                          ? `${rsvp.attending} of ${rsvp.total} attending`
+                          ? compactLabel(rsvp)
                           : formatTime(cls.start_time)}
                       </Typography>
+                      {role === 'teacher' && rsvp && rsvp.away > 0 && (
+                        <EventBusyOutlinedIcon
+                          titleAccess={`${rsvp.away} away`}
+                          sx={{
+                            fontSize: 12,
+                            flexShrink: 0,
+                            color: isFeature ? 'inherit' : 'text.secondary',
+                            opacity: isFeature ? 0.85 : 1,
+                          }}
+                        />
+                      )}
                       {cls.teams_meeting_id && (
                         <VideocamIcon
                           sx={{

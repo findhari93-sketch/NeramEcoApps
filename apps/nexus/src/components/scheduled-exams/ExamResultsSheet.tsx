@@ -592,9 +592,17 @@ export default function ExamResultsSheet({
                 />
 
                 <Alert severity="info" icon={false}>
-                  <Typography variant="caption">
-                    Only the summary and the top three are named in the channel. Every student gets
-                    their own rank and marks privately, through their notifications.
+                  <Typography variant="caption" component="p">
+                    Only the summary and the top four are named in the channel. A tie brings both
+                    students in, so it can name five.
+                  </Typography>
+                  <Typography variant="caption" component="p" sx={{ mt: 0.75 }}>
+                    Everyone else is told privately that their result is ready, with a link to their
+                    own rank, marks and answers. The message names no numbers, so nothing sensitive
+                    sits in a notification preview.
+                  </Typography>
+                  <Typography variant="caption" component="p" sx={{ mt: 0.75 }}>
+                    Both go out as Neram Assistant, not from your own Teams account.
                   </Typography>
                 </Alert>
               </>

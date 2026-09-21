@@ -101,7 +101,14 @@ export async function notifyStudents(input: NotifyStudentsInput): Promise<Notify
       teamsText: input.teamsText || input.title,
       eventType: input.eventType,
       metadata: { classroom_id: input.classroomId, ...(input.metadata || {}) },
-      ...(input.teams === false ? { bellOnly: true } : input.teacher ? { teacher: input.teacher } : {}),
+      // A class notice is an announcement, not a conversation: the class was
+      // created, moved, cancelled, its recording is up, the week is published.
+      // Nobody wrote it to any one student, so it goes out as Neram Assistant,
+      // with the teacher who made the change as the fallback while the Assistant
+      // is switched off (founder, 2026-09-20).
+      ...(input.teams === false
+        ? { bellOnly: true }
+        : { assistant: { fallbackSenderUserId: input.teacher?.userId ?? null } }),
       source: { kind: input.eventType, refId: input.classroomId },
     });
     return { recipients: ids.length, teamsDelivered: counts.chat + counts.teams, inAppDelivered, topBarDelivered: counts.inapp };

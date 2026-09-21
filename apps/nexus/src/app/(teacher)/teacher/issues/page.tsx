@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -39,7 +40,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
-import SendIcon from '@mui/icons-material/Send';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
 import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
@@ -54,9 +54,12 @@ import CheckIcon from '@mui/icons-material/Check';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import CircleIcon from '@mui/icons-material/Circle';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import { buildIssueMarkdown, screenshotPublicUrls } from '@/lib/issue-report-bundle';
+import { renderFactsForTeacher, type ResultFacts } from '@/lib/exam-result-explain';
 import { copyScreenshotsToClipboard } from '@/lib/screenshot-clipboard';
 import type {
   NexusFoundationIssueWithDetails,
@@ -65,6 +68,10 @@ import type {
   NexusFoundationIssueActivity,
 } from '@neram/database/types';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import IssueThread from '@/components/issues/IssueThread';
+import IssueReplyComposer from '@/components/issues/IssueReplyComposer';
+import StudentTestCardPanel from '@/components/issues/StudentTestCardPanel';
+import { ISSUE_PARAM, findIssueForRef } from '@/lib/issue-link';
 
 const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   bug: { label: 'Bug', color: '#d32f2f' },
@@ -72,6 +79,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   ui_ux: { label: 'UI/UX', color: '#1976d2' },
   feature_request: { label: 'Feature', color: '#7b1fa2' },
   class_schedule: { label: 'Class', color: '#2e7d32' },
+  result_dispute: { label: 'Result', color: '#ed6c02' },
   other: { label: 'Other', color: '#757575' },
 };
 
@@ -87,7 +95,12 @@ interface StaffUser {
 export default function TeacherIssuesPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { getToken } = useNexusAuthContext();
+  // getTeacherToken as well as getToken: a reply has to leave here as a Teams
+  // chat from this person's own account, and only the teacher token carries
+  // ChatMessage.Send. getToken() would reach Graph, come back 403, and the
+  // student would silently get a bell and nothing else.
+  const { getToken, getTeacherToken, user } = useNexusAuthContext();
+  const searchParams = useSearchParams();
   const [issues, setIssues] = useState<NexusFoundationIssueWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
@@ -117,9 +130,10 @@ export default function TeacherIssuesPage() {
   // Resolve
   const [resolutionNote, setResolutionNote] = useState('');
 
-  // Comment
-  const [comment, setComment] = useState('');
-  const [commentSending, setCommentSending] = useState(false);
+  // Ask the reporter to check it again
+  const [recheckOpen, setRecheckOpen] = useState(false);
+  const [recheckNote, setRecheckNote] = useState('');
+  const [recheckSending, setRecheckSending] = useState(false);
 
   // More actions menu
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -207,6 +221,37 @@ export default function TeacherIssuesPage() {
     fetchIssues();
   }, []);
 
+  /**
+   * ?issue=NXS-0125 opens that ticket.
+   *
+   * The address a Teams message and a bell entry both point at, built by
+   * issue-link.ts. Runs once per reference: without the ref the drawer would
+   * reopen every time the list refetched, which makes the ticket impossible to
+   * close while the link is still in the address bar.
+   *
+   * The tab moves to All first, because a link is just as likely to name a
+   * closed or awaiting ticket as an open one, and a link that lands on an empty
+   * list is worse than no link.
+   */
+  const deepLinkedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const ref = searchParams?.get(ISSUE_PARAM);
+    if (!ref || issues.length === 0 || deepLinkedRef.current === ref) return;
+    const match = findIssueForRef(issues, ref);
+    if (!match) return;
+    deepLinkedRef.current = ref;
+    setTab(3);
+    openIssueDetail(match);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, issues]);
+
+  /** A reply written after the last time anyone on the team opened this ticket. */
+  function hasUnreadReply(issue: NexusFoundationIssueWithDetails): boolean {
+    if (!issue.last_reply_at) return false;
+    if (!issue.staff_seen_at) return true;
+    return new Date(issue.last_reply_at) > new Date(issue.staff_seen_at);
+  }
+
   async function fetchIssues() {
     setLoading(true);
     try {
@@ -231,7 +276,9 @@ export default function TeacherIssuesPage() {
     try {
       const token = await getToken();
       if (!token) return;
-      const res = await fetch(`/api/foundation/issues/${issueId}`, {
+      // seen=1 clears the team's unread mark on this ticket. On the GET the
+      // page already makes, so opening a ticket costs no extra request.
+      const res = await fetch(`/api/foundation/issues/${issueId}?seen=1`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -350,32 +397,63 @@ export default function TeacherIssuesPage() {
     setMenuAnchor(null);
   }
 
-  async function handleComment() {
-    if (!selectedIssue || !comment.trim()) return;
-    setCommentSending(true);
+  /**
+   * Reply on the ticket, and reach the student.
+   *
+   * The teacher token is the whole point: the route turns it into a Teams 1:1
+   * chat from this staff member's own account, so the student has a person to
+   * answer rather than a system message. An internal note skips all of that.
+   *
+   * Throws on failure so the composer keeps the draft in the box.
+   */
+  async function handleSendComment(text: string, internal: boolean) {
+    if (!selectedIssue) return;
+    const token = internal ? await getToken() : await getTeacherToken();
+    if (!token) throw new Error('Not signed in');
+    const res = await fetch(`/api/foundation/issues/${selectedIssue.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'comment', comment: text, internal }),
+    });
+    if (!res.ok) {
+      setSnackbar({ open: true, message: 'Could not send that reply. Try again.' });
+      throw new Error('comment failed');
+    }
+    setSnackbar({
+      open: true,
+      message: internal ? 'Internal note saved' : 'Reply sent to the student on Teams',
+    });
+    fetchIssueDetail(selectedIssue.id);
+    fetchIssues();
+  }
+
+  /** Ask the reporter to try it again and say whether it is fixed. */
+  async function handleRecheck() {
+    if (!selectedIssue) return;
+    setRecheckSending(true);
     try {
-      const token = await getToken();
-      if (!token) return;
+      const token = await getTeacherToken();
+      if (!token) throw new Error('Not signed in');
       const res = await fetch(`/api/foundation/issues/${selectedIssue.id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'comment', comment: comment.trim() }),
+        body: JSON.stringify({ action: 'recheck', note: recheckNote.trim() }),
       });
-      if (res.ok) {
-        setComment('');
-        fetchIssueDetail(selectedIssue.id);
-      }
+      if (!res.ok) throw new Error('recheck failed');
+      setRecheckOpen(false);
+      setRecheckNote('');
+      setSnackbar({ open: true, message: 'Asked them to check it and reply on the ticket' });
+      fetchIssueDetail(selectedIssue.id);
     } catch {
-      // ignore
+      setSnackbar({ open: true, message: 'Could not send that. Try again.' });
     } finally {
-      setCommentSending(false);
+      setRecheckSending(false);
     }
   }
 
   function openIssueDetail(issue: NexusFoundationIssueWithDetails) {
     setSelectedIssue(issue);
     setResolutionNote('');
-    setComment('');
     fetchIssueDetail(issue.id);
   }
 
@@ -430,22 +508,6 @@ export default function TeacherIssuesPage() {
     });
   };
 
-  const actionLabel = (action: string) => {
-    const labels: Record<string, string> = {
-      created: 'reported this issue',
-      assigned: 'assigned this issue',
-      accepted: 'accepted this issue',
-      delegated: 'delegated this issue',
-      returned: 'returned this issue',
-      marked_in_progress: 'marked as in progress',
-      resolved: 'resolved this issue',
-      reopened: 'reopened this issue',
-      comment: 'commented',
-      confirmed: 'confirmed this issue is resolved',
-      auto_closed: 'auto-closed (no response after 3 days)',
-    };
-    return labels[action] || action;
-  };
 
   const openCount = issues.filter((i) => i.status === 'open').length;
   const inProgressCount = issues.filter((i) => i.status === 'in_progress').length;
@@ -459,120 +521,28 @@ export default function TeacherIssuesPage() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1.5 }}>
         <TimelineIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-          ACTIVITY
+          CONVERSATION
         </Typography>
       </Box>
-      {activityLoading ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {[1, 2].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={40} sx={{ borderRadius: 1 }} />
-          ))}
-        </Box>
-      ) : activity.length === 0 ? (
-        <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-          No activity yet.
-        </Typography>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {activity.map((a, idx) => (
-            <Box
-              key={a.id}
-              sx={{
-                display: 'flex',
-                gap: 1.5,
-                position: 'relative',
-                pb: idx < activity.length - 1 ? 2 : 0,
-                '&::before':
-                  idx < activity.length - 1
-                    ? {
-                        content: '""',
-                        position: 'absolute',
-                        left: 11,
-                        top: 24,
-                        bottom: 0,
-                        width: 2,
-                        bgcolor: alpha(theme.palette.divider, 0.5),
-                      }
-                    : undefined,
-              }}
-            >
-              <Avatar
-                sx={{
-                  width: 24,
-                  height: 24,
-                  fontSize: '0.65rem',
-                  bgcolor:
-                    a.action === 'resolved'
-                      ? theme.palette.success.main
-                      : a.action === 'comment'
-                        ? theme.palette.info.main
-                        : theme.palette.grey[400],
-                  flexShrink: 0,
-                }}
-              >
-                {a.actor_name?.charAt(0) || '?'}
-              </Avatar>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="caption" sx={{ lineHeight: 1.4 }}>
-                  <strong>{a.actor_name || 'Unknown'}</strong>{' '}
-                  {actionLabel(a.action)}
-                  {a.target_user_name && (
-                    <>
-                      {' to '}
-                      <strong>{a.target_user_name}</strong>
-                    </>
-                  )}
-                </Typography>
-                {a.reason && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: 'block',
-                      color: 'text.secondary',
-                      fontStyle: 'italic',
-                      mt: 0.25,
-                    }}
-                  >
-                    &quot;{a.reason}&quot;
-                  </Typography>
-                )}
-                <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', fontSize: '0.65rem' }}>
-                  {formatTimestamp(a.created_at)}
-                </Typography>
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      )}
 
-      {/* Comment input */}
+      {/* The same component the student reads, so neither side is looking at a
+          different record of the same exchange. showInternal is a staff view of
+          rows a student is never served in the first place. */}
+      <IssueThread
+        activity={activity}
+        viewerId={user?.id || null}
+        loading={activityLoading}
+        showInternal
+        emptyText="Nothing said yet. A reply here reaches the student on Teams."
+      />
+
       {selectedIssue && selectedIssue.status !== 'closed' && (
-        <Box sx={{ display: 'flex', gap: 1, mt: 2, alignItems: 'flex-end' }}>
-          <TextField
-            placeholder="Add a comment..."
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            size="small"
-            fullWidth
-            multiline
-            maxRows={3}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleComment();
-              }
-            }}
-          />
-          <IconButton
-            size="small"
-            color="primary"
-            onClick={handleComment}
-            disabled={commentSending || !comment.trim()}
-            sx={{ minWidth: 36, minHeight: 36 }}
-          >
-            {commentSending ? <CircularProgress size={18} /> : <SendIcon fontSize="small" />}
-          </IconButton>
-        </Box>
+        <IssueReplyComposer
+          onSend={handleSendComment}
+          placeholder="Reply to the student..."
+          allowInternal
+          helperText="Sends a Teams chat from your account and a Nexus alert, with a link back to this ticket."
+        />
       )}
     </Box>
   );
@@ -640,6 +610,15 @@ export default function TeacherIssuesPage() {
 
       {/* Reproduce the issue exactly as the student sees it */}
       <Box sx={{ mb: 1.5 }}>
+        {/* The cheap answer first: the sentence she is reading right now.
+            Impersonating her is the expensive one, and sits under it. */}
+        {selectedIssue.student_id && (
+          <StudentTestCardPanel
+            studentId={selectedIssue.student_id}
+            firstName={(selectedIssue.student_name || 'this student').trim().split(/\s+/)[0]}
+          />
+        )}
+
         <ViewAsStudentButton
           studentId={selectedIssue.student_id}
           reason={`Ticket ${selectedIssue.ticket_number}`}
@@ -789,6 +768,40 @@ export default function TeacherIssuesPage() {
         </Box>
       )}
 
+      {/*
+        The working behind a queried result.
+        Rendered from the SAME function that wrote the Teams message the teacher
+        already received, so the ticket and the chat can never drift apart and
+        say two different things about one student's marks.
+      */}
+      {selectedIssue.category === 'result_dispute' && Boolean(selectedIssue.context?.facts) && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 0.5 }}>
+            HOW THIS RESULT WAS WORKED OUT
+          </Typography>
+          <Box
+            sx={{
+              p: 1.5,
+              borderRadius: 2,
+              border: 1,
+              borderColor: 'divider',
+              bgcolor: 'action.hover',
+              // A long line wraps instead of scrolling the panel sideways.
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
+            }}
+          >
+            <Typography variant="body2" sx={{ lineHeight: 1.6, fontVariantNumeric: 'tabular-nums' }}>
+              {renderFactsForTeacher(
+                selectedIssue.context?.facts as ResultFacts,
+                selectedIssue.student_name || 'This student',
+                selectedIssue.description || '',
+              )}
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
       {/* Screenshots */}
       {selectedIssue?.screenshot_urls && selectedIssue.screenshot_urls.length > 0 && (
         <Box sx={{ mt: 2 }}>
@@ -921,6 +934,25 @@ export default function TeacherIssuesPage() {
             <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.5 }}>
               {formatTimestamp(selectedIssue.resolved_at)}
             </Typography>
+          )}
+          {/* The answer to "is it actually fixed for her". Nobody on this side
+              can watch an hour of recording as the student, so the person who
+              can is asked, on Teams, with a link straight back here. */}
+          {selectedIssue.status !== 'closed' && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="success"
+              fullWidth
+              startIcon={<HelpOutlineIcon sx={{ fontSize: '1rem' }} />}
+              onClick={() => {
+                setRecheckNote('');
+                setRecheckOpen(true);
+              }}
+              sx={{ textTransform: 'none', minHeight: 44, mt: 1.5 }}
+            >
+              Ask them to check it again
+            </Button>
           )}
         </Box>
       ) : (
@@ -1200,6 +1232,16 @@ export default function TeacherIssuesPage() {
                     )}
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
+                    {/* A reply nobody on the team has opened. Shape as well as
+                        colour, so it still reads without colour vision. */}
+                    {hasUnreadReply(issue) && (
+                      <Tooltip title="New reply on this ticket">
+                        <CircleIcon
+                          aria-label="New reply"
+                          sx={{ fontSize: '0.6rem', color: 'primary.main', flexShrink: 0 }}
+                        />
+                      </Tooltip>
+                    )}
                     <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }} noWrap>
                       {issue.title}
                     </Typography>
@@ -1474,6 +1516,41 @@ export default function TeacherIssuesPage() {
       </Dialog>
 
       {/* Success Snackbar */}
+      {/* Ask the reporter to re-check */}
+      <Dialog open={recheckOpen} onClose={() => setRecheckOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Ask them to check it again</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+            Sends a Teams chat from your account and a Nexus alert, with a link back to this
+            ticket. It asks them to try it once more and answer here, not in the chat.
+          </Typography>
+          <TextField
+            label="Anything to add (optional)"
+            placeholder="Try opening the test again now and tell us what it says."
+            value={recheckNote}
+            onChange={(e) => setRecheckNote(e.target.value)}
+            fullWidth
+            multiline
+            rows={3}
+            sx={{ '& .MuiInputBase-input': { fontSize: 16 } }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setRecheckOpen(false)} sx={{ textTransform: 'none', minHeight: 44 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleRecheck}
+            disabled={recheckSending}
+            startIcon={recheckSending ? <CircularProgress size={16} /> : <HelpOutlineIcon />}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            {recheckSending ? 'Sending...' : 'Send the ask'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={snackbar.open}
         autoHideDuration={3000}

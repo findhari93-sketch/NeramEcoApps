@@ -7,6 +7,7 @@ import GridView from './GridView';
 import DayStrip from '../DayStrip';
 import { formatDateISO, type HolidayInfo, type ResolvedBand, type WeekDates } from '../date-utils';
 import { type ClassCardData } from '../ClassCard';
+import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
 
 interface DayViewProps {
   classes: ClassCardData[];
@@ -29,7 +30,7 @@ interface DayViewProps {
   role: 'teacher' | 'student' | 'parent';
   onClassClick?: (cls: ClassCardData) => void;
   onSlotClick?: (date: string, startTime: string, event?: React.MouseEvent) => void;
-  rsvpData?: Record<string, { attending: number; total: number }>;
+  rsvpData?: Record<string, RsvpSummary>;
   scrollToTime?: string;
 }
 

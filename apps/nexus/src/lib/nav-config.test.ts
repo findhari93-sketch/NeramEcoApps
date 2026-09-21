@@ -53,22 +53,48 @@ describe('nav-config: every desktop item is reachable on a phone', () => {
     const management = PANELS.find((p) => p.id === 'management')!;
     expect(paths(panelOverflow(management))).toEqual(
       expect.arrayContaining([
-        '/teacher/catch-up',
         '/teacher/study-materials',
         '/teacher/study-materials/feedback',
         '/teacher/devices',
       ]),
     );
 
+    // Catch-up moved to Teaching, beside the Attendance screen that sends
+    // teachers to it. It still has to be reachable on a phone from there.
     const teaching = PANELS.find((p) => p.id === 'teaching')!;
     expect(paths(panelOverflow(teaching))).toEqual(
-      expect.arrayContaining(['/teacher/curriculum', '/teacher/course-plans']),
+      expect.arrayContaining(['/teacher/curriculum', '/teacher/course-plans', '/teacher/catch-up']),
     );
 
     const study = ZONES.find((z) => z.id === 'study')!;
     expect(paths(zoneOverflow(study))).toEqual(
       expect.arrayContaining(['/student/study-materials/starred', '/student/resources']),
     );
+  });
+
+  /**
+   * The Classes family. Attendance is marked inside Timetable and chased in
+   * Catch-up, so all three belong to one group in one panel. Splitting them
+   * again (Catch-up back to Management especially) is what this asserts against:
+   * both follow-up links on the Attendance standing rows point at Catch-up, and
+   * a cross-panel link swaps the entire sidebar mid-task.
+   */
+  it('keeps Timetable, Attendance and Catch-up in one Classes group in Teaching', () => {
+    const teaching = PANELS.find((p) => p.id === 'teaching')!;
+    const classes = groupNavItems(teaching.sidebarItems).find((g) => g.label === 'Classes');
+    expect(paths(classes?.items ?? [])).toEqual([
+      '/teacher/timetable',
+      '/teacher/attendance',
+      '/teacher/catch-up',
+    ]);
+
+    const management = PANELS.find((p) => p.id === 'management')!;
+    expect(paths(flattenNavItems(management.sidebarItems))).not.toContain('/teacher/catch-up');
+  });
+
+  it('lists the inactivity watchlist somewhere, so it is not an orphan', () => {
+    const everywhere = PANELS.flatMap((p) => paths(flattenNavItems(p.sidebarItems)));
+    expect(everywhere).toContain('/teacher/students/watchlist');
   });
 
   it('keeps Catch-up in the student Classroom More sheet', () => {
@@ -261,19 +287,36 @@ describe('groupNavItems', () => {
   });
 });
 
-describe('nav-config: Inspiration', () => {
-  it('is reachable on a phone from both student zones', () => {
+describe('nav-config: Drawings is one destination', () => {
+  it('gives each student zone exactly one Drawings item, reachable on a phone', () => {
     for (const zone of ZONES) {
+      const all = zone.navGroups.flatMap((g) => g.items.map((i) => i.path));
+      expect(all.filter((path) => path === '/student/sketchbook'), `${zone.id} zone`).toHaveLength(1);
       const mobile = [...paths(zone.bottomNavItems), ...paths(zoneOverflow(zone))];
-      expect(mobile, `${zone.id} zone`).toContain('/student/inspiration');
+      expect(mobile, `${zone.id} zone`).toContain('/student/sketchbook');
     }
   });
 
   it('sits with student work in the Teaching panel, reachable on a phone', () => {
     const teaching = PANELS.find((p) => p.id === 'teaching')!;
-    const item = teaching.sidebarItems.find((i) => i.path === '/teacher/inspiration');
+    const item = teaching.sidebarItems.find((i) => i.path === '/teacher/sketchbook');
     expect(item?.group).toBe('Student work');
-    expect([...paths(panelBottomNav(teaching)), ...paths(panelOverflow(teaching))]).toContain('/teacher/inspiration');
+    expect(item?.label).toBe('Drawings');
+    expect([...paths(panelBottomNav(teaching)), ...paths(panelOverflow(teaching))]).toContain('/teacher/sketchbook');
+  });
+
+  it('no longer offers Inspiration as a second door beside it', () => {
+    // Sketchbook and Inspiration were two items in the same group, which asked
+    // every teacher and every student to know the difference before they had
+    // opened either. Inspiration keeps its own route, because it carries a URL
+    // full of filters and a page per drawing, but it is a tab now, not a
+    // destination of its own.
+    const teaching = PANELS.find((p) => p.id === 'teaching')!;
+    expect(teaching.sidebarItems.map((i) => i.path)).not.toContain('/teacher/inspiration');
+    for (const zone of ZONES) {
+      const all = zone.navGroups.flatMap((g) => g.items.map((i) => i.path));
+      expect(all, `${zone.id} zone`).not.toContain('/student/inspiration');
+    }
   });
 });
 

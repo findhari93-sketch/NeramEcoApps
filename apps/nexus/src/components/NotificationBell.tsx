@@ -33,6 +33,7 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   scholarship_opened: '#2196f3',
   scholarship_revision_requested: '#ff5722',
   foundation_issue_reported: '#ed6c02',
+  result_dispute_raised: '#ed6c02',
   foundation_issue_resolved: '#4caf50',
   foundation_issue_awaiting_confirmation: '#2196f3',
   foundation_issue_in_progress: '#2196f3',
@@ -40,6 +41,10 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   foundation_issue_delegated: '#ff9800',
   foundation_issue_reopened: '#f44336',
   foundation_issue_closed: '#4caf50',
+  foundation_issue_comment: '#0ea5e9',
+  // Amber, and louder than a plain reply on purpose: this one asks the reader
+  // to go and do something before the ticket can close.
+  foundation_issue_recheck_requested: '#ed6c02',
   assignment_nudge: '#7c3aed',
   assignment_reviewed: '#2E7D32',
   study_material_nudge: '#0ea5e9',
@@ -80,6 +85,17 @@ function getNavigationUrl(
       if (classroomId) return `/${nexusRole || 'student'}/classrooms/${classroomId}`;
       return `/${nexusRole || 'student'}/classrooms`;
     }
+    // A reply on a ticket, in either direction. metadata.href is written by the
+    // route from issue-link.ts, so the student lands on /student/issues and the
+    // staff member on /teacher/issues from the SAME event type, each with the
+    // ticket already open. The fallback is the bare list, never null: an
+    // unmapped row renders and then does nothing when tapped.
+    case 'foundation_issue_comment':
+    case 'foundation_issue_recheck_requested': {
+      const href = notification.metadata?.href as string | undefined;
+      if (href && href.startsWith('/')) return href;
+      return `/${nexusRole || 'student'}/issues`;
+    }
     // Foundation issue notifications → navigate to issues page
     case 'foundation_issue_resolved':
     case 'foundation_issue_awaiting_confirmation':
@@ -87,10 +103,19 @@ function getNavigationUrl(
     case 'foundation_issue_assigned':
     case 'foundation_issue_delegated':
     case 'foundation_issue_reopened':
-    case 'foundation_issue_closed':
+    case 'foundation_issue_closed': {
+      const href = notification.metadata?.href as string | undefined;
+      if (href && href.startsWith('/')) return href;
       return `/${nexusRole || 'student'}/issues`;
+    }
     case 'foundation_issue_reported':
       return `/${nexusRole || 'teacher'}/issues`;
+    // A student asking about their own published result. Staff only: it lands
+    // on the ticket, which carries the working behind that result.
+    case 'result_dispute_raised': {
+      const issueId = notification.metadata?.issue_id as string | undefined;
+      return issueId ? `/teacher/issues?issue=${issueId}` : '/teacher/issues';
+    }
     // Assignment reminder → open the assignment it was about.
     case 'assignment_nudge': {
       const ids = notification.metadata?.assignment_ids as string[] | undefined;

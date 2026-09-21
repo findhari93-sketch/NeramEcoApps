@@ -8,6 +8,9 @@ import {
   getExpiredAwaitingIssues,
   getStudentFoundationIssues,
   getAllFoundationIssues,
+  addIssueComment,
+  getIssueActivityLog,
+  markIssueSeen,
 } from '../nexus/foundation';
 
 /**
@@ -164,6 +167,57 @@ describe('createFoundationIssue', () => {
 
     expect(mock.insert).toHaveBeenCalledWith(
       expect.objectContaining({ chapter_id: null })
+    );
+  });
+
+  // A column the database may not have yet.
+  //
+  // `context` arrived with result disputes and lives in its own migration. While
+  // that migration was unapplied, EVERY ticket creation answered 500, including
+  // the report button that has nothing to do with disputes, because the insert
+  // named the column whether or not the caller had anything to put in it.
+  // PostgREST refuses an unknown column outright (PGRST204), so one feature's
+  // pending migration took the whole reporting flow down with it.
+  //
+  // Naming a key only when there is a value to put in it keeps each optional
+  // column's blast radius to the callers that actually use it.
+  test('omits context when the caller passes none', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-4', status: 'open' }, error: null });
+
+    await createFoundationIssue(
+      {
+        student_id: 'student-1',
+        title: 'Report a problem',
+        description: 'The page is blank',
+      },
+      mock
+    );
+
+    // The first insert is the ticket itself; the second is its activity row.
+    const payload = mock.insert.mock.calls[0][0];
+    expect(Object.keys(payload)).not.toContain('context');
+  });
+
+  test('sends context when the caller supplies it', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-5', status: 'open' }, error: null });
+
+    await createFoundationIssue(
+      {
+        student_id: 'student-1',
+        title: 'Result query',
+        description: 'My percentage looks wrong',
+        category: 'result_dispute',
+        context: { exam_id: 'exam-1', facts: { marks: 42 } },
+      },
+      mock
+    );
+
+    expect(mock.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: { exam_id: 'exam-1', facts: { marks: 42 } },
+      })
     );
   });
 });
@@ -432,5 +486,109 @@ describe('getAllFoundationIssues', () => {
     await getAllFoundationIssues({ assigned_to: 'teacher-1' }, mock);
 
     expect(mock.eq).toHaveBeenCalledWith('assigned_to', 'teacher-1');
+  });
+});
+
+// ============================================
+// addIssueComment (the conversation)
+// ============================================
+
+describe('addIssueComment', () => {
+  test('is visible to the student by default, because a comment is a message', async () => {
+    const { mock } = createChainableMock();
+
+    await addIssueComment('issue-1', 'teacher-1', 'Try it again now', undefined, mock);
+
+    expect(mock.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_id: 'issue-1',
+        actor_id: 'teacher-1',
+        action: 'comment',
+        reason: 'Try it again now',
+        visible_to_student: true,
+      }),
+    );
+  });
+
+  test('an internal note is written staff-only', async () => {
+    const { mock } = createChainableMock();
+
+    await addIssueComment('issue-1', 'teacher-1', 'Same as NXS-0119', { visibleToStudent: false }, mock);
+
+    expect(mock.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ visible_to_student: false }),
+    );
+  });
+
+  test('a visible comment stamps last_reply_at, which is what the badge reads', async () => {
+    const { mock } = createChainableMock();
+
+    await addIssueComment('issue-1', 'teacher-1', 'Fixed now', undefined, mock);
+
+    const stamped = mock.update.mock.calls.find((c: any[]) => 'last_reply_at' in (c[0] || {}));
+    expect(stamped).toBeTruthy();
+    expect(typeof stamped[0].last_reply_at).toBe('string');
+  });
+
+  test('an internal note does not stamp last_reply_at: nobody is waiting on it', async () => {
+    const { mock } = createChainableMock();
+
+    await addIssueComment('issue-1', 'teacher-1', 'internal', { visibleToStudent: false }, mock);
+
+    const stamped = mock.update.mock.calls.find((c: any[]) => 'last_reply_at' in (c[0] || {}));
+    expect(stamped).toBeUndefined();
+  });
+});
+
+// ============================================
+// getIssueActivityLog
+// ============================================
+
+describe('getIssueActivityLog', () => {
+  test('serves staff the whole log', async () => {
+    const { mock } = createChainableMock();
+    mock.then = vi.fn((resolve: any) => resolve({ data: [], error: null }));
+
+    await getIssueActivityLog('issue-1', undefined, mock);
+
+    expect(mock.eq).toHaveBeenCalledWith('issue_id', 'issue-1');
+    expect(mock.eq).not.toHaveBeenCalledWith('visible_to_student', true);
+  });
+
+  test('filters internal rows out of a student payload in the DATABASE, not the UI', async () => {
+    const { mock } = createChainableMock();
+    mock.then = vi.fn((resolve: any) => resolve({ data: [], error: null }));
+
+    await getIssueActivityLog('issue-1', { visibleToStudentOnly: true }, mock);
+
+    expect(mock.eq).toHaveBeenCalledWith('visible_to_student', true);
+  });
+});
+
+// ============================================
+// markIssueSeen
+// ============================================
+
+describe('markIssueSeen', () => {
+  test('clears the student mark without touching the staff one', async () => {
+    const { mock } = createChainableMock();
+
+    await markIssueSeen('issue-1', 'student', mock);
+
+    const [payload] = mock.update.mock.calls[0];
+    expect(payload).toHaveProperty('student_seen_at');
+    expect(payload).not.toHaveProperty('staff_seen_at');
+    // Reading a ticket is not a change to it.
+    expect(payload).not.toHaveProperty('updated_at');
+  });
+
+  test('clears the staff mark without touching the student one', async () => {
+    const { mock } = createChainableMock();
+
+    await markIssueSeen('issue-1', 'staff', mock);
+
+    const [payload] = mock.update.mock.calls[0];
+    expect(payload).toHaveProperty('staff_seen_at');
+    expect(payload).not.toHaveProperty('student_seen_at');
   });
 });

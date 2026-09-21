@@ -710,6 +710,13 @@ export async function createFoundationIssue(
     title: string;
     description: string;
     category?: FoundationIssueCategory;
+    /**
+     * Staff-facing facts captured when the ticket was raised, so a dispute can
+     * be answered from the ticket rather than from a database session. For a
+     * result_dispute: which attempt was counted, the marks, the rank and its
+     * sitting, the pass bar, and the student's other attempts.
+     */
+    context?: Record<string, unknown>;
     page_url?: string;
     screenshot_urls?: string[];
     // Auto-captured technical context (staff-only).
@@ -729,6 +736,20 @@ export async function createFoundationIssue(
       title: data.title,
       description: data.description,
       category: data.category || 'other',
+      // Named only when there is something to put in it.
+      //
+      // `context` belongs to result disputes and ships in a migration of its
+      // own. While that migration was unapplied, naming the column here made
+      // PostgREST refuse EVERY ticket insert (PGRST204, column not in the
+      // schema cache), so the ordinary "Report a problem" button answered 500
+      // for a feature it does not use. Omitting the key is identical to
+      // sending null, since the column defaults to null, and it keeps an
+      // optional column's blast radius on the callers that actually pass it.
+      // A dispute that really carries context still fails loudly if the
+      // migration is missing, which is the right way round.
+      ...(data.context === undefined
+        ? {}
+        : { context: data.context as unknown as Json }),
       page_url: data.page_url || null,
       screenshot_urls: data.screenshot_urls || null,
       console_logs: (data.console_logs ?? null) as unknown as Json,
@@ -739,13 +760,32 @@ export async function createFoundationIssue(
     .single();
   if (error) throw error;
 
-  // Log the creation activity
-  await supabase.from('nexus_foundation_issue_activity').insert({
-    issue_id: issue.id,
-    actor_id: data.student_id,
-    action: 'created',
-    new_status: 'open',
-  });
+  // Log the creation activity.
+  //
+  // Deliberately not thrown on: the ticket already exists, and failing the
+  // request here would tell the student their report did not go through when
+  // it did. But it is no longer ignored either. This insert names
+  // visible_to_student, so on a database that has not had the conversation
+  // migration applied it fails every single time, and an unchecked insert
+  // turns that into tickets whose thread quietly has no opening line. The log
+  // line is the difference between a schema gap you can see in Vercel and one
+  // nobody finds for a month.
+  const { error: activityError } = await supabase
+    .from('nexus_foundation_issue_activity')
+    .insert({
+      issue_id: issue.id,
+      actor_id: data.student_id,
+      action: 'created',
+      new_status: 'open',
+      // The student's own "I reported this" line. It opens their thread.
+      visible_to_student: true,
+    });
+  if (activityError) {
+    console.error(
+      `createFoundationIssue: ticket ${issue.id} was created but its opening activity row was not`,
+      activityError
+    );
+  }
 
   return issue as unknown as NexusFoundationIssue;
 }
@@ -931,6 +971,9 @@ export async function resolveFoundationIssue(
     old_status: 'in_progress',
     new_status: 'awaiting_confirmation',
     reason: resolutionNote,
+    // The resolution note is written FOR the reporter, and the ticket then asks
+    // them to confirm it. Hiding it would leave them a question with no answer.
+    visible_to_student: true,
   });
 
   return data as unknown as NexusFoundationIssue;
@@ -960,6 +1003,7 @@ export async function confirmFoundationIssue(
     action: 'confirmed',
     old_status: 'awaiting_confirmation',
     new_status: 'closed',
+    visible_to_student: true,
   });
 
   return data as unknown as NexusFoundationIssue;
@@ -994,6 +1038,8 @@ export async function reopenFoundationIssue(
     old_status: 'awaiting_confirmation',
     new_status: 'open',
     reason,
+    // The student wrote this reason themselves, so it is theirs to see.
+    visible_to_student: true,
   });
 
   return data as unknown as NexusFoundationIssue;
@@ -1067,6 +1113,10 @@ export async function updateFoundationIssueStatus(
     action,
     old_status: current?.status || null,
     new_status: status,
+    // A bare status move carries no words, so nothing here can leak. Showing it
+    // is what makes the student's thread read as a history rather than as a
+    // conversation with gaps in it.
+    visible_to_student: true,
   });
 
   return data as unknown as NexusFoundationIssue;
@@ -1092,20 +1142,32 @@ export async function updateFoundationIssuePriority(
 // ISSUE ACTIVITY LOG
 // ============================================
 
+/**
+ * The ticket's timeline.
+ *
+ * `visibleToStudentOnly` filters HERE rather than in the route, so there is one
+ * place to audit and no way for a second caller to forget. Internal notes name
+ * staff and carry delegation reasons; a student must not receive them at all,
+ * not merely fail to see them on a screen.
+ */
 export async function getIssueActivityLog(
   issueId: string,
+  opts?: { visibleToStudentOnly?: boolean },
   client?: TypedSupabaseClient
 ): Promise<NexusFoundationIssueActivity[]> {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('nexus_foundation_issue_activity')
     .select(`
       *,
       actor:users!nexus_foundation_issue_activity_actor_id_fkey(name),
       target:users!nexus_foundation_issue_activity_target_user_id_fkey(name)
     `)
-    .eq('issue_id', issueId)
-    .order('created_at', { ascending: true });
+    .eq('issue_id', issueId);
+  if (opts?.visibleToStudentOnly) {
+    query = query.eq('visible_to_student', true);
+  }
+  const { data, error } = await query.order('created_at', { ascending: true });
   if (error) throw error;
   return (data || []).map((row: any) => ({
     ...row,
@@ -1116,13 +1178,23 @@ export async function getIssueActivityLog(
   }));
 }
 
+/**
+ * One message on a ticket.
+ *
+ * Visible by default, because a comment is a message: the staff-only case is the
+ * exception and says so at the call site. A visible row also stamps
+ * `last_reply_at`, which is the only thing the nav badge looks at, so the stamp
+ * and the row are written by the same function and cannot come apart.
+ */
 export async function addIssueComment(
   issueId: string,
   actorId: string,
   comment: string,
+  opts?: { visibleToStudent?: boolean },
   client?: TypedSupabaseClient
 ): Promise<NexusFoundationIssueActivity> {
   const supabase = client || getSupabaseAdminClient();
+  const visible = opts?.visibleToStudent !== false;
   const { data, error } = await supabase
     .from('nexus_foundation_issue_activity')
     .insert({
@@ -1130,11 +1202,46 @@ export async function addIssueComment(
       actor_id: actorId,
       action: 'comment',
       reason: comment,
+      visible_to_student: visible,
     })
     .select()
     .single();
   if (error) throw error;
+
+  if (visible) {
+    const now = new Date().toISOString();
+    const { error: stampError } = await supabase
+      .from('nexus_foundation_issues')
+      .update({ last_reply_at: now, updated_at: now })
+      .eq('id', issueId);
+    // Logged, not thrown: the message landed, and losing the unread dot is a
+    // smaller failure than losing the reply that was already written.
+    if (stampError) console.error('addIssueComment could not stamp last_reply_at:', stampError);
+  }
+
   return data as unknown as NexusFoundationIssueActivity;
+}
+
+/**
+ * Clear one side's unread mark on a ticket.
+ *
+ * `staff` is shared across the team on purpose: the issues queue is a shared
+ * inbox, so one person reading a reply clears it for everyone. See the column
+ * comment in 20260930090000_foundation_issue_conversation.sql.
+ */
+export async function markIssueSeen(
+  issueId: string,
+  side: 'student' | 'staff',
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const column = side === 'staff' ? 'staff_seen_at' : 'student_seen_at';
+  // Deliberately NOT bumping updated_at: reading a ticket is not a change to it.
+  const { error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({ [column]: new Date().toISOString() } as never)
+    .eq('id', issueId);
+  if (error) console.error('markIssueSeen failed:', error);
 }
 
 export async function deleteFoundationIssue(

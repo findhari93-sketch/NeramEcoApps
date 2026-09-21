@@ -6,10 +6,13 @@ import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import AddTaskOutlinedIcon from '@mui/icons-material/AddTaskOutlined';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import type { ClassCardData } from '../ClassCard';
 import { type HolidayInfo, formatDateISO, formatTime, hasClassEnded, isToday, type WeekDates } from '../date-utils';
 import { LAYOUT, RADIUS, SHADOW, iconTagSx, tagSx } from '../timetable-theme';
 import ClassCoverThumb from '../ClassCoverThumb';
+import { announce, compactLabel } from '@/lib/class-availability';
+import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
 
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -21,6 +24,14 @@ interface PlannerWeekListProps {
   selectedId?: string | null;
   /** Which classes already have an assignment attached. */
   assignmentCounts?: Record<string, number>;
+  /**
+   * Expected headcount per class id.
+   *
+   * This is the teacher's landing view, so it is the first place the number
+   * has to be true: a week that looks full here but is half on exam leave is
+   * the exact planning mistake the whole feature exists to stop.
+   */
+  availability?: Record<string, RsvpSummary>;
   onSelect: (cls: ClassCardData) => void;
   onAddClass: (date: string) => void;
   /**
@@ -46,6 +57,7 @@ export default function PlannerWeekList({
   holidays,
   selectedId,
   assignmentCounts,
+  availability,
   onSelect,
   onAddClass,
   onAssignmentClick,
@@ -205,6 +217,7 @@ export default function PlannerWeekList({
                 const isSelected = selectedId === cls.id;
                 const isCancelled = cls.status === 'cancelled';
                 const assignmentCount = assignmentCounts?.[cls.id] ?? 0;
+                const expected = availability?.[cls.id];
                 // Only a class that actually happened can have a picture of
                 // itself. A tile on a future class would promise content that
                 // does not exist, and a cancelled one has nothing to show.
@@ -267,6 +280,12 @@ export default function PlannerWeekList({
                       <Typography variant="caption" color="text.secondary">
                         {formatTime(cls.start_time)} to {formatTime(cls.end_time)}
                         {today ? ', today' : ''}
+                        {/* A middot, and only the compact form: the row is 56px
+                            tall with a truncating title beside it, so the word
+                            "expected" would cost the title characters it needs
+                            more. The full sentence is on the away badge's label
+                            and in the sheet. */}
+                        {expected ? ` · ${compactLabel(expected)}` : ''}
                       </Typography>
                     </Box>
 
@@ -282,6 +301,13 @@ export default function PlannerWeekList({
                         flexShrink: 0,
                       }}
                     >
+                      {expected && expected.away > 0 && (
+                        <Tooltip title={announce(expected)} arrow enterTouchDelay={0} leaveTouchDelay={3000}>
+                          <Box component="span" aria-label={announce(expected)} sx={iconTagSx(theme, 'neutral')}>
+                            <EventBusyOutlinedIcon sx={{ fontSize: 13 }} />
+                          </Box>
+                        </Tooltip>
+                      )}
                       {isDraft && (
                         <Tooltip title="Draft, not visible to students yet" arrow enterTouchDelay={0} leaveTouchDelay={3000}>
                           <Box component="span" aria-label="Draft" sx={iconTagSx(theme, 'neutral')}>

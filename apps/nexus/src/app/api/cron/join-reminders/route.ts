@@ -122,7 +122,8 @@ export async function GET(request: NextRequest) {
       if (won?.length) claimed.push(c);
     }
 
-    // One sendNudge per classroom and step, sent as that classroom's connected teacher.
+    // One sendNudge per classroom and step, sent as Neram Assistant. The
+    // classroom's connected teacher is the fallback while the Assistant is off.
     const senders = await classroomSenders([...new Set(claimed.map((c) => c.classroomId))]);
     const groups = new Map<string, Candidate[]>();
     for (const c of claimed) {
@@ -145,7 +146,7 @@ export async function GET(request: NextRequest) {
         eventType: 'classroom_enrolled',
         metadata: { source: 'join_reminder', step: first.step, classroom_id: first.classroomId },
         reachNotStarted: true,
-        ...(sender ? { sendAs: { senderUserId: sender.userId, link: { url, label: msg.buttonLabel } } } : {}),
+        assistant: { link: { url, label: msg.buttonLabel }, fallbackSenderUserId: sender?.userId ?? null },
         source: { kind: 'join_reminder', refId: first.classroomId },
       });
       reached += results.filter((r) => r.ok).length;

@@ -268,7 +268,16 @@ function resolveCardCore(t: StudentTestFacts, now: number): Omit<StudentTestCard
   // An exam is sat once, so its number is a score. Everything else can be
   // retaken, so its number is a best. Calling an exam's number "Best" was the
   // tell that it had come from somewhere else entirely.
-  const score = sat ? (t.best_percentage ?? null) : null;
+  //
+  // And it HAD. best_percentage is the highest of every submitted attempt on the
+  // door, while the rank beside it comes from the published snapshot, which is
+  // built from the FIRST submitted attempt. On a reopened or made-up paper those
+  // are two different sittings, so the card showed one paper's percentage next
+  // to another paper's rank and called the pair "Your score". A published exam
+  // now reads its number off the same snapshot as its rank, so the card, the
+  // Teams message and the teacher's screen cannot disagree.
+  const published = t.is_exam ? (t.exam_result?.percentage ?? null) : null;
+  const score = sat ? (published ?? (t.is_exam ? null : (t.best_percentage ?? null))) : null;
   const scored = {
     score_percentage: score,
     score_label: score == null ? null : t.is_exam ? ('Your score' as const) : ('Best' as const),

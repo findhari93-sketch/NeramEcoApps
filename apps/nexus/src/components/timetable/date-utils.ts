@@ -26,6 +26,10 @@ const BLOCK_GAP = 4;
 // into components. Re-exported here because every consumer of the band maths
 // needs it too.
 import { DEFAULT_WINDOW, type IsoWeekday, type TimetableWindow } from '@/lib/timetable-window';
+// The UTC-midnight one, never a local-time Date walk: this module's own
+// addDays(Date, n) would shift the planning horizon on a non-UTC runtime, and a
+// silent timezone shift is the bug away-windows.ts exists to have stopped.
+import { addDaysYmd, formatDay } from '@/lib/away-windows';
 
 export { DEFAULT_WINDOW };
 export type { IsoWeekday, TimetableWindow };
@@ -265,6 +269,64 @@ export function monthGridRangeFor(
     start: visibleStart < grid.start ? visibleStart : grid.start,
     end: visibleEnd > grid.end ? visibleEnd : grid.end,
   };
+}
+
+/** Sunday first, matching Date.getUTCDay(). */
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** How far ahead "Who is coming" can look. The widest horizon chip. */
+export const PLANNING_HORIZON_DAYS = 30;
+
+/**
+ * The fetch range for a view, widened to cover the forward planner.
+ *
+ * "Who is coming" answers about the days AHEAD, including days with nothing
+ * scheduled on them, so it needs rows the month grid may not reach: on the 28th
+ * of a month the grid ends in days, and the planner is still asking about the
+ * 27th of the next one. Widening the one request the page already makes keeps
+ * the planner free, rather than making the sheet fetch on every open.
+ *
+ * Widened at the END only, and only when today already falls inside the grid.
+ * Browsing March while it is September must not union six months into a single
+ * request: there, the grid is returned untouched and the sheet fetches its own
+ * horizon, which is the rare case worth paying for.
+ */
+export function planningRangeFor(
+  anchor: Date,
+  visibleStart: string,
+  visibleEnd: string,
+  today: string,
+  horizonDays: number = PLANNING_HORIZON_DAYS,
+): { start: string; end: string } {
+  const grid = monthGridRangeFor(anchor, visibleStart, visibleEnd);
+  if (today < grid.start || today > grid.end) return grid;
+  const horizonEnd = addDaysYmd(today, horizonDays - 1);
+  return { start: grid.start, end: horizonEnd > grid.end ? horizonEnd : grid.end };
+}
+
+/**
+ * "Today", "Tomorrow", or "Sat 20 Sep".
+ *
+ * The planner lists consecutive days, where an unbroken column of "Sat 20 Sep,
+ * Sun 21 Sep" costs a beat of reading to locate now. Named days are read
+ * instantly, and every other row carries its weekday because "is Thursday worth
+ * running" is a question about the weekday as much as the date.
+ *
+ * Parsed at local midnight, the same way effectiveWeekdays does, because the
+ * only thing taken from the Date is a weekday name.
+ */
+export function relativeDayLabel(ymd: string, today: string): string {
+  if (ymd === today) return 'Today';
+  if (ymd === addDaysYmd(today, 1)) return 'Tomorrow';
+  const day = formatDay(ymd);
+  if (!day) return ymd;
+  // Spelled out by hand rather than with toLocaleDateString, for exactly the
+  // reason formatMonthYear is: this runtime's ICU renders an en-IN short
+  // weekday as "Thu, 24 Sept", and a string that is compared in tests and read
+  // at a glance in a planner must not move with an ICU upgrade.
+  const d = new Date(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return `${WEEKDAYS[d.getUTCDay()]} ${day}`;
 }
 
 // ─── Range labels ────────────────────────────────────────────────────────────

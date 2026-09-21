@@ -328,7 +328,10 @@ export async function getExamResults(
       average: v.n > 0 ? round2(v.sum / v.n) : 0,
       total_marks: v.total,
     })),
-    podium: rows.filter((r) => r.sitting === 'main' && r.rank != null && r.rank <= 3),
+    // Four, not three (founder, 2026-09-20). Filtered by RANK, so a tie at the
+    // bottom of it brings both students in and the card names five: dropping
+    // one of two equal scores is the one outcome worth avoiding here.
+    podium: rows.filter((r) => r.sitting === 'main' && r.rank != null && r.rank <= 4),
     // Across BOTH sittings, unlike stats and section_averages: a second-sitting
     // drawing still needs a teacher's mark, and this count is what tells them
     // grading work remains.

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addDaysYmd,
   covers,
   coveringWindow,
+  daysBetweenYmd,
+  eachDayYmd,
   defaultReviewOn,
   describeWindow,
   formatDay,
@@ -261,5 +264,76 @@ describe('loadAwayWindows, when the table is not there yet', () => {
     await expect(
       loadAwayWindows(q({ code: '42P01' }) as never, { studentIds: [] }),
     ).resolves.toEqual([]);
+  });
+});
+
+describe('daysBetweenYmd', () => {
+  it('is zero across the same day', () => {
+    expect(daysBetweenYmd('2026-09-22', '2026-09-22')).toBe(0);
+  });
+
+  it('counts adjacent days as one', () => {
+    expect(daysBetweenYmd('2026-09-22', '2026-09-23')).toBe(1);
+  });
+
+  it('crosses a month boundary without losing a day', () => {
+    expect(daysBetweenYmd('2026-09-28', '2026-10-02')).toBe(4);
+  });
+
+  it('crosses a year boundary', () => {
+    expect(daysBetweenYmd('2026-12-30', '2027-01-02')).toBe(3);
+  });
+
+  // A one-day window drawn on a range that starts after it is the case the bar
+  // has to clamp rather than render backwards.
+  it('goes negative when the second date is earlier', () => {
+    expect(daysBetweenYmd('2026-09-23', '2026-09-22')).toBe(-1);
+  });
+
+  it('returns zero rather than NaN for something that is not a date', () => {
+    expect(daysBetweenYmd('not-a-date', '2026-09-22')).toBe(0);
+  });
+});
+
+describe('walking the calendar, which the forward planner does', () => {
+  it('steps a day at a time across a month boundary', () => {
+    expect(addDaysYmd('2026-09-30', 1)).toBe('2026-10-01');
+    expect(addDaysYmd('2026-02-28', 1)).toBe('2026-03-01');
+  });
+
+  it('steps across a year boundary and backwards', () => {
+    expect(addDaysYmd('2026-12-31', 1)).toBe('2027-01-01');
+    expect(addDaysYmd('2027-01-01', -1)).toBe('2026-12-31');
+  });
+
+  it('includes both ends of the range', () => {
+    expect(eachDayYmd('2026-09-20', '2026-09-23')).toEqual([
+      '2026-09-20',
+      '2026-09-21',
+      '2026-09-22',
+      '2026-09-23',
+    ]);
+  });
+
+  it('returns the single day when both ends are the same', () => {
+    expect(eachDayYmd('2026-09-20', '2026-09-20')).toEqual(['2026-09-20']);
+  });
+
+  it('returns nothing for an inverted or missing range rather than spinning', () => {
+    expect(eachDayYmd('2026-09-23', '2026-09-20')).toEqual([]);
+    expect(eachDayYmd('', '2026-09-20')).toEqual([]);
+  });
+
+  it('stops at the cap, so an unbounded span cannot build an unbounded list', () => {
+    expect(eachDayYmd('2026-01-01', '2026-12-31', 10)).toHaveLength(10);
+    expect(eachDayYmd('2026-01-01', '2026-12-31', 10)[9]).toBe('2026-01-10');
+  });
+
+  it('crosses a DST-style boundary without repeating or skipping a day', () => {
+    // Every date is built at UTC midnight, so a local-time shift cannot land
+    // twice on the same day. This is the bug the module exists to have stopped.
+    const days = eachDayYmd('2026-03-28', '2026-03-31');
+    expect(days).toEqual(['2026-03-28', '2026-03-29', '2026-03-30', '2026-03-31']);
+    expect(new Set(days).size).toBe(4);
   });
 });

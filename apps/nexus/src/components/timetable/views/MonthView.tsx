@@ -1,9 +1,20 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Box, Skeleton, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
+import { Box, Skeleton, Typography, alpha, darken, useMediaQuery, useTheme } from '@neram/ui';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { type ClassCardData } from '../ClassCard';
+import {
+  announceForecast,
+  awayLabel,
+  expectedLabel,
+  forecastVerdict,
+  likelyLabel,
+  likelySentence,
+} from '@/lib/class-availability';
+import type { DayForecast } from '@/lib/class-forecast';
+import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
 import {
   formatDateISO,
   formatTimeCompact,
@@ -43,6 +54,29 @@ interface MonthViewProps {
   onDayMenu?: (iso: string, event: React.MouseEvent) => void;
   /** Student: an opted-out class reads as dimmed. */
   myRsvps?: Record<string, 'attending' | 'not_attending'>;
+  /**
+   * Expected headcount per class id, and the realistic headcount per DATE.
+   *
+   * The headcount is per class but the forecast is per day, and that is not an
+   * inconsistency. A month chip is 20px tall with a clamped title in a
+   * minmax(0, 1fr) column: there is no room for a ratio on it, and below md
+   * this view is not a grid of chips at all. So the grid cell carries one
+   * day-level figure and the per-class ratio lives in the day list, where rows
+   * are 56px.
+   */
+  availability?: Record<string, RsvpSummary>;
+  /**
+   * How many students are realistically coming, per date.
+   *
+   * Replaced the old `awayByDate` count, which repeated the word "away" in all
+   * 35 cells and answered the wrong question: a teacher is deciding whether to
+   * hold a class, which is a question about who will be there, not who will not.
+   */
+  forecastByDate?: Record<string, DayForecast>;
+  /** Today in IST. Past cells carry no forecast; a finished day cannot be predicted. */
+  todayISO?: string;
+  /** Tapping the day-level figure. The one tap target this feature adds. */
+  onOpenDayAvailability?: (iso: string) => void;
 }
 
 /**
@@ -63,9 +97,21 @@ export default function MonthView({
   onOpenDay,
   onDayMenu,
   myRsvps,
+  availability,
+  forecastByDate,
+  todayISO,
+  onOpenDayAvailability,
 }: MonthViewProps) {
   const theme = useTheme();
   const isCompact = useMediaQuery(theme.breakpoints.down('md'));
+
+  // A forecast is only ever offered for today or later. The register holds what
+  // actually happened on a past night, and predicting it from a window that
+  // includes that very class would be both wrong and pointless. This is also
+  // what empties the grid of the repeated grey text the whole change is about.
+  const today = todayISO || formatDateISO(new Date());
+  const forecastOn = (iso: string): DayForecast | null =>
+    role === 'teacher' && iso >= today ? forecastByDate?.[iso] ?? null : null;
 
   const classesByDate = useMemo(() => {
     const map: Record<string, ClassCardData[]> = {};
@@ -151,7 +197,12 @@ export default function MonthView({
                 component="button"
                 type="button"
                 data-testid="month-cell"
-                aria-label={`${day.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}, ${count} ${count === 1 ? 'class' : 'classes'}`}
+                // The dots stay dots. Extending the label is how the forecast
+                // reaches a screen reader on a 44px cell that has room for
+                // nothing else.
+                aria-label={`${day.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}, ${count} ${count === 1 ? 'class' : 'classes'}${
+                  forecastOn(iso) ? `, ${likelySentence(forecastOn(iso)!)}` : ''
+                }`}
                 aria-pressed={selected}
                 onClick={() => setSelectedISO(iso)}
                 sx={{
@@ -228,6 +279,59 @@ export default function MonthView({
             </Box>
           )}
 
+          {/* Full width and 44px, so there is no crowding against the class
+              rows below and no target gymnastics. */}
+          {(() => {
+            const forecast = forecastOn(selectedISO);
+            if (!forecast || !onOpenDayAvailability) return null;
+            const verdict = forecastVerdict(forecast.likely, forecast.onRoll);
+            const thin = verdict.key === 'thin' || verdict.key === 'very_thin';
+            return (
+              <Box
+                component="button"
+                type="button"
+                onClick={() => onOpenDayAvailability(selectedISO)}
+                aria-label={announceForecast(
+                  forecast,
+                  selectedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' }),
+                  forecast.scheduled,
+                )}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  width: '100%',
+                  minHeight: 44,
+                  px: 1.5,
+                  mb: 1.5,
+                  textAlign: 'left',
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  border: `1px solid ${thin ? theme.palette.warning.main : theme.palette.divider}`,
+                  borderRadius: RADIUS.control,
+                  bgcolor: 'background.paper',
+                  '&:focus-visible': {
+                    outline: `2px solid ${theme.palette.primary.main}`,
+                    outlineOffset: 2,
+                  },
+                }}
+              >
+                {thin && (
+                  <WarningAmberOutlinedIcon
+                    aria-hidden
+                    sx={{ fontSize: 16, color: 'warning.dark' }}
+                  />
+                )}
+                <Typography aria-hidden variant="body2" sx={{ fontWeight: 700 }}>
+                  {likelySentence(forecast)}
+                </Typography>
+                <Typography aria-hidden variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                  See who
+                </Typography>
+              </Box>
+            );
+          })()}
+
           {dayClasses.length === 0 && !dayHoliday ? (
             <CalendarEmptyState role={role} period="day" />
           ) : (
@@ -267,6 +371,14 @@ export default function MonthView({
                   <Typography variant="caption" color="text.secondary">
                     {formatTimeCompact(cls.start_time)} to {formatTimeCompact(cls.end_time)}
                   </Typography>
+                  {role === 'teacher' && availability?.[cls.id] && (
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      {expectedLabel(availability[cls.id])}
+                      {availability[cls.id].away > 0
+                        ? ` · ${awayLabel(availability[cls.id].away)}`
+                        : ''}
+                    </Typography>
+                  )}
                 </Box>
               ))}
             </Box>
@@ -397,6 +509,107 @@ export default function MonthView({
                     : day.getDate()}
                 </Box>
               </Box>
+
+              {/* The day's realistic headcount, and the only tap target this
+                  feature adds. It is NOT attached to a class chip: those are
+                  20px buttons already, and a button inside a button is both
+                  invalid and unusable with a keyboard, which is the same reason
+                  the "+N more" affordance is structured the way it is.
+
+                  Quiet by default, loud only when thin. Thirty-five cells all
+                  shouting is thirty-five cells saying nothing, which is exactly
+                  what the old "N away" pill did: the same word, the same grey,
+                  in every cell including the ones already in the past. On a
+                  normal day this now reads as a caption, and the warning tone
+                  plus the glyph appear on the handful of nights actually worth
+                  a second look, which is what makes them findable at a glance. */}
+              {(() => {
+                const forecast = forecastOn(iso);
+                if (!forecast || !onOpenDayAvailability) return null;
+                const verdict = forecastVerdict(forecast.likely, forecast.onRoll);
+                const thin = verdict.key === 'thin' || verdict.key === 'very_thin';
+                return (
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenDayAvailability(iso);
+                  }}
+                  data-turnout={verdict.key}
+                  aria-label={announceForecast(
+                    forecast,
+                    day.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' }),
+                    forecast.scheduled,
+                  )}
+                  sx={{
+                    ...tagSx(theme, 'neutral'),
+                    position: 'relative',
+                    zIndex: 1,
+                    maxWidth: '100%',
+                    border: 0,
+                    cursor: 'pointer',
+                    justifyContent: 'center',
+                    px: 0.5,
+                    // fontFamily, never the `font` shorthand. That is a
+                    // shorthand and resets every longhand it covers, so the
+                    // size and weight declared after it would survive but
+                    // anything before it would be silently thrown away.
+                    fontFamily: 'inherit',
+                    fontSize: '0.6875rem',
+                    fontWeight: thin ? 700 : 600,
+                    ...(thin
+                      ? {
+                          // Measured on the rendered screen, not assumed.
+                          // warning.main on this tint is about 3.5:1 and
+                          // warning.dark only reaches 4.23:1 at 11px, which is
+                          // under AA and drops to 3.70:1 once the hover
+                          // deepens the tint. Darkened off the same token
+                          // rather than hardcoded, so it still tracks the brand
+                          // amber: 5.94:1 at rest and 5.20:1 on hover.
+                          bgcolor: alpha(theme.palette.warning.main, 0.16),
+                          color: darken(theme.palette.warning.dark, 0.2),
+                        }
+                      : {
+                          bgcolor: 'transparent',
+                          color: theme.palette.text.secondary,
+                        }),
+                    // The pill itself is short, so the 44px target is expanded
+                    // around it rather than drawn at that height, which would
+                    // swamp a month cell.
+                    '&::after': {
+                      content: '""',
+                      position: 'absolute',
+                      top: '50%',
+                      left: 0,
+                      right: 0,
+                      height: 44,
+                      transform: 'translateY(-50%)',
+                    },
+                    // It sits ABOVE the cell's invisible "schedule here" button,
+                    // so that button's hover never fires while the pointer is
+                    // over this. Without its own hover the quiet version is
+                    // plain text that happens to be clickable, which is not an
+                    // affordance anyone can find.
+                    transition: theme.transitions.create(['background-color'], { duration: 150 }),
+                    '&:hover': {
+                      bgcolor: thin
+                        ? alpha(theme.palette.warning.main, 0.28)
+                        : theme.palette.action.hover,
+                    },
+                    '&:focus-visible': {
+                      outline: `2px solid ${theme.palette.primary.main}`,
+                      outlineOffset: 2,
+                    },
+                  }}
+                >
+                  {thin && <WarningAmberOutlinedIcon aria-hidden sx={{ fontSize: 12 }} />}
+                  <Box component="span" aria-hidden>
+                    {likelyLabel(forecast)}
+                  </Box>
+                </Box>
+                );
+              })()}
 
               {/* A holiday sits ABOVE the chips, it does not replace them. This
                   was a ternary, so marking a day as a holiday hid every class

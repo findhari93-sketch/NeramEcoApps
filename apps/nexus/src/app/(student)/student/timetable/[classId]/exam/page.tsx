@@ -18,6 +18,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import ResultLooksWrongSheet from '@/components/tests/ResultLooksWrongSheet';
 
 /**
  * The student's side of a scheduled exam: lobby, countdown, then the result.
@@ -91,6 +92,7 @@ export default function StudentExamPage() {
   const theme = useTheme();
   const classId = params.classId as string;
   const { getToken } = useNexusAuthContext();
+  const [queryOpen, setQueryOpen] = useState(false);
 
   const [view, setView] = useState<ExamView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -366,8 +368,44 @@ export default function StudentExamPage() {
               Results are out but yours could not be found. Speak to your teacher.
             </Typography>
           )}
+
+          {/*
+            The end of the loop. Before this, a published result was the last
+            word: a number, and nowhere to say it looks wrong. It is a quiet
+            text button because most students will never need it, and the ones
+            who do should not have to hunt for it.
+          */}
+          {view.exam.results_state !== 'unpublished' && view.my_result && (
+            <Button
+              onClick={() => setQueryOpen(true)}
+              sx={{ mt: 2, textTransform: 'none', minHeight: 48, px: 0, justifyContent: 'flex-start' }}
+            >
+              Something looks wrong
+            </Button>
+          )}
         </Paper>
       )}
+
+      <ResultLooksWrongSheet
+        open={queryOpen}
+        examTitle={view?.exam?.title || 'this exam'}
+        onClose={() => setQueryOpen(false)}
+        submit={async ({ reason_code, note }) => {
+          const token = await getToken();
+          const res = await fetch(`/api/student/exams/${view?.exam?.id}/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ reason_code, note }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(json?.error || 'That did not send. Try again in a moment.');
+          return {
+            issueId: json?.data?.issue_id,
+            ticketNumber: json?.data?.ticket_number ?? null,
+            alreadyOpen: json?.data?.already_open === true,
+          };
+        }}
+      />
     </Box>
   );
 }

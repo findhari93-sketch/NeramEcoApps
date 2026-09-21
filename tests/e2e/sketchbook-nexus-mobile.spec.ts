@@ -152,11 +152,11 @@ test.describe('Sketchbook on a phone', () => {
     const state = await open(page, '/student/sketchbook');
     test.skip(state === 'down', 'Nexus not running');
     test.skip(state === 'off', 'student.sketchbook is off in this environment');
-    // exact: true, because without the migration the page's own empty state
-    // renders an "Your sketchbook is empty" heading, and getByRole's default
-    // substring match on "Sketchbook" resolves both, which is a strict-mode
-    // violation rather than a pass.
-    await expect(page.getByRole('heading', { name: 'Sketchbook', exact: true })).toBeVisible();
+    // The sketchbook is the first tab of the Drawings hub, so the page heading
+    // is the hub's. exact: true stays, because the page's own empty state can
+    // render its own heading and getByRole's default substring match would
+    // resolve both, which is a strict-mode violation rather than a pass.
+    await expect(page.getByRole('heading', { name: 'Drawings', exact: true })).toBeVisible();
     await assertNoHorizontalOverflow(page);
     const fab = page.getByRole('button', { name: 'Add a sketch' });
     await expect(fab).toBeVisible();

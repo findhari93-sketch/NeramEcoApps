@@ -10,7 +10,8 @@
  */
 import { Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Alert, Box, Skeleton, Tab, Tabs, Typography } from '@neram/ui';
+import Link from 'next/link';
+import { Alert, Box, Button, Skeleton, Tab, Tabs, Typography } from '@neram/ui';
 import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
@@ -123,9 +124,22 @@ function AttendanceRegisterWorkspace() {
 
       {data && view === 'classes' && (
         data.classes.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-            No classes have finished in this range.
-          </Typography>
+          <Box sx={{ py: 4, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              No classes have finished in this range.
+            </Typography>
+            {/* The register only ever shows classes that are over. An empty one
+                usually means the range, or the schedule, and the calendar is
+                where both are answered. */}
+            <Button
+              component={Link}
+              href="/teacher/timetable"
+              size="small"
+              sx={{ mt: 1.5, minHeight: 44, textTransform: 'none' }}
+            >
+              Open the timetable
+            </Button>
+          </Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             {data.classes.map((cls) => (

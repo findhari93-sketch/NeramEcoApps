@@ -11,7 +11,7 @@ import DeviceSection from '@/components/profile/DeviceSection';
 import AccountInfoSection from '@/components/profile/AccountInfoSection';
 
 interface DashboardData {
-  attendanceSummary: { total: number; attended: number; percentage: number };
+  attendanceSummary: { total: number; attended: number; percentage: number | null; sentence?: string };
   checklistProgress: { completed: number; total: number };
   topicProgress: { completed: number; total: number };
 }

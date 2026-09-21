@@ -221,6 +221,132 @@ test.describe('Foundation Issues — Enterprise Ticket System', () => {
     const body = await res.json();
     expect(body.activity).toBeDefined();
     expect(body.activity.reason).toBe('__TEST__ Looking into this issue.');
+    // A comment is a message by default. The staff-only case has to ask.
+    expect(body.activity.visible_to_student).toBe(true);
+  });
+
+  test('PATCH add internal note (teacher) stays staff-only', async ({ request }) => {
+    const res = await request.patch(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(teacherToken),
+      data: {
+        action: 'comment',
+        comment: '__TEST__ Internal: same root cause as NXS-0119.',
+        internal: true,
+      },
+    });
+    expect(res.status()).toBe(200);
+    expect((await res.json()).activity.visible_to_student).toBe(false);
+  });
+
+  test('the reporter can reply on their own ticket', async ({ request }) => {
+    const res = await request.patch(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(studentToken),
+      data: { action: 'comment', comment: '__TEST__ Still showing closed for me.' },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.activity.reason).toBe('__TEST__ Still showing closed for me.');
+    expect(body.activity.visible_to_student).toBe(true);
+  });
+
+  test('the student is never served an internal note', async ({ request }) => {
+    const res = await request.get(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(studentToken),
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    const reasons = (body.activity || []).map((a: { reason: string | null }) => a.reason || '');
+    expect(reasons.some((r: string) => r.includes('Looking into this issue'))).toBe(true);
+    // The filter is a database predicate, so the internal row is absent from
+    // the PAYLOAD, not merely hidden on the screen.
+    expect(reasons.some((r: string) => r.includes('Internal: same root cause'))).toBe(false);
+    expect((body.activity || []).every((a: { visible_to_student: boolean }) => a.visible_to_student)).toBe(true);
+
+    // Staff-only capture never leaves the server for a student either.
+    expect(body.issue.console_logs).toBeUndefined();
+    expect(body.issue.device_info).toBeUndefined();
+  });
+
+  test('staff still see every row, including the internal note', async ({ request }) => {
+    const res = await request.get(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(teacherToken),
+    });
+    expect(res.status()).toBe(200);
+    const reasons = ((await res.json()).activity || []).map(
+      (a: { reason: string | null }) => a.reason || '',
+    );
+    expect(reasons.some((r: string) => r.includes('Internal: same root cause'))).toBe(true);
+  });
+
+  test('a student cannot comment on somebody else’s ticket', async ({ request }) => {
+    // Raise a ticket AS THE TEACHER so the student is provably not its reporter.
+    const created = await request.post('/api/foundation/issues', {
+      headers: authHeader(teacherToken),
+      data: { title: '__TEST__ Not the student ticket', category: 'other', description: 'x' },
+    });
+    expect(created.status()).toBe(201);
+    const otherId = (await created.json()).issue.id;
+
+    const res = await request.patch(`/api/foundation/issues/${otherId}`, {
+      headers: authHeader(studentToken),
+      data: { action: 'comment', comment: '__TEST__ should not land' },
+    });
+    expect(res.status()).toBe(403);
+
+    await request.delete(`/api/foundation/issues/${otherId}`, { headers: authHeader(teacherToken) });
+  });
+
+  test('?seen=1 clears the unread mark, a plain GET does not', async ({ request }) => {
+    const before = await request.get(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(studentToken),
+    });
+    const seenBefore = (await before.json()).issue.student_seen_at;
+
+    await request.get(`/api/foundation/issues/${createdIssueId}?seen=1`, {
+      headers: authHeader(studentToken),
+    });
+
+    const after = await request.get(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(studentToken),
+    });
+    const seenAfter = (await after.json()).issue.student_seen_at;
+
+    expect(seenAfter).toBeTruthy();
+    if (seenBefore) expect(new Date(seenAfter).getTime()).toBeGreaterThan(new Date(seenBefore).getTime());
+  });
+
+  test('a reply stamps last_reply_at, which is what the nav badge reads', async ({ request }) => {
+    await request.patch(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(teacherToken),
+      data: { action: 'comment', comment: '__TEST__ one more note for the badge' },
+    });
+
+    const res = await request.get(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(teacherToken),
+    });
+    expect((await res.json()).issue.last_reply_at).toBeTruthy();
+
+    const badges = await request.get('/api/nav-badges', { headers: authHeader(studentToken) });
+    expect(badges.status()).toBe(200);
+    expect((await badges.json()).badges.issues).toBeGreaterThan(0);
+  });
+
+  test('PATCH recheck asks the reporter and writes the ask into the thread', async ({ request }) => {
+    const res = await request.patch(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(teacherToken),
+      data: { action: 'recheck', note: '__TEST__ Please open the test again and tell us.' },
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.activity.reason).toBe('__TEST__ Please open the test again and tell us.');
+    expect(body.activity.visible_to_student).toBe(true);
+
+    const student = await request.patch(`/api/foundation/issues/${createdIssueId}`, {
+      headers: authHeader(studentToken),
+      data: { action: 'recheck', note: '__TEST__ nope' },
+    });
+    expect(student.status()).toBe(500);
   });
 
   // ── Resolve: Sets awaiting_confirmation ──

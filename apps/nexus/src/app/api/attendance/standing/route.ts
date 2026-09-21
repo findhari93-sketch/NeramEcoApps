@@ -43,6 +43,15 @@ export interface StandingRow {
   avatar_url: string | null;
   study_stage: string | null;
   enrolled_at: string | null;
+  /**
+   * The batch they sit in, or null for a whole-classroom member.
+   *
+   * Carried so a caller can tell whether this student was even invited to a
+   * given class without fetching a second roster. The timetable forecast needs
+   * it, and joining two independently fetched rosters is a drift bug waiting
+   * to happen.
+   */
+  batch_id: string | null;
   standing: Standing;
   reasons: string[];
   /** Null when nothing in the range was measured. Never 0. */
@@ -235,6 +244,7 @@ export async function GET(request: NextRequest) {
         avatar_url: m.user?.avatar_url || null,
         study_stage: m.current_standard ?? null,
         enrolled_at: m.enrolled_at ?? null,
+        batch_id: m.batch_id ?? null,
         standing: verdict.standing,
         reasons: verdict.reasons,
         rate: t.counted ? Math.round((t.present / t.counted) * 100) : null,

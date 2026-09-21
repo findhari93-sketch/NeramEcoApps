@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { loadOwnAttendance } from '@/lib/student-attendance';
 import { getSupabaseAdminClient } from '@neram/database';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 import { applyClassPrepGate } from '@/lib/class-prep-server';
@@ -33,6 +34,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Sequential on purpose, exactly as api/parent/overview is: batch_id decides
+    // which classes count, so it has to be known before attendance is read.
+    const { data: enrollment } = await supabase
+      .from('nexus_enrollments')
+      .select('batch_id, enrolled_at')
+      .eq('user_id', user.id)
+      .eq('classroom_id', classroomId)
+      .eq('role', 'student')
+      .eq('is_active', true)
+      .maybeSingle();
+
     // Compute "now" in IST (Asia/Kolkata, UTC+5:30) so time filtering
     // works correctly on Vercel's UTC servers.
     const now = new Date();
@@ -43,8 +55,7 @@ export async function GET(request: NextRequest) {
     // Fetch all data in parallel
     const [
       upcomingClassesRaw,
-      attendanceResult,
-      completedClassesCountResult,
+      ownAttendance,
       recentCompletedResult,
       checklistTotalResult,
       checklistCompletedResult,
@@ -65,19 +76,24 @@ export async function GET(request: NextRequest) {
         .order('start_time', { ascending: true })
         .limit(10),
 
-      // Attendance: classes attended
-      supabase
-        .from('nexus_attendance')
-        .select('id', { count: 'exact', head: true })
-        .eq('student_id', user.id)
-        .eq('attended', true),
-
-      // Total completed classes in classroom (for attendance %)
-      supabase
-        .from('nexus_scheduled_classes')
-        .select('id', { count: 'exact', head: true })
-        .eq('classroom_id', classroomId)
-        .eq('status', 'completed'),
+      /*
+       * Attendance, through the one shared loader.
+       *
+       * This replaces two count queries that were wrong in both of the ways
+       * lib/parent-attendance.ts exists to prevent. `attended` counted
+       * nexus_attendance rows on student_id ALONE, with no classroom filter, so
+       * a student in two classrooms counted both over one classroom's
+       * denominator and could score over 100%. And a class nobody synced has no
+       * rows at all, so an unsynced term read as 0% rather than as unknown.
+       *
+       * It is the same call the Attendance page makes. The card and the page it
+       * opens are one tap apart; they cannot be allowed to disagree.
+       */
+      loadOwnAttendance(user.id, {
+        classroom_id: classroomId,
+        batch_id: (enrollment?.batch_id as string | null) ?? null,
+        enrolled_at: (enrollment?.enrolled_at as string | null) ?? null,
+      }),
 
       // Recent completed classes with recordings (for dashboard section).
       // cover_image_id + class_images drive the cover thumbnail on each card.
@@ -134,9 +150,6 @@ export async function GET(request: NextRequest) {
       return cls.end_time > nowTimeHHMM;
     }).slice(0, 5);
 
-    const totalClasses = completedClassesCountResult.count || 0;
-    const attendedClasses = attendanceResult.count || 0;
-
     // The class prep gate. This is a student-only route, so every class here is
     // seen as a student, and the dashboard hero's Join must not outlive the lock
     // that my-schedule already applies on the timetable.
@@ -149,9 +162,19 @@ export async function GET(request: NextRequest) {
       prep,
       completedClasses: recentCompletedResult.data || [],
       attendanceSummary: {
-        total: totalClasses,
-        attended: attendedClasses,
-        percentage: totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 100) : 0,
+        // `total` is now the MEASURED count, not every completed class, so
+        // "attended 12 of 14" never counts two classes nobody recorded.
+        total: ownAttendance.summary.measuredClasses,
+        attended: ownAttendance.summary.attended,
+        /**
+         * null, never 0, when nothing was measured. "We have not recorded your
+         * attendance" and "you attended nothing" are different sentences, and a
+         * percentage cannot tell them apart. Render `sentence` when this is
+         * null rather than inventing a number.
+         */
+        percentage: ownAttendance.summary.attendanceRate,
+        notMeasured: ownAttendance.summary.notMeasuredClasses,
+        sentence: ownAttendance.sentence,
       },
       checklistProgress: {
         completed: checklistCompletedResult.count || 0,

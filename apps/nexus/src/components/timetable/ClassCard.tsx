@@ -11,6 +11,7 @@ import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import { formatTimeCompact } from './time-utils';
 import type { ClassImageRef } from '@/lib/class-cover';
 import { resourceCount } from '@/lib/class-resources';
+import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
 
 export { formatTimeCompact };
 
@@ -107,7 +108,7 @@ export interface ClassCardData {
 interface ClassCardProps {
   cls: ClassCardData;
   role: 'teacher' | 'student' | 'parent';
-  rsvpSummary?: { attending: number; total: number } | null;
+  rsvpSummary?: RsvpSummary | null;
   myRsvp?: 'attending' | 'not_attending' | null;
   averageRating?: number | null;
   myAttended?: boolean | null;

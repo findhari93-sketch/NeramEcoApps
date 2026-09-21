@@ -41,7 +41,16 @@ import LanguageMark from './LanguageMark';
  */
 
 /** Below this the glyph is an unreadable smudge, so drop it and keep the ring. */
-const MIN_GLYPH_SIZE = 28;
+/**
+ * Below this the stage glyph and the language mark are dropped and the ring is
+ * left drawing a coloured circle on its own.
+ *
+ * Exported because that failure is silent: a ring with no glyph still looks
+ * deliberate, so a caller sizing an avatar at 26 loses the exam year, the
+ * paused state and the spoken language without anything going wrong on screen.
+ * Screens that rely on those being readable assert against this.
+ */
+export const MIN_GLYPH_SIZE = 28;
 
 export interface StudentStageAvatarProps {
   /**

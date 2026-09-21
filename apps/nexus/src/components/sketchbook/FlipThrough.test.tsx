@@ -68,4 +68,24 @@ describe('FlipThrough', () => {
       '/teacher/drawing-reviews/11111111-1111-4111-8111-111111111111?from=flip&classroom=22222222-2222-4222-8222-222222222222',
     );
   });
+
+  // The inbox 500'd against production for days and this component answered with
+  // a full-height grey skeleton: `isLoading || !data` is still true when a
+  // fetch REJECTS, because fetchWithToken throws by design and SWR settles with
+  // data undefined. No message, no retry, nothing in the console a teacher
+  // could act on. ClassRhythmList has had this branch all along; this one did not.
+  it('offers a retry when the inbox could not be loaded', () => {
+    const mutate = vi.fn();
+    swr.mockReturnValue({ data: undefined, error: new Error('boom'), isLoading: false, mutate });
+    render(<FlipThrough classroomId="c1" />);
+    expect(screen.getByText('Could not load the flip through')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(mutate).toHaveBeenCalled();
+  });
+
+  it('still shows the skeleton while loading, with no error on screen', () => {
+    swr.mockReturnValue({ data: undefined, error: undefined, isLoading: true, mutate: vi.fn() });
+    render(<FlipThrough classroomId="c1" />);
+    expect(screen.queryByText('Could not load the flip through')).toBeNull();
+  });
 });

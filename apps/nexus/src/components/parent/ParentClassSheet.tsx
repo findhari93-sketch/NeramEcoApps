@@ -192,7 +192,7 @@ export default function ParentClassSheet({ cls, open, onClose }: ParentClassShee
             endTime={cls.attendance.endTime}
             scheduledMinutes={cls.attendance.scheduledMinutes}
             measurement={cls.attendance.measurement}
-            label={ATTENDANCE_STATUS[cls.attendance.label].label}
+            label={cls.attendance.label}
             attended={cls.attendance.attended}
             durationMinutes={cls.attendance.durationMinutes}
             segments={cls.attendance.segments}

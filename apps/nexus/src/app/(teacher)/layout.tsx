@@ -15,12 +15,13 @@ import FeatureGate from '@/components/FeatureGate';
 
 function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
-  const { currentSidebarItems, currentBottomNavItems, currentOverflowGroups } = usePanelContext();
+  const { currentSidebarItems, currentSidebarGroups, currentBottomNavItems, currentOverflowGroups } =
+    usePanelContext();
   const fullBleed = isFullBleedRoute(usePathname());
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <DesktopSidebar items={currentSidebarItems} />
+      <DesktopSidebar items={currentSidebarItems} groups={currentSidebarGroups} />
 
       <Box
         sx={{

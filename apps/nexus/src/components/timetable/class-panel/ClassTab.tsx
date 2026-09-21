@@ -8,8 +8,9 @@ import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import IosShareIcon from '@mui/icons-material/IosShare';
 import PrepGateCard from '../PrepGateCard';
 import ClassManageSection from './ClassManageSection';
-import { RADIUS } from '../timetable-theme';
+import { RADIUS, tagSx } from '../timetable-theme';
 import type { ClassPanelTabProps } from './types';
+import { awayLabel, expectedLabel } from '@/lib/class-availability';
 
 /**
  * Somebody attached to this class, with their face on it.
@@ -145,8 +146,19 @@ export default function ClassTab(props: ClassPanelTabProps) {
         >
           <PeopleAltIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {rsvpSummary.attending}/{rsvpSummary.total} attending
+            {expectedLabel(rsvpSummary)}
           </Typography>
+          {/* Neutral, not warning, for two reasons that point the same way. The
+              theme's warning.dark reaches only about 3.79:1 as literal text, under
+              the 4.5:1 rule; and RegisterGrid already draws away cells with full ink
+              and no tint on purpose, because a declared window is a settled fact to
+              plan around rather than a problem to escalate. Amber would say the
+              opposite of what the register says about the same student. */}
+          {rsvpSummary.away > 0 && (
+            <Box component="span" sx={tagSx(theme, 'neutral')}>
+              {awayLabel(rsvpSummary.away)}
+            </Box>
+          )}
           {onViewRsvpDashboard && (
             <Typography variant="caption" color="primary" sx={{ ml: 'auto' }}>
               View details →

@@ -490,3 +490,133 @@ describe('a declared away window, as a parent reads it', () => {
     expect(view.label).toBe('missed');
   });
 });
+
+describe('a class a teacher excused', () => {
+  const absent = (over = {}) =>
+    attRow({ attended: false, joined_at: null, left_at: null, duration_minutes: null, ...over });
+
+  it('reads as excused, not as missed', () => {
+    const [view] = buildClassAttendanceViews(
+      [cls('c1')],
+      [absent()],
+      new Set(['c1']),
+      [],
+      undefined,
+      undefined,
+      new Set(['c1'])
+    );
+
+    expect(view.label).toBe('missed_excused');
+  });
+
+  /**
+   * The precedence the two existing classifiers already agree on:
+   * registerGroupOf checks excused_at before away and before the reason, and
+   * bucketFor does the same. A third answer here would put the student's own
+   * screen at odds with the register their teacher is reading.
+   */
+  it('outranks both a declared away window and a reason the student typed', () => {
+    const away = [
+      { id: 'w1', student_id: 's1', starts_on: '2026-07-20', ends_on: '2026-07-25', cancelled_at: null },
+    ] as never;
+
+    const [view] = buildClassAttendanceViews(
+      [cls('c1')],
+      [absent()],
+      new Set(['c1']),
+      [{ scheduled_class_id: 'c1', reason_code: 'unwell', reason_note: 'fever' }],
+      undefined,
+      away,
+      new Set(['c1'])
+    );
+
+    expect(view.label).toBe('missed_excused');
+  });
+
+  it('leaves a class nobody excused alone', () => {
+    const [view] = buildClassAttendanceViews(
+      [cls('c1')],
+      [absent()],
+      new Set(['c1']),
+      [{ scheduled_class_id: 'c1', reason_code: 'unwell', reason_note: null }],
+      undefined,
+      undefined,
+      new Set(['other-class'])
+    );
+
+    expect(view.label).toBe('missed_with_reason');
+  });
+
+  it('never relabels a class the student actually attended', () => {
+    const [view] = buildClassAttendanceViews(
+      [cls('c1')],
+      [attRow()],
+      new Set(['c1']),
+      [],
+      undefined,
+      undefined,
+      new Set(['c1'])
+    );
+
+    expect(view.label).toBe('attended');
+  });
+});
+
+describe('summarise counts the four ways a class can be missed separately', () => {
+  function missedAs(id: string, date: string) {
+    return {
+      classId: id,
+      title: 'Class',
+      date,
+      startTime: '18:00:00',
+      endTime: '19:30:00',
+      scheduledMinutes: 90,
+      measurement: 'measured' as const,
+      attended: false,
+      joinedAt: null,
+      leftAt: null,
+      durationMinutes: null,
+      late: false,
+      leftEarly: false,
+      droppedMidClass: false,
+      segments: [],
+      reasonCode: null,
+      reasonNote: null,
+      reasonSource: null,
+    };
+  }
+
+  it('splits missed into no-reason, reason given, away and excused', () => {
+    const summary = summarise([
+      { ...missedAs('a', '2026-07-01'), label: 'missed' },
+      { ...missedAs('b', '2026-07-02'), label: 'missed_with_reason' },
+      { ...missedAs('c', '2026-07-03'), label: 'missed_away' },
+      { ...missedAs('d', '2026-07-04'), label: 'missed_excused' },
+    ]);
+
+    // `missed` keeps its old meaning, every class not attended, because the
+    // parent screen and the staff profile already render it that way.
+    expect(summary.missed).toBe(4);
+    expect(summary.missedNoReason).toBe(1);
+    expect(summary.missedWithReason).toBe(1);
+    expect(summary.missedAway).toBe(1);
+    expect(summary.excused).toBe(1);
+
+    // The four sub-counts must account for every missed class, or a tile row
+    // built from them silently loses students.
+    expect(
+      summary.missedNoReason + summary.missedWithReason + summary.missedAway + summary.excused
+    ).toBe(summary.missed);
+  });
+
+  it('still reports null rather than zero when nothing was measured', () => {
+    const summary = summarise([
+      { ...missedAs('a', '2026-07-01'), measurement: 'not_measured', label: 'not_recorded', attended: null },
+    ]);
+
+    expect(summary.attendanceRate).toBeNull();
+    expect(summary.excused).toBe(0);
+    expect(summary.missedAway).toBe(0);
+    expect(summary.missedNoReason).toBe(0);
+  });
+});

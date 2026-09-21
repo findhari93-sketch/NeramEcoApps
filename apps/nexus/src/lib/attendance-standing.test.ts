@@ -3,8 +3,10 @@ import {
   attendanceStanding,
   KEEPING_UP_RATE,
   NO_CONTACT_DAYS,
+  RARELY_COMES_RATE,
   STANDING_META,
   STANDING_ORDER,
+  turnoutRecord,
   type StandingInput,
 } from './attendance-standing';
 
@@ -215,5 +217,72 @@ describe('the display tables', () => {
   it('put the ones needing a person first', () => {
     expect(STANDING_ORDER[0]).toBe('no_contact');
     expect(STANDING_ORDER[1]).toBe('falling_behind');
+  });
+});
+
+/**
+ * The rate a FORECAST may act on, which is not the rate the standing ladder
+ * reports. `StandingRow.rate` divides by `counted`, away days included, so that
+ * nobody can declare open-ended leave and read as 100% attendance.
+ *
+ * Reused as-is for a forecast it would invert the meaning: away days are
+ * already subtracted on the specific dates they cover, so counting them here
+ * too would take the same absence off twice and mark the students who told us
+ * in advance as the ones least likely to turn up.
+ */
+describe('turnoutRecord', () => {
+  it('measures against the classes they were actually expected at', () => {
+    const r = turnoutRecord({ counted: 20, present: 12, away: 8 });
+    expect(r.judged).toBe(12);
+    expect(r.rate).toBe(100);
+    expect(r.rarely).toBe(false);
+  });
+
+  it('does not mark a student whose absences were all declared leave', () => {
+    // 4 of 13 by the standing rate (31%), 4 of 4 by this one.
+    const r = turnoutRecord({ counted: 13, present: 4, away: 9 });
+    expect(r.rate).toBe(100);
+    expect(r.rarely).toBe(false);
+  });
+
+  it('marks a student who simply stops turning up', () => {
+    const r = turnoutRecord({ counted: 10, present: 1, away: 0 });
+    expect(r.rate).toBe(10);
+    expect(r.rarely).toBe(true);
+  });
+
+  it('is null, never zero, when nothing was measured', () => {
+    // The difference between "missed everything" and "we never looked".
+    expect(turnoutRecord({ counted: 0, present: 0, away: 0 }).rate).toBeNull();
+    expect(turnoutRecord(null).rate).toBeNull();
+    expect(turnoutRecord(null).rarely).toBe(false);
+  });
+
+  it('is null when every measured class was covered by a window', () => {
+    const r = turnoutRecord({ counted: 6, present: 0, away: 6 });
+    expect(r.judged).toBe(0);
+    expect(r.rate).toBeNull();
+    expect(r.rarely).toBe(false);
+  });
+
+  it('holds its fire until there is enough history to judge', () => {
+    expect(turnoutRecord({ counted: 3, present: 0, away: 0 })).toMatchObject({
+      rate: 0,
+      rarely: false,
+    });
+    expect(turnoutRecord({ counted: 4, present: 0, away: 0 }).rarely).toBe(true);
+  });
+
+  it('puts the boundary where the constant says it is', () => {
+    expect(turnoutRecord({ counted: 10, present: 4, away: 0 })).toMatchObject({
+      rate: RARELY_COMES_RATE,
+      rarely: false,
+    });
+    expect(turnoutRecord({ counted: 10, present: 3, away: 0 }).rarely).toBe(true);
+  });
+
+  it('never reports more than everything, however the tallies arrive', () => {
+    const r = turnoutRecord({ counted: 10, present: 10, away: 6 });
+    expect(r.rate).toBe(100);
   });
 });

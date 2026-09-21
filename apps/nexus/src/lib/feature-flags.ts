@@ -53,6 +53,16 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.course-plan', label: 'Course Plan', surface: 'student', group: 'Live Class', paths: ['/student/course-plan'], defaultEnabled: false },
   { id: 'student.assignments', label: 'Assignments', surface: 'student', group: 'Live Class', paths: ['/student/assignments'], defaultEnabled: false },
   /**
+   * A student reading their own attendance record: how many classes have run,
+   * how many they were in the room for, and when they joined and left each one.
+   *
+   * Off by default and enforced on the route as well as in the nav, following
+   * parent.class-standing. Handing someone a hard count of what they have
+   * missed is a one-way door: it cannot be untold once it has been shown, so it
+   * gets piloted on one classroom before the cohort.
+   */
+  { id: 'student.attendance', label: 'Attendance', surface: 'student', group: 'Live Class', paths: ['/student/attendance'], defaultEnabled: false },
+  /**
    * Not a page (`paths: []`). A drawing assignment opens as a workspace: the
    * drawing fixed on one side, the teacher's voice note, notes and scores
    * scrolling beside it, earlier attempts switched in place. Off, the same URL
@@ -103,7 +113,9 @@ export const FEATURES: FeatureDef[] = [
 
   { id: 'student.tests', label: 'Tests', surface: 'student', group: 'Practice', paths: ['/student/tests'], defaultEnabled: false },
   { id: 'student.drawings', label: 'Drawings', surface: 'student', group: 'Practice', paths: ['/student/drawings'], defaultEnabled: false },
-  { id: 'student.sketchbook', label: 'Sketchbook', surface: 'student', group: 'Practice', paths: ['/student/sketchbook'], defaultEnabled: false },
+  // The Drawings hub. Switching this off takes the whole destination with it,
+  // Inspiration tab included, because the hub is now the only door to it.
+  { id: 'student.sketchbook', label: 'Drawings', surface: 'student', group: 'Practice', paths: ['/student/sketchbook'], defaultEnabled: false },
   // 'student.sketchbook-featured-shelf' was removed on 2026-09-19. It promised a
   // shelf of featured sketches on the Sketchbook home, enforced in
   // /api/sketchbook/featured. Neither the shelf nor that route was ever built,
@@ -115,7 +127,10 @@ export const FEATURES: FeatureDef[] = [
   // stars and above, and anything a teacher features, credited by name unless
   // the student opted out. Enforced server side in /api/inspiration/*, which
   // answers 404 while this is off.
-  { id: 'student.inspiration', label: 'Inspiration', surface: 'student', group: 'Practice', paths: ['/student/inspiration'], defaultEnabled: false },
+  // Now a tab of the Drawings hub rather than a nav item of its own. It keeps
+  // this flag and its own routes: the tab is hidden when it is off, so nobody
+  // is offered a tab whose page answers "unavailable". See lib/drawings-hub.
+  { id: 'student.inspiration', label: 'Inspiration (a tab of Drawings)', surface: 'student', group: 'Practice', paths: ['/student/inspiration'], defaultEnabled: false },
   { id: 'student.exam-recall', label: 'Recall', surface: 'student', group: 'Practice', paths: ['/student/exam-recall'], defaultEnabled: false },
 
   { id: 'student.documents', label: 'Documents', surface: 'student', group: 'Manage', paths: ['/student/documents'], defaultEnabled: false },
@@ -163,8 +178,9 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.curriculum', label: 'Repository', surface: 'staff', group: 'Teaching', paths: ['/teacher/curriculum'], defaultEnabled: true },
   { id: 'staff.course-plans', label: 'Course Plans', surface: 'staff', group: 'Teaching', paths: ['/teacher/course-plans'], defaultEnabled: true },
   { id: 'staff.assignments', label: 'Assignments', surface: 'staff', group: 'Teaching', paths: ['/teacher/assignments'], defaultEnabled: true },
-  { id: 'staff.sketchbook', label: 'Sketchbooks', surface: 'staff', group: 'Teaching', paths: ['/teacher/sketchbook'], defaultEnabled: true },
-  { id: 'staff.inspiration', label: 'Inspiration', surface: 'staff', group: 'Teaching', paths: ['/teacher/inspiration'], defaultEnabled: true },
+  // The Drawings hub. See the student note above: this carries Inspiration too.
+  { id: 'staff.sketchbook', label: 'Drawings', surface: 'staff', group: 'Teaching', paths: ['/teacher/sketchbook'], defaultEnabled: true },
+  { id: 'staff.inspiration', label: 'Inspiration (a tab of Drawings)', surface: 'staff', group: 'Teaching', paths: ['/teacher/inspiration'], defaultEnabled: true },
   // Behaviour switches, not pages. OFF until delivery is verified on
   // /api/admin/delivery-health: the first run would otherwise message most of a
   // class at 18:00 on the day it deploys.
@@ -178,11 +194,20 @@ export const FEATURES: FeatureDef[] = [
   // ── Staff: Management panel ───────────────────────────────────────────────
   { id: 'staff.classrooms', label: 'Classrooms', surface: 'staff', group: 'Management', paths: ['/teacher/classrooms'], defaultEnabled: true },
   { id: 'staff.students', label: 'Students', surface: 'staff', group: 'Management', paths: ['/teacher/students'], defaultEnabled: true },
+  // Behaviour switch, not a page. Chases students whose unfinished catch-up is
+  // holding the test door shut. OFF until the manual message from the Behind on
+  // catch-up tile has been used for a week.
+  { id: 'staff.test-chase', label: 'Automatic chase for students whose catch-up is holding up a test', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   // Behaviour switch, not a page. Messages Not started students (never entered
   // Nexus) on day 1, 3 and 7. OFF until each live classroom has a connected Teams
   // sender, because a student stuck at the photo gate cannot see the Nexus bell.
-  { id: 'staff.test-chase', label: 'Automatic chase for students whose catch-up is holding up a test', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   { id: 'staff.join-reminders', label: 'Automatic reminders to students who have not entered Nexus (day 1, 3, 7)', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
+  // Behaviour switch, not a page. Sends the system's own messages (results are
+  // out, your details are needed, every cron) as Neram Assistant instead of from
+  // a teacher's personal Teams chat. OFF until manifest v1.2.0, which adds the
+  // bot's "personal" scope, is approved in Teams admin: without it Graph hands
+  // back an install with no chat and every send falls back to the activity feed.
+  { id: 'staff.assistant-sender', label: 'Send system messages as Neram Assistant, not from a personal Teams chat', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   // Longer path wins in featureForPath, so this correctly beats staff.students
   // for the sub-route and can be switched off independently of the roster.
   // Defaults ON like every other staff feature (the registry invariant); to

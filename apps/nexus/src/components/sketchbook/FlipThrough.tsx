@@ -30,7 +30,7 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
   const { getToken } = useNexusAuthContext();
   const { refreshBadges } = useNavBadges();
   const { factsFor } = useStudentStageFacts();
-  const { data, isLoading, mutate } = useAuthSWR<{
+  const { data, error, isLoading, mutate } = useAuthSWR<{
     sketches: Array<SketchbookInboxRow & { featured: SketchbookFeatureFact[] }>;
     remaining: number;
   }>(`/api/sketchbook/inbox?classroom=${encodeURIComponent(classroomId)}`);
@@ -70,8 +70,20 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [index, next]);
 
+  // A rejected fetch also leaves `data` undefined, so without this the skeleton
+  // below is what a teacher stares at for ever. fetchWithToken throws on a
+  // non-2xx by design, which is the whole reason `error` has to be read here.
+  if (error && !data) {
+    return (
+      <EmptyState
+        title="Could not load the flip through"
+        description="Check your connection and try again."
+        action={<Button variant="contained" onClick={() => mutate()} sx={{ minHeight: 48 }}>Try again</Button>}
+      />
+    );
+  }
   if (isLoading || !data) {
-    return <Skeleton variant="rounded" sx={{ height: 'min(70vh, 560px)', borderRadius: 2 }} />;
+    return <Skeleton variant="rounded" aria-busy="true" aria-label="Loading sketches" sx={{ height: 'min(70vh, 560px)', borderRadius: 2 }} />;
   }
   if (!current) {
     return (

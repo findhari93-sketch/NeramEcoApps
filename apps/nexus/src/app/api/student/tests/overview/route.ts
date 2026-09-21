@@ -55,12 +55,51 @@ const CLASS_TEST_LOOKBACK_DAYS = 120;
 
 export async function GET(request: NextRequest) {
   try {
-    const classroomId = new URL(request.url).searchParams.get('classroom');
+    const params = new URL(request.url).searchParams;
+    let classroomId = params.get('classroom');
     const access = await verifyQBAccess(request.headers.get('Authorization'), classroomId);
     if (!access.ok) return access.response;
 
-    const studentId = access.caller.id;
     const isStaff = resolveStaffRole(access.caller) !== null;
+
+    /**
+     * ?as_student=<user id>: build this page for somebody else.
+     *
+     * Staff only, and the whole reason it exists is a support ticket. A student
+     * reports that a test says Closed when they were told it would open, and
+     * the only ways to check used to be watching the recording as them or
+     * impersonating them for an hour. This answers the same question in one
+     * request, because it IS the same code path: the verdict a teacher reads
+     * here is the sentence on the student's own card, not a second derivation
+     * of it that can disagree.
+     *
+     * It sits on this route rather than in a staff route of its own precisely
+     * so there is only one derivation. The authority is the same
+     * resolveStaffRole that already decides is_staff_preview below.
+     */
+    const asStudent = params.get('as_student');
+    let studentId = access.caller.id;
+    if (asStudent && asStudent !== access.caller.id) {
+      if (!isStaff) {
+        return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+      }
+      studentId = asStudent;
+      if (!classroomId) {
+        // Their newest active cohort. A student on no active classroom gets an
+        // honest empty page rather than a 500, the same way a signed-in student
+        // with no classroom already does.
+        const { data: enrolment } = await (getSupabaseAdminClient() as any)
+          .from('nexus_enrollments')
+          .select('classroom_id, enrolled_at')
+          .eq('user_id', studentId)
+          .eq('role', 'student')
+          .eq('is_active', true)
+          .order('enrolled_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        classroomId = enrolment?.classroom_id || null;
+      }
+    }
     // Cast: nexus_test_placements and nexus_tests.folder_id are not in
     // database.generated.ts until it is regenerated, which waits for the
     // migrations to be on both environments.
@@ -660,6 +699,10 @@ export async function GET(request: NextRequest) {
         recent,
         needs_reason: needsReason,
         is_staff_preview: isStaff,
+        // Whose page this is, so a staff panel can label it and a mixed-up
+        // response cannot be mistaken for the caller's own.
+        student_id: studentId,
+        classroom_id: classroomId,
         /**
          * False when the request arrived with no classroom. The page needs to
          * tell those apart: "no classroom selected" and "your teacher has not

@@ -2638,6 +2638,8 @@ export type NotificationEventType =
   | 'foundation_issue_awaiting_confirmation'
   | 'foundation_issue_reopened'
   | 'foundation_issue_closed'
+  | 'foundation_issue_comment'
+  | 'foundation_issue_recheck_requested'
   | 'study_material_comment_added'
   | 'assignment_reviewed'
   | 'auto_first_touch_sent';
@@ -6326,7 +6328,15 @@ export interface NexusFoundationReaction {
 
 export type FoundationIssuePriority = 'low' | 'medium' | 'high';
 
-export type FoundationIssueCategory = 'bug' | 'content_issue' | 'ui_ux' | 'feature_request' | 'class_schedule' | 'other';
+export type FoundationIssueCategory =
+  | 'bug'
+  | 'content_issue'
+  | 'ui_ux'
+  | 'feature_request'
+  | 'class_schedule'
+  /** A student queries their own published exam result. Carries `context`. */
+  | 'result_dispute'
+  | 'other';
 
 export type FoundationIssueAction =
   | 'created'
@@ -6375,11 +6385,22 @@ export interface NexusFoundationIssue {
   screenshot_urls: string[] | null;
   page_url: string | null;
   auto_close_at: string | null;
+  /** Facts captured when the ticket was raised. For result_dispute, the working behind the result. */
+  context: Record<string, unknown> | null;
   // Auto-captured technical context (staff-only; never shown to the student).
   console_logs: FoundationIssueLogEntry[] | null;
   device_info: Record<string, unknown> | null;
   /** Which app the report came from: 'nexus' | 'app'. */
   source_app: string;
+  /**
+   * When the newest student-visible conversation row was written. Null on a
+   * ticket nobody has replied to. Compared against the two seen stamps below to
+   * produce the unread dot and the nav badge.
+   */
+  last_reply_at: string | null;
+  student_seen_at: string | null;
+  /** Shared across staff: the issues queue is a shared inbox. */
+  staff_seen_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -6404,6 +6425,12 @@ export interface NexusFoundationIssueActivity {
   reason: string | null;
   old_status: string | null;
   new_status: string | null;
+  /**
+   * May the reporter read this row? False is an internal staff note, and is the
+   * database default so a writer that forgets fails closed. Filtered in
+   * getIssueActivityLog, so a student's payload never contains an internal row.
+   */
+  visible_to_student: boolean;
   created_at: string;
   // Joined fields
   actor_name?: string;

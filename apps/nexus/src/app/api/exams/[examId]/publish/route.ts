@@ -19,6 +19,9 @@ import { buildExamResultSections } from '@/lib/exam-results-model';
 import { snapshotRows } from '@/lib/exam-snapshot-rows';
 import { renderShareHtml, renderShareText } from '@/lib/class-share-render';
 import { postChannelMessageDetailed, isPostError, resolveMeetingChannelId } from '@/lib/teams-class-announcements';
+import { assistantConfig, assistantEnabled } from '@/lib/teams-assistant';
+import { postToConversation } from '@/lib/pad/bot/session-card';
+import { shareBaseUrl } from '@/lib/class-share-links';
 import { examBadgesFor, examPointsFor } from '@/lib/exam-badges';
 import type { ShareSectionId } from '@/lib/class-share-model';
 
@@ -332,6 +335,8 @@ export async function POST(
     //      less harmful than a silently missing one.
     let teamsMessageId: string | null = null;
     let teamsError: string | null = null;
+    /** Who the class sees as the author of the card: 'assistant' or 'teacher'. */
+    let teamsPostedBy: 'assistant' | 'teacher' | null = null;
     /**
      * Set when Graph accepted the card but Nexus could not store its id.
      *
@@ -343,11 +348,16 @@ export async function POST(
     let teamsRecordError: string | null = null;
 
     if (postToTeams && (classroom as any)?.ms_team_id && graphToken) {
+      // The footer line has always accepted a url and has never been given one,
+      // so "Your own rank and marks are in Nexus" was a sentence nobody could
+      // act on from the channel.
+      const base = shareBaseUrl(request.nextUrl?.origin ?? null);
       const sections = buildExamResultSections({
         examTitle: exam.title || 'Exam',
         classroomName: (classroom as any)?.name ?? null,
         results,
         provisional,
+        resultUrl: exam.scheduled_class_id ? `${base}/student/timetable/${exam.scheduled_class_id}/exam` : null,
       });
       const enabled = new Set<ShareSectionId>(
         (requestedSections.length > 0
@@ -361,15 +371,53 @@ export async function POST(
         (await resolveMeetingChannelId(graphToken, (classroom as any).ms_team_id));
 
       if (channelId) {
-        const posted = await postChannelMessageDetailed(
-          graphToken,
-          (classroom as any).ms_team_id,
-          channelId,
-          html,
-        );
-        if (isPostError(posted)) {
+        /**
+         * Neram Assistant first, so the class sees the school announcing a
+         * result rather than one teacher announcing it.
+         *
+         * Plain text, not the HTML: a bot activity renders a much smaller
+         * subset of HTML than a chatMessage does, and a card that silently
+         * loses its headings is worse than one that never had them. The
+         * delegated post below keeps the HTML.
+         *
+         * Falls back rather than failing. Posting as the Assistant needs the app
+         * installed in the team, which needs an admin consent that may not have
+         * happened yet; a publish must not be blocked on it. The teacher's own
+         * post is exactly what shipped before.
+         */
+        const assistantCfg = assistantConfig();
+        if (assistantCfg && (await assistantEnabled(supabase))) {
+          const status = await postToConversation(
+            { serviceUrl: assistantCfg.serviceUrl, conversationId: channelId },
+            { type: 'message', text: renderShareText(sections, enabled), textFormat: 'plain' },
+          );
+          if (status >= 200 && status < 300) {
+            teamsPostedBy = 'assistant';
+            // The connector hands back no Teams message id, but the column is
+            // only ever read as "was this announced" (alreadyAnnounced here,
+            // announcedIn in the sheet) and nothing edits the card by id. So
+            // record a sentinel: leaving it null would offer the teacher a
+            // Post button for a card that is already in the channel.
+            teamsMessageId = `assistant:${Date.now()}`;
+            try {
+              await recordExamTeamsPost(params.examId, teamsMessageId);
+            } catch (err) {
+              console.error('[Exam Publish] the Assistant posted but its marker did not save:', err);
+              teamsRecordError =
+                'The card reached the channel, but Nexus could not record that it did. Do not publish again, it would post a second card. Ask an administrator to check the exam.';
+            }
+          } else {
+            console.warn(`[Exam Publish] Neram Assistant could not post to the channel (${status}), falling back to the teacher`);
+          }
+        }
+
+        const posted = teamsPostedBy
+          ? null
+          : await postChannelMessageDetailed(graphToken, (classroom as any).ms_team_id, channelId, html);
+        if (posted && isPostError(posted)) {
           teamsError = posted.error;
-        } else {
+        } else if (posted) {
+          teamsPostedBy = 'teacher';
           teamsMessageId = posted.id;
           // NEVER FATAL. The card is already in the channel and cannot be
           // unsent, so throwing here threw away the only knowledge that it
@@ -397,6 +445,7 @@ export async function POST(
           // Rows actually written, not the roster.
           students: written.length,
           teams_message_id: teamsMessageId,
+          teams_posted_by: teamsPostedBy,
           teams_error: teamsError,
           teams_record_error: teamsRecordError,
           ...gamification,

@@ -24,6 +24,9 @@ const LABEL_COLOR: Record<AttendanceLabel, 'success' | 'error' | 'warning' | 'de
   // Neutral, not warning. A window declared in advance is the child doing the
   // right thing, and colouring it as a problem would tell a parent off for it.
   missed_away: 'default',
+  // Neutral for the same reason. A member of staff waived this one on purpose;
+  // colouring it as a problem would argue with their own decision.
+  missed_excused: 'default',
   not_recorded: 'default',
 };
 

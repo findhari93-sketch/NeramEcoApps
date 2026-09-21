@@ -46,7 +46,7 @@ import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
-import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined';
 import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
@@ -55,6 +55,7 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ArchitectureOutlinedIcon from '@mui/icons-material/ArchitectureOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { QB_EXAM_LABELS, QB_EXAM_ORDER, qbExamPath, qbHomePath, type QBSurface } from '@/lib/qb-exam-routes';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
@@ -185,13 +186,26 @@ export const PANELS: PanelConfig[] = [
     defaultPath: '/teacher/dashboard',
     sidebarItems: [
       { label: 'Dashboard', path: '/teacher/dashboard', icon: <DashboardOutlinedIcon />, group: 'Today' },
-      { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon />, group: 'Today' },
+      // One class, from the schedule to the record to what is still owed.
+      // Attendance is MARKED inside Timetable (ClassAttendancePanel), read across
+      // classes on /teacher/attendance, and chased in Catch-up. Catch-up used to
+      // sit in the Management panel, so following up on attendance swapped the
+      // whole sidebar out from under the teacher mid-task.
+      { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon />, group: 'Classes' },
+      { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon />, group: 'Classes' },
+      // Class Recaps used to be its own Management item. It was half of this one:
+      // a list of recorded classes with a Create recap button, next to a screen
+      // that knew which of those missing recaps were blocking real students.
+      // Both live here now, in the Classes and recaps tab.
+      { label: 'Catch-up', path: '/teacher/catch-up', icon: <HistoryToggleOffOutlinedIcon />, group: 'Classes' },
       { label: 'Repository', path: '/teacher/curriculum', icon: <AutoStoriesOutlinedIcon />, group: 'Curriculum' },
       { label: 'Course Plans', path: COURSE_PLANS_PATH, icon: <PlaylistAddCheckOutlinedIcon />, group: 'Curriculum' },
       { label: 'Assignments', path: '/teacher/assignments', icon: <AssignmentTurnedInOutlinedIcon />, group: 'Student work' },
-      { label: 'Sketchbooks', path: '/teacher/sketchbook', icon: <AutoStoriesOutlinedIcon />, group: 'Student work' },
-      { label: 'Inspiration', path: '/teacher/inspiration', icon: <CollectionsOutlinedIcon />, group: 'Student work' },
-      { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon />, group: 'Records' },
+      // Sketchbooks and Inspiration were two items side by side in this group.
+      // They are one destination now, with Inspiration as a tab inside it; see
+      // lib/drawings-hub. The path stays /teacher/sketchbook because Teams
+      // cards, the evening digest and the sender callback all point at it.
+      { label: 'Drawings', path: '/teacher/sketchbook', icon: <BrushOutlinedIcon />, group: 'Student work' },
       { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon />, group: 'Records' },
       { label: 'Exams', path: '/teacher/exams', icon: <DateRangeOutlinedIcon />, group: 'Records' },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon />, group: 'Help' },
@@ -216,16 +230,14 @@ export const PANELS: PanelConfig[] = [
       // matching API routes already refuse them.
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon />, capability: 'structure.enrollment.add', group: 'People' },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon />, group: 'People' },
+      // Was in no sidebar at all: reachable only from the Students page and from
+      // the Attendance standing rows. Listed here so it can be found and returned to.
+      { label: 'Watchlist', path: '/teacher/students/watchlist', icon: <VisibilityOutlinedIcon />, group: 'People' },
       { label: 'Photo Review', path: '/teacher/photo-review', icon: <FaceRetouchingNaturalOutlinedIcon />, group: 'People' },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon />, group: 'Operations' },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon />, group: 'Content' },
       { label: 'Study Materials', path: '/teacher/study-materials', icon: <FolderOutlinedIcon />, group: 'Content' },
       { label: 'Materials Feedback', path: '/teacher/study-materials/feedback', icon: <RateReviewOutlinedIcon />, group: 'Content' },
-      // Class Recaps used to sit here as its own item. It was half of this one:
-      // a list of recorded classes with a Create recap button, next to a screen
-      // that knew which of those missing recaps were blocking real students.
-      // Both live under Catch-up now, in the Classes and recaps tab.
-      { label: 'Catch-up', path: '/teacher/catch-up', icon: <HistoryToggleOffOutlinedIcon />, group: 'Progress' },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon />, group: 'Content' },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon />, group: 'Content' },
       questionBankFolder('teacher', 'Question Bank', 'Assessment'),
@@ -290,7 +302,7 @@ export const CATCHUP_PATH = '/student/catch-up';
 // "Watch again" tab, and the plural route redirects there.
 export const CLASS_RECAP_PATH = '/student/class-recap';
 export const RESOURCES_PATH = '/student/resources';
-export const INSPIRATION_PATH = '/student/inspiration';
+export const DRAWINGS_PATH = '/student/sketchbook';
 
 export interface ZoneConfig {
   id: StudentZoneId;
@@ -336,6 +348,9 @@ const CLASSROOM: ZoneConfig = {
         { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
         { label: 'Course Plan', path: COURSE_PLAN_PATH, icon: <ViewTimelineOutlinedIcon /> },
         { label: 'Assignments', path: ASSIGNMENTS_PATH, icon: <AssignmentTurnedInOutlinedIcon /> },
+        // The student half of the staff Classes group: the schedule, the record,
+        // then what is still owed. Behind student.attendance.
+        { label: 'Attendance', path: '/student/attendance', icon: <EventNoteOutlinedIcon /> },
         { label: 'Catch-up', path: CATCHUP_PATH, icon: <HistoryToggleOffOutlinedIcon /> },
       ],
     },
@@ -352,8 +367,7 @@ const CLASSROOM: ZoneConfig = {
       label: 'Practice',
       items: [
         { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
-        { label: 'Sketchbook', path: '/student/sketchbook', icon: <AutoStoriesOutlinedIcon /> },
-        { label: 'Inspiration', path: INSPIRATION_PATH, icon: <CollectionsOutlinedIcon /> },
+        { label: 'Drawings', path: DRAWINGS_PATH, icon: <BrushOutlinedIcon /> },
         { label: 'Recall', path: '/student/exam-recall', icon: <HistoryEduOutlinedIcon /> },
       ],
     },
@@ -397,7 +411,7 @@ const STUDY: ZoneConfig = {
         { label: 'Self-learning', path: SELF_LEARNING_PATH, icon: <AutoStoriesOutlinedIcon /> },
         { label: 'Reference', path: RESOURCES_PATH, icon: <MenuBookOutlinedIcon /> },
         { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
-        { label: 'Inspiration', path: INSPIRATION_PATH, icon: <CollectionsOutlinedIcon /> },
+        { label: 'Drawings', path: DRAWINGS_PATH, icon: <BrushOutlinedIcon /> },
       ],
     },
     {

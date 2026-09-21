@@ -122,7 +122,7 @@ test.describe('Sketchbook hub on a phone', () => {
       await expect(page.getByRole('button', { name: 'Next' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Redo' })).toHaveCount(0);
       await assertNoHorizontalOverflow(page);
-      await page.getByRole('link', { name: 'Sketchbooks' }).first().waitFor();
+      await page.getByRole('link', { name: 'Drawings' }).first().waitFor();
       await page.goBack();
       await expect(page).toHaveURL(new RegExp(`/teacher/sketchbook/${sketch.student_id}`), { timeout: 30_000 });
     } finally {
@@ -130,7 +130,7 @@ test.describe('Sketchbook hub on a phone', () => {
     }
   });
 
-  test('the retired Drawing Reviews queue sends teachers to Sketchbooks', async ({ page }) => {
+  test('the retired Drawing Reviews queue sends teachers to the Drawings hub', async ({ page }) => {
     test.setTimeout(90_000);
     await injectAuthForPage(page, 'teacher');
     await page.goto(`${NEXUS}/teacher/drawing-reviews`);

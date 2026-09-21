@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ClassCardData } from '../ClassCard';
 import type { ClassPrepSummaryClient } from '../PrepGateCard';
+import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
 import type {
   ClassPanelRole,
   ClassPanelTabKey,
@@ -70,7 +71,8 @@ export interface ClassPanelProps {
   /** Every toast goes to the host page, which already owns a Snackbar. */
   onNotify: (message: string, severity?: 'success' | 'error' | 'warning') => void;
 
-  rsvpSummary?: { attending: number; total: number } | null;
+  /** Expected headcount. `total` is the roll minus the away, not the roll. */
+  rsvpSummary?: RsvpSummary | null;
   /** Real (Teams/manual) attendance for a past class, DB-only so cheap to fetch. */
   attendanceSummary?: {
     present: number;

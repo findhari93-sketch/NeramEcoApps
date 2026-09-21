@@ -49,10 +49,43 @@ export interface AwayWindow {
 }
 
 /** Plain date arithmetic on a YYYY-MM-DD. Built and read in UTC, so no shift. */
-function addDays(ymd: string, days: number): string {
+export function addDaysYmd(ymd: string, days: number): string {
   const d = new Date(`${ymd}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Every date from `from` to `to`, both ends inclusive.
+ *
+ * The forward planner needs a row for a day with nothing scheduled on it, which
+ * means walking the calendar rather than walking the classes. Same UTC-midnight
+ * discipline as addDaysYmd, and capped so a malformed or inverted range cannot
+ * spin: a year of days is already far past anything a calendar asks for.
+ */
+export function eachDayYmd(from: string, to: string, maxDays = 366): string[] {
+  if (!from || !to || from > to) return [];
+  const out: string[] = [];
+  let cursor = from;
+  while (cursor <= to && out.length < maxDays) {
+    out.push(cursor);
+    cursor = addDaysYmd(cursor, 1);
+  }
+  return out;
+}
+
+/**
+ * Whole days from one YYYY-MM-DD to another. Negative when `to` is earlier.
+ *
+ * Same discipline as addDays: both ends are parsed at UTC midnight, so the
+ * subtraction never crosses a timezone and never lands on a half day. The only
+ * caller is the range bar, which needs a width, not a date.
+ */
+export function daysBetweenYmd(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
 }
 
 /**
@@ -62,7 +95,7 @@ function addDays(ymd: string, days: number): string {
  * would otherwise explain every future class forever, so it gets a horizon.
  */
 export function defaultReviewOn(startsOn: string, endsOn: string | null): string {
-  return endsOn || addDays(startsOn, OPEN_ENDED_REVIEW_DAYS);
+  return endsOn || addDaysYmd(startsOn, OPEN_ENDED_REVIEW_DAYS);
 }
 
 /**

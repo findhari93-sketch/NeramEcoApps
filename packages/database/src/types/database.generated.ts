@@ -8302,6 +8302,7 @@ export type Database = {
           old_status: string | null
           reason: string | null
           target_user_id: string | null
+          visible_to_student: boolean
         }
         Insert: {
           action: string
@@ -8313,6 +8314,7 @@ export type Database = {
           old_status?: string | null
           reason?: string | null
           target_user_id?: string | null
+          visible_to_student?: boolean
         }
         Update: {
           action?: string
@@ -8324,6 +8326,7 @@ export type Database = {
           old_status?: string | null
           reason?: string | null
           target_user_id?: string | null
+          visible_to_student?: boolean
         }
         Relationships: [
           {
@@ -8376,6 +8379,7 @@ export type Database = {
           description: string
           device_info: Json | null
           id: string
+          last_reply_at: string | null
           page_url: string | null
           priority: string
           resolution_note: string | null
@@ -8384,8 +8388,10 @@ export type Database = {
           screenshot_urls: string[] | null
           section_id: string | null
           source_app: string
+          staff_seen_at: string | null
           status: string
           student_id: string
+          student_seen_at: string | null
           ticket_number: string | null
           title: string
           updated_at: string
@@ -8402,6 +8408,7 @@ export type Database = {
           description?: string
           device_info?: Json | null
           id?: string
+          last_reply_at?: string | null
           page_url?: string | null
           priority?: string
           resolution_note?: string | null
@@ -8410,8 +8417,10 @@ export type Database = {
           screenshot_urls?: string[] | null
           section_id?: string | null
           source_app?: string
+          staff_seen_at?: string | null
           status?: string
           student_id: string
+          student_seen_at?: string | null
           ticket_number?: string | null
           title: string
           updated_at?: string
@@ -8428,6 +8437,7 @@ export type Database = {
           description?: string
           device_info?: Json | null
           id?: string
+          last_reply_at?: string | null
           page_url?: string | null
           priority?: string
           resolution_note?: string | null
@@ -8436,8 +8446,10 @@ export type Database = {
           screenshot_urls?: string[] | null
           section_id?: string | null
           source_app?: string
+          staff_seen_at?: string | null
           status?: string
           student_id?: string
+          student_seen_at?: string | null
           ticket_number?: string | null
           title?: string
           updated_at?: string
@@ -16422,6 +16434,13 @@ export type Database = {
         }
         Returns: undefined
       }
+      nexus_issue_badge_counts: {
+        Args: { p_is_staff: boolean; p_user_id: string }
+        Returns: {
+          inbox: number
+          unread: number
+        }[]
+      }
       normalize_state_name: { Args: { raw_state: string }; Returns: string }
       record_profile_change: {
         Args: {
@@ -16631,6 +16650,8 @@ export type Database = {
         | "foundation_issue_awaiting_confirmation"
         | "foundation_issue_reopened"
         | "foundation_issue_closed"
+        | "foundation_issue_comment"
+        | "foundation_issue_recheck_requested"
         | "assignment_nudge"
         | "study_material_nudge"
       notification_recipient_role: "admin" | "team_lead" | "team_member"
@@ -16955,6 +16976,8 @@ export const Constants = {
         "foundation_issue_awaiting_confirmation",
         "foundation_issue_reopened",
         "foundation_issue_closed",
+        "foundation_issue_comment",
+        "foundation_issue_recheck_requested",
         "assignment_nudge",
         "study_material_nudge",
       ],

@@ -44,6 +44,7 @@ export type AttendanceLabel =
   | 'missed'
   | 'missed_with_reason'
   | 'missed_away'
+  | 'missed_excused'
   | 'not_recorded';
 
 export const ATTENDANCE_LABEL_TEXT: Record<AttendanceLabel, string> = {
@@ -54,6 +55,7 @@ export const ATTENDANCE_LABEL_TEXT: Record<AttendanceLabel, string> = {
   missed: 'Missed',
   missed_with_reason: 'Missed (reason given)',
   missed_away: 'Away (told us in advance)',
+  missed_excused: 'Excused (by a teacher)',
   not_recorded: 'Not recorded',
 };
 
@@ -133,8 +135,17 @@ export interface AttendanceSummary {
   measuredClasses: number;
   notMeasuredClasses: number;
   attended: number;
+  /** Every class not attended, whatever the explanation. Unchanged meaning. */
   missed: number;
+  /**
+   * The four ways a class can be missed, which always sum back to `missed`.
+   * They are separate counts because they call for different things: only
+   * missedNoReason is someone to chase.
+   */
+  missedNoReason: number;
   missedWithReason: number;
+  missedAway: number;
+  excused: number;
   late: number;
   leftEarly: number;
   droppedMidClass: number;
@@ -194,6 +205,7 @@ function pickLabel(args: {
   droppedMidClass: boolean;
   hasReason: boolean;
   away: boolean;
+  excused: boolean;
 }): AttendanceLabel {
   // Away is read before the reason, matching registerGroupOf. It matters most
   // here of all the places that grouping is done: a declared window usually
@@ -202,6 +214,11 @@ function pickLabel(args: {
   // while the teacher's register says "Away". Of everyone who reads these
   // screens, the parent is the one who already knows the answer.
   if (!args.attended) {
+    // Excused outranks both, because registerGroupOf and bucketFor already read
+    // excused_at first and the three have to agree. Until this existed, a class
+    // a teacher had deliberately waived still read "Missed" to the parent, and
+    // would have read the same way to the student on their own screen.
+    if (args.excused) return 'missed_excused';
     if (args.away) return 'missed_away';
     return args.hasReason ? 'missed_with_reason' : 'missed';
   }
@@ -241,8 +258,16 @@ export function buildClassAttendanceViews(
    * This student's declared away windows. Optional, and a caller that omits it
    * simply gets the old labels: no caller is made wrong by not passing it.
    */
-  awayWindows?: AwayWindow[]
+  awayWindows?: AwayWindow[],
+  /**
+   * Classes a teacher waived for this student (absences.excused_at). Optional
+   * for the same reason awayWindows is: a caller that omits it gets the old
+   * labels rather than a wrong one.
+   */
+  excusedClassIds?: Set<string> | string[]
 ): ClassAttendanceView[] {
+  const excused =
+    excusedClassIds instanceof Set ? excusedClassIds : new Set(excusedClassIds || []);
   const measured =
     measuredClassIds instanceof Set ? measuredClassIds : new Set(measuredClassIds);
   const attByClass = new Map<string, AttendanceRow>(
@@ -327,6 +352,7 @@ export function buildClassAttendanceViews(
         droppedMidClass,
         hasReason: !!(abs?.reason_code || abs?.reason_note),
         away: !!coveringWindow(awayWindows || [], cls.scheduled_date),
+        excused: excused.has(cls.id),
       }),
       attended,
       joinedAt: att?.joined_at ?? null,
@@ -364,7 +390,10 @@ export function summarise(views: ClassAttendanceView[]): AttendanceSummary {
     notMeasuredClasses: list.length - measured.length,
     attended,
     missed: missedViews.length,
+    missedNoReason: missedViews.filter((v) => v.label === 'missed').length,
     missedWithReason: missedViews.filter((v) => v.label === 'missed_with_reason').length,
+    missedAway: missedViews.filter((v) => v.label === 'missed_away').length,
+    excused: missedViews.filter((v) => v.label === 'missed_excused').length,
     late: measured.filter((v) => v.late).length,
     leftEarly: measured.filter((v) => v.leftEarly).length,
     droppedMidClass: measured.filter((v) => v.droppedMidClass).length,

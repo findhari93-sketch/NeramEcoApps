@@ -1,6 +1,8 @@
 'use client';
 
 import { Box, Typography, Chip, Tooltip, alpha, useTheme } from '@neram/ui';
+import type { AttendanceLabel } from '@/lib/parent-attendance';
+import { ATTENDANCE_STATUS, type StatusTone } from '@/lib/parent-status';
 
 /**
  * One class rendered as a presence timeline.
@@ -29,7 +31,16 @@ export interface AttendanceStripProps {
   endTime: string;
   scheduledMinutes: number | null;
   measurement: 'measured' | 'not_measured';
-  label: string;
+  /**
+   * The label TOKEN, not its display text. Both the word and the colour are
+   * derived from it here, so the two cannot disagree.
+   *
+   * It used to be the text, with a colour map keyed on the text. The two call
+   * sites then passed two different wordings of the same label (one spread the
+   * raw token, the other the ATTENDANCE_STATUS phrase) and neither matched the
+   * map, so every chip in the portal fell through to grey.
+   */
+  label: AttendanceLabel;
   attended: boolean | null;
   durationMinutes: number | null;
   segments: AttendanceStripSegment[];
@@ -63,14 +74,13 @@ function friendlyDate(ymd: string): string {
   }).format(ms);
 }
 
-const LABEL_COLOUR: Record<string, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
-  Attended: 'success',
-  'Joined late': 'warning',
-  'Left early': 'warning',
-  'Partly attended': 'warning',
-  Missed: 'error',
-  'Missed (reason given)': 'info',
-  'Not recorded': 'default',
+/** The shared status tones, in the vocabulary a MUI Chip understands. */
+const TONE_COLOUR: Record<StatusTone, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
+  success: 'success',
+  warning: 'warning',
+  error: 'error',
+  primary: 'info',
+  neutral: 'default',
 };
 
 export default function AttendanceStrip(props: AttendanceStripProps) {
@@ -134,8 +144,8 @@ export default function AttendanceStrip(props: AttendanceStripProps) {
         </Box>
         <Chip
           size="small"
-          label={props.label}
-          color={LABEL_COLOUR[props.label] ?? 'default'}
+          label={ATTENDANCE_STATUS[props.label]?.label ?? props.label}
+          color={TONE_COLOUR[ATTENDANCE_STATUS[props.label]?.tone] ?? 'default'}
           variant={unmeasured ? 'outlined' : 'filled'}
           sx={{ flexShrink: 0, fontWeight: 600 }}
         />

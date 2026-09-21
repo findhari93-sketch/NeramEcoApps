@@ -44,6 +44,13 @@ interface SearchPage {
 export interface InspirationBrowserProps {
   mode: InspirationMode;
   savedOnly?: boolean;
+  /**
+   * 'embedded': the Drawings hub has already drawn the page header and the tab
+   * bar, so this renders its content only. Its action button moves to a row
+   * above the search box rather than into a second header. The Saved list and
+   * a single drawing stay 'page': they sit below the bar and keep their Back.
+   */
+  chrome?: 'page' | 'embedded';
 }
 
 /**
@@ -51,7 +58,7 @@ export interface InspirationBrowserProps {
  * mount, written with replaceState), so a search survives reload, sharing and
  * Back. Teachers get the same page with a Hidden filter and Add exemplar.
  */
-export default function InspirationBrowser({ mode, savedOnly = false }: InspirationBrowserProps) {
+export default function InspirationBrowser({ mode, savedOnly = false, chrome = 'page' }: InspirationBrowserProps) {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
   // Reaches a page's own cache entry, which the hook's own mutate cannot. See toggleSave.
@@ -261,33 +268,41 @@ export default function InspirationBrowser({ mode, savedOnly = false }: Inspirat
       : 'No drawings yet';
   const statusMessage = resultLine ?? (empty ? emptyTitle : '');
 
+  // One definition, rendered either in this page's own header or, under the
+  // Drawings hub, in a row of its own. Add exemplar opens a sheet whose state
+  // lives in this component, so the button cannot simply be handed upwards.
+  const headerAction = savedOnly ? undefined : mode === 'staff' ? (
+    <Button variant="contained" startIcon={<AddPhotoAlternateOutlinedIcon />} onClick={() => setAdding(true)} sx={{ minHeight: 44 }}>
+      Add exemplar
+    </Button>
+  ) : (
+    <Button component={Link} href={`${base}/saved`} variant="outlined" startIcon={<FavoriteBorderIcon />} sx={{ minHeight: 44 }}>
+      Saved
+    </Button>
+  );
+
   return (
     <Box sx={{ pb: 10 }}>
-      <PageHeader
-        title={savedOnly ? 'Saved' : 'Inspiration'}
-        subtitle={
-          savedOnly
-            ? 'Drawings you kept for later'
-            : mode === 'staff'
-              ? 'What students see when they look for ideas'
-              : 'Search drawings by Neram teachers, classmates and alumni'
-        }
-        backHref={savedOnly ? base : undefined}
-        breadcrumbs={savedOnly ? [{ label: 'Inspiration', href: base }] : undefined}
-        action={
-          savedOnly ? undefined : mode === 'staff' ? (
-            <Button variant="contained" startIcon={<AddPhotoAlternateOutlinedIcon />} onClick={() => setAdding(true)} sx={{ minHeight: 44 }}>
-              Add exemplar
-            </Button>
-          ) : (
-            <Button component={Link} href={`${base}/saved`} variant="outlined" startIcon={<FavoriteBorderIcon />} sx={{ minHeight: 44 }}>
-              Saved
-            </Button>
-          )
-        }
-      />
+      {chrome === 'page' && (
+        <PageHeader
+          title={savedOnly ? 'Saved' : 'Inspiration'}
+          subtitle={
+            savedOnly
+              ? 'Drawings you kept for later'
+              : mode === 'staff'
+                ? 'What students see when they look for ideas'
+                : 'Search drawings by Neram teachers, classmates and alumni'
+          }
+          backHref={savedOnly ? base : undefined}
+          breadcrumbs={savedOnly ? [{ label: 'Inspiration', href: base }] : undefined}
+          action={headerAction}
+        />
+      )}
 
       <Box sx={{ px: { xs: 2, sm: 3 }, maxWidth: 1440, mx: 'auto', minWidth: 0 }}>
+        {chrome === 'embedded' && headerAction && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1.5 }}>{headerAction}</Box>
+        )}
         {!savedOnly && (
           <>
             <InspirationSearchBar value={input} onChange={setInput} />

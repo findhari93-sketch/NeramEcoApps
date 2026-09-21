@@ -154,11 +154,43 @@ describe('resolveStudentTestCard', () => {
     });
 
     it('calls an exam number a score and a practice number a best', () => {
-      const exam = resolve({ is_exam: true, attempts: 1, best_percentage: 82, results_state: 'final' });
+      const exam = resolve({
+        is_exam: true,
+        attempts: 1,
+        best_percentage: 82,
+        results_state: 'final',
+        exam_result: { rank: 4, total_ranked: 18, percentage: 82, is_provisional: false, absent: false },
+      });
       expect(exam.score_label).toBe('Your score');
+      expect(exam.score_percentage).toBe(82);
 
       const practice = resolve({ attempts: 3, best_percentage: 82 });
       expect(practice.score_label).toBe('Best');
+    });
+
+    // The card used to headline the BEST of every attempt on the door while the
+    // rank chip beside it came from the published snapshot, which ranks the
+    // FIRST submitted attempt. A reopened paper made those two different
+    // sittings, so "Your score 91%" sat next to a rank earned with 86%.
+    it('headlines the attempt that was actually ranked, not the best one', () => {
+      const c = resolve({
+        is_exam: true,
+        attempts: 2,
+        best_percentage: 91,
+        results_state: 'final',
+        exam_result: { rank: 8, total_ranked: 18, percentage: 86, is_provisional: false, absent: false },
+      });
+      expect(c.score_percentage).toBe(86);
+      expect(c.score_percentage).not.toBe(91);
+    });
+
+    // Publishing is what reveals a result. A number on a card whose own sentence
+    // says the result is not out yet answered the founder's "what is publishing"
+    // with "nothing".
+    it('shows no exam number until the teacher has published', () => {
+      const c = resolve({ is_exam: true, attempts: 1, best_percentage: 82, results_state: 'unpublished' });
+      expect(c.score_percentage).toBeNull();
+      expect(c.reason).toContain('not out yet');
     });
 
     it('reports attempts left rather than a bare refusal when the limit is spent', () => {

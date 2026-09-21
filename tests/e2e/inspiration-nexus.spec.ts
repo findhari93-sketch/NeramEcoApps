@@ -68,7 +68,9 @@ test.describe('Teacher Inspiration on a laptop', () => {
     expect(fixtureId, `the laptop fixture exemplar was not created: ${fixtureError}`).toBeTruthy();
     test.skip(!(await open(page, `/teacher/inspiration?q=${encodeURIComponent(FIXTURE_TITLE)}`)), 'Nexus not running');
 
-    await expect(page.getByRole('heading', { name: 'Inspiration', exact: true })).toBeVisible();
+    // Inspiration is a tab of the Drawings hub now; the heading is the hub's.
+    await expect(page.getByRole('heading', { name: 'Drawings', exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Inspiration', selected: true })).toBeVisible();
     // A real tile, not a skeleton: the grid has loaded before its columns are counted.
     const tile = page.getByTestId('inspiration-tile').first();
     await expect(tile).toBeVisible({ timeout: 60_000 });

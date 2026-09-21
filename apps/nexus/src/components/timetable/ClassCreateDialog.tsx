@@ -39,6 +39,9 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import { type ClassCardData } from './ClassCard';
+import DateAvailabilityNote from './DateAvailabilityNote';
+import type { DayForecast } from '@/lib/class-forecast';
+import type { RsvpDashboardRangeResponse } from '@/app/api/timetable/rsvp-dashboard/route';
 import { type HolidayInfo, classStartDate } from './date-utils';
 import { buildClassDraftPrompt, parseClassDraft } from '@/lib/class-ai-draft';
 
@@ -205,6 +208,15 @@ interface ClassCreateDialogProps {
   onSaved: (created?: { id: string; classroom_id: string }[]) => void;
   prefillDate?: string;
   prefillTime?: string;
+  /**
+   * Per-date availability for the loaded planning range, so the teacher sees
+   * who is free for the date they just picked, BEFORE the class and its Teams
+   * meeting exist. The page already holds these rows for the calendar, so
+   * passing them in costs no request. Undefined simply hides the line.
+   */
+  availability?: RsvpDashboardRangeResponse;
+  /** The realistic headcount per date, so this line agrees with the calendar. */
+  forecastByDate?: Record<string, DayForecast>;
   holidays?: Record<string, HolidayInfo>;
   onRemoveHoliday?: (date: string) => Promise<void>;
   onMeetingError?: (error: string) => void;
@@ -231,6 +243,8 @@ export default function ClassCreateDialog({
   onSaved,
   prefillDate,
   prefillTime,
+  availability,
+  forecastByDate,
   holidays,
   onRemoveHoliday,
   onMeetingError,
@@ -695,6 +709,16 @@ export default function ClassCreateDialog({
             InputLabelProps={{ shrink: true }}
             inputProps={{ min: todayStr() }}
             helperText={formData.scheduled_date === todayStr() ? 'Today' : undefined}
+          />
+
+          {/* Who is free on the date just picked. The decision this dialog used
+              to make blind: a teacher could schedule a class onto a night nine
+              students had already declared themselves away for, and only find
+              out when the room was empty. */}
+          <DateAvailabilityNote
+            date={formData.scheduled_date}
+            availability={availability}
+            forecast={forecastByDate?.[formData.scheduled_date] ?? null}
           />
 
           {/* Quick time presets */}

@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
         old_status: 'awaiting_confirmation',
         new_status: 'closed',
         reason: 'Auto-closed after 3 days with no response',
+        // The student is told this happened, so the row explaining it belongs
+        // in the thread they can read.
+        visible_to_student: true,
       });
 
       await cleanupIssueScreenshots(issue.id).catch(console.error);

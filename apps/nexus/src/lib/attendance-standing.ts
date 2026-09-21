@@ -54,6 +54,61 @@ export const KEEPING_UP_RATE = 75;
 /** Not seen in Nexus for this long, with work outstanding, reads as no contact. */
 export const NO_CONTACT_DAYS = 21;
 
+/**
+ * Below this share of the classes they were EXPECTED at, a student is unlikely
+ * to be in the room tomorrow whatever the register says they are entitled to.
+ *
+ * Lives beside KEEPING_UP_RATE on purpose. Two attendance thresholds in two
+ * files is exactly how this codebase ended up with four attendance-percentage
+ * implementations, two of which are documented as wrong.
+ */
+export const RARELY_COMES_RATE = 40;
+
+/** Fewer measured classes than this and the record says nothing worth acting on. */
+export const MIN_JUDGED_CLASSES = 4;
+
+export interface TurnoutTally {
+  /** Classes measured and counted against them, away days INCLUDED. */
+  counted: number;
+  present: number;
+  /** Of `counted`, the ones a declared window already explained. */
+  away: number;
+}
+
+export interface TurnoutRecord {
+  /** `counted` minus away: the classes they were actually expected at. */
+  judged: number;
+  /** Null when there is nothing to judge. Never 0, same rule as `rate`. */
+  rate: number | null;
+  /** Enough history, and below the bar. The only field a forecast may subtract on. */
+  rarely: boolean;
+}
+
+/**
+ * How reliably this student turns up, for predicting a room.
+ *
+ * DELIBERATELY NOT `StandingRow.rate`, and the difference is the whole point.
+ * That rate divides by `counted`, which includes away days, because a rate that
+ * dropped them would let anyone declaring open-ended leave read as 100% (see
+ * the note at the top of api/timetable/rsvp-dashboard/route.ts).
+ *
+ * A forecast needs the opposite. It already subtracts a declared window on the
+ * specific date it covers, so leaving those same classes in the denominator
+ * here would subtract the same absence twice, and a student who declared three
+ * weeks of exam leave and has since come back would read as someone who never
+ * attends. That punishes the people who told us in advance, which is the harm
+ * the `away`-before-`no_contact` ordering below exists to prevent.
+ *
+ * A retrospective "I was unwell" absence stays in. The question this answers is
+ * who is in the room, not who is to blame for being out of it.
+ */
+export function turnoutRecord(t: TurnoutTally | null | undefined): TurnoutRecord {
+  const judged = Math.max(0, (t?.counted ?? 0) - (t?.away ?? 0));
+  if (!t || judged <= 0) return { judged: 0, rate: null, rarely: false };
+  const rate = Math.round((Math.min(t.present, judged) / judged) * 100);
+  return { judged, rate, rarely: judged >= MIN_JUDGED_CLASSES && rate < RARELY_COMES_RATE };
+}
+
 export interface StandingInput {
   /** IST YYYY-MM-DD. One value for the whole cohort, never per row. */
   today: string;

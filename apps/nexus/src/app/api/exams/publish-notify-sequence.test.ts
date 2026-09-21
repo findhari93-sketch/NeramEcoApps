@@ -375,7 +375,12 @@ describe('publishing twice, notifying twice', () => {
 
     const hers = H.nudges.find((n) => n.studentId === 'kaveya');
     expect(hers?.plain).toContain('You sat this in the second sitting');
-    expect(hers?.plain).toContain('Your rank: 1st of 1 in the second sitting');
+    // The rank itself is no longer in the chat (founder, 2026-09-20): the
+    // message carries a link and the page carries the number. What must
+    // survive is that she is told WHICH sitting she was in, because being
+    // ranked 1st of 1 without that sentence reads as first in the class.
+    expect(hers?.plain).toContain('ready in Nexus');
+    expect(hers?.plain).not.toMatch(/\d/);
   });
 
   it('never writes a row for a student whose window is still open', async () => {
@@ -403,13 +408,14 @@ describe('publishing twice, notifying twice', () => {
     await notify(req(), PARAMS);
 
     const his = H.nudges.find((n) => n.studentId === 'hari');
-    // 2, the number the teacher's sheet and the student's own card both show.
-    // The notify predicate has always required an attempt before it names a
-    // sitting size, so this number was right even before the snapshot filter
-    // landed. It is pinned here because the two now have to agree: the filter
-    // decides who is in the table, sizeOf decides who is counted, and a change
-    // to either alone is what makes the card and the message disagree.
-    expect(his?.plain).toContain('Your rank: 2nd of 2');
+    // This used to pin "Your rank: 2nd of 2", because the message and the
+    // student's own card had to agree on the sitting size and once did not.
+    // They cannot disagree any more: the message states no number at all, and
+    // the page it links to reads the same snapshot the card does. The
+    // invariant that remains is that no number leaks into a Teams preview.
+    expect(his?.plain).toContain('ready in Nexus');
+    expect(his?.plain).not.toMatch(/\d/);
+    expect(his?.plain).not.toContain('Your rank:');
   });
 
   /**
@@ -455,11 +461,13 @@ describe('publishing twice, notifying twice', () => {
     expect(body.data.notified).toBe(1);
 
     const hers = H.nudges.filter((n) => n.studentId === 'meera');
-    const told = hers.filter((n) => n.plain.includes('Your rank'));
+    // "ready in Nexus" is the has-a-paper message. The absent notice never
+    // says it, so this still separates the two exactly as 'Your rank' did.
+    const told = hers.filter((n) => n.plain.includes('ready in Nexus'));
     // Exactly one message carries her result: not none, and not a second copy
     // on the next republish either.
     expect(told).toHaveLength(1);
-    expect(told[0].plain).toContain('Your rank: 1st of 1 in the second sitting');
+    expect(told[0].plain).toContain('You sat this in the second sitting');
     // Two messages in total, and the first one is the absent notice she was
     // correctly sent on the day. Clearing the stamp must not resend that.
     expect(hers).toHaveLength(2);
@@ -646,7 +654,7 @@ describe('students the exam was never set for', () => {
     await notify(req(), PARAMS);
 
     expect(H.table.find((r) => r.student_id === 'salai')?.attempt_id).toBe('att-salai');
-    expect(H.nudges.find((n) => n.studentId === 'salai')?.plain).toContain('Your rank');
+    expect(H.nudges.find((n) => n.studentId === 'salai')?.plain).toContain('ready in Nexus');
   });
 
   it('tells the teacher how many are not part of the exam, and leaves them out of the roster', async () => {

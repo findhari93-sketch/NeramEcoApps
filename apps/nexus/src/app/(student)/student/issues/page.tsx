@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -20,6 +21,7 @@ import {
   IconButton,
   Snackbar,
   Alert,
+  Collapse,
 } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
@@ -32,10 +34,21 @@ import DesignServicesOutlinedIcon from '@mui/icons-material/DesignServicesOutlin
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import CircleIcon from '@mui/icons-material/Circle';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
-import type { NexusFoundationIssueWithDetails, FoundationIssueCategory } from '@neram/database/types';
+import IssueThread from '@/components/issues/IssueThread';
+import IssueReplyComposer from '@/components/issues/IssueReplyComposer';
+import { ISSUE_PARAM, findIssueForRef } from '@/lib/issue-link';
+import type {
+  NexusFoundationIssueWithDetails,
+  NexusFoundationIssueActivity,
+  FoundationIssueCategory,
+} from '@neram/database/types';
 
 const CATEGORY_CONFIG: Record<FoundationIssueCategory, { label: string; icon: React.ReactNode; color: string }> = {
   bug: { label: 'Bug', icon: <BugReportOutlinedIcon sx={{ fontSize: '0.8rem' }} />, color: '#d32f2f' },
@@ -43,12 +56,14 @@ const CATEGORY_CONFIG: Record<FoundationIssueCategory, { label: string; icon: Re
   ui_ux: { label: 'UI/UX', icon: <DesignServicesOutlinedIcon sx={{ fontSize: '0.8rem' }} />, color: '#1976d2' },
   feature_request: { label: 'Feature', icon: <LightbulbOutlinedIcon sx={{ fontSize: '0.8rem' }} />, color: '#7b1fa2' },
   class_schedule: { label: 'Class', icon: <EventOutlinedIcon sx={{ fontSize: '0.8rem' }} />, color: '#2e7d32' },
+  result_dispute: { label: 'Result', icon: <FactCheckOutlinedIcon sx={{ fontSize: '0.8rem' }} />, color: '#ed6c02' },
   other: { label: 'Other', icon: <HelpOutlineOutlinedIcon sx={{ fontSize: '0.8rem' }} />, color: '#757575' },
 };
 
 export default function StudentIssuesPage() {
   const theme = useTheme();
-  const { getToken } = useNexusAuthContext();
+  const { getToken, user } = useNexusAuthContext();
+  const searchParams = useSearchParams();
   const [issues, setIssues] = useState<NexusFoundationIssueWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   // Tabs: 0 = Open (priority), 1 = Awaiting, 2 = Closed, 3 = All
@@ -64,9 +79,38 @@ export default function StudentIssuesPage() {
   });
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
+  // The conversation on each ticket, fetched the first time it is opened and
+  // then kept. Held per ticket rather than for "the open one" so collapsing and
+  // reopening a ticket does not re-ask the server for something unchanged.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<Record<string, NexusFoundationIssueActivity[]>>({});
+  const [threadLoading, setThreadLoading] = useState<string | null>(null);
+
   useEffect(() => {
     fetchIssues({ initial: true });
   }, []);
+
+  /**
+   * ?issue=NXS-0125 opens that ticket's conversation.
+   *
+   * The address the Teams chat and the bell both point at. The tab moves to All
+   * first, because the ticket a message is about is usually one waiting on the
+   * student or already answered, and neither sits under Open. Runs once per
+   * reference so the ticket can be collapsed again while the link is still in
+   * the address bar.
+   */
+  const deepLinkedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const ref = searchParams?.get(ISSUE_PARAM);
+    if (!ref || issues.length === 0 || deepLinkedRef.current === ref) return;
+    const match = findIssueForRef(issues, ref);
+    if (!match) return;
+    deepLinkedRef.current = ref;
+    tabTouchedRef.current = true;
+    setTab(3);
+    void openThread(match.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, issues]);
 
   async function fetchIssues(options?: { initial?: boolean }) {
     setLoading(true);
@@ -93,6 +137,71 @@ export default function StudentIssuesPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  /**
+   * Open a ticket's conversation.
+   *
+   * ?seen=1 clears the unread mark on the same GET the page was going to make
+   * anyway, so reading a reply costs no second request. The local row is
+   * stamped too, so the dot goes out at once rather than at the next poll.
+   */
+  const openThread = useCallback(async (issueId: string) => {
+    setExpandedId((current) => (current === issueId ? null : issueId));
+    if (threads[issueId]) {
+      setIssues((prev) =>
+        prev.map((i) => (i.id === issueId ? { ...i, student_seen_at: new Date().toISOString() } : i)),
+      );
+      return;
+    }
+    setThreadLoading(issueId);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/foundation/issues/${issueId}?seen=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setThreads((prev) => ({ ...prev, [issueId]: data.activity || [] }));
+      setIssues((prev) =>
+        prev.map((i) => (i.id === issueId ? { ...i, student_seen_at: new Date().toISOString() } : i)),
+      );
+    } catch (err) {
+      console.error('Failed to load the conversation:', err);
+    } finally {
+      setThreadLoading(null);
+    }
+  }, [getToken, threads]);
+
+  /**
+   * Reply on the ticket.
+   *
+   * Throws on failure so the composer keeps what was typed. A support box that
+   * eats a message the student has just written is worse than one that refuses.
+   */
+  async function sendReply(issueId: string, text: string) {
+    const token = await getToken();
+    if (!token) throw new Error('Not signed in');
+    const res = await fetch(`/api/foundation/issues/${issueId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'comment', comment: text }),
+    });
+    if (!res.ok) {
+      setSnackbar({ open: true, message: 'Could not send that. Please try again.', severity: 'error' });
+      throw new Error('reply failed');
+    }
+    const data = await res.json();
+    setThreads((prev) => ({ ...prev, [issueId]: [...(prev[issueId] || []), data.activity] }));
+    setSnackbar({ open: true, message: 'Sent. Your teacher has been told.', severity: 'success' });
+  }
+
+  /** A staff reply written since this student last opened the ticket. */
+  function hasUnreadReply(issue: NexusFoundationIssueWithDetails): boolean {
+    if (!issue.last_reply_at) return false;
+    if (!issue.student_seen_at) return true;
+    return new Date(issue.last_reply_at) > new Date(issue.student_seen_at);
   }
 
   const filteredIssues = issues.filter((issue) => {
@@ -291,6 +400,14 @@ export default function StudentIssuesPage() {
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.75 }}>
                   <Box sx={{ flex: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+                      {/* A reply this student has not opened. Shape as well as
+                          colour, and it carries a label for a screen reader. */}
+                      {hasUnreadReply(issue) && (
+                        <CircleIcon
+                          aria-label="New reply"
+                          sx={{ fontSize: '0.55rem', color: 'primary.main', flexShrink: 0 }}
+                        />
+                      )}
                       <Typography variant="caption" sx={{ color: 'text.disabled', fontWeight: 600, fontSize: '0.7rem' }}>
                         {issue.ticket_number}
                       </Typography>
@@ -402,7 +519,7 @@ export default function StudentIssuesPage() {
                     }}
                   >
                     <Typography variant="caption" sx={{ fontWeight: 600, color: theme.palette.info.main, display: 'block', mb: 1 }}>
-                      Is this issue resolved?
+                      Did this fix work for you?
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                       <Button
@@ -411,9 +528,9 @@ export default function StudentIssuesPage() {
                         color="success"
                         onClick={() => handleConfirm(issue.id)}
                         disabled={actionLoading}
-                        sx={{ textTransform: 'none', minHeight: 32, fontSize: '0.8rem' }}
+                        sx={{ textTransform: 'none', minHeight: 44, px: 2, fontSize: '0.85rem' }}
                       >
-                        Yes, close it
+                        Yes, it works
                       </Button>
                       <Button
                         size="small"
@@ -421,7 +538,7 @@ export default function StudentIssuesPage() {
                         color="warning"
                         onClick={() => setReopenIssueId(issue.id)}
                         disabled={actionLoading}
-                        sx={{ textTransform: 'none', minHeight: 32, fontSize: '0.8rem' }}
+                        sx={{ textTransform: 'none', minHeight: 44, px: 2, fontSize: '0.85rem' }}
                       >
                         Reopen
                       </Button>
@@ -442,6 +559,57 @@ export default function StudentIssuesPage() {
                     </Typography>
                   </Box>
                 )}
+
+                {/*
+                  The conversation.
+                  Collapsed until asked for, because most tickets have nothing
+                  said on them, and an empty thread on every card would bury the
+                  ones that do. Opening it clears the unread dot.
+                */}
+                <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${theme.palette.divider}` }}>
+                  <Button
+                    onClick={() => void openThread(issue.id)}
+                    aria-expanded={expandedId === issue.id}
+                    startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: '1rem' }} />}
+                    endIcon={
+                      <ExpandMoreIcon
+                        sx={{
+                          transform: expandedId === issue.id ? 'rotate(180deg)' : 'none',
+                          transition: 'transform 200ms',
+                          '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+                        }}
+                      />
+                    }
+                    sx={{
+                      textTransform: 'none',
+                      minHeight: 44,
+                      px: 1,
+                      color: 'text.secondary',
+                      fontSize: '0.8rem',
+                      justifyContent: 'flex-start',
+                    }}
+                  >
+                    {expandedId === issue.id ? 'Hide conversation' : 'Conversation'}
+                  </Button>
+
+                  <Collapse in={expandedId === issue.id} unmountOnExit>
+                    <Box sx={{ pt: 1 }}>
+                      <IssueThread
+                        activity={threads[issue.id] || []}
+                        viewerId={user?.id || null}
+                        loading={threadLoading === issue.id}
+                        emptyText="Nothing said yet. Ask here if something is unclear."
+                      />
+                      {issue.status !== 'closed' && (
+                        <IssueReplyComposer
+                          onSend={(text) => sendReply(issue.id, text)}
+                          placeholder="Reply to your teacher..."
+                          helperText="Your teacher gets this on Nexus. Please keep the conversation here, not on Teams."
+                        />
+                      )}
+                    </Box>
+                  </Collapse>
+                </Box>
               </Paper>
             );
           })}

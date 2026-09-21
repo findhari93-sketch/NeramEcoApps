@@ -198,7 +198,10 @@ test.describe('Inspiration on a phone', () => {
     test.skip(state === 'down', 'Nexus not running');
     test.skip(state === 'off', 'student.inspiration is off in this environment');
 
-    await expect(page.getByRole('heading', { name: 'Inspiration', exact: true })).toBeVisible();
+    // Inspiration is a tab of the Drawings hub now, so the page heading is the
+    // hub's. Its own name is on the selected tab.
+    await expect(page.getByRole('heading', { name: 'Drawings', exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Inspiration', selected: true })).toBeVisible();
     const search = page.getByRole('textbox', { name: 'Search Inspiration' });
     await expect(search).toBeVisible();
     expect(await search.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);

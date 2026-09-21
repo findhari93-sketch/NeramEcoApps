@@ -93,8 +93,11 @@ export async function POST(request: NextRequest) {
       // metadata.href for this event type, which is the generic deep-link pattern
       // already used by catchup_overdue and prework_reason_needed.
       metadata: { href: '/student/complete-profile', source: 'application_forms' },
-      teacher: { authHeader: request.headers.get('Authorization'), userId: staff.id },
-      sendAs: { senderUserId: staff.id, link: { url, label: 'Fill in your details' } },
+      // Neram Assistant, not the member of staff who pressed the button
+      // (founder, 2026-09-20). A form to fill in is the school asking, not a
+      // person starting a conversation, and it was arriving in the founder's
+      // own Teams thread with the student alongside their real messages.
+      assistant: { link: { url, label: 'Fill in your details' } },
       // Never having signed in is what put them on this list, so the whole point is
       // reaching exactly those students.
       reachNotStarted: true,

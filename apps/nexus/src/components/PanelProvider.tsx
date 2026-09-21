@@ -79,6 +79,8 @@ interface PanelContextValue {
   availablePanels: { id: PanelId; label: string; icon: React.ReactNode }[];
   currentPanelTitle: string;
   currentSidebarItems: NavItem[];
+  /** The same items under their headings, which is what DesktopSidebar renders. */
+  currentSidebarGroups: NavGroup[];
   currentBottomNavItems: NavItem[];
   /** Flattened "More" sheet, for anything that wants a plain list. */
   currentOverflowItems: NavItem[];
@@ -92,6 +94,7 @@ const PanelContext = createContext<PanelContextValue>({
   availablePanels: [],
   currentPanelTitle: 'Classroom Teaching',
   currentSidebarItems: [],
+  currentSidebarGroups: [],
   currentBottomNavItems: [],
   currentOverflowItems: [],
   currentOverflowGroups: [],
@@ -178,13 +181,15 @@ export default function PanelProvider({ children }: { children: React.ReactNode 
     // Filter first, group second, so a heading whose every item is switched off
     // does not render over an empty section.
     const overflow = filterItems(panelOverflow(resolvedPanel));
+    const sidebar = filterNavTree(resolvedPanel.sidebarItems, isItemVisible);
 
     return {
       activePanel: resolvedPanel.id,
       setActivePanel,
       availablePanels: availablePanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon })),
       currentPanelTitle: resolvedPanel.title,
-      currentSidebarItems: filterNavTree(resolvedPanel.sidebarItems, isItemVisible),
+      currentSidebarItems: sidebar,
+      currentSidebarGroups: groupNavItems(sidebar),
       currentBottomNavItems: filterItems(panelBottomNav(resolvedPanel)),
       currentOverflowItems: overflow,
       currentOverflowGroups: groupNavItems(overflow),

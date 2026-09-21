@@ -17,9 +17,9 @@ const manifest = JSON.parse(readFileSync(path.join(NEXUS, 'teams-app/manifest.js
 const APP_ID = 'aa039c70-50d2-4c91-bd0e-5675df5e50ff';
 
 describe('Teams app manifest', () => {
-  it('is the existing Neram Assistant app, version 1.1.0, still carrying My Work', () => {
+  it('is the existing Neram Assistant app, version 1.2.0, still carrying My Work', () => {
     expect(manifest.id).toBe('df4f6b2d-ea18-46d1-8934-f508ac248e6c');
-    expect(manifest.version).toBe('1.1.0');
+    expect(manifest.version).toBe('1.2.0');
     expect(Number(manifest.manifestVersion)).toBeGreaterThanOrEqual(1.12);
     expect(manifest.staticTabs).toEqual([
       expect.objectContaining({ entityId: 'nexusAssignments', contentUrl: 'https://nexus.neramclasses.com/student/assignments' }),
@@ -67,8 +67,20 @@ describe('Teams app manifest', () => {
   });
 
   it('uses the Nexus Entra app as the bot, with a messaging route to receive it', () => {
-    expect(manifest.bots).toEqual([{ botId: APP_ID, scopes: ['team', 'groupChat'], supportsFiles: false, isNotificationOnly: false }]);
+    expect(manifest.bots).toEqual([
+      { botId: APP_ID, scopes: ['personal', 'team', 'groupChat'], supportsFiles: false, isNotificationOnly: false },
+    ]);
     expect(existsSync(path.join(NEXUS, 'src/app/api/pad/bot/messages/route.ts'))).toBe(true);
+  });
+
+  // The scope Neram Assistant needs to send a 1:1 chat at all. Without it Graph
+  // returns an install with no chat, and every system message quietly falls back
+  // to the activity feed, which is the state this app was in before v1.2.0.
+  it('lets the bot hold a 1:1 chat, which is how the system speaks without borrowing a teacher', () => {
+    expect(manifest.bots[0].scopes).toContain('personal');
+    // Not notification-only: a student who replies gets a sentence back saying
+    // the Assistant cannot read it and naming what does work.
+    expect(manifest.bots[0].isNotificationOnly).toBe(false);
   });
 
   it('asks only for the meeting permissions it uses: participants and notifications for the bot, and sharing results to the meeting screen', () => {

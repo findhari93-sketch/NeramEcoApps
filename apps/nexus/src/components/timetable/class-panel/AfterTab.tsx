@@ -84,14 +84,28 @@ export default function AfterTab(props: ClassPanelTabProps) {
             )}
           </Box>
           <Box sx={{ display: 'flex', gap: 3 }}>
+            {/* "Expected", not "Total". Away students leave this denominator,
+                so on a class that has already run "Total 22, Attended 25" was
+                reachable and read as nonsense. The roll is still stated, beside
+                the away count that explains the gap. */}
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                Total
+                Expected
               </Typography>
               <Typography variant="body1" sx={{ fontWeight: 700 }}>
                 {rsvpSummary.total}
               </Typography>
             </Box>
+            {rsvpSummary.away > 0 && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  Away
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                  {rsvpSummary.away}
+                </Typography>
+              </Box>
+            )}
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 Opted in

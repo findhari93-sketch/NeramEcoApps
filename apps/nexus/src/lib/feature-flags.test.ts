@@ -54,6 +54,11 @@ describe('feature-flags registry', () => {
     // sixty days at once. It waits until a teacher has sent the same message
     // by hand from the Students tab and seen it land.
     'staff.test-chase',
+    // Different reason: this one depends on a change OUTSIDE the code. Until
+    // manifest v1.2.0 (the bot's 'personal' scope) is approved in Teams admin,
+    // Graph returns an install with no 1:1 chat, so switching it on early
+    // silently downgrades every system message to the activity feed.
+    'staff.assistant-sender',
     // Not a meter but a classroom: a live session reaches every enrolled
     // student's pad at the first ASK. It ships dark until the Teams app, the bot
     // and the manual test run are signed off, then goes on for one pilot class.
